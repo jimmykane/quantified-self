@@ -17,9 +17,12 @@ import {
   DataStamina,
   DataSwimPace,
   DataSwimDistance,
+  DataTemperature,
   DistanceUnits,
   DynamicDataLoader,
   LapTypes,
+  PaceUnits,
+  SpeedUnits,
   SwimPaceUnits,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
@@ -777,6 +780,53 @@ describe('event-echarts-data.helper', () => {
     const showAllDataPoints = eventChartSeriesToPoints(withShowAllData[0].series[0]);
     expect(showAllDataPoints).toHaveLength(3);
     expect(showAllDataPoints[0].time).toBe(activity.startDate.getTime());
+  });
+
+  it('keeps configured derived metrics available when recorded metrics are included', () => {
+    const speedStream = {
+      type: DataSpeed.type,
+      getData: () => [3, 3.2, 3.4],
+    } as any;
+    const temperatureStream = {
+      type: DataTemperature.type,
+      getData: () => [18, 19, 20],
+    } as any;
+    const timeStream = {
+      type: XAxisTypes.Time,
+      getData: () => [0, 1, 2],
+    } as any;
+    const activity = {
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      creator: { name: 'Garmin' },
+      type: 'Running',
+      getID: () => 'a-recorded-metrics',
+      getAllStreams: () => [speedStream, temperatureStream],
+      getStream: (type: string) => (type === XAxisTypes.Time ? timeStream : null),
+    } as any;
+
+    const panels = buildEventChartPanels({
+      selectedActivities: [activity],
+      allActivities: [activity],
+      xAxisType: XAxisTypes.Duration,
+      showAllData: true,
+      dataTypesToUse: [DataPace.type],
+      userUnitSettings: {
+        speedUnits: [SpeedUnits.KilometersPerHour],
+        paceUnits: [PaceUnits.MinutesPerKilometer],
+        swimPaceUnits: [],
+        gradeAdjustedSpeedUnits: [],
+        gradeAdjustedPaceUnits: [],
+        verticalSpeedUnits: [],
+      } as any,
+      eventColorService: {
+        getActivityColor: () => '#00ff00'
+      } as any,
+    });
+
+    expect(panels.map((panel) => panel.dataType)).toEqual(expect.arrayContaining([
+      DataPace.type,
+      DataTemperature.type,
+    ]));
   });
 
   it('skips distance-axis chart building when missing distance streams throw from provider', () => {

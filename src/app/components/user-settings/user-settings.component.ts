@@ -178,7 +178,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   private readonly controlLabels: Record<string, string> = {
     displayName: 'Name',
     appTheme: 'Interface Theme',
-    dataTypesToUse: 'Visible Metrics',
+    dataTypesToUse: 'Default chart metrics',
     xAxisType: 'Data Scaling (X-Axis)',
     chartStrokeWidth: 'Line Width',
     chartFillOpacity: 'Fill Intensity',

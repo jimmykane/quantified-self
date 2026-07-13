@@ -201,6 +201,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Altitude** charts can color the altitude line by grade');
     expect(gettingStartedSection?.content).toContain('**Color Altitude by Grade**');
     expect(gettingStartedSection?.content).toContain('**Heart Rate** and **Power** charts color their lines and visible fill');
+    expect(gettingStartedSection?.content).toContain('**Include all recorded metrics**');
+    expect(gettingStartedSection?.content).toContain('available in **Visible charts**');
+    expect(gettingStartedSection?.content).toContain('does not change which charts are currently visible');
     expect(gettingStartedSection?.content).not.toContain('lightly tints the chart grid by zone');
   });
 

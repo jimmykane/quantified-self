@@ -46,6 +46,7 @@ import {
   EventChartLapMarker,
   EventChartPanelModel,
   EventChartSwimLengthMarker,
+  resolveEventChartConfiguredDataTypes,
 } from '../../../helpers/event-echarts-data.helper';
 import { resolveEventSeriesColor } from '../../../helpers/event-echarts-style.helper';
 import {
@@ -293,7 +294,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public get seriesMenuSummary(): string {
-    return `Series ${this.visibleDataTypeCount}/${this.dataTypeLegendItems.length}`;
+    return `Visible charts: ${this.visibleDataTypeCount}/${this.dataTypeLegendItems.length}`;
   }
 
   public get hasActiveZoomRange(): boolean {
@@ -783,7 +784,13 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     if (nextVisibleDataTypeIDs.size === 0) {
-      nextVisibleDataTypeIDs = new Set(availableDataTypeIDs);
+      const configuredAvailableDataTypeIDs = this.showAllData
+        ? resolveEventChartConfiguredDataTypes(this.dataTypesToUse, this.userUnitSettings)
+          .filter((dataTypeID) => availableDataTypeIDs.has(dataTypeID))
+        : [];
+      nextVisibleDataTypeIDs = configuredAvailableDataTypeIDs.length > 0
+        ? new Set(configuredAvailableDataTypeIDs)
+        : new Set(availableDataTypeIDs);
     }
 
     this.visibleDataTypeIDs = nextVisibleDataTypeIDs;

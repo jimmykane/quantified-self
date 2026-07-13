@@ -274,6 +274,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
+- **Default chart metrics** in **Settings -> Charts** control which available charts are shown initially.
+- The chart option **Include all recorded metrics** makes other chartable streams, such as Temperature, available in **Visible charts**. It does not change which charts are currently visible.
+- Use **Visible charts** to show or hide individual charts, or **Show all charts** to display every available chart.
 - Each event chart panel can use the **Overlay** button to compare one other available metric on a shared y-axis when metrics are compatible, otherwise on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
 - Right-clicking an event chart copies a themed image of the full chart panel, including the chart title, legend, and range statistics.
 - Swim activities with per-length pool data show a **Show Swim Lengths** chart option that overlays swim length end boundaries on the chart; active and idle/rest lengths are both included.

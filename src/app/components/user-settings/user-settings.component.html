@@ -223,7 +223,7 @@
                 </mat-form-field>
 
                 <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Visible Metrics</mat-label>
+                  <mat-label>Default chart metrics</mat-label>
                   <mat-select formControlName="dataTypesToUse" multiple>
                     @for (group of dataGroups; track group.name) {
                     <mat-optgroup [label]="group.name">
@@ -234,13 +234,15 @@
                     }
                   </mat-select>
                   <mat-hint>
-                    Metrics come from each activity's data streams. If a metric isn't present, it won't appear. Some
-                    metrics are derived or unit-based.
+                    These metrics are shown by default when present. Some metrics are derived or unit-based.
                   </mat-hint>
                 </mat-form-field>
 
                 <div class="settings-toggle-grid">
-                  <mat-slide-toggle formControlName="showAllData">Show All Data Points</mat-slide-toggle>
+                  <mat-slide-toggle formControlName="showAllData"
+                    matTooltip="Adds every chartable metric recorded by the activity to Visible charts without showing it automatically.">
+                    Include all recorded metrics
+                  </mat-slide-toggle>
                   <mat-slide-toggle formControlName="chartCursorBehaviour">Selection Tool by Default</mat-slide-toggle>
                   <mat-slide-toggle formControlName="useAnimations">Enable Animations</mat-slide-toggle>
                 </div>

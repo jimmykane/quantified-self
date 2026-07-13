@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { ChartCursorBehaviours, XAxisTypes } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
@@ -21,7 +21,7 @@ interface ChartSeriesMenuItem {
   standalone: false
 })
 
-export class EventCardChartActionsComponent implements OnChanges {
+export class EventCardChartActionsComponent {
   @Input() user: User;
   @Input() event: EventInterface;
   @Input() xAxisType: XAxisTypes;
@@ -55,7 +55,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   private analyticsService = inject(AppAnalyticsService);
 
   public get shouldShowAllSeriesAction(): boolean {
-    return this.seriesMenuItems.length > 0 && this.seriesMenuItems.every((item) => !item.visible);
+    return this.seriesMenuItems.some((item) => !item.visible);
   }
 
   public get visibleSeriesCount(): number {
@@ -197,8 +197,5 @@ export class EventCardChartActionsComponent implements OnChanges {
 
   get fillOpacityPercentLabel(): string {
     return `${Math.round(this.fillOpacity * 100)}%`;
-  }
-
-  ngOnChanges(simpleChanges) {
   }
 }

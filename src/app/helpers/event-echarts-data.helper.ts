@@ -1102,7 +1102,6 @@ function getFilteredStreams(input: {
   userUnitSettings: UserUnitSettingsInterface;
   activityType: any;
 }): StreamInterface[] {
-  const includeDerivedTypes = !input.showAllData;
   const allowedDataTypes = input.showAllData
     ? null
     : DynamicDataLoader
@@ -1120,11 +1119,15 @@ function getFilteredStreams(input: {
     .getNonUnitBasedDataTypes(input.showAllData, input.dataTypesToUse)
     .indexOf(DataDistance.type) === -1;
 
-  const whitelistedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
+  const recordedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
     input.streams.map((stream) => stream.type),
     input.userUnitSettings,
-    { includeDerivedTypes }
+    { includeDerivedTypes: !input.showAllData }
   );
+  const configuredTypes = input.showAllData
+    ? resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings)
+    : [];
+  const whitelistedUnitTypes = [...new Set([...recordedUnitTypes, ...configuredTypes])];
   const whitelistedUnitTypeSet = new Set(whitelistedUnitTypes);
 
   const mergedStreams = ActivityUtilities
@@ -1132,7 +1135,10 @@ function getFilteredStreams(input: {
       input.streams,
       input.activityType,
       whitelistedUnitTypes,
-      { includeDerivedTypes, includeUnitVariants: true }
+      {
+        includeDerivedTypes: !input.showAllData || configuredTypes.length > 0,
+        includeUnitVariants: true,
+      }
     )
     .concat(input.streams);
 
@@ -1331,11 +1337,10 @@ function hasFiniteStreamData(stream: StreamInterface | undefined | null): boolea
   return false;
 }
 
-function buildPreferredDataTypeOrder(
+export function resolveEventChartConfiguredDataTypes(
   dataTypesToUse: string[],
   userUnitSettings: UserUnitSettingsInterface
-): Map<string, number> {
-  const order = new Map<string, number>();
+): string[] {
   const canonicalDataTypes = getAppCanonicalChartDataTypes();
   const selectedDataTypeSet = new Set(dataTypesToUse || []);
   const canonicalSelectedDataTypes = canonicalDataTypes
@@ -1346,7 +1351,7 @@ function buildPreferredDataTypeOrder(
         .sort((left, right) => left.localeCompare(right))
     );
   const orderedSelectedDataTypes = applyEventChartCanonicalOrderOverride(canonicalSelectedDataTypes);
-  let index = 0;
+  const resolvedDataTypes: string[] = [];
 
   orderedSelectedDataTypes.forEach((dataType) => {
     const resolvedTypes = DynamicDataLoader
@@ -1354,15 +1359,24 @@ function buildPreferredDataTypeOrder(
       .concat(dataType);
 
     resolvedTypes.forEach((resolvedType) => {
-      if (!resolvedType || order.has(resolvedType)) {
+      if (!resolvedType || resolvedDataTypes.includes(resolvedType)) {
         return;
       }
 
-      order.set(resolvedType, index);
-      index += 1;
+      resolvedDataTypes.push(resolvedType);
     });
   });
 
+  return resolvedDataTypes;
+}
+
+function buildPreferredDataTypeOrder(
+  dataTypesToUse: string[],
+  userUnitSettings: UserUnitSettingsInterface
+): Map<string, number> {
+  const order = new Map<string, number>();
+  resolveEventChartConfiguredDataTypes(dataTypesToUse, userUnitSettings)
+    .forEach((dataType, index) => order.set(dataType, index));
   return order;
 }
 
