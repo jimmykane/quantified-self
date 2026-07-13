@@ -72,6 +72,7 @@ import {
     type DerivedTrainingDisciplineSummary,
     type DerivedTrainingBuildBenchmarkReference,
     type DerivedTrainingBuildComparisonDiscipline,
+    type DerivedTrainingBuildEventSuggestion,
     type DerivedTrainingBuildComparisonMetricPayload,
     type DerivedTrainingBuildRaceSuggestion,
     type DerivedTrainingBuildWindow,
@@ -1518,6 +1519,7 @@ interface ResolvedTrainingBuildEvent {
 }
 
 const TRAINING_BUILD_RACE_SUGGESTION_LIMIT = 20;
+const TRAINING_BUILD_EVENT_SUGGESTION_LIMIT = 100;
 
 function createTrainingBuildWindowAccumulator(): TrainingBuildWindowAccumulator {
     return {
@@ -1754,6 +1756,21 @@ function buildTrainingBuildRaceSuggestions(
         }));
 }
 
+function buildTrainingBuildEventSuggestions(
+    events: readonly ResolvedTrainingBuildEvent[],
+    currentStartDayMs: number,
+): DerivedTrainingBuildEventSuggestion[] {
+    return events
+        .filter(event => (event.startDayMs - DAY_MS) < currentStartDayMs && !isRaceTaggedEvent(event.eventData))
+        .sort((left, right) => right.startDayMs - left.startDayMs || left.eventId.localeCompare(right.eventId))
+        .slice(0, TRAINING_BUILD_EVENT_SUGGESTION_LIMIT)
+        .map(event => ({
+            eventId: event.eventId,
+            startDayMs: event.startDayMs,
+            label: toSafeString(event.eventData.name).trim() || null,
+        }));
+}
+
 export function buildTrainingBuildComparisonMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
     benchmarkSettings: unknown,
@@ -1791,10 +1808,13 @@ export function buildTrainingBuildComparisonMetricPayload(
     const disciplines = (['running', 'cycling'] as const).map((discipline): DerivedTrainingBuildComparisonDiscipline => {
         const selection = selections[discipline] || null;
         const events = eventsByDiscipline[discipline];
-        // Keep races that can be valid for at least the shortest supported build.
-        // The dialog filters this bounded list again as the athlete chooses 8/10/12 weeks.
+        // Keep anchors that can be valid for at least the shortest supported build.
+        // The dialog marks candidates unavailable as the athlete switches 8/10/12 weeks.
+        // Do not narrow this list to an already saved benchmark duration: a user
+        // must be able to change from 12 weeks to a newer, valid 8-week anchor.
         const shortestCurrentStartDayMs = asOfDayMs - ((8 * 7 - 1) * DAY_MS);
         const suggestedRaces = buildTrainingBuildRaceSuggestions(events, shortestCurrentStartDayMs);
+        const suggestedEvents = buildTrainingBuildEventSuggestions(events, shortestCurrentStartDayMs);
         if (!selection) {
             return {
                 discipline,
@@ -1803,6 +1823,7 @@ export function buildTrainingBuildComparisonMetricPayload(
                 current: null,
                 benchmark: null,
                 suggestedRaces,
+                suggestedEvents,
             };
         }
         const currentStartDayMs = asOfDayMs - ((selection.durationWeeks * 7 - 1) * DAY_MS);
@@ -1814,7 +1835,8 @@ export function buildTrainingBuildComparisonMetricPayload(
                 selection: null,
                 current: null,
                 benchmark: null,
-                suggestedRaces: buildTrainingBuildRaceSuggestions(events, currentStartDayMs),
+                suggestedRaces,
+                suggestedEvents,
             };
         }
         return {
@@ -1829,7 +1851,8 @@ export function buildTrainingBuildComparisonMetricPayload(
                 reference.windowEndDayMs,
                 nowMs,
             ),
-            suggestedRaces: buildTrainingBuildRaceSuggestions(events, currentStartDayMs),
+            suggestedRaces,
+            suggestedEvents,
         };
     });
 

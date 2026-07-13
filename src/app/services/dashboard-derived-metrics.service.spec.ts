@@ -398,6 +398,28 @@ describe('DashboardDerivedMetricsService', () => {
     }
   });
 
+  it('rebuilds a ready build comparison snapshot that predates event picker suggestions', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(Date.UTC(2026, 6, 13, 12, 0, 0)));
+      const status = (service as any).resolveSnapshotStatus(DERIVED_METRIC_KINDS.TrainingBuildComparison, {
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: {
+          asOfDayMs: Date.UTC(2026, 6, 13),
+          disciplines: [
+            { discipline: 'running', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [] },
+            { discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [] },
+          ],
+        },
+      });
+
+      expect(status).toBe('stale');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('requests missing derived metrics once while a request is in flight', async () => {
     let resolveCall: ((value?: unknown) => void) | null = null;
     mockFunctionsService.call.mockImplementation(() => new Promise((resolve) => {

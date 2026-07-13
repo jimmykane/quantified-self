@@ -305,6 +305,11 @@ export interface TrainingBuildSettings {
 export interface SetTrainingBuildBenchmarkRequest {
   discipline: DerivedTrainingDiscipline;
   selection: TrainingBuildBenchmarkSelection | null;
+  /**
+   * When present, the selected event is explicitly promoted to a Race tag as
+   * part of saving this benchmark. It must match selection.raceEventId.
+   */
+  markRaceEventId?: string;
 }
 
 export interface SetTrainingBuildBenchmarkResponse {
@@ -426,6 +431,12 @@ export interface DerivedTrainingBuildRaceSuggestion {
   label: string | null;
 }
 
+export interface DerivedTrainingBuildEventSuggestion {
+  eventId: string;
+  startDayMs: number;
+  label: string | null;
+}
+
 export type DerivedTrainingBuildBenchmarkReference = TrainingBuildBenchmarkSelection & {
   selectionKey: string;
   windowStartDayMs: number;
@@ -465,6 +476,10 @@ export interface DerivedTrainingBuildComparisonDiscipline {
   current: DerivedTrainingBuildWindow | null;
   benchmark: DerivedTrainingBuildWindow | null;
   suggestedRaces: DerivedTrainingBuildRaceSuggestion[];
+  // Bounded, historical, untagged events for the explicit “mark as Race” flow.
+  // Optional at the persisted-data boundary so old snapshots can be detected and
+  // selectively rebuilt without a global schema-version bump.
+  suggestedEvents?: DerivedTrainingBuildEventSuggestion[];
 }
 
 export interface DerivedTrainingBuildComparisonMetricPayload {

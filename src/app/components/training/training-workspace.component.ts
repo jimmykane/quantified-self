@@ -34,7 +34,10 @@ import {
 } from '../../helpers/training-analysis.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
-import { TrainingBuildBenchmarkDialogComponent } from './training-build-benchmark-dialog.component';
+import {
+  TrainingBuildBenchmarkDialogComponent,
+  type TrainingBuildEventSuggestionsState,
+} from './training-build-benchmark-dialog.component';
 import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
@@ -334,6 +337,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         discipline,
         asOfDayMs: this.derivedState.trainingBuildComparison?.asOfDayMs ?? this.resolveCurrentUtcDayMs(),
         suggestedRaces: card?.source?.suggestedRaces || [],
+        suggestedEvents: card?.source?.suggestedEvents || [],
+        eventSuggestionsState: this.resolveTrainingBuildEventSuggestionsState(card?.source || null),
         selection,
       },
     });
@@ -345,6 +350,17 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.refreshTrainingBuildCards();
       this.changeDetector.markForCheck();
     }));
+  }
+
+  private resolveTrainingBuildEventSuggestionsState(
+    source: DashboardTrainingBuildComparisonDiscipline | null,
+  ): TrainingBuildEventSuggestionsState {
+    if (source) {
+      return 'ready';
+    }
+    return this.derivedState.trainingBuildComparisonStatus === 'failed'
+      ? 'unavailable'
+      : 'loading';
   }
 
   private formatTrainingBuildDistance(value: number | null | undefined): string {

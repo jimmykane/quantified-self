@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import type {
+  DerivedTrainingBuildEventSuggestion,
   DerivedTrainingBuildRaceSuggestion,
   DerivedTrainingDiscipline,
   SetTrainingBuildBenchmarkRequest,
@@ -10,10 +11,23 @@ import type {
 } from '@shared/derived-metrics';
 import { AppFunctionsService } from '../../services/app.functions.service';
 
+type TrainingBuildReferenceMode = 'event' | 'period';
+type TrainingBuildEventDateFilter = 'all' | 'recent' | 'earlier';
+export type TrainingBuildEventSuggestionsState = 'ready' | 'loading' | 'unavailable';
+
+interface TrainingBuildEventOption extends DerivedTrainingBuildEventSuggestion {
+  isEligible: boolean;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TAGGED_RACES_COLLAPSED_LIMIT = 3;
+
 export interface TrainingBuildBenchmarkDialogData {
   discipline: DerivedTrainingDiscipline;
   asOfDayMs: number;
   suggestedRaces: DerivedTrainingBuildRaceSuggestion[];
+  suggestedEvents?: DerivedTrainingBuildEventSuggestion[];
+  eventSuggestionsState?: TrainingBuildEventSuggestionsState;
   selection: TrainingBuildBenchmarkSelection | null;
 }
 
@@ -25,13 +39,24 @@ export interface TrainingBuildBenchmarkDialogData {
   standalone: false,
 })
 export class TrainingBuildBenchmarkDialogComponent {
-  public mode: 'race' | 'period';
+  public mode: TrainingBuildReferenceMode;
   public durationWeeks: TrainingBuildDurationWeeks;
-  public raceEventId: string | null;
+  public eventId: string | null;
   public periodEndDate: string;
   public isSaving = false;
   public errorMessage: string | null = null;
-  public visibleSuggestedRaces: DerivedTrainingBuildRaceSuggestion[] = [];
+  public visibleSuggestedRaces: TrainingBuildEventOption[] = [];
+  public displayedSuggestedRaces: TrainingBuildEventOption[] = [];
+  public visibleSuggestedEvents: TrainingBuildEventOption[] = [];
+  public eventSearchQuery = '';
+  public eventDateFilter: TrainingBuildEventDateFilter = 'all';
+  public isRaceListExpanded = false;
+  public selectedEvent: TrainingBuildEventOption | null = null;
+  public selectedBuildStartDayMs: number | null = null;
+  public selectedBenchmarkEndDayMs: number | null = null;
+  public selectedEventNeedsRaceTag = false;
+  public saveActionLabel = 'Save benchmark';
+  public canSave = true;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public readonly data: TrainingBuildBenchmarkDialogData,
@@ -40,34 +65,57 @@ export class TrainingBuildBenchmarkDialogComponent {
   ) {
     const selection = data.selection;
     this.durationWeeks = selection?.durationWeeks || 12;
-    this.refreshVisibleSuggestedRaces();
-    this.mode = selection?.mode || (this.visibleSuggestedRaces.length ? 'race' : 'period');
-    this.raceEventId = selection?.mode === 'race' ? selection.raceEventId : this.visibleSuggestedRaces[0]?.eventId || null;
+    this.mode = selection?.mode === 'period' ? 'period' : 'event';
+    this.eventId = selection?.mode === 'race' ? selection.raceEventId : null;
     this.periodEndDate = selection?.mode === 'period'
       ? this.formatDateInput(selection.endDayMs)
       : this.formatDateInput(this.defaultPeriodEndDayMs());
+    this.refreshEventOptions();
+    if (this.mode === 'event' && !this.selectedEvent) {
+      this.eventId = this.visibleSuggestedRaces.find(event => event.isEligible)?.eventId
+        || this.visibleSuggestedEvents.find(event => event.isEligible)?.eventId
+        || null;
+      this.refreshSelectedEvent();
+    }
   }
 
-  public selectMode(mode: 'race' | 'period'): void {
+  public selectMode(mode: TrainingBuildReferenceMode): void {
     this.mode = mode;
-    if (mode === 'race' && !this.visibleSuggestedRaces.some(race => race.eventId === this.raceEventId)) {
-      this.raceEventId = this.visibleSuggestedRaces[0]?.eventId || null;
+    if (mode === 'event' && !this.selectedEvent) {
+      this.eventId = this.visibleSuggestedRaces.find(event => event.isEligible)?.eventId
+        || this.visibleSuggestedEvents.find(event => event.isEligible)?.eventId
+        || null;
+      this.refreshSelectedEvent();
     }
+    this.refreshSaveActionLabel();
     this.errorMessage = null;
   }
 
   public selectDurationWeeks(durationWeeks: TrainingBuildDurationWeeks): void {
     this.durationWeeks = durationWeeks;
-    this.refreshVisibleSuggestedRaces();
-    if (this.mode === 'race' && !this.visibleSuggestedRaces.some(race => race.eventId === this.raceEventId)) {
-      this.raceEventId = this.visibleSuggestedRaces[0]?.eventId || null;
-    }
+    this.refreshEventOptions();
     this.errorMessage = null;
   }
 
-  public selectRace(eventId: string): void {
-    this.raceEventId = eventId;
+  public selectEvent(eventId: string): void {
+    this.eventId = eventId;
+    this.refreshSelectedEvent();
     this.errorMessage = null;
+  }
+
+  public updateEventSearchQuery(value: string): void {
+    this.eventSearchQuery = value;
+    this.refreshEventOptions();
+  }
+
+  public selectEventDateFilter(value: TrainingBuildEventDateFilter): void {
+    this.eventDateFilter = value;
+    this.refreshEventOptions();
+  }
+
+  public toggleRaceList(): void {
+    this.isRaceListExpanded = !this.isRaceListExpanded;
+    this.refreshDisplayedSuggestedRaces();
   }
 
   public updatePeriodEndDate(value: string): void {
@@ -88,12 +136,12 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   private buildSelection(): TrainingBuildBenchmarkSelection | null {
-    if (this.mode === 'race') {
-      if (!this.raceEventId) {
-        this.errorMessage = 'Choose a tagged race, or use a manual period.';
+    if (this.mode === 'event') {
+      if (!this.selectedEvent || !this.selectedEvent.isEligible) {
+        this.errorMessage = 'Choose an eligible tagged race or historical event.';
         return null;
       }
-      return { mode: 'race', durationWeeks: this.durationWeeks, raceEventId: this.raceEventId };
+      return { mode: 'race', durationWeeks: this.durationWeeks, raceEventId: this.selectedEvent.eventId };
     }
     const endDayMs = this.parseDateInput(this.periodEndDate);
     if (endDayMs === null) {
@@ -107,13 +155,17 @@ export class TrainingBuildBenchmarkDialogComponent {
     this.isSaving = true;
     this.errorMessage = null;
     try {
+      const request: SetTrainingBuildBenchmarkRequest = {
+        discipline: this.data.discipline,
+        selection,
+        ...(selection?.mode === 'race' && this.selectedEventNeedsRaceTag
+          ? { markRaceEventId: selection.raceEventId }
+          : {}),
+      };
       const response = await this.functionsService.call<
         SetTrainingBuildBenchmarkRequest,
         SetTrainingBuildBenchmarkResponse
-      >('setTrainingBuildBenchmark', {
-        discipline: this.data.discipline,
-        selection,
-      });
+      >('setTrainingBuildBenchmark', request);
 
       if (response?.data?.accepted !== true) {
         throw new Error(
@@ -130,14 +182,73 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   private defaultPeriodEndDayMs(): number {
-    return this.resolveAsOfDayMs() - ((12 * 7) * 24 * 60 * 60 * 1000);
+    return this.resolveAsOfDayMs() - ((12 * 7) * DAY_MS);
   }
 
-  private refreshVisibleSuggestedRaces(): void {
-    const currentStartDayMs = this.resolveAsOfDayMs() - ((this.durationWeeks * 7 - 1) * 24 * 60 * 60 * 1000);
-    this.visibleSuggestedRaces = this.data.suggestedRaces.filter(
-      race => (race.startDayMs - (24 * 60 * 60 * 1000)) < currentStartDayMs,
-    );
+  private refreshEventOptions(): void {
+    this.visibleSuggestedRaces = this.toEventOptions(this.data.suggestedRaces);
+    this.visibleSuggestedEvents = this.toEventOptions(this.data.suggestedEvents || [])
+      .filter(event => this.matchesEventPickerFilters(event));
+    this.refreshDisplayedSuggestedRaces();
+    this.refreshSelectedEvent();
+  }
+
+  private toEventOptions(events: readonly DerivedTrainingBuildEventSuggestion[]): TrainingBuildEventOption[] {
+    const currentStartDayMs = this.resolveCurrentBuildStartDayMs();
+    return [...events]
+      .sort((left, right) => right.startDayMs - left.startDayMs || left.eventId.localeCompare(right.eventId))
+      .map(event => ({
+        ...event,
+        isEligible: (event.startDayMs - DAY_MS) < currentStartDayMs,
+      }));
+  }
+
+  private matchesEventPickerFilters(event: TrainingBuildEventOption): boolean {
+    const query = this.eventSearchQuery.trim().toLocaleLowerCase();
+    if (query && !(event.label || 'Untitled event').toLocaleLowerCase().includes(query)) {
+      return false;
+    }
+    const recentBoundaryDayMs = this.resolveAsOfDayMs() - (365 * DAY_MS);
+    if (this.eventDateFilter === 'recent') {
+      return event.startDayMs >= recentBoundaryDayMs;
+    }
+    if (this.eventDateFilter === 'earlier') {
+      return event.startDayMs < recentBoundaryDayMs;
+    }
+    return true;
+  }
+
+  private refreshDisplayedSuggestedRaces(): void {
+    this.displayedSuggestedRaces = this.isRaceListExpanded
+      ? this.visibleSuggestedRaces
+      : this.visibleSuggestedRaces.slice(0, TAGGED_RACES_COLLAPSED_LIMIT);
+  }
+
+  private refreshSelectedEvent(): void {
+    const selected = [...this.visibleSuggestedRaces, ...this.toEventOptions(this.data.suggestedEvents || [])]
+      .find(event => event.eventId === this.eventId) || null;
+    this.selectedEvent = selected;
+    this.selectedEventNeedsRaceTag = !!selected
+      && !this.visibleSuggestedRaces.some(event => event.eventId === selected.eventId);
+    this.selectedBenchmarkEndDayMs = selected ? selected.startDayMs - DAY_MS : null;
+    this.selectedBuildStartDayMs = this.selectedBenchmarkEndDayMs === null
+      ? null
+      : this.selectedBenchmarkEndDayMs - ((this.durationWeeks * 7 - 1) * DAY_MS);
+    this.refreshSaveActionLabel();
+  }
+
+  private refreshSaveActionLabel(): void {
+    if (this.mode === 'period') {
+      this.saveActionLabel = 'Save benchmark';
+      this.canSave = true;
+      return;
+    }
+    this.canSave = !!this.selectedEvent?.isEligible;
+    this.saveActionLabel = this.selectedEventNeedsRaceTag ? 'Mark as Race and use event' : 'Use event';
+  }
+
+  private resolveCurrentBuildStartDayMs(): number {
+    return this.resolveAsOfDayMs() - ((this.durationWeeks * 7 - 1) * DAY_MS);
   }
 
   private resolveAsOfDayMs(): number {

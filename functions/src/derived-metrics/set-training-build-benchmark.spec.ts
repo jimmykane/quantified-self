@@ -11,21 +11,30 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 const hoisted = vi.hoisted(() => {
-    const eventGet = vi.fn();
-    const settingsSet = vi.fn();
+    const transactionGet = vi.fn();
+    const transactionSet = vi.fn();
+    const transactionUpdate = vi.fn();
+    const runTransaction = vi.fn(async (callback: (transaction: unknown) => unknown) => callback({
+        get: transactionGet,
+        set: transactionSet,
+        update: transactionUpdate,
+    }));
     const doc = vi.fn((path: string) => path.includes('/events/')
-        ? { get: eventGet }
-        : { set: settingsSet });
-    const firestore = Object.assign(vi.fn(() => ({ doc })), {
+        ? { path }
+        : { path });
+    const firestore = Object.assign(vi.fn(() => ({ doc, runTransaction })), {
         FieldValue: { delete: vi.fn(() => ({ __delete__: true })) },
     });
     return {
-        eventGet,
-        settingsSet,
+        transactionGet,
+        transactionSet,
+        transactionUpdate,
+        runTransaction,
         doc,
         firestore,
         enforceAppCheck: vi.fn(),
         getUserDeletionGuardState: vi.fn(),
+        getUserDeletionGuardStateInTransaction: vi.fn(),
         markDerivedMetricsDirtyAndMaybeQueue: vi.fn(),
     };
 });
@@ -37,6 +46,7 @@ vi.mock('../../../shared/functions-manifest', () => ({
 vi.mock('../utils', () => ({ enforceAppCheck: hoisted.enforceAppCheck }));
 vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.getUserDeletionGuardState,
+    getUserDeletionGuardStateInTransaction: hoisted.getUserDeletionGuardStateInTransaction,
 }));
 vi.mock('./derived-metrics.service', async () => {
     const actual = await vi.importActual<typeof import('./derived-metrics.service')>('./derived-metrics.service');
@@ -49,13 +59,13 @@ describe('setTrainingBuildBenchmark', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: false });
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: false });
         hoisted.markDerivedMetricsDirtyAndMaybeQueue.mockResolvedValue({
             accepted: true,
             queued: true,
             generation: 14,
         });
-        hoisted.settingsSet.mockResolvedValue(undefined);
-        hoisted.eventGet.mockResolvedValue({
+        hoisted.transactionGet.mockResolvedValue({
             exists: true,
             data: () => ({
                 name: 'Spring marathon',
@@ -88,7 +98,7 @@ describe('setTrainingBuildBenchmark', () => {
         expect(hoisted.enforceAppCheck).toHaveBeenCalled();
         expect(hoisted.doc).toHaveBeenCalledWith('users/user-1/events/race-1');
         expect(hoisted.doc).toHaveBeenCalledWith('users/user-1/config/settings');
-        expect(hoisted.settingsSet).toHaveBeenCalledWith({
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
             trainingSettings: {
                 buildBenchmarks: {
                     running: { mode: 'race', durationWeeks: 12, raceEventId: 'race-1' },
@@ -102,7 +112,7 @@ describe('setTrainingBuildBenchmark', () => {
     });
 
     it('accepts a valid tagged race with a legacy ISO start date', async () => {
-        hoisted.eventGet.mockResolvedValueOnce({
+        hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
                 name: 'Spring marathon',
@@ -120,11 +130,11 @@ describe('setTrainingBuildBenchmark', () => {
                 selection: { mode: 'race', durationWeeks: 12, raceEventId: 'race-1' },
             },
         })).resolves.toMatchObject({ accepted: true });
-        expect(hoisted.settingsSet).toHaveBeenCalled();
+        expect(hoisted.transactionSet).toHaveBeenCalled();
     });
 
     it('rejects races without an exact Race tag and overlapping manual periods', async () => {
-        hoisted.eventGet.mockResolvedValueOnce({
+        hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
                 tags: ['Race pace'],
@@ -141,7 +151,7 @@ describe('setTrainingBuildBenchmark', () => {
             auth: { uid: 'user-1' }, app: {},
             data: { discipline: 'cycling', selection: { mode: 'period', durationWeeks: 8, endDayMs: Date.now() } },
         })).rejects.toMatchObject({ code: 'failed-precondition' });
-        expect(hoisted.settingsSet).not.toHaveBeenCalled();
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
     });
 
     it('guards deletion and clears only the selected sport benchmark', async () => {
@@ -156,9 +166,21 @@ describe('setTrainingBuildBenchmark', () => {
             auth: { uid: 'user-1' }, app: {},
             data: { discipline: 'cycling', selection: null },
         });
-        expect(hoisted.settingsSet).toHaveBeenLastCalledWith({
+        expect(hoisted.transactionSet).toHaveBeenLastCalledWith(expect.anything(), {
             trainingSettings: { buildBenchmarks: { cycling: { __delete__: true } } },
         }, { merge: true });
+    });
+
+    it('rechecks deletion state inside the atomic benchmark write', async () => {
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+
+        await expect((setTrainingBuildBenchmark as any)({
+            auth: { uid: 'user-1' }, app: {},
+            data: { discipline: 'cycling', selection: null },
+        })).rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.markDerivedMetricsDirtyAndMaybeQueue).not.toHaveBeenCalled();
     });
 
     it('rejects malformed selections before reads or writes', () => {
@@ -187,5 +209,44 @@ describe('setTrainingBuildBenchmark', () => {
             selection: { mode: 'race', durationWeeks: 8, raceEventId: '🏃'.repeat(400) },
         })).toThrow('selection must be a valid');
         expect(() => parseTrainingBuildBenchmarkRequest({ discipline: 'swimming', selection: null })).toThrow('discipline');
+        expect(() => parseTrainingBuildBenchmarkRequest({
+            discipline: 'running',
+            selection: { mode: 'race', durationWeeks: 8, raceEventId: 'event-1' },
+            markRaceEventId: 'other-event',
+        })).toThrow('markRaceEventId');
+    });
+
+    it('adds the Race tag and saves the matching benchmark in one transaction', async () => {
+        hoisted.transactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({
+                name: 'Long run dress rehearsal',
+                tags: ['Marathon block'],
+                benchmarkReviewTags: ['stale'],
+                startDate: Date.UTC(2026, 2, 1, 9, 0, 0),
+                stats: { 'Activity Types': ['Running'] },
+            }),
+        });
+
+        await expect((setTrainingBuildBenchmark as any)({
+            auth: { uid: 'user-1' }, app: {},
+            data: {
+                discipline: 'running',
+                selection: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
+                markRaceEventId: 'event-1',
+            },
+        })).resolves.toMatchObject({ accepted: true });
+
+        expect(hoisted.transactionUpdate).toHaveBeenCalledWith(
+            { path: 'users/user-1/events/event-1' },
+            { tags: ['Marathon block', 'Race'], benchmarkReviewTags: { __delete__: true } },
+        );
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
+                },
+            },
+        }, { merge: true });
     });
 });

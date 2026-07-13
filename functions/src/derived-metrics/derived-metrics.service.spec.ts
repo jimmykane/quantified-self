@@ -365,6 +365,9 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running.benchmark?.easySeconds).toBeNull();
         expect(running.benchmark?.efficiency).toBeNull();
         expect(running.suggestedRaces).toEqual([{ eventId: 'race-anchor', startDayMs: raceDayMs, label: 'Spring marathon' }]);
+        expect(running.suggestedEvents).toEqual([
+            { eventId: 'run-build', startDayMs: Date.UTC(2026, 3, 19), label: null },
+        ]);
         expect(cycling.status).toBe('ready');
         expect(cycling.current?.activityCount).toBe(1);
         expect(cycling.current?.trainingStressScore).toBeNull();
@@ -415,6 +418,45 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running?.selection?.label).toBe('Legacy marathon');
         expect(running?.suggestedRaces).toEqual([
             { eventId: 'legacy-race', startDayMs: raceDayMs, label: 'Legacy marathon' },
+        ]);
+        expect(running?.suggestedEvents).toEqual([]);
+    });
+
+    it('keeps newer anchors available when a saved benchmark uses a longer duration', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
+        const docs = [
+            {
+                id: 'saved-race',
+                data: () => ({
+                    name: 'Spring marathon',
+                    tags: ['Race'],
+                    startDate: Date.UTC(2026, 1, 1),
+                    stats: { [DataActivityTypes.type]: [ActivityTypes.Running] },
+                }),
+            },
+            {
+                id: 'newer-event',
+                data: () => ({
+                    name: 'Long run dress rehearsal',
+                    startDate: Date.UTC(2026, 4, 1),
+                    stats: { [DataActivityTypes.type]: [ActivityTypes.Running] },
+                }),
+            },
+        ] as any;
+
+        const result = buildTrainingBuildComparisonMetricPayload(docs, {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'race', durationWeeks: 12, raceEventId: 'saved-race' },
+                },
+            },
+        }, nowMs);
+
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+        expect(running?.status).toBe('ready');
+        expect(running?.suggestedEvents).toEqual([
+            { eventId: 'newer-event', startDayMs: Date.UTC(2026, 4, 1), label: 'Long run dress rehearsal' },
         ]);
     });
 

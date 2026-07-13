@@ -14,6 +14,7 @@ import type {
   DerivedTrainingBuildBenchmarkReference,
   DerivedTrainingBuildComparisonDiscipline,
   DerivedTrainingBuildComparisonMetricPayload,
+  DerivedTrainingBuildEventSuggestion,
   DerivedTrainingBuildRaceSuggestion,
   DerivedTrainingBuildWindow,
   DerivedTrainingDisciplineSummary,
@@ -169,14 +170,16 @@ export interface DashboardTrainingSummaryContext {
 }
 
 export type DashboardTrainingBuildWindow = DerivedTrainingBuildWindow;
+export type DashboardTrainingBuildEventSuggestion = DerivedTrainingBuildEventSuggestion;
 export type DashboardTrainingBuildRaceSuggestion = DerivedTrainingBuildRaceSuggestion;
 export type DashboardTrainingBuildBenchmarkReference = DerivedTrainingBuildBenchmarkReference;
 
-export interface DashboardTrainingBuildComparisonDiscipline extends Omit<DerivedTrainingBuildComparisonDiscipline, 'current' | 'benchmark' | 'selection' | 'suggestedRaces'> {
+export interface DashboardTrainingBuildComparisonDiscipline extends Omit<DerivedTrainingBuildComparisonDiscipline, 'current' | 'benchmark' | 'selection' | 'suggestedRaces' | 'suggestedEvents'> {
   current: DashboardTrainingBuildWindow | null;
   benchmark: DashboardTrainingBuildWindow | null;
   selection: DashboardTrainingBuildBenchmarkReference | null;
   suggestedRaces: DashboardTrainingBuildRaceSuggestion[];
+  suggestedEvents: DashboardTrainingBuildEventSuggestion[];
 }
 
 export interface DashboardTrainingBuildComparisonContext {
@@ -492,6 +495,10 @@ function resolveDashboardTrainingBuildRaceSuggestions(value: unknown): Dashboard
   });
 }
 
+function resolveDashboardTrainingBuildEventSuggestions(value: unknown): DashboardTrainingBuildEventSuggestion[] {
+  return resolveDashboardTrainingBuildRaceSuggestions(value);
+}
+
 export function resolveDashboardTrainingBuildComparisonContext(payload: unknown): DashboardTrainingBuildComparisonContext | null {
   const raw = (payload || {}) as Partial<DerivedTrainingBuildComparisonMetricPayload>;
   const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
@@ -506,6 +513,7 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
     if (
       (source.discipline !== 'running' && source.discipline !== 'cycling')
       || (source.status !== 'not-configured' && source.status !== 'invalid-selection' && source.status !== 'ready')
+      || !Array.isArray(source.suggestedEvents)
     ) {
       return [];
     }
@@ -522,6 +530,7 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
       current,
       benchmark,
       suggestedRaces: resolveDashboardTrainingBuildRaceSuggestions(source.suggestedRaces),
+      suggestedEvents: resolveDashboardTrainingBuildEventSuggestions(source.suggestedEvents),
     }];
   });
   if (

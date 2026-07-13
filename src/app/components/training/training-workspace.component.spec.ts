@@ -125,6 +125,8 @@ describe('TrainingWorkspaceComponent', () => {
       ...createDashboardDerivedMetricsMissingState(),
       trainingBuildComparisonStatus: 'ready',
     };
+    expect((component as any).resolveTrainingBuildEventSuggestionsState(null)).toBe('loading');
+    expect((component as any).resolveTrainingBuildEventSuggestionsState(readySource)).toBe('ready');
     expect((component as any).resolveTrainingBuildCardState('running', null, null)).toBe('not-configured');
     expect((component as any).resolveTrainingBuildCardState('running', readySource, selection)).toBe('ready');
     expect((component as any).resolveTrainingBuildCardState('running', readySource, {
@@ -135,6 +137,7 @@ describe('TrainingWorkspaceComponent', () => {
     component.derivedState = { ...component.derivedState, trainingBuildComparisonStatus: 'building' };
     expect((component as any).resolveTrainingBuildCardState('running', null, selection)).toBe('updating');
     component.derivedState = { ...component.derivedState, trainingBuildComparisonStatus: 'failed' };
+    expect((component as any).resolveTrainingBuildEventSuggestionsState(null)).toBe('unavailable');
     expect((component as any).resolveTrainingBuildCardState('running', null, selection)).toBe('unavailable');
     expect(component.formatTrainingBuildDelta(14, 10)).toBe('+4');
     expect(component.formatTrainingBuildDurationDelta(5_400, 3_600)).toBe('+30m');

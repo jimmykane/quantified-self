@@ -251,15 +251,20 @@ describe('dashboard-derived-metrics.helper', () => {
           intensitySourceEventCount: 9, efficiency: 1.9, efficiencySampleCount: 9,
         },
         suggestedRaces: [{ eventId: 'race-1', startDayMs: Date.UTC(2026, 4, 24), label: 'Spring marathon' }],
+        suggestedEvents: [{ eventId: 'event-1', startDayMs: Date.UTC(2026, 4, 12), label: 'Long run' }],
       }, {
-        discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [],
+        discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
       }],
     });
 
     expect(context?.disciplines).toHaveLength(2);
     expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
     expect(context?.disciplines[0].selection?.mode).toBe('race');
+    expect(context?.disciplines[0].suggestedEvents).toEqual([
+      { eventId: 'event-1', startDayMs: Date.UTC(2026, 4, 12), label: 'Long run' },
+    ]);
     expect(context?.disciplines[1].status).toBe('not-configured');
+    expect(context?.disciplines[1].suggestedEvents).toEqual([]);
   });
 
   it('rejects incomplete or duplicated sport build comparison snapshots for self-healing', () => {
@@ -270,6 +275,7 @@ describe('dashboard-derived-metrics.helper', () => {
       current: null,
       benchmark: null,
       suggestedRaces: [],
+      suggestedEvents: [],
     });
 
     expect(resolveDashboardTrainingBuildComparisonContext({

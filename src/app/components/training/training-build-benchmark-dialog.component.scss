@@ -3,10 +3,26 @@ mat-dialog-content { display: grid; gap: 20px; min-width: min(100%, 440px); }
 .dialog-intro, .dialog-empty { margin: 0; color: var(--mat-sys-on-surface-variant); line-height: 1.45; }
 .dialog-field { display: grid; gap: 8px; }
 .field-label { font-size: 13px; font-weight: 650; color: var(--mat-sys-on-surface-variant); }
-.race-list { display: grid; gap: 8px; max-height: 250px; overflow-y: auto; }
-.race-option { justify-content: space-between; text-align: left; }
-.race-option-selected { --mat-button-outlined-outline-color: var(--mat-sys-primary); background: var(--mat-sys-secondary-container); }
-.race-option small { color: var(--mat-sys-on-surface-variant); }
+.event-picker { display: grid; gap: 20px; }
+.event-picker-section { display: grid; gap: 10px; }
+.event-picker-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.event-picker-heading p, .event-picker-hint { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); line-height: 1.35; }
+.event-picker-hint { font-size: 12px; }
+.event-picker-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(128px, .45fr); gap: 10px; }
+.event-search-input, .event-date-filter { width: 100%; }
+.event-option-list { display: grid; gap: 8px; }
+.event-option-list-scroll { max-height: 250px; overflow-y: auto; padding-right: 2px; }
+.event-option { justify-content: space-between; min-height: 48px; text-align: left; }
+.event-option-copy { display: grid; gap: 2px; min-width: 0; }
+.event-option-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-option-selected { --mat-button-outlined-outline-color: var(--mat-sys-primary); background: var(--mat-sys-secondary-container); }
+.event-option small { color: var(--mat-sys-on-surface-variant); }
+.event-selection-preview { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); line-height: 1.35; }
+.event-selection-preview > span { color: var(--mat-sys-on-secondary-container); }
 .period-input { width: 100%; }
 .dialog-error { margin: 0; color: var(--mat-sys-error); line-height: 1.35; }
 mat-dialog-actions mat-spinner { display: inline-block; vertical-align: middle; }
+
+@media (max-width: 480px) {
+  .event-picker-filters { grid-template-columns: 1fr; }
+}

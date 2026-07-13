@@ -18,7 +18,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     });
 
     component.selectDurationWeeks(10);
-    component.selectRace('race-1');
+    component.selectEvent('race-1');
     await component.save();
 
     expect(functionsService.call).toHaveBeenCalledWith('setTrainingBuildBenchmark', {
@@ -82,7 +82,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     });
   });
 
-  it('reselects a race that remains eligible when switching from a manual period', () => {
+  it('keeps an eligible tagged race selected when switching from a manual period', () => {
     const { component } = createDialog({
       discipline: 'running',
       asOfDayMs: Date.UTC(2026, 0, 1),
@@ -94,9 +94,74 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     });
 
     component.selectDurationWeeks(12);
-    component.selectMode('race');
+    component.selectMode('event');
 
-    expect(component.raceEventId).toBe('valid-for-12');
-    expect(component.visibleSuggestedRaces.map(race => race.eventId)).toEqual(['valid-for-12']);
+    expect(component.eventId).toBe('valid-for-12');
+    expect(component.visibleSuggestedRaces).toEqual([
+      expect.objectContaining({ eventId: 'valid-for-8-only', isEligible: false }),
+      expect.objectContaining({ eventId: 'valid-for-12', isEligible: true }),
+    ]);
+  });
+
+  it('explicitly marks a selected historical event as Race before using it', async () => {
+    const { component, dialogRef, functionsService } = createDialog({
+      discipline: 'running',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [],
+      suggestedEvents: [{ eventId: 'event-1', startDayMs: Date.UTC(2025, 7, 20), label: 'Long run dress rehearsal' }],
+    });
+
+    component.selectEvent('event-1');
+    await component.save();
+
+    expect(functionsService.call).toHaveBeenCalledWith('setTrainingBuildBenchmark', {
+      discipline: 'running',
+      selection: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
+      markRaceEventId: 'event-1',
+    });
+    expect(component.saveActionLabel).toBe('Mark as Race and use event');
+    expect(dialogRef.close).toHaveBeenCalledWith({
+      saved: true,
+      selection: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
+    });
+  });
+
+  it('filters other events without hiding the prioritized tagged races', () => {
+    const { component } = createDialog({
+      discipline: 'cycling',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [{ eventId: 'race-1', startDayMs: Date.UTC(2025, 7, 12), label: 'Gran fondo' }],
+      suggestedEvents: [
+        { eventId: 'event-1', startDayMs: Date.UTC(2025, 10, 1), label: 'Tempo ride' },
+        { eventId: 'event-2', startDayMs: Date.UTC(2024, 4, 1), label: 'Mountain day' },
+      ],
+    });
+
+    component.updateEventSearchQuery('tempo');
+    expect(component.visibleSuggestedRaces.map(event => event.eventId)).toEqual(['race-1']);
+    expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-1']);
+
+    component.updateEventSearchQuery('');
+    component.selectEventDateFilter('earlier');
+    expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-2']);
+  });
+
+  it('does not allow an event that would overlap the current build', async () => {
+    const { component, functionsService } = createDialog({
+      discipline: 'running',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [],
+      suggestedEvents: [{ eventId: 'recent-event', startDayMs: Date.UTC(2025, 10, 15), label: 'Recent long run' }],
+    });
+
+    component.selectEvent('recent-event');
+    await component.save();
+
+    expect(component.selectedEvent?.isEligible).toBe(false);
+    expect(component.errorMessage).toContain('eligible');
+    expect(functionsService.call).not.toHaveBeenCalled();
   });
 });
