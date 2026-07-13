@@ -6,6 +6,7 @@ import type {
   NormalizedInsightLocationFilter,
 } from '../../../../shared/ai-insights.types';
 import { aiInsightsGenkit } from './genkit';
+import { traceInsightModelCall } from './ai-tracing';
 import { resolveMapboxAccessToken } from './mapbox-config';
 
 const DEFAULT_LOCATION_RADIUS_KM = 50;
@@ -466,7 +467,7 @@ const defaultResolveLocationFilterDependencies: ResolveLocationFilterDependencie
     };
   },
   inferLocationText: async (input) => {
-    const { output } = await aiInsightsGenkit.generate({
+    const { output } = await traceInsightModelCall('location', () => aiInsightsGenkit.generate({
       system: [
         'You normalize fitness insight location filters into one concrete place name or coordinates.',
         'Use the prompt and failed candidate as hints.',
@@ -476,7 +477,7 @@ const defaultResolveLocationFilterDependencies: ResolveLocationFilterDependencie
       ].join(' '),
       prompt: JSON.stringify(input),
       output: { schema: InferLocationTextSchema },
-    });
+    }));
 
     return normalizeLocationText(output?.locationText);
   },

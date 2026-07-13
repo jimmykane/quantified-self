@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentPond Instrumentation"
+  short_description: "Add OpenInference tracing to Firebase apps"
+  default_prompt: "Use $agentpond-instrumentation to add OpenInference tracing to this Firebase application."
