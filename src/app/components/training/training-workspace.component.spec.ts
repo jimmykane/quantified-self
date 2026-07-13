@@ -161,6 +161,54 @@ describe('TrainingWorkspaceComponent', () => {
     }
   });
 
+  it('updates an open benchmark dialog when event suggestions arrive', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const updateEventSuggestions = vi.fn();
+    const suggestedEvent = {
+      eventId: 'event-1',
+      startDayMs: Date.UTC(2025, 7, 20),
+      label: 'New event',
+      distanceMeters: 80_000,
+      durationSeconds: 10_800,
+      trainingStressScore: 220,
+    };
+    component.derivedState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingBuildComparisonStatus: 'ready',
+      trainingBuildComparison: {
+        asOfDayMs: Date.UTC(2026, 0, 2),
+        disciplines: [
+          {
+            discipline: 'running', status: 'not-configured', selection: null, current: null, benchmark: null,
+            suggestedRaces: [], suggestedEvents: [],
+          },
+          {
+            discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null,
+            suggestedRaces: [], suggestedEvents: [suggestedEvent],
+          },
+        ],
+      },
+    } as any;
+    (component as any).trainingBuildBenchmarkDialogRef = { componentInstance: { updateEventSuggestions } };
+    (component as any).trainingBuildBenchmarkDialogDiscipline = 'cycling';
+
+    (component as any).refreshTrainingBuildCards();
+
+    expect(updateEventSuggestions).toHaveBeenCalledWith({
+      asOfDayMs: Date.UTC(2026, 0, 2),
+      suggestedRaces: [],
+      suggestedEvents: [suggestedEvent],
+      state: 'ready',
+    });
+  });
+
   it('keeps derived metric listeners active after the initial user change', async () => {
     const derivedState$ = new Subject<DashboardDerivedMetricsState>();
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };

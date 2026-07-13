@@ -4,8 +4,9 @@ import { TrainingBuildBenchmarkDialogComponent } from './training-build-benchmar
 function createDialog(data: any) {
   const dialogRef = { close: vi.fn() } as any;
   const functionsService = { call: vi.fn().mockResolvedValue({ data: { accepted: true } }) } as any;
-  const component = new TrainingBuildBenchmarkDialogComponent(data, dialogRef, functionsService);
-  return { component, dialogRef, functionsService };
+  const changeDetector = { markForCheck: vi.fn() } as any;
+  const component = new TrainingBuildBenchmarkDialogComponent(data, dialogRef, functionsService, changeDetector);
+  return { component, dialogRef, functionsService, changeDetector };
 }
 
 describe('TrainingBuildBenchmarkDialogComponent', () => {
@@ -127,25 +128,80 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     });
   });
 
-  it('filters other events without hiding the prioritized tagged races', () => {
+  it('orders recognizable activity summaries without relying on generic event names', () => {
     const { component } = createDialog({
       discipline: 'cycling',
       asOfDayMs: Date.UTC(2026, 0, 1),
       selection: null,
-      suggestedRaces: [{ eventId: 'race-1', startDayMs: Date.UTC(2025, 7, 12), label: 'Gran fondo' }],
+      suggestedRaces: [{
+        eventId: 'race-1', startDayMs: Date.UTC(2025, 7, 12), label: 'Gran fondo',
+        distanceMeters: 160_000, durationSeconds: 18_000, trainingStressScore: 400,
+      }],
       suggestedEvents: [
-        { eventId: 'event-1', startDayMs: Date.UTC(2025, 10, 1), label: 'Tempo ride' },
-        { eventId: 'event-2', startDayMs: Date.UTC(2024, 4, 1), label: 'Mountain day' },
+        {
+          eventId: 'event-1', startDayMs: Date.UTC(2025, 10, 1), label: 'New event',
+          distanceMeters: 40_000, durationSeconds: 5_400, trainingStressScore: 110,
+        },
+        {
+          eventId: 'event-2', startDayMs: Date.UTC(2024, 4, 1), label: 'Mountain day',
+          distanceMeters: 90_000, durationSeconds: 14_400, trainingStressScore: null,
+        },
+        {
+          eventId: 'event-3', startDayMs: Date.UTC(2025, 9, 1), label: 'Threshold session',
+          distanceMeters: 30_000, durationSeconds: 4_800, trainingStressScore: 180,
+        },
       ],
     });
 
-    component.updateEventSearchQuery('tempo');
     expect(component.visibleSuggestedRaces.map(event => event.eventId)).toEqual(['race-1']);
-    expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-1']);
+    expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-1', 'event-3', 'event-2']);
+    expect(component.visibleSuggestedEvents[0].displayLabel).toBeNull();
+    expect(component.visibleSuggestedEvents[0].detailsText).toContain('110 TSS');
 
-    component.updateEventSearchQuery('');
+    component.selectEventSort('longest');
+    expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-2', 'event-1', 'event-3']);
+
+    component.selectEventSort('highest-load');
+    expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-3', 'event-1', 'event-2']);
+
     component.selectEventDateFilter('earlier');
     expect(component.visibleSuggestedEvents.map(event => event.eventId)).toEqual(['event-2']);
+  });
+
+  it('replaces loading suggestions when the derived snapshot arrives while the dialog is open', () => {
+    const { component, changeDetector } = createDialog({
+      discipline: 'cycling',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [],
+      suggestedEvents: [],
+      eventSuggestionsState: 'loading',
+    });
+
+    component.updateEventSuggestions({
+      asOfDayMs: Date.UTC(2026, 0, 2),
+      suggestedRaces: [],
+      suggestedEvents: [{
+        eventId: 'event-1',
+        startDayMs: Date.UTC(2025, 7, 20),
+        label: 'New event',
+        distanceMeters: 80_000,
+        durationSeconds: 10_800,
+        trainingStressScore: 220,
+      }],
+      state: 'ready',
+    });
+
+    expect(component.eventSuggestionsState).toBe('ready');
+    expect(component.visibleSuggestedEvents).toEqual([
+      expect.objectContaining({
+        eventId: 'event-1',
+        detailsText: expect.stringContaining('220 TSS'),
+        displayLabel: null,
+      }),
+    ]);
+    expect(component.eventId).toBe('event-1');
+    expect(changeDetector.markForCheck).toHaveBeenCalledTimes(1);
   });
 
   it('does not allow an event that would overlap the current build', async () => {

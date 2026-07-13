@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, computed } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { AppThemes, DataDistance, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -169,6 +169,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private trainingBuildSettings: TrainingBuildSettings = {};
   private unitSettings: UserUnitSettingsInterface | null = null;
   private pendingTrainingBuildSelections = new Map<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection | null>();
+  private trainingBuildBenchmarkDialogRef: MatDialogRef<TrainingBuildBenchmarkDialogComponent> | null = null;
+  private trainingBuildBenchmarkDialogDiscipline: DerivedTrainingDiscipline | null = null;
 
   constructor(
     private readonly authService: AppAuthService,
@@ -271,6 +273,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private resetWorkspace(): void {
+    const activeDialogRef = this.trainingBuildBenchmarkDialogRef;
+    this.trainingBuildBenchmarkDialogRef = null;
+    this.trainingBuildBenchmarkDialogDiscipline = null;
+    activeDialogRef?.close();
     this.isLoading = true;
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.sleepTrend = null;
@@ -328,6 +334,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   public openTrainingBuildBenchmarkDialog(discipline: DerivedTrainingDiscipline): void {
+    if (this.trainingBuildBenchmarkDialogRef) {
+      return;
+    }
     const card = this.trainingBuildCards.find(item => item.discipline === discipline);
     const selection = this.resolveEffectiveTrainingBuildSelection(discipline);
     const dialogRef = this.dialog.open(TrainingBuildBenchmarkDialogComponent, {
@@ -340,9 +349,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         suggestedEvents: card?.source?.suggestedEvents || [],
         eventSuggestionsState: this.resolveTrainingBuildEventSuggestionsState(card?.source || null),
         selection,
+        unitSettings: this.unitSettings,
       },
     });
+    this.trainingBuildBenchmarkDialogRef = dialogRef;
+    this.trainingBuildBenchmarkDialogDiscipline = discipline;
     this.subscriptions.add(dialogRef.afterClosed().subscribe((result: { saved?: boolean; selection?: TrainingBuildBenchmarkSelection | null } | undefined) => {
+      if (this.trainingBuildBenchmarkDialogRef === dialogRef) {
+        this.trainingBuildBenchmarkDialogRef = null;
+        this.trainingBuildBenchmarkDialogDiscipline = null;
+      }
       if (!result?.saved) {
         return;
       }
@@ -499,6 +515,22 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private refreshTrainingBuildCards(): void {
     this.trainingBuildCards = this.buildTrainingBuildCards();
+    this.syncTrainingBuildBenchmarkDialogSuggestions();
+  }
+
+  private syncTrainingBuildBenchmarkDialogSuggestions(): void {
+    const dialogRef = this.trainingBuildBenchmarkDialogRef;
+    const discipline = this.trainingBuildBenchmarkDialogDiscipline;
+    if (!dialogRef || !discipline) {
+      return;
+    }
+    const card = this.trainingBuildCards.find(item => item.discipline === discipline);
+    dialogRef.componentInstance.updateEventSuggestions({
+      asOfDayMs: this.derivedState.trainingBuildComparison?.asOfDayMs ?? this.resolveCurrentUtcDayMs(),
+      suggestedRaces: card?.source?.suggestedRaces || [],
+      suggestedEvents: card?.source?.suggestedEvents || [],
+      state: this.resolveTrainingBuildEventSuggestionsState(card?.source || null),
+    });
   }
 
   private buildTrainingBuildCards(): TrainingBuildCardViewModel[] {

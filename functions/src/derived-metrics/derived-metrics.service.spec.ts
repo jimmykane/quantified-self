@@ -364,9 +364,15 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running.benchmark?.trainingStressScore).toBe(70);
         expect(running.benchmark?.easySeconds).toBeNull();
         expect(running.benchmark?.efficiency).toBeNull();
-        expect(running.suggestedRaces).toEqual([{ eventId: 'race-anchor', startDayMs: raceDayMs, label: 'Spring marathon' }]);
+        expect(running.suggestedRaces).toEqual([{
+            eventId: 'race-anchor', startDayMs: raceDayMs, label: 'Spring marathon',
+            distanceMeters: 42_195, durationSeconds: 12_000, trainingStressScore: null,
+        }]);
         expect(running.suggestedEvents).toEqual([
-            { eventId: 'run-build', startDayMs: Date.UTC(2026, 3, 19), label: null },
+            {
+                eventId: 'run-build', startDayMs: Date.UTC(2026, 3, 19), label: null,
+                distanceMeters: 10_000, durationSeconds: 3_600, trainingStressScore: 70,
+            },
         ]);
         expect(cycling.status).toBe('ready');
         expect(cycling.current?.activityCount).toBe(1);
@@ -417,7 +423,10 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running?.status).toBe('ready');
         expect(running?.selection?.label).toBe('Legacy marathon');
         expect(running?.suggestedRaces).toEqual([
-            { eventId: 'legacy-race', startDayMs: raceDayMs, label: 'Legacy marathon' },
+            {
+                eventId: 'legacy-race', startDayMs: raceDayMs, label: 'Legacy marathon',
+                distanceMeters: null, durationSeconds: null, trainingStressScore: null,
+            },
         ]);
         expect(running?.suggestedEvents).toEqual([]);
     });
@@ -456,7 +465,10 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         const running = result.payload.disciplines.find(item => item.discipline === 'running');
         expect(running?.status).toBe('ready');
         expect(running?.suggestedEvents).toEqual([
-            { eventId: 'newer-event', startDayMs: Date.UTC(2026, 4, 1), label: 'Long run dress rehearsal' },
+            {
+                eventId: 'newer-event', startDayMs: Date.UTC(2026, 4, 1), label: 'Long run dress rehearsal',
+                distanceMeters: null, durationSeconds: null, trainingStressScore: null,
+            },
         ]);
     });
 

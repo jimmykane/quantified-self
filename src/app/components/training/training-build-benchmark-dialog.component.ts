@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, Inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { DataDistance, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   DerivedTrainingBuildEventSuggestion,
   DerivedTrainingBuildRaceSuggestion,
@@ -9,14 +10,19 @@ import type {
   TrainingBuildBenchmarkSelection,
   TrainingBuildDurationWeeks,
 } from '@shared/derived-metrics';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
 import { AppFunctionsService } from '../../services/app.functions.service';
 
 type TrainingBuildReferenceMode = 'event' | 'period';
 type TrainingBuildEventDateFilter = 'all' | 'recent' | 'earlier';
+type TrainingBuildEventSort = 'latest' | 'longest' | 'highest-load';
 export type TrainingBuildEventSuggestionsState = 'ready' | 'loading' | 'unavailable';
 
 interface TrainingBuildEventOption extends DerivedTrainingBuildEventSuggestion {
   isEligible: boolean;
+  detailsText: string;
+  displayLabel: string | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -29,6 +35,14 @@ export interface TrainingBuildBenchmarkDialogData {
   suggestedEvents?: DerivedTrainingBuildEventSuggestion[];
   eventSuggestionsState?: TrainingBuildEventSuggestionsState;
   selection: TrainingBuildBenchmarkSelection | null;
+  unitSettings?: UserUnitSettingsInterface | null;
+}
+
+export interface TrainingBuildEventSuggestionsUpdate {
+  asOfDayMs: number;
+  suggestedRaces: DerivedTrainingBuildRaceSuggestion[];
+  suggestedEvents: DerivedTrainingBuildEventSuggestion[];
+  state: TrainingBuildEventSuggestionsState;
 }
 
 @Component({
@@ -48,8 +62,9 @@ export class TrainingBuildBenchmarkDialogComponent {
   public visibleSuggestedRaces: TrainingBuildEventOption[] = [];
   public displayedSuggestedRaces: TrainingBuildEventOption[] = [];
   public visibleSuggestedEvents: TrainingBuildEventOption[] = [];
-  public eventSearchQuery = '';
+  public eventSuggestionsState: TrainingBuildEventSuggestionsState;
   public eventDateFilter: TrainingBuildEventDateFilter = 'all';
+  public eventSort: TrainingBuildEventSort = 'latest';
   public isRaceListExpanded = false;
   public selectedEvent: TrainingBuildEventOption | null = null;
   public selectedBuildStartDayMs: number | null = null;
@@ -62,11 +77,13 @@ export class TrainingBuildBenchmarkDialogComponent {
     @Inject(MAT_DIALOG_DATA) public readonly data: TrainingBuildBenchmarkDialogData,
     private readonly dialogRef: MatDialogRef<TrainingBuildBenchmarkDialogComponent>,
     private readonly functionsService: AppFunctionsService,
+    private readonly changeDetector: ChangeDetectorRef,
   ) {
     const selection = data.selection;
     this.durationWeeks = selection?.durationWeeks || 12;
     this.mode = selection?.mode === 'period' ? 'period' : 'event';
     this.eventId = selection?.mode === 'race' ? selection.raceEventId : null;
+    this.eventSuggestionsState = data.eventSuggestionsState || 'ready';
     this.periodEndDate = selection?.mode === 'period'
       ? this.formatDateInput(selection.endDayMs)
       : this.formatDateInput(this.defaultPeriodEndDayMs());
@@ -91,6 +108,21 @@ export class TrainingBuildBenchmarkDialogComponent {
     this.errorMessage = null;
   }
 
+  public updateEventSuggestions(update: TrainingBuildEventSuggestionsUpdate): void {
+    this.data.asOfDayMs = update.asOfDayMs;
+    this.data.suggestedRaces = update.suggestedRaces;
+    this.data.suggestedEvents = update.suggestedEvents;
+    this.eventSuggestionsState = update.state;
+    this.refreshEventOptions();
+    if (this.mode === 'event' && !this.selectedEvent) {
+      this.eventId = this.visibleSuggestedRaces.find(event => event.isEligible)?.eventId
+        || this.visibleSuggestedEvents.find(event => event.isEligible)?.eventId
+        || null;
+      this.refreshSelectedEvent();
+    }
+    this.changeDetector.markForCheck();
+  }
+
   public selectDurationWeeks(durationWeeks: TrainingBuildDurationWeeks): void {
     this.durationWeeks = durationWeeks;
     this.refreshEventOptions();
@@ -103,13 +135,13 @@ export class TrainingBuildBenchmarkDialogComponent {
     this.errorMessage = null;
   }
 
-  public updateEventSearchQuery(value: string): void {
-    this.eventSearchQuery = value;
+  public selectEventDateFilter(value: TrainingBuildEventDateFilter): void {
+    this.eventDateFilter = value;
     this.refreshEventOptions();
   }
 
-  public selectEventDateFilter(value: TrainingBuildEventDateFilter): void {
-    this.eventDateFilter = value;
+  public selectEventSort(value: TrainingBuildEventSort): void {
+    this.eventSort = value;
     this.refreshEventOptions();
   }
 
@@ -188,7 +220,8 @@ export class TrainingBuildBenchmarkDialogComponent {
   private refreshEventOptions(): void {
     this.visibleSuggestedRaces = this.toEventOptions(this.data.suggestedRaces);
     this.visibleSuggestedEvents = this.toEventOptions(this.data.suggestedEvents || [])
-      .filter(event => this.matchesEventPickerFilters(event));
+      .filter(event => this.matchesEventPickerDateFilter(event))
+      .sort((left, right) => this.compareSuggestedEvents(left, right));
     this.refreshDisplayedSuggestedRaces();
     this.refreshSelectedEvent();
   }
@@ -200,14 +233,12 @@ export class TrainingBuildBenchmarkDialogComponent {
       .map(event => ({
         ...event,
         isEligible: (event.startDayMs - DAY_MS) < currentStartDayMs,
+        detailsText: this.formatEventDetails(event),
+        displayLabel: this.resolveEventDisplayLabel(event.label),
       }));
   }
 
-  private matchesEventPickerFilters(event: TrainingBuildEventOption): boolean {
-    const query = this.eventSearchQuery.trim().toLocaleLowerCase();
-    if (query && !(event.label || 'Untitled event').toLocaleLowerCase().includes(query)) {
-      return false;
-    }
+  private matchesEventPickerDateFilter(event: TrainingBuildEventOption): boolean {
     const recentBoundaryDayMs = this.resolveAsOfDayMs() - (365 * DAY_MS);
     if (this.eventDateFilter === 'recent') {
       return event.startDayMs >= recentBoundaryDayMs;
@@ -216,6 +247,62 @@ export class TrainingBuildBenchmarkDialogComponent {
       return event.startDayMs < recentBoundaryDayMs;
     }
     return true;
+  }
+
+  private compareSuggestedEvents(left: TrainingBuildEventOption, right: TrainingBuildEventOption): number {
+    if (this.eventSort === 'longest') {
+      return this.compareNullableMetricDescending(left.durationSeconds, right.durationSeconds)
+        || this.compareByMostRecent(left, right);
+    }
+    if (this.eventSort === 'highest-load') {
+      return this.compareNullableMetricDescending(left.trainingStressScore, right.trainingStressScore)
+        || this.compareByMostRecent(left, right);
+    }
+    return this.compareByMostRecent(left, right);
+  }
+
+  private compareNullableMetricDescending(left: number | null, right: number | null): number {
+    if (left === null && right === null) {
+      return 0;
+    }
+    if (left === null) {
+      return 1;
+    }
+    if (right === null) {
+      return -1;
+    }
+    return right - left;
+  }
+
+  private compareByMostRecent(
+    left: Pick<TrainingBuildEventOption, 'eventId' | 'startDayMs'>,
+    right: Pick<TrainingBuildEventOption, 'eventId' | 'startDayMs'>,
+  ): number {
+    return right.startDayMs - left.startDayMs || left.eventId.localeCompare(right.eventId);
+  }
+
+  private formatEventDetails(event: DerivedTrainingBuildEventSuggestion): string {
+    const details = [
+      this.formatEventDistance(event.distanceMeters),
+      Number.isFinite(event.durationSeconds) ? formatSleepDuration(event.durationSeconds) : null,
+      Number.isFinite(event.trainingStressScore) ? `${new Intl.NumberFormat(undefined, {
+        maximumFractionDigits: 0,
+      }).format(event.trainingStressScore)} TSS` : null,
+    ].filter((detail): detail is string => !!detail && detail !== '--');
+    return details.join(' · ') || 'Activity details unavailable';
+  }
+
+  private formatEventDistance(value: number | null): string | null {
+    if (value === null || !Number.isFinite(value)) {
+      return null;
+    }
+    return resolveUnitAwareDisplayStat(new DataDistance(value), this.data.unitSettings, { stripRepeatedUnit: true })?.text
+      || `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value / 1000)} km`;
+  }
+
+  private resolveEventDisplayLabel(value: string | null): string | null {
+    const label = `${value || ''}`.trim();
+    return label && label.toLocaleLowerCase() !== 'new event' ? label : null;
   }
 
   private refreshDisplayedSuggestedRaces(): void {

@@ -425,17 +425,16 @@ export interface DerivedTrainingSummaryMetricPayload {
   excludesMergedEvents: boolean;
 }
 
-export interface DerivedTrainingBuildRaceSuggestion {
-  eventId: string;
-  startDayMs: number;
-  label: string | null;
-}
-
 export interface DerivedTrainingBuildEventSuggestion {
   eventId: string;
   startDayMs: number;
   label: string | null;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+  trainingStressScore: number | null;
 }
+
+export interface DerivedTrainingBuildRaceSuggestion extends DerivedTrainingBuildEventSuggestion {}
 
 export type DerivedTrainingBuildBenchmarkReference = TrainingBuildBenchmarkSelection & {
   selectionKey: string;
@@ -477,9 +476,7 @@ export interface DerivedTrainingBuildComparisonDiscipline {
   benchmark: DerivedTrainingBuildWindow | null;
   suggestedRaces: DerivedTrainingBuildRaceSuggestion[];
   // Bounded, historical, untagged events for the explicit “mark as Race” flow.
-  // Optional at the persisted-data boundary so old snapshots can be detected and
-  // selectively rebuilt without a global schema-version bump.
-  suggestedEvents?: DerivedTrainingBuildEventSuggestion[];
+  suggestedEvents: DerivedTrainingBuildEventSuggestion[];
 }
 
 export interface DerivedTrainingBuildComparisonMetricPayload {

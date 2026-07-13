@@ -1741,6 +1741,23 @@ function resolveTrainingBuildBenchmarkReference(
     };
 }
 
+function buildTrainingBuildEventSuggestion(
+    event: ResolvedTrainingBuildEvent,
+): DerivedTrainingBuildEventSuggestion {
+    const distanceMeters = toFiniteNumber(resolveRawStatNumericValue(event.eventData, DataDistance.type));
+    const trainingStressScore = resolveTrainingStressScore(event.eventData);
+    return {
+        eventId: event.eventId,
+        startDayMs: event.startDayMs,
+        label: toSafeString(event.eventData.name).trim() || null,
+        distanceMeters: distanceMeters !== null && distanceMeters >= 0 ? toRoundedNumber(distanceMeters, 2) : null,
+        durationSeconds: resolveTrainingBuildActivityDurationSeconds(event.eventData),
+        trainingStressScore: trainingStressScore !== null && trainingStressScore >= 0
+            ? toRoundedNumber(trainingStressScore, 2)
+            : null,
+    };
+}
+
 function buildTrainingBuildRaceSuggestions(
     events: readonly ResolvedTrainingBuildEvent[],
     currentStartDayMs: number,
@@ -1749,11 +1766,7 @@ function buildTrainingBuildRaceSuggestions(
         .filter(event => (event.startDayMs - DAY_MS) < currentStartDayMs && isRaceTaggedEvent(event.eventData))
         .sort((left, right) => right.startDayMs - left.startDayMs || left.eventId.localeCompare(right.eventId))
         .slice(0, TRAINING_BUILD_RACE_SUGGESTION_LIMIT)
-        .map(event => ({
-            eventId: event.eventId,
-            startDayMs: event.startDayMs,
-            label: toSafeString(event.eventData.name).trim() || null,
-        }));
+        .map(event => buildTrainingBuildEventSuggestion(event));
 }
 
 function buildTrainingBuildEventSuggestions(
@@ -1764,11 +1777,7 @@ function buildTrainingBuildEventSuggestions(
         .filter(event => (event.startDayMs - DAY_MS) < currentStartDayMs && !isRaceTaggedEvent(event.eventData))
         .sort((left, right) => right.startDayMs - left.startDayMs || left.eventId.localeCompare(right.eventId))
         .slice(0, TRAINING_BUILD_EVENT_SUGGESTION_LIMIT)
-        .map(event => ({
-            eventId: event.eventId,
-            startDayMs: event.startDayMs,
-            label: toSafeString(event.eventData.name).trim() || null,
-        }));
+        .map(event => buildTrainingBuildEventSuggestion(event));
 }
 
 export function buildTrainingBuildComparisonMetricPayload(

@@ -250,8 +250,14 @@ describe('dashboard-derived-metrics.helper', () => {
           longestActivityDurationSeconds: 4_000, easySeconds: 8_000, moderateSeconds: 3_000, hardSeconds: 1_000,
           intensitySourceEventCount: 9, efficiency: 1.9, efficiencySampleCount: 9,
         },
-        suggestedRaces: [{ eventId: 'race-1', startDayMs: Date.UTC(2026, 4, 24), label: 'Spring marathon' }],
-        suggestedEvents: [{ eventId: 'event-1', startDayMs: Date.UTC(2026, 4, 12), label: 'Long run' }],
+        suggestedRaces: [{
+          eventId: 'race-1', startDayMs: Date.UTC(2026, 4, 24), label: 'Spring marathon',
+          distanceMeters: 42_195, durationSeconds: 12_600, trainingStressScore: 310,
+        }],
+        suggestedEvents: [{
+          eventId: 'event-1', startDayMs: Date.UTC(2026, 4, 12), label: 'Long run',
+          distanceMeters: 18_000, durationSeconds: 6_000, trainingStressScore: null,
+        }],
       }, {
         discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
       }],
@@ -261,7 +267,10 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
     expect(context?.disciplines[0].selection?.mode).toBe('race');
     expect(context?.disciplines[0].suggestedEvents).toEqual([
-      { eventId: 'event-1', startDayMs: Date.UTC(2026, 4, 12), label: 'Long run' },
+      {
+        eventId: 'event-1', startDayMs: Date.UTC(2026, 4, 12), label: 'Long run',
+        distanceMeters: 18_000, durationSeconds: 6_000, trainingStressScore: null,
+      },
     ]);
     expect(context?.disciplines[1].status).toBe('not-configured');
     expect(context?.disciplines[1].suggestedEvents).toEqual([]);
@@ -286,5 +295,15 @@ describe('dashboard-derived-metrics.helper', () => {
       asOfDayMs: Date.UTC(2026, 5, 30),
       disciplines: [buildDiscipline('running'), buildDiscipline('running')],
     })).toBeNull();
+
+    const snapshotWithoutActivitySummaries = buildDiscipline('running');
+    snapshotWithoutActivitySummaries.suggestedEvents = [{
+      eventId: 'old-event', startDayMs: Date.UTC(2026, 3, 1), label: 'New event',
+    }];
+    expect(resolveDashboardTrainingBuildComparisonContext({
+      asOfDayMs: Date.UTC(2026, 5, 30),
+      disciplines: [snapshotWithoutActivitySummaries, buildDiscipline('cycling')],
+    })).toBeNull();
+
   });
 });

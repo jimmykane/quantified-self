@@ -473,30 +473,53 @@ function resolveDashboardTrainingBuildSelection(value: unknown): DashboardTraini
   return null;
 }
 
-function resolveDashboardTrainingBuildRaceSuggestions(value: unknown): DashboardTrainingBuildRaceSuggestion[] {
-  if (!Array.isArray(value)) {
-    return [];
+function resolveDashboardTrainingBuildSuggestionMetric(
+  value: unknown,
+  allowZero = false,
+): number | null | undefined {
+  if (value === null) {
+    return null;
   }
-  return value.flatMap((candidate) => {
+  const numericValue = toFiniteNumber(value);
+  return numericValue !== null && (allowZero ? numericValue >= 0 : numericValue > 0)
+    ? numericValue
+    : undefined;
+}
+
+function resolveDashboardTrainingBuildSuggestions(value: unknown): DashboardTrainingBuildEventSuggestion[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const suggestions: DashboardTrainingBuildEventSuggestion[] = [];
+  for (const candidate of value) {
     if (!candidate || typeof candidate !== 'object') {
-      return [];
+      return null;
     }
-    const raw = candidate as Partial<DerivedTrainingBuildRaceSuggestion>;
+    const raw = candidate as Partial<DerivedTrainingBuildEventSuggestion>;
     const eventId = typeof raw.eventId === 'string' && raw.eventId.trim() ? raw.eventId : null;
     const startDayMs = toFiniteNumber(raw.startDayMs);
-    if (!eventId || startDayMs === null) {
-      return [];
+    const distanceMeters = resolveDashboardTrainingBuildSuggestionMetric(raw.distanceMeters, true);
+    const durationSeconds = resolveDashboardTrainingBuildSuggestionMetric(raw.durationSeconds);
+    const trainingStressScore = resolveDashboardTrainingBuildSuggestionMetric(raw.trainingStressScore, true);
+    if (
+      !eventId
+      || startDayMs === null
+      || distanceMeters === undefined
+      || durationSeconds === undefined
+      || trainingStressScore === undefined
+    ) {
+      return null;
     }
-    return [{
+    suggestions.push({
       eventId,
       startDayMs,
       label: typeof raw.label === 'string' && raw.label.trim() ? raw.label : null,
-    }];
-  });
-}
-
-function resolveDashboardTrainingBuildEventSuggestions(value: unknown): DashboardTrainingBuildEventSuggestion[] {
-  return resolveDashboardTrainingBuildRaceSuggestions(value);
+      distanceMeters,
+      durationSeconds,
+      trainingStressScore,
+    });
+  }
+  return suggestions;
 }
 
 export function resolveDashboardTrainingBuildComparisonContext(payload: unknown): DashboardTrainingBuildComparisonContext | null {
@@ -517,6 +540,11 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
     ) {
       return [];
     }
+    const suggestedRaces = resolveDashboardTrainingBuildSuggestions(source.suggestedRaces);
+    const suggestedEvents = resolveDashboardTrainingBuildSuggestions(source.suggestedEvents);
+    if (!suggestedRaces || !suggestedEvents) {
+      return [];
+    }
     const selection = resolveDashboardTrainingBuildSelection(source.selection);
     const current = source.current === null ? null : resolveDashboardTrainingBuildWindow(source.current);
     const benchmark = source.benchmark === null ? null : resolveDashboardTrainingBuildWindow(source.benchmark);
@@ -529,8 +557,8 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
       selection,
       current,
       benchmark,
-      suggestedRaces: resolveDashboardTrainingBuildRaceSuggestions(source.suggestedRaces),
-      suggestedEvents: resolveDashboardTrainingBuildEventSuggestions(source.suggestedEvents),
+      suggestedRaces,
+      suggestedEvents,
     }];
   });
   if (

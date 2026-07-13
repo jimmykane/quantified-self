@@ -398,7 +398,7 @@ describe('DashboardDerivedMetricsService', () => {
     }
   });
 
-  it('rebuilds a ready build comparison snapshot that predates event picker suggestions', () => {
+  it('marks an incomplete ready build comparison snapshot as stale', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date(Date.UTC(2026, 6, 13, 12, 0, 0)));
@@ -410,6 +410,32 @@ describe('DashboardDerivedMetricsService', () => {
           disciplines: [
             { discipline: 'running', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [] },
             { discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [] },
+          ],
+        },
+      });
+
+      expect(status).toBe('stale');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rebuilds a ready build comparison snapshot whose picker candidates lack activity summaries', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(Date.UTC(2026, 6, 13, 12, 0, 0)));
+      const status = (service as any).resolveSnapshotStatus(DERIVED_METRIC_KINDS.TrainingBuildComparison, {
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: {
+          asOfDayMs: Date.UTC(2026, 6, 13),
+          disciplines: [
+            {
+              discipline: 'running', status: 'not-configured', selection: null, current: null, benchmark: null,
+              suggestedRaces: [{ eventId: 'old-race', startDayMs: Date.UTC(2026, 4, 1), label: 'New event' }],
+              suggestedEvents: [],
+            },
+            { discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [] },
           ],
         },
       });

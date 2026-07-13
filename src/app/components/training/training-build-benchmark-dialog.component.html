@@ -1,7 +1,7 @@
 <h2 mat-dialog-title>Set {{ data.discipline === 'running' ? 'running' : 'cycling' }} benchmark</h2>
 
 <mat-dialog-content>
-  <p class="dialog-intro">Compare your current build with one historical build of the same length. An event anchor excludes event day itself.</p>
+  <p class="dialog-intro">Compare a historical build with the same number of weeks. Event day is excluded when it is the anchor.</p>
 
   <div class="dialog-field">
     <span class="field-label">Build length</span>
@@ -21,109 +21,120 @@
   </div>
 
   @if (mode === 'event') {
-    <div class="event-picker" aria-label="Race and event suggestions">
-      <section class="event-picker-section" aria-label="Tagged races">
-        <div class="event-picker-heading">
-          <div>
-            <span class="field-label">Your tagged races</span>
-            <p>Choose an existing <strong>Race</strong>-tagged event.</p>
+    @if (eventSuggestionsState === 'ready') {
+      <div class="event-picker" aria-label="Race and event suggestions">
+        <section class="event-picker-section" aria-label="Tagged races">
+          <div class="event-picker-heading">
+            <div>
+              <span class="field-label">Your tagged races</span>
+              <p>Choose an existing <strong>Race</strong>-tagged event.</p>
+            </div>
+            @if (visibleSuggestedRaces.length > displayedSuggestedRaces.length) {
+              <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show all</button>
+            } @else if (isRaceListExpanded && visibleSuggestedRaces.length > 3) {
+              <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show less</button>
+            }
           </div>
-          @if (visibleSuggestedRaces.length > displayedSuggestedRaces.length) {
-            <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show all</button>
-          } @else if (isRaceListExpanded && visibleSuggestedRaces.length > 3) {
-            <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show less</button>
-          }
-        </div>
-        <div class="event-option-list">
-          @for (race of displayedSuggestedRaces; track race.eventId) {
-            <button
-              mat-stroked-button
-              type="button"
-              class="event-option"
-              [class.event-option-selected]="race.eventId === eventId"
-              (click)="selectEvent(race.eventId)"
-              [disabled]="isSaving || !race.isEligible"
-            >
-              <span class="event-option-copy">
-                <span>{{ race.label || 'Tagged race' }}</span>
-                @if (!race.isEligible) { <small>Not available for this build length</small> }
-              </span>
-              <small>{{ race.startDayMs | date:'mediumDate':'UTC' }}</small>
-            </button>
-          } @empty {
-            @if (data.eventSuggestionsState === 'loading') {
-              <p class="dialog-empty" role="status">Loading historical event suggestions…</p>
-            } @else if (data.eventSuggestionsState === 'unavailable') {
-              <p class="dialog-empty">Historical event suggestions are unavailable right now. You can still choose a manual period.</p>
-            } @else {
+          <div class="event-option-list">
+            @for (race of displayedSuggestedRaces; track race.eventId) {
+              <button
+                mat-stroked-button
+                type="button"
+                class="event-option"
+                [class.event-option-selected]="race.eventId === eventId"
+                (click)="selectEvent(race.eventId)"
+                [disabled]="isSaving || !race.isEligible"
+              >
+                <span class="event-option-copy">
+                  <span class="event-option-details">{{ race.detailsText }}</span>
+                  @if (race.displayLabel) { <small>{{ race.displayLabel }}</small> }
+                  @if (!race.isEligible) { <small>Not available for this build length</small> }
+                </span>
+                <small class="event-option-date">{{ race.startDayMs | date:'mediumDate':'UTC' }}</small>
+              </button>
+            } @empty {
               <p class="dialog-empty">No historical events are tagged exactly <strong>Race</strong> for this sport yet.</p>
             }
-          }
-        </div>
-      </section>
-
-      <section class="event-picker-section" aria-label="Other historical events">
-        <div class="event-picker-heading">
-          <div>
-            <span class="field-label">Choose another event</span>
-            <p>Selecting one explicitly adds the <strong>Race</strong> tag when you save.</p>
           </div>
-        </div>
-        <div class="event-picker-filters">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-search-input">
-            <mat-label>Search events</mat-label>
-            <input matInput [value]="eventSearchQuery" (input)="updateEventSearchQuery($any($event.target).value)" [disabled]="isSaving">
-          </mat-form-field>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-date-filter">
-            <mat-label>Date</mat-label>
-            <mat-select [value]="eventDateFilter" (selectionChange)="selectEventDateFilter($event.value)" [disabled]="isSaving">
-              <mat-option value="all">All shown</mat-option>
-              <mat-option value="recent">Past year</mat-option>
-              <mat-option value="earlier">Earlier history</mat-option>
-            </mat-select>
-          </mat-form-field>
-        </div>
-        <div class="event-option-list event-option-list-scroll">
-          @for (event of visibleSuggestedEvents; track event.eventId) {
-            <button
-              mat-stroked-button
-              type="button"
-              class="event-option"
-              [class.event-option-selected]="event.eventId === eventId"
-              (click)="selectEvent(event.eventId)"
-              [disabled]="isSaving || !event.isEligible"
-            >
-              <span class="event-option-copy">
-                <span>{{ event.label || 'Untitled event' }}</span>
-                @if (!event.isEligible) { <small>Overlaps the current build at this length</small> }
-              </span>
-              <small>{{ event.startDayMs | date:'mediumDate':'UTC' }}</small>
-            </button>
-          } @empty {
-            @if (data.eventSuggestionsState === 'loading') {
-              <p class="dialog-empty" role="status">Looking for historical {{ data.discipline }} events…</p>
-            } @else if (data.eventSuggestionsState === 'unavailable') {
-              <p class="dialog-empty">Historical event suggestions are unavailable right now. You can still choose a manual period.</p>
-            } @else {
-              <p class="dialog-empty">No historical {{ data.discipline }} events match these filters.</p>
-            }
-          }
-        </div>
-        @if (visibleSuggestedEvents.length) {
-          <p class="event-picker-hint">Showing up to 100 recent historical events for this sport.</p>
-        }
-      </section>
+        </section>
 
-      @if (selectedEvent && selectedBuildStartDayMs !== null && selectedBenchmarkEndDayMs !== null) {
-        <div class="event-selection-preview">
-          <strong>{{ selectedEvent.label || (selectedEventNeedsRaceTag ? 'Selected event' : 'Tagged race') }}</strong>
-          <span>{{ durationWeeks }}-week build: {{ selectedBuildStartDayMs | date:'mediumDate':'UTC' }} – {{ selectedBenchmarkEndDayMs | date:'mediumDate':'UTC' }} · event day excluded</span>
-          @if (selectedEventNeedsRaceTag) {
-            <span>This will add the <strong>Race</strong> tag and use this event as the anchor.</span>
+        <section class="event-picker-section" aria-label="Other historical events">
+          <div class="event-picker-heading">
+            <div>
+              <span class="field-label">Choose another event</span>
+              <p>Pick by activity facts. Selecting one adds the <strong>Race</strong> tag when you save.</p>
+            </div>
+          </div>
+          <div class="event-picker-filters">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-date-filter">
+              <mat-label>Date</mat-label>
+              <mat-select [value]="eventDateFilter" (selectionChange)="selectEventDateFilter($event.value)" [disabled]="isSaving">
+                <mat-option value="all">All shown</mat-option>
+                <mat-option value="recent">Past year</mat-option>
+                <mat-option value="earlier">Earlier history</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <div class="event-sort-control">
+              <span class="field-label">Order</span>
+              <mat-button-toggle-group [value]="eventSort" (change)="selectEventSort($event.value)" [disabled]="isSaving" aria-label="Event order">
+                <mat-button-toggle value="latest">Latest</mat-button-toggle>
+                <mat-button-toggle value="longest">Longest</mat-button-toggle>
+                <mat-button-toggle value="highest-load">Highest load</mat-button-toggle>
+              </mat-button-toggle-group>
+            </div>
+          </div>
+          <div class="event-option-list event-option-list-scroll">
+            @for (event of visibleSuggestedEvents; track event.eventId) {
+              <button
+                mat-stroked-button
+                type="button"
+                class="event-option"
+                [class.event-option-selected]="event.eventId === eventId"
+                (click)="selectEvent(event.eventId)"
+                [disabled]="isSaving || !event.isEligible"
+              >
+                <span class="event-option-copy">
+                  <span class="event-option-details">{{ event.detailsText }}</span>
+                  @if (event.displayLabel) { <small>{{ event.displayLabel }}</small> }
+                  @if (!event.isEligible) { <small>Overlaps the current build at this length</small> }
+                </span>
+                <small class="event-option-date">{{ event.startDayMs | date:'mediumDate':'UTC' }}</small>
+              </button>
+            } @empty {
+              <p class="dialog-empty">No historical {{ data.discipline }} events in this time range.</p>
+            }
+          </div>
+          @if (visibleSuggestedEvents.length) {
+            <p class="event-picker-hint">Showing the latest 100 historical events for this sport.</p>
+          }
+        </section>
+
+        @if (selectedEvent && selectedBuildStartDayMs !== null && selectedBenchmarkEndDayMs !== null) {
+          <div class="event-selection-preview">
+            <strong>{{ selectedEvent.detailsText }}</strong>
+            @if (selectedEvent.displayLabel) { <span>{{ selectedEvent.displayLabel }}</span> }
+            <span>{{ durationWeeks }}-week build: {{ selectedBuildStartDayMs | date:'mediumDate':'UTC' }} – {{ selectedBenchmarkEndDayMs | date:'mediumDate':'UTC' }} · event day excluded</span>
+            @if (selectedEventNeedsRaceTag) {
+              <span>This will add the <strong>Race</strong> tag and use this event as the anchor.</span>
+            }
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="event-suggestions-status">
+        @if (eventSuggestionsState === 'loading') {
+          <mat-spinner diameter="22"></mat-spinner>
+        }
+        <div class="event-suggestions-status-copy">
+          <strong>{{ eventSuggestionsState === 'loading' ? 'Finding past events' : 'Event suggestions unavailable' }}</strong>
+          @if (eventSuggestionsState === 'loading') {
+            <p role="status">You can switch to Manual period if you already know the historical end date.</p>
+          } @else {
+            <p>Switch to Manual period to choose a historical end date instead.</p>
           }
         </div>
-      }
-    </div>
+      </div>
+    }
   } @else {
     <mat-form-field appearance="outline" class="period-input">
       <mat-label>Historical build end date</mat-label>
@@ -142,7 +153,9 @@
     <button mat-button color="warn" (click)="clear()" [disabled]="isSaving">Clear benchmark</button>
   }
   <button mat-button mat-dialog-close [disabled]="isSaving">Cancel</button>
-  <button mat-flat-button color="primary" (click)="save()" [disabled]="isSaving || !canSave">
-    @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> } @else { {{ saveActionLabel }} }
-  </button>
+  @if (mode === 'period' || (eventSuggestionsState === 'ready' && canSave)) {
+    <button mat-flat-button color="primary" (click)="save()" [disabled]="isSaving || !canSave">
+      @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> } @else { {{ saveActionLabel }} }
+    </button>
+  }
 </mat-dialog-actions>

@@ -2,19 +2,27 @@
 mat-dialog-content { display: grid; gap: 20px; min-width: min(100%, 440px); }
 .dialog-intro, .dialog-empty { margin: 0; color: var(--mat-sys-on-surface-variant); line-height: 1.45; }
 .dialog-field { display: grid; gap: 8px; }
+.dialog-field mat-button-toggle-group { justify-self: start; }
 .field-label { font-size: 13px; font-weight: 650; color: var(--mat-sys-on-surface-variant); }
 .event-picker { display: grid; gap: 20px; }
+.event-suggestions-status { display: flex; align-items: flex-start; gap: 10px; }
+.event-suggestions-status mat-spinner { flex: 0 0 22px; margin-top: 2px; }
+.event-suggestions-status-copy { display: grid; gap: 4px; }
+.event-suggestions-status-copy p { margin: 0; color: var(--mat-sys-on-surface-variant); line-height: 1.45; }
 .event-picker-section { display: grid; gap: 10px; }
 .event-picker-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .event-picker-heading p, .event-picker-hint { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); line-height: 1.35; }
 .event-picker-hint { font-size: 12px; }
-.event-picker-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(128px, .45fr); gap: 10px; }
-.event-search-input, .event-date-filter { width: 100%; }
+.event-picker-filters { display: grid; grid-template-columns: minmax(132px, .45fr) minmax(0, 1fr); align-items: end; gap: 10px; }
+.event-date-filter { width: 100%; }
+.event-sort-control { display: grid; gap: 8px; }
 .event-option-list { display: grid; gap: 8px; }
 .event-option-list-scroll { max-height: 250px; overflow-y: auto; padding-right: 2px; }
-.event-option { justify-content: space-between; min-height: 48px; text-align: left; }
+.event-option { justify-content: space-between; min-height: 56px; text-align: left; }
 .event-option-copy { display: grid; gap: 2px; min-width: 0; }
 .event-option-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-option-details { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; font-weight: 650; }
+.event-option-date { flex: 0 0 auto; }
 .event-option-selected { --mat-button-outlined-outline-color: var(--mat-sys-primary); background: var(--mat-sys-secondary-container); }
 .event-option small { color: var(--mat-sys-on-surface-variant); }
 .event-selection-preview { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); line-height: 1.35; }
