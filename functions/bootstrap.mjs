@@ -9,6 +9,7 @@ const telemetry = new NodeSDK({
 telemetry.start();
 
 const functions = await import("./lib/functions/src/index.js");
+const runtimeFunctions = functions.default ?? functions;
 
 export const addCOROSAPIHistoryToQueue = functions.addCOROSAPIHistoryToQueue;
 export const addSuuntoAppHistoryToQueue = functions.addSuuntoAppHistoryToQueue;
@@ -72,6 +73,7 @@ export const processDerivedMetricsTask = functions.processDerivedMetricsTask;
 export const processRouteDeliverySyncTask = functions.processRouteDeliverySyncTask;
 export const processRouteSyncTask = functions.processRouteSyncTask;
 export const processSleepSyncTask = functions.processSleepSyncTask;
+export const processSportsLibReparseHeavyTask = runtimeFunctions.processSportsLibReparseHeavyTask;
 export const processSportsLibReparseTask = functions.processSportsLibReparseTask;
 export const processSportsLibRouteReparseTask = functions.processSportsLibRouteReparseTask;
 export const processWorkoutTask = functions.processWorkoutTask;
@@ -88,6 +90,7 @@ export const requestAndSetGarminAPIAccessToken = functions.requestAndSetGarminAP
 export const requestAndSetSuuntoAPIAccessToken = functions.requestAndSetSuuntoAPIAccessToken;
 export const restoreUserClaims = functions.restoreUserClaims;
 export const retryPendingServiceDisconnects = functions.retryPendingServiceDisconnects;
+export const retrySportsLibReparseHeavyJob = runtimeFunctions.retrySportsLibReparseHeavyJob;
 export const scheduleCOROSSleepSync = functions.scheduleCOROSSleepSync;
 export const scheduleSportsLibReparseScan = functions.scheduleSportsLibReparseScan;
 export const scheduleSportsLibRouteReparseScan = functions.scheduleSportsLibRouteReparseScan;
