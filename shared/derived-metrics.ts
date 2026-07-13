@@ -13,6 +13,7 @@ export const DERIVED_METRIC_KINDS = {
   IntensityDistribution: 'intensity_distribution',
   EfficiencyTrend: 'efficiency_trend',
   TrainingSummary: 'training_summary',
+  PowerCurve: 'power_curve',
 } as const;
 
 export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS];
@@ -32,6 +33,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.IntensityDistribution,
   DERIVED_METRIC_KINDS.EfficiencyTrend,
   DERIVED_METRIC_KINDS.TrainingSummary,
+  DERIVED_METRIC_KINDS.PowerCurve,
 ];
 
 export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
@@ -41,6 +43,7 @@ export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.FormNow,
   DERIVED_METRIC_KINDS.FormPlus7d,
   DERIVED_METRIC_KINDS.FreshnessForecast,
+  DERIVED_METRIC_KINDS.PowerCurve,
 ];
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
@@ -313,6 +316,53 @@ export interface DerivedTrainingSummaryMetricPayload {
   excludesMergedEvents: boolean;
 }
 
+export type DerivedPowerCurveScope = DerivedTrainingDiscipline;
+
+export type DerivedPowerCurveRange =
+  | 'thisWeek'
+  | 'thisMonth'
+  | '14d'
+  | '30d'
+  | '90d'
+  | '1y'
+  | '2y'
+  | '3y'
+  | '4y'
+  | 'all';
+
+// Firestore does not allow nested arrays, so every point series is stored as
+// flat [duration, power, wattsPerKgOrZero] triples.
+export type DerivedPowerCurvePointSeries = number[];
+
+export interface DerivedPowerCurveLatestActivity {
+  eventId: string | null;
+  startMs: number;
+  points: DerivedPowerCurvePointSeries;
+}
+
+export interface DerivedPowerCurveRangeSnapshot {
+  sourceEventCount: number;
+  matchedEventCount: number;
+  latestActivity: DerivedPowerCurveLatestActivity | null;
+  bestPoints: DerivedPowerCurvePointSeries;
+  best30dPoints: DerivedPowerCurvePointSeries;
+  best30dEventCount: number;
+  best90dPoints: DerivedPowerCurvePointSeries;
+  best90dEventCount: number;
+}
+
+export interface DerivedPowerCurveScopeSnapshot {
+  ranges: Record<Exclude<DerivedPowerCurveRange, 'thisWeek'>, DerivedPowerCurveRangeSnapshot>;
+  thisWeekByStartDay: Record<string, DerivedPowerCurveRangeSnapshot>;
+}
+
+export interface DerivedPowerCurveMetricPayload {
+  asOfDayMs: number;
+  excludesMergedEvents: boolean;
+  pointSamplingVersion: 1;
+  scopes: Record<DerivedPowerCurveScope, DerivedPowerCurveScopeSnapshot>;
+}
+
 export type DerivedFormMetricSnapshot = DerivedMetricSnapshotBase<DerivedFormMetricPayload>;
 export type DerivedRecoveryNowMetricSnapshot = DerivedMetricSnapshotBase<DerivedRecoveryNowMetricPayload>;
 export type DerivedAcwrMetricSnapshot = DerivedMetricSnapshotBase<DerivedAcwrMetricPayload>;
@@ -327,6 +377,7 @@ export type DerivedFreshnessForecastMetricSnapshot = DerivedMetricSnapshotBase<D
 export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBase<DerivedIntensityDistributionMetricPayload>;
 export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
 export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSummaryMetricPayload>;
+export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedPowerCurveMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
   | DerivedRecoveryNowMetricSnapshot
@@ -341,7 +392,8 @@ export type DerivedMetricSnapshot =
   | DerivedFreshnessForecastMetricSnapshot
   | DerivedIntensityDistributionMetricSnapshot
   | DerivedEfficiencyTrendMetricSnapshot
-  | DerivedTrainingSummaryMetricSnapshot;
+  | DerivedTrainingSummaryMetricSnapshot
+  | DerivedPowerCurveMetricSnapshot;
 
 export interface EnsureDerivedMetricsRequest {
   metricKinds?: DerivedMetricKind[];

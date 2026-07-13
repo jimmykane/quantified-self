@@ -41,7 +41,6 @@ import {
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
-import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 function makeEvent(options: {
@@ -270,143 +269,25 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Monthly);
   });
 
-  it('should build Power Curve tiles from per-tile filtered events', () => {
-    const fallbackEvent = makeEvent({
-      id: 'fallback-best',
-      startDate: '2024-02-01T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Cycling],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [{ duration: 300, power: 999 }],
-      },
-    });
-    const cyclingEvent = makeEvent({
-      id: 'cycling-event',
-      startDate: '2024-03-01T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Cycling],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [
-          { duration: 60, power: 400 },
-          { duration: 300, power: 320 },
-        ],
-      },
-    });
-    const runningEvent = makeEvent({
-      id: 'running-event',
-      startDate: '2024-03-02T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Running],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [{ duration: 300, power: 500 }],
-      },
-    });
-
+  it('should build Power Curve tiles from their derived snapshot without tile events', () => {
+    const range = {
+      sourceEventCount: 2,
+      matchedEventCount: 2,
+      latestActivity: { eventId: 'cycling-latest', startMs: Date.UTC(2024, 2, 3), points: [300, 390, 0] },
+      bestPoints: [300, 420, 0],
+      best30dPoints: [300, 400, 0],
+      best30dEventCount: 1,
+      best90dPoints: [300, 410, 0],
+      best90dEventCount: 2,
+    };
+    const scope = {
+      ranges: { thisMonth: range, '14d': range, '30d': range, '90d': range, '1y': range, '2y': range, '3y': range, '4y': range, all: range },
+      thisWeekByStartDay: Object.fromEntries(Array.from({ length: 7 }, (_, day) => [`${day}`, range])),
+    };
     const viewModels = buildDashboardTileViewModels({
       tiles: [{
         type: TileTypes.Chart,
         order: 7,
-        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
-        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Weekly,
-        eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] },
-        size: { columns: 1, rows: 1 },
-      }] as any,
-      events: [fallbackEvent],
-      tileEventsByOrder: {
-        7: [cyclingEvent, runningEvent],
-      },
-    });
-
-    const powerCurve = (viewModels[0] as any).powerCurve;
-    expect((viewModels[0] as any).chartType).toBe(DASHBOARD_POWER_CURVE_CHART_TYPE);
-    expect((viewModels[0] as any).timeInterval).toBe(TimeIntervals.Auto);
-    expect(powerCurve.matchedEventCount).toBe(1);
-    expect(powerCurve.latestEventId).toBe('cycling-event');
-    expect(powerCurve.summaryPoints).toEqual([
-      { duration: 60, power: 400 },
-      { duration: 300, power: 320 },
-    ]);
-    expect(powerCurve.series).toHaveLength(1);
-    expect(powerCurve.series[0].seriesKey).toBe('latestAndBest');
-  });
-
-  it('should label running Power Curve latest series from the scoped tile filters', () => {
-    const bestRunningEvent = makeEvent({
-      id: 'best-running-event',
-      startDate: '2024-03-01T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Running],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [
-          { duration: 300, power: 420 },
-        ],
-      },
-    });
-    const latestRunningEvent = makeEvent({
-      id: 'latest-running-event',
-      startDate: '2024-03-03T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Running],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [
-          { duration: 300, power: 390 },
-        ],
-      },
-    });
-
-    const viewModels = buildDashboardTileViewModels({
-      tiles: [{
-        type: TileTypes.Chart,
-        order: 8,
-        name: 'Running Power Curve',
-        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
-        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Weekly,
-        eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
-        size: { columns: 1, rows: 1 },
-      }] as any,
-      events: [],
-      tileEventsByOrder: {
-        8: [bestRunningEvent, latestRunningEvent],
-      },
-    });
-
-    const powerCurve = (viewModels[0] as any).powerCurve;
-    expect(powerCurve.latestEventId).toBe('latest-running-event');
-    expect(powerCurve.compareMode).toBe('latest');
-    expect(powerCurve.comparisonSeriesLabel).toBe('Latest running activity');
-    expect(powerCurve.series.map((series: any) => series.label)).toEqual([
-      'Best in range',
-      'Latest running activity',
-    ]);
-  });
-
-  it('should label cycling Power Curve latest series from the scoped tile filters', () => {
-    const bestCyclingEvent = makeEvent({
-      id: 'best-cycling-event',
-      startDate: '2024-03-01T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Cycling],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [
-          { duration: 300, power: 420 },
-        ],
-      },
-    });
-    const latestCyclingEvent = makeEvent({
-      id: 'latest-cycling-event',
-      startDate: '2024-03-03T10:00:00.000Z',
-      activityTypes: [ActivityTypes.MountainBiking],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [
-          { duration: 300, power: 390 },
-        ],
-      },
-    });
-
-    const viewModels = buildDashboardTileViewModels({
-      tiles: [{
-        type: TileTypes.Chart,
-        order: 9,
         name: 'Cycling Power Curve',
         chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
         dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
@@ -414,131 +295,33 @@ describe('dashboard-tile-view-model.helper', () => {
         dataCategoryType: ChartDataCategoryTypes.DateType,
         dataTimeInterval: TimeIntervals.Weekly,
         eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
+        displaySettings: { powerCurveCompareMode: 'best30d' },
         size: { columns: 1, rows: 1 },
       }] as any,
-      events: [],
-      tileEventsByOrder: {
-        9: [bestCyclingEvent, latestCyclingEvent],
+      tileEventsByOrder: { 7: [] },
+      derivedMetrics: {
+        powerCurve: {
+          asOfDayMs: Date.UTC(2024, 2, 3),
+          excludesMergedEvents: true,
+          pointSamplingVersion: 1,
+          scopes: { cycling: scope, running: scope },
+        },
       },
     });
 
     const powerCurve = (viewModels[0] as any).powerCurve;
-    expect(powerCurve.latestEventId).toBe('latest-cycling-event');
+    expect(powerCurve.latestEventId).toBe('cycling-latest');
     expect(powerCurve.latestSeriesLabel).toBe('Latest cycling activity');
-    expect(powerCurve.compareMode).toBe('latest');
-    expect(powerCurve.comparisonSeriesLabel).toBe('Latest cycling activity');
-    expect(powerCurve.series.map((series: any) => series.label)).toEqual([
-      'Best in range',
-      'Latest cycling activity',
-    ]);
+    expect(powerCurve.comparisonSeriesLabel).toBe('Best last 30d');
+    expect(powerCurve.comparisonEventCount).toBe(1);
   });
 
-  it('should build Power Curve recent-best comparisons from tile display settings', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2024-01-31T12:00:00.000Z'));
-    try {
-      const olderBest = makeEvent({
-        id: 'older-best',
-        startDate: '2023-12-01T10:00:00.000Z',
-        activityTypes: [ActivityTypes.Cycling],
-        stats: {
-          [POWER_CURVE_STAT_TYPE]: [
-            { duration: 300, power: 430 },
-          ],
-        },
-      });
-      const recentBest = makeEvent({
-        id: 'recent-best',
-        startDate: '2024-01-20T10:00:00.000Z',
-        activityTypes: [ActivityTypes.Cycling],
-        stats: {
-          [POWER_CURVE_STAT_TYPE]: [
-            { duration: 300, power: 360 },
-          ],
-        },
-      });
-
-      const viewModels = buildDashboardTileViewModels({
-        tiles: [{
-          type: TileTypes.Chart,
-          order: 11,
-          name: 'Cycling Power Curve',
-          chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
-          dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-          dataValueType: ChartDataValueTypes.Total,
-          dataCategoryType: ChartDataCategoryTypes.DateType,
-          dataTimeInterval: TimeIntervals.Weekly,
-          eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] },
-          displaySettings: { powerCurveCompareMode: 'best30d' },
-          size: { columns: 1, rows: 1 },
-        }] as any,
-        events: [],
-        tileEventsByOrder: {
-          11: [olderBest, recentBest],
-        },
-      });
-
-      const powerCurve = (viewModels[0] as any).powerCurve;
-      expect(powerCurve.compareMode).toBe('best30d');
-      expect(powerCurve.comparisonSeriesLabel).toBe('Best last 30d');
-      expect(powerCurve.comparisonEventCount).toBe(1);
-      expect(powerCurve.series.map((series: any) => series.label)).toEqual([
-        'Best in range',
-        'Best last 30d',
-      ]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('should label saved Cycling Power Curve tiles from title when strict filter scope is unresolved', () => {
-    const bestCyclingEvent = makeEvent({
-      id: 'best-cycling-event',
-      startDate: '2024-03-01T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Cycling],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [
-          { duration: 300, power: 420 },
-        ],
-      },
-    });
-    const latestCyclingEvent = makeEvent({
-      id: 'latest-cycling-event',
-      startDate: '2024-03-03T10:00:00.000Z',
-      activityTypes: [ActivityTypes.Cycling],
-      stats: {
-        [POWER_CURVE_STAT_TYPE]: [
-          { duration: 300, power: 390 },
-        ],
-      },
-    });
-
+  it('maps an unclassified legacy Power Curve tile to the cycling snapshot', () => {
     const viewModels = buildDashboardTileViewModels({
-      tiles: [{
-        type: TileTypes.Chart,
-        order: 10,
-        name: 'Cycling Power Curve',
-        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any,
-        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-        dataValueType: ChartDataValueTypes.Total,
-        dataCategoryType: ChartDataCategoryTypes.DateType,
-        dataTimeInterval: TimeIntervals.Weekly,
-        eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running] },
-        size: { columns: 1, rows: 1 },
-      }] as any,
-      events: [],
-      tileEventsByOrder: {
-        10: [bestCyclingEvent, latestCyclingEvent],
-      },
+      tiles: [{ type: TileTypes.Chart, order: 8, chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as any, eventFilters: { range: '1y', activityTypes: [ActivityTypes.Running, ActivityTypes.Cycling] } }] as any,
+      derivedMetrics: null,
     });
-
-    const powerCurve = (viewModels[0] as any).powerCurve;
-    expect(powerCurve.latestEventId).toBe('latest-cycling-event');
-    expect(powerCurve.latestSeriesLabel).toBe('Latest cycling activity');
-    expect(powerCurve.series.map((series: any) => series.label)).toEqual([
-      'Best in range',
-      'Latest cycling activity',
-    ]);
+    expect((viewModels[0] as any).powerCurve).toBeNull();
   });
 
   it('should keep intensity-zones tiles as raw sorted event passthrough', () => {

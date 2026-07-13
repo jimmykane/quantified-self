@@ -102,9 +102,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
     expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
-    expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated event-backed charts');
+    expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
-    expect(gettingStartedSection?.content).toContain('latest matching activity or a saved recent-best comparison window');
+    expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
     expect(gettingStartedSection?.content).toContain('Device VO2 Max');
     expect(gettingStartedSection?.content).toContain('never as a readiness score');
   });
@@ -226,8 +226,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Efficiency Trend');
     expect(gettingStartedSection?.content).toContain('Cycling Power Curve');
     expect(gettingStartedSection?.content).toContain('Running Power Curve');
-    expect(gettingStartedSection?.content).toContain("each event's stored PowerCurve stat");
-    expect(gettingStartedSection?.content).toContain('latest matching activity, best last 30d, or best last 90d');
+    expect(gettingStartedSection?.content).toContain('prepared PowerCurve snapshot');
+    expect(gettingStartedSection?.content).toContain('latest activity, best last 30d, or best last 90d');
     expect(gettingStartedSection?.content).toContain('Cycling and running power data stay in separate tiles');
     expect(gettingStartedSection?.content).toContain('saved per dashboard tile');
     expect(gettingStartedSection?.content).not.toContain('**Sleep** shows connected-source sleep duration');

@@ -68,8 +68,8 @@ describe('dashboard-special-chart-types', () => {
     ]);
   });
 
-  it('marks Power Curve as the event-backed curated chart', () => {
-    expect(isDashboardEventBackedSpecialChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(true);
+  it('keeps Power Curve out of event-backed curated charts', () => {
+    expect(isDashboardEventBackedSpecialChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(false);
     expect(isDashboardEventBackedSpecialChartType(DASHBOARD_FORM_CHART_TYPE)).toBe(false);
     expect(isDashboardEventBackedSpecialChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(false);
   });

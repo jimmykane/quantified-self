@@ -52,6 +52,7 @@ describe('DashboardDerivedMetricsService', () => {
     intensityDistribution: null,
     efficiencyTrend: null,
     trainingSummary: null,
+    powerCurve: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
     acwrStatus: 'missing',
@@ -66,6 +67,7 @@ describe('DashboardDerivedMetricsService', () => {
     intensityDistributionStatus: 'missing',
     efficiencyTrendStatus: 'missing',
     trainingSummaryStatus: 'missing',
+    powerCurveStatus: 'missing',
   });
 
   beforeEach(() => {
@@ -140,7 +142,7 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
     expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
-    expect(doc).toHaveBeenCalledTimes(14);
+    expect(doc).toHaveBeenCalledTimes(15);
     expect(state.formStatus).toBe('ready');
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.acwrStatus).toBe('missing');
@@ -338,8 +340,36 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
         DERIVED_METRIC_KINDS.TrainingSummary,
+        DERIVED_METRIC_KINDS.PowerCurve,
       ],
     });
+  });
+
+  it('marks an unsupported ready Power Curve payload stale so it is rebuilt', async () => {
+    const uid = 'user-1';
+    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({
+      path: segments.join('/'),
+    }));
+    hoisted.docDataMock.mockImplementation((docRef: { path?: string } | undefined) => {
+      if (`${docRef?.path || ''}`.endsWith('/power_curve')) {
+        return of({
+          status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+          payload: {
+            asOfDayMs: Date.UTC(2026, 6, 13),
+            excludesMergedEvents: true,
+            pointSamplingVersion: 2,
+            scopes: {},
+          },
+        });
+      }
+      return of(undefined);
+    });
+
+    const state = await firstValueFrom(service.watch({ uid }));
+
+    expect(state.powerCurve).toBeNull();
+    expect(state.powerCurveStatus).toBe('stale');
   });
 
   it('requests missing derived metrics once while a request is in flight', async () => {
@@ -373,6 +403,7 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
         DERIVED_METRIC_KINDS.TrainingSummary,
+        DERIVED_METRIC_KINDS.PowerCurve,
       ],
     });
 
@@ -399,6 +430,7 @@ describe('DashboardDerivedMetricsService', () => {
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
+      powerCurveStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -420,6 +452,7 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.IntensityDistribution,
         DERIVED_METRIC_KINDS.EfficiencyTrend,
         DERIVED_METRIC_KINDS.TrainingSummary,
+        DERIVED_METRIC_KINDS.PowerCurve,
       ],
     });
   });
@@ -443,6 +476,7 @@ describe('DashboardDerivedMetricsService', () => {
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
+      powerCurveStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);
@@ -469,6 +503,7 @@ describe('DashboardDerivedMetricsService', () => {
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
+      powerCurveStatus: 'ready',
     };
 
     service.ensureForDashboard({ uid: 'user-1' }, state);

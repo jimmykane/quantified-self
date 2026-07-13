@@ -91,6 +91,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import type { SleepSession } from '@shared/sleep';
+import type { DerivedPowerCurveMetricPayload } from '@shared/derived-metrics';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import type {
   AppDashboardChartTileDisplaySettingsInterface,
@@ -127,6 +128,10 @@ import {
 import { normalizeDashboardDerivedChartRange } from '../../helpers/dashboard-derived-chart-range.helper';
 import { resolveTrainingStateClassification } from '../../helpers/training-state.helper';
 import { normalizeDashboardPowerCurveCompareMode } from '../../helpers/dashboard-power-curve.helper';
+import {
+  getDashboardPowerCurveActivityTypes,
+  resolveDashboardPowerCurveTileDisplayScope,
+} from '../../helpers/dashboard-power-curve-scope.helper';
 import {
   getSparseEqualWidthDashboardGridLayout,
   type SparseEqualWidthDashboardGridLayout,
@@ -263,6 +268,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedFreshnessForecastContext: DashboardFreshnessForecastContext | null = null;
   private derivedIntensityDistributionContext: DashboardIntensityDistributionContext | null = null;
   private derivedEfficiencyTrendContext: DashboardEfficiencyTrendContext | null = null;
+  private derivedPowerCurvePayload: DerivedPowerCurveMetricPayload | null = null;
   private derivedFormStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedRecoveryNowStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedAcwrStatus: DashboardDerivedMetricStatus = 'missing';
@@ -276,6 +282,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedFreshnessForecastStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedIntensityDistributionStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedEfficiencyTrendStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedPowerCurveStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedMetricsHydrated = false;
   private derivedPendingBannerTimeout: ReturnType<typeof setTimeout> | null = null;
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -508,6 +515,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrendWindow: this.sleepTrendWindow,
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
+      startOfWeek: this.user?.settings?.unitSettings?.startOfTheWeek ?? null,
       derivedMetrics: {
         formPoints: this.derivedFormPoints,
         recoveryNow: this.derivedRecoveryNowContext,
@@ -522,6 +530,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         freshnessForecast: this.derivedFreshnessForecastContext,
         intensityDistribution: this.derivedIntensityDistributionContext,
         efficiencyTrend: this.derivedEfficiencyTrendContext,
+        powerCurve: this.derivedPowerCurvePayload,
       },
     });
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
@@ -607,6 +616,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const hasFreshnessForecastChanged = !equal(this.derivedFreshnessForecastContext, state.freshnessForecast);
       const hasIntensityDistributionChanged = !equal(this.derivedIntensityDistributionContext, state.intensityDistribution);
       const hasEfficiencyTrendChanged = !equal(this.derivedEfficiencyTrendContext, state.efficiencyTrend);
+      const hasPowerCurveChanged = !equal(this.derivedPowerCurvePayload, state.powerCurve);
       const hasFormStatusChanged = this.derivedFormStatus !== state.formStatus;
       const hasRecoveryStatusChanged = this.derivedRecoveryNowStatus !== state.recoveryNowStatus;
       const hasAcwrStatusChanged = this.derivedAcwrStatus !== state.acwrStatus;
@@ -620,6 +630,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const hasFreshnessForecastStatusChanged = this.derivedFreshnessForecastStatus !== state.freshnessForecastStatus;
       const hasIntensityDistributionStatusChanged = this.derivedIntensityDistributionStatus !== state.intensityDistributionStatus;
       const hasEfficiencyTrendStatusChanged = this.derivedEfficiencyTrendStatus !== state.efficiencyTrendStatus;
+      const hasPowerCurveStatusChanged = this.derivedPowerCurveStatus !== state.powerCurveStatus;
       const hasBannerStateChanged = hasFormStatusChanged
         || hasRecoveryStatusChanged
         || hasAcwrStatusChanged
@@ -632,7 +643,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasEfficiencyDelta4wStatusChanged
         || hasFreshnessForecastStatusChanged
         || hasIntensityDistributionStatusChanged
-        || hasEfficiencyTrendStatusChanged;
+        || hasEfficiencyTrendStatusChanged
+        || hasPowerCurveStatusChanged;
       const hasTileDataChanged = hasFormPointsChanged
         || hasRecoveryContextChanged
         || hasAcwrChanged
@@ -645,7 +657,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasEfficiencyDelta4wChanged
         || hasFreshnessForecastChanged
         || hasIntensityDistributionChanged
-        || hasEfficiencyTrendChanged;
+        || hasEfficiencyTrendChanged
+        || hasPowerCurveChanged;
       if (!hasTileDataChanged && !hasBannerStateChanged && wasHydrated) {
         return;
       }
@@ -669,6 +682,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedFreshnessForecastContext = state.freshnessForecast;
       this.derivedIntensityDistributionContext = state.intensityDistribution;
       this.derivedEfficiencyTrendContext = state.efficiencyTrend;
+      this.derivedPowerCurvePayload = state.powerCurve;
       this.derivedFormStatus = state.formStatus;
       this.derivedRecoveryNowStatus = state.recoveryNowStatus;
       this.derivedAcwrStatus = state.acwrStatus;
@@ -682,6 +696,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedFreshnessForecastStatus = state.freshnessForecastStatus;
       this.derivedIntensityDistributionStatus = state.intensityDistributionStatus;
       this.derivedEfficiencyTrendStatus = state.efficiencyTrendStatus;
+      this.derivedPowerCurveStatus = state.powerCurveStatus;
       this.dashboardCurrentState = this.buildDashboardCurrentState();
       this.updateRecoveryRefreshTimer();
       this.refreshDerivedMetricsBannerState();
@@ -880,6 +895,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (this.isRoutePreviewMapTile(tile)) {
       return this.routePreviewLoading;
     }
+    if (isDashboardChartTileViewModel(tile) && isDashboardPowerCurveChartType(tile.chartType)) {
+      return this.derivedPowerCurveStatus !== 'ready';
+    }
     if (this.isEventDataTile(tile)) {
       return this.tileEventLoadingByOrder[tile.order] === true;
     }
@@ -898,6 +916,17 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     order: number,
     range: AppDashboardTileEventFilterRange,
   ): Promise<void> {
+    const tile = this.getOrderedDashboardSettingsTiles().find(candidate => candidate.order === order);
+    const isPowerCurveTile = tile?.type === TileTypes.Chart
+      && isDashboardPowerCurveChartType((tile as TileChartSettingsInterface).chartType);
+    if (isPowerCurveTile) {
+      const scope = resolveDashboardPowerCurveTileDisplayScope(tile) || 'cycling';
+      await this.updateTileEventFilters(order, {
+        range,
+        activityTypes: getDashboardPowerCurveActivityTypes(scope),
+      });
+      return;
+    }
     if (range === 'all') {
       const confirmed = await this.confirmAllTileEventRangeSelection();
       if (!confirmed) {
@@ -1187,7 +1216,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const dashboardSettings = (this.user as AppUserInterface).settings.dashboardSettings as AppDashboardSettingsInterface;
     const previousTiles = this.cloneDashboardTiles(dashboardSettings.tiles);
     const tile = dashboardSettings.tiles.find(candidate => candidate.order === order);
-    if (!tile || !this.isEventDataSettingsTile(tile)) {
+    const isPowerCurveTile = tile?.type === TileTypes.Chart
+      && isDashboardPowerCurveChartType((tile as TileChartSettingsInterface).chartType);
+    if (!tile || (!this.isEventDataSettingsTile(tile) && !isPowerCurveTile)) {
       return;
     }
 
@@ -1397,6 +1428,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedFreshnessForecastContext = null;
     this.derivedIntensityDistributionContext = null;
     this.derivedEfficiencyTrendContext = null;
+    this.derivedPowerCurvePayload = null;
     this.derivedFormStatus = 'missing';
     this.derivedRecoveryNowStatus = 'missing';
     this.derivedAcwrStatus = 'missing';
@@ -1410,6 +1442,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedFreshnessForecastStatus = 'missing';
     this.derivedIntensityDistributionStatus = 'missing';
     this.derivedEfficiencyTrendStatus = 'missing';
+    this.derivedPowerCurveStatus = 'missing';
     this.dashboardCurrentState = createEmptyDashboardCurrentStateViewModel();
     this.refreshDerivedMetricsBannerState();
   }
@@ -1898,6 +1931,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       intensityDistribution: this.derivedIntensityDistributionContext,
       efficiencyTrend: this.derivedEfficiencyTrendContext,
       trainingSummary: null,
+      powerCurve: this.derivedPowerCurvePayload,
       formStatus: this.derivedFormStatus,
       recoveryNowStatus: this.derivedRecoveryNowStatus,
       acwrStatus: this.derivedAcwrStatus,
@@ -1912,6 +1946,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       intensityDistributionStatus: this.derivedIntensityDistributionStatus,
       efficiencyTrendStatus: this.derivedEfficiencyTrendStatus,
       trainingSummaryStatus: 'missing',
+      powerCurveStatus: this.derivedPowerCurveStatus,
     }, { force: true });
   }
 
@@ -2228,6 +2263,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     if (isDashboardEfficiencyTrendChartType(chartType)) {
       return this.derivedEfficiencyTrendStatus;
+    }
+    if (isDashboardPowerCurveChartType(chartType)) {
+      return this.derivedPowerCurveStatus;
     }
     return null;
   }

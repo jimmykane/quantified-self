@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
+    ActivityTypeGroups,
     DataDuration,
     DataActivityTypes,
     DataCriticalPower,
@@ -24,6 +25,14 @@ import {
     DataRecoveryTime,
     DataVO2Max,
 } from '@sports-alliance/sports-lib';
+import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
+import {
+    buildPowerCurveEnvelope,
+    filterPowerCurvePointsByMaxDuration,
+    normalizePowerCurvePoints,
+    POWER_CURVE_STAT_TYPE,
+    type PowerCurvePoint,
+} from '../../../shared/power-curve';
 import {
     buildDerivedFormDailyLoads,
     DERIVED_METRIC_KINDS,
@@ -50,6 +59,11 @@ import {
     type DerivedMetricKind,
     type DerivedMetricsCoordinator,
     type DerivedMonotonyStrainMetricPayload,
+    type DerivedPowerCurveMetricPayload,
+    type DerivedPowerCurvePointSeries,
+    type DerivedPowerCurveRange,
+    type DerivedPowerCurveRangeSnapshot,
+    type DerivedPowerCurveScope,
     type DerivedRampRateMetricPayload,
     type DerivedRecoveryNowMetricPayload,
     type DerivedTrainingCapacityMetric,
@@ -80,6 +94,28 @@ const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
 const TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
 const TRAINING_SUMMARY_BASELINE_WINDOW_DAYS = 84;
+const POWER_CURVE_MAX_STORED_POINTS = 128;
+const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600] as const;
+type PowerCurveDurationRange = Exclude<DerivedPowerCurveRange, 'thisWeek' | 'thisMonth' | 'all'>;
+const POWER_CURVE_RANGE_DAYS: Record<PowerCurveDurationRange, number> = {
+    '14d': 14,
+    '30d': 30,
+    '90d': 90,
+    '1y': 365,
+    '2y': 365 * 2,
+    '3y': 365 * 3,
+    '4y': 365 * 4,
+};
+const TRAINING_DISCIPLINE_ACTIVITY_TYPES: Record<DerivedTrainingDiscipline, ReadonlySet<string>> = {
+    cycling: new Set([
+        ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+        ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+    ].map(activityType => `${activityType}`.trim())),
+    running: new Set([
+        ...getActivityTypesForGroup(ActivityTypeGroups.RunningGroup),
+        ...getActivityTypesForGroup(ActivityTypeGroups.TrailRunningGroup),
+    ].map(activityType => `${activityType}`.trim())),
+};
 const DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
 const DERIVED_METRICS_STUCK_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const POWER_ZONE_STAT_TYPES = [
@@ -150,6 +186,7 @@ interface DerivedMetricBuildExecutionContext {
     getIntensityDistributionBuildResult: () => DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload>;
     getEfficiencyTrendBuildResult: () => DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload>;
     getTrainingSummaryBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload>;
+    getPowerCurveBuildResult: () => DerivedMetricBuildResult<DerivedPowerCurveMetricPayload>;
 }
 
 interface DerivedMetricBuildDefinition {
@@ -980,17 +1017,264 @@ function resolveTrainingDiscipline(eventData: Record<string, unknown>): DerivedT
     const values = Array.isArray(rawActivityTypes)
         ? rawActivityTypes
         : [rawActivityTypes];
-    const normalized = values
-        .map(value => `${value ?? ''}`.trim().toLowerCase())
+    const activityTypes = values
+        .map(value => `${value ?? ''}`.trim())
         .filter(Boolean);
 
-    if (normalized.some(value => value.includes('treadmill') || value.includes('trail run') || value.includes('running'))) {
+    if (activityTypes.some(value => TRAINING_DISCIPLINE_ACTIVITY_TYPES.running.has(value))) {
         return 'running';
     }
-    if (normalized.some(value => value.includes('indoor cycling') || value.includes('mountain biking') || value.includes('cycling') || value.includes('biking'))) {
+    if (activityTypes.some(value => TRAINING_DISCIPLINE_ACTIVITY_TYPES.cycling.has(value))) {
         return 'cycling';
     }
     return null;
+}
+
+interface ResolvedPowerCurveEvent {
+    eventId: string | null;
+    startMs: number;
+    points: PowerCurvePoint[];
+}
+
+function resolvePowerCurveDurationSeconds(eventData: Record<string, unknown>): number | null {
+    const statDuration = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type));
+    if (statDuration !== null) {
+        return statDuration;
+    }
+    const startMs = toMillis(eventData.startDate);
+    const endMs = toMillis(eventData.endDate);
+    if (startMs === null || endMs === null || endMs <= startMs) {
+        return null;
+    }
+    return (endMs - startMs) / 1000;
+}
+
+function resolvePowerCurveEvent(
+    doc: FirestoreQueryDocumentSnapshot,
+): { discipline: DerivedPowerCurveScope; source: ResolvedPowerCurveEvent | null; startMs: number } | null {
+    const eventData = (doc.data() || {}) as Record<string, unknown>;
+    if (isMergedEvent(eventData)) {
+        return null;
+    }
+    const discipline = resolveTrainingDiscipline(eventData);
+    const startMs = toMillis(eventData.startDate);
+    if (discipline === null || startMs === null) {
+        return null;
+    }
+
+    const points = filterPowerCurvePointsByMaxDuration(
+        normalizePowerCurvePoints(resolveRawStatValue(eventData, POWER_CURVE_STAT_TYPE)).points,
+        resolvePowerCurveDurationSeconds(eventData),
+    );
+    if (!points.length) {
+        return { discipline, source: null, startMs };
+    }
+
+    return {
+        discipline,
+        startMs,
+        source: {
+            eventId: `${doc.id || ''}`.trim() || null,
+            startMs,
+            points,
+        },
+    };
+}
+
+function isPowerCurveEventInWindow(
+    startMs: number,
+    window: { startMs: number | null; endMs: number | null },
+): boolean {
+    return (window.startMs === null || startMs >= window.startMs)
+        && (window.endMs === null || startMs <= window.endMs);
+}
+
+function resolvePowerCurveRangeWindow(
+    range: DerivedPowerCurveRange,
+    nowMs: number,
+    weekStartDay: number | null = null,
+): { startMs: number | null; endMs: number | null } {
+    if (range === 'all') {
+        return { startMs: null, endMs: null };
+    }
+    if (range === 'thisMonth') {
+        const now = new Date(nowMs);
+        return {
+            startMs: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+            endMs: nowMs,
+        };
+    }
+    if (range === 'thisWeek') {
+        const now = new Date(nowMs);
+        const normalizedWeekStartDay = Number.isFinite(weekStartDay)
+            ? Math.max(0, Math.min(6, Math.floor(weekStartDay as number)))
+            : 1;
+        const daysSinceStart = (now.getUTCDay() - normalizedWeekStartDay + 7) % 7;
+        return {
+            startMs: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceStart),
+            endMs: nowMs,
+        };
+    }
+
+    const days = POWER_CURVE_RANGE_DAYS[range as keyof typeof POWER_CURVE_RANGE_DAYS];
+    return {
+        startMs: nowMs - (days * DAY_MS),
+        endMs: nowMs,
+    };
+}
+
+function samplePowerCurvePoints(points: readonly PowerCurvePoint[]): PowerCurvePoint[] {
+    if (points.length <= POWER_CURVE_MAX_STORED_POINTS) {
+        return points.map(point => ({ ...point }));
+    }
+
+    const selectedIndexes = new Set<number>([0, points.length - 1]);
+    POWER_CURVE_BENCHMARK_DURATIONS_SECONDS.forEach((duration) => {
+        const index = points.findIndex(point => point.duration === duration);
+        if (index >= 0) {
+            selectedIndexes.add(index);
+        }
+    });
+
+    const firstDuration = points[0].duration;
+    const lastDuration = points[points.length - 1].duration;
+    const logStart = Math.log(firstDuration);
+    const logSpan = Math.log(lastDuration) - logStart;
+    const targetCount = POWER_CURVE_MAX_STORED_POINTS;
+    for (let slot = 1; selectedIndexes.size < targetCount && slot < targetCount - 1; slot += 1) {
+        const targetDuration = Math.exp(logStart + ((logSpan * slot) / (targetCount - 1)));
+        let closestIndex = 0;
+        let closestDistance = Number.POSITIVE_INFINITY;
+        points.forEach((point, index) => {
+            const distance = Math.abs(Math.log(point.duration) - Math.log(targetDuration));
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = index;
+            }
+        });
+        selectedIndexes.add(closestIndex);
+    }
+
+    for (let index = 0; selectedIndexes.size < targetCount && index < points.length; index += 1) {
+        const evenlySpacedIndex = Math.round((index * (points.length - 1)) / (targetCount - 1));
+        selectedIndexes.add(evenlySpacedIndex);
+    }
+
+    return [...selectedIndexes]
+        .sort((left, right) => left - right)
+        .slice(0, targetCount)
+        .map(index => ({ ...points[index] }));
+}
+
+function serializePowerCurvePoints(points: readonly PowerCurvePoint[]): DerivedPowerCurvePointSeries {
+    return samplePowerCurvePoints(points).flatMap(point => [
+        point.duration,
+        point.power,
+        point.wattsPerKg ?? 0,
+    ]);
+}
+
+function comparePowerCurveEvents(left: ResolvedPowerCurveEvent, right: ResolvedPowerCurveEvent): number {
+    if (left.startMs !== right.startMs) {
+        return left.startMs - right.startMs;
+    }
+    return `${left.eventId || ''}`.localeCompare(`${right.eventId || ''}`);
+}
+
+function buildPowerCurveRangeSnapshot(
+    sourceEvents: readonly { startMs: number; source: ResolvedPowerCurveEvent | null }[],
+    window: { startMs: number | null; endMs: number | null },
+    nowMs: number,
+): DerivedPowerCurveRangeSnapshot {
+    const rangeSourceEvents = sourceEvents.filter(event => isPowerCurveEventInWindow(event.startMs, window));
+    const matchedEvents = rangeSourceEvents
+        .map(event => event.source)
+        .filter((event): event is ResolvedPowerCurveEvent => event !== null)
+        .sort(comparePowerCurveEvents);
+    const latestActivity = matchedEvents[matchedEvents.length - 1] || null;
+    const bestPoints = buildPowerCurveEnvelope(matchedEvents.map(event => event.points));
+    // Preserve the prior dashboard behavior: recent-best comparisons are anchored
+    // to the latest usable activity in the selected range, not wall-clock now.
+    const comparisonAnchorMs = latestActivity?.startMs ?? nowMs;
+    const buildRecentWindow = (days: number): ResolvedPowerCurveEvent[] => matchedEvents.filter(event => (
+        event.startMs >= comparisonAnchorMs - (days * DAY_MS)
+        && event.startMs <= comparisonAnchorMs
+    ));
+    const recent30d = buildRecentWindow(30);
+    const recent90d = buildRecentWindow(90);
+
+    return {
+        sourceEventCount: rangeSourceEvents.length,
+        matchedEventCount: matchedEvents.length,
+        latestActivity: latestActivity
+            ? {
+                eventId: latestActivity.eventId,
+                startMs: latestActivity.startMs,
+                points: serializePowerCurvePoints(latestActivity.points),
+            }
+            : null,
+        bestPoints: serializePowerCurvePoints(bestPoints),
+        best30dPoints: serializePowerCurvePoints(buildPowerCurveEnvelope(recent30d.map(event => event.points))),
+        best30dEventCount: recent30d.length,
+        best90dPoints: serializePowerCurvePoints(buildPowerCurveEnvelope(recent90d.map(event => event.points))),
+        best90dEventCount: recent90d.length,
+    };
+}
+
+export function buildPowerCurveMetricPayload(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> {
+    const eventsByScope: Record<DerivedPowerCurveScope, Array<{ startMs: number; source: ResolvedPowerCurveEvent | null }>> = {
+        cycling: [],
+        running: [],
+    };
+
+    docs.forEach((doc) => {
+        const resolved = resolvePowerCurveEvent(doc);
+        if (resolved) {
+            eventsByScope[resolved.discipline].push({
+                startMs: resolved.startMs,
+                source: resolved.source,
+            });
+        }
+    });
+
+    const buildScope = (scope: DerivedPowerCurveScope) => {
+        const events = eventsByScope[scope];
+        const ranges = {
+            thisMonth: buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('thisMonth', nowMs), nowMs),
+            '14d': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('14d', nowMs), nowMs),
+            '30d': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('30d', nowMs), nowMs),
+            '90d': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('90d', nowMs), nowMs),
+            '1y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('1y', nowMs), nowMs),
+            '2y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('2y', nowMs), nowMs),
+            '3y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('3y', nowMs), nowMs),
+            '4y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('4y', nowMs), nowMs),
+            all: buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('all', nowMs), nowMs),
+        };
+        const thisWeekByStartDay = Array.from({ length: 7 }, (_, day) => [
+            `${day}`,
+            buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('thisWeek', nowMs, day), nowMs),
+        ] as const).reduce<Record<string, DerivedPowerCurveRangeSnapshot>>((result, [day, snapshot]) => {
+            result[day] = snapshot;
+            return result;
+        }, {});
+        return { ranges, thisWeekByStartDay };
+    };
+
+    return {
+        sourceEventCount: docs.length,
+        payload: {
+            asOfDayMs: resolveUtcDayStartMs(nowMs),
+            excludesMergedEvents: true,
+            pointSamplingVersion: 1,
+            scopes: {
+                cycling: buildScope('cycling'),
+                running: buildScope('running'),
+            },
+        },
+    };
 }
 
 function resolveTrainingSourceKey(eventData: Record<string, unknown>): string | null {
@@ -1620,6 +1904,10 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs'],
         build: (context) => context.getTrainingSummaryBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.PowerCurve]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => context.getPowerCurveBuildResult(),
+    },
 };
 
 function createDerivedMetricBuildExecutionContext(
@@ -1641,6 +1929,7 @@ function createDerivedMetricBuildExecutionContext(
     let intensityDistributionBuildResultCache: DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> | null = null;
     let efficiencyTrendBuildResultCache: DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> | null = null;
     let trainingSummaryBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> | null = null;
+    let powerCurveBuildResultCache: DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> | null = null;
 
     const getDailyLoadContext = (): ReturnType<typeof buildDailyLoadContext> => {
         if (dailyLoadContextCache) {
@@ -1700,6 +1989,14 @@ function createDerivedMetricBuildExecutionContext(
         return trainingSummaryBuildResultCache;
     };
 
+    const getPowerCurveBuildResult = (): DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> => {
+        if (powerCurveBuildResultCache) {
+            return powerCurveBuildResultCache;
+        }
+        powerCurveBuildResultCache = buildPowerCurveMetricPayload(formDocs, nowMs);
+        return powerCurveBuildResultCache;
+    };
+
     return {
         nowMs,
         formDocs,
@@ -1710,6 +2007,7 @@ function createDerivedMetricBuildExecutionContext(
         getIntensityDistributionBuildResult,
         getEfficiencyTrendBuildResult,
         getTrainingSummaryBuildResult,
+        getPowerCurveBuildResult,
     };
 }
 

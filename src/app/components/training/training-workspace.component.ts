@@ -1,12 +1,15 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, computed } from '@angular/core';
-import { AppThemes, ActivityTypes, type EventInterface } from '@sports-alliance/sports-lib';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type {
   DashboardTrainingCapacityMetric,
   DashboardTrainingDisciplineSummary,
 } from '../../helpers/dashboard-derived-metrics.helper';
-import { buildDashboardPowerCurveContext, type DashboardPowerCurveContext } from '../../helpers/dashboard-power-curve.helper';
+import {
+  buildDashboardPowerCurveContextFromSnapshot,
+  type DashboardPowerCurveContext,
+} from '../../helpers/dashboard-power-curve.helper';
 import {
   buildDashboardSleepTrendContext,
   formatSleepDuration,
@@ -21,7 +24,6 @@ import {
   resolveTrainingComparisonState,
 } from '../../helpers/training-analysis.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
-import { AppEventService } from '../../services/app.event.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import {
   DashboardDerivedMetricsService,
@@ -131,7 +133,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   constructor(
     private readonly authService: AppAuthService,
     private readonly derivedMetricsService: DashboardDerivedMetricsService,
-    private readonly eventService: AppEventService,
     private readonly sleepService: AppSleepService,
     private readonly themeService: AppThemeService,
     private readonly changeDetector: ChangeDetectorRef,
@@ -170,13 +171,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.derivedMetricsService.ensureForDashboard(user, this.derivedState);
         this.changeDetector.markForCheck();
       }
-
-      this.dataSubscriptions.add(this.eventService
-        .getEventsBy(user, [], 'startDate', false, 500)
-        .subscribe((events) => {
-          this.updatePowerCurves(events || []);
-          this.changeDetector.markForCheck();
-        }));
 
       const endMs = Date.now();
       const startMs = endMs - TRAINING_SLEEP_WINDOW_MS;
@@ -243,6 +237,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private applyDerivedState(state: DashboardDerivedMetricsState): void {
     this.derivedState = state;
+    this.cyclingPowerCurve = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
+      scope: 'cycling',
+      range: 'all',
+      latestSeriesLabel: 'Latest cycling activity',
+    });
+    this.runningPowerCurve = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
+      scope: 'running',
+      range: 'all',
+      latestSeriesLabel: 'Latest running activity',
+    });
     this.refreshDerivedViewModels();
     const summaries = state.trainingSummary?.disciplines || [];
     this.trainingMixDisciplines = summaries
@@ -391,25 +395,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     });
   }
 
-  private updatePowerCurves(events: EventInterface[]): void {
-    const trainingEvents = events.filter(event => event?.isMerge !== true);
-    this.cyclingPowerCurve = buildDashboardPowerCurveContext(
-      trainingEvents.filter(event => this.matchesDiscipline(event, 'cycling')),
-      { latestSeriesLabel: 'Latest cycling activity' },
-    );
-    this.runningPowerCurve = buildDashboardPowerCurveContext(
-      trainingEvents.filter(event => this.matchesDiscipline(event, 'running')),
-      { latestSeriesLabel: 'Latest running activity' },
-    );
-  }
-
-  private matchesDiscipline(event: EventInterface, discipline: 'running' | 'cycling'): boolean {
-    const activityTypes = event.getActivityTypesAsArray?.() || [];
-    const matchingTypes: string[] = discipline === 'running'
-      ? [ActivityTypes.Running, ActivityTypes.TrailRunning, ActivityTypes.Treadmill, ActivityTypes.IndoorRunning]
-      : [ActivityTypes.Cycling, ActivityTypes.MountainBiking, ActivityTypes.IndoorCycling];
-    return activityTypes.some(type => matchingTypes.includes(type));
-  }
 }
 
 function resolveTrainingZoneSeconds(

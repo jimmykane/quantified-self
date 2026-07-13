@@ -1,11 +1,11 @@
-import { DataDuration, type EventInterface } from '@sports-alliance/sports-lib';
-import {
-  buildPowerCurveEnvelope,
-  filterPowerCurvePointsByMaxDuration,
-  normalizePowerCurvePoints,
-  POWER_CURVE_STAT_TYPE,
-  type PowerCurvePoint,
-} from '@shared/power-curve';
+import type {
+  DerivedPowerCurveMetricPayload,
+  DerivedPowerCurvePointSeries,
+  DerivedPowerCurveRange,
+  DerivedPowerCurveRangeSnapshot,
+  DerivedPowerCurveScope,
+} from '@shared/derived-metrics';
+import type { PowerCurvePoint } from '@shared/power-curve';
 import type { AppDashboardPowerCurveCompareMode } from '../models/app-user.interface';
 
 export interface DashboardPowerCurveSeries {
@@ -36,21 +36,15 @@ export interface DashboardPowerCurveContext {
   summaryPoints: DashboardPowerCurveSummaryPoint[];
 }
 
-export interface DashboardPowerCurveContextOptions {
+export interface DashboardPowerCurveSnapshotContextOptions {
+  scope: DerivedPowerCurveScope;
+  range: DerivedPowerCurveRange;
+  startOfWeek?: number | null;
   latestSeriesLabel?: string;
   compareMode?: AppDashboardPowerCurveCompareMode | null;
-  nowMs?: number;
-}
-
-interface ResolvedPowerCurveEvent {
-  event: EventInterface;
-  eventId: string | null;
-  startMs: number | null;
-  points: PowerCurvePoint[];
 }
 
 const SUMMARY_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600];
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export const DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE: AppDashboardPowerCurveCompareMode = 'latest';
 
@@ -108,41 +102,68 @@ export function resolveDashboardPowerCurveComparisonLabel(
     .find(option => option.mode === normalizedMode)?.menuLabel || latestSeriesLabel;
 }
 
-export function buildDashboardPowerCurveContext(
-  events: EventInterface[],
-  options: DashboardPowerCurveContextOptions = {},
-): DashboardPowerCurveContext {
-  const resolvedEvents = (events || [])
-    .map(resolvePowerCurveEvent)
-    .filter((entry): entry is ResolvedPowerCurveEvent => entry !== null)
-    .sort((left, right) => compareResolvedPowerCurveEvents(left, right));
+export function resolveDashboardPowerCurveMetricPayload(value: unknown): DerivedPowerCurveMetricPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const payload = value as Record<string, unknown>;
+  const asOfDayMs = toFiniteNumber(payload.asOfDayMs);
+  const scopes = payload.scopes;
+  if (
+    asOfDayMs === null
+    || payload.excludesMergedEvents !== true
+    || payload.pointSamplingVersion !== 1
+    || !scopes
+    || typeof scopes !== 'object'
+    || Array.isArray(scopes)
+  ) {
+    return null;
+  }
 
-  const latestEvent = resolvedEvents[resolvedEvents.length - 1] || null;
-  const envelope = buildPowerCurveEnvelope(resolvedEvents.map(entry => entry.points));
-  const summaryPoints = buildDashboardPowerCurveSummaryPoints(envelope);
-  const sourceEventCount = Array.isArray(events) ? events.length : 0;
+  const normalizedScopes = (['cycling', 'running'] as const).reduce<Partial<DerivedPowerCurveMetricPayload['scopes']>>((result, scope) => {
+    const normalizedScope = normalizeScopeSnapshot((scopes as Record<string, unknown>)[scope]);
+    if (normalizedScope) {
+      result[scope] = normalizedScope;
+    }
+    return result;
+  }, {});
+  if (!normalizedScopes.cycling || !normalizedScopes.running) {
+    return null;
+  }
+
+  return {
+    asOfDayMs,
+    excludesMergedEvents: true,
+    pointSamplingVersion: 1,
+    scopes: normalizedScopes as DerivedPowerCurveMetricPayload['scopes'],
+  };
+}
+
+export function buildDashboardPowerCurveContextFromSnapshot(
+  payload: DerivedPowerCurveMetricPayload | null | undefined,
+  options: DashboardPowerCurveSnapshotContextOptions,
+): DashboardPowerCurveContext | null {
+  const scopeSnapshot = payload?.scopes?.[options.scope];
+  const snapshot = resolveRangeSnapshot(scopeSnapshot, options.range, options.startOfWeek);
+  if (!snapshot) {
+    return null;
+  }
+
   const latestSeriesLabel = options.latestSeriesLabel || 'Latest power activity';
   const compareMode = normalizeDashboardPowerCurveCompareMode(options.compareMode);
   const comparisonSeriesLabel = resolveDashboardPowerCurveComparisonLabel(compareMode, latestSeriesLabel);
-  const comparisonAnchorMs = options.nowMs ?? latestEvent?.startMs ?? Date.now();
-  const comparisonEvents = resolveComparisonPowerCurveEvents(resolvedEvents, compareMode, comparisonAnchorMs);
+  const bestPoints = deserializePowerCurvePoints(snapshot.bestPoints);
+  const latestPoints = deserializePowerCurvePoints(snapshot.latestActivity?.points || []);
   const comparisonPoints = compareMode === 'latest'
-    ? comparisonEvents[0]?.points || []
-    : buildPowerCurveEnvelope(comparisonEvents.map(entry => entry.points));
+    ? latestPoints
+    : deserializePowerCurvePoints(compareMode === 'best30d' ? snapshot.best30dPoints : snapshot.best90dPoints);
+  const comparisonEventCount = compareMode === 'latest'
+    ? (snapshot.latestActivity ? 1 : 0)
+    : (compareMode === 'best30d' ? snapshot.best30dEventCount : snapshot.best90dEventCount);
+  const latestActivity = snapshot.latestActivity;
 
-  if (!resolvedEvents.length || !envelope.length) {
-    return {
-      matchedEventCount: 0,
-      sourceEventCount,
-      latestEventId: null,
-      latestEventStartMs: null,
-      latestSeriesLabel,
-      compareMode,
-      comparisonSeriesLabel,
-      comparisonEventCount: 0,
-      series: [],
-      summaryPoints,
-    };
+  if (!snapshot.matchedEventCount || !bestPoints.length) {
+    return createEmptyPowerCurveContext(snapshot, latestSeriesLabel, compareMode, comparisonSeriesLabel);
   }
 
   const comparisonSeries: DashboardPowerCurveSeries | null = comparisonPoints.length
@@ -152,18 +173,18 @@ export function buildDashboardPowerCurveContext(
       colorKey: 'latest',
       points: comparisonPoints,
       ...(compareMode === 'latest' ? {
-        eventId: comparisonEvents[0]?.eventId ?? null,
-        eventStartMs: comparisonEvents[0]?.startMs ?? null,
+        eventId: latestActivity?.eventId ?? null,
+        eventStartMs: latestActivity?.startMs ?? null,
       } : {}),
     }
     : null;
-  const comparisonEqualsBest = comparisonSeries !== null && powerCurvePointsEqual(comparisonSeries.points, envelope);
+  const comparisonEqualsBest = comparisonSeries !== null && powerCurvePointsEqual(comparisonSeries.points, bestPoints);
   const series = comparisonEqualsBest
     ? [{
       seriesKey: 'latestAndBest' as const,
       label: compareMode === 'latest' ? 'Latest and best' : `${comparisonSeriesLabel} and best`,
       colorKey: 'best',
-      points: envelope,
+      points: bestPoints,
       eventId: comparisonSeries.eventId,
       eventStartMs: comparisonSeries.eventStartMs,
     }]
@@ -172,169 +193,207 @@ export function buildDashboardPowerCurveContext(
         seriesKey: 'best' as const,
         label: 'Best in range',
         colorKey: 'best',
-        points: envelope,
+        points: bestPoints,
       },
       ...(comparisonSeries ? [comparisonSeries] : []),
     ];
 
   return {
-    matchedEventCount: resolvedEvents.length,
-    sourceEventCount,
-    latestEventId: latestEvent?.eventId ?? null,
-    latestEventStartMs: latestEvent?.startMs ?? null,
+    matchedEventCount: snapshot.matchedEventCount,
+    sourceEventCount: snapshot.sourceEventCount,
+    latestEventId: latestActivity?.eventId ?? null,
+    latestEventStartMs: latestActivity?.startMs ?? null,
     latestSeriesLabel,
     compareMode,
     comparisonSeriesLabel,
-    comparisonEventCount: comparisonEvents.length,
+    comparisonEventCount,
     series,
-    summaryPoints,
+    summaryPoints: buildDashboardPowerCurveSummaryPoints(bestPoints),
   };
 }
 
-function resolveComparisonPowerCurveEvents(
-  events: ResolvedPowerCurveEvent[],
-  compareMode: AppDashboardPowerCurveCompareMode,
-  nowMs = Date.now(),
-): ResolvedPowerCurveEvent[] {
-  if (compareMode === 'latest') {
-    const latestEvent = events[events.length - 1] || null;
-    return latestEvent ? [latestEvent] : [];
+function normalizeScopeSnapshot(value: unknown): DerivedPowerCurveMetricPayload['scopes'][DerivedPowerCurveScope] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
   }
-
-  const windowDays = DASHBOARD_POWER_CURVE_COMPARE_MODE_OPTIONS
-    .find(option => option.mode === compareMode)?.windowDays ?? null;
-  if (!windowDays || !Number.isFinite(nowMs)) {
-    return [];
+  const source = value as Record<string, unknown>;
+  const rangesSource = source.ranges;
+  const thisWeekSource = source.thisWeekByStartDay;
+  if (!rangesSource || typeof rangesSource !== 'object' || Array.isArray(rangesSource)
+    || !thisWeekSource || typeof thisWeekSource !== 'object' || Array.isArray(thisWeekSource)) {
+    return null;
   }
-
-  const cutoffMs = nowMs - (windowDays * MS_PER_DAY);
-  return events.filter(entry => (
-    entry.startMs !== null
-    && entry.startMs >= cutoffMs
-    && entry.startMs <= nowMs
-  ));
-}
-
-function resolvePowerCurveEvent(event: EventInterface): ResolvedPowerCurveEvent | null {
-  const stat = event?.getStat?.(POWER_CURVE_STAT_TYPE) as { getValue?: () => unknown } | null | undefined;
-  const durationSeconds = resolveEventDurationSeconds(event);
-  const points = filterPowerCurvePointsByMaxDuration(
-    normalizePowerCurvePoints(stat?.getValue?.()).points,
-    durationSeconds,
-  );
-  if (!points.length) {
+  const rangeNames: Array<Exclude<DerivedPowerCurveRange, 'thisWeek'>> = [
+    'thisMonth', '14d', '30d', '90d', '1y', '2y', '3y', '4y', 'all',
+  ];
+  const ranges = rangeNames.reduce<Partial<DerivedPowerCurveMetricPayload['scopes'][DerivedPowerCurveScope]['ranges']>>((result, range) => {
+    const snapshot = normalizeRangeSnapshot((rangesSource as Record<string, unknown>)[range]);
+    if (snapshot) {
+      result[range] = snapshot;
+    }
+    return result;
+  }, {});
+  if (Object.keys(ranges).length !== rangeNames.length) {
+    return null;
+  }
+  const thisWeekByStartDay = Object.entries(thisWeekSource as Record<string, unknown>)
+    .reduce<Record<string, DerivedPowerCurveRangeSnapshot>>((result, [day, candidate]) => {
+      const snapshot = normalizeRangeSnapshot(candidate);
+      if (/^[0-6]$/.test(day) && snapshot) {
+        result[day] = snapshot;
+      }
+      return result;
+    }, {});
+  if (Object.keys(thisWeekByStartDay).length !== 7) {
     return null;
   }
   return {
-    event,
-    eventId: resolveEventId(event),
-    startMs: resolveEventStartMs(event),
-    points,
+    ranges: ranges as DerivedPowerCurveMetricPayload['scopes'][DerivedPowerCurveScope]['ranges'],
+    thisWeekByStartDay,
   };
 }
 
-function resolveEventId(event: EventInterface): string | null {
-  const candidate = `${event?.getID?.() || (event as { id?: unknown })?.id || ''}`.trim();
-  return candidate.length > 0 ? candidate : null;
-}
-
-function resolveEventStartMs(event: EventInterface): number | null {
-  const rawValue = (event as { startDate?: unknown })?.startDate;
-  return resolveDateLikeMs(rawValue);
-}
-
-function resolveEventDurationSeconds(event: EventInterface): number | null {
-  const candidates = [
-    (event as { getDuration?: () => { getValue?: () => unknown } | null | undefined })?.getDuration?.()?.getValue?.(),
-    (event?.getStat?.(DataDuration.type) as { getValue?: () => unknown } | null | undefined)?.getValue?.(),
-    (event as { duration?: unknown })?.duration,
-  ];
-
-  for (const candidate of candidates) {
-    const duration = toFinitePositiveNumber(candidate);
-    if (duration !== null) {
-      return duration;
-    }
-  }
-
-  const startMs = resolveEventStartMs(event);
-  const endMs = resolveEventEndMs(event);
-  if (startMs === null || endMs === null || endMs <= startMs) {
+function normalizeRangeSnapshot(value: unknown): DerivedPowerCurveRangeSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
-  return (endMs - startMs) / 1000;
+  const snapshot = value as Record<string, unknown>;
+  const sourceEventCount = toNonNegativeInteger(snapshot.sourceEventCount);
+  const matchedEventCount = toNonNegativeInteger(snapshot.matchedEventCount);
+  const best30dEventCount = toNonNegativeInteger(snapshot.best30dEventCount);
+  const best90dEventCount = toNonNegativeInteger(snapshot.best90dEventCount);
+  const bestPoints = normalizePowerCurvePointSeries(snapshot.bestPoints);
+  const best30dPoints = normalizePowerCurvePointSeries(snapshot.best30dPoints);
+  const best90dPoints = normalizePowerCurvePointSeries(snapshot.best90dPoints);
+  if (sourceEventCount === null || matchedEventCount === null || best30dEventCount === null || best90dEventCount === null
+    || bestPoints === null || best30dPoints === null || best90dPoints === null) {
+    return null;
+  }
+  const latestActivity = normalizeLatestActivity(snapshot.latestActivity);
+  if (snapshot.latestActivity !== null && snapshot.latestActivity !== undefined && latestActivity === null) {
+    return null;
+  }
+  return {
+    sourceEventCount,
+    matchedEventCount,
+    latestActivity,
+    bestPoints,
+    best30dPoints,
+    best30dEventCount,
+    best90dPoints,
+    best90dEventCount,
+  };
 }
 
-function resolveEventEndMs(event: EventInterface): number | null {
-  const rawValue = (event as { endDate?: unknown })?.endDate;
-  return resolveDateLikeMs(rawValue);
+function normalizeLatestActivity(value: unknown): DerivedPowerCurveRangeSnapshot['latestActivity'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const source = value as Record<string, unknown>;
+  const startMs = toFiniteNumber(source.startMs);
+  const points = normalizePowerCurvePointSeries(source.points);
+  if (startMs === null || points === null) {
+    return null;
+  }
+  const eventId = typeof source.eventId === 'string' && source.eventId.trim().length ? source.eventId : null;
+  return { eventId, startMs, points };
 }
 
-function resolveDateLikeMs(rawValue: unknown): number | null {
-  if (rawValue instanceof Date) {
-    const time = rawValue.getTime();
-    return Number.isFinite(time) ? time : null;
+function normalizePowerCurvePointSeries(value: unknown): DerivedPowerCurvePointSeries | null {
+  if (!Array.isArray(value) || value.length % 3 !== 0) {
+    return null;
   }
-  if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
-    return rawValue;
-  }
-  if (typeof rawValue === 'string' && rawValue.trim().length > 0) {
-    const time = new Date(rawValue).getTime();
-    return Number.isFinite(time) ? time : null;
-  }
-  if (rawValue && typeof rawValue === 'object') {
-    const date = (rawValue as { toDate?: () => Date }).toDate?.();
-    if (date instanceof Date) {
-      const time = date.getTime();
-      return Number.isFinite(time) ? time : null;
+  const points: number[] = [];
+  for (let index = 0; index < value.length; index += 3) {
+    const duration = toFinitePositiveNumber(value[index]);
+    const power = toFinitePositiveNumber(value[index + 1]);
+    const wattsPerKg = toFiniteNumber(value[index + 2]);
+    if (duration === null || power === null || wattsPerKg === null || wattsPerKg < 0) {
+      return null;
     }
-    const seconds = (rawValue as { seconds?: unknown }).seconds;
-    const nanoseconds = (rawValue as { nanoseconds?: unknown }).nanoseconds;
-    if (typeof seconds === 'number' && Number.isFinite(seconds)) {
-      return (seconds * 1000) + (typeof nanoseconds === 'number' && Number.isFinite(nanoseconds)
-        ? Math.floor(nanoseconds / 1000000)
-        : 0);
-    }
+    points.push(duration, power, wattsPerKg);
   }
-  return null;
+  return points;
 }
 
-function toFinitePositiveNumber(value: unknown): number | null {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) && value > 0 ? value : null;
+function resolveRangeSnapshot(
+  scope: DerivedPowerCurveMetricPayload['scopes'][DerivedPowerCurveScope] | undefined,
+  range: DerivedPowerCurveRange,
+  startOfWeek: number | null | undefined,
+): DerivedPowerCurveRangeSnapshot | null {
+  if (!scope) {
+    return null;
   }
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  if (range === 'thisWeek') {
+    const normalizedDay = Number.isFinite(startOfWeek) ? Math.max(0, Math.min(6, Math.floor(startOfWeek as number))) : 1;
+    return scope.thisWeekByStartDay[`${normalizedDay}`] || null;
   }
-  return null;
+  return scope.ranges[range] || null;
 }
 
-function compareResolvedPowerCurveEvents(left: ResolvedPowerCurveEvent, right: ResolvedPowerCurveEvent): number {
-  const leftStart = left.startMs ?? Number.NEGATIVE_INFINITY;
-  const rightStart = right.startMs ?? Number.NEGATIVE_INFINITY;
-  if (leftStart !== rightStart) {
-    return leftStart - rightStart;
-  }
-  return `${left.eventId || ''}`.localeCompare(`${right.eventId || ''}`);
+function createEmptyPowerCurveContext(
+  snapshot: DerivedPowerCurveRangeSnapshot,
+  latestSeriesLabel: string,
+  compareMode: AppDashboardPowerCurveCompareMode,
+  comparisonSeriesLabel: string,
+): DashboardPowerCurveContext {
+  return {
+    matchedEventCount: 0,
+    sourceEventCount: snapshot.sourceEventCount,
+    latestEventId: null,
+    latestEventStartMs: null,
+    latestSeriesLabel,
+    compareMode,
+    comparisonSeriesLabel,
+    comparisonEventCount: 0,
+    series: [],
+    summaryPoints: [],
+  };
 }
 
-function buildDashboardPowerCurveSummaryPoints(points: PowerCurvePoint[]): DashboardPowerCurveSummaryPoint[] {
+function deserializePowerCurvePoints(points: ReadonlyArray<number>): PowerCurvePoint[] {
+  const result: PowerCurvePoint[] = [];
+  for (let index = 0; index < points.length; index += 3) {
+    const duration = points[index];
+    const power = points[index + 1];
+    const wattsPerKg = points[index + 2];
+    result.push({
+      duration,
+      power,
+      ...(wattsPerKg > 0 ? { wattsPerKg } : {}),
+    });
+  }
+  return result;
+}
+
+function buildDashboardPowerCurveSummaryPoints(points: readonly PowerCurvePoint[]): DashboardPowerCurveSummaryPoint[] {
   return SUMMARY_DURATIONS_SECONDS
     .map(duration => points.find(point => point.duration === duration))
     .filter((point): point is PowerCurvePoint => !!point)
     .map(point => ({ ...point }));
 }
 
-function powerCurvePointsEqual(left: PowerCurvePoint[], right: PowerCurvePoint[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every((leftPoint, index) => {
+function powerCurvePointsEqual(left: readonly PowerCurvePoint[], right: readonly PowerCurvePoint[]): boolean {
+  return left.length === right.length && left.every((leftPoint, index) => {
     const rightPoint = right[index];
     return rightPoint
       && leftPoint.duration === rightPoint.duration
       && leftPoint.power === rightPoint.power
       && (leftPoint.wattsPerKg ?? null) === (rightPoint.wattsPerKg ?? null);
   });
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function toFinitePositiveNumber(value: unknown): number | null {
+  const numberValue = toFiniteNumber(value);
+  return numberValue !== null && numberValue > 0 ? numberValue : null;
+}
+
+function toNonNegativeInteger(value: unknown): number | null {
+  const numberValue = toFiniteNumber(value);
+  return numberValue !== null && numberValue >= 0 ? Math.floor(numberValue) : null;
 }

@@ -2,7 +2,7 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import {
     abandonDerivedMetricsProcessingAfterWriteBlock,
     areOnlyProjectionSensitiveMetricKinds,
@@ -77,7 +77,11 @@ export const processDerivedMetricsTask = onTaskDispatched({
         const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
         const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(dirtyMetricKinds);
         let projectionFormSnapshotSeed: Awaited<ReturnType<typeof fetchDerivedFormSnapshotSeed>> = null;
-        const canUseProjectionSeed = sourceRequirements.needsFormDocs && projectionOnlyKinds;
+        // Power Curve is refreshed daily for calendar windows, but unlike load-derived
+        // projections it needs the source event stats rather than Form's daily-load seed.
+        const canUseProjectionSeed = sourceRequirements.needsFormDocs
+            && projectionOnlyKinds
+            && !dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.PowerCurve);
         if (canUseProjectionSeed) {
             const candidateProjectionSeed = await fetchDerivedFormSnapshotSeed(uid);
             const hasCompatibleSchema = Number.isFinite(candidateProjectionSeed?.schemaVersion)

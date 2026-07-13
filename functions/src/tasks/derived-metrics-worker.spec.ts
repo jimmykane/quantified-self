@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 
 vi.mock('firebase-functions/v2/tasks', () => ({
     onTaskDispatched: (_opts: unknown, handler: any) => handler,
@@ -150,7 +150,7 @@ describe('processDerivedMetricsTask', () => {
         });
         hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({
             status: 'ready',
-            schemaVersion: 7,
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             builtFromEventMutationVersion: 12,
             sourceEventCount: 5,
             sourceDocCount: 7,
@@ -183,6 +183,22 @@ describe('processDerivedMetricsTask', () => {
             formSourceEventCount: 5,
             formSourceDocCount: 7,
         });
+    });
+
+    it('reads source events for Power Curve even when a Form projection seed is available', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.PowerCurve],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 12,
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'power-doc' }] as any);
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-power', generation: 91 },
+        });
+
+        expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-power');
     });
 
     it('exits before snapshot writes when user deletion becomes active after claiming work', async () => {

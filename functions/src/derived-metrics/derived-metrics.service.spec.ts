@@ -4,6 +4,8 @@ import {
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
 } from '../../../shared/derived-metrics';
 import {
+    ActivityTypeGroups,
+    ActivityTypes,
     DataActivityTypes,
     DataCriticalPower,
     DataDuration,
@@ -23,6 +25,8 @@ import {
     DataRecoveryTime,
     DataVO2Max,
 } from '@sports-alliance/sports-lib';
+import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
+import { POWER_CURVE_STAT_TYPE } from '../../../shared/power-curve';
 
 const hoisted = vi.hoisted(() => {
     const get = vi.fn();
@@ -234,6 +238,145 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingSummary])).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: false,
+        });
+    });
+
+    it('uses the event source for the Power Curve snapshot', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.PowerCurve])).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+        });
+    });
+});
+
+describe('buildPowerCurveMetricPayload', () => {
+    it('prepares scoped ranges, comparisons, and bounded point series from raw event stats', async () => {
+        const { buildPowerCurveMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 0, 31, 12, 0, 0);
+        const longCurve = Array.from({ length: 200 }, (_, index) => ({
+            duration: index + 1,
+            power: 500 - index,
+        }));
+        const docs = [
+            {
+                id: 'old-cycling',
+                data: () => ({
+                    startDate: Date.UTC(2025, 11, 1, 10, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                        [DataDuration.type]: 3600,
+                        [POWER_CURVE_STAT_TYPE]: longCurve,
+                    },
+                }),
+            },
+            {
+                id: 'latest-cycling',
+                data: () => ({
+                    startDate: Date.UTC(2026, 0, 30, 10, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                        [DataDuration.type]: 3600,
+                        [POWER_CURVE_STAT_TYPE]: [{ duration: 60, power: 410 }, { duration: 300, power: 330 }],
+                    },
+                }),
+            },
+            {
+                id: 'merged-running',
+                data: () => ({
+                    isMerge: true,
+                    startDate: Date.UTC(2026, 0, 30, 10, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Running],
+                        [POWER_CURVE_STAT_TYPE]: [{ duration: 60, power: 999 }],
+                    },
+                }),
+            },
+        ];
+
+        const result = buildPowerCurveMetricPayload(docs as never, nowMs);
+        const cycling = result.payload.scopes.cycling.ranges.all;
+
+        expect(result.payload.asOfDayMs).toBe(Date.UTC(2026, 0, 31));
+        expect(cycling.sourceEventCount).toBe(2);
+        expect(cycling.matchedEventCount).toBe(2);
+        expect(cycling.latestActivity?.eventId).toBe('latest-cycling');
+        expect(cycling.best30dEventCount).toBe(1);
+        expect(cycling.bestPoints).toHaveLength(128 * 3);
+        expect(cycling.bestPoints.slice(0, 3)).toEqual([1, 500, 0]);
+        expect(Object.keys(result.payload.scopes.cycling.thisWeekByStartDay)).toHaveLength(7);
+        expect(result.payload.scopes.running.ranges.all.matchedEventCount).toBe(0);
+    });
+
+    it('anchors recent-best comparisons to the latest activity in the selected range', async () => {
+        const { buildPowerCurveMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 0, 31, 12, 0, 0);
+        const docs = [
+            {
+                id: 'older-best',
+                data: () => ({
+                    startDate: Date.UTC(2025, 11, 1, 10, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                        [POWER_CURVE_STAT_TYPE]: [{ duration: 300, power: 500 }],
+                    },
+                }),
+            },
+            {
+                id: 'latest',
+                data: () => ({
+                    startDate: Date.UTC(2025, 11, 31, 10, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                        [POWER_CURVE_STAT_TYPE]: [{ duration: 300, power: 400 }],
+                    },
+                }),
+            },
+        ];
+
+        const result = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        expect(result.payload.scopes.cycling.ranges.all.best30dPoints).toEqual([300, 500, 0]);
+        expect(result.payload.scopes.cycling.ranges.all.best30dEventCount).toBe(2);
+    });
+
+    it('uses the same activity groups as the dashboard scopes', async () => {
+        const { buildPowerCurveMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 0, 31, 12, 0, 0);
+        const cyclingActivityTypes = [...new Set([
+            ...getActivityTypesForGroup(ActivityTypeGroups.CyclingGroup),
+            ...getActivityTypesForGroup(ActivityTypeGroups.MountainBikingGroup),
+        ])];
+        const runningActivityTypes = [...new Set([
+            ...getActivityTypesForGroup(ActivityTypeGroups.RunningGroup),
+            ...getActivityTypesForGroup(ActivityTypeGroups.TrailRunningGroup),
+        ])];
+        const createDocs = (activityTypes: readonly string[], scope: string) => activityTypes.map((activityType, index) => ({
+            id: `${scope}-${index}`,
+            data: () => ({
+                startDate: Date.UTC(2026, 0, 30, 10, 0, 0),
+                stats: {
+                    [DataActivityTypes.type]: [activityType],
+                    [POWER_CURVE_STAT_TYPE]: [{ duration: 300, power: 280 }],
+                },
+            }),
+        }));
+        const docs = [
+            ...createDocs(cyclingActivityTypes, 'cycling'),
+            ...createDocs(runningActivityTypes, 'running'),
+        ];
+
+        const result = buildPowerCurveMetricPayload(docs as never, nowMs);
+
+        expect(result.payload.scopes.cycling.ranges.all).toMatchObject({
+            sourceEventCount: cyclingActivityTypes.length,
+            matchedEventCount: cyclingActivityTypes.length,
+            bestPoints: [300, 280, 0],
+        });
+        expect(result.payload.scopes.running.ranges.all).toMatchObject({
+            sourceEventCount: runningActivityTypes.length,
+            matchedEventCount: runningActivityTypes.length,
         });
     });
 });

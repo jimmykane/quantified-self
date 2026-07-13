@@ -142,6 +142,9 @@ vi.mock('./request-helper', () => ({
 vi.mock('@sports-alliance/sports-lib', () => ({
     ActivityTypes: {
         Cycling: 'Cycling',
+        EBiking: 'E-Biking',
+        EnduroMTB: 'Enduro MTB',
+        DownhillCycling: 'Downhill Cycling',
         Running: 'Running',
         Walking: 'Walking',
         Swimming: 'Swimming',
@@ -163,6 +166,28 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         VirtualCycling: 'Virtual Cycling',
         'Weight Training': 'Weight Training',
         'Mountain Biking': 'Mountain Biking',
+    },
+    ActivityTypeGroups: {
+        CyclingGroup: 'cycling_group',
+        MountainBikingGroup: 'mountain_biking_group',
+        RunningGroup: 'running_group',
+        TrailRunningGroup: 'trail_running_group',
+    },
+    ActivityTypesHelper: {
+        getActivityTypesForActivityGroup: (group: string) => {
+            switch (group) {
+                case 'cycling_group':
+                    return ['Cycling', 'Indoor Cycling', 'Virtual Cycling', 'E-Biking'];
+                case 'mountain_biking_group':
+                    return ['Mountain Biking', 'Enduro MTB', 'Downhill Cycling'];
+                case 'running_group':
+                    return ['Running', 'Treadmill', 'Indoor Running', 'Virtual Running'];
+                case 'trail_running_group':
+                    return ['Trail Running'];
+                default:
+                    return [];
+            }
+        },
     },
     DataActivityTypes: { type: 'Activity Types' },
     DataCriticalPower: { type: 'Critical Power' },

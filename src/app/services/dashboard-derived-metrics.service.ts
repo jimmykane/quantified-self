@@ -33,6 +33,7 @@ import {
   resolveDashboardTrainingSummaryContext,
 } from '../helpers/dashboard-derived-metrics.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
+import { resolveDashboardPowerCurveMetricPayload } from '../helpers/dashboard-power-curve.helper';
 import type { DashboardDerivedMetricStatus } from '../helpers/derived-metric-status.helper';
 import { AppFunctionsService } from './app.functions.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -43,7 +44,7 @@ import {
   PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
   type DerivedMetricKind,
-  type DerivedMetricSnapshotStatus,
+  type DerivedPowerCurveMetricPayload,
   type EnsureDerivedMetricsRequest,
   type EnsureDerivedMetricsResponse,
 } from '@shared/derived-metrics';
@@ -63,6 +64,7 @@ export interface DashboardDerivedMetricsState {
   intensityDistribution: DashboardIntensityDistributionContext | null;
   efficiencyTrend: DashboardEfficiencyTrendContext | null;
   trainingSummary: DashboardTrainingSummaryContext | null;
+  powerCurve: DerivedPowerCurveMetricPayload | null;
   formStatus: DashboardDerivedMetricStatus;
   recoveryNowStatus: DashboardDerivedMetricStatus;
   acwrStatus: DashboardDerivedMetricStatus;
@@ -77,6 +79,7 @@ export interface DashboardDerivedMetricsState {
   intensityDistributionStatus: DashboardDerivedMetricStatus;
   efficiencyTrendStatus: DashboardDerivedMetricStatus;
   trainingSummaryStatus: DashboardDerivedMetricStatus;
+  powerCurveStatus: DashboardDerivedMetricStatus;
 }
 
 export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMetricsState {
@@ -95,6 +98,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     intensityDistribution: null,
     efficiencyTrend: null,
     trainingSummary: null,
+    powerCurve: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
     acwrStatus: 'missing',
@@ -109,6 +113,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     intensityDistributionStatus: 'missing',
     efficiencyTrendStatus: 'missing',
     trainingSummaryStatus: 'missing',
+    powerCurveStatus: 'missing',
   };
 }
 
@@ -129,7 +134,8 @@ type DerivedMetricStateContextKey =
   | 'freshnessForecast'
   | 'intensityDistribution'
   | 'efficiencyTrend'
-  | 'trainingSummary';
+  | 'trainingSummary'
+  | 'powerCurve';
 
 type DerivedMetricStateStatusKey =
   | 'formStatus'
@@ -145,7 +151,8 @@ type DerivedMetricStateStatusKey =
   | 'freshnessForecastStatus'
   | 'intensityDistributionStatus'
   | 'efficiencyTrendStatus'
-  | 'trainingSummaryStatus';
+  | 'trainingSummaryStatus'
+  | 'powerCurveStatus';
 
 interface DerivedMetricStateDescriptor {
   kind: DerivedMetricKind;
@@ -249,6 +256,11 @@ export class DashboardDerivedMetricsService {
         contextKey: 'trainingSummary',
         statusKey: 'trainingSummaryStatus',
         resolveContext: (snapshot) => resolveDashboardTrainingSummaryContext(this.resolveSnapshotPayload(snapshot)),
+      },
+      [DERIVED_METRIC_KINDS.PowerCurve]: {
+        contextKey: 'powerCurve',
+        statusKey: 'powerCurveStatus',
+        resolveContext: (snapshot) => resolveDashboardPowerCurveMetricPayload(this.resolveSnapshotPayload(snapshot)),
       },
     };
   private readonly metricDescriptors: readonly DerivedMetricStateDescriptor[] = DASHBOARD_DERIVED_METRIC_KINDS
@@ -384,6 +396,17 @@ export class DashboardDerivedMetricsService {
         schemaVersion === null
         || schemaVersion < DERIVED_METRIC_SCHEMA_VERSION
       )
+    ) {
+      return 'stale';
+    }
+
+    // A ready snapshot with an unsupported Power Curve payload must be rebuilt.
+    // Otherwise the chart would silently present an empty state even though its
+    // document claims to be healthy.
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.PowerCurve
+      && !resolveDashboardPowerCurveMetricPayload(this.resolveSnapshotPayload(snapshot))
     ) {
       return 'stale';
     }

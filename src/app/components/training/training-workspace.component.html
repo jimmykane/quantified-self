@@ -168,10 +168,10 @@
           <app-sleep-trend-chart [sleepTrend]="sleepTrend" sleepRange="14d" sleepWindowLabel="Last 14 days" [darkTheme]="isDarkTheme()"></app-sleep-trend-chart>
         </article>
         <article class="training-chart-panel qs-glass-card-panel">
-          <app-power-curve-chart title="Cycling Power Curve" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+          <app-power-curve-chart title="Cycling Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
         </article>
         <article class="training-chart-panel qs-glass-card-panel">
-          <app-power-curve-chart title="Running Power Curve" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+          <app-power-curve-chart title="Running Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
         </article>
       </div>
     </section>

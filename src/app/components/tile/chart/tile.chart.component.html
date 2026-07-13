@@ -5,11 +5,16 @@
     @if (showEventFilters) {
     <app-dashboard-tile-event-filters class="tile-event-filter-controls" [eventFilters]="eventFilters"
       [canNavigateNewer]="canNavigateTileEventsNewer"
-      [showActivityFilter]="showEventActivityFilter"
       (rangeChange)="eventFilterRangeChange.emit($event)"
       (activityTypesChange)="eventFilterActivityTypesChange.emit($event)"
       (navigate)="eventFilterNavigate.emit($event)">
     </app-dashboard-tile-event-filters>
+    }
+    @if (showPowerCurveRangeSelector) {
+    <app-chart-range-selector class="tile-local-range-selector" [options]="powerCurveRangeSelectorOptions"
+      [value]="powerCurveRange" ariaLabel="Select Power Curve range"
+      (valueChange)="onPowerCurveRangeSelection($event)">
+    </app-chart-range-selector>
     }
     @if (showDerivedRangeSelector) {
     <app-chart-range-selector class="tile-local-range-selector" [options]="derivedRangeSelectorOptions"
