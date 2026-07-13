@@ -57,7 +57,7 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('queues only projection-sensitive stale kinds when asOfDay is behind today', () => {
+    it('queues only calendar-sensitive stale kinds when asOfDay is behind today', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
             metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d],
@@ -69,7 +69,23 @@ describe('decideDerivedMetricsFreshness', () => {
         expect(decision).toEqual({
             shouldQueue: true,
             metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
-            reason: 'projection_day_behind',
+            reason: 'calendar_day_behind',
+        });
+    });
+
+    it('refreshes a build comparison when its current window is from yesterday', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.TrainingBuildComparison]: { asOfDayMs: Date.UTC(2026, 3, 14) },
+            }),
+        });
+
+        expect(decision).toEqual({
+            shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            reason: 'calendar_day_behind',
         });
     });
 
@@ -160,4 +176,3 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 });
-

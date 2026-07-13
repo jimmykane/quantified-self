@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import {
     ActivityTypeGroups,
     DataDuration,
+    DataDistance,
     DataActivityTypes,
     DataCriticalPower,
     DataFTP,
@@ -69,14 +70,26 @@ import {
     type DerivedTrainingCapacityMetric,
     type DerivedTrainingDiscipline,
     type DerivedTrainingDisciplineSummary,
+    type DerivedTrainingBuildBenchmarkReference,
+    type DerivedTrainingBuildComparisonDiscipline,
+    type DerivedTrainingBuildComparisonMetricPayload,
+    type DerivedTrainingBuildRaceSuggestion,
+    type DerivedTrainingBuildWindow,
     type DerivedTrainingSummaryMetricPayload,
+    type TrainingBuildBenchmarkSelection,
+    type TrainingBuildDurationWeeks,
+    TRAINING_BUILD_DURATION_WEEKS,
     getDerivedMetricDocId,
+    getTrainingBuildBenchmarkSelectionKey,
+    normalizeTrainingBuildRaceEventId,
+    normalizeTrainingBuildPeriodEndDayMs,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
     normalizeDerivedFormDailyLoads,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
+import { getEventTags } from '../../../shared/event-tags';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
 import {
     getUserDeletionGuardState,
@@ -86,7 +99,7 @@ import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './der
 
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
-const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType', 'creator', 'serviceName', 'sourceServiceName'] as const;
+const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'tags', 'benchmarkReviewTags', 'name', 'isMerge', 'mergeType', 'creator', 'serviceName', 'sourceServiceName'] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
@@ -146,7 +159,7 @@ interface DerivedMetricBuildResult<TPayload> {
     payload: TPayload;
 }
 
-type DerivedMetricBuildSourceDependency = 'formDocs' | 'recoveryNowDocs';
+type DerivedMetricBuildSourceDependency = 'formDocs' | 'recoveryNowDocs' | 'trainingBuildBenchmarkSettings';
 
 interface DerivedLoadPoint {
     dayMs: number;
@@ -187,6 +200,7 @@ interface DerivedMetricBuildExecutionContext {
     getEfficiencyTrendBuildResult: () => DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload>;
     getTrainingSummaryBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload>;
     getPowerCurveBuildResult: () => DerivedMetricBuildResult<DerivedPowerCurveMetricPayload>;
+    getTrainingBuildComparisonBuildResult: () => DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload>;
 }
 
 interface DerivedMetricBuildDefinition {
@@ -1012,7 +1026,7 @@ function createTrainingSummaryDisciplineAccumulator(): TrainingSummaryDiscipline
     };
 }
 
-function resolveTrainingDiscipline(eventData: Record<string, unknown>): DerivedTrainingDiscipline | null {
+export function resolveTrainingDiscipline(eventData: Record<string, unknown>): DerivedTrainingDiscipline | null {
     const rawActivityTypes = resolveRawStatValue(eventData, DataActivityTypes.type);
     const values = Array.isArray(rawActivityTypes)
         ? rawActivityTypes
@@ -1477,6 +1491,359 @@ export function buildTrainingSummaryMetricPayload(
     };
 }
 
+interface TrainingBuildWindowAccumulator {
+    activityCount: number;
+    durationSeconds: number;
+    distanceMeters: number;
+    distanceEventCount: number;
+    trainingStressScore: number;
+    trainingStressScoreEventCount: number;
+    activeWeekStarts: Set<number>;
+    longestActivityDurationSeconds: number | null;
+    easySeconds: number;
+    moderateSeconds: number;
+    hardSeconds: number;
+    intensitySourceEventCount: number;
+    weightedEfficiencySum: number;
+    efficiencyDurationSeconds: number;
+    efficiencySampleCount: number;
+}
+
+interface ResolvedTrainingBuildEvent {
+    eventId: string;
+    eventData: Record<string, unknown>;
+    discipline: DerivedTrainingDiscipline;
+    startMs: number;
+    startDayMs: number;
+}
+
+const TRAINING_BUILD_RACE_SUGGESTION_LIMIT = 20;
+
+function createTrainingBuildWindowAccumulator(): TrainingBuildWindowAccumulator {
+    return {
+        activityCount: 0,
+        durationSeconds: 0,
+        distanceMeters: 0,
+        distanceEventCount: 0,
+        trainingStressScore: 0,
+        trainingStressScoreEventCount: 0,
+        activeWeekStarts: new Set<number>(),
+        longestActivityDurationSeconds: null,
+        easySeconds: 0,
+        moderateSeconds: 0,
+        hardSeconds: 0,
+        intensitySourceEventCount: 0,
+        weightedEfficiencySum: 0,
+        efficiencyDurationSeconds: 0,
+        efficiencySampleCount: 0,
+    };
+}
+
+function isTrainingBuildDurationWeeks(value: unknown): value is TrainingBuildDurationWeeks {
+    return TRAINING_BUILD_DURATION_WEEKS.includes(Number(value) as TrainingBuildDurationWeeks);
+}
+
+export function normalizeTrainingBuildBenchmarkSelection(value: unknown): TrainingBuildBenchmarkSelection | null {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+    const raw = value as Partial<TrainingBuildBenchmarkSelection>;
+    const durationWeeks = Number(raw.durationWeeks);
+    if (!isTrainingBuildDurationWeeks(durationWeeks)) {
+        return null;
+    }
+    if (raw.mode === 'race') {
+        const raceEventId = normalizeTrainingBuildRaceEventId(raw.raceEventId);
+        return raceEventId
+            ? { mode: 'race', durationWeeks, raceEventId }
+            : null;
+    }
+    if (raw.mode === 'period') {
+        const endDayMs = normalizeTrainingBuildPeriodEndDayMs(raw.endDayMs);
+        return endDayMs === null
+            ? null
+            : { mode: 'period', durationWeeks, endDayMs };
+    }
+    return null;
+}
+
+export function resolveTrainingBuildBenchmarkSelections(
+    value: unknown,
+): Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>> {
+    const settings = value && typeof value === 'object'
+        ? value as Record<string, unknown>
+        : {};
+    const trainingSettings = settings.trainingSettings && typeof settings.trainingSettings === 'object'
+        ? settings.trainingSettings as Record<string, unknown>
+        : {};
+    const rawBenchmarks = trainingSettings.buildBenchmarks && typeof trainingSettings.buildBenchmarks === 'object'
+        ? trainingSettings.buildBenchmarks as Record<string, unknown>
+        : {};
+
+    return (['running', 'cycling'] as const).reduce<Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>>>(
+        (benchmarks, discipline) => {
+            const selection = normalizeTrainingBuildBenchmarkSelection(rawBenchmarks[discipline]);
+            if (selection) {
+                benchmarks[discipline] = selection;
+            }
+            return benchmarks;
+        },
+        {},
+    );
+}
+
+export function isRaceTaggedEvent(eventData: Record<string, unknown>): boolean {
+    return getEventTags(eventData).some(tag => tag.toLowerCase() === 'race');
+}
+
+function resolveTrainingBuildActivityDurationSeconds(eventData: Record<string, unknown>): number | null {
+    const statDuration = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type));
+    if (statDuration !== null) {
+        return statDuration;
+    }
+    const startMs = toMillis(eventData.startDate);
+    const endMs = toMillis(eventData.endDate);
+    return startMs !== null && endMs !== null && endMs > startMs
+        ? (endMs - startMs) / 1000
+        : null;
+}
+
+function addTrainingBuildEventToWindow(
+    accumulator: TrainingBuildWindowAccumulator,
+    event: ResolvedTrainingBuildEvent,
+): void {
+    const { eventData, startDayMs } = event;
+    accumulator.activityCount += 1;
+    accumulator.activeWeekStarts.add(resolveUtcWeekStartMs(startDayMs));
+
+    const durationSeconds = resolveTrainingBuildActivityDurationSeconds(eventData);
+    if (durationSeconds !== null) {
+        accumulator.durationSeconds += durationSeconds;
+        accumulator.longestActivityDurationSeconds = Math.max(
+            accumulator.longestActivityDurationSeconds || 0,
+            durationSeconds,
+        );
+    }
+
+    const distanceMeters = toFiniteNumber(resolveRawStatNumericValue(eventData, DataDistance.type));
+    if (distanceMeters !== null && distanceMeters >= 0) {
+        accumulator.distanceMeters += distanceMeters;
+        accumulator.distanceEventCount += 1;
+    }
+
+    const trainingStressScore = resolveTrainingStressScore(eventData);
+    if (trainingStressScore !== null && trainingStressScore >= 0) {
+        accumulator.trainingStressScore += trainingStressScore;
+        accumulator.trainingStressScoreEventCount += 1;
+    }
+
+    const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
+    const powerZoneTotal = powerZones.reduce((sum, value) => sum + value, 0);
+    const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
+    const heartRateZoneTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
+    const zones = powerZoneTotal > 0 ? powerZones : (heartRateZoneTotal > 0 ? heartRateZones : null);
+    if (zones) {
+        accumulator.easySeconds += (zones[0] || 0) + (zones[1] || 0);
+        accumulator.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
+        accumulator.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+        accumulator.intensitySourceEventCount += 1;
+    }
+
+    const averagePower = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataPowerAvg.type));
+    const averageHeartRate = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataHeartRateAvg.type));
+    if (averagePower !== null && averageHeartRate !== null && durationSeconds !== null) {
+        accumulator.weightedEfficiencySum += (averagePower / averageHeartRate) * durationSeconds;
+        accumulator.efficiencyDurationSeconds += durationSeconds;
+        accumulator.efficiencySampleCount += 1;
+    }
+}
+
+function buildTrainingBuildWindow(
+    events: readonly ResolvedTrainingBuildEvent[],
+    durationWeeks: TrainingBuildDurationWeeks,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+    asOfMs: number,
+): DerivedTrainingBuildWindow {
+    const accumulator = createTrainingBuildWindowAccumulator();
+    events.forEach((event) => {
+        if (
+            event.startMs <= asOfMs
+            && event.startDayMs >= windowStartDayMs
+            && event.startDayMs <= windowEndDayMs
+        ) {
+            addTrainingBuildEventToWindow(accumulator, event);
+        }
+    });
+    return {
+        periodWeeks: durationWeeks,
+        windowStartDayMs,
+        windowEndDayMs,
+        activityCount: accumulator.activityCount,
+        durationSeconds: toRoundedNumber(accumulator.durationSeconds, 2),
+        distanceMeters: accumulator.distanceEventCount ? toRoundedNumber(accumulator.distanceMeters, 2) : null,
+        distanceEventCount: accumulator.distanceEventCount,
+        trainingStressScore: accumulator.trainingStressScoreEventCount
+            ? toRoundedNumber(accumulator.trainingStressScore, 2)
+            : null,
+        trainingStressScoreEventCount: accumulator.trainingStressScoreEventCount,
+        activeWeekCount: accumulator.activeWeekStarts.size,
+        longestActivityDurationSeconds: accumulator.longestActivityDurationSeconds === null
+            ? null
+            : toRoundedNumber(accumulator.longestActivityDurationSeconds, 2),
+        easySeconds: accumulator.intensitySourceEventCount ? toRoundedNumber(accumulator.easySeconds, 2) : null,
+        moderateSeconds: accumulator.intensitySourceEventCount ? toRoundedNumber(accumulator.moderateSeconds, 2) : null,
+        hardSeconds: accumulator.intensitySourceEventCount ? toRoundedNumber(accumulator.hardSeconds, 2) : null,
+        intensitySourceEventCount: accumulator.intensitySourceEventCount,
+        efficiency: accumulator.efficiencyDurationSeconds > 0
+            ? toRoundedNumber(accumulator.weightedEfficiencySum / accumulator.efficiencyDurationSeconds, 4)
+            : null,
+        efficiencySampleCount: accumulator.efficiencySampleCount,
+    };
+}
+
+function resolveTrainingBuildBenchmarkReference(
+    selection: TrainingBuildBenchmarkSelection,
+    discipline: DerivedTrainingDiscipline,
+    events: readonly ResolvedTrainingBuildEvent[],
+    currentStartDayMs: number,
+): DerivedTrainingBuildBenchmarkReference | null {
+    const periodDays = selection.durationWeeks * 7;
+    let windowEndDayMs: number;
+    let label: string | null = null;
+
+    if (selection.mode === 'race') {
+        const race = events.find(event => event.eventId === selection.raceEventId && isRaceTaggedEvent(event.eventData));
+        if (!race || race.discipline !== discipline) {
+            return null;
+        }
+        windowEndDayMs = race.startDayMs - DAY_MS;
+        label = toSafeString(race.eventData.name).trim() || 'Tagged race';
+    } else {
+        windowEndDayMs = resolveUtcDayStartMs(selection.endDayMs);
+    }
+
+    if (windowEndDayMs >= currentStartDayMs) {
+        return null;
+    }
+    const selectionKey = getTrainingBuildBenchmarkSelectionKey(selection);
+    if (!selectionKey) {
+        return null;
+    }
+    return {
+        ...selection,
+        selectionKey,
+        windowStartDayMs: windowEndDayMs - ((periodDays - 1) * DAY_MS),
+        windowEndDayMs,
+        label,
+    };
+}
+
+function buildTrainingBuildRaceSuggestions(
+    events: readonly ResolvedTrainingBuildEvent[],
+    currentStartDayMs: number,
+): DerivedTrainingBuildRaceSuggestion[] {
+    return events
+        .filter(event => (event.startDayMs - DAY_MS) < currentStartDayMs && isRaceTaggedEvent(event.eventData))
+        .sort((left, right) => right.startDayMs - left.startDayMs || left.eventId.localeCompare(right.eventId))
+        .slice(0, TRAINING_BUILD_RACE_SUGGESTION_LIMIT)
+        .map(event => ({
+            eventId: event.eventId,
+            startDayMs: event.startDayMs,
+            label: toSafeString(event.eventData.name).trim() || null,
+        }));
+}
+
+export function buildTrainingBuildComparisonMetricPayload(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+    benchmarkSettings: unknown,
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const eventsByDiscipline: Record<DerivedTrainingDiscipline, ResolvedTrainingBuildEvent[]> = {
+        running: [],
+        cycling: [],
+    };
+    let sourceEventCount = 0;
+
+    docs.forEach((doc) => {
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        if (isMergedEvent(eventData)) {
+            return;
+        }
+        const discipline = resolveTrainingDiscipline(eventData);
+        const startMs = toMillis(eventData.startDate);
+        const eventId = `${doc.id || ''}`.trim();
+        if (!discipline || startMs === null || !eventId) {
+            return;
+        }
+        eventsByDiscipline[discipline].push({
+            eventId,
+            eventData,
+            discipline,
+            startMs,
+            startDayMs: resolveUtcDayStartMs(startMs),
+        });
+        sourceEventCount += 1;
+    });
+
+    const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
+    const disciplines = (['running', 'cycling'] as const).map((discipline): DerivedTrainingBuildComparisonDiscipline => {
+        const selection = selections[discipline] || null;
+        const events = eventsByDiscipline[discipline];
+        // Keep races that can be valid for at least the shortest supported build.
+        // The dialog filters this bounded list again as the athlete chooses 8/10/12 weeks.
+        const shortestCurrentStartDayMs = asOfDayMs - ((8 * 7 - 1) * DAY_MS);
+        const suggestedRaces = buildTrainingBuildRaceSuggestions(events, shortestCurrentStartDayMs);
+        if (!selection) {
+            return {
+                discipline,
+                status: 'not-configured',
+                selection: null,
+                current: null,
+                benchmark: null,
+                suggestedRaces,
+            };
+        }
+        const currentStartDayMs = asOfDayMs - ((selection.durationWeeks * 7 - 1) * DAY_MS);
+        const reference = resolveTrainingBuildBenchmarkReference(selection, discipline, events, currentStartDayMs);
+        if (!reference) {
+            return {
+                discipline,
+                status: 'invalid-selection',
+                selection: null,
+                current: null,
+                benchmark: null,
+                suggestedRaces: buildTrainingBuildRaceSuggestions(events, currentStartDayMs),
+            };
+        }
+        return {
+            discipline,
+            status: 'ready',
+            selection: reference,
+            current: buildTrainingBuildWindow(events, selection.durationWeeks, currentStartDayMs, asOfDayMs, nowMs),
+            benchmark: buildTrainingBuildWindow(
+                events,
+                selection.durationWeeks,
+                reference.windowStartDayMs,
+                reference.windowEndDayMs,
+                nowMs,
+            ),
+            suggestedRaces: buildTrainingBuildRaceSuggestions(events, currentStartDayMs),
+        };
+    });
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            excludesMergedEvents: true,
+            disciplines,
+        },
+    };
+}
+
 function buildIntensityDistributionMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> {
@@ -1908,12 +2275,17 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs'],
         build: (context) => context.getPowerCurveBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.TrainingBuildComparison]: {
+        sourceDependencies: ['formDocs', 'trainingBuildBenchmarkSettings'],
+        build: (context) => context.getTrainingBuildComparisonBuildResult(),
+    },
 };
 
 function createDerivedMetricBuildExecutionContext(
     sourceDocs: {
         formDocs?: readonly FirestoreQueryDocumentSnapshot[];
         recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        trainingBuildBenchmarkSettings?: unknown;
     },
     nowMs: number,
     options?: {
@@ -1922,6 +2294,7 @@ function createDerivedMetricBuildExecutionContext(
 ): DerivedMetricBuildExecutionContext {
     const formDocs = sourceDocs.formDocs || [];
     const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
+    const trainingBuildBenchmarkSettings = sourceDocs.trainingBuildBenchmarkSettings || {};
 
     let dailyLoadContextCache: ReturnType<typeof buildDailyLoadContext> | null = null;
     let derivedLoadPointsCache: DerivedLoadPoint[] | null = null;
@@ -1930,6 +2303,7 @@ function createDerivedMetricBuildExecutionContext(
     let efficiencyTrendBuildResultCache: DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> | null = null;
     let trainingSummaryBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> | null = null;
     let powerCurveBuildResultCache: DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> | null = null;
+    let trainingBuildComparisonBuildResultCache: DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> | null = null;
 
     const getDailyLoadContext = (): ReturnType<typeof buildDailyLoadContext> => {
         if (dailyLoadContextCache) {
@@ -1997,6 +2371,18 @@ function createDerivedMetricBuildExecutionContext(
         return powerCurveBuildResultCache;
     };
 
+    const getTrainingBuildComparisonBuildResult = (): DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> => {
+        if (trainingBuildComparisonBuildResultCache) {
+            return trainingBuildComparisonBuildResultCache;
+        }
+        trainingBuildComparisonBuildResultCache = buildTrainingBuildComparisonMetricPayload(
+            formDocs,
+            trainingBuildBenchmarkSettings,
+            nowMs,
+        );
+        return trainingBuildComparisonBuildResultCache;
+    };
+
     return {
         nowMs,
         formDocs,
@@ -2008,6 +2394,7 @@ function createDerivedMetricBuildExecutionContext(
         getEfficiencyTrendBuildResult,
         getTrainingSummaryBuildResult,
         getPowerCurveBuildResult,
+        getTrainingBuildComparisonBuildResult,
     };
 }
 
@@ -2016,9 +2403,11 @@ export function resolveDerivedMetricSourceRequirements(
 ): {
     needsFormDocs: boolean;
     needsRecoveryNowDocs: boolean;
+    needsTrainingBuildBenchmarkSettings: boolean;
 } {
     let needsFormDocs = false;
     let needsRecoveryNowDocs = false;
+    let needsTrainingBuildBenchmarkSettings = false;
 
     metricKinds.forEach((metricKind) => {
         const definition = DERIVED_METRIC_BUILD_REGISTRY[metricKind];
@@ -2031,11 +2420,15 @@ export function resolveDerivedMetricSourceRequirements(
         if (definition.sourceDependencies.includes('recoveryNowDocs')) {
             needsRecoveryNowDocs = true;
         }
+        if (definition.sourceDependencies.includes('trainingBuildBenchmarkSettings')) {
+            needsTrainingBuildBenchmarkSettings = true;
+        }
     });
 
     return {
         needsFormDocs,
         needsRecoveryNowDocs,
+        needsTrainingBuildBenchmarkSettings,
     };
 }
 
@@ -2067,6 +2460,44 @@ function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFi
 async function queueDerivedMetricsTask(uid: string, generation: number): Promise<boolean> {
     const queued = await enqueueDerivedMetricsTask(uid, generation);
     return queued;
+}
+
+/**
+ * Records an enqueue failure only while the generation that attempted the enqueue
+ * is still waiting to be claimed. An enqueue can time out after Cloud Tasks has
+ * accepted it, or a newer dirty-mark can replace the generation while the failure
+ * path is running. In either case, an unconditional failure write would strand
+ * the healthy task by changing its coordinator status away from `queued`.
+ */
+async function markDerivedMetricsEnqueueFailed(
+    uid: string,
+    generation: number,
+    error: unknown,
+    logContext: string,
+    fallbackError: string,
+): Promise<void> {
+    const coordinatorRef = getCoordinatorDocRef(uid);
+    await admin.firestore().runTransaction(async (transaction) => {
+        const coordinatorSnapshot = await transaction.get(coordinatorRef);
+        if (!coordinatorSnapshot.exists) {
+            return;
+        }
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, logContext, { generation })) {
+            return;
+        }
+
+        const coordinator = parseCoordinator(coordinatorSnapshot.data());
+        if (coordinator.generation !== generation || coordinator.status !== 'queued') {
+            return;
+        }
+
+        transaction.set(coordinatorRef, {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
+            status: 'failed',
+            lastError: toSafeString((error as { message?: unknown } | null)?.message) || fallbackError,
+            updatedAtMs: Date.now(),
+        }, { merge: true });
+    });
 }
 
 async function readDerivedMetricsWriteBlocked(
@@ -2147,6 +2578,16 @@ export async function fetchDerivedMetricsEventDocs(uid: string): Promise<Firesto
         .select(...DERIVED_METRICS_EVENT_FIELDS)
         .get();
     return snapshot.docs;
+}
+
+export async function fetchTrainingBuildBenchmarkSettings(uid: string): Promise<unknown> {
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection('config')
+        .doc('settings')
+        .get();
+    return snapshot.data() || {};
 }
 
 export interface DerivedFormSnapshotSeed {
@@ -2335,14 +2776,13 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
                 generation: generationToQueue,
                 error,
             });
-            if (!await readDerivedMetricsWriteBlocked(uid, 'dirty-mark enqueue failure write', { generation: generationToQueue })) {
-                await coordinatorRef.set({
-                    entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                    status: 'failed',
-                    lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_failed',
-                    updatedAtMs: Date.now(),
-                }, { merge: true });
-            }
+            await markDerivedMetricsEnqueueFailed(
+                uid,
+                generationToQueue,
+                error,
+                'dirty-mark enqueue failure write',
+                'enqueue_failed',
+            );
 
             return {
                 accepted: false,
@@ -2535,17 +2975,13 @@ export async function completeDerivedMetricsProcessing(
                 nextGeneration: completion.nextGeneration,
                 error,
             });
-            if (!await readDerivedMetricsWriteBlocked(uid, 'follow-up enqueue failure write', {
-                generation,
-                nextGeneration: completion.nextGeneration,
-            })) {
-                await coordinatorRef.set({
-                    entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                    status: 'failed',
-                    lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_follow_up_failed',
-                    updatedAtMs: Date.now(),
-                }, { merge: true });
-            }
+            await markDerivedMetricsEnqueueFailed(
+                uid,
+                completion.nextGeneration,
+                error,
+                'follow-up enqueue failure write',
+                'enqueue_follow_up_failed',
+            );
         }
     }
 
@@ -2816,6 +3252,7 @@ export async function writeDerivedMetricSnapshotsReady(
     sourceDocs: {
         formDocs?: readonly FirestoreQueryDocumentSnapshot[];
         recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        trainingBuildBenchmarkSettings?: unknown;
     },
     options?: {
         builtFromEventMutationVersion?: number | null;
@@ -2860,6 +3297,9 @@ export async function writeDerivedMetricSnapshotsReady(
         }
         if (sourceDependencies.includes('recoveryNowDocs')) {
             sourceDocCount += recoveryNowSourceDocCount;
+        }
+        if (sourceDependencies.includes('trainingBuildBenchmarkSettings')) {
+            sourceDocCount += 1;
         }
         return sourceDocCount;
     };

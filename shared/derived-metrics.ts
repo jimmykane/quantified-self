@@ -14,6 +14,7 @@ export const DERIVED_METRIC_KINDS = {
   EfficiencyTrend: 'efficiency_trend',
   TrainingSummary: 'training_summary',
   PowerCurve: 'power_curve',
+  TrainingBuildComparison: 'training_build_comparison',
 } as const;
 
 export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS];
@@ -34,6 +35,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.EfficiencyTrend,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.PowerCurve,
+  DERIVED_METRIC_KINDS.TrainingBuildComparison,
 ];
 
 export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
@@ -44,6 +46,14 @@ export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.FormPlus7d,
   DERIVED_METRIC_KINDS.FreshnessForecast,
   DERIVED_METRIC_KINDS.PowerCurve,
+];
+
+// These metrics change as the UTC day changes, even if no event is written.
+// Training build comparison needs a full event-history read, so it remains out
+// of the projection-only list used by the worker's Form-snapshot fast path.
+export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
+  ...PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_KINDS.TrainingBuildComparison,
 ];
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
@@ -273,6 +283,100 @@ export interface DerivedEfficiencyTrendMetricPayload {
 
 export type DerivedTrainingDiscipline = 'running' | 'cycling';
 
+export const TRAINING_BUILD_DURATION_WEEKS = [8, 10, 12] as const;
+export type TrainingBuildDurationWeeks = typeof TRAINING_BUILD_DURATION_WEEKS[number];
+
+export type TrainingBuildBenchmarkSelection =
+  | {
+    mode: 'race';
+    durationWeeks: TrainingBuildDurationWeeks;
+    raceEventId: string;
+  }
+  | {
+    mode: 'period';
+    durationWeeks: TrainingBuildDurationWeeks;
+    endDayMs: number;
+  };
+
+export interface TrainingBuildSettings {
+  buildBenchmarks?: Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>>;
+}
+
+export interface SetTrainingBuildBenchmarkRequest {
+  discipline: DerivedTrainingDiscipline;
+  selection: TrainingBuildBenchmarkSelection | null;
+}
+
+export interface SetTrainingBuildBenchmarkResponse {
+  accepted: boolean;
+  queued: boolean;
+  generation: number | null;
+}
+
+/**
+ * Normalizes an event document ID before it is persisted as a benchmark reference.
+ * Keeping this aligned with Firestore's document-ID constraints means a malformed
+ * callable payload cannot turn into an invalid document path during validation.
+ */
+export function normalizeTrainingBuildRaceEventId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const raceEventId = value.trim();
+  if (
+    !raceEventId
+    || raceEventId === '.'
+    || raceEventId === '..'
+    || /^__.*__$/.test(raceEventId)
+    || raceEventId.includes('/')
+    || new TextEncoder().encode(raceEventId).byteLength > 1_500
+  ) {
+    return null;
+  }
+  return raceEventId;
+}
+
+/**
+ * Normalizes a manual benchmark end date to its UTC calendar-day boundary.
+ * The value is shared by the callable, worker, and frontend matching logic so
+ * a valid calendar date always has one stable benchmark key.
+ */
+export function normalizeTrainingBuildPeriodEndDayMs(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const endDayMs = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(endDayMs)) {
+    return null;
+  }
+  const date = new Date(endDayMs);
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+  const utcDayStartMs = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Number.isFinite(utcDayStartMs) ? utcDayStartMs : null;
+}
+
+export function getTrainingBuildBenchmarkSelectionKey(value: unknown): string | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const selection = value as Partial<TrainingBuildBenchmarkSelection>;
+  const durationWeeks = Number(selection.durationWeeks);
+  if (!TRAINING_BUILD_DURATION_WEEKS.includes(durationWeeks as TrainingBuildDurationWeeks)) {
+    return null;
+  }
+  if (selection.mode === 'race') {
+    const raceEventId = normalizeTrainingBuildRaceEventId(selection.raceEventId);
+    return raceEventId ? `race:${durationWeeks}:${raceEventId}` : null;
+  }
+  if (selection.mode === 'period') {
+    const endDayMs = normalizeTrainingBuildPeriodEndDayMs(selection.endDayMs);
+    return endDayMs === null ? null : `period:${durationWeeks}:${endDayMs}`;
+  }
+  return null;
+}
+
 export type DerivedTrainingCapacityTrend = 'improving' | 'stable' | 'declining';
 
 export interface DerivedTrainingSummaryWindow {
@@ -314,6 +418,60 @@ export interface DerivedTrainingSummaryMetricPayload {
   baselineWindowDays: number;
   disciplines: DerivedTrainingDisciplineSummary[];
   excludesMergedEvents: boolean;
+}
+
+export interface DerivedTrainingBuildRaceSuggestion {
+  eventId: string;
+  startDayMs: number;
+  label: string | null;
+}
+
+export type DerivedTrainingBuildBenchmarkReference = TrainingBuildBenchmarkSelection & {
+  selectionKey: string;
+  windowStartDayMs: number;
+  windowEndDayMs: number;
+  label: string | null;
+};
+
+export interface DerivedTrainingBuildWindow {
+  periodWeeks: TrainingBuildDurationWeeks;
+  windowStartDayMs: number;
+  windowEndDayMs: number;
+  activityCount: number;
+  durationSeconds: number;
+  distanceMeters: number | null;
+  distanceEventCount: number;
+  trainingStressScore: number | null;
+  trainingStressScoreEventCount: number;
+  activeWeekCount: number;
+  longestActivityDurationSeconds: number | null;
+  easySeconds: number | null;
+  moderateSeconds: number | null;
+  hardSeconds: number | null;
+  intensitySourceEventCount: number;
+  efficiency: number | null;
+  efficiencySampleCount: number;
+}
+
+export type DerivedTrainingBuildComparisonStatus =
+  | 'not-configured'
+  | 'invalid-selection'
+  | 'ready';
+
+export interface DerivedTrainingBuildComparisonDiscipline {
+  discipline: DerivedTrainingDiscipline;
+  status: DerivedTrainingBuildComparisonStatus;
+  selection: DerivedTrainingBuildBenchmarkReference | null;
+  current: DerivedTrainingBuildWindow | null;
+  benchmark: DerivedTrainingBuildWindow | null;
+  suggestedRaces: DerivedTrainingBuildRaceSuggestion[];
+}
+
+export interface DerivedTrainingBuildComparisonMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  excludesMergedEvents: boolean;
+  disciplines: DerivedTrainingBuildComparisonDiscipline[];
 }
 
 export type DerivedPowerCurveScope = DerivedTrainingDiscipline;
@@ -378,6 +536,7 @@ export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBa
 export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
 export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSummaryMetricPayload>;
 export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedPowerCurveMetricPayload>;
+export type DerivedTrainingBuildComparisonMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingBuildComparisonMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
   | DerivedRecoveryNowMetricSnapshot
@@ -393,7 +552,8 @@ export type DerivedMetricSnapshot =
   | DerivedIntensityDistributionMetricSnapshot
   | DerivedEfficiencyTrendMetricSnapshot
   | DerivedTrainingSummaryMetricSnapshot
-  | DerivedPowerCurveMetricSnapshot;
+  | DerivedPowerCurveMetricSnapshot
+  | DerivedTrainingBuildComparisonMetricSnapshot;
 
 export interface EnsureDerivedMetricsRequest {
   metricKinds?: DerivedMetricKind[];

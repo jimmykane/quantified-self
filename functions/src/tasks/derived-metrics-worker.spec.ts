@@ -30,6 +30,7 @@ const hoisted = vi.hoisted(() => ({
     failDerivedMetricsProcessing: vi.fn(),
     fetchDerivedMetricsEventDocs: vi.fn(),
     fetchRecoveryLookbackEventDocs: vi.fn(),
+    fetchTrainingBuildBenchmarkSettings: vi.fn(),
     getDerivedRecoveryLookbackWindowSeconds: vi.fn(() => 0),
     isDerivedMetricsUserWriteBlocked: vi.fn(),
     markDerivedMetricSnapshotsBuilding: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
         fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
         fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
+        fetchTrainingBuildBenchmarkSettings: hoisted.fetchTrainingBuildBenchmarkSettings,
         getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
         isDerivedMetricsUserWriteBlocked: hoisted.isDerivedMetricsUserWriteBlocked,
         markDerivedMetricSnapshotsBuilding: hoisted.markDerivedMetricSnapshotsBuilding,
@@ -80,6 +82,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.markDerivedMetricSnapshotsBuilding.mockResolvedValue(undefined);
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValue([{ id: 'form-doc' }] as any);
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValue([{ id: 'recovery-doc' }] as any);
+        hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValue({ trainingSettings: {} });
         hoisted.writeDerivedMetricSnapshotsReady.mockResolvedValue(undefined);
         hoisted.completeDerivedMetricsProcessing.mockResolvedValue({
             requeued: false,
@@ -199,6 +202,32 @@ describe('processDerivedMetricsTask', () => {
 
         expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
         expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-power');
+    });
+
+    it('fetches benchmark settings only for the training build comparison and passes them to its builder', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 13,
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'training-doc' }] as any);
+        const settings = { trainingSettings: { buildBenchmarks: { running: { mode: 'period', durationWeeks: 12 } } } };
+        hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValueOnce(settings);
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-training-build', generation: 92 },
+        });
+
+        expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-training-build');
+        expect(hoisted.fetchTrainingBuildBenchmarkSettings).toHaveBeenCalledWith('user-training-build');
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-training-build', [
+            DERIVED_METRIC_KINDS.TrainingBuildComparison,
+        ], {
+            formDocs: [{ id: 'training-doc' }],
+            recoveryNowDocs: [],
+            trainingBuildBenchmarkSettings: settings,
+        }, expect.objectContaining({ builtFromEventMutationVersion: 13 }));
     });
 
     it('exits before snapshot writes when user deletion becomes active after claiming work', async () => {

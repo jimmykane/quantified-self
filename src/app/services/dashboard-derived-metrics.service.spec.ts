@@ -13,6 +13,7 @@ import {
 import { AppFunctionsService } from './app.functions.service';
 import {
   DashboardDerivedMetricsService,
+  TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from './dashboard-derived-metrics.service';
 
@@ -52,6 +53,7 @@ describe('DashboardDerivedMetricsService', () => {
     intensityDistribution: null,
     efficiencyTrend: null,
     trainingSummary: null,
+    trainingBuildComparison: null,
     powerCurve: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
@@ -67,6 +69,7 @@ describe('DashboardDerivedMetricsService', () => {
     intensityDistributionStatus: 'missing',
     efficiencyTrendStatus: 'missing',
     trainingSummaryStatus: 'missing',
+    trainingBuildComparisonStatus: 'missing',
     powerCurveStatus: 'missing',
   });
 
@@ -143,6 +146,7 @@ describe('DashboardDerivedMetricsService', () => {
     expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form));
     expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
     expect(doc).toHaveBeenCalledTimes(15);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(false);
     expect(state.formStatus).toBe('ready');
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.acwrStatus).toBe('missing');
@@ -372,6 +376,28 @@ describe('DashboardDerivedMetricsService', () => {
     expect(state.powerCurveStatus).toBe('stale');
   });
 
+  it('marks a ready build comparison stale when its current window is from yesterday', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(Date.UTC(2026, 3, 28, 12, 0, 0)));
+      const status = (service as any).resolveSnapshotStatus(DERIVED_METRIC_KINDS.TrainingBuildComparison, {
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: {
+          asOfDayMs: Date.UTC(2026, 3, 27),
+          disciplines: [
+            { discipline: 'running', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [] },
+            { discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [] },
+          ],
+        },
+      });
+
+      expect(status).toBe('stale');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('requests missing derived metrics once while a request is in flight', async () => {
     let resolveCall: ((value?: unknown) => void) | null = null;
     mockFunctionsService.call.mockImplementation(() => new Promise((resolve) => {
@@ -430,6 +456,7 @@ describe('DashboardDerivedMetricsService', () => {
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
+      trainingBuildComparisonStatus: 'ready',
       powerCurveStatus: 'ready',
     };
 
@@ -457,6 +484,53 @@ describe('DashboardDerivedMetricsService', () => {
     });
   });
 
+  it('subscribes to and requests the Training-only metric only for the Training workspace scope', async () => {
+    const uid = 'user-1';
+    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
+
+    const state = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
+    }));
+
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(true);
+    service.ensureForDashboard({ uid }, state, {
+      metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
+    });
+    expect(mockFunctionsService.call).toHaveBeenCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
+      metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
+    });
+  });
+
+  it('does not let an in-flight dashboard probe suppress a Training workspace request', () => {
+    let resolveDashboardProbe: ((value: unknown) => void) | null = null;
+    mockFunctionsService.call.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveDashboardProbe = resolve;
+    }));
+    const dashboardState: DashboardDerivedMetricsState = {
+      ...createMissingState(),
+      formStatus: 'ready', recoveryNowStatus: 'ready', acwrStatus: 'ready', rampRateStatus: 'ready',
+      monotonyStrainStatus: 'ready', formNowStatus: 'ready', formPlus7dStatus: 'ready',
+      easyPercentStatus: 'ready', hardPercentStatus: 'ready', efficiencyDelta4wStatus: 'ready',
+      freshnessForecastStatus: 'ready', intensityDistributionStatus: 'ready', efficiencyTrendStatus: 'ready',
+      trainingSummaryStatus: 'ready', powerCurveStatus: 'ready',
+    };
+    const trainingState: DashboardDerivedMetricsState = {
+      ...dashboardState,
+      trainingBuildComparisonStatus: 'missing',
+    };
+
+    service.ensureForDashboard({ uid: 'user-1' }, dashboardState);
+    service.ensureForDashboard({ uid: 'user-1' }, trainingState, {
+      metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
+    });
+
+    expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+    expect(mockFunctionsService.call).toHaveBeenLastCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+    });
+    resolveDashboardProbe?.({ data: { accepted: true } });
+  });
+
   it('applies longer cooldown for healthy freshness probes', async () => {
     const state: DashboardDerivedMetricsState = {
       ...createMissingState(),
@@ -476,6 +550,7 @@ describe('DashboardDerivedMetricsService', () => {
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
+      trainingBuildComparisonStatus: 'ready',
       powerCurveStatus: 'ready',
     };
 
@@ -503,6 +578,7 @@ describe('DashboardDerivedMetricsService', () => {
       intensityDistributionStatus: 'ready',
       efficiencyTrendStatus: 'ready',
       trainingSummaryStatus: 'ready',
+      trainingBuildComparisonStatus: 'ready',
       powerCurveStatus: 'ready',
     };
 

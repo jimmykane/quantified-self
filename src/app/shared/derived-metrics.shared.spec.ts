@@ -8,6 +8,9 @@ import {
   DEFAULT_DERIVED_METRIC_KINDS,
   buildDerivedFormDailyLoads,
   getDerivedMetricDocId,
+  getTrainingBuildBenchmarkSelectionKey,
+  normalizeTrainingBuildPeriodEndDayMs,
+  normalizeTrainingBuildRaceEventId,
   isDerivedMetricKind,
   normalizeDerivedFormDailyLoads,
   normalizeDerivedMetricKinds,
@@ -56,6 +59,26 @@ describe('derived-metrics shared helpers', () => {
     expect(getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)).toBe('recovery_now');
   });
 
+  it('normalizes only Firestore-safe race event IDs for saved build references', () => {
+    expect(normalizeTrainingBuildRaceEventId(' race-1 ')).toBe('race-1');
+    expect(normalizeTrainingBuildRaceEventId('race/other')).toBeNull();
+    expect(normalizeTrainingBuildRaceEventId('.')).toBeNull();
+    expect(normalizeTrainingBuildRaceEventId('..')).toBeNull();
+    expect(normalizeTrainingBuildRaceEventId('__reserved__')).toBeNull();
+    expect(normalizeTrainingBuildRaceEventId('🏃'.repeat(400))).toBeNull();
+  });
+
+  it('uses one UTC day and key for manual build benchmark dates', () => {
+    const midday = Date.UTC(2026, 4, 10, 15, 30);
+    const normalizedDay = Date.UTC(2026, 4, 10);
+
+    expect(normalizeTrainingBuildPeriodEndDayMs(midday)).toBe(normalizedDay);
+    expect(getTrainingBuildBenchmarkSelectionKey({
+      mode: 'period', durationWeeks: 12, endDayMs: midday,
+    })).toBe(`period:12:${normalizedDay}`);
+    expect(normalizeTrainingBuildPeriodEndDayMs(1e100)).toBeNull();
+  });
+
   it('normalizes derived form daily loads for object and legacy tuple entries', () => {
     expect(normalizeDerivedFormDailyLoads([
       { dayMs: Date.UTC(2026, 0, 2), load: 5 },
@@ -80,7 +103,7 @@ describe('derived-metrics shared helpers', () => {
   });
 
   it('exposes recovery lookback constants for bounded derived recovery scans', () => {
-    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(7);
+    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(8);
     expect(DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS).toBe(14 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS).toBe(2 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS).toBe(

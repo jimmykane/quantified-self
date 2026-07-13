@@ -1,0 +1,12 @@
+:host { display: block; }
+mat-dialog-content { display: grid; gap: 20px; min-width: min(100%, 440px); }
+.dialog-intro, .dialog-empty { margin: 0; color: var(--mat-sys-on-surface-variant); line-height: 1.45; }
+.dialog-field { display: grid; gap: 8px; }
+.field-label { font-size: 13px; font-weight: 650; color: var(--mat-sys-on-surface-variant); }
+.race-list { display: grid; gap: 8px; max-height: 250px; overflow-y: auto; }
+.race-option { justify-content: space-between; text-align: left; }
+.race-option-selected { --mat-button-outlined-outline-color: var(--mat-sys-primary); background: var(--mat-sys-secondary-container); }
+.race-option small { color: var(--mat-sys-on-surface-variant); }
+.period-input { width: 100%; }
+.dialog-error { margin: 0; color: var(--mat-sys-error); line-height: 1.35; }
+mat-dialog-actions mat-spinner { display: inline-block; vertical-align: middle; }

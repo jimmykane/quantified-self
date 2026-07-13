@@ -17,6 +17,7 @@ import type {
   DashboardMonotonyStrainContext,
   DashboardRampRateContext,
   DashboardTrainingSummaryContext,
+  DashboardTrainingBuildComparisonContext,
 } from '../helpers/dashboard-derived-metrics.helper';
 import {
   resolveDashboardAcwrContext,
@@ -31,6 +32,7 @@ import {
   resolveDashboardMonotonyStrainContext,
   resolveDashboardRampRateContext,
   resolveDashboardTrainingSummaryContext,
+  resolveDashboardTrainingBuildComparisonContext,
 } from '../helpers/dashboard-derived-metrics.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
 import { resolveDashboardPowerCurveMetricPayload } from '../helpers/dashboard-power-curve.helper';
@@ -41,7 +43,7 @@ import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
-  PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
+  CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
   type DerivedMetricKind,
   type DerivedPowerCurveMetricPayload,
@@ -64,6 +66,7 @@ export interface DashboardDerivedMetricsState {
   intensityDistribution: DashboardIntensityDistributionContext | null;
   efficiencyTrend: DashboardEfficiencyTrendContext | null;
   trainingSummary: DashboardTrainingSummaryContext | null;
+  trainingBuildComparison: DashboardTrainingBuildComparisonContext | null;
   powerCurve: DerivedPowerCurveMetricPayload | null;
   formStatus: DashboardDerivedMetricStatus;
   recoveryNowStatus: DashboardDerivedMetricStatus;
@@ -79,6 +82,7 @@ export interface DashboardDerivedMetricsState {
   intensityDistributionStatus: DashboardDerivedMetricStatus;
   efficiencyTrendStatus: DashboardDerivedMetricStatus;
   trainingSummaryStatus: DashboardDerivedMetricStatus;
+  trainingBuildComparisonStatus: DashboardDerivedMetricStatus;
   powerCurveStatus: DashboardDerivedMetricStatus;
 }
 
@@ -98,6 +102,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     intensityDistribution: null,
     efficiencyTrend: null,
     trainingSummary: null,
+    trainingBuildComparison: null,
     powerCurve: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
@@ -113,6 +118,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     intensityDistributionStatus: 'missing',
     efficiencyTrendStatus: 'missing',
     trainingSummaryStatus: 'missing',
+    trainingBuildComparisonStatus: 'missing',
     powerCurveStatus: 'missing',
   };
 }
@@ -135,6 +141,7 @@ type DerivedMetricStateContextKey =
   | 'intensityDistribution'
   | 'efficiencyTrend'
   | 'trainingSummary'
+  | 'trainingBuildComparison'
   | 'powerCurve';
 
 type DerivedMetricStateStatusKey =
@@ -152,6 +159,7 @@ type DerivedMetricStateStatusKey =
   | 'intensityDistributionStatus'
   | 'efficiencyTrendStatus'
   | 'trainingSummaryStatus'
+  | 'trainingBuildComparisonStatus'
   | 'powerCurveStatus';
 
 interface DerivedMetricStateDescriptor {
@@ -161,7 +169,20 @@ interface DerivedMetricStateDescriptor {
   resolveContext: (snapshot: SnapshotRecord) => DashboardDerivedMetricsState[DerivedMetricStateContextKey];
 }
 
-const DASHBOARD_DERIVED_METRIC_KINDS = Object.values(DERIVED_METRIC_KINDS) as DerivedMetricKind[];
+const ALL_DERIVED_METRIC_KINDS = Object.values(DERIVED_METRIC_KINDS) as DerivedMetricKind[];
+
+// Best Build vs Now is a curated Training-only insight. Keep it out of the
+// dashboard's subscriptions and freshness probes so opening a dashboard neither
+// creates a hidden dependency nor queues an otherwise unnecessary rebuild.
+const DASHBOARD_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
+  kind => kind !== DERIVED_METRIC_KINDS.TrainingBuildComparison,
+);
+
+export const TRAINING_WORKSPACE_DERIVED_METRIC_KINDS = [...ALL_DERIVED_METRIC_KINDS];
+
+export interface DashboardDerivedMetricsScopeOptions {
+  metricKinds?: readonly DerivedMetricKind[];
+}
 
 @Injectable({
   providedIn: 'root',
@@ -177,10 +198,10 @@ export class DashboardDerivedMetricsService {
   private firestore = inject(Firestore);
   private functionsService = inject(AppFunctionsService);
   private snackBar = inject(MatSnackBar);
-  private ensureInFlightByUID = new Set<string>();
-  private ensureLastRequestedAtByUID = new Map<string, number>();
-  private ensureFailureCountByUID = new Map<string, number>();
-  private ensureLastFailureNotifiedAtByUID = new Map<string, number>();
+  private ensureInFlightByScopeKey = new Set<string>();
+  private ensureLastRequestedAtByScopeKey = new Map<string, number>();
+  private ensureFailureCountByScopeKey = new Map<string, number>();
+  private ensureLastFailureNotifiedAtByScopeKey = new Map<string, number>();
   // Frontend derived-metric registry:
   // each metric kind is wired once for status + context parsing.
   private readonly metricDescriptorByKind: Record<
@@ -257,24 +278,27 @@ export class DashboardDerivedMetricsService {
         statusKey: 'trainingSummaryStatus',
         resolveContext: (snapshot) => resolveDashboardTrainingSummaryContext(this.resolveSnapshotPayload(snapshot)),
       },
+      [DERIVED_METRIC_KINDS.TrainingBuildComparison]: {
+        contextKey: 'trainingBuildComparison',
+        statusKey: 'trainingBuildComparisonStatus',
+        resolveContext: (snapshot) => resolveDashboardTrainingBuildComparisonContext(this.resolveSnapshotPayload(snapshot)),
+      },
       [DERIVED_METRIC_KINDS.PowerCurve]: {
         contextKey: 'powerCurve',
         statusKey: 'powerCurveStatus',
         resolveContext: (snapshot) => resolveDashboardPowerCurveMetricPayload(this.resolveSnapshotPayload(snapshot)),
       },
     };
-  private readonly metricDescriptors: readonly DerivedMetricStateDescriptor[] = DASHBOARD_DERIVED_METRIC_KINDS
-    .map((kind) => ({
-      kind,
-      ...this.metricDescriptorByKind[kind],
-    }));
-
-  watch(user: UserUIDCarrier): Observable<DashboardDerivedMetricsState> {
+  watch(
+    user: UserUIDCarrier,
+    options?: DashboardDerivedMetricsScopeOptions,
+  ): Observable<DashboardDerivedMetricsState> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid) {
       return of(createDashboardDerivedMetricsMissingState());
     }
-    const snapshotStreams = this.metricDescriptors
+    const metricDescriptors = this.resolveMetricDescriptors(options?.metricKinds);
+    const snapshotStreams = metricDescriptors
       .map(descriptor => this.watchMetricSnapshot(uid, descriptor.kind));
     return combineLatest(snapshotStreams).pipe(
       map((snapshots) => {
@@ -284,7 +308,7 @@ export class DashboardDerivedMetricsService {
           unknown
         >;
         snapshots.forEach((snapshot, index) => {
-          const descriptor = this.metricDescriptors[index];
+          const descriptor = metricDescriptors[index];
           mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(descriptor.kind, snapshot);
           mutableState[descriptor.contextKey] = descriptor.resolveContext(snapshot);
         });
@@ -296,14 +320,17 @@ export class DashboardDerivedMetricsService {
   ensureForDashboard(
     user: UserUIDCarrier,
     state: DashboardDerivedMetricsState,
-    options?: { force?: boolean },
+    options?: { force?: boolean } & DashboardDerivedMetricsScopeOptions,
   ): void {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid) {
       return;
     }
 
-    const staleOrMissingMetricKinds = this.metricDescriptors
+    const metricDescriptors = this.resolveMetricDescriptors(options?.metricKinds);
+    const scopeMetricKinds = metricDescriptors.map(descriptor => descriptor.kind);
+    const scopeKey = this.resolveEnsureScopeKey(uid, scopeMetricKinds);
+    const staleOrMissingMetricKinds = metricDescriptors
       .filter((descriptor) => {
         const status = state[descriptor.statusKey];
         return status === 'missing' || status === 'failed' || status === 'stale';
@@ -314,16 +341,16 @@ export class DashboardDerivedMetricsService {
     // when stale/failure conditions are detected.
     const requestedMetricKinds = staleOrMissingMetricKinds.length
       ? staleOrMissingMetricKinds
-      : [...DASHBOARD_DERIVED_METRIC_KINDS];
+      : metricDescriptors.map(descriptor => descriptor.kind);
     const requestCooldownMs = staleOrMissingMetricKinds.length
       ? DashboardDerivedMetricsService.ENSURE_COOLDOWN_MS
       : DashboardDerivedMetricsService.HEALTHY_PROBE_COOLDOWN_MS;
 
     const nowMs = Date.now();
-    const lastRequestedAtMs = this.ensureLastRequestedAtByUID.get(uid) || 0;
+    const lastRequestedAtMs = this.ensureLastRequestedAtByScopeKey.get(scopeKey) || 0;
     const shouldRespectCooldown = options?.force !== true;
     if (
-      this.ensureInFlightByUID.has(uid)
+      this.ensureInFlightByScopeKey.has(scopeKey)
       || (
         shouldRespectCooldown
         && (nowMs - lastRequestedAtMs) < requestCooldownMs
@@ -332,8 +359,8 @@ export class DashboardDerivedMetricsService {
       return;
     }
 
-    this.ensureInFlightByUID.add(uid);
-    this.ensureLastRequestedAtByUID.set(uid, nowMs);
+    this.ensureInFlightByScopeKey.add(scopeKey);
+    this.ensureLastRequestedAtByScopeKey.set(scopeKey, nowMs);
 
     const request: EnsureDerivedMetricsRequest = {
       metricKinds: requestedMetricKinds,
@@ -345,17 +372,41 @@ export class DashboardDerivedMetricsService {
           if (response?.data?.accepted === false) {
             throw new Error('ensureDerivedMetrics request was not accepted');
           }
-          this.resetEnsureFailureState(uid);
+          this.resetEnsureFailureState(scopeKey);
         }),
         catchError((error) => {
-          this.handleEnsureFailure(uid, user, state, error);
+          this.handleEnsureFailure(scopeKey, user, state, scopeMetricKinds, error);
           return of(null);
         }),
         finalize(() => {
-          this.ensureInFlightByUID.delete(uid);
+          this.ensureInFlightByScopeKey.delete(scopeKey);
         }),
       )
       .subscribe();
+  }
+
+  private resolveMetricDescriptors(
+    requestedMetricKinds: readonly DerivedMetricKind[] | undefined,
+  ): readonly DerivedMetricStateDescriptor[] {
+    const metricKinds = requestedMetricKinds?.length
+      ? requestedMetricKinds
+      : DASHBOARD_DERIVED_METRIC_KINDS;
+    const seen = new Set<DerivedMetricKind>();
+    return metricKinds.flatMap((kind) => {
+      if (seen.has(kind)) {
+        return [];
+      }
+      const descriptor = this.metricDescriptorByKind[kind];
+      if (!descriptor) {
+        return [];
+      }
+      seen.add(kind);
+      return [{ kind, ...descriptor }];
+    });
+  }
+
+  private resolveEnsureScopeKey(uid: string, metricKinds: readonly DerivedMetricKind[]): string {
+    return `${uid}:${[...metricKinds].sort().join(',')}`;
   }
 
   private watchMetricSnapshot(uid: string, metricKind: DerivedMetricKind): Observable<SnapshotRecord> {
@@ -411,13 +462,21 @@ export class DashboardDerivedMetricsService {
       return 'stale';
     }
 
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.TrainingBuildComparison
+      && !resolveDashboardTrainingBuildComparisonContext(this.resolveSnapshotPayload(snapshot))
+    ) {
+      return 'stale';
+    }
+
     if (this.isStuckPendingStatus(status, updatedAtMs)) {
       return 'failed';
     }
 
     if (
       status === 'ready'
-      && this.isProjectionSensitiveMetricKind(metricKind)
+      && this.isCalendarSensitiveMetricKind(metricKind)
     ) {
       const asOfDayMs = this.resolveSnapshotAsOfDayMs(snapshot);
       const todayUtcDayMs = this.resolveUtcDayStartMs(Date.now());
@@ -467,8 +526,8 @@ export class DashboardDerivedMetricsService {
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
   }
 
-  private isProjectionSensitiveMetricKind(metricKind: DerivedMetricKind): boolean {
-    return PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS.includes(metricKind);
+  private isCalendarSensitiveMetricKind(metricKind: DerivedMetricKind): boolean {
+    return CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS.includes(metricKind);
   }
 
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {
@@ -555,38 +614,45 @@ export class DashboardDerivedMetricsService {
     return numericValue;
   }
 
-  private resetEnsureFailureState(uid: string): void {
-    this.ensureFailureCountByUID.delete(uid);
-    this.ensureLastFailureNotifiedAtByUID.delete(uid);
+  private resetEnsureFailureState(scopeKey: string): void {
+    this.ensureFailureCountByScopeKey.delete(scopeKey);
+    this.ensureLastFailureNotifiedAtByScopeKey.delete(scopeKey);
   }
 
   private handleEnsureFailure(
-    uid: string,
+    scopeKey: string,
     user: UserUIDCarrier,
     state: DashboardDerivedMetricsState,
+    scopeMetricKinds: readonly DerivedMetricKind[],
     _error: unknown,
   ): void {
-    const nextFailureCount = (this.ensureFailureCountByUID.get(uid) || 0) + 1;
-    this.ensureFailureCountByUID.set(uid, nextFailureCount);
+    const nextFailureCount = (this.ensureFailureCountByScopeKey.get(scopeKey) || 0) + 1;
+    this.ensureFailureCountByScopeKey.set(scopeKey, nextFailureCount);
 
     if (nextFailureCount < DashboardDerivedMetricsService.ENSURE_FAILURE_NOTIFICATION_THRESHOLD) {
       return;
     }
 
     const nowMs = Date.now();
-    const lastNotifiedAtMs = this.ensureLastFailureNotifiedAtByUID.get(uid) || 0;
+    const lastNotifiedAtMs = this.ensureLastFailureNotifiedAtByScopeKey.get(scopeKey) || 0;
     if ((nowMs - lastNotifiedAtMs) < DashboardDerivedMetricsService.ENSURE_FAILURE_NOTIFICATION_COOLDOWN_MS) {
       return;
     }
 
-    this.ensureLastFailureNotifiedAtByUID.set(uid, nowMs);
+    this.ensureLastFailureNotifiedAtByScopeKey.set(scopeKey, nowMs);
+    const surfaceLabel = scopeMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingBuildComparison)
+      ? 'training insights'
+      : 'dashboard derived metrics';
     const snackBarRef = this.snackBar.open(
-      'Could not refresh dashboard derived metrics. Showing last known values.',
+      `Could not refresh ${surfaceLabel}. Showing last known values.`,
       'Retry',
       { duration: 7000 },
     );
     snackBarRef.onAction().subscribe(() => {
-      this.ensureForDashboard(user, state, { force: true });
+      this.ensureForDashboard(user, state, {
+        force: true,
+        metricKinds: scopeMetricKinds,
+      });
     });
   }
 }

@@ -1931,6 +1931,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       intensityDistribution: this.derivedIntensityDistributionContext,
       efficiencyTrend: this.derivedEfficiencyTrendContext,
       trainingSummary: null,
+      trainingBuildComparison: null,
       powerCurve: this.derivedPowerCurvePayload,
       formStatus: this.derivedFormStatus,
       recoveryNowStatus: this.derivedRecoveryNowStatus,
@@ -1946,6 +1947,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       intensityDistributionStatus: this.derivedIntensityDistributionStatus,
       efficiencyTrendStatus: this.derivedEfficiencyTrendStatus,
       trainingSummaryStatus: 'missing',
+      trainingBuildComparisonStatus: 'missing',
       powerCurveStatus: this.derivedPowerCurveStatus,
     }, { force: true });
   }

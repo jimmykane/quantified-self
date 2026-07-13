@@ -99,9 +99,17 @@ service cloud.firestore {
            
       }
 
-      // Config Settings (Private / Owner Read-Write)
+      // Config Settings (Private / Owner Read-Write). Training benchmarks are
+      // deliberately server-owned so every selection is validated and queues
+      // a targeted derived-metrics refresh through its App-Check callable.
       match /config/settings {
-         allow read, write: if request.auth.uid == userID;
+         allow read: if request.auth.uid == userID;
+         allow create: if request.auth.uid == userID
+           && !request.resource.data.keys().hasAny(['trainingSettings']);
+         allow update: if request.auth.uid == userID
+           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['trainingSettings']);
+         allow delete: if request.auth.uid == userID
+           && !resource.data.keys().hasAny(['trainingSettings']);
       }
 
       // AI Insights Latest Snapshot (Private / Owner Read/Delete, fixed latest doc only)

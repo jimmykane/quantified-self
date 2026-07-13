@@ -151,6 +151,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 ### Training workspace
 
 - **Training** has a fixed analytical layout rather than draggable dashboard tiles: a **28-day status** compared with your usual training, **Notable changes**, **Load trajectory**, **Training mix**, and **Capacity evidence**.
+- **Best build vs now** is a curated Training comparison for running and cycling. Set one saved benchmark per sport from a manual end date or an older event tagged exactly **Race** (case-insensitive). A race is only an anchor: its workload is excluded from the benchmark.
+- Choose an 8, 10, or 12-week build (12 weeks by default). The saved benchmark must finish before the matching current window, so comparisons never overlap. Merged events are excluded; missing TSS, zones, power, or heart-rate data remains unavailable instead of being counted as zero.
 - Training Mix compares the latest 28 days with a normalized 84-day baseline for running and cycling. Running includes running, trail running, treadmill, and indoor running; cycling includes cycling, mountain biking, and indoor cycling.
 - When that derived comparison is missing or rebuilding, Training says it is preparing rather than showing a zero-session result. A confirmed empty state means no eligible running or cycling session was found in the latest 28 days.
 - Capacity evidence is separated by activity family and source. **Device VO2 Max** is shown as a labelled personal device trend, never as a readiness score. FTP and critical power follow the same source rule.

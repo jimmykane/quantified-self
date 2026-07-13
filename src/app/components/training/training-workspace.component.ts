@@ -1,11 +1,20 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, computed } from '@angular/core';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { MatDialog } from '@angular/material/dialog';
+import { AppThemes, DataDistance, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type {
   DashboardTrainingCapacityMetric,
+  DashboardTrainingBuildComparisonDiscipline,
   DashboardTrainingDisciplineSummary,
 } from '../../helpers/dashboard-derived-metrics.helper';
+import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import {
+  getTrainingBuildBenchmarkSelectionKey,
+  type DerivedTrainingDiscipline,
+  type TrainingBuildBenchmarkSelection,
+  type TrainingBuildSettings,
+} from '@shared/derived-metrics';
 import {
   buildDashboardPowerCurveContextFromSnapshot,
   type DashboardPowerCurveContext,
@@ -25,9 +34,11 @@ import {
 } from '../../helpers/training-analysis.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { TrainingBuildBenchmarkDialogComponent } from './training-build-benchmark-dialog.component';
 import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
+  TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
 import type { SleepSession } from '@shared/sleep';
@@ -79,6 +90,28 @@ interface TrainingLoadMetricsViewModel {
   freshnessPlusSevenDaysText: string;
 }
 
+type TrainingBuildCardState = 'not-configured' | 'updating' | 'invalid' | 'unavailable' | 'ready';
+
+interface TrainingBuildCardViewModel {
+  discipline: DerivedTrainingDiscipline;
+  label: string;
+  state: TrainingBuildCardState;
+  source: DashboardTrainingBuildComparisonDiscipline | null;
+  expectedSelection: TrainingBuildBenchmarkSelection | null;
+  referenceText: string;
+  rangeText: string;
+  emptyMessage: string | null;
+  metricRows: TrainingBuildMetricRowViewModel[];
+}
+
+interface TrainingBuildMetricRowViewModel {
+  label: string;
+  currentText: string;
+  benchmarkText: string;
+  deltaText: string;
+  isIntensity: boolean;
+}
+
 const TRAINING_SLEEP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 function createEmptyTrainingStatusViewModel(): TrainingStatusViewModel {
@@ -124,17 +157,22 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
   public capacityDisciplines: TrainingCapacityDisciplineViewModel[] = [];
+  public trainingBuildCards: TrainingBuildCardViewModel[] = [];
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
   private currentUserUID: string | null = null;
+  private trainingBuildSettings: TrainingBuildSettings = {};
+  private unitSettings: UserUnitSettingsInterface | null = null;
+  private pendingTrainingBuildSelections = new Map<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection | null>();
 
   constructor(
     private readonly authService: AppAuthService,
     private readonly derivedMetricsService: DashboardDerivedMetricsService,
     private readonly sleepService: AppSleepService,
     private readonly themeService: AppThemeService,
+    private readonly dialog: MatDialog,
     private readonly changeDetector: ChangeDetectorRef,
   ) {}
 
@@ -142,6 +180,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.subscriptions.add(this.authService.user$.subscribe((user) => {
       const uid = `${user?.uid || ''}`.trim();
       if (uid === this.currentUserUID) {
+        this.trainingBuildSettings = user?.settings?.trainingSettings || {};
+        this.unitSettings = user?.settings?.unitSettings || null;
+        this.refreshTrainingBuildCards();
+        this.changeDetector.markForCheck();
         return;
       }
 
@@ -149,6 +191,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.dataSubscriptions.unsubscribe();
       this.dataSubscriptions = new Subscription();
       this.resetWorkspace();
+      this.trainingBuildSettings = user?.settings?.trainingSettings || {};
+      this.unitSettings = user?.settings?.unitSettings || null;
+      this.refreshTrainingBuildCards();
       if (!user || !uid) {
         this.isLoading = false;
         this.changeDetector.markForCheck();
@@ -156,11 +201,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       }
 
       let hasReceivedDerivedState = false;
-      this.dataSubscriptions.add(this.derivedMetricsService.watch(user).subscribe((state) => {
+      const metricScope = { metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS };
+      this.dataSubscriptions.add(this.derivedMetricsService.watch(user, metricScope).subscribe((state) => {
         hasReceivedDerivedState = true;
         this.applyDerivedState(state);
         this.isLoading = false;
-        this.derivedMetricsService.ensureForDashboard(user, state);
+        this.derivedMetricsService.ensureForDashboard(user, state, metricScope);
         this.changeDetector.markForCheck();
       }));
 
@@ -168,7 +214,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       // block the workspace that requests the missing snapshots in the first place.
       if (!hasReceivedDerivedState) {
         this.isLoading = false;
-        this.derivedMetricsService.ensureForDashboard(user, this.derivedState);
+        this.derivedMetricsService.ensureForDashboard(user, this.derivedState, metricScope);
         this.changeDetector.markForCheck();
       }
 
@@ -233,6 +279,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
     this.trainingMixDisciplines = [];
     this.capacityDisciplines = [];
+    this.trainingBuildSettings = {};
+    this.unitSettings = null;
+    this.pendingTrainingBuildSelections.clear();
+    this.trainingBuildCards = this.buildTrainingBuildCards();
   }
 
   private applyDerivedState(state: DashboardDerivedMetricsState): void {
@@ -271,6 +321,124 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.capacityDisciplines = summaries
       .map((summary) => ({ summary, metrics: this.resolveCapacityMetrics(summary) }))
       .filter(view => view.metrics.length > 0);
+    this.refreshTrainingBuildCards();
+  }
+
+  public openTrainingBuildBenchmarkDialog(discipline: DerivedTrainingDiscipline): void {
+    const card = this.trainingBuildCards.find(item => item.discipline === discipline);
+    const selection = this.resolveEffectiveTrainingBuildSelection(discipline);
+    const dialogRef = this.dialog.open(TrainingBuildBenchmarkDialogComponent, {
+      width: 'min(100vw - 32px, 560px)',
+      maxWidth: '560px',
+      data: {
+        discipline,
+        asOfDayMs: this.derivedState.trainingBuildComparison?.asOfDayMs ?? this.resolveCurrentUtcDayMs(),
+        suggestedRaces: card?.source?.suggestedRaces || [],
+        selection,
+      },
+    });
+    this.subscriptions.add(dialogRef.afterClosed().subscribe((result: { saved?: boolean; selection?: TrainingBuildBenchmarkSelection | null } | undefined) => {
+      if (!result?.saved) {
+        return;
+      }
+      this.pendingTrainingBuildSelections.set(discipline, result.selection ?? null);
+      this.refreshTrainingBuildCards();
+      this.changeDetector.markForCheck();
+    }));
+  }
+
+  private formatTrainingBuildDistance(value: number | null | undefined): string {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return '--';
+    }
+    return resolveUnitAwareDisplayStat(new DataDistance(value), this.unitSettings, { stripRepeatedUnit: true })?.text
+      || `${this.formatNumber(value / 1000, 1)} km`;
+  }
+
+  private formatTrainingBuildDuration(value: number | null | undefined): string {
+    return value === null || value === undefined || !Number.isFinite(value) ? '--' : formatSleepDuration(value);
+  }
+
+  private formatTrainingBuildDistanceDelta(current: number | null | undefined, benchmark: number | null | undefined): string {
+    if (current === null || current === undefined || benchmark === null || benchmark === undefined) {
+      return '--';
+    }
+    const delta = current - benchmark;
+    return `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${this.formatTrainingBuildDistance(Math.abs(delta))}`;
+  }
+
+  private formatTrainingBuildNumber(value: number | null | undefined, fractionDigits = 0): string {
+    return this.formatNumber(value, fractionDigits);
+  }
+
+  private formatTrainingBuildActiveWeeks(
+    activeWeekCount: number | null | undefined,
+    periodWeeks: number | null | undefined,
+  ): string {
+    if (
+      activeWeekCount === null
+      || activeWeekCount === undefined
+      || periodWeeks === null
+      || periodWeeks === undefined
+      || !Number.isFinite(activeWeekCount)
+      || !Number.isFinite(periodWeeks)
+      || periodWeeks <= 0
+    ) {
+      return '--';
+    }
+    return `${this.formatTrainingBuildNumber(activeWeekCount)} / ${this.formatTrainingBuildNumber(periodWeeks)}`;
+  }
+
+  public formatTrainingBuildDelta(current: number | null | undefined, benchmark: number | null | undefined, fractionDigits = 0): string {
+    if (current === null || current === undefined || benchmark === null || benchmark === undefined) {
+      return '--';
+    }
+    return this.formatNumber(current - benchmark, fractionDigits, true);
+  }
+
+  public formatTrainingBuildDurationDelta(current: number | null | undefined, benchmark: number | null | undefined): string {
+    if (current === null || current === undefined || benchmark === null || benchmark === undefined) {
+      return '--';
+    }
+    const delta = current - benchmark;
+    return `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${formatSleepDuration(Math.abs(delta))}`;
+  }
+
+  private formatTrainingBuildIntensity(
+    window: DashboardTrainingBuildComparisonDiscipline['current'] | null | undefined,
+  ): string {
+    if (!window || window.easySeconds === null || window.moderateSeconds === null || window.hardSeconds === null) {
+      return '--';
+    }
+    const total = window.easySeconds + window.moderateSeconds + window.hardSeconds;
+    if (total <= 0) {
+      return '--';
+    }
+    return `E ${this.formatPercent(window.easySeconds, total)} · M ${this.formatPercent(window.moderateSeconds, total)} · H ${this.formatPercent(window.hardSeconds, total)}`;
+  }
+
+  private formatTrainingBuildReference(source: DashboardTrainingBuildComparisonDiscipline | null): string {
+    const selection = source?.selection;
+    if (!selection) {
+      return '';
+    }
+    if (selection.mode === 'race') {
+      return selection.label || 'Tagged race';
+    }
+    return 'Manual historical period';
+  }
+
+  private formatTrainingBuildRange(startDayMs: number | null | undefined, endDayMs: number | null | undefined): string {
+    if (!Number.isFinite(startDayMs) || !Number.isFinite(endDayMs)) {
+      return '';
+    }
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+    return `${formatter.format(new Date(startDayMs as number))} – ${formatter.format(new Date(endDayMs as number))}`;
   }
 
   private getLatestFormPoint() {
@@ -311,6 +479,172 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       freshnessNowText: this.formatNumber(latestCurrentPoint?.formSameDay ?? this.derivedState.formNow?.value, 1, true),
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
+  }
+
+  private refreshTrainingBuildCards(): void {
+    this.trainingBuildCards = this.buildTrainingBuildCards();
+  }
+
+  private buildTrainingBuildCards(): TrainingBuildCardViewModel[] {
+    const contexts = this.derivedState.trainingBuildComparison?.disciplines || [];
+    return (['running', 'cycling'] as const).map((discipline) => {
+      const source = contexts.find(item => item.discipline === discipline) || null;
+      const expectedSelection = this.resolveEffectiveTrainingBuildSelection(discipline);
+      const state = this.resolveTrainingBuildCardState(discipline, source, expectedSelection);
+      return {
+        discipline,
+        label: discipline === 'running' ? 'Running' : 'Cycling',
+        state,
+        source,
+        expectedSelection,
+        referenceText: this.formatTrainingBuildReference(source),
+        rangeText: this.formatTrainingBuildRange(
+          source?.selection?.windowStartDayMs,
+          source?.selection?.windowEndDayMs,
+        ),
+        emptyMessage: this.resolveTrainingBuildEmptyMessage(source),
+        metricRows: this.buildTrainingBuildMetricRows(source),
+      };
+    });
+  }
+
+  private resolveTrainingBuildEmptyMessage(source: DashboardTrainingBuildComparisonDiscipline | null): string | null {
+    if (source?.current?.activityCount === 0) {
+      return 'No eligible sessions in the current window.';
+    }
+    if (source?.benchmark?.activityCount === 0) {
+      return 'No eligible sessions in the saved benchmark window.';
+    }
+    return null;
+  }
+
+  private buildTrainingBuildMetricRows(
+    source: DashboardTrainingBuildComparisonDiscipline | null,
+  ): TrainingBuildMetricRowViewModel[] {
+    const current = source?.current;
+    const benchmark = source?.benchmark;
+    if (!current || !benchmark) {
+      return [];
+    }
+    const rows: TrainingBuildMetricRowViewModel[] = [
+      {
+        label: 'Distance',
+        currentText: this.formatTrainingBuildDistance(current.distanceMeters),
+        benchmarkText: this.formatTrainingBuildDistance(benchmark.distanceMeters),
+        deltaText: this.formatTrainingBuildDistanceDelta(current.distanceMeters, benchmark.distanceMeters),
+        isIntensity: false,
+      },
+      {
+        label: 'Time',
+        currentText: this.formatTrainingBuildDuration(current.durationSeconds),
+        benchmarkText: this.formatTrainingBuildDuration(benchmark.durationSeconds),
+        deltaText: this.formatTrainingBuildDurationDelta(current.durationSeconds, benchmark.durationSeconds),
+        isIntensity: false,
+      },
+      {
+        label: 'Sessions',
+        currentText: this.formatTrainingBuildNumber(current.activityCount),
+        benchmarkText: this.formatTrainingBuildNumber(benchmark.activityCount),
+        deltaText: this.formatTrainingBuildDelta(current.activityCount, benchmark.activityCount),
+        isIntensity: false,
+      },
+      {
+        label: 'Active weeks',
+        currentText: this.formatTrainingBuildActiveWeeks(current.activeWeekCount, current.periodWeeks),
+        benchmarkText: this.formatTrainingBuildActiveWeeks(benchmark.activeWeekCount, benchmark.periodWeeks),
+        deltaText: this.formatTrainingBuildDelta(current.activeWeekCount, benchmark.activeWeekCount),
+        isIntensity: false,
+      },
+      {
+        label: 'Longest session',
+        currentText: this.formatTrainingBuildDuration(current.longestActivityDurationSeconds),
+        benchmarkText: this.formatTrainingBuildDuration(benchmark.longestActivityDurationSeconds),
+        deltaText: this.formatTrainingBuildDurationDelta(
+          current.longestActivityDurationSeconds,
+          benchmark.longestActivityDurationSeconds,
+        ),
+        isIntensity: false,
+      },
+    ];
+    if (current.trainingStressScore !== null || benchmark.trainingStressScore !== null) {
+      rows.push({
+        label: 'TSS',
+        currentText: this.formatTrainingBuildNumber(current.trainingStressScore),
+        benchmarkText: this.formatTrainingBuildNumber(benchmark.trainingStressScore),
+        deltaText: this.formatTrainingBuildDelta(current.trainingStressScore, benchmark.trainingStressScore),
+        isIntensity: false,
+      });
+    }
+    if (current.efficiency !== null || benchmark.efficiency !== null) {
+      rows.push({
+        label: 'Power / HR',
+        currentText: this.formatTrainingBuildNumber(current.efficiency, 2),
+        benchmarkText: this.formatTrainingBuildNumber(benchmark.efficiency, 2),
+        deltaText: this.formatTrainingBuildDelta(current.efficiency, benchmark.efficiency, 2),
+        isIntensity: false,
+      });
+    }
+    if (current.intensitySourceEventCount || benchmark.intensitySourceEventCount) {
+      rows.push({
+        label: 'Intensity mix',
+        currentText: this.formatTrainingBuildIntensity(current),
+        benchmarkText: this.formatTrainingBuildIntensity(benchmark),
+        deltaText: '—',
+        isIntensity: true,
+      });
+    }
+    return rows;
+  }
+
+  private resolveEffectiveTrainingBuildSelection(discipline: DerivedTrainingDiscipline): TrainingBuildBenchmarkSelection | null {
+    if (this.pendingTrainingBuildSelections.has(discipline)) {
+      return this.pendingTrainingBuildSelections.get(discipline) || null;
+    }
+    const selection = this.trainingBuildSettings.buildBenchmarks?.[discipline] || null;
+    return getTrainingBuildBenchmarkSelectionKey(selection) ? selection : null;
+  }
+
+  private resolveCurrentUtcDayMs(): number {
+    const now = new Date();
+    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  }
+
+  private resolveTrainingBuildCardState(
+    discipline: DerivedTrainingDiscipline,
+    source: DashboardTrainingBuildComparisonDiscipline | null,
+    expectedSelection: TrainingBuildBenchmarkSelection | null,
+  ): TrainingBuildCardState {
+    const pending = this.pendingTrainingBuildSelections.has(discipline);
+    const expectedKey = getTrainingBuildBenchmarkSelectionKey(expectedSelection);
+    const snapshotMatchesExpected = expectedKey
+      ? source?.selection?.selectionKey === expectedKey && source.status === 'ready'
+      : source?.status === 'not-configured' && this.derivedState.trainingBuildComparisonStatus === 'ready';
+    if (pending && snapshotMatchesExpected) {
+      this.pendingTrainingBuildSelections.delete(discipline);
+    }
+    if (pending && !snapshotMatchesExpected) {
+      return 'updating';
+    }
+    if (!expectedSelection) {
+      return 'not-configured';
+    }
+    if (this.derivedState.trainingBuildComparisonStatus === 'failed') {
+      return 'unavailable';
+    }
+    if (
+      this.derivedState.trainingBuildComparisonStatus === 'missing'
+      || this.derivedState.trainingBuildComparisonStatus === 'queued'
+      || this.derivedState.trainingBuildComparisonStatus === 'processing'
+      || this.derivedState.trainingBuildComparisonStatus === 'building'
+      || this.derivedState.trainingBuildComparisonStatus === 'stale'
+      || !source
+    ) {
+      return 'updating';
+    }
+    if (source.status === 'invalid-selection') {
+      return 'invalid';
+    }
+    return snapshotMatchesExpected ? 'ready' : 'updating';
   }
 
   private buildTrainingStatus(

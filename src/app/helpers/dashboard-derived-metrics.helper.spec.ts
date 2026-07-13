@@ -14,6 +14,7 @@ import {
   resolveDashboardMonotonyStrainContext,
   resolveDashboardRampRateContext,
   resolveDashboardTrainingSummaryContext,
+  resolveDashboardTrainingBuildComparisonContext,
 } from './dashboard-derived-metrics.helper';
 
 describe('dashboard-derived-metrics.helper', () => {
@@ -223,5 +224,61 @@ describe('dashboard-derived-metrics.helper', () => {
 
     expect(context?.disciplines[0]?.current28d.activityCount).toBe(4);
     expect(context?.disciplines[0]?.vo2Max).toMatchObject({ sourceKey: null, latestValue: 51, trend: null });
+  });
+
+  it('normalizes separate sport build comparisons and preserves unavailable optional metrics', () => {
+    const context = resolveDashboardTrainingBuildComparisonContext({
+      asOfDayMs: Date.UTC(2026, 5, 30),
+      disciplines: [{
+        discipline: 'running',
+        status: 'ready',
+        selection: {
+          mode: 'race', durationWeeks: 12, raceEventId: 'race-1', selectionKey: 'race:12:race-1',
+          windowStartDayMs: Date.UTC(2026, 2, 1), windowEndDayMs: Date.UTC(2026, 4, 23), label: 'Spring marathon',
+        },
+        current: {
+          periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 4, 8), windowEndDayMs: Date.UTC(2026, 5, 30),
+          activityCount: 8, durationSeconds: 12_000, distanceMeters: 82_000, distanceEventCount: 8,
+          trainingStressScore: null, trainingStressScoreEventCount: 0, activeWeekCount: 7,
+          longestActivityDurationSeconds: 3_600, easySeconds: null, moderateSeconds: null, hardSeconds: null,
+          intensitySourceEventCount: 0, efficiency: null, efficiencySampleCount: 0,
+        },
+        benchmark: {
+          periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 2, 1), windowEndDayMs: Date.UTC(2026, 4, 23),
+          activityCount: 9, durationSeconds: 14_000, distanceMeters: 94_000, distanceEventCount: 9,
+          trainingStressScore: 510, trainingStressScoreEventCount: 9, activeWeekCount: 8,
+          longestActivityDurationSeconds: 4_000, easySeconds: 8_000, moderateSeconds: 3_000, hardSeconds: 1_000,
+          intensitySourceEventCount: 9, efficiency: 1.9, efficiencySampleCount: 9,
+        },
+        suggestedRaces: [{ eventId: 'race-1', startDayMs: Date.UTC(2026, 4, 24), label: 'Spring marathon' }],
+      }, {
+        discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [],
+      }],
+    });
+
+    expect(context?.disciplines).toHaveLength(2);
+    expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
+    expect(context?.disciplines[0].selection?.mode).toBe('race');
+    expect(context?.disciplines[1].status).toBe('not-configured');
+  });
+
+  it('rejects incomplete or duplicated sport build comparison snapshots for self-healing', () => {
+    const buildDiscipline = (discipline: 'running' | 'cycling') => ({
+      discipline,
+      status: 'not-configured',
+      selection: null,
+      current: null,
+      benchmark: null,
+      suggestedRaces: [],
+    });
+
+    expect(resolveDashboardTrainingBuildComparisonContext({
+      asOfDayMs: Date.UTC(2026, 5, 30),
+      disciplines: [buildDiscipline('running')],
+    })).toBeNull();
+    expect(resolveDashboardTrainingBuildComparisonContext({
+      asOfDayMs: Date.UTC(2026, 5, 30),
+      disciplines: [buildDiscipline('running'), buildDiscipline('running')],
+    })).toBeNull();
   });
 });

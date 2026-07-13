@@ -51,6 +51,66 @@
       </div>
     </section>
 
+    <section class="training-section" aria-labelledby="training-build-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Historical reference</p>
+          <h2 id="training-build-title">Best build vs now</h2>
+        </div>
+        <span class="training-section-note">Choose one benchmark per sport</span>
+      </div>
+      <div class="training-build-grid">
+        @for (card of trainingBuildCards; track card.discipline) {
+          <article class="training-build-card qs-glass-card-panel">
+            <header class="training-build-card-header">
+              <div>
+                <span class="training-metric-label">{{ card.label }}</span>
+                <h3>{{ card.state === 'ready' ? card.referenceText : 'Historical benchmark' }}</h3>
+              </div>
+              <button mat-stroked-button (click)="openTrainingBuildBenchmarkDialog(card.discipline)">
+                <mat-icon aria-hidden="true">{{ card.expectedSelection ? 'edit' : 'add' }}</mat-icon>
+                <span>{{ card.expectedSelection ? 'Change' : 'Set benchmark' }}</span>
+              </button>
+            </header>
+
+            @if (card.state === 'not-configured') {
+              <div class="training-build-status">
+                <strong>Set a build to compare</strong>
+                <p>Choose a tagged race or a historical end date. Your current and benchmark windows will always match.</p>
+              </div>
+            } @else if (card.state === 'updating') {
+              <div class="training-build-status" role="status">
+                <mat-spinner diameter="24"></mat-spinner>
+                <div><strong>Updating comparison</strong><p>Reading the saved benchmark and your derived training history.</p></div>
+              </div>
+            } @else if (card.state === 'invalid') {
+              <div class="training-build-status">
+                <strong>Benchmark needs attention</strong>
+                <p>The saved race or period no longer makes a valid non-overlapping build. Choose another reference.</p>
+              </div>
+            } @else if (card.state === 'unavailable') {
+              <div class="training-build-status">
+                <strong>Comparison unavailable</strong>
+                <p>Refresh to request another derived comparison snapshot.</p>
+              </div>
+            } @else {
+              <p class="training-build-range">{{ card.source?.selection?.durationWeeks }} weeks · {{ card.rangeText }}</p>
+              @if (card.emptyMessage) {
+                <p class="training-build-empty">{{ card.emptyMessage }}</p>
+              }
+              <dl class="training-build-table">
+                <div class="training-build-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Benchmark</dd><dd>Change</dd></div>
+                @for (row of card.metricRows; track row.label) {
+                  <div [class.training-build-intensity-row]="row.isIntensity"><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.benchmarkText }}</dd><dd>{{ row.deltaText }}</dd></div>
+                }
+              </dl>
+              <p class="training-build-footnote">Merged events are excluded. TSS, intensity, and Power / HR appear only when your source activities provide them.</p>
+            }
+          </article>
+        }
+      </div>
+    </section>
+
     @if (trainingComparisonState !== 'preparing') {
       <section class="training-section" aria-labelledby="training-insights-title">
         <div class="training-section-heading">

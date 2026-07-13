@@ -36,7 +36,7 @@ const hoisted = vi.hoisted(() => {
     const transactionSet = vi.fn();
     const userRootGet = vi.fn();
     const tombstoneGet = vi.fn();
-    const eventsCollection = { where };
+    const eventsCollection = { where, select };
     const derivedMetricsCollectionRef = {
         path: 'users/user-1/derivedMetrics',
     };
@@ -203,6 +203,34 @@ describe('fetchRecoveryLookbackEventDocs', () => {
     });
 });
 
+describe('fetchDerivedMetricsEventDocs', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        hoisted.select.mockReturnValue({ get: hoisted.get });
+        hoisted.get.mockResolvedValue({ docs: [] });
+    });
+
+    it('fetches both canonical and legacy event tag fields for derived race suggestions', async () => {
+        const { fetchDerivedMetricsEventDocs } = await import('./derived-metrics.service');
+
+        await fetchDerivedMetricsEventDocs('user-1');
+
+        expect(hoisted.select).toHaveBeenCalledWith(
+            'startDate',
+            'endDate',
+            'stats',
+            'tags',
+            'benchmarkReviewTags',
+            'name',
+            'isMerge',
+            'mergeType',
+            'creator',
+            'serviceName',
+            'sourceServiceName',
+        );
+    });
+});
+
 describe('resolveDerivedMetricSourceRequirements', () => {
     it('marks form docs required for load-backed and KPI metric kinds', async () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
@@ -215,6 +243,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         ).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: false,
+            needsTrainingBuildBenchmarkSettings: false,
         });
     });
 
@@ -229,6 +258,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         ).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: true,
+            needsTrainingBuildBenchmarkSettings: false,
         });
     });
 
@@ -238,6 +268,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingSummary])).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: false,
+            needsTrainingBuildBenchmarkSettings: false,
         });
     });
 
@@ -247,7 +278,186 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.PowerCurve])).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: false,
+            needsTrainingBuildBenchmarkSettings: false,
         });
+    });
+
+    it('fetches settings only for the training build comparison snapshot', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingBuildComparison])).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+            needsTrainingBuildBenchmarkSettings: true,
+        });
+    });
+});
+
+describe('buildTrainingBuildComparisonMetricPayload', () => {
+    it('keeps sport windows separate, excludes the race anchor, and leaves optional metrics explicit', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
+        const raceDayMs = Date.UTC(2026, 3, 20);
+        const docs = [
+            {
+                id: 'run-build',
+                data: () => ({
+                    startDate: Date.UTC(2026, 3, 19, 8, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Running],
+                        [DataDuration.type]: 3600,
+                        Distance: 10000,
+                        'Training Stress Score': 70,
+                    },
+                }),
+            },
+            {
+                id: 'race-anchor',
+                data: () => ({
+                    name: 'Spring marathon',
+                    tags: ['Race'],
+                    startDate: raceDayMs + (8 * 60 * 60 * 1000),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Running],
+                        [DataDuration.type]: 12_000,
+                        Distance: 42_195,
+                    },
+                }),
+            },
+            {
+                id: 'current-cycle',
+                data: () => ({
+                    startDate: Date.UTC(2026, 5, 29, 8, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                        [DataDuration.type]: 5400,
+                        Distance: 50_000,
+                    },
+                }),
+            },
+            {
+                id: 'merged-race',
+                data: () => ({
+                    tags: ['race'],
+                    isMerge: true,
+                    startDate: Date.UTC(2026, 3, 1),
+                    stats: { [DataActivityTypes.type]: [ActivityTypes.Running] },
+                }),
+            },
+        ] as any;
+
+        const result = buildTrainingBuildComparisonMetricPayload(docs, {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'race', durationWeeks: 8, raceEventId: 'race-anchor' },
+                    cycling: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 1) },
+                },
+            },
+        }, nowMs);
+
+        const running = result.payload.disciplines.find(item => item.discipline === 'running')!;
+        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling')!;
+        expect(running.status).toBe('ready');
+        expect(running.selection?.windowEndDayMs).toBe(raceDayMs - (24 * 60 * 60 * 1000));
+        expect(running.benchmark?.activityCount).toBe(1);
+        expect(running.benchmark?.distanceMeters).toBe(10_000);
+        expect(running.benchmark?.trainingStressScore).toBe(70);
+        expect(running.benchmark?.easySeconds).toBeNull();
+        expect(running.benchmark?.efficiency).toBeNull();
+        expect(running.suggestedRaces).toEqual([{ eventId: 'race-anchor', startDayMs: raceDayMs, label: 'Spring marathon' }]);
+        expect(cycling.status).toBe('ready');
+        expect(cycling.current?.activityCount).toBe(1);
+        expect(cycling.current?.trainingStressScore).toBeNull();
+    });
+
+    it('marks malformed or overlapping selections invalid instead of building an overlapping comparison', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
+        const result = buildTrainingBuildComparisonMetricPayload([], {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'period', durationWeeks: 12, endDayMs: Date.UTC(2026, 5, 29) },
+                    cycling: { mode: 'race', durationWeeks: 9, raceEventId: 'missing' },
+                },
+            },
+        }, nowMs);
+
+        expect(result.payload.disciplines.find(item => item.discipline === 'running')?.status).toBe('invalid-selection');
+        expect(result.payload.disciplines.find(item => item.discipline === 'cycling')?.status).toBe('not-configured');
+    });
+
+    it('honours a legacy Race tag when resolving a saved race benchmark', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
+        const raceDayMs = Date.UTC(2026, 3, 20);
+        const docs = [
+            {
+                id: 'legacy-race',
+                data: () => ({
+                    name: 'Legacy marathon',
+                    benchmarkReviewTags: ['Race'],
+                    startDate: raceDayMs,
+                    stats: { [DataActivityTypes.type]: [ActivityTypes.Running] },
+                }),
+            },
+        ] as any;
+
+        const result = buildTrainingBuildComparisonMetricPayload(docs, {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'race', durationWeeks: 8, raceEventId: 'legacy-race' },
+                },
+            },
+        }, nowMs);
+
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+        expect(running?.status).toBe('ready');
+        expect(running?.selection?.label).toBe('Legacy marathon');
+        expect(running?.suggestedRaces).toEqual([
+            { eventId: 'legacy-race', startDayMs: raceDayMs, label: 'Legacy marathon' },
+        ]);
+    });
+
+    it('does not count future-dated sessions in the current build', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
+        const docs = [
+            {
+                id: 'current-run',
+                data: () => ({
+                    startDate: Date.UTC(2026, 5, 30, 8, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Running],
+                        [DataDuration.type]: 3_600,
+                        Distance: 10_000,
+                    },
+                }),
+            },
+            {
+                id: 'scheduled-run',
+                data: () => ({
+                    startDate: Date.UTC(2026, 5, 30, 20, 0, 0),
+                    stats: {
+                        [DataActivityTypes.type]: [ActivityTypes.Running],
+                        [DataDuration.type]: 7_200,
+                        Distance: 20_000,
+                    },
+                }),
+            },
+        ] as any;
+
+        const result = buildTrainingBuildComparisonMetricPayload(docs, {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 1) },
+                },
+            },
+        }, nowMs);
+
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+        expect(running?.current?.activityCount).toBe(1);
+        expect(running?.current?.durationSeconds).toBe(3_600);
+        expect(running?.current?.distanceMeters).toBe(10_000);
     });
 });
 
@@ -1076,6 +1286,63 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
                 status: 'processing',
                 generation: 30,
             }),
+        );
+    });
+
+    it('does not overwrite a newly claimed generation when an earlier enqueue reports a failure', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        let coordinatorReadCount = 0;
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => {
+            if (ref === hoisted.coordinatorRef) {
+                coordinatorReadCount += 1;
+                return coordinatorReadCount === 1
+                    ? {
+                        exists: true,
+                        data: () => ({
+                            status: 'idle',
+                            generation: 7,
+                            dirtyMetricKinds: [],
+                            updatedAtMs: Date.now(),
+                        }),
+                    }
+                    : {
+                        exists: true,
+                        data: () => ({
+                            status: 'processing',
+                            generation: 8,
+                            dirtyMetricKinds: [],
+                            updatedAtMs: Date.now(),
+                        }),
+                    };
+            }
+            if (ref === hoisted.userRootRef) {
+                return { exists: true, data: () => ({}) };
+            }
+            if (ref === hoisted.tombstoneRef) {
+                return { exists: false, data: () => undefined };
+            }
+            return { exists: false, data: () => undefined };
+        });
+        hoisted.enqueueDerivedMetricsTask.mockRejectedValueOnce(new Error('transient task queue error'));
+
+        await expect(markDerivedMetricsDirtyAndMaybeQueue(
+            'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+        )).resolves.toEqual({
+            accepted: false,
+            queued: false,
+            generation: 8,
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+        });
+
+        expect(hoisted.transactionSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(
+            hoisted.coordinatorRef,
+            expect.objectContaining({
+                status: 'queued',
+                generation: 8,
+            }),
+            { merge: true },
         );
     });
 

@@ -34,7 +34,6 @@ interface CloudTasksConfig {
     sportsLibRouteReparseQueue: string;
     derivedMetricsQueue: string;
     derivedMetricsIngressBucketSeconds: number;
-    serviceAccountEmail: string;
 }
 
 interface DebugConfig {
@@ -92,7 +91,6 @@ export const config: AppConfig = {
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
             derivedMetricsIngressBucketSeconds: 30,
-            serviceAccountEmail: `${process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId}@appspot.gserviceaccount.com`,
         };
     },
     get debug() {

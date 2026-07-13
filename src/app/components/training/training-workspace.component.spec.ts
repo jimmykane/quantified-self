@@ -10,6 +10,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
+  TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
 import { TrainingWorkspaceComponent } from './training-workspace.component';
@@ -91,7 +92,70 @@ describe('TrainingWorkspaceComponent', () => {
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
       { uid: 'user-1' },
       expect.objectContaining({ trainingSummaryStatus: 'missing' }),
+      { metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS },
     );
+  });
+
+  it('distinguishes benchmark card states and formats comparison deltas without a chart', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const selection = { mode: 'period' as const, durationWeeks: 12 as const, endDayMs: Date.UTC(2025, 5, 1) };
+    const readySource = {
+      discipline: 'running' as const,
+      status: 'ready' as const,
+      selection: {
+        ...selection,
+        selectionKey: 'period:12:1748736000000',
+        windowStartDayMs: Date.UTC(2025, 3, 8),
+        windowEndDayMs: Date.UTC(2025, 5, 1),
+        label: null,
+      },
+      current: null,
+      benchmark: null,
+      suggestedRaces: [],
+    } as any;
+
+    component.derivedState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingBuildComparisonStatus: 'ready',
+    };
+    expect((component as any).resolveTrainingBuildCardState('running', null, null)).toBe('not-configured');
+    expect((component as any).resolveTrainingBuildCardState('running', readySource, selection)).toBe('ready');
+    expect((component as any).resolveTrainingBuildCardState('running', readySource, {
+      mode: 'period', durationWeeks: 10, endDayMs: Date.UTC(2025, 5, 1),
+    })).toBe('updating');
+    expect((component as any).resolveTrainingBuildCardState('running', { ...readySource, status: 'invalid-selection' }, selection)).toBe('invalid');
+
+    component.derivedState = { ...component.derivedState, trainingBuildComparisonStatus: 'building' };
+    expect((component as any).resolveTrainingBuildCardState('running', null, selection)).toBe('updating');
+    component.derivedState = { ...component.derivedState, trainingBuildComparisonStatus: 'failed' };
+    expect((component as any).resolveTrainingBuildCardState('running', null, selection)).toBe('unavailable');
+    expect(component.formatTrainingBuildDelta(14, 10)).toBe('+4');
+    expect(component.formatTrainingBuildDurationDelta(5_400, 3_600)).toBe('+30m');
+    expect((component as any).formatTrainingBuildActiveWeeks(8, 12)).toBe('8 / 12');
+    expect((component as any).formatTrainingBuildActiveWeeks(8, null)).toBe('--');
+
+    const dateTimeFormat = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({
+      format: (value: Date) => value.toISOString().slice(0, 10),
+    } as unknown as Intl.DateTimeFormat));
+    try {
+      expect((component as any).formatTrainingBuildRange(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 2)))
+        .toBe('2026-01-01 – 2026-01-02');
+      expect(dateTimeFormat).toHaveBeenCalledWith(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+    } finally {
+      dateTimeFormat.mockRestore();
+    }
   });
 
   it('keeps derived metric listeners active after the initial user change', async () => {

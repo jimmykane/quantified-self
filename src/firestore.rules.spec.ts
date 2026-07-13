@@ -1101,6 +1101,29 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should require the benchmark callable for training settings while allowing other settings updates', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const settingsRef = db.collection('users').doc(userId).collection('config').doc('settings');
+                const trainingSettings = {
+                    buildBenchmarks: {
+                        running: { mode: 'period', durationWeeks: 12, endDayMs: 1_746_403_200_000 },
+                    },
+                };
+
+                await assertFails(settingsRef.set({ trainingSettings }));
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/config/settings`).set({
+                        theme: 'dark',
+                        trainingSettings,
+                    });
+                });
+
+                await assertFails(settingsRef.update({
+                    trainingSettings: { buildBenchmarks: { cycling: { mode: 'period', durationWeeks: 8, endDayMs: 1_746_403_200_000 } } },
+                }));
+                await assertSucceeds(settingsRef.update({ theme: 'light' }));
+            });
+
             it('should deny user reading other user settings', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertFails(db.collection('users').doc(otherId).collection('config').doc('settings').get());

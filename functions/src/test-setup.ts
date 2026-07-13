@@ -191,6 +191,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     },
     DataActivityTypes: { type: 'Activity Types' },
     DataCriticalPower: { type: 'Critical Power' },
+    DataDistance: { type: 'Distance' },
     DataDuration: { type: 'Duration' },
     DataFTP: { type: 'FTP' },
     DataHeartRateAvg: { type: 'Heart Rate Avg' },

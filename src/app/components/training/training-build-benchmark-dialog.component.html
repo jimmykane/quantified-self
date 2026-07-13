@@ -1,0 +1,55 @@
+<h2 mat-dialog-title>Set {{ data.discipline === 'running' ? 'running' : 'cycling' }} benchmark</h2>
+
+<mat-dialog-content>
+  <p class="dialog-intro">Compare your current build with one historical build of the same length. Race anchors exclude race day itself.</p>
+
+  <div class="dialog-field">
+    <span class="field-label">Build length</span>
+    <mat-button-toggle-group [value]="durationWeeks" (change)="selectDurationWeeks($event.value)" [disabled]="isSaving" aria-label="Build length">
+      <mat-button-toggle [value]="8">8 weeks</mat-button-toggle>
+      <mat-button-toggle [value]="10">10 weeks</mat-button-toggle>
+      <mat-button-toggle [value]="12">12 weeks</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
+
+  <div class="dialog-field">
+    <span class="field-label">Reference</span>
+    <mat-button-toggle-group [value]="mode" (change)="selectMode($event.value)" [disabled]="isSaving" aria-label="Benchmark reference type">
+      <mat-button-toggle value="race">Tagged race</mat-button-toggle>
+      <mat-button-toggle value="period">Manual period</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
+
+  @if (mode === 'race') {
+    <div class="race-list" aria-label="Tagged race suggestions">
+      @for (race of visibleSuggestedRaces; track race.eventId) {
+        <button mat-stroked-button class="race-option" [class.race-option-selected]="race.eventId === raceEventId" (click)="selectRace(race.eventId)" [disabled]="isSaving">
+          <span>{{ race.label || 'Tagged race' }}</span>
+          <small>{{ race.startDayMs | date:'mediumDate':'UTC' }}</small>
+        </button>
+      } @empty {
+        <p class="dialog-empty">No older events tagged exactly <strong>Race</strong> for this sport. Add that tag to an event, or choose a manual period.</p>
+      }
+    </div>
+  } @else {
+    <mat-form-field appearance="outline" class="period-input">
+      <mat-label>Historical build end date</mat-label>
+      <input matInput type="date" [value]="periodEndDate" (input)="updatePeriodEndDate($any($event.target).value)" [disabled]="isSaving">
+      <mat-hint>The build ends on this day and cannot overlap your current build.</mat-hint>
+    </mat-form-field>
+  }
+
+  @if (errorMessage) {
+    <p class="dialog-error" role="alert">{{ errorMessage }}</p>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (data.selection) {
+    <button mat-button color="warn" (click)="clear()" [disabled]="isSaving">Clear benchmark</button>
+  }
+  <button mat-button mat-dialog-close [disabled]="isSaving">Cancel</button>
+  <button mat-flat-button color="primary" (click)="save()" [disabled]="isSaving">
+    @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> } @else { Save benchmark }
+  </button>
+</mat-dialog-actions>

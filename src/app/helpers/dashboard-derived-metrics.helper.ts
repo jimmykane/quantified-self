@@ -11,6 +11,11 @@ import type {
   DerivedMonotonyStrainMetricPayload,
   DerivedRampRateMetricPayload,
   DerivedTrainingCapacityMetric,
+  DerivedTrainingBuildBenchmarkReference,
+  DerivedTrainingBuildComparisonDiscipline,
+  DerivedTrainingBuildComparisonMetricPayload,
+  DerivedTrainingBuildRaceSuggestion,
+  DerivedTrainingBuildWindow,
   DerivedTrainingDisciplineSummary,
   DerivedTrainingSummaryMetricPayload,
   DerivedTrainingSummaryWindow,
@@ -161,6 +166,22 @@ export interface DashboardTrainingSummaryContext {
   currentWindowDays: number;
   baselineWindowDays: number;
   disciplines: DashboardTrainingDisciplineSummary[];
+}
+
+export type DashboardTrainingBuildWindow = DerivedTrainingBuildWindow;
+export type DashboardTrainingBuildRaceSuggestion = DerivedTrainingBuildRaceSuggestion;
+export type DashboardTrainingBuildBenchmarkReference = DerivedTrainingBuildBenchmarkReference;
+
+export interface DashboardTrainingBuildComparisonDiscipline extends Omit<DerivedTrainingBuildComparisonDiscipline, 'current' | 'benchmark' | 'selection' | 'suggestedRaces'> {
+  current: DashboardTrainingBuildWindow | null;
+  benchmark: DashboardTrainingBuildWindow | null;
+  selection: DashboardTrainingBuildBenchmarkReference | null;
+  suggestedRaces: DashboardTrainingBuildRaceSuggestion[];
+}
+
+export interface DashboardTrainingBuildComparisonContext {
+  asOfDayMs: number;
+  disciplines: DashboardTrainingBuildComparisonDiscipline[];
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -367,6 +388,150 @@ export function resolveDashboardTrainingSummaryContext(payload: unknown): Dashbo
     baselineWindowDays,
     disciplines,
   };
+}
+
+function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingBuildWindow | null {
+  const raw = (value || {}) as Partial<DerivedTrainingBuildWindow>;
+  const periodWeeks = toFiniteNumber(raw.periodWeeks);
+  const windowStartDayMs = toFiniteNumber(raw.windowStartDayMs);
+  const windowEndDayMs = toFiniteNumber(raw.windowEndDayMs);
+  const activityCount = toFiniteNumber(raw.activityCount);
+  const durationSeconds = toFiniteNumber(raw.durationSeconds);
+  const distanceEventCount = toFiniteNumber(raw.distanceEventCount);
+  const trainingStressScoreEventCount = toFiniteNumber(raw.trainingStressScoreEventCount);
+  const activeWeekCount = toFiniteNumber(raw.activeWeekCount);
+  const intensitySourceEventCount = toFiniteNumber(raw.intensitySourceEventCount);
+  const efficiencySampleCount = toFiniteNumber(raw.efficiencySampleCount);
+  if (
+    (periodWeeks !== 8 && periodWeeks !== 10 && periodWeeks !== 12)
+    || windowStartDayMs === null
+    || windowEndDayMs === null
+    || activityCount === null
+    || durationSeconds === null
+    || distanceEventCount === null
+    || trainingStressScoreEventCount === null
+    || activeWeekCount === null
+    || intensitySourceEventCount === null
+    || efficiencySampleCount === null
+  ) {
+    return null;
+  }
+  return {
+    periodWeeks,
+    windowStartDayMs,
+    windowEndDayMs,
+    activityCount,
+    durationSeconds,
+    distanceMeters: toFiniteNumber(raw.distanceMeters),
+    distanceEventCount,
+    trainingStressScore: toFiniteNumber(raw.trainingStressScore),
+    trainingStressScoreEventCount,
+    activeWeekCount,
+    longestActivityDurationSeconds: toFiniteNumber(raw.longestActivityDurationSeconds),
+    easySeconds: toFiniteNumber(raw.easySeconds),
+    moderateSeconds: toFiniteNumber(raw.moderateSeconds),
+    hardSeconds: toFiniteNumber(raw.hardSeconds),
+    intensitySourceEventCount,
+    efficiency: toFiniteNumber(raw.efficiency),
+    efficiencySampleCount,
+  };
+}
+
+function resolveDashboardTrainingBuildSelection(value: unknown): DashboardTrainingBuildBenchmarkReference | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const raw = value as Partial<DerivedTrainingBuildBenchmarkReference>;
+  const durationWeeks = toFiniteNumber(raw.durationWeeks);
+  const windowStartDayMs = toFiniteNumber(raw.windowStartDayMs);
+  const windowEndDayMs = toFiniteNumber(raw.windowEndDayMs);
+  const selectionKey = typeof raw.selectionKey === 'string' && raw.selectionKey.trim() ? raw.selectionKey : null;
+  if (
+    (durationWeeks !== 8 && durationWeeks !== 10 && durationWeeks !== 12)
+    || windowStartDayMs === null
+    || windowEndDayMs === null
+    || !selectionKey
+  ) {
+    return null;
+  }
+  const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label : null;
+  if (raw.mode === 'race') {
+    const raceEventId = typeof raw.raceEventId === 'string' && raw.raceEventId.trim() ? raw.raceEventId : null;
+    return raceEventId ? {
+      mode: 'race', durationWeeks, raceEventId, selectionKey, windowStartDayMs, windowEndDayMs, label,
+    } : null;
+  }
+  if (raw.mode === 'period') {
+    const endDayMs = toFiniteNumber(raw.endDayMs);
+    return endDayMs === null ? null : {
+      mode: 'period', durationWeeks, endDayMs, selectionKey, windowStartDayMs, windowEndDayMs, label,
+    };
+  }
+  return null;
+}
+
+function resolveDashboardTrainingBuildRaceSuggestions(value: unknown): DashboardTrainingBuildRaceSuggestion[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object') {
+      return [];
+    }
+    const raw = candidate as Partial<DerivedTrainingBuildRaceSuggestion>;
+    const eventId = typeof raw.eventId === 'string' && raw.eventId.trim() ? raw.eventId : null;
+    const startDayMs = toFiniteNumber(raw.startDayMs);
+    if (!eventId || startDayMs === null) {
+      return [];
+    }
+    return [{
+      eventId,
+      startDayMs,
+      label: typeof raw.label === 'string' && raw.label.trim() ? raw.label : null,
+    }];
+  });
+}
+
+export function resolveDashboardTrainingBuildComparisonContext(payload: unknown): DashboardTrainingBuildComparisonContext | null {
+  const raw = (payload || {}) as Partial<DerivedTrainingBuildComparisonMetricPayload>;
+  const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
+  if (asOfDayMs === null || !Array.isArray(raw.disciplines)) {
+    return null;
+  }
+  const disciplines = raw.disciplines.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object') {
+      return [];
+    }
+    const source = candidate as Partial<DerivedTrainingBuildComparisonDiscipline>;
+    if (
+      (source.discipline !== 'running' && source.discipline !== 'cycling')
+      || (source.status !== 'not-configured' && source.status !== 'invalid-selection' && source.status !== 'ready')
+    ) {
+      return [];
+    }
+    const selection = resolveDashboardTrainingBuildSelection(source.selection);
+    const current = source.current === null ? null : resolveDashboardTrainingBuildWindow(source.current);
+    const benchmark = source.benchmark === null ? null : resolveDashboardTrainingBuildWindow(source.benchmark);
+    if (source.status === 'ready' && (!selection || !current || !benchmark)) {
+      return [];
+    }
+    return [{
+      discipline: source.discipline,
+      status: source.status,
+      selection,
+      current,
+      benchmark,
+      suggestedRaces: resolveDashboardTrainingBuildRaceSuggestions(source.suggestedRaces),
+    }];
+  });
+  if (
+    disciplines.length !== 2
+    || !disciplines.some(discipline => discipline.discipline === 'running')
+    || !disciplines.some(discipline => discipline.discipline === 'cycling')
+  ) {
+    return null;
+  }
+  return { asOfDayMs, disciplines };
 }
 
 export function resolveDashboardRampRateContext(payload: unknown): DashboardRampRateContext | null {

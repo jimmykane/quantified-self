@@ -11,6 +11,7 @@ import {
     fetchDerivedFormSnapshotSeed,
     fetchDerivedMetricsEventDocs,
     fetchRecoveryLookbackEventDocs,
+    fetchTrainingBuildBenchmarkSettings,
     getDerivedRecoveryLookbackWindowSeconds,
     isDerivedMetricsUserWriteBlocked,
     markDerivedMetricSnapshotsBuilding,
@@ -109,6 +110,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             // Reusing full-history form docs inflates segment counts and breaks "recovery left now" semantics.
             ? await fetchRecoveryLookbackEventDocs(uid)
             : [];
+        const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
+            ? await fetchTrainingBuildBenchmarkSettings(uid)
+            : {};
 
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
             await abandonAfterWriteBlock('task before snapshot ready write');
@@ -117,6 +121,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
         await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
             formDocs,
             recoveryNowDocs,
+            ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
         }, {
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formDailyLoads: projectionFormSnapshotSeed?.dailyLoads || [],
@@ -136,6 +141,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formEventDocsScanned: formDocs.length,
             recoveryEventDocsScanned: recoveryNowDocs.length,
+            trainingBuildBenchmarkSettingsFetched: sourceRequirements.needsTrainingBuildBenchmarkSettings,
             usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
             projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),
