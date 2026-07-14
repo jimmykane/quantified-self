@@ -437,12 +437,44 @@ describe('TrainingWorkspaceComponent', () => {
     const recoveryView = (component as any).buildTrainingRecoveryViewModel(recoveryComparison, 'Now', 'Usual');
     expect(recoveryView).toMatchObject({ state: 'ready', isUpdating: false });
     expect(recoveryView.metricRows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'Sleep / night', currentText: '8h 00m', deltaText: '+1h 00m' }),
-      expect.objectContaining({ label: 'Bedtime variation', deltaText: '15m steadier' }),
-      expect.objectContaining({ label: 'Overnight HRV', deltaText: '+10 ms' }),
+      expect.objectContaining({ label: 'Sleep / night', currentText: '8h 00m', deltaText: '+1h 00m', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Recorded nights', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Bedtime variation', deltaText: '15m steadier', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Overnight HRV', deltaText: '+10 ms', deltaTone: 'positive' }),
     ]));
     expect(recoveryView.sourceText).toContain('Garmin');
     expect(recoveryView.sourceText).toContain('naps are excluded');
+
+    const lowerRecoveryView = (component as any).buildTrainingRecoveryViewModel({
+      ...recoveryComparison,
+      current: {
+        ...recoveryComparison.current,
+        recordedNightCount: 14,
+        averageSleepSeconds: 6 * 3600,
+        bedtimeVariationMinutes: 60,
+        medianOvernightHrvMs: 40,
+      },
+    }, 'Now', 'Usual');
+    expect(lowerRecoveryView.metricRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Sleep / night', deltaTone: 'negative' }),
+      expect.objectContaining({ label: 'Recorded nights', deltaTone: 'negative' }),
+      expect.objectContaining({ label: 'Bedtime variation', deltaText: '15m more variable', deltaTone: 'negative' }),
+      expect.objectContaining({ label: 'Overnight HRV', deltaTone: 'negative' }),
+    ]));
+    expect((component as any).resolveTrainingComparisonDeltaTone(100.4, 100, 'direct', 0.5)).toBe('neutral');
+    expect((component as any).resolveTrainingComparisonDeltaTone(null, 100)).toBe('neutral');
+    expect((component as any).formatTrainingRecoveryCoverageDelta(
+      { ...recoveryComparison.current, recordedNightCount: 21 },
+      { ...recoveryComparison.reference, recordedNightCount: 62 },
+    )).toBe('+1 pt');
+    expect((component as any).formatTrainingRecoveryCoverageDelta(
+      { ...recoveryComparison.current, expectedNightCount: 0 },
+      recoveryComparison.reference,
+    )).toBe('--');
+    expect((component as any).resolveTrainingRecoveryCoverageDeltaTone(
+      { ...recoveryComparison.current, expectedNightCount: 0 },
+      recoveryComparison.reference,
+    )).toBe('neutral');
 
     component.derivedState = { ...component.derivedState, trainingBuildComparisonStatus: 'failed' };
     const failedRecoveryView = (component as any).buildTrainingRecoveryViewModel(recoveryComparison, 'Now', 'Usual');
@@ -468,10 +500,17 @@ describe('TrainingWorkspaceComponent', () => {
       benchmark: { ...swimWindow, poolAveragePaceSecondsPer100m: 100 },
     }, 'swimming');
     expect(swimRows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m faster' }),
-      expect.objectContaining({ label: 'Open-water pace', currentText: '--', benchmarkText: '--' }),
+      expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m faster', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Open-water pace', currentText: '--', benchmarkText: '--', deltaTone: 'neutral' }),
     ]));
     expect(swimRows).not.toEqual(expect.arrayContaining([expect.objectContaining({ label: 'Power / HR' })]));
+    const slowerSwimRows = (component as any).buildTrainingBuildMetricRows({
+      current: { ...swimWindow, poolAveragePaceSecondsPer100m: 105 },
+      benchmark: { ...swimWindow, poolAveragePaceSecondsPer100m: 100 },
+    }, 'swimming');
+    expect(slowerSwimRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m slower', deltaTone: 'negative' }),
+    ]));
 
     const dateTimeFormat = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({
       format: (value: Date) => value.toISOString().slice(0, 10),

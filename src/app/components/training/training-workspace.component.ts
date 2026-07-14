@@ -14,6 +14,7 @@ import {
   type TrainingCapacityDisciplineViewModel,
 } from '../../helpers/training-capacity.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { resolveMetricSemantics, type MetricSemanticsDirection } from '@shared/metric-semantics';
 import {
   getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
@@ -118,16 +119,20 @@ interface TrainingBuildMetricRowViewModel {
   currentText: string;
   benchmarkText: string;
   deltaText: string;
+  deltaTone?: TrainingComparisonDeltaTone;
   isIntensity: boolean;
 }
 
 type TrainingRecoveryState = 'updating' | 'unavailable' | 'empty' | 'limited' | 'ready';
+type TrainingComparisonDeltaTone = 'positive' | 'negative' | 'neutral';
+const TRAINING_SWIM_PACE_DELTA_DIRECTION = resolveMetricSemantics('Swim pace').direction;
 
 interface TrainingRecoveryMetricRowViewModel {
   label: string;
   currentText: string;
   referenceText: string;
   deltaText: string;
+  deltaTone: TrainingComparisonDeltaTone;
 }
 
 interface TrainingRecoveryViewModel {
@@ -577,6 +582,23 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     return `${this.formatTrainingBuildSwimPace(Math.abs(delta))} ${delta < 0 ? 'faster' : 'slower'}`;
   }
 
+  private resolveTrainingComparisonDeltaTone(
+    current: number | null | undefined,
+    reference: number | null | undefined,
+    direction: MetricSemanticsDirection = 'direct',
+    minimumAbsoluteDelta = 0,
+  ): TrainingComparisonDeltaTone {
+    if (!Number.isFinite(current) || !Number.isFinite(reference)) {
+      return 'neutral';
+    }
+    const delta = (current as number) - (reference as number);
+    if (Math.abs(delta) < minimumAbsoluteDelta || delta === 0) {
+      return 'neutral';
+    }
+    const isPositive = direction === 'inverse' ? delta < 0 : delta > 0;
+    return isPositive ? 'positive' : 'negative';
+  }
+
   private formatTrainingBuildNumber(value: number | null | undefined, fractionDigits = 0): string {
     return this.formatNumber(value, fractionDigits);
   }
@@ -800,11 +822,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       deltaText: isComparable
         ? this.formatTrainingRecoveryDurationDelta(current.averageSleepSeconds, reference.averageSleepSeconds)
         : '—',
+      deltaTone: isComparable
+        ? this.resolveTrainingComparisonDeltaTone(current.averageSleepSeconds, reference.averageSleepSeconds, 'direct', 60)
+        : 'neutral',
     }, {
       label: 'Recorded nights',
       currentText: `${current.recordedNightCount} / ${current.expectedNightCount}`,
       referenceText: `${reference.recordedNightCount} / ${reference.expectedNightCount}`,
       deltaText: isComparable ? this.formatTrainingRecoveryCoverageDelta(current, reference) : '—',
+      deltaTone: isComparable ? this.resolveTrainingRecoveryCoverageDeltaTone(current, reference) : 'neutral',
     }, {
       label: 'Bedtime variation',
       currentText: this.formatTrainingRecoveryVariation(current.bedtimeVariationMinutes),
@@ -812,6 +838,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       deltaText: isComparable
         ? this.formatTrainingRecoveryVariationDelta(current.bedtimeVariationMinutes, reference.bedtimeVariationMinutes)
         : '—',
+      deltaTone: isComparable
+        ? this.resolveTrainingComparisonDeltaTone(current.bedtimeVariationMinutes, reference.bedtimeVariationMinutes, 'inverse', 0.5)
+        : 'neutral',
     }, {
       label: 'Overnight HRV',
       currentText: this.formatTrainingRecoveryHrv(current.medianOvernightHrvMs),
@@ -819,7 +848,20 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       deltaText: isComparable
         ? this.formatTrainingRecoveryHrvDelta(current.medianOvernightHrvMs, reference.medianOvernightHrvMs)
         : '—',
+      deltaTone: isComparable
+        ? this.resolveTrainingComparisonDeltaTone(current.medianOvernightHrvMs, reference.medianOvernightHrvMs, 'direct', 0.05)
+        : 'neutral',
     }];
+  }
+
+  private resolveTrainingRecoveryCoverageDeltaTone(
+    current: DashboardTrainingRecoveryWindow,
+    reference: DashboardTrainingRecoveryWindow,
+  ): TrainingComparisonDeltaTone {
+    const deltaPoints = this.resolveTrainingRecoveryCoverageDeltaPoints(current, reference);
+    return deltaPoints === null
+      ? 'neutral'
+      : this.resolveTrainingComparisonDeltaTone(deltaPoints, 0);
   }
 
   private resolveTrainingRecoveryDetail(
@@ -908,11 +950,27 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     current: DashboardTrainingRecoveryWindow,
     reference: DashboardTrainingRecoveryWindow,
   ): string {
-    const deltaPoints = Math.round(
-      ((current.recordedNightCount / current.expectedNightCount)
-        - (reference.recordedNightCount / reference.expectedNightCount)) * 100,
-    );
-    return deltaPoints === 0 ? 'Same coverage' : `${deltaPoints > 0 ? '+' : '−'}${Math.abs(deltaPoints)} pts`;
+    const deltaPoints = this.resolveTrainingRecoveryCoverageDeltaPoints(current, reference);
+    if (deltaPoints === null) {
+      return '--';
+    }
+    if (deltaPoints === 0) {
+      return 'Same coverage';
+    }
+    const pointLabel = Math.abs(deltaPoints) === 1 ? 'pt' : 'pts';
+    return `${deltaPoints > 0 ? '+' : '−'}${Math.abs(deltaPoints)} ${pointLabel}`;
+  }
+
+  private resolveTrainingRecoveryCoverageDeltaPoints(
+    current: DashboardTrainingRecoveryWindow,
+    reference: DashboardTrainingRecoveryWindow,
+  ): number | null {
+    if (current.expectedNightCount <= 0 || reference.expectedNightCount <= 0) {
+      return null;
+    }
+    const currentCoverage = current.recordedNightCount / current.expectedNightCount;
+    const referenceCoverage = reference.recordedNightCount / reference.expectedNightCount;
+    return Math.round((currentCoverage - referenceCoverage) * 100);
   }
 
   private formatTrainingRecoveryVariation(value: number | null): string {
@@ -1013,6 +1071,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           current.poolAveragePaceSecondsPer100m,
           benchmark.poolAveragePaceSecondsPer100m,
         ),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(
+          current.poolAveragePaceSecondsPer100m,
+          benchmark.poolAveragePaceSecondsPer100m,
+          TRAINING_SWIM_PACE_DELTA_DIRECTION,
+          0.5,
+        ),
         isIntensity: false,
       }, {
         label: 'Open-water pace',
@@ -1021,6 +1085,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         deltaText: this.formatTrainingBuildSwimPaceDelta(
           current.openWaterAveragePaceSecondsPer100m,
           benchmark.openWaterAveragePaceSecondsPer100m,
+        ),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(
+          current.openWaterAveragePaceSecondsPer100m,
+          benchmark.openWaterAveragePaceSecondsPer100m,
+          TRAINING_SWIM_PACE_DELTA_DIRECTION,
+          0.5,
         ),
         isIntensity: false,
       });

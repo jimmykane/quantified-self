@@ -79,7 +79,7 @@
           <dl class="training-recovery-table">
             <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
             @for (row of trainingRecovery.metricRows; track row.label) {
-              <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd>{{ row.deltaText }}</dd></div>
+              <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
             }
           </dl>
         }
@@ -137,7 +137,7 @@
               <dl class="training-build-table">
                 <div class="training-build-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Benchmark</dd><dd>Change</dd></div>
                 @for (row of card.metricRows; track row.label) {
-                  <div [class.training-build-intensity-row]="row.isIntensity"><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.benchmarkText }}</dd><dd>{{ row.deltaText }}</dd></div>
+                  <div [class.training-build-intensity-row]="row.isIntensity"><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.benchmarkText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
                 }
               </dl>
               @if (card.recovery; as recovery) {
@@ -151,7 +151,7 @@
                     <dl class="training-recovery-table training-build-recovery-table">
                       <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ recovery.currentLabel }}</dd><dd>{{ recovery.referenceLabel }}</dd><dd>Change</dd></div>
                       @for (row of recovery.metricRows; track row.label) {
-                        <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd>{{ row.deltaText }}</dd></div>
+                        <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
                       }
                     </dl>
                   }
