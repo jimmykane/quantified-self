@@ -180,6 +180,7 @@ export { setTrainingVisibleDisciplines } from './derived-metrics/set-training-vi
 export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,
+  onDashboardDerivedMetricsSleepWrite,
 } from './derived-metrics/derived-metrics.trigger';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';

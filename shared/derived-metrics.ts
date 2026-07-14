@@ -5,6 +5,7 @@ import {
   type PowerCapacityDiscipline,
   type TrainingDiscipline,
 } from './training-disciplines';
+import type { SleepProvider } from './sleep';
 
 export const DERIVED_METRIC_KINDS = {
   Form: 'form',
@@ -73,7 +74,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 9;
+export const DERIVED_METRIC_SCHEMA_VERSION = 10;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -547,6 +548,29 @@ export interface DerivedTrainingBuildWindow {
   openWaterPaceActivityCount: number;
 }
 
+export type DerivedTrainingRecoveryCoverage = 'none' | 'limited' | 'sufficient';
+
+export interface DerivedTrainingRecoveryWindow {
+  periodDays: number;
+  windowStartDayMs: number;
+  windowEndDayMs: number;
+  provider: SleepProvider | null;
+  recordedNightCount: number;
+  expectedNightCount: number;
+  coverage: DerivedTrainingRecoveryCoverage;
+  averageSleepSeconds: number | null;
+  bedtimeVariationMinutes: number | null;
+  medianOvernightHrvMs: number | null;
+  overnightHrvNightCount: number;
+}
+
+export interface DerivedTrainingRecoveryComparison {
+  current: DerivedTrainingRecoveryWindow;
+  reference: DerivedTrainingRecoveryWindow;
+  sameProvider: boolean;
+  isComparable: boolean;
+}
+
 export type DerivedTrainingBuildComparisonStatus =
   | 'not-configured'
   | 'invalid-selection'
@@ -558,6 +582,7 @@ export interface DerivedTrainingBuildComparisonDiscipline {
   selection: DerivedTrainingBuildBenchmarkReference | null;
   current: DerivedTrainingBuildWindow | null;
   benchmark: DerivedTrainingBuildWindow | null;
+  recovery: DerivedTrainingRecoveryComparison | null;
   suggestedRaces: DerivedTrainingBuildRaceSuggestion[];
   // Bounded historical events without an exact Race tag; tagged races are prioritized above.
   suggestedEvents: DerivedTrainingBuildEventSuggestion[];
@@ -567,6 +592,7 @@ export interface DerivedTrainingBuildComparisonMetricPayload {
   dayBoundary: 'UTC';
   asOfDayMs: number;
   excludesMergedEvents: boolean;
+  recovery: DerivedTrainingRecoveryComparison;
   disciplines: DerivedTrainingBuildComparisonDiscipline[];
 }
 

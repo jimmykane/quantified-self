@@ -104,6 +104,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('one activity leg at a time');
     expect(gettingStartedSection?.content).toContain('shown first as quick picks');
     expect(gettingStartedSection?.content).toContain('selecting an event never changes its tags');
+    expect(gettingStartedSection?.content).toContain('**Recovery context**');
+    expect(gettingStartedSection?.content).toContain('without changing the Training state');
+    expect(gettingStartedSection?.content).toContain('longest valid main overnight record');
+    expect(gettingStartedSection?.content).toContain('at least three recorded nights');
+    expect(gettingStartedSection?.content).toContain('at least five qualifying nights');
+    expect(gettingStartedSection?.content).toContain('Missing nights and missing HRV are never counted as zero');
+    expect(gettingStartedSection?.content).toContain('at least seven recorded nights and at least half of the window');
     expect(gettingStartedSection?.content).toContain('keeps pool and open-water evidence separate');
     expect(gettingStartedSection?.content).toContain('does not infer Critical Swim Speed');
     expect(gettingStartedSection?.content).toContain('zero-session result');

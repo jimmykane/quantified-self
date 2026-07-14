@@ -19,12 +19,15 @@ import type {
   DerivedTrainingBuildEventSuggestion,
   DerivedTrainingBuildRaceSuggestion,
   DerivedTrainingBuildWindow,
+  DerivedTrainingRecoveryComparison,
+  DerivedTrainingRecoveryWindow,
   DerivedTrainingDisciplineSummary,
   DerivedTrainingSummaryMetricPayload,
   DerivedTrainingSummaryWindow,
   DerivedTrainingSwimPerformanceMetricPayload,
   DerivedTrainingSwimWeek,
 } from '@shared/derived-metrics';
+import { normalizeSleepProvider } from '@shared/sleep';
 import {
   getTrainingBuildBenchmarkSelectionKey,
   normalizeTrainingBuildEventId,
@@ -191,6 +194,8 @@ export type DashboardTrainingBuildWindow = DerivedTrainingBuildWindow;
 export type DashboardTrainingBuildEventSuggestion = DerivedTrainingBuildEventSuggestion;
 export type DashboardTrainingBuildRaceSuggestion = DerivedTrainingBuildRaceSuggestion;
 export type DashboardTrainingBuildBenchmarkReference = DerivedTrainingBuildBenchmarkReference;
+export type DashboardTrainingRecoveryWindow = DerivedTrainingRecoveryWindow;
+export type DashboardTrainingRecoveryComparison = DerivedTrainingRecoveryComparison;
 
 export interface DashboardTrainingBuildComparisonDiscipline extends Omit<DerivedTrainingBuildComparisonDiscipline, 'current' | 'benchmark' | 'selection' | 'suggestedRaces' | 'suggestedEvents'> {
   current: DashboardTrainingBuildWindow | null;
@@ -202,6 +207,7 @@ export interface DashboardTrainingBuildComparisonDiscipline extends Omit<Derived
 
 export interface DashboardTrainingBuildComparisonContext {
   asOfDayMs: number;
+  recovery: DashboardTrainingRecoveryComparison;
   disciplines: DashboardTrainingBuildComparisonDiscipline[];
 }
 
@@ -696,6 +702,93 @@ function resolveDashboardTrainingBuildSelection(value: unknown): DashboardTraini
   return null;
 }
 
+function resolveDashboardTrainingRecoveryWindow(value: unknown): DashboardTrainingRecoveryWindow | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const raw = value as Partial<DerivedTrainingRecoveryWindow>;
+  const periodDays = toFiniteNumber(raw.periodDays);
+  const windowStartDayMs = toFiniteNumber(raw.windowStartDayMs);
+  const windowEndDayMs = toFiniteNumber(raw.windowEndDayMs);
+  const recordedNightCount = toFiniteNumber(raw.recordedNightCount);
+  const expectedNightCount = toFiniteNumber(raw.expectedNightCount);
+  const overnightHrvNightCount = toFiniteNumber(raw.overnightHrvNightCount);
+  const averageSleepSeconds = raw.averageSleepSeconds === null ? null : toFiniteNumber(raw.averageSleepSeconds);
+  const bedtimeVariationMinutes = raw.bedtimeVariationMinutes === null ? null : toFiniteNumber(raw.bedtimeVariationMinutes);
+  const medianOvernightHrvMs = raw.medianOvernightHrvMs === null ? null : toFiniteNumber(raw.medianOvernightHrvMs);
+  const provider = raw.provider === null ? null : normalizeSleepProvider(raw.provider);
+  if (
+    periodDays === null
+    || !Number.isInteger(periodDays)
+    || periodDays < 1
+    || periodDays > 366
+    || windowStartDayMs === null
+    || windowEndDayMs === null
+    || resolveUtcDayStartMs(windowStartDayMs) !== windowStartDayMs
+    || resolveUtcDayStartMs(windowEndDayMs) !== windowEndDayMs
+    || windowEndDayMs - windowStartDayMs !== (periodDays - 1) * DAY_MS
+    || expectedNightCount !== periodDays
+    || recordedNightCount === null
+    || !Number.isInteger(recordedNightCount)
+    || recordedNightCount < 0
+    || recordedNightCount > periodDays
+    || overnightHrvNightCount === null
+    || !Number.isInteger(overnightHrvNightCount)
+    || overnightHrvNightCount < 0
+    || overnightHrvNightCount > recordedNightCount
+    || (raw.provider !== null && provider === null)
+    || (recordedNightCount === 0) !== (provider === null)
+    || (raw.averageSleepSeconds !== null && (averageSleepSeconds === null || averageSleepSeconds < 3600 || averageSleepSeconds > 16 * 3600))
+    || (raw.bedtimeVariationMinutes !== null && (bedtimeVariationMinutes === null || bedtimeVariationMinutes < 0 || bedtimeVariationMinutes > 12 * 60))
+    || (raw.medianOvernightHrvMs !== null && (medianOvernightHrvMs === null || medianOvernightHrvMs <= 0))
+    || (recordedNightCount >= 3) !== (averageSleepSeconds !== null)
+    || (recordedNightCount >= 5) !== (bedtimeVariationMinutes !== null)
+    || (overnightHrvNightCount >= 5) !== (medianOvernightHrvMs !== null)
+  ) {
+    return null;
+  }
+  const sufficientNightCount = Math.max(7, Math.ceil(periodDays * 0.5));
+  const expectedCoverage = recordedNightCount === 0
+    ? 'none'
+    : (recordedNightCount >= sufficientNightCount ? 'sufficient' : 'limited');
+  if (raw.coverage !== expectedCoverage) {
+    return null;
+  }
+  return {
+    periodDays,
+    windowStartDayMs,
+    windowEndDayMs,
+    provider,
+    recordedNightCount,
+    expectedNightCount: periodDays,
+    coverage: expectedCoverage,
+    averageSleepSeconds,
+    bedtimeVariationMinutes,
+    medianOvernightHrvMs,
+    overnightHrvNightCount,
+  };
+}
+
+function resolveDashboardTrainingRecoveryComparison(value: unknown): DashboardTrainingRecoveryComparison | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const raw = value as Partial<DerivedTrainingRecoveryComparison>;
+  const current = resolveDashboardTrainingRecoveryWindow(raw.current);
+  const reference = resolveDashboardTrainingRecoveryWindow(raw.reference);
+  if (!current || !reference) {
+    return null;
+  }
+  const sameProvider = current.provider !== null && current.provider === reference.provider;
+  const isComparable = sameProvider
+    && current.coverage === 'sufficient'
+    && reference.coverage === 'sufficient';
+  if (raw.sameProvider !== sameProvider || raw.isComparable !== isComparable) {
+    return null;
+  }
+  return { current, reference, sameProvider, isComparable };
+}
+
 function resolveDashboardTrainingBuildSuggestionMetric(
   value: unknown,
   allowZero = false,
@@ -749,11 +842,19 @@ function resolveDashboardTrainingBuildSuggestions(value: unknown): DashboardTrai
 export function resolveDashboardTrainingBuildComparisonContext(payload: unknown): DashboardTrainingBuildComparisonContext | null {
   const raw = (payload || {}) as Partial<DerivedTrainingBuildComparisonMetricPayload>;
   const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
+  const recovery = resolveDashboardTrainingRecoveryComparison(raw.recovery);
   if (
     raw.dayBoundary !== 'UTC'
     || raw.excludesMergedEvents !== true
     || asOfDayMs === null
     || resolveUtcDayStartMs(asOfDayMs) !== asOfDayMs
+    || !recovery
+    || recovery.current.periodDays !== 28
+    || recovery.current.windowEndDayMs !== asOfDayMs
+    || recovery.current.windowStartDayMs !== asOfDayMs - (27 * DAY_MS)
+    || recovery.reference.periodDays !== 84
+    || recovery.reference.windowEndDayMs !== recovery.current.windowStartDayMs - DAY_MS
+    || recovery.reference.windowStartDayMs !== recovery.reference.windowEndDayMs - (83 * DAY_MS)
     || !Array.isArray(raw.disciplines)
   ) {
     return null;
@@ -779,6 +880,9 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
     const selection = resolveDashboardTrainingBuildSelection(source.selection);
     const current = source.current === null ? null : resolveDashboardTrainingBuildWindow(source.current);
     const benchmark = source.benchmark === null ? null : resolveDashboardTrainingBuildWindow(source.benchmark);
+    const disciplineRecovery = source.recovery === null
+      ? null
+      : resolveDashboardTrainingRecoveryComparison(source.recovery);
     if (source.status === 'ready') {
       if (
         !selection
@@ -790,10 +894,16 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
         || benchmark.periodWeeks !== selection.durationWeeks
         || benchmark.windowStartDayMs !== selection.windowStartDayMs
         || benchmark.windowEndDayMs !== selection.windowEndDayMs
+        || benchmark.windowEndDayMs >= current.windowStartDayMs
+        || !disciplineRecovery
+        || disciplineRecovery.current.windowStartDayMs !== current.windowStartDayMs
+        || disciplineRecovery.current.windowEndDayMs !== current.windowEndDayMs
+        || disciplineRecovery.reference.windowStartDayMs !== benchmark.windowStartDayMs
+        || disciplineRecovery.reference.windowEndDayMs !== benchmark.windowEndDayMs
       ) {
         return [];
       }
-    } else if (source.selection !== null || source.current !== null || source.benchmark !== null) {
+    } else if (source.selection !== null || source.current !== null || source.benchmark !== null || source.recovery !== null) {
       return [];
     }
     return [{
@@ -802,6 +912,7 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
       selection,
       current,
       benchmark,
+      recovery: disciplineRecovery,
       suggestedRaces,
       suggestedEvents,
     }];
@@ -812,7 +923,7 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
   ) {
     return null;
   }
-  return { asOfDayMs, disciplines };
+  return { asOfDayMs, recovery, disciplines };
 }
 
 export function resolveDashboardTrainingSwimPerformanceContext(

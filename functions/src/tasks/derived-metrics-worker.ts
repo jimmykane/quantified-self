@@ -13,6 +13,7 @@ import {
     fetchDerivedMetricsEventDocs,
     fetchRecoveryLookbackEventDocs,
     fetchTrainingBuildBenchmarkSettings,
+    fetchTrainingBuildSleepDocs,
     getDerivedRecoveryLookbackWindowSeconds,
     isDerivedMetricsUserWriteBlocked,
     markDerivedMetricSnapshotsBuilding,
@@ -76,6 +77,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             return;
         }
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
+        const buildAtMs = Date.now();
         const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
         const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(dirtyMetricKinds);
         let projectionFormSnapshotSeed: Awaited<ReturnType<typeof fetchDerivedFormSnapshotSeed>> = null;
@@ -119,6 +121,15 @@ export const processDerivedMetricsTask = onTaskDispatched({
         const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
             ? await fetchTrainingBuildBenchmarkSettings(uid)
             : {};
+        const trainingBuildSleepDocs = sourceRequirements.needsTrainingBuildSleepDocs
+            ? await fetchTrainingBuildSleepDocs(
+                uid,
+                formDocs,
+                trainingActivityDocs,
+                trainingBuildBenchmarkSettings,
+                buildAtMs,
+            )
+            : [];
 
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
             await abandonAfterWriteBlock('task before snapshot ready write');
@@ -129,7 +140,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             recoveryNowDocs,
             trainingActivityDocs,
             ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
+            ...(sourceRequirements.needsTrainingBuildSleepDocs ? { trainingBuildSleepDocs } : {}),
         }, {
+            buildAtMs,
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formDailyLoads: projectionFormSnapshotSeed?.dailyLoads || [],
             formSourceEventCount: projectionFormSnapshotSeed?.sourceEventCount ?? null,
@@ -151,6 +164,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             trainingActivityDocsScanned: trainingActivityDocs.length,
             trainingSwimLengthsFetched: sourceRequirements.needsTrainingSwimLengths,
             trainingBuildBenchmarkSettingsFetched: sourceRequirements.needsTrainingBuildBenchmarkSettings,
+            trainingBuildSleepDocsScanned: trainingBuildSleepDocs.length,
             usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
             projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),

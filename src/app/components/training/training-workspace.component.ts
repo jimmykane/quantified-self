@@ -6,6 +6,8 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import type {
   DashboardTrainingBuildComparisonDiscipline,
   DashboardTrainingDisciplineSummary,
+  DashboardTrainingRecoveryComparison,
+  DashboardTrainingRecoveryWindow,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
   buildTrainingCapacityViewModels,
@@ -26,11 +28,7 @@ import {
   buildDashboardPowerCurveContextFromSnapshot,
   type DashboardPowerCurveContext,
 } from '../../helpers/dashboard-power-curve.helper';
-import {
-  buildDashboardSleepTrendContext,
-  formatSleepDuration,
-  type DashboardSleepTrendContext,
-} from '../../helpers/dashboard-sleep-chart.helper';
+import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
 import {
   buildTrainingAnalysis,
   type TrainingAnalysisInsight,
@@ -39,7 +37,6 @@ import {
   type TrainingWindowComparison,
   resolveTrainingComparisonState,
 } from '../../helpers/training-analysis.helper';
-import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import {
   TrainingBuildBenchmarkDialogComponent,
@@ -64,7 +61,6 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import type { SleepSession } from '@shared/sleep';
 
 interface TrainingMixDisciplineViewModel {
   summary: DashboardTrainingDisciplineSummary;
@@ -113,6 +109,7 @@ interface TrainingBuildCardViewModel {
   rangeText: string;
   emptyMessage: string | null;
   metricRows: TrainingBuildMetricRowViewModel[];
+  recovery: TrainingRecoveryViewModel | null;
 }
 
 interface TrainingBuildMetricRowViewModel {
@@ -123,7 +120,36 @@ interface TrainingBuildMetricRowViewModel {
   isIntensity: boolean;
 }
 
-const TRAINING_SLEEP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+type TrainingRecoveryState = 'updating' | 'unavailable' | 'empty' | 'limited' | 'ready';
+
+interface TrainingRecoveryMetricRowViewModel {
+  label: string;
+  currentText: string;
+  referenceText: string;
+  deltaText: string;
+}
+
+interface TrainingRecoveryViewModel {
+  state: TrainingRecoveryState;
+  isUpdating: boolean;
+  currentLabel: string;
+  referenceLabel: string;
+  detailText: string;
+  sourceText: string;
+  metricRows: TrainingRecoveryMetricRowViewModel[];
+}
+
+function createEmptyTrainingRecoveryViewModel(): TrainingRecoveryViewModel {
+  return {
+    state: 'updating',
+    isUpdating: true,
+    currentLabel: 'Now',
+    referenceLabel: 'Usual',
+    detailText: 'Preparing recovery context from your recorded overnight sleep.',
+    sourceText: 'Sleep context does not change your Training state.',
+    metricRows: [],
+  };
+}
 
 function createEmptyTrainingStatusViewModel(): TrainingStatusViewModel {
   return {
@@ -159,7 +185,7 @@ function createEmptyTrainingLoadMetricsViewModel(): TrainingLoadMetricsViewModel
 export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public isLoading = true;
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
-  public sleepTrend: DashboardSleepTrendContext | null = null;
+  public trainingRecovery = createEmptyTrainingRecoveryViewModel();
   public cyclingPowerCurve: DashboardPowerCurveContext | null = null;
   public runningPowerCurve: DashboardPowerCurveContext | null = null;
   public trainingStatus = createEmptyTrainingStatusViewModel();
@@ -195,7 +221,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   constructor(
     private readonly authService: AppAuthService,
     private readonly derivedMetricsService: DashboardDerivedMetricsService,
-    private readonly sleepService: AppSleepService,
     private readonly themeService: AppThemeService,
     private readonly dialog: MatDialog,
     private readonly changeDetector: ChangeDetectorRef,
@@ -244,15 +269,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
       }
 
-      const endMs = Date.now();
-      const startMs = endMs - TRAINING_SLEEP_WINDOW_MS;
-      this.dataSubscriptions.add(this.sleepService
-        .watchForDashboard(uid, startMs, endMs)
-        .subscribe((sessions) => {
-          this.sleepTrend = this.buildSleepTrend(sessions || [], startMs, endMs);
-          this.refreshDerivedViewModels();
-          this.changeDetector.markForCheck();
-        }));
     }));
   }
 
@@ -289,7 +305,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     activeVisibilityDialogRef?.close();
     this.isLoading = true;
     this.derivedState = createDashboardDerivedMetricsMissingState();
-    this.sleepTrend = null;
+    this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
     this.cyclingPowerCurve = null;
     this.runningPowerCurve = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
@@ -662,6 +678,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     );
     this.trainingStatus = this.buildTrainingStatus(analysis, this.trainingComparisonState);
     this.trainingInsights = analysis.insights;
+    this.trainingRecovery = this.buildTrainingRecoveryViewModel(
+      this.derivedState.trainingBuildComparison?.recovery || null,
+      'Now',
+      'Usual',
+      analysis,
+    );
     this.loadMetrics = {
       ctlText: this.formatNumber(latestFormPoint?.ctl),
       atlText: this.formatNumber(latestFormPoint?.atl),
@@ -713,8 +735,213 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         ),
         emptyMessage: this.resolveTrainingBuildEmptyMessage(source),
         metricRows: this.buildTrainingBuildMetricRows(source, discipline),
+        recovery: state === 'ready' && source?.recovery
+          ? this.buildTrainingRecoveryViewModel(source.recovery, 'Now', 'Benchmark')
+          : null,
       };
     });
+  }
+
+  private buildTrainingRecoveryViewModel(
+    comparison: DashboardTrainingRecoveryComparison | null,
+    currentLabel: string,
+    referenceLabel: string,
+    analysis?: TrainingAnalysis,
+  ): TrainingRecoveryViewModel {
+    const snapshotStatus = this.derivedState.trainingBuildComparisonStatus;
+    const isUpdating = snapshotStatus !== 'ready' && snapshotStatus !== 'failed';
+    if (snapshotStatus === 'failed') {
+      return {
+        state: 'unavailable',
+        isUpdating: false,
+        currentLabel,
+        referenceLabel,
+        detailText: 'Recovery context could not be refreshed. Refresh to request another derived snapshot.',
+        sourceText: 'Cached sleep values are withheld because they may be stale. Sleep context does not change your Training state.',
+        metricRows: [],
+      };
+    }
+    if (!comparison) {
+      return {
+        state: 'updating',
+        isUpdating,
+        currentLabel,
+        referenceLabel,
+        detailText: 'Preparing recovery context from your recorded overnight sleep.',
+        sourceText: 'Sleep context does not change your Training state.',
+        metricRows: [],
+      };
+    }
+    const hasRecordedSleep = comparison.current.recordedNightCount > 0
+      || comparison.reference.recordedNightCount > 0;
+    const state: TrainingRecoveryState = !hasRecordedSleep
+      ? 'empty'
+      : (comparison.isComparable ? 'ready' : 'limited');
+    return {
+      state,
+      isUpdating,
+      currentLabel,
+      referenceLabel,
+      detailText: this.resolveTrainingRecoveryDetail(comparison, currentLabel, referenceLabel, analysis),
+      sourceText: this.resolveTrainingRecoverySourceText(comparison, currentLabel, referenceLabel),
+      metricRows: hasRecordedSleep ? this.buildTrainingRecoveryRows(comparison) : [],
+    };
+  }
+
+  private buildTrainingRecoveryRows(
+    comparison: DashboardTrainingRecoveryComparison,
+  ): TrainingRecoveryMetricRowViewModel[] {
+    const { current, reference, isComparable } = comparison;
+    return [{
+      label: 'Sleep / night',
+      currentText: this.formatTrainingRecoveryDuration(current.averageSleepSeconds),
+      referenceText: this.formatTrainingRecoveryDuration(reference.averageSleepSeconds),
+      deltaText: isComparable
+        ? this.formatTrainingRecoveryDurationDelta(current.averageSleepSeconds, reference.averageSleepSeconds)
+        : '—',
+    }, {
+      label: 'Recorded nights',
+      currentText: `${current.recordedNightCount} / ${current.expectedNightCount}`,
+      referenceText: `${reference.recordedNightCount} / ${reference.expectedNightCount}`,
+      deltaText: isComparable ? this.formatTrainingRecoveryCoverageDelta(current, reference) : '—',
+    }, {
+      label: 'Bedtime variation',
+      currentText: this.formatTrainingRecoveryVariation(current.bedtimeVariationMinutes),
+      referenceText: this.formatTrainingRecoveryVariation(reference.bedtimeVariationMinutes),
+      deltaText: isComparable
+        ? this.formatTrainingRecoveryVariationDelta(current.bedtimeVariationMinutes, reference.bedtimeVariationMinutes)
+        : '—',
+    }, {
+      label: 'Overnight HRV',
+      currentText: this.formatTrainingRecoveryHrv(current.medianOvernightHrvMs),
+      referenceText: this.formatTrainingRecoveryHrv(reference.medianOvernightHrvMs),
+      deltaText: isComparable
+        ? this.formatTrainingRecoveryHrvDelta(current.medianOvernightHrvMs, reference.medianOvernightHrvMs)
+        : '—',
+    }];
+  }
+
+  private resolveTrainingRecoveryDetail(
+    comparison: DashboardTrainingRecoveryComparison,
+    currentLabel: string,
+    referenceLabel: string,
+    analysis?: TrainingAnalysis,
+  ): string {
+    const { current, reference } = comparison;
+    if (current.recordedNightCount === 0 && reference.recordedNightCount === 0) {
+      return 'No recorded overnight sleep in these windows. Sync sleep from a supported provider to add recovery context.';
+    }
+    if (!comparison.sameProvider && current.provider && reference.provider) {
+      return `${currentLabel} and ${referenceLabel.toLowerCase()} use different sleep providers, so values are shown without deltas.`;
+    }
+    if (!comparison.isComparable) {
+      const currentMinimum = Math.max(7, Math.ceil(current.expectedNightCount * 0.5));
+      const referenceMinimum = Math.max(7, Math.ceil(reference.expectedNightCount * 0.5));
+      return `More recorded nights are needed for a fair comparison (${current.recordedNightCount} / ${currentMinimum} ${currentLabel.toLowerCase()}, ${reference.recordedNightCount} / ${referenceMinimum} ${referenceLabel.toLowerCase()}).`;
+    }
+    if (!analysis) {
+      return 'Recorded recovery is comparable across both build windows.';
+    }
+    const loadDelta = analysis.duration.deltaPercent;
+    const sleepDeltaSeconds = current.averageSleepSeconds !== null && reference.averageSleepSeconds !== null
+      ? current.averageSleepSeconds - reference.averageSleepSeconds
+      : null;
+    const loadText = loadDelta === null
+      ? 'Your usual training-time baseline is still building.'
+      : (Math.abs(loadDelta) < 10
+        ? 'Training time is close to your usual level.'
+        : `Training time is ${this.formatNumber(Math.abs(loadDelta), 0)}% ${loadDelta > 0 ? 'above' : 'below'} usual.`);
+    const sleepText = sleepDeltaSeconds === null || Math.abs(sleepDeltaSeconds) < 15 * 60
+      ? 'Recorded sleep per night is similar.'
+      : `Recorded sleep averages ${this.formatTrainingRecoveryDuration(Math.abs(sleepDeltaSeconds))} ${sleepDeltaSeconds > 0 ? 'longer' : 'shorter'} per night.`;
+    return `${loadText} ${sleepText}`;
+  }
+
+  private resolveTrainingRecoverySourceText(
+    comparison: DashboardTrainingRecoveryComparison,
+    currentLabel: string,
+    referenceLabel: string,
+  ): string {
+    const currentProvider = this.formatTrainingSleepProvider(comparison.current.provider);
+    const referenceProvider = this.formatTrainingSleepProvider(comparison.reference.provider);
+    const providerText = comparison.sameProvider && currentProvider
+      ? currentProvider
+      : (currentProvider || referenceProvider
+        ? `${currentLabel}: ${currentProvider || 'no data'} · ${referenceLabel}: ${referenceProvider || 'no data'}`
+        : 'No sleep source');
+    const contextNote = referenceLabel === 'Usual'
+      ? 'Main overnight sleep only; naps are excluded. Sleep context does not change your Training state.'
+      : 'Main overnight sleep only; naps are excluded. This is context, not an explanation of training changes.';
+    return `${providerText} · ${contextNote}`;
+  }
+
+  private formatTrainingSleepProvider(provider: DashboardTrainingRecoveryWindow['provider']): string | null {
+    if (provider === 'GarminAPI') {
+      return 'Garmin';
+    }
+    if (provider === 'SuuntoApp') {
+      return 'Suunto';
+    }
+    if (provider === 'COROSAPI') {
+      return 'COROS';
+    }
+    return null;
+  }
+
+  private formatTrainingRecoveryDuration(value: number | null): string {
+    return value === null ? '--' : formatSleepDuration(value);
+  }
+
+  private formatTrainingRecoveryDurationDelta(current: number | null, reference: number | null): string {
+    if (current === null || reference === null) {
+      return '--';
+    }
+    const delta = current - reference;
+    if (Math.abs(delta) < 60) {
+      return 'Same';
+    }
+    return `${delta > 0 ? '+' : '−'}${this.formatTrainingRecoveryDuration(Math.abs(delta))}`;
+  }
+
+  private formatTrainingRecoveryCoverageDelta(
+    current: DashboardTrainingRecoveryWindow,
+    reference: DashboardTrainingRecoveryWindow,
+  ): string {
+    const deltaPoints = Math.round(
+      ((current.recordedNightCount / current.expectedNightCount)
+        - (reference.recordedNightCount / reference.expectedNightCount)) * 100,
+    );
+    return deltaPoints === 0 ? 'Same coverage' : `${deltaPoints > 0 ? '+' : '−'}${Math.abs(deltaPoints)} pts`;
+  }
+
+  private formatTrainingRecoveryVariation(value: number | null): string {
+    return value === null ? '--' : `±${this.formatNumber(value, 0)}m`;
+  }
+
+  private formatTrainingRecoveryVariationDelta(current: number | null, reference: number | null): string {
+    if (current === null || reference === null) {
+      return '--';
+    }
+    const delta = Math.round(current - reference);
+    if (delta === 0) {
+      return 'Same';
+    }
+    return `${Math.abs(delta)}m ${delta < 0 ? 'steadier' : 'more variable'}`;
+  }
+
+  private formatTrainingRecoveryHrv(value: number | null): string {
+    return value === null ? '--' : `${this.formatNumber(value, 1)} ms`;
+  }
+
+  private formatTrainingRecoveryHrvDelta(current: number | null, reference: number | null): string {
+    if (current === null || reference === null) {
+      return '--';
+    }
+    const delta = current - reference;
+    if (Math.abs(delta) < 0.05) {
+      return 'Same';
+    }
+    return `${this.formatNumber(delta, 1, true)} ms`;
   }
 
   private resolveTrainingBuildEmptyMessage(source: DashboardTrainingBuildComparisonDiscipline | null): string | null {
@@ -951,13 +1178,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     }
     const direction = comparison.delta > 0 ? 'more' : 'fewer';
     return `${this.formatNumber(Math.abs(comparison.delta), 0)} ${direction} than usual`;
-  }
-
-  private buildSleepTrend(sessions: SleepSession[], startMs: number, endMs: number): DashboardSleepTrendContext {
-    return buildDashboardSleepTrendContext(sessions, {
-      nowMs: endMs,
-      sleepWindow: { startMs, endMs },
-    });
   }
 
 }

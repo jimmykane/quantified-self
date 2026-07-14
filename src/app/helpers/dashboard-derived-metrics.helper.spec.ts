@@ -348,16 +348,36 @@ describe('dashboard-derived-metrics.helper', () => {
   });
 
   it('normalizes separate sport build comparisons and preserves unavailable optional metrics', () => {
+    const emptyRecoveryWindow = (windowStartDayMs: number, periodDays: number) => ({
+      periodDays,
+      windowStartDayMs,
+      windowEndDayMs: windowStartDayMs + ((periodDays - 1) * 24 * 60 * 60 * 1000),
+      provider: null,
+      recordedNightCount: 0,
+      expectedNightCount: periodDays,
+      coverage: 'none',
+      averageSleepSeconds: null,
+      bedtimeVariationMinutes: null,
+      medianOvernightHrvMs: null,
+      overnightHrvNightCount: 0,
+    });
+    const emptyRecoveryComparison = (currentStartDayMs: number, currentDays: number, referenceStartDayMs: number, referenceDays: number) => ({
+      current: emptyRecoveryWindow(currentStartDayMs, currentDays),
+      reference: emptyRecoveryWindow(referenceStartDayMs, referenceDays),
+      sameProvider: false,
+      isComparable: false,
+    });
     const payload = {
       dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
       excludesMergedEvents: true,
+      recovery: emptyRecoveryComparison(Date.UTC(2026, 5, 3), 28, Date.UTC(2026, 2, 11), 84),
       disciplines: [{
         discipline: 'running',
         status: 'ready',
         selection: {
           mode: 'event', durationWeeks: 12, eventId: 'race-1', selectionKey: 'event:12:race-1',
-          windowStartDayMs: Date.UTC(2026, 2, 1), windowEndDayMs: Date.UTC(2026, 4, 23), label: ' Spring marathon ',
+          windowStartDayMs: Date.UTC(2026, 0, 14), windowEndDayMs: Date.UTC(2026, 3, 7), label: ' Spring marathon ',
         },
         current: {
           periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 3, 8), windowEndDayMs: Date.UTC(2026, 5, 30),
@@ -369,7 +389,7 @@ describe('dashboard-derived-metrics.helper', () => {
           openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
         },
         benchmark: {
-          periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 2, 1), windowEndDayMs: Date.UTC(2026, 4, 23),
+          periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 0, 14), windowEndDayMs: Date.UTC(2026, 3, 7),
           activityCount: 9, durationSeconds: 14_000, distanceMeters: 94_000, distanceEventCount: 9,
           trainingStressScore: 510, trainingStressScoreEventCount: 9, activeWeekCount: 8,
           longestActivityDurationSeconds: 4_000, easySeconds: 8_000, moderateSeconds: 3_000, hardSeconds: 1_000,
@@ -377,8 +397,9 @@ describe('dashboard-derived-metrics.helper', () => {
           poolAveragePaceSecondsPer100m: null, poolPaceActivityCount: 0,
           openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
         },
+        recovery: emptyRecoveryComparison(Date.UTC(2026, 3, 8), 84, Date.UTC(2026, 0, 14), 84),
         suggestedRaces: [{
-          eventId: 'race-1', startDayMs: Date.UTC(2026, 4, 24), label: 'Spring marathon',
+          eventId: 'race-1', startDayMs: Date.UTC(2026, 3, 8), label: 'Spring marathon',
           distanceMeters: 42_195, durationSeconds: 12_600, trainingStressScore: 310,
         }],
         suggestedEvents: [{
@@ -386,9 +407,9 @@ describe('dashboard-derived-metrics.helper', () => {
           distanceMeters: 18_000, durationSeconds: 6_000, trainingStressScore: null,
         }],
       }, {
-        discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
+        discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, recovery: null, suggestedRaces: [], suggestedEvents: [],
       }, {
-        discipline: 'swimming', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
+        discipline: 'swimming', status: 'not-configured', selection: null, current: null, benchmark: null, recovery: null, suggestedRaces: [], suggestedEvents: [],
       }],
     };
     const context = resolveDashboardTrainingBuildComparisonContext(payload);
@@ -405,6 +426,28 @@ describe('dashboard-derived-metrics.helper', () => {
     ]);
     expect(context?.disciplines[1].status).toBe('not-configured');
     expect(context?.disciplines[1].suggestedEvents).toEqual([]);
+    expect(context?.recovery.current.periodDays).toBe(28);
+    expect(context?.disciplines[0].recovery?.reference.periodDays).toBe(84);
+
+    Object.assign(payload.recovery.current, {
+      provider: 'GarminAPI',
+      recordedNightCount: 5,
+      coverage: 'limited',
+      averageSleepSeconds: 8 * 60 * 60,
+      bedtimeVariationMinutes: 721,
+    });
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+    Object.assign(payload.recovery.current, {
+      provider: null,
+      recordedNightCount: 0,
+      coverage: 'none',
+      averageSleepSeconds: null,
+      bedtimeVariationMinutes: null,
+    });
+
+    payload.recovery.current.recordedNightCount = 1;
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+    payload.recovery.current.recordedNightCount = 0;
 
     payload.disciplines[0].suggestedEvents[0].eventId = 'race-1';
     expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();

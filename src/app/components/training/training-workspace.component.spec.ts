@@ -4,8 +4,6 @@ import { NEVER, of, Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { AppSleepService } from '../../services/app.sleep.service';
-import { AppEventService } from '../../services/app.event.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import {
   DashboardDerivedMetricsService,
@@ -39,8 +37,6 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
-        { provide: AppEventService, useValue: { getEventsBy: vi.fn(() => of([])) } },
-        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -74,8 +70,6 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
-        { provide: AppEventService, useValue: { getEventsBy: vi.fn(() => of([])) } },
-        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -87,7 +81,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming sessions.');
-    expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBe(3);
     expect(fixture.nativeElement.textContent).not.toContain('What changed from your normal');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
       { uid: 'user-1' },
@@ -134,8 +128,6 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
-        { provide: AppEventService, useValue: { getEventsBy: vi.fn(() => of([])) } },
-        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -205,7 +197,6 @@ describe('TrainingWorkspaceComponent', () => {
           useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['cycling'] } } }) },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
-        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -254,7 +245,6 @@ describe('TrainingWorkspaceComponent', () => {
           useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['swimming'] } } }) },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
-        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -278,7 +268,6 @@ describe('TrainingWorkspaceComponent', () => {
     const dialogRef = { afterClosed: () => afterClosed };
     const dialog = { open: vi.fn(() => dialogRef) };
     const component = new TrainingWorkspaceComponent(
-      {} as any,
       {} as any,
       {} as any,
       { appTheme: () => AppThemes.Normal } as any,
@@ -321,7 +310,6 @@ describe('TrainingWorkspaceComponent', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
-      {} as any,
       { appTheme: () => AppThemes.Normal } as any,
       dialog as any,
       { markForCheck: vi.fn() } as any,
@@ -341,7 +329,6 @@ describe('TrainingWorkspaceComponent', () => {
     const afterClosed = new Subject<{ saved: true; visibleDisciplines: ['cycling'] }>();
     const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };
     const component = new TrainingWorkspaceComponent(
-      {} as any,
       {} as any,
       {} as any,
       { appTheme: () => AppThemes.Normal } as any,
@@ -366,7 +353,6 @@ describe('TrainingWorkspaceComponent', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
-      {} as any,
       { appTheme: () => AppThemes.Normal } as any,
       dialog as any,
       { markForCheck: vi.fn() } as any,
@@ -386,7 +372,6 @@ describe('TrainingWorkspaceComponent', () => {
 
   it('distinguishes benchmark card states and formats comparison deltas without a chart', () => {
     const component = new TrainingWorkspaceComponent(
-      {} as any,
       {} as any,
       {} as any,
       { appTheme: () => AppThemes.Normal } as any,
@@ -432,6 +417,43 @@ describe('TrainingWorkspaceComponent', () => {
     expect((component as any).formatTrainingBuildActiveWeeks(8, 12)).toBe('8 / 12');
     expect((component as any).formatTrainingBuildActiveWeeks(8, null)).toBe('--');
 
+    component.derivedState = { ...component.derivedState, trainingBuildComparisonStatus: 'ready' };
+    const recoveryComparison = {
+      sameProvider: true,
+      isComparable: true,
+      current: {
+        periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
+        recordedNightCount: 20, expectedNightCount: 28, coverage: 'sufficient',
+        averageSleepSeconds: 8 * 3600, bedtimeVariationMinutes: 30,
+        medianOvernightHrvMs: 60, overnightHrvNightCount: 20,
+      },
+      reference: {
+        periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
+        recordedNightCount: 50, expectedNightCount: 84, coverage: 'sufficient',
+        averageSleepSeconds: 7 * 3600, bedtimeVariationMinutes: 45,
+        medianOvernightHrvMs: 50, overnightHrvNightCount: 50,
+      },
+    };
+    const recoveryView = (component as any).buildTrainingRecoveryViewModel(recoveryComparison, 'Now', 'Usual');
+    expect(recoveryView).toMatchObject({ state: 'ready', isUpdating: false });
+    expect(recoveryView.metricRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Sleep / night', currentText: '8h 00m', deltaText: '+1h 00m' }),
+      expect.objectContaining({ label: 'Bedtime variation', deltaText: '15m steadier' }),
+      expect.objectContaining({ label: 'Overnight HRV', deltaText: '+10 ms' }),
+    ]));
+    expect(recoveryView.sourceText).toContain('Garmin');
+    expect(recoveryView.sourceText).toContain('naps are excluded');
+
+    component.derivedState = { ...component.derivedState, trainingBuildComparisonStatus: 'failed' };
+    const failedRecoveryView = (component as any).buildTrainingRecoveryViewModel(recoveryComparison, 'Now', 'Usual');
+    expect(failedRecoveryView).toMatchObject({
+      state: 'unavailable',
+      isUpdating: false,
+      metricRows: [],
+    });
+    expect(failedRecoveryView.detailText).toContain('could not be refreshed');
+    expect(failedRecoveryView.sourceText).toContain('may be stale');
+
     const swimWindow = {
       periodWeeks: 12, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 4,
       durationSeconds: 10_000, distanceMeters: 8_000, distanceEventCount: 4,
@@ -470,7 +492,6 @@ describe('TrainingWorkspaceComponent', () => {
 
   it('updates an open benchmark dialog when event suggestions arrive', () => {
     const component = new TrainingWorkspaceComponent(
-      {} as any,
       {} as any,
       {} as any,
       { appTheme: () => AppThemes.Normal } as any,
@@ -525,8 +546,6 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
-        { provide: AppEventService, useValue: { getEventsBy: vi.fn(() => of([])) } },
-        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],

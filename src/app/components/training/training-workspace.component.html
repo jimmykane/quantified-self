@@ -63,6 +63,28 @@
           </article>
         }
       </div>
+      <article class="training-recovery-panel qs-glass-card-panel" aria-labelledby="training-recovery-title">
+        <header class="training-recovery-header">
+          <div>
+            <span class="training-metric-label">Recovery context</span>
+            <h3 id="training-recovery-title">Recorded sleep alongside training</h3>
+          </div>
+          <span>Current 28 days / previous 84 days</span>
+        </header>
+        @if (trainingRecovery.isUpdating) {
+          <p class="training-recovery-update" role="status">Updating recovery context…</p>
+        }
+        <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
+        @if (trainingRecovery.metricRows.length) {
+          <dl class="training-recovery-table">
+            <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
+            @for (row of trainingRecovery.metricRows; track row.label) {
+              <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd>{{ row.deltaText }}</dd></div>
+            }
+          </dl>
+        }
+        <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
+      </article>
     </section>
 
     <section class="training-section" aria-labelledby="training-build-title">
@@ -118,6 +140,24 @@
                   <div [class.training-build-intensity-row]="row.isIntensity"><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.benchmarkText }}</dd><dd>{{ row.deltaText }}</dd></div>
                 }
               </dl>
+              @if (card.recovery; as recovery) {
+                <section class="training-build-recovery" [attr.aria-label]="card.label + ' recovery comparison'">
+                  <div class="training-build-recovery-heading">
+                    <strong>Recovery during these builds</strong>
+                    @if (recovery.isUpdating) { <span role="status">Updating…</span> }
+                  </div>
+                  <p>{{ recovery.detailText }}</p>
+                  @if (recovery.metricRows.length) {
+                    <dl class="training-recovery-table training-build-recovery-table">
+                      <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ recovery.currentLabel }}</dd><dd>{{ recovery.referenceLabel }}</dd><dd>Change</dd></div>
+                      @for (row of recovery.metricRows; track row.label) {
+                        <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd>{{ row.deltaText }}</dd></div>
+                      }
+                    </dl>
+                  }
+                  <small>{{ recovery.sourceText }}</small>
+                </section>
+              }
               @if (card.discipline === 'swimming') {
                 <p class="training-build-footnote">Pool and open-water pace stay separate. Missing pace, TSS, or intensity remains unavailable rather than zero.</p>
               } @else {
@@ -295,9 +335,6 @@
         }
         <article class="training-chart-panel qs-glass-card-panel">
           <app-efficiency-trend-chart [trend]="derivedState.efficiencyTrend" [status]="derivedState.efficiencyTrendStatus" [darkTheme]="isDarkTheme()" range="1y"></app-efficiency-trend-chart>
-        </article>
-        <article class="training-chart-panel qs-glass-card-panel">
-          <app-sleep-trend-chart [sleepTrend]="sleepTrend" sleepRange="14d" sleepWindowLabel="Last 14 days" [darkTheme]="isDarkTheme()"></app-sleep-trend-chart>
         </article>
         @if (isCyclingVisible) {
           <article class="training-chart-panel qs-glass-card-panel">

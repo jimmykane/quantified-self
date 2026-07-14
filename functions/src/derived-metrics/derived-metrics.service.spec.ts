@@ -295,6 +295,91 @@ describe('fetchDerivedMetricsEventDocs', () => {
     });
 });
 
+describe('fetchTrainingBuildSleepDocs', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        const query = { where: hoisted.where, select: hoisted.select };
+        hoisted.where.mockReturnValue(query);
+        hoisted.select.mockReturnValue({ get: hoisted.get });
+        hoisted.get
+            .mockResolvedValueOnce({ docs: [{ id: 'historical-sleep' }] })
+            .mockResolvedValueOnce({ docs: [{ id: 'recent-sleep' }] });
+    });
+
+    it('queries only the merged recent and configured benchmark sleep-date ranges', async () => {
+        const { fetchTrainingBuildSleepDocs } = await import('./derived-metrics.service');
+        const docs = await fetchTrainingBuildSleepDocs(
+            'user-1',
+            [],
+            [],
+            {
+                trainingSettings: {
+                    buildBenchmarks: {
+                        running: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 1) },
+                    },
+                },
+            },
+            Date.UTC(2026, 5, 30, 12),
+        );
+
+        expect(hoisted.where.mock.calls).toEqual([
+            ['sleepDate', '>=', '2026-01-05'],
+            ['sleepDate', '<=', '2026-03-01'],
+            ['sleepDate', '>=', '2026-03-11'],
+            ['sleepDate', '<=', '2026-06-30'],
+        ]);
+        expect(hoisted.select).toHaveBeenCalledTimes(2);
+        expect(hoisted.select).toHaveBeenCalledWith(
+            'source.provider',
+            'sleepDate',
+            'startTimeMs',
+            'endTimeMs',
+            'timezoneOffsetSeconds',
+            'durationSeconds',
+            'isNap',
+            'vitals.overnightHrvMs',
+            'vitals.averageHrvMs',
+        );
+        expect(docs.map(doc => doc.id)).toEqual(['historical-sleep', 'recent-sleep']);
+    });
+
+    it('resolves event-anchored sleep ranges from the selected sport activity without a full metric prebuild', async () => {
+        const { fetchTrainingBuildSleepDocs } = await import('./derived-metrics.service');
+        const raceStartMs = Date.UTC(2026, 0, 1, 8);
+        await fetchTrainingBuildSleepDocs(
+            'user-1',
+            [{
+                id: 'winter-event',
+                data: () => ({ startDate: raceStartMs, name: 'Winter event' }),
+            }] as any,
+            [{
+                id: 'winter-bike',
+                data: () => ({
+                    eventID: 'winter-event',
+                    startDate: raceStartMs,
+                    type: ActivityTypes.Cycling,
+                    stats: {},
+                }),
+            }] as any,
+            {
+                trainingSettings: {
+                    buildBenchmarks: {
+                        cycling: { mode: 'event', durationWeeks: 8, eventId: 'winter-event' },
+                    },
+                },
+            },
+            Date.UTC(2026, 5, 30, 12),
+        );
+
+        expect(hoisted.where.mock.calls).toEqual([
+            ['sleepDate', '>=', '2025-11-06'],
+            ['sleepDate', '<=', '2025-12-31'],
+            ['sleepDate', '>=', '2026-03-11'],
+            ['sleepDate', '<=', '2026-06-30'],
+        ]);
+    });
+});
+
 describe('resolveDerivedMetricSourceRequirements', () => {
     it('marks form docs required for load-backed and KPI metric kinds', async () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
@@ -310,6 +395,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingActivityDocs: false,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
         });
     });
 
@@ -327,6 +413,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingActivityDocs: false,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
         });
     });
 
@@ -339,6 +426,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingActivityDocs: true,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
         });
     });
 
@@ -351,6 +439,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingActivityDocs: true,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
         });
     });
 
@@ -363,6 +452,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingActivityDocs: true,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
         });
     });
 
@@ -375,6 +465,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingActivityDocs: true,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: true,
+            needsTrainingBuildSleepDocs: true,
         });
     });
 
@@ -387,11 +478,224 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingActivityDocs: true,
             needsTrainingSwimLengths: true,
             needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
         });
     });
 });
 
 describe('buildTrainingBuildComparisonMetricPayload', () => {
+    it('compares trustworthy overnight recovery context without treating naps or missing nights as zero', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const buildSleepDocs = (
+            startDayMs: number,
+            dayCount: number,
+            durationSeconds: number,
+            overnightHrvMs: number,
+            prefix: string,
+        ) => Array.from({ length: dayCount }, (_, index) => {
+            const sleepDayMs = startDayMs + (index * 24 * 60 * 60 * 1000);
+            const bedtimeOffsetHours = index % 2 === 0 ? 2 : 1;
+            return {
+                id: `${prefix}-${index}`,
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (bedtimeOffsetHours * 60 * 60 * 1000),
+                    endTimeMs: sleepDayMs + ((durationSeconds / 3600 - bedtimeOffsetHours) * 60 * 60 * 1000),
+                    timezoneOffsetSeconds: 0,
+                    durationSeconds,
+                    isNap: false,
+                    vitals: { overnightHrvMs },
+                }),
+            };
+        });
+        const sleepDocs = [
+            ...buildSleepDocs(Date.UTC(2026, 0, 14), 56, 6.5 * 3600, 45, 'benchmark'),
+            ...buildSleepDocs(Date.UTC(2026, 2, 11), 84, 7 * 3600, 50, 'usual'),
+            ...buildSleepDocs(Date.UTC(2026, 5, 3), 28, 8 * 3600, 60, 'current'),
+            {
+                id: 'ignored-nap',
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: '2026-06-30',
+                    startTimeMs: Date.UTC(2026, 5, 30, 12),
+                    durationSeconds: 4 * 3600,
+                    isNap: true,
+                    vitals: { overnightHrvMs: 100 },
+                }),
+            },
+        ] as any;
+
+        const result = buildTrainingBuildComparisonMetricPayload([], {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 10) },
+                },
+            },
+        }, nowMs, sleepDocs);
+
+        expect(result.payload.recovery).toMatchObject({
+            sameProvider: true,
+            isComparable: true,
+            current: {
+                periodDays: 28,
+                provider: 'GarminAPI',
+                recordedNightCount: 28,
+                coverage: 'sufficient',
+                averageSleepSeconds: 8 * 3600,
+                bedtimeVariationMinutes: 30,
+                medianOvernightHrvMs: 60,
+            },
+            reference: {
+                periodDays: 84,
+                provider: 'GarminAPI',
+                recordedNightCount: 84,
+                coverage: 'sufficient',
+                averageSleepSeconds: 7 * 3600,
+                medianOvernightHrvMs: 50,
+            },
+        });
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+        expect(running?.recovery).toMatchObject({
+            sameProvider: true,
+            isComparable: true,
+            current: { periodDays: 56, averageSleepSeconds: 7.5 * 3600 },
+            reference: { periodDays: 56, averageSleepSeconds: 6.5 * 3600 },
+        });
+        expect(result.payload.disciplines.find(item => item.discipline === 'cycling')?.recovery).toBeNull();
+    });
+
+    it('withholds recovery comparability across providers and keeps absent HRV null', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const buildProviderNights = (
+            provider: 'GarminAPI' | 'SuuntoApp',
+            startDayMs: number,
+            count: number,
+            prefix: string,
+        ) => Array.from({ length: count }, (_, index) => {
+            const sleepDayMs = startDayMs + (index * 24 * 60 * 60 * 1000);
+            return {
+                id: `${prefix}-${index}`,
+                data: () => ({
+                    source: { provider },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (2 * 60 * 60 * 1000),
+                    durationSeconds: 7.5 * 3600,
+                    timezoneOffsetSeconds: 0,
+                    isNap: false,
+                    vitals: {},
+                }),
+            };
+        });
+        const sleepDocs = [
+            ...buildProviderNights('SuuntoApp', Date.UTC(2026, 2, 11), 42, 'reference'),
+            ...buildProviderNights('GarminAPI', Date.UTC(2026, 5, 3), 14, 'current'),
+        ] as any;
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs,
+        );
+
+        expect(result.payload.recovery).toMatchObject({
+            sameProvider: false,
+            isComparable: false,
+            current: {
+                provider: 'GarminAPI',
+                coverage: 'sufficient',
+                medianOvernightHrvMs: null,
+                overnightHrvNightCount: 0,
+            },
+            reference: {
+                provider: 'SuuntoApp',
+                coverage: 'sufficient',
+                medianOvernightHrvMs: null,
+                overnightHrvNightCount: 0,
+            },
+        });
+    });
+
+    it('uses one canonical main sleep record per provider and sleep date', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const dayMs = 24 * 60 * 60 * 1000;
+        const firstSleepDayMs = Date.UTC(2026, 5, 24);
+        const sleepDocs = Array.from({ length: 7 }, (_, index) => {
+            const sleepDayMs = firstSleepDayMs + (index * dayMs);
+            return {
+                id: `main-${index}`,
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (2 * 60 * 60 * 1000),
+                    durationSeconds: 8 * 3600,
+                    timezoneOffsetSeconds: 0,
+                    isNap: false,
+                    vitals: { overnightHrvMs: 50 },
+                }),
+            };
+        });
+        sleepDocs.push({
+            id: 'duplicate-main-record',
+            data: () => ({
+                source: { provider: 'GarminAPI' },
+                sleepDate: '2026-06-24',
+                startTimeMs: firstSleepDayMs - (2 * 60 * 60 * 1000),
+                durationSeconds: 8 * 3600,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                vitals: { overnightHrvMs: 50 },
+            }),
+        });
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs as any,
+        );
+
+        expect(result.payload.recovery.current).toMatchObject({
+            provider: 'GarminAPI',
+            recordedNightCount: 7,
+            averageSleepSeconds: 8 * 3600,
+            overnightHrvNightCount: 7,
+        });
+    });
+
+    it('measures bedtime variation on a circular clock for daytime and shift sleep', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const dayMs = 24 * 60 * 60 * 1000;
+        const firstSleepDayMs = Date.UTC(2026, 5, 25);
+        const sleepDocs = Array.from({ length: 6 }, (_, index) => {
+            const sleepDayMs = firstSleepDayMs + (index * dayMs);
+            const localBedtimeHour = index % 2 === 0 ? 10 : 14;
+            return {
+                id: `shift-${index}`,
+                data: () => ({
+                    source: { provider: 'SuuntoApp' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs + (localBedtimeHour * 60 * 60 * 1000),
+                    durationSeconds: 8 * 3600,
+                    timezoneOffsetSeconds: 0,
+                    isNap: false,
+                    vitals: {},
+                }),
+            };
+        });
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs as any,
+        );
+
+        expect(result.payload.recovery.current.bedtimeVariationMinutes).toBe(120);
+    });
+
     it('keeps sport windows separate, excludes the event anchor, and leaves optional metrics explicit', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);

@@ -32,6 +32,7 @@ const hoisted = vi.hoisted(() => ({
     fetchDerivedMetricsEventDocs: vi.fn(),
     fetchRecoveryLookbackEventDocs: vi.fn(),
     fetchTrainingBuildBenchmarkSettings: vi.fn(),
+    fetchTrainingBuildSleepDocs: vi.fn(),
     getDerivedRecoveryLookbackWindowSeconds: vi.fn(() => 0),
     isDerivedMetricsUserWriteBlocked: vi.fn(),
     markDerivedMetricSnapshotsBuilding: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
         fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
         fetchTrainingBuildBenchmarkSettings: hoisted.fetchTrainingBuildBenchmarkSettings,
+        fetchTrainingBuildSleepDocs: hoisted.fetchTrainingBuildSleepDocs,
         getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
         isDerivedMetricsUserWriteBlocked: hoisted.isDerivedMetricsUserWriteBlocked,
         markDerivedMetricSnapshotsBuilding: hoisted.markDerivedMetricSnapshotsBuilding,
@@ -86,6 +88,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.fetchDerivedMetricsActivityDocs.mockResolvedValue([{ id: 'activity-doc' }] as any);
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValue([{ id: 'recovery-doc' }] as any);
         hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValue({ trainingSettings: {} });
+        hoisted.fetchTrainingBuildSleepDocs.mockResolvedValue([{ id: 'sleep-doc' }] as any);
         hoisted.writeDerivedMetricSnapshotsReady.mockResolvedValue(undefined);
         hoisted.completeDerivedMetricsProcessing.mockResolvedValue({
             requeued: false,
@@ -111,6 +114,7 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [{ id: 'recovery-doc' }],
             trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 11,
             formDailyLoads: [],
             formSourceEventCount: null,
@@ -143,6 +147,7 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [],
             trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 12,
             formDailyLoads: [],
             formSourceEventCount: null,
@@ -184,6 +189,7 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [],
             trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 12,
             formDailyLoads: [
                 { dayMs: Date.UTC(2026, 0, 1), load: 10 },
@@ -255,6 +261,13 @@ describe('processDerivedMetricsTask', () => {
         expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
         expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-training-build');
         expect(hoisted.fetchTrainingBuildBenchmarkSettings).toHaveBeenCalledWith('user-training-build');
+        expect(hoisted.fetchTrainingBuildSleepDocs).toHaveBeenCalledWith(
+            'user-training-build',
+            [{ id: 'training-doc' }],
+            [{ id: 'activity-doc' }],
+            settings,
+            expect.any(Number),
+        );
         expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-training-build', [
             DERIVED_METRIC_KINDS.TrainingBuildComparison,
         ], {
@@ -262,6 +275,7 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [],
             trainingActivityDocs: [{ id: 'activity-doc' }],
             trainingBuildBenchmarkSettings: settings,
+            trainingBuildSleepDocs: [{ id: 'sleep-doc' }],
         }, expect.objectContaining({ builtFromEventMutationVersion: 13 }));
     });
 
@@ -357,6 +371,7 @@ describe('processDerivedMetricsTask', () => {
             recoveryNowDocs: [],
             trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 13,
             formDailyLoads: [],
             formSourceEventCount: null,

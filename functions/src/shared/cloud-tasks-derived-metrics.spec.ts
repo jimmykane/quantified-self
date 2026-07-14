@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { enqueueDerivedMetricsIngressTask, enqueueDerivedMetricsTask } from './cloud-tasks';
+import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 
 const hoisted = vi.hoisted(() => {
     const mockTaskQueue = { enqueue: vi.fn() };
@@ -70,6 +71,43 @@ describe('derived metrics task dispatch', () => {
         expect(hoisted.mockTaskQueue.enqueue.mock.calls[1][1]).toMatchObject({
             id: 'derived-metrics-ingress-user-1-1712000040',
         });
+    });
+
+    it('keeps targeted sleep ingress separate from event ingress in the same bucket', async () => {
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            taskScope: 'sleep',
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            incrementEventMutationVersion: false,
+        });
+
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+            {
+                uid: 'user-1',
+                bucketStartEpochSec: 1_712_000_010,
+                metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+                incrementEventMutationVersion: false,
+            },
+            {
+                id: 'derived-metrics-ingress-user-1-1712000010-sleep',
+                scheduleTime: new Date(1_712_000_042_000),
+            },
+        );
+    });
+
+    it('rejects invalid ingress scopes and empty targeted metric lists before dispatch', async () => {
+        await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            taskScope: 'sleep/other',
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+        })).rejects.toThrow('task scope is invalid');
+        await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            taskScope: 'sleep',
+            metricKinds: [],
+        })).rejects.toThrow('metric kinds are invalid');
+        await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+        })).rejects.toThrow('requires a task scope');
+
+        expect(hoisted.mockTaskQueue.enqueue).not.toHaveBeenCalled();
     });
 
     it('honors an explicit ingress delay override', async () => {

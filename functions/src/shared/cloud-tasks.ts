@@ -17,6 +17,10 @@ import {
     REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
 } from './activity-processing-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import {
+    normalizeDerivedMetricKindsStrict,
+    type DerivedMetricKind,
+} from '../../../shared/derived-metrics';
 
 // Lazy-initialized singleton client for performance
 let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
@@ -543,6 +547,11 @@ export async function enqueueDerivedMetricsIngressTask(
     uid: string,
     scheduleDelaySeconds?: number,
     nowMs?: number,
+    options?: {
+        taskScope?: string;
+        metricKinds?: readonly DerivedMetricKind[];
+        incrementEventMutationVersion?: boolean;
+    },
 ): Promise<boolean> {
     const {
         projectId,
@@ -554,6 +563,20 @@ export async function enqueueDerivedMetricsIngressTask(
     }
 
     const safeUid = `${uid}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const taskScope = `${options?.taskScope || ''}`.trim();
+    if (taskScope && !/^[a-zA-Z0-9-_]+$/.test(taskScope)) {
+        throw new Error('Derived metrics ingress task scope is invalid');
+    }
+    const hasTargetedMetricKinds = options?.metricKinds !== undefined;
+    const metricKinds = hasTargetedMetricKinds
+        ? normalizeDerivedMetricKindsStrict(options.metricKinds)
+        : [];
+    if (hasTargetedMetricKinds && !metricKinds.length) {
+        throw new Error('Derived metrics ingress metric kinds are invalid');
+    }
+    if (hasTargetedMetricKinds && !taskScope) {
+        throw new Error('Targeted derived metrics ingress requires a task scope');
+    }
     const bucketSeconds = Math.max(1, Math.floor(Number(derivedMetricsIngressBucketSeconds) || 30));
     const currentEpochSeconds = Math.max(0, Math.floor(((Number.isFinite(nowMs) ? nowMs : Date.now()) as number) / 1000));
     const bucketStartEpochSec = currentEpochSeconds - (currentEpochSeconds % bucketSeconds);
@@ -567,8 +590,13 @@ export async function enqueueDerivedMetricsIngressTask(
     const effectiveScheduleEpochSeconds = overrideScheduleDelaySeconds === null
         ? computedScheduleEpochSec
         : (currentEpochSeconds + effectiveScheduleDelaySeconds);
-    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}`;
-    const payload = { uid, bucketStartEpochSec };
+    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}`;
+    const payload = {
+        uid,
+        bucketStartEpochSec,
+        ...(hasTargetedMetricKinds ? { metricKinds } : {}),
+        ...(options?.incrementEventMutationVersion === false ? { incrementEventMutationVersion: false } : {}),
+    };
 
     return enqueueTaskWithRetry({
         projectId,
