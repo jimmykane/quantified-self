@@ -7,7 +7,7 @@ import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue
 import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { EventWriteSkippedForDeletedUserError, generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
+import { EventWriteSkippedForDeletedUserError, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
 import * as requestPromise from '../request-helper';
 import {
   GarminAPIActivityQueueItemInterface,
@@ -28,6 +28,7 @@ import { uploadDebugFile } from '../debug-utils';
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
+import { resolveProviderImportEventID } from '../queue/provider-event-id';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -363,7 +364,15 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    const eventID = await generateEventID(firebaseUserID, event.startDate);
+    const eventID = await resolveProviderImportEventID({
+      userID: firebaseUserID,
+      startDate: event.startDate,
+      serviceName: ServiceNames.GarminAPI,
+      providerEventID: queueItem.activityFileID,
+      providerEventIDField: 'serviceActivityFileID',
+      providerEventSecondaryID: queueItem.activityFileType,
+      providerEventSecondaryIDField: 'serviceActivityFileType',
+    });
     if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_event_write')) {
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     }

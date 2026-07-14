@@ -13,7 +13,7 @@ import {
   GarminAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, generateEventID, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth, EventWriteSkippedForDeletedUserError } from './utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth, EventWriteSkippedForDeletedUserError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -46,6 +46,7 @@ import {
   markQueueItemDeletedForUserCleanup,
   QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from './queue/cleanup-tombstone';
+import { resolveProviderImportEventID } from './queue/provider-event-id';
 
 export {
   ProviderQueueUserDeletedOrDeletingError,
@@ -731,7 +732,15 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         case ServiceNames.COROSAPI: {
           const corosWorkoutQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
           const corosMetaData = new COROSAPIEventMetaData(corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.openId, corosWorkoutQueueItem.FITFileURI, new Date());
-          const deterministicID = await generateEventID(parentID, event.startDate);
+          const deterministicID = await resolveProviderImportEventID({
+            userID: parentID,
+            startDate: event.startDate,
+            serviceName: ServiceNames.COROSAPI,
+            providerEventID: corosWorkoutQueueItem.workoutID,
+            providerEventIDField: 'serviceWorkoutID',
+            providerEventSecondaryID: corosWorkoutQueueItem.FITFileURI,
+            providerEventSecondaryIDField: 'serviceFITFileURI',
+          });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
             const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
@@ -744,7 +753,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         case ServiceNames.SuuntoApp: {
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
-          const deterministicID = await generateEventID(parentID, event.startDate);
+          const deterministicID = await resolveProviderImportEventID({
+            userID: parentID,
+            startDate: event.startDate,
+            serviceName: ServiceNames.SuuntoApp,
+            providerEventID: suuntoWorkoutQueueItem.workoutID,
+            providerEventIDField: 'serviceWorkoutID',
+          });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
             const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);

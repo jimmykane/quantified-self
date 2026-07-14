@@ -130,6 +130,10 @@ vi.mock('../request-helper', () => ({
     get: vi.fn().mockResolvedValue(new ArrayBuffer(10)),
 }));
 
+vi.mock('../queue/provider-event-id', () => ({
+    resolveProviderImportEventID: vi.fn().mockResolvedValue('event-id'),
+}));
+
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const mod = await importOriginal<any>();
     return {
