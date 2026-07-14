@@ -515,7 +515,7 @@ export interface DerivedTrainingBuildEventSuggestion {
   trainingStressScore: number | null;
 }
 
-export interface DerivedTrainingBuildRaceSuggestion extends DerivedTrainingBuildEventSuggestion {}
+export type DerivedTrainingBuildRaceSuggestion = DerivedTrainingBuildEventSuggestion;
 
 export type DerivedTrainingBuildBenchmarkReference = TrainingBuildBenchmarkSelection & {
   selectionKey: string;
@@ -546,6 +546,25 @@ export interface DerivedTrainingBuildWindow {
   poolPaceActivityCount: number;
   openWaterAveragePaceSecondsPer100m: number | null;
   openWaterPaceActivityCount: number;
+}
+
+export const DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS = 3;
+export const DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS = 5;
+export const DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS = 5;
+export const DERIVED_TRAINING_RECOVERY_MIN_COMPARABLE_NIGHTS = 7;
+export const DERIVED_TRAINING_RECOVERY_MIN_COMPARABLE_COVERAGE = 0.5;
+export const DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS = 60 * 60;
+export const DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS = 16 * 60 * 60;
+export const DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES = 12 * 60;
+
+export function getDerivedTrainingRecoveryMinimumComparableNights(expectedNightCount: number): number {
+  const normalizedExpectedNightCount = Number.isFinite(expectedNightCount)
+    ? Math.max(1, Math.floor(expectedNightCount))
+    : 1;
+  return Math.max(
+    DERIVED_TRAINING_RECOVERY_MIN_COMPARABLE_NIGHTS,
+    Math.ceil(normalizedExpectedNightCount * DERIVED_TRAINING_RECOVERY_MIN_COMPARABLE_COVERAGE),
+  );
 }
 
 export type DerivedTrainingRecoveryCoverage = 'none' | 'limited' | 'sufficient';

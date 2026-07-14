@@ -32,6 +32,7 @@ h3 { margin-bottom: 0; }
 .training-recovery-table dt, .training-recovery-table dd { margin: 0; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
 .training-recovery-table dt { color: var(--mat-sys-on-surface-variant); }
 .training-recovery-table dd { font-weight: 650; text-align: right; }
+.training-recovery-table > div:not(.training-recovery-table-heading) dd { font-family: 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
 .training-recovery-table-heading dt, .training-recovery-table-heading dd { color: var(--mat-sys-on-surface-variant); font-size: 11px; font-weight: 650; text-transform: uppercase; }
 .training-recovery-source { margin: 11px 0 0; color: var(--mat-sys-on-surface-variant); font-size: 12px; line-height: 1.4; }
 .training-metric-label { color: var(--mat-sys-on-surface-variant); font-size: 13px; font-weight: 650; }

@@ -654,7 +654,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
             [],
             {},
             Date.UTC(2026, 5, 30, 12),
-            sleepDocs as any,
+            sleepDocs as unknown as FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>[],
         );
 
         expect(result.payload.recovery.current).toMatchObject({
@@ -694,6 +694,39 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         );
 
         expect(result.payload.recovery.current.bedtimeVariationMinutes).toBe(120);
+    });
+
+    it('keeps malformed finite timestamps and timezone offsets from poisoning bedtime variation', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const dayMs = 24 * 60 * 60 * 1000;
+        const firstSleepDayMs = Date.UTC(2026, 5, 26);
+        const sleepDocs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = firstSleepDayMs + (index * dayMs);
+            return {
+                id: `malformed-time-${index}`,
+                data: () => ({
+                    source: { provider: 'COROSAPI' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: Number.MAX_VALUE,
+                    durationSeconds: 8 * 3600,
+                    timezoneOffsetSeconds: Number.MAX_VALUE,
+                    isNap: false,
+                    vitals: {},
+                }),
+            };
+        });
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs as unknown as FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>[],
+        );
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 0,
+            bedtimeVariationMinutes: null,
+        });
     });
 
     it('keeps sport windows separate, excludes the event anchor, and leaves optional metrics explicit', async () => {

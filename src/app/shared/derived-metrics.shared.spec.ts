@@ -5,9 +5,16 @@ import {
   DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
   DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
   DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS,
+  DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES,
+  DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS,
+  DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
+  DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
+  DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
+  DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
   DEFAULT_DERIVED_METRIC_KINDS,
   buildDerivedFormDailyLoads,
   getDerivedMetricDocId,
+  getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
   normalizeTrainingBuildEventId,
   normalizeTrainingBuildPeriodEndDayMs,
@@ -50,6 +57,18 @@ describe('derived-metrics shared helpers', () => {
     expect(normalizeDerivedMetricKindsStrict([])).toEqual([]);
     expect(normalizeDerivedMetricKindsStrict(['unknown'])).toEqual([]);
     expect(normalizeDerivedMetricKindsStrict(null)).toEqual([]);
+  });
+
+  it('shares Training recovery availability and comparison thresholds across builders and clients', () => {
+    expect(DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS).toBe(3);
+    expect(DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS).toBe(5);
+    expect(DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS).toBe(5);
+    expect(DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS).toBe(60 * 60);
+    expect(DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS).toBe(16 * 60 * 60);
+    expect(DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES).toBe(12 * 60);
+    expect(getDerivedTrainingRecoveryMinimumComparableNights(5)).toBe(7);
+    expect(getDerivedTrainingRecoveryMinimumComparableNights(28)).toBe(14);
+    expect(getDerivedTrainingRecoveryMinimumComparableNights(84)).toBe(42);
   });
 
   it('resolves metric kind guards and document ids', () => {

@@ -43,6 +43,11 @@ import {
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
     DEFAULT_DERIVED_METRIC_KINDS,
+    DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS,
+    DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
+    DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
+    DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
+    DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedFormDailyLoadEntry,
@@ -87,6 +92,7 @@ import {
     type TrainingBuildDurationWeeks,
     TRAINING_BUILD_DURATION_WEEKS,
     getDerivedMetricDocId,
+    getDerivedTrainingRecoveryMinimumComparableNights,
     getTrainingBuildBenchmarkSelectionKey,
     normalizeTrainingBuildEventId,
     normalizeTrainingBuildPeriodEndDayMs,
@@ -139,11 +145,7 @@ const TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
 const TRAINING_SUMMARY_BASELINE_WINDOW_DAYS = 84;
 const TRAINING_RECOVERY_CURRENT_WINDOW_DAYS = 28;
 const TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS = 84;
-const TRAINING_RECOVERY_MIN_SLEEP_NIGHTS = 3;
-const TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS = 5;
-const TRAINING_RECOVERY_MIN_HRV_NIGHTS = 5;
-const TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS = 60 * 60;
-const TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS = 16 * 60 * 60;
+const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
 const TRAINING_CAPACITY_MODEL_WINDOW_DAYS = 90 as const;
 const TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS = [180, 300, 600, 900, 1200] as const;
 const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
@@ -2213,6 +2215,13 @@ function resolveSleepDateDayMs(value: unknown): number | null {
         : null;
 }
 
+function resolveLocalClockMinutes(startTimeMs: number, timezoneOffsetSeconds: number): number {
+    const startTimeOfDayMs = startTimeMs % DAY_MS;
+    const offsetTimeOfDayMs = (timezoneOffsetSeconds * 1000) % DAY_MS;
+    const localTimeOfDayMs = ((startTimeOfDayMs + offsetTimeOfDayMs) % DAY_MS + DAY_MS) % DAY_MS;
+    return Math.floor(localTimeOfDayMs / (60 * 1000));
+}
+
 function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
@@ -2240,12 +2249,24 @@ function resolveTrainingSleepNights(
             || sleepDayMs === null
             || startTimeMs === null
             || durationSeconds === null
-            || durationSeconds < TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
-            || durationSeconds > TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
+            || durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            || durationSeconds > DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
         ) {
             return;
         }
-        const timezoneOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds) || 0;
+        const rawTimezoneOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
+        const timezoneOffsetSeconds = rawTimezoneOffsetSeconds !== null
+            && Math.abs(rawTimezoneOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
+            ? rawTimezoneOffsetSeconds
+            : 0;
+        const localStartTimeMs = startTimeMs + (timezoneOffsetSeconds * 1000);
+        if (
+            !Number.isFinite(localStartTimeMs)
+            || localStartTimeMs < sleepDayMs - DAY_MS
+            || localStartTimeMs >= sleepDayMs + (2 * DAY_MS)
+        ) {
+            return;
+        }
         const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
             ? data.vitals as Record<string, unknown>
             : {};
@@ -2276,16 +2297,13 @@ function resolveTrainingSleepNights(
         });
     });
 
-    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => {
-        const localStart = new Date(night.startTimeMs + (night.timezoneOffsetSeconds * 1000));
-        return {
-            provider: night.provider,
-            sleepDayMs: night.sleepDayMs,
-            durationSeconds: night.durationSeconds,
-            localBedtimeMinutes: (localStart.getUTCHours() * 60) + localStart.getUTCMinutes(),
-            overnightHrvMs: night.overnightHrvMs,
-        };
-    });
+    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => ({
+        provider: night.provider,
+        sleepDayMs: night.sleepDayMs,
+        durationSeconds: night.durationSeconds,
+        localBedtimeMinutes: resolveLocalClockMinutes(night.startTimeMs, night.timezoneOffsetSeconds),
+        overnightHrvMs: night.overnightHrvMs,
+    }));
 }
 
 function resolveMedian(values: readonly number[]): number | null {
@@ -2330,7 +2348,7 @@ function resolveTrainingRecoveryCoverage(
     if (recordedNightCount <= 0) {
         return 'none';
     }
-    const sufficientNightCount = Math.max(7, Math.ceil(expectedNightCount * 0.5));
+    const sufficientNightCount = getDerivedTrainingRecoveryMinimumComparableNights(expectedNightCount);
     return recordedNightCount >= sufficientNightCount ? 'sufficient' : 'limited';
 }
 
@@ -2347,7 +2365,7 @@ function buildTrainingRecoveryWindow(
             && night.sleepDayMs <= windowEndDayMs)
         : [];
     const hrvValues = selectedNights.flatMap(night => night.overnightHrvMs === null ? [] : [night.overnightHrvMs]);
-    const bedtimeVariationMinutes = selectedNights.length >= TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
+    const bedtimeVariationMinutes = selectedNights.length >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
         ? resolveBedtimeVariationMinutes(selectedNights.map(night => night.localBedtimeMinutes))
         : null;
     return {
@@ -2358,11 +2376,11 @@ function buildTrainingRecoveryWindow(
         recordedNightCount: selectedNights.length,
         expectedNightCount: periodDays,
         coverage: resolveTrainingRecoveryCoverage(selectedNights.length, periodDays),
-        averageSleepSeconds: selectedNights.length >= TRAINING_RECOVERY_MIN_SLEEP_NIGHTS
+        averageSleepSeconds: selectedNights.length >= DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS
             ? Math.round(selectedNights.reduce((sum, night) => sum + night.durationSeconds, 0) / selectedNights.length)
             : null,
         bedtimeVariationMinutes: bedtimeVariationMinutes === null ? null : Math.round(bedtimeVariationMinutes),
-        medianOvernightHrvMs: hrvValues.length >= TRAINING_RECOVERY_MIN_HRV_NIGHTS
+        medianOvernightHrvMs: hrvValues.length >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS
             ? Math.round((resolveMedian(hrvValues) || 0) * 10) / 10
             : null,
         overnightHrvNightCount: hrvValues.length,

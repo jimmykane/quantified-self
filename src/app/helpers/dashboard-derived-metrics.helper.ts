@@ -29,6 +29,13 @@ import type {
 } from '@shared/derived-metrics';
 import { normalizeSleepProvider } from '@shared/sleep';
 import {
+  DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES,
+  DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS,
+  DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
+  DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
+  DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
+  DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
+  getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
   normalizeTrainingBuildEventId,
   normalizeTrainingBuildPeriodEndDayMs,
@@ -738,16 +745,16 @@ function resolveDashboardTrainingRecoveryWindow(value: unknown): DashboardTraini
     || overnightHrvNightCount > recordedNightCount
     || (raw.provider !== null && provider === null)
     || (recordedNightCount === 0) !== (provider === null)
-    || (raw.averageSleepSeconds !== null && (averageSleepSeconds === null || averageSleepSeconds < 3600 || averageSleepSeconds > 16 * 3600))
-    || (raw.bedtimeVariationMinutes !== null && (bedtimeVariationMinutes === null || bedtimeVariationMinutes < 0 || bedtimeVariationMinutes > 12 * 60))
+    || (raw.averageSleepSeconds !== null && (averageSleepSeconds === null || averageSleepSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS || averageSleepSeconds > DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS))
+    || (raw.bedtimeVariationMinutes !== null && (bedtimeVariationMinutes === null || bedtimeVariationMinutes < 0 || bedtimeVariationMinutes > DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES))
     || (raw.medianOvernightHrvMs !== null && (medianOvernightHrvMs === null || medianOvernightHrvMs <= 0))
-    || (recordedNightCount >= 3) !== (averageSleepSeconds !== null)
-    || (recordedNightCount >= 5) !== (bedtimeVariationMinutes !== null)
-    || (overnightHrvNightCount >= 5) !== (medianOvernightHrvMs !== null)
+    || (recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS) !== (averageSleepSeconds !== null)
+    || (recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS) !== (bedtimeVariationMinutes !== null)
+    || (overnightHrvNightCount >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS) !== (medianOvernightHrvMs !== null)
   ) {
     return null;
   }
-  const sufficientNightCount = Math.max(7, Math.ceil(periodDays * 0.5));
+  const sufficientNightCount = getDerivedTrainingRecoveryMinimumComparableNights(periodDays);
   const expectedCoverage = recordedNightCount === 0
     ? 'none'
     : (recordedNightCount >= sufficientNightCount ? 'sufficient' : 'limited');

@@ -452,7 +452,7 @@ describe('TrainingWorkspaceComponent', () => {
       metricRows: [],
     });
     expect(failedRecoveryView.detailText).toContain('could not be refreshed');
-    expect(failedRecoveryView.sourceText).toContain('may be stale');
+    expect(failedRecoveryView.sourceText).toContain('may be incomplete or stale');
 
     const swimWindow = {
       periodWeeks: 12, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 4,

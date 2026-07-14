@@ -15,6 +15,7 @@ import {
 } from '../../helpers/training-capacity.helper';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import {
+  getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
   isTrainingVisibleDiscipline,
   normalizeTrainingVisibleDisciplines,
@@ -757,7 +758,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         currentLabel,
         referenceLabel,
         detailText: 'Recovery context could not be refreshed. Refresh to request another derived snapshot.',
-        sourceText: 'Cached sleep values are withheld because they may be stale. Sleep context does not change your Training state.',
+        sourceText: 'Sleep values are withheld because this derived snapshot may be incomplete or stale. Sleep context does not change your Training state.',
         metricRows: [],
       };
     }
@@ -835,8 +836,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return `${currentLabel} and ${referenceLabel.toLowerCase()} use different sleep providers, so values are shown without deltas.`;
     }
     if (!comparison.isComparable) {
-      const currentMinimum = Math.max(7, Math.ceil(current.expectedNightCount * 0.5));
-      const referenceMinimum = Math.max(7, Math.ceil(reference.expectedNightCount * 0.5));
+      const currentMinimum = getDerivedTrainingRecoveryMinimumComparableNights(current.expectedNightCount);
+      const referenceMinimum = getDerivedTrainingRecoveryMinimumComparableNights(reference.expectedNightCount);
       return `More recorded nights are needed for a fair comparison (${current.recordedNightCount} / ${currentMinimum} ${currentLabel.toLowerCase()}, ${reference.recordedNightCount} / ${referenceMinimum} ${referenceLabel.toLowerCase()}).`;
     }
     if (!analysis) {
