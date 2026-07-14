@@ -176,7 +176,11 @@ export { mergeEvents } from './events/merge-events';
 export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
-export { onDashboardDerivedMetricsEventWrite } from './derived-metrics/derived-metrics.trigger';
+export { setTrainingVisibleDisciplines } from './derived-metrics/set-training-visible-disciplines';
+export {
+  onDashboardDerivedMetricsActivityWrite,
+  onDashboardDerivedMetricsEventWrite,
+} from './derived-metrics/derived-metrics.trigger';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
 export { onSubscriptionUpdated } from './stripe/subscriptions';

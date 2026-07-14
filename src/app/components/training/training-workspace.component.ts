@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, computed } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { AppThemes, DataDistance, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { AppThemes, DataDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type {
@@ -14,9 +14,13 @@ import {
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import {
   getTrainingBuildBenchmarkSelectionKey,
+  isTrainingVisibleDiscipline,
+  normalizeTrainingVisibleDisciplines,
+  TRAINING_VISIBLE_DISCIPLINES,
   type DerivedTrainingDiscipline,
   type TrainingBuildBenchmarkSelection,
-  type TrainingBuildSettings,
+  type TrainingSettings,
+  type TrainingVisibleDiscipline,
 } from '@shared/derived-metrics';
 import {
   buildDashboardPowerCurveContextFromSnapshot,
@@ -42,6 +46,19 @@ import {
   type TrainingBuildEventSuggestionsState,
 } from './training-build-benchmark-dialog.component';
 import {
+  TrainingSportVisibilityDialogComponent,
+  type TrainingSportVisibilityDialogResult,
+} from './training-sport-visibility-dialog.component';
+import {
+  formatTrainingVisibleDisciplinesActivityLabel,
+  formatTrainingVisibleDisciplinesAccessibleLabel,
+  formatTrainingVisibleDisciplinesCompactLabel,
+  formatTrainingVisibleDisciplinesLabel,
+  resolveTrainingSportVisibility,
+  trainingSportVisibilitySelectionKey,
+} from '../../helpers/training-sport-visibility.helper';
+import { formatTrainingSwimPace } from '../../helpers/training-swim-performance.helper';
+import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
@@ -51,6 +68,7 @@ import type { SleepSession } from '@shared/sleep';
 
 interface TrainingMixDisciplineViewModel {
   summary: DashboardTrainingDisciplineSummary;
+  label: string;
   currentZoneSeconds: number;
   baselineZoneSeconds: number;
   activityCountText: string;
@@ -151,16 +169,28 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
   public capacityDisciplines: TrainingCapacityDisciplineViewModel[] = [];
   public trainingBuildCards: TrainingBuildCardViewModel[] = [];
+  public visibleDisciplines: TrainingVisibleDiscipline[] = [...TRAINING_VISIBLE_DISCIPLINES];
+  public visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
+  public visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
+  public visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
+  public isAutomaticSportVisibility = true;
+  public isRunningVisible = true;
+  public isCyclingVisible = true;
+  public isSwimmingVisible = true;
+  public hasPowerCapacityVisible = true;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
   private currentUserUID: string | null = null;
-  private trainingBuildSettings: TrainingBuildSettings = {};
-  private unitSettings: UserUnitSettingsInterface | null = null;
+  private trainingSettings: TrainingSettings = {};
+  public unitSettings: UserUnitSettingsInterface | null = null;
   private pendingTrainingBuildSelections = new Map<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection | null>();
+  private pendingTrainingVisibleDisciplines: TrainingVisibleDiscipline[] | null | undefined;
+  private pendingTrainingVisibleDisciplinesBaselineKey: string | undefined;
   private trainingBuildBenchmarkDialogRef: MatDialogRef<TrainingBuildBenchmarkDialogComponent> | null = null;
   private trainingBuildBenchmarkDialogDiscipline: DerivedTrainingDiscipline | null = null;
+  private trainingSportVisibilityDialogRef: MatDialogRef<TrainingSportVisibilityDialogComponent> | null = null;
 
   constructor(
     private readonly authService: AppAuthService,
@@ -175,9 +205,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.subscriptions.add(this.authService.user$.subscribe((user) => {
       const uid = `${user?.uid || ''}`.trim();
       if (uid === this.currentUserUID) {
-        this.trainingBuildSettings = user?.settings?.trainingSettings || {};
+        this.trainingSettings = user?.settings?.trainingSettings || {};
+        this.reconcilePendingTrainingSportVisibility();
         this.unitSettings = user?.settings?.unitSettings || null;
-        this.refreshTrainingBuildCards();
+        this.refreshSportSpecificViewModels();
         this.changeDetector.markForCheck();
         return;
       }
@@ -186,9 +217,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.dataSubscriptions.unsubscribe();
       this.dataSubscriptions = new Subscription();
       this.resetWorkspace();
-      this.trainingBuildSettings = user?.settings?.trainingSettings || {};
+      this.trainingSettings = user?.settings?.trainingSettings || {};
       this.unitSettings = user?.settings?.unitSettings || null;
-      this.refreshTrainingBuildCards();
+      this.refreshSportSpecificViewModels();
       if (!user || !uid) {
         this.isLoading = false;
         this.changeDetector.markForCheck();
@@ -250,9 +281,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private resetWorkspace(): void {
     const activeDialogRef = this.trainingBuildBenchmarkDialogRef;
+    const activeVisibilityDialogRef = this.trainingSportVisibilityDialogRef;
     this.trainingBuildBenchmarkDialogRef = null;
     this.trainingBuildBenchmarkDialogDiscipline = null;
+    this.trainingSportVisibilityDialogRef = null;
     activeDialogRef?.close();
+    activeVisibilityDialogRef?.close();
     this.isLoading = true;
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.sleepTrend = null;
@@ -264,9 +298,20 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
     this.trainingMixDisciplines = [];
     this.capacityDisciplines = [];
-    this.trainingBuildSettings = {};
+    this.trainingSettings = {};
     this.unitSettings = null;
     this.pendingTrainingBuildSelections.clear();
+    this.pendingTrainingVisibleDisciplines = undefined;
+    this.pendingTrainingVisibleDisciplinesBaselineKey = undefined;
+    this.visibleDisciplines = [...TRAINING_VISIBLE_DISCIPLINES];
+    this.visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
+    this.visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
+    this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
+    this.isAutomaticSportVisibility = true;
+    this.isRunningVisible = true;
+    this.isCyclingVisible = true;
+    this.isSwimmingVisible = true;
+    this.hasPowerCapacityVisible = true;
     this.trainingBuildCards = this.buildTrainingBuildCards();
   }
 
@@ -283,13 +328,33 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       latestSeriesLabel: 'Latest running activity',
     });
     this.refreshDerivedViewModels();
-    const summaries = state.trainingSummary?.disciplines || [];
+    this.refreshSportSpecificViewModels();
+  }
+
+  private refreshSportSpecificViewModels(): void {
+    this.refreshTrainingSportVisibility();
+    if (
+      this.trainingBuildBenchmarkDialogRef
+      && this.trainingBuildBenchmarkDialogDiscipline
+      && (
+        !isTrainingVisibleDiscipline(this.trainingBuildBenchmarkDialogDiscipline)
+        || !this.visibleDisciplines.includes(this.trainingBuildBenchmarkDialogDiscipline)
+      )
+    ) {
+      const dialogRef = this.trainingBuildBenchmarkDialogRef;
+      this.trainingBuildBenchmarkDialogRef = null;
+      this.trainingBuildBenchmarkDialogDiscipline = null;
+      dialogRef.close();
+    }
+    const summaries = this.derivedState.trainingSummary?.disciplines || [];
     this.trainingMixDisciplines = summaries
+      .filter(summary => isTrainingVisibleDiscipline(summary.discipline))
       .map((summary) => {
         const currentZoneSeconds = resolveTrainingZoneSeconds(summary.current28d);
         const baselineZoneSeconds = resolveTrainingZoneSeconds(summary.baseline28d);
         return {
           summary,
+          label: formatTrainingVisibleDisciplinesLabel([summary.discipline]),
           currentZoneSeconds,
           baselineZoneSeconds,
           activityCountText: this.formatNumber(summary.current28d.activityCount, 0),
@@ -302,13 +367,102 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           baselineHardText: this.formatPercent(summary.baseline28d.hardSeconds, baselineZoneSeconds),
         };
       })
+      .filter(view => this.visibleDisciplines.includes(view.summary.discipline))
       .filter(view => view.summary.current28d.activityCount > 0 || view.summary.baseline28d.activityCount > 0);
-    this.capacityDisciplines = buildTrainingCapacityViewModels(state.trainingCapacity);
+    this.capacityDisciplines = buildTrainingCapacityViewModels(this.derivedState.trainingCapacity)
+      .filter(view => isTrainingVisibleDiscipline(view.discipline) && this.visibleDisciplines.includes(view.discipline));
     this.refreshTrainingBuildCards();
   }
 
+  private refreshTrainingSportVisibility(): void {
+    const preference = this.pendingTrainingVisibleDisciplines !== undefined
+      ? this.pendingTrainingVisibleDisciplines
+      : this.trainingSettings.visibleDisciplines;
+    const resolution = resolveTrainingSportVisibility(
+      preference,
+      this.derivedState.trainingSummary,
+      this.derivedState.trainingSummaryStatus === 'ready',
+      this.trainingSettings.buildBenchmarks,
+    );
+    this.visibleDisciplines = resolution.disciplines;
+    this.isAutomaticSportVisibility = resolution.isAutomatic;
+    this.isRunningVisible = resolution.disciplines.includes('running');
+    this.isCyclingVisible = resolution.disciplines.includes('cycling');
+    this.isSwimmingVisible = resolution.disciplines.includes('swimming');
+    this.hasPowerCapacityVisible = this.isRunningVisible || this.isCyclingVisible;
+    this.visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(resolution.disciplines);
+    this.visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(
+      resolution.disciplines,
+      resolution.isAutomatic,
+    );
+    this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(resolution.disciplines);
+  }
+
+  private reconcilePendingTrainingSportVisibility(): void {
+    if (this.pendingTrainingVisibleDisciplines === undefined) {
+      this.pendingTrainingVisibleDisciplinesBaselineKey = undefined;
+      return;
+    }
+    const persistedKey = this.resolvePersistedTrainingSportVisibilityKey();
+    if (
+      this.isPersistedTrainingSportVisibility(this.pendingTrainingVisibleDisciplines)
+      || (
+        this.pendingTrainingVisibleDisciplinesBaselineKey !== undefined
+        && persistedKey !== this.pendingTrainingVisibleDisciplinesBaselineKey
+      )
+    ) {
+      this.pendingTrainingVisibleDisciplines = undefined;
+      this.pendingTrainingVisibleDisciplinesBaselineKey = undefined;
+    }
+  }
+
+  private isPersistedTrainingSportVisibility(
+    preference: readonly TrainingVisibleDiscipline[] | null,
+  ): boolean {
+    return this.resolvePersistedTrainingSportVisibilityKey()
+      === trainingSportVisibilitySelectionKey(preference);
+  }
+
+  private resolvePersistedTrainingSportVisibilityKey(): string {
+    return trainingSportVisibilitySelectionKey(
+      normalizeTrainingVisibleDisciplines(this.trainingSettings.visibleDisciplines),
+    );
+  }
+
+  public openTrainingSportVisibilityDialog(): void {
+    if (this.trainingSportVisibilityDialogRef || this.trainingBuildBenchmarkDialogRef) {
+      return;
+    }
+    const dialogRef = this.dialog.open(TrainingSportVisibilityDialogComponent, {
+      width: 'min(100vw - 32px, 480px)',
+      maxWidth: '480px',
+      data: {
+        visibleDisciplines: [...this.visibleDisciplines],
+        isAutomatic: this.isAutomaticSportVisibility,
+      },
+    });
+    this.trainingSportVisibilityDialogRef = dialogRef;
+    this.subscriptions.add(dialogRef.afterClosed().subscribe((result: TrainingSportVisibilityDialogResult | undefined) => {
+      if (this.trainingSportVisibilityDialogRef === dialogRef) {
+        this.trainingSportVisibilityDialogRef = null;
+      }
+      if (!result?.saved) {
+        return;
+      }
+      if (this.isPersistedTrainingSportVisibility(result.visibleDisciplines)) {
+        this.pendingTrainingVisibleDisciplines = undefined;
+        this.pendingTrainingVisibleDisciplinesBaselineKey = undefined;
+      } else {
+        this.pendingTrainingVisibleDisciplinesBaselineKey = this.resolvePersistedTrainingSportVisibilityKey();
+        this.pendingTrainingVisibleDisciplines = result.visibleDisciplines;
+      }
+      this.refreshSportSpecificViewModels();
+      this.changeDetector.markForCheck();
+    }));
+  }
+
   public openTrainingBuildBenchmarkDialog(discipline: DerivedTrainingDiscipline): void {
-    if (this.trainingBuildBenchmarkDialogRef) {
+    if (this.trainingBuildBenchmarkDialogRef || this.trainingSportVisibilityDialogRef) {
       return;
     }
     const card = this.trainingBuildCards.find(item => item.discipline === discipline);
@@ -353,24 +507,56 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       : 'loading';
   }
 
-  private formatTrainingBuildDistance(value: number | null | undefined): string {
+  private formatTrainingBuildDistance(
+    value: number | null | undefined,
+    discipline: DerivedTrainingDiscipline = 'running',
+  ): string {
     if (value === null || value === undefined || !Number.isFinite(value)) {
       return '--';
     }
-    return resolveUnitAwareDisplayStat(new DataDistance(value), this.unitSettings, { stripRepeatedUnit: true })?.text
-      || `${this.formatNumber(value / 1000, 1)} km`;
+    const distance = discipline === 'swimming' ? new DataSwimDistance(value) : new DataDistance(value);
+    const formattedDistance = resolveUnitAwareDisplayStat(distance, this.unitSettings, { stripRepeatedUnit: true })?.text;
+    if (formattedDistance) {
+      return formattedDistance;
+    }
+    return discipline === 'swimming'
+      ? `${this.formatNumber(value, 0)} m`
+      : `${this.formatNumber(value / 1000, 1)} km`;
   }
 
   private formatTrainingBuildDuration(value: number | null | undefined): string {
     return value === null || value === undefined || !Number.isFinite(value) ? '--' : formatSleepDuration(value);
   }
 
-  private formatTrainingBuildDistanceDelta(current: number | null | undefined, benchmark: number | null | undefined): string {
+  private formatTrainingBuildDistanceDelta(
+    current: number | null | undefined,
+    benchmark: number | null | undefined,
+    discipline: DerivedTrainingDiscipline,
+  ): string {
     if (current === null || current === undefined || benchmark === null || benchmark === undefined) {
       return '--';
     }
     const delta = current - benchmark;
-    return `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${this.formatTrainingBuildDistance(Math.abs(delta))}`;
+    return `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${this.formatTrainingBuildDistance(Math.abs(delta), discipline)}`;
+  }
+
+  private formatTrainingBuildSwimPace(value: number | null | undefined): string {
+    const usesYards = this.unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard;
+    return formatTrainingSwimPace(value, usesYards);
+  }
+
+  private formatTrainingBuildSwimPaceDelta(
+    current: number | null | undefined,
+    benchmark: number | null | undefined,
+  ): string {
+    if (!Number.isFinite(current) || !Number.isFinite(benchmark)) {
+      return '--';
+    }
+    const delta = (current as number) - (benchmark as number);
+    if (Math.abs(delta) < 0.5) {
+      return 'Same pace';
+    }
+    return `${this.formatTrainingBuildSwimPace(Math.abs(delta))} ${delta < 0 ? 'faster' : 'slower'}`;
   }
 
   private formatTrainingBuildNumber(value: number | null | undefined, fractionDigits = 0): string {
@@ -509,13 +695,13 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private buildTrainingBuildCards(): TrainingBuildCardViewModel[] {
     const contexts = this.derivedState.trainingBuildComparison?.disciplines || [];
-    return (['running', 'cycling'] as const).map((discipline) => {
+    return TRAINING_VISIBLE_DISCIPLINES.filter(discipline => this.visibleDisciplines.includes(discipline)).map((discipline) => {
       const source = contexts.find(item => item.discipline === discipline) || null;
       const expectedSelection = this.resolveEffectiveTrainingBuildSelection(discipline);
       const state = this.resolveTrainingBuildCardState(discipline, source, expectedSelection);
       return {
         discipline,
-        label: discipline === 'running' ? 'Running' : 'Cycling',
+        label: formatTrainingVisibleDisciplinesLabel([discipline]),
         state,
         source,
         expectedSelection,
@@ -525,7 +711,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           source?.selection?.windowEndDayMs,
         ),
         emptyMessage: this.resolveTrainingBuildEmptyMessage(source),
-        metricRows: this.buildTrainingBuildMetricRows(source),
+        metricRows: this.buildTrainingBuildMetricRows(source, discipline),
       };
     });
   }
@@ -542,6 +728,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private buildTrainingBuildMetricRows(
     source: DashboardTrainingBuildComparisonDiscipline | null,
+    discipline: DerivedTrainingDiscipline,
   ): TrainingBuildMetricRowViewModel[] {
     const current = source?.current;
     const benchmark = source?.benchmark;
@@ -551,9 +738,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const rows: TrainingBuildMetricRowViewModel[] = [
       {
         label: 'Distance',
-        currentText: this.formatTrainingBuildDistance(current.distanceMeters),
-        benchmarkText: this.formatTrainingBuildDistance(benchmark.distanceMeters),
-        deltaText: this.formatTrainingBuildDistanceDelta(current.distanceMeters, benchmark.distanceMeters),
+        currentText: this.formatTrainingBuildDistance(current.distanceMeters, discipline),
+        benchmarkText: this.formatTrainingBuildDistance(benchmark.distanceMeters, discipline),
+        deltaText: this.formatTrainingBuildDistanceDelta(current.distanceMeters, benchmark.distanceMeters, discipline),
         isIntensity: false,
       },
       {
@@ -588,6 +775,27 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         isIntensity: false,
       },
     ];
+    if (discipline === 'swimming') {
+      rows.push({
+        label: 'Pool pace',
+        currentText: this.formatTrainingBuildSwimPace(current.poolAveragePaceSecondsPer100m),
+        benchmarkText: this.formatTrainingBuildSwimPace(benchmark.poolAveragePaceSecondsPer100m),
+        deltaText: this.formatTrainingBuildSwimPaceDelta(
+          current.poolAveragePaceSecondsPer100m,
+          benchmark.poolAveragePaceSecondsPer100m,
+        ),
+        isIntensity: false,
+      }, {
+        label: 'Open-water pace',
+        currentText: this.formatTrainingBuildSwimPace(current.openWaterAveragePaceSecondsPer100m),
+        benchmarkText: this.formatTrainingBuildSwimPace(benchmark.openWaterAveragePaceSecondsPer100m),
+        deltaText: this.formatTrainingBuildSwimPaceDelta(
+          current.openWaterAveragePaceSecondsPer100m,
+          benchmark.openWaterAveragePaceSecondsPer100m,
+        ),
+        isIntensity: false,
+      });
+    }
     if (current.trainingStressScore !== null || benchmark.trainingStressScore !== null) {
       rows.push({
         label: 'TSS',
@@ -597,7 +805,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         isIntensity: false,
       });
     }
-    if (current.efficiency !== null || benchmark.efficiency !== null) {
+    if (discipline !== 'swimming' && (current.efficiency !== null || benchmark.efficiency !== null)) {
       rows.push({
         label: 'Power / HR',
         currentText: this.formatTrainingBuildNumber(current.efficiency, 2),
@@ -622,7 +830,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (this.pendingTrainingBuildSelections.has(discipline)) {
       return this.pendingTrainingBuildSelections.get(discipline) || null;
     }
-    const selection = this.trainingBuildSettings.buildBenchmarks?.[discipline] || null;
+    const selection = this.trainingSettings.buildBenchmarks?.[discipline] || null;
     return getTrainingBuildBenchmarkSelectionKey(selection) ? selection : null;
   }
 
@@ -708,9 +916,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return {
         ...currentState,
         volumeText: '0h',
-        volumeCaption: 'No eligible running or cycling sessions in the last 28 days',
+        volumeCaption: 'No eligible running, cycling/MTB, or swimming sessions in the last 28 days',
         sessionsText: '0 sessions',
-        sessionsCaption: 'No eligible running or cycling sessions in the last 28 days',
+        sessionsCaption: 'No eligible running, cycling/MTB, or swimming sessions in the last 28 days',
       };
     }
     return {

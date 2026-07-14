@@ -96,6 +96,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('Load and recovery interpretation lives in **Training**');
     expect(gettingStartedSection?.content).toContain('Notable changes');
+    expect(gettingStartedSection?.content).toContain('**Sports shown**');
+    expect(gettingStartedSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
+    expect(gettingStartedSection?.content).toContain('**Use automatic selection**');
+    expect(gettingStartedSection?.content).toContain('does not filter the overall comparison or notable changes');
+    expect(gettingStartedSection?.content).toContain('Mountain Biking groups');
+    expect(gettingStartedSection?.content).toContain('one activity leg at a time');
+    expect(gettingStartedSection?.content).toContain('keeps pool and open-water evidence separate');
+    expect(gettingStartedSection?.content).toContain('does not infer Critical Swim Speed');
     expect(gettingStartedSection?.content).toContain('zero-session result');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
     expect(gettingStartedSection?.content).toContain('**Activity Overview**, **Routes & Maps**, and **Custom Charts**');

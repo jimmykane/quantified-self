@@ -28,6 +28,7 @@ const hoisted = vi.hoisted(() => ({
     fetchDerivedFormSnapshotSeed: vi.fn(),
     completeDerivedMetricsProcessing: vi.fn(),
     failDerivedMetricsProcessing: vi.fn(),
+    fetchDerivedMetricsActivityDocs: vi.fn(),
     fetchDerivedMetricsEventDocs: vi.fn(),
     fetchRecoveryLookbackEventDocs: vi.fn(),
     fetchTrainingBuildBenchmarkSettings: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         fetchDerivedFormSnapshotSeed: hoisted.fetchDerivedFormSnapshotSeed,
         completeDerivedMetricsProcessing: hoisted.completeDerivedMetricsProcessing,
         failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
+        fetchDerivedMetricsActivityDocs: hoisted.fetchDerivedMetricsActivityDocs,
         fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
         fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
         fetchTrainingBuildBenchmarkSettings: hoisted.fetchTrainingBuildBenchmarkSettings,
@@ -81,6 +83,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.isDerivedMetricsUserWriteBlocked.mockResolvedValue(false);
         hoisted.markDerivedMetricSnapshotsBuilding.mockResolvedValue(undefined);
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValue([{ id: 'form-doc' }] as any);
+        hoisted.fetchDerivedMetricsActivityDocs.mockResolvedValue([{ id: 'activity-doc' }] as any);
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValue([{ id: 'recovery-doc' }] as any);
         hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValue({ trainingSettings: {} });
         hoisted.writeDerivedMetricSnapshotsReady.mockResolvedValue(undefined);
@@ -106,6 +109,7 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'form-doc' }],
             recoveryNowDocs: [{ id: 'recovery-doc' }],
+            trainingActivityDocs: [],
         }, {
             builtFromEventMutationVersion: 11,
             formDailyLoads: [],
@@ -137,6 +141,7 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'tss-doc' }],
             recoveryNowDocs: [],
+            trainingActivityDocs: [],
         }, {
             builtFromEventMutationVersion: 12,
             formDailyLoads: [],
@@ -177,6 +182,7 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [],
             recoveryNowDocs: [],
+            trainingActivityDocs: [],
         }, {
             builtFromEventMutationVersion: 12,
             formDailyLoads: [
@@ -188,11 +194,19 @@ describe('processDerivedMetricsTask', () => {
         });
     });
 
-    it('reads source events for Power Curve even when a Form projection seed is available', async () => {
+    it('reads parent events and activities for activity-backed metrics instead of using a Form projection seed', async () => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
-            dirtyMetricKinds: [DERIVED_METRIC_KINDS.PowerCurve],
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingSummary],
             startedAtMs: Date.now(),
             eventMutationVersion: 12,
+        });
+        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            builtFromEventMutationVersion: 12,
+            sourceEventCount: 5,
+            sourceDocCount: 7,
+            dailyLoads: [{ dayMs: Date.UTC(2026, 0, 1), load: 10 }],
         });
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'power-doc' }] as any);
 
@@ -202,6 +216,26 @@ describe('processDerivedMetricsTask', () => {
 
         expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
         expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-power');
+        expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledWith('user-power', {
+            includeSwimLengths: false,
+        });
+    });
+
+    it('includes swim lengths only when swimming performance is requested', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingSwimPerformance],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 12,
+        });
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-swim', generation: 92 },
+        });
+
+        expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledWith('user-swim', {
+            includeSwimLengths: true,
+        });
+        expect(hoisted.fetchTrainingBuildBenchmarkSettings).not.toHaveBeenCalled();
     });
 
     it('fetches benchmark settings only for the training build comparison and passes them to its builder', async () => {
@@ -226,6 +260,7 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'training-doc' }],
             recoveryNowDocs: [],
+            trainingActivityDocs: [{ id: 'activity-doc' }],
             trainingBuildBenchmarkSettings: settings,
         }, expect.objectContaining({ builtFromEventMutationVersion: 13 }));
     });
@@ -320,6 +355,7 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'kpi-doc' }],
             recoveryNowDocs: [],
+            trainingActivityDocs: [],
         }, {
             builtFromEventMutationVersion: 13,
             formDailyLoads: [],

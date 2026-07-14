@@ -22,7 +22,10 @@ import type {
   DerivedTrainingDisciplineSummary,
   DerivedTrainingSummaryMetricPayload,
   DerivedTrainingSummaryWindow,
+  DerivedTrainingSwimPerformanceMetricPayload,
+  DerivedTrainingSwimWeek,
 } from '@shared/derived-metrics';
+import { isTrainingDiscipline, TRAINING_DISCIPLINES } from '@shared/training-disciplines';
 import {
   extendDashboardFormPointsWithZeroLoadUntil,
   type DashboardFormPoint,
@@ -195,6 +198,12 @@ export interface DashboardTrainingBuildComparisonContext {
   disciplines: DashboardTrainingBuildComparisonDiscipline[];
 }
 
+export interface DashboardTrainingSwimPerformanceContext {
+  asOfDayMs: number;
+  swolfContext: DerivedTrainingSwimPerformanceMetricPayload['swolfContext'];
+  weeks: DerivedTrainingSwimWeek[];
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -235,6 +244,11 @@ function resolveUtcWeekStartMs(timeMs: number): number {
     date.getUTCMonth(),
     date.getUTCDate() - dayIndexMondayFirst,
   );
+}
+
+function resolveUtcDayStartMs(timeMs: number): number {
+  const date = new Date(timeMs);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function toRoundedMetricValue(value: number | null, precision = 4): number | null {
@@ -313,13 +327,21 @@ function resolveDashboardTrainingSummaryWindow(value: unknown): DashboardTrainin
   const hardSeconds = toFiniteNumber(raw.hardSeconds);
   if (
     periodDays === null
+    || periodDays <= 0
+    || !Number.isInteger(periodDays)
     || windowStartDayMs === null
     || windowEndDayMs === null
+    || windowEndDayMs < windowStartDayMs
     || activityCount === null
+    || activityCount < 0
     || durationSeconds === null
+    || durationSeconds < 0
     || easySeconds === null
+    || easySeconds < 0
     || moderateSeconds === null
+    || moderateSeconds < 0
     || hardSeconds === null
+    || hardSeconds < 0
   ) {
     return null;
   }
@@ -340,7 +362,15 @@ export function resolveDashboardTrainingSummaryContext(payload: unknown): Dashbo
   const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
   const currentWindowDays = toFiniteNumber(raw.currentWindowDays);
   const baselineWindowDays = toFiniteNumber(raw.baselineWindowDays);
-  if (asOfDayMs === null || currentWindowDays === null || baselineWindowDays === null || !Array.isArray(raw.disciplines)) {
+  if (
+    raw.dayBoundary !== 'UTC'
+    || raw.excludesMergedEvents !== true
+    || asOfDayMs === null
+    || resolveUtcDayStartMs(asOfDayMs) !== asOfDayMs
+    || currentWindowDays !== 28
+    || baselineWindowDays !== 84
+    || !Array.isArray(raw.disciplines)
+  ) {
     return null;
   }
   const disciplines = raw.disciplines
@@ -349,7 +379,7 @@ export function resolveDashboardTrainingSummaryContext(payload: unknown): Dashbo
         return null;
       }
       const source = discipline as Partial<DerivedTrainingDisciplineSummary>;
-      if (source.discipline !== 'running' && source.discipline !== 'cycling') {
+      if (!isTrainingDiscipline(source.discipline)) {
         return null;
       }
       const current28d = resolveDashboardTrainingSummaryWindow(source.current28d);
@@ -364,6 +394,12 @@ export function resolveDashboardTrainingSummaryContext(payload: unknown): Dashbo
       };
     })
     .filter((discipline): discipline is DashboardTrainingDisciplineSummary => !!discipline);
+  if (
+    disciplines.length !== TRAINING_DISCIPLINES.length
+    || new Set(disciplines.map(discipline => discipline.discipline)).size !== TRAINING_DISCIPLINES.length
+  ) {
+    return null;
+  }
   return {
     asOfDayMs,
     currentWindowDays,
@@ -568,6 +604,8 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
   const activeWeekCount = toFiniteNumber(raw.activeWeekCount);
   const intensitySourceEventCount = toFiniteNumber(raw.intensitySourceEventCount);
   const efficiencySampleCount = toFiniteNumber(raw.efficiencySampleCount);
+  const poolPaceActivityCount = toFiniteNumber(raw.poolPaceActivityCount);
+  const openWaterPaceActivityCount = toFiniteNumber(raw.openWaterPaceActivityCount);
   if (
     (periodWeeks !== 8 && periodWeeks !== 10 && periodWeeks !== 12)
     || windowStartDayMs === null
@@ -579,6 +617,8 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
     || activeWeekCount === null
     || intensitySourceEventCount === null
     || efficiencySampleCount === null
+    || poolPaceActivityCount === null
+    || openWaterPaceActivityCount === null
   ) {
     return null;
   }
@@ -600,6 +640,10 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
     intensitySourceEventCount,
     efficiency: toFiniteNumber(raw.efficiency),
     efficiencySampleCount,
+    poolAveragePaceSecondsPer100m: toFiniteNumber(raw.poolAveragePaceSecondsPer100m),
+    poolPaceActivityCount,
+    openWaterAveragePaceSecondsPer100m: toFiniteNumber(raw.openWaterAveragePaceSecondsPer100m),
+    openWaterPaceActivityCount,
   };
 }
 
@@ -688,7 +732,13 @@ function resolveDashboardTrainingBuildSuggestions(value: unknown): DashboardTrai
 export function resolveDashboardTrainingBuildComparisonContext(payload: unknown): DashboardTrainingBuildComparisonContext | null {
   const raw = (payload || {}) as Partial<DerivedTrainingBuildComparisonMetricPayload>;
   const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
-  if (asOfDayMs === null || !Array.isArray(raw.disciplines)) {
+  if (
+    raw.dayBoundary !== 'UTC'
+    || raw.excludesMergedEvents !== true
+    || asOfDayMs === null
+    || resolveUtcDayStartMs(asOfDayMs) !== asOfDayMs
+    || !Array.isArray(raw.disciplines)
+  ) {
     return null;
   }
   const disciplines = raw.disciplines.flatMap((candidate) => {
@@ -697,7 +747,7 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
     }
     const source = candidate as Partial<DerivedTrainingBuildComparisonDiscipline>;
     if (
-      (source.discipline !== 'running' && source.discipline !== 'cycling')
+      !isTrainingDiscipline(source.discipline)
       || (source.status !== 'not-configured' && source.status !== 'invalid-selection' && source.status !== 'ready')
       || !Array.isArray(source.suggestedEvents)
     ) {
@@ -725,13 +775,106 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
     }];
   });
   if (
-    disciplines.length !== 2
-    || !disciplines.some(discipline => discipline.discipline === 'running')
-    || !disciplines.some(discipline => discipline.discipline === 'cycling')
+    disciplines.length !== TRAINING_DISCIPLINES.length
+    || new Set(disciplines.map(discipline => discipline.discipline)).size !== TRAINING_DISCIPLINES.length
   ) {
     return null;
   }
   return { asOfDayMs, disciplines };
+}
+
+export function resolveDashboardTrainingSwimPerformanceContext(
+  payload: unknown,
+): DashboardTrainingSwimPerformanceContext | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const raw = payload as Partial<DerivedTrainingSwimPerformanceMetricPayload>;
+  const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
+  if (
+    raw.dayBoundary !== 'UTC'
+    || raw.weekCount !== 12
+    || raw.excludesMergedEvents !== true
+    || asOfDayMs === null
+    || !Array.isArray(raw.weeks)
+    || raw.weeks.length !== 24
+  ) {
+    return null;
+  }
+  const weeks: DerivedTrainingSwimWeek[] = [];
+  for (const candidate of raw.weeks) {
+    if (!candidate || typeof candidate !== 'object') {
+      return null;
+    }
+    const week = candidate as Partial<DerivedTrainingSwimWeek>;
+    const weekStartMs = toFiniteNumber(week.weekStartMs);
+    const activityCount = toFiniteNumber(week.activityCount);
+    const distanceMeters = toFiniteNumber(week.distanceMeters);
+    const paceActivityCount = toFiniteNumber(week.paceActivityCount);
+    const swolfLengthCount = toFiniteNumber(week.swolfLengthCount);
+    const pace = toFiniteNumber(week.averagePaceSecondsPer100m);
+    const swolf = toFiniteNumber(week.swolf);
+    if (
+      weekStartMs === null
+      || (week.environment !== 'pool' && week.environment !== 'open-water')
+      || activityCount === null || activityCount < 0 || !Number.isInteger(activityCount)
+      || distanceMeters === null || distanceMeters < 0
+      || paceActivityCount === null || paceActivityCount < 0 || !Number.isInteger(paceActivityCount)
+      || swolfLengthCount === null || swolfLengthCount < 0 || !Number.isInteger(swolfLengthCount)
+      || (pace !== null && pace <= 0)
+      || (swolf !== null && swolf <= 0)
+      || paceActivityCount > activityCount
+      || (paceActivityCount === 0 ? pace !== null : pace === null || distanceMeters <= 0)
+      || (swolfLengthCount === 0 ? swolf !== null : swolf === null || activityCount === 0)
+      || (week.environment === 'open-water' && (swolf !== null || swolfLengthCount !== 0))
+    ) {
+      return null;
+    }
+    weeks.push({
+      weekStartMs,
+      environment: week.environment,
+      activityCount,
+      distanceMeters,
+      averagePaceSecondsPer100m: pace,
+      paceActivityCount,
+      swolf,
+      swolfLengthCount,
+    });
+  }
+  const context = raw.swolfContext;
+  const stroke = typeof context?.stroke === 'string' ? context.stroke.trim() : '';
+  const poolLengthMeters = toFiniteNumber(context?.poolLengthMeters);
+  if (context !== null && (!stroke || poolLengthMeters === null || poolLengthMeters <= 0)) {
+    return null;
+  }
+  const hasSwolfEvidence = weeks.some(week => week.environment === 'pool' && week.swolfLengthCount > 0);
+  if ((context !== null) !== hasSwolfEvidence) {
+    return null;
+  }
+  const uniqueWeekEnvironments = new Set(weeks.map(week => `${week.weekStartMs}:${week.environment}`));
+  const uniqueWeeks = new Set(weeks.map(week => week.weekStartMs));
+  const sortedWeekStarts = [...uniqueWeeks].sort((left, right) => left - right);
+  const expectedLastWeekStartMs = resolveUtcWeekStartMs(asOfDayMs);
+  const hasExpectedWeekSequence = sortedWeekStarts.every((weekStartMs, index) => (
+    weekStartMs === expectedLastWeekStartMs - ((11 - index) * 7 * 24 * 60 * 60 * 1000)
+  ));
+  const hasCompleteEnvironmentPairs = [...uniqueWeeks].every(weekStartMs => (
+    uniqueWeekEnvironments.has(`${weekStartMs}:pool`)
+    && uniqueWeekEnvironments.has(`${weekStartMs}:open-water`)
+  ));
+  if (
+    uniqueWeekEnvironments.size !== 24
+    || uniqueWeeks.size !== 12
+    || !hasExpectedWeekSequence
+    || !hasCompleteEnvironmentPairs
+  ) {
+    return null;
+  }
+  return {
+    asOfDayMs,
+    swolfContext: context === null ? null : { stroke, poolLengthMeters: poolLengthMeters as number },
+    weeks: weeks.sort((left, right) => left.weekStartMs - right.weekStartMs || left.environment.localeCompare(right.environment)),
+  };
 }
 
 export function resolveDashboardRampRateContext(payload: unknown): DashboardRampRateContext | null {

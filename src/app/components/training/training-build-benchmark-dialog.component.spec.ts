@@ -70,6 +70,23 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     });
   });
 
+  it('uses swim-distance presentation for Swimming event choices', () => {
+    const { component } = createDialog({
+      discipline: 'swimming',
+      asOfDayMs: Date.UTC(2026, 3, 1),
+      selection: null,
+      suggestedRaces: [],
+      suggestedEvents: [{
+        eventId: 'swim-1', startDayMs: Date.UTC(2025, 10, 1), label: 'Pool test',
+        distanceMeters: 1_500, durationSeconds: 1_800, trainingStressScore: null,
+      }],
+    });
+
+    expect(component.disciplineLabel).toBe('swimming');
+    expect(component.visibleSuggestedEvents[0].detailsText).toContain('m');
+    expect(component.visibleSuggestedEvents[0].detailsText).not.toContain('km');
+  });
+
   it('clears only this sport benchmark', async () => {
     const { component, functionsService } = createDialog({
       discipline: 'cycling',

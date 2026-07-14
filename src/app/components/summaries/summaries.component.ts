@@ -1933,6 +1933,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingSummary: null,
       trainingBuildComparison: null,
       trainingCapacity: null,
+      trainingSwimPerformance: null,
       powerCurve: this.derivedPowerCurvePayload,
       formStatus: this.derivedFormStatus,
       recoveryNowStatus: this.derivedRecoveryNowStatus,
@@ -1950,6 +1951,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingSummaryStatus: 'missing',
       trainingBuildComparisonStatus: 'missing',
       trainingCapacityStatus: 'missing',
+      trainingSwimPerformanceStatus: 'missing',
       powerCurveStatus: this.derivedPowerCurveStatus,
     }, { force: true });
   }

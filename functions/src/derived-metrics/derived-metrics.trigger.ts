@@ -15,13 +15,10 @@ function resolveEventTimeMs(event: { time?: unknown }): number | null {
     return Number.isFinite(parsedTimeMs) ? parsedTimeMs : null;
 }
 
-export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
-    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
-    document: 'users/{uid}/events/{eventId}',
-    maxInstances: 50,
-    concurrency: 1,
-    retry: true,
-}, async (event) => {
+async function handleDerivedMetricsSourceWrite(
+    event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
+    source: 'event' | 'activity',
+): Promise<void> {
     const uid = `${event.params?.uid || ''}`.trim();
     if (!uid) {
         return;
@@ -40,7 +37,8 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     if (deletionGuard.shouldSkip) {
         logger.info('[derived-metrics] Skipping ingress enqueue because user deletion is in progress or user root is missing.', {
             uid,
-            eventId: event.params?.eventId || null,
+            source,
+            sourceId: source === 'event' ? event.params?.eventId || null : event.params?.activityId || null,
             userExists: deletionGuard.userExists,
             deletionInProgress: deletionGuard.deletionInProgress,
         });
@@ -55,11 +53,28 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
         ? await enqueueDerivedMetricsIngressTask(uid, undefined, eventTimeMs as number)
         : await enqueueDerivedMetricsIngressTask(uid);
 
-    logger.info('[derived-metrics] Event write enqueued derived metrics ingress', {
+    logger.info('[derived-metrics] Source write enqueued derived metrics ingress', {
         uid,
-        eventId: event.params?.eventId || null,
+        source,
+        sourceId: source === 'event' ? event.params?.eventId || null : event.params?.activityId || null,
         beforeExists,
         afterExists,
         queued,
     });
-});
+}
+
+export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
+    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
+    document: 'users/{uid}/events/{eventId}',
+    maxInstances: 50,
+    concurrency: 1,
+    retry: true,
+}, event => handleDerivedMetricsSourceWrite(event, 'event'));
+
+export const onDashboardDerivedMetricsActivityWrite = onDocumentWritten({
+    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
+    document: 'users/{uid}/activities/{activityId}',
+    maxInstances: 50,
+    concurrency: 1,
+    retry: true,
+}, event => handleDerivedMetricsSourceWrite(event, 'activity'));

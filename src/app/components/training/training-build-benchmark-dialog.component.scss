@@ -52,6 +52,8 @@ mat-dialog-content { display: grid; gap: 16px; min-width: min(100%, 440px); }
 .period-input { width: 100%; }
 .dialog-error { margin: 0; color: var(--mat-sys-error); line-height: 1.35; }
 mat-dialog-actions mat-spinner { display: inline-block; vertical-align: middle; }
+.dialog-action-content { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.dialog-action-content mat-spinner { flex: 0 0 18px; }
 
 @media (max-width: 480px) {
   .dialog-controls { grid-template-columns: 1fr 1fr; gap: 8px; }

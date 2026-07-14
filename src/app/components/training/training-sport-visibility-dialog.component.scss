@@ -1,0 +1,22 @@
+:host { display: block; }
+mat-dialog-content { display: grid; gap: 16px; min-width: min(100%, 390px); }
+.dialog-intro, .scope-note, .dialog-error { margin: 0; line-height: 1.45; }
+.dialog-intro, .scope-note { color: var(--mat-sys-on-surface-variant); }
+.automatic-note { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 12px; background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); }
+.automatic-note mat-icon { flex: 0 0 auto; }
+.automatic-note div { display: grid; gap: 2px; }
+.automatic-note span { font-size: 13px; line-height: 1.35; }
+.sport-options { display: grid; gap: 4px; }
+.sport-options mat-checkbox { padding: 8px 0; }
+.sport-option-copy { display: grid; gap: 2px; padding-left: 4px; }
+.sport-option-copy small { color: var(--mat-sys-on-surface-variant); font-size: 12px; line-height: 1.35; }
+.scope-note { font-size: 13px; }
+.dialog-error { color: var(--mat-sys-error); }
+mat-dialog-actions { flex-wrap: wrap; }
+.dialog-action-content { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.dialog-action-content mat-spinner { flex: 0 0 18px; }
+
+@media (max-width: 480px) {
+  mat-dialog-content { min-width: 0; }
+  mat-dialog-actions { row-gap: 4px; }
+}

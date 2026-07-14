@@ -22,7 +22,13 @@ const hoisted = vi.hoisted(() => {
     const doc = vi.fn((path: string) => path.includes('/events/')
         ? { path }
         : { path });
-    const firestore = Object.assign(vi.fn(() => ({ doc, runTransaction })), {
+    const activitiesQuery = { kind: 'activities-query' };
+    const select = vi.fn(() => activitiesQuery);
+    const where = vi.fn(() => ({ select }));
+    const activityCollection = { where };
+    const userDoc = { collection: vi.fn(() => activityCollection) };
+    const collection = vi.fn(() => ({ doc: vi.fn(() => userDoc) }));
+    const firestore = Object.assign(vi.fn(() => ({ doc, runTransaction, collection })), {
         FieldValue: { delete: vi.fn(() => ({ __delete__: true })) },
     });
     return {
@@ -31,6 +37,10 @@ const hoisted = vi.hoisted(() => {
         transactionUpdate,
         runTransaction,
         doc,
+        activitiesQuery,
+        collection,
+        where,
+        select,
         firestore,
         enforceAppCheck: vi.fn(),
         getUserDeletionGuardState: vi.fn(),
@@ -65,14 +75,18 @@ describe('setTrainingBuildBenchmark', () => {
             queued: true,
             generation: 14,
         });
-        hoisted.transactionGet.mockResolvedValue({
-            exists: true,
-            data: () => ({
-                name: 'Spring marathon',
-                tags: ['Race'],
-                startDate: Date.UTC(2026, 2, 1, 9, 0, 0),
-                stats: { 'Activity Types': ['Running'] },
-            }),
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => {
+            if (ref === hoisted.activitiesQuery) {
+                return { docs: [{ data: () => ({ type: 'Running' }) }] };
+            }
+            return {
+                exists: true,
+                data: () => ({
+                    name: 'Spring marathon',
+                    tags: ['Race'],
+                    startDate: Date.UTC(2026, 2, 1, 9, 0, 0),
+                }),
+            };
         });
     });
 
@@ -81,6 +95,18 @@ describe('setTrainingBuildBenchmark', () => {
             code: 'unauthenticated',
         });
         expect(hoisted.enforceAppCheck).not.toHaveBeenCalled();
+    });
+
+    it('stops before Firestore access when App Check verification fails', async () => {
+        hoisted.enforceAppCheck.mockImplementationOnce(() => {
+            throw new Error('App Check verification failed.');
+        });
+
+        await expect((setTrainingBuildBenchmark as any)({
+            auth: { uid: 'user-1' }, app: null,
+            data: { discipline: 'swimming', selection: null },
+        })).rejects.toThrow('App Check verification failed');
+        expect(hoisted.firestore).not.toHaveBeenCalled();
     });
 
     it('validates and stores only the selected sport branch, then queues only this metric', async () => {
@@ -208,12 +234,39 @@ describe('setTrainingBuildBenchmark', () => {
             discipline: 'running',
             selection: { mode: 'race', durationWeeks: 8, raceEventId: '🏃'.repeat(400) },
         })).toThrow('selection must be a valid');
-        expect(() => parseTrainingBuildBenchmarkRequest({ discipline: 'swimming', selection: null })).toThrow('discipline');
+        expect(() => parseTrainingBuildBenchmarkRequest({ discipline: 'rowing', selection: null })).toThrow('discipline');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
             selection: { mode: 'race', durationWeeks: 8, raceEventId: 'event-1' },
             markRaceEventId: 'other-event',
         })).toThrow('markRaceEventId');
+    });
+
+    it('accepts Swimming when the selected parent event has a swimming activity leg', async () => {
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => {
+            if (ref === hoisted.activitiesQuery) {
+                return { docs: [{ data: () => ({ type: 'Open Water Swimming' }) }] };
+            }
+            return {
+                exists: true,
+                data: () => ({ tags: ['Race'], startDate: Date.UTC(2026, 1, 1) }),
+            };
+        });
+
+        await expect((setTrainingBuildBenchmark as any)({
+            auth: { uid: 'user-1' }, app: {},
+            data: {
+                discipline: 'swimming',
+                selection: { mode: 'race', durationWeeks: 8, raceEventId: 'triathlon-1' },
+            },
+        })).resolves.toMatchObject({ accepted: true });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            trainingSettings: {
+                buildBenchmarks: {
+                    swimming: { mode: 'race', durationWeeks: 8, raceEventId: 'triathlon-1' },
+                },
+            },
+        }, { merge: true });
     });
 
     it('adds the Race tag and saves the matching benchmark in one transaction', async () => {

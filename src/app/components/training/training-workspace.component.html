@@ -4,10 +4,21 @@
       <p class="training-eyebrow">28-day training analysis</p>
       <h1 id="training-title">Training</h1>
     </div>
-    <a mat-stroked-button routerLink="/dashboard" aria-label="Return to dashboard">
-      <mat-icon aria-hidden="true">dashboard</mat-icon>
-      <span>Dashboard</span>
-    </a>
+    <div class="training-page-actions">
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="openTrainingSportVisibilityDialog()"
+        [attr.aria-label]="visibleDisciplinesAccessibleLabel"
+      >
+        <mat-icon aria-hidden="true">tune</mat-icon>
+        <span>{{ visibleDisciplinesCompactLabel }}</span>
+      </button>
+      <a mat-stroked-button routerLink="/dashboard" aria-label="Return to dashboard">
+        <mat-icon aria-hidden="true">dashboard</mat-icon>
+        <span class="training-dashboard-action-label">Dashboard</span>
+      </a>
+    </div>
   </header>
 
   @if (isLoading) {
@@ -15,8 +26,11 @@
   } @else {
     <section class="training-section training-status" aria-labelledby="training-status-title">
       <div class="training-section-heading">
-        <p>Your training, in context</p>
-        <h2 id="training-status-title">Compared with your usual 28 days</h2>
+        <div>
+          <p>Your training, in context</p>
+          <h2 id="training-status-title">Compared with your usual 28 days</h2>
+        </div>
+        <span class="training-section-note">Running, cycling/MTB, and swimming</span>
       </div>
       <div class="training-status-grid">
         <article class="training-state-panel qs-glass-card-panel">
@@ -28,7 +42,7 @@
           <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel" role="status">
             <span class="training-metric-label">Training comparison</span>
             <strong>Preparing</strong>
-            <span>Reading your recent running and cycling sessions.</span>
+            <span>Reading your recent running, cycling/MTB, and swimming sessions.</span>
           </article>
         } @else if (trainingComparisonState === 'unavailable') {
           <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel">
@@ -104,7 +118,11 @@
                   <div [class.training-build-intensity-row]="row.isIntensity"><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.benchmarkText }}</dd><dd>{{ row.deltaText }}</dd></div>
                 }
               </dl>
-              <p class="training-build-footnote">Merged events are excluded. TSS, intensity, and Power / HR appear only when your source activities provide them.</p>
+              @if (card.discipline === 'swimming') {
+                <p class="training-build-footnote">Pool and open-water pace stay separate. Missing pace, TSS, or intensity remains unavailable rather than zero.</p>
+              } @else {
+                <p class="training-build-footnote">Merged events are excluded. TSS, intensity, and Power / HR appear only when your source activities provide them.</p>
+              }
             }
           </article>
         }
@@ -131,7 +149,7 @@
               </article>
             } @empty {
               @if (trainingComparisonState === 'empty') {
-                <p class="training-empty-state">No eligible running or cycling sessions in the last 28 days. Add one to start your comparison.</p>
+                <p class="training-empty-state">No eligible running, cycling/MTB, or swimming sessions in the last 28 days. Add one to start your comparison.</p>
               } @else if (trainingComparisonState === 'building-baseline') {
                 <p class="training-empty-state">Your baseline is building. Keep training to compare your next 28 days with your usual pattern.</p>
               } @else {
@@ -145,8 +163,11 @@
 
     <section class="training-section" aria-labelledby="load-trajectory-title">
       <div class="training-section-heading">
-        <p>Load trajectory</p>
-        <h2 id="load-trajectory-title">How your load is changing</h2>
+        <div>
+          <p>Load trajectory</p>
+          <h2 id="load-trajectory-title">How your load is changing</h2>
+        </div>
+        <span class="training-section-note">All activities with TSS</span>
       </div>
       <div class="training-load-grid">
         <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
@@ -170,16 +191,19 @@
 
     <section class="training-section" aria-labelledby="training-mix-title">
       <div class="training-section-heading">
-        <p>Training mix</p>
-        <h2 id="training-mix-title">Where your effort is going</h2>
+        <div>
+          <p>Training mix</p>
+          <h2 id="training-mix-title">Where your effort is going</h2>
+        </div>
+        <span class="training-section-note">Intensity chart uses all eligible zone data</span>
       </div>
       <div class="training-mix-grid">
         @if (trainingComparisonState === 'unavailable') {
-          <p class="training-empty-state">Running and cycling comparison is unavailable right now.</p>
+          <p class="training-empty-state">Training mix comparison is unavailable right now.</p>
         } @else if (trainingComparisonState !== 'preparing') {
           @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
             <article class="training-mix-panel qs-glass-card-panel">
-              <header><h3 class="qs-dashboard-chart-title">{{ discipline.summary.discipline === 'running' ? 'Running' : 'Cycling' }}</h3><span>28d / normalized 84d</span></header>
+              <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
               <div class="training-mix-summary"><strong>{{ discipline.activityCountText }}</strong><span>activities</span><strong>{{ discipline.durationText }}</strong><span>time</span></div>
               <dl>
                 <div><dt>Easy</dt><dd>{{ discipline.easyText }} <span>/ {{ discipline.baselineEasyText }}</span></dd></div>
@@ -188,7 +212,7 @@
               </dl>
             </article>
           } @empty {
-            <p class="training-empty-state">No eligible running or cycling sessions in the last 28 days.</p>
+            <p class="training-empty-state">No eligible {{ visibleDisciplinesActivityLabel }} in the last 28 days.</p>
           }
         }
         <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
@@ -206,10 +230,11 @@
         <span class="training-section-note">Source, time window, and fit quality stay visible</span>
       </div>
       <div class="training-performance-grid">
-        @if (derivedState.trainingCapacityStatus === 'failed') {
-          <p class="training-empty-state">Capacity markers are unavailable right now. Refresh to request another derived snapshot.</p>
-        } @else if (derivedState.trainingCapacityStatus === 'ready') {
-          @for (discipline of capacityDisciplines; track discipline.discipline) {
+        @if (hasPowerCapacityVisible) {
+          @if (derivedState.trainingCapacityStatus === 'failed') {
+            <p class="training-empty-state">Capacity markers are unavailable right now. Refresh to request another derived snapshot.</p>
+          } @else if (derivedState.trainingCapacityStatus === 'ready') {
+            @for (discipline of capacityDisciplines; track discipline.discipline) {
             <article class="training-capacity-panel qs-glass-card-panel">
               <header>
                 <div>
@@ -248,14 +273,25 @@
                 <p>{{ discipline.interpretation.description }}</p>
               </div>
             </article>
-          } @empty {
-            <p class="training-empty-state">No capacity snapshot is available yet.</p>
+            } @empty {
+              <p class="training-empty-state">No capacity snapshot is available for the sports shown.</p>
+            }
+          } @else {
+            <div class="training-capacity-loading qs-glass-card-panel" role="status">
+              <mat-spinner diameter="24"></mat-spinner>
+              <div><strong>Preparing capacity evidence</strong><p>Reading imported markers and the derived 90-day power curve.</p></div>
+            </div>
           }
-        } @else {
-          <div class="training-capacity-loading qs-glass-card-panel" role="status">
-            <mat-spinner diameter="24"></mat-spinner>
-            <div><strong>Preparing capacity evidence</strong><p>Reading imported markers and the derived 90-day power curve.</p></div>
-          </div>
+        }
+        @if (isSwimmingVisible) {
+          <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
+            <app-training-swim-performance-chart
+              [performance]="derivedState.trainingSwimPerformance"
+              [status]="derivedState.trainingSwimPerformanceStatus"
+              [darkTheme]="isDarkTheme()"
+              [unitSettings]="unitSettings"
+            ></app-training-swim-performance-chart>
+          </article>
         }
         <article class="training-chart-panel qs-glass-card-panel">
           <app-efficiency-trend-chart [trend]="derivedState.efficiencyTrend" [status]="derivedState.efficiencyTrendStatus" [darkTheme]="isDarkTheme()" range="1y"></app-efficiency-trend-chart>
@@ -263,12 +299,16 @@
         <article class="training-chart-panel qs-glass-card-panel">
           <app-sleep-trend-chart [sleepTrend]="sleepTrend" sleepRange="14d" sleepWindowLabel="Last 14 days" [darkTheme]="isDarkTheme()"></app-sleep-trend-chart>
         </article>
-        <article class="training-chart-panel qs-glass-card-panel">
-          <app-power-curve-chart title="Cycling Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
-        </article>
-        <article class="training-chart-panel qs-glass-card-panel">
-          <app-power-curve-chart title="Running Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
-        </article>
+        @if (isCyclingVisible) {
+          <article class="training-chart-panel qs-glass-card-panel">
+            <app-power-curve-chart title="Cycling Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+          </article>
+        }
+        @if (isRunningVisible) {
+          <article class="training-chart-panel qs-glass-card-panel">
+            <app-power-curve-chart title="Running Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+          </article>
+        }
       </div>
     </section>
   }

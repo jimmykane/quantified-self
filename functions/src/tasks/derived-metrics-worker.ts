@@ -2,13 +2,14 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import {
     abandonDerivedMetricsProcessingAfterWriteBlock,
     areOnlyProjectionSensitiveMetricKinds,
     completeDerivedMetricsProcessing,
     failDerivedMetricsProcessing,
     fetchDerivedFormSnapshotSeed,
+    fetchDerivedMetricsActivityDocs,
     fetchDerivedMetricsEventDocs,
     fetchRecoveryLookbackEventDocs,
     fetchTrainingBuildBenchmarkSettings,
@@ -78,11 +79,11 @@ export const processDerivedMetricsTask = onTaskDispatched({
         const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
         const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(dirtyMetricKinds);
         let projectionFormSnapshotSeed: Awaited<ReturnType<typeof fetchDerivedFormSnapshotSeed>> = null;
-        // Power Curve is refreshed daily for calendar windows, but unlike load-derived
-        // projections it needs the source event stats rather than Form's daily-load seed.
+        // Activity-backed metrics require both normalized activities and their parent
+        // event metadata. Form's daily-load seed cannot replace that join input.
         const canUseProjectionSeed = sourceRequirements.needsFormDocs
             && projectionOnlyKinds
-            && !dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.PowerCurve);
+            && !sourceRequirements.needsTrainingActivityDocs;
         if (canUseProjectionSeed) {
             const candidateProjectionSeed = await fetchDerivedFormSnapshotSeed(uid);
             const hasCompatibleSchema = Number.isFinite(candidateProjectionSeed?.schemaVersion)
@@ -110,6 +111,11 @@ export const processDerivedMetricsTask = onTaskDispatched({
             // Reusing full-history form docs inflates segment counts and breaks "recovery left now" semantics.
             ? await fetchRecoveryLookbackEventDocs(uid)
             : [];
+        const trainingActivityDocs = sourceRequirements.needsTrainingActivityDocs
+            ? await fetchDerivedMetricsActivityDocs(uid, {
+                includeSwimLengths: sourceRequirements.needsTrainingSwimLengths,
+            })
+            : [];
         const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
             ? await fetchTrainingBuildBenchmarkSettings(uid)
             : {};
@@ -121,6 +127,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
         await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
             formDocs,
             recoveryNowDocs,
+            trainingActivityDocs,
             ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
         }, {
             builtFromEventMutationVersion: startResult.eventMutationVersion,
@@ -141,6 +148,8 @@ export const processDerivedMetricsTask = onTaskDispatched({
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formEventDocsScanned: formDocs.length,
             recoveryEventDocsScanned: recoveryNowDocs.length,
+            trainingActivityDocsScanned: trainingActivityDocs.length,
+            trainingSwimLengthsFetched: sourceRequirements.needsTrainingSwimLengths,
             trainingBuildBenchmarkSettingsFetched: sourceRequirements.needsTrainingBuildBenchmarkSettings,
             usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
             projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,

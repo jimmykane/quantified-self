@@ -1154,7 +1154,7 @@ export class AppUserService implements OnDestroy {
       return {};
     }
 
-    // Training build benchmarks are written only by their validated callable.
+    // Training preferences and benchmarks are written only by their validated callables.
     // Generic profile saves can otherwise replay a stale value and make an
     // unrelated preference update fail Firestore's server-owned-field rule.
     const { trainingSettings: _trainingSettings, ...clientWritableSettings } = settings as Record<string, unknown>;

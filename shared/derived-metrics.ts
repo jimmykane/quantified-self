@@ -1,3 +1,11 @@
+import {
+  POWER_CAPACITY_DISCIPLINES,
+  TRAINING_DISCIPLINES,
+  isTrainingDiscipline,
+  type PowerCapacityDiscipline,
+  type TrainingDiscipline,
+} from './training-disciplines';
+
 export const DERIVED_METRIC_KINDS = {
   Form: 'form',
   RecoveryNow: 'recovery_now',
@@ -16,6 +24,7 @@ export const DERIVED_METRIC_KINDS = {
   TrainingCapacity: 'training_capacity',
   PowerCurve: 'power_curve',
   TrainingBuildComparison: 'training_build_comparison',
+  TrainingSwimPerformance: 'training_swim_performance',
 } as const;
 
 export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS];
@@ -38,6 +47,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingCapacity,
   DERIVED_METRIC_KINDS.PowerCurve,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
 export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
@@ -51,17 +61,19 @@ export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 ];
 
 // These metrics change as the UTC day changes, even if no event is written.
-// Training build comparison needs a full event-history read, so it remains out
-// of the projection-only list used by the worker's Form-snapshot fast path.
+// Activity-backed Training metrics remain out of the projection-only list because
+// they need normalized activities joined to their parent event metadata.
 export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   ...PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingCapacity,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 8;
+export const DERIVED_METRIC_SCHEMA_VERSION = 9;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -284,7 +296,16 @@ export interface DerivedEfficiencyTrendMetricPayload {
   latestValue: number | null;
 }
 
-export type DerivedTrainingDiscipline = 'running' | 'cycling';
+export type DerivedTrainingDiscipline = TrainingDiscipline;
+export type DerivedPowerCapacityDiscipline = PowerCapacityDiscipline;
+
+/** Sports whose curated Training modules can currently be shown or hidden. */
+export const TRAINING_VISIBLE_DISCIPLINES = TRAINING_DISCIPLINES;
+export type TrainingVisibleDiscipline = typeof TRAINING_VISIBLE_DISCIPLINES[number];
+
+export function isTrainingVisibleDiscipline(value: unknown): value is TrainingVisibleDiscipline {
+  return isTrainingDiscipline(value);
+}
 
 export const TRAINING_BUILD_DURATION_WEEKS = [8, 10, 12] as const;
 export type TrainingBuildDurationWeeks = typeof TRAINING_BUILD_DURATION_WEEKS[number];
@@ -301,8 +322,38 @@ export type TrainingBuildBenchmarkSelection =
     endDayMs: number;
   };
 
-export interface TrainingBuildSettings {
+export interface TrainingSettings {
+  visibleDisciplines?: TrainingVisibleDiscipline[];
   buildBenchmarks?: Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>>;
+}
+
+export interface SetTrainingVisibleDisciplinesRequest {
+  /** A null selection restores automatic visibility based on recent training. */
+  visibleDisciplines: TrainingVisibleDiscipline[] | null;
+}
+
+export interface SetTrainingVisibleDisciplinesResponse {
+  accepted: true;
+  visibleDisciplines: TrainingVisibleDiscipline[] | null;
+}
+
+/**
+ * Treats persisted visibility as untrusted input and returns a canonical order.
+ * Invalid or empty values resolve to null so readers can safely use automatic mode.
+ */
+export function normalizeTrainingVisibleDisciplines(value: unknown): TrainingVisibleDiscipline[] | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
+  if (value.some(item => !isTrainingVisibleDiscipline(item))) {
+    return null;
+  }
+  const disciplines = value as TrainingVisibleDiscipline[];
+  if (new Set(disciplines).size !== disciplines.length) {
+    return null;
+  }
+  const selected = new Set(disciplines);
+  return TRAINING_VISIBLE_DISCIPLINES.filter(discipline => selected.has(discipline));
 }
 
 export interface SetTrainingBuildBenchmarkRequest {
@@ -446,7 +497,7 @@ export interface DerivedModeledCriticalPower {
 }
 
 export interface DerivedTrainingCapacityDiscipline {
-  discipline: DerivedTrainingDiscipline;
+  discipline: DerivedPowerCapacityDiscipline;
   ftpSetting: DerivedTrainingCapacityImportedMetric | null;
   importedVo2Max: DerivedTrainingCapacityImportedMetric | null;
   modeledCriticalPower: DerivedModeledCriticalPower;
@@ -495,6 +546,10 @@ export interface DerivedTrainingBuildWindow {
   intensitySourceEventCount: number;
   efficiency: number | null;
   efficiencySampleCount: number;
+  poolAveragePaceSecondsPer100m: number | null;
+  poolPaceActivityCount: number;
+  openWaterAveragePaceSecondsPer100m: number | null;
+  openWaterPaceActivityCount: number;
 }
 
 export type DerivedTrainingBuildComparisonStatus =
@@ -520,7 +575,34 @@ export interface DerivedTrainingBuildComparisonMetricPayload {
   disciplines: DerivedTrainingBuildComparisonDiscipline[];
 }
 
-export type DerivedPowerCurveScope = DerivedTrainingDiscipline;
+export type DerivedPowerCurveScope = DerivedPowerCapacityDiscipline;
+
+export type DerivedTrainingSwimEnvironment = 'pool' | 'open-water';
+
+export interface DerivedTrainingSwimWeek {
+  weekStartMs: number;
+  environment: DerivedTrainingSwimEnvironment;
+  activityCount: number;
+  distanceMeters: number;
+  averagePaceSecondsPer100m: number | null;
+  paceActivityCount: number;
+  swolf: number | null;
+  swolfLengthCount: number;
+}
+
+export interface DerivedTrainingSwolfContext {
+  stroke: string;
+  poolLengthMeters: number;
+}
+
+export interface DerivedTrainingSwimPerformanceMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  weekCount: 12;
+  excludesMergedEvents: boolean;
+  swolfContext: DerivedTrainingSwolfContext | null;
+  weeks: DerivedTrainingSwimWeek[];
+}
 
 export type DerivedPowerCurveRange =
   | 'thisWeek'
@@ -584,6 +666,7 @@ export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<Der
 export type DerivedTrainingCapacityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingCapacityMetricPayload>;
 export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedPowerCurveMetricPayload>;
 export type DerivedTrainingBuildComparisonMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingBuildComparisonMetricPayload>;
+export type DerivedTrainingSwimPerformanceMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSwimPerformanceMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
   | DerivedRecoveryNowMetricSnapshot
@@ -601,7 +684,10 @@ export type DerivedMetricSnapshot =
   | DerivedTrainingSummaryMetricSnapshot
   | DerivedTrainingCapacityMetricSnapshot
   | DerivedPowerCurveMetricSnapshot
-  | DerivedTrainingBuildComparisonMetricSnapshot;
+  | DerivedTrainingBuildComparisonMetricSnapshot
+  | DerivedTrainingSwimPerformanceMetricSnapshot;
+
+export { POWER_CAPACITY_DISCIPLINES };
 
 export interface EnsureDerivedMetricsRequest {
   metricKinds?: DerivedMetricKind[];

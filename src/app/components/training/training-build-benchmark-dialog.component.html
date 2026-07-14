@@ -1,4 +1,4 @@
-<h2 mat-dialog-title>Set {{ data.discipline === 'running' ? 'running' : 'cycling' }} benchmark</h2>
+<h2 mat-dialog-title>Set {{ disciplineLabel }} benchmark</h2>
 
 <mat-dialog-content>
   <p class="dialog-intro">Compare matching historical and current builds. Event day is excluded.</p>
@@ -170,7 +170,10 @@
   <button mat-button mat-dialog-close [disabled]="isSaving">Cancel</button>
   @if (mode === 'period' || (eventSuggestionsState === 'ready' && canSave)) {
     <button mat-flat-button color="primary" (click)="save()" [disabled]="isSaving || !canSave">
-      @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> } @else { {{ saveActionLabel }} }
+      <span class="dialog-action-content">
+        @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> }
+        <span>{{ saveActionLabel }}</span>
+      </span>
     </button>
   }
 </mat-dialog-actions>

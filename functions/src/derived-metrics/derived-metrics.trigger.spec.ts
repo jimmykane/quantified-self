@@ -40,7 +40,10 @@ vi.mock('../../../shared/functions-manifest', () => ({
     },
 }));
 
-import { onDashboardDerivedMetricsEventWrite } from './derived-metrics.trigger';
+import {
+    onDashboardDerivedMetricsActivityWrite,
+    onDashboardDerivedMetricsEventWrite,
+} from './derived-metrics.trigger';
 
 describe('onDashboardDerivedMetricsEventWrite', () => {
     beforeEach(() => {
@@ -83,6 +86,37 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             }),
             expect.any(Function),
         );
+    });
+
+    it('configures the activity trigger on normalized flat activity documents', () => {
+        expect(hoisted.onDocumentWritten).toHaveBeenCalledWith(
+            expect.objectContaining({
+                document: 'users/{uid}/activities/{activityId}',
+                retry: true,
+            }),
+            expect.any(Function),
+        );
+    });
+
+    it('enqueues activity creates and deletes through the same debounced ingress', async () => {
+        await (onDashboardDerivedMetricsActivityWrite as any)({
+            params: { uid: 'user-1', activityId: 'activity-1' },
+            data: {
+                before: { exists: false },
+                after: { exists: true },
+            },
+        });
+        await (onDashboardDerivedMetricsActivityWrite as any)({
+            params: { uid: 'user-1', activityId: 'activity-1' },
+            data: {
+                before: { exists: true },
+                after: { exists: false },
+            },
+        });
+
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(2);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenNthCalledWith(1, 'user-1');
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenNthCalledWith(2, 'user-1');
     });
 
     it('enqueues a debounced ingress task for valid event writes', async () => {

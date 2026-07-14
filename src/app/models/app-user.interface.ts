@@ -19,7 +19,7 @@ import { AppDateValue } from './app-date-value.type';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { ServiceConnectionMetaFields } from '@shared/service-connection';
-import type { TrainingBuildSettings } from '@shared/derived-metrics';
+import type { TrainingSettings } from '@shared/derived-metrics';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
@@ -228,7 +228,7 @@ export interface AppUserSettingsInterface extends UserSettingsInterface {
     appSettings?: AppAppSettingsInterface;
     serviceSyncSettings?: ServiceSyncSettingsInterface;
     deviceDisplaySettings?: AppDeviceDisplaySettingsInterface;
-    trainingSettings?: TrainingBuildSettings;
+    trainingSettings?: TrainingSettings;
 }
 
 export interface AppUserInterface extends User {

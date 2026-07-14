@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { DataDistance, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataDistance, DataSwimDistance, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   DerivedTrainingBuildEventSuggestion,
   DerivedTrainingBuildRaceSuggestion,
@@ -54,6 +54,7 @@ export interface TrainingBuildEventSuggestionsUpdate {
   standalone: false,
 })
 export class TrainingBuildBenchmarkDialogComponent {
+  public readonly disciplineLabel: string;
   public mode: TrainingBuildReferenceMode;
   public durationWeeks: TrainingBuildDurationWeeks;
   public eventId: string | null;
@@ -82,6 +83,9 @@ export class TrainingBuildBenchmarkDialogComponent {
     private readonly functionsService: AppFunctionsService,
     private readonly changeDetector: ChangeDetectorRef,
   ) {
+    this.disciplineLabel = data.discipline === 'running'
+      ? 'running'
+      : data.discipline === 'cycling' ? 'cycling' : 'swimming';
     const selection = data.selection;
     this.durationWeeks = selection?.durationWeeks || 12;
     this.mode = selection?.mode === 'period' ? 'period' : 'event';
@@ -195,6 +199,7 @@ export class TrainingBuildBenchmarkDialogComponent {
       this.errorMessage = this.resolveErrorMessage(error);
     } finally {
       this.isSaving = false;
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -292,8 +297,16 @@ export class TrainingBuildBenchmarkDialogComponent {
     if (value === null || !Number.isFinite(value) || value < 0.5) {
       return null;
     }
-    return resolveUnitAwareDisplayStat(new DataDistance(value), this.data.unitSettings, { stripRepeatedUnit: true })?.text
-      || `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value / 1000)} km`;
+    const distance = this.data.discipline === 'swimming' ? new DataSwimDistance(value) : new DataDistance(value);
+    const formattedDistance = resolveUnitAwareDisplayStat(distance, this.data.unitSettings, { stripRepeatedUnit: true })?.text;
+    if (formattedDistance) {
+      return formattedDistance;
+    }
+    const fallbackValue = this.data.discipline === 'swimming' ? value : value / 1000;
+    const fallbackUnit = this.data.discipline === 'swimming' ? 'm' : 'km';
+    return `${new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: this.data.discipline === 'swimming' ? 0 : 1,
+    }).format(fallbackValue)} ${fallbackUnit}`;
   }
 
   private resolveEventDisplayLabel(value: string | null): string | null {

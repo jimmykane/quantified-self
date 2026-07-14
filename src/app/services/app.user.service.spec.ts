@@ -1307,6 +1307,7 @@ describe('AppUserService', () => {
                 settings: {
                     theme: 'dark',
                     trainingSettings: {
+                        visibleDisciplines: ['cycling'],
                         buildBenchmarks: {
                             running: { mode: 'period', durationWeeks: 12, endDayMs: 1_746_403_200_000 },
                         },
@@ -1528,6 +1529,7 @@ describe('AppUserService', () => {
                 settings: {
                     appSettings: { theme: 'dark' },
                     trainingSettings: {
+                        visibleDisciplines: ['cycling'],
                         buildBenchmarks: {
                             cycling: { mode: 'period', durationWeeks: 8, endDayMs: 1_746_403_200_000 },
                         },

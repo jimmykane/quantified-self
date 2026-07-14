@@ -61,7 +61,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running or cycling sessions in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling/MTB, or swimming sessions in the last 28 days.');
     expect(element.textContent).toContain('Preparing capacity evidence');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
@@ -86,7 +86,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
-    expect(fixture.nativeElement.textContent).toContain('Reading your recent running and cycling sessions.');
+    expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming sessions.');
     expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBe(2);
     expect(fixture.nativeElement.textContent).not.toContain('What changed from your normal');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
@@ -155,6 +155,214 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).toContain('does not show that fitness declined.');
   });
 
+  it('filters every sport-specific module while leaving global training sections visible', async () => {
+    const window = (activityCount: number) => ({
+      periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount,
+      durationSeconds: 3600, easySeconds: 1800, moderateSeconds: 900, hardSeconds: 900,
+    });
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [
+          { discipline: 'running', current28d: window(3), baseline28d: window(3) },
+          { discipline: 'cycling', current28d: window(4), baseline28d: window(4) },
+        ],
+      },
+      trainingCapacityStatus: 'ready',
+      trainingCapacity: {
+        asOfDayMs: 2,
+        disciplines: [
+          {
+            discipline: 'running', ftpSetting: null, importedVo2Max: null,
+            modeledCriticalPower: {
+              status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
+              confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
+              minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
+            },
+          },
+          {
+            discipline: 'cycling', ftpSetting: null, importedVo2Max: null,
+            modeledCriticalPower: {
+              status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
+              confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
+              minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
+            },
+          },
+        ],
+      },
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent],
+      providers: [
+        {
+          provide: AppAuthService,
+          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['cycling'] } } }) },
+        },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('Cycling');
+    expect(element.querySelectorAll('.training-build-card')).toHaveLength(1);
+    expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
+    expect(element.textContent).toContain('Cycling capacity evidence');
+    expect(element.textContent).not.toContain('Running capacity evidence');
+    expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
+    expect(element.querySelector('app-power-curve-chart[title="Running Power Curve"]')).toBeNull();
+    expect(element.textContent).toContain('Running, cycling/MTB, and swimming');
+    expect(element.textContent).toContain('All activities with TSS');
+    expect(element.textContent).toContain('Intensity chart uses all eligible zone data');
+  });
+
+  it('renders Swimming-only detail cards without capacity or power placeholders', async () => {
+    const window = (activityCount: number) => ({
+      periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount,
+      durationSeconds: activityCount ? 3_600 : 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+    });
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 2, currentWindowDays: 28, baselineWindowDays: 84,
+        disciplines: [
+          { discipline: 'running', current28d: window(2), baseline28d: window(2) },
+          { discipline: 'cycling', current28d: window(2), baseline28d: window(2) },
+          { discipline: 'swimming', current28d: window(3), baseline28d: window(2) },
+        ],
+      },
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent],
+      providers: [
+        {
+          provide: AppAuthService,
+          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['swimming'] } } }) },
+        },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: { watchForDashboard: vi.fn(() => of([])) } },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelectorAll('.training-build-card')).toHaveLength(1);
+    expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
+    expect(element.querySelector('app-training-swim-performance-chart')).not.toBeNull();
+    expect(element.querySelector('app-power-curve-chart')).toBeNull();
+    expect(element.textContent).not.toContain('Preparing capacity evidence');
+    expect(element.textContent).not.toContain('capacity evidence');
+    expect(element.textContent).toContain('Running, cycling/MTB, and swimming');
+  });
+
+  it('applies a saved visibility result immediately while settings propagation catches up', () => {
+    const afterClosed = new Subject<{ saved: true; visibleDisciplines: ['cycling'] }>();
+    const dialogRef = { afterClosed: () => afterClosed };
+    const dialog = { open: vi.fn(() => dialogRef) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    component.derivedState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 2, currentWindowDays: 28, baselineWindowDays: 84,
+        disciplines: [{
+          discipline: 'running',
+          current28d: {
+            periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 2,
+            durationSeconds: 1, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+          },
+          baseline28d: {
+            periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 2,
+            durationSeconds: 1, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+          },
+        }],
+      },
+    };
+    (component as any).refreshSportSpecificViewModels();
+    expect(component.visibleDisciplines).toEqual(['running']);
+
+    component.openTrainingSportVisibilityDialog();
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      data: { visibleDisciplines: ['running'], isAutomatic: true },
+    }));
+    afterClosed.next({ saved: true, visibleDisciplines: ['cycling'] });
+
+    expect(component.visibleDisciplines).toEqual(['cycling']);
+    expect(component.isAutomaticSportVisibility).toBe(false);
+  });
+
+  it('does not retain a pending override when settings propagated before the dialog result', () => {
+    const afterClosed = new Subject<{ saved: true; visibleDisciplines: ['cycling'] }>();
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    (component as any).trainingSettings = { visibleDisciplines: ['cycling'] };
+
+    component.openTrainingSportVisibilityDialog();
+    afterClosed.next({ saved: true, visibleDisciplines: ['cycling'] });
+
+    expect((component as any).pendingTrainingVisibleDisciplines).toBeUndefined();
+    (component as any).trainingSettings = { visibleDisciplines: ['running'] };
+    (component as any).reconcilePendingTrainingSportVisibility();
+    (component as any).refreshSportSpecificViewModels();
+    expect(component.visibleDisciplines).toEqual(['running']);
+  });
+
+  it('releases a pending override when a newer persisted choice arrives from another tab', () => {
+    const afterClosed = new Subject<{ saved: true; visibleDisciplines: ['cycling'] }>();
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+    );
+
+    component.openTrainingSportVisibilityDialog();
+    afterClosed.next({ saved: true, visibleDisciplines: ['cycling'] });
+    expect(component.visibleDisciplines).toEqual(['cycling']);
+
+    (component as any).trainingSettings = { visibleDisciplines: ['running'] };
+    (component as any).reconcilePendingTrainingSportVisibility();
+    (component as any).refreshSportSpecificViewModels();
+
+    expect((component as any).pendingTrainingVisibleDisciplines).toBeUndefined();
+    expect(component.visibleDisciplines).toEqual(['running']);
+  });
+
   it('distinguishes benchmark card states and formats comparison deltas without a chart', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
@@ -202,6 +410,25 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.formatTrainingBuildDurationDelta(5_400, 3_600)).toBe('+30m');
     expect((component as any).formatTrainingBuildActiveWeeks(8, 12)).toBe('8 / 12');
     expect((component as any).formatTrainingBuildActiveWeeks(8, null)).toBe('--');
+
+    const swimWindow = {
+      periodWeeks: 12, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 4,
+      durationSeconds: 10_000, distanceMeters: 8_000, distanceEventCount: 4,
+      trainingStressScore: null, trainingStressScoreEventCount: 0, activeWeekCount: 4,
+      longestActivityDurationSeconds: 3_000, easySeconds: null, moderateSeconds: null, hardSeconds: null,
+      intensitySourceEventCount: 0, efficiency: 2, efficiencySampleCount: 4,
+      poolAveragePaceSecondsPer100m: 95, poolPaceActivityCount: 3,
+      openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
+    };
+    const swimRows = (component as any).buildTrainingBuildMetricRows({
+      current: swimWindow,
+      benchmark: { ...swimWindow, poolAveragePaceSecondsPer100m: 100 },
+    }, 'swimming');
+    expect(swimRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m faster' }),
+      expect.objectContaining({ label: 'Open-water pace', currentText: '--', benchmarkText: '--' }),
+    ]));
+    expect(swimRows).not.toEqual(expect.arrayContaining([expect.objectContaining({ label: 'Power / HR' })]));
 
     const dateTimeFormat = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({
       format: (value: Date) => value.toISOString().slice(0, 10),

@@ -1101,12 +1101,14 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
-            it('should require the benchmark callable for training settings while allowing other settings updates', async () => {
+            it('should require validated callables for training settings while allowing other settings updates', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 const settingsRef = db.collection('users').doc(userId).collection('config').doc('settings');
                 const trainingSettings = {
+                    visibleDisciplines: ['running', 'cycling', 'swimming'],
                     buildBenchmarks: {
                         running: { mode: 'period', durationWeeks: 12, endDayMs: 1_746_403_200_000 },
+                        swimming: { mode: 'period', durationWeeks: 8, endDayMs: 1_743_984_000_000 },
                     },
                 };
 

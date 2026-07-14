@@ -16,6 +16,7 @@ import {
   resolveDashboardTrainingSummaryContext,
   resolveDashboardTrainingBuildComparisonContext,
   resolveDashboardTrainingCapacityContext,
+  resolveDashboardTrainingSwimPerformanceContext,
 } from './dashboard-derived-metrics.helper';
 
 describe('dashboard-derived-metrics.helper', () => {
@@ -199,10 +200,12 @@ describe('dashboard-derived-metrics.helper', () => {
   });
 
   it('normalizes the training summary without mixing in capacity markers', () => {
-    const context = resolveDashboardTrainingSummaryContext({
+    const payload = {
+      dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 6, 10),
       currentWindowDays: 28,
       baselineWindowDays: 84,
+      excludesMergedEvents: true,
       disciplines: [{
         discipline: 'running',
         current28d: {
@@ -213,11 +216,34 @@ describe('dashboard-derived-metrics.helper', () => {
           periodDays: 28, windowStartDayMs: Date.UTC(2026, 2, 21), windowEndDayMs: Date.UTC(2026, 5, 12),
           activityCount: 3, durationSeconds: 10_800, easySeconds: 7_200, moderateSeconds: 2_400, hardSeconds: 1_200,
         },
+      }, {
+        discipline: 'cycling',
+        current28d: {
+          periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2,
+          activityCount: 0, durationSeconds: 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+        },
+        baseline28d: {
+          periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2,
+          activityCount: 0, durationSeconds: 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+        },
+      }, {
+        discipline: 'swimming',
+        current28d: {
+          periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2,
+          activityCount: 0, durationSeconds: 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+        },
+        baseline28d: {
+          periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2,
+          activityCount: 0, durationSeconds: 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+        },
       }],
-    });
+    };
+    const context = resolveDashboardTrainingSummaryContext(payload);
 
     expect(context?.disciplines[0]?.current28d.activityCount).toBe(4);
     expect(context?.disciplines[0]).not.toHaveProperty('vo2Max');
+    expect(resolveDashboardTrainingSummaryContext({ ...payload, dayBoundary: 'local' })).toBeNull();
+    expect(resolveDashboardTrainingSummaryContext({ ...payload, excludesMergedEvents: false })).toBeNull();
   });
 
   it('normalizes imported capacity markers separately from modeled critical power', () => {
@@ -323,7 +349,9 @@ describe('dashboard-derived-metrics.helper', () => {
 
   it('normalizes separate sport build comparisons and preserves unavailable optional metrics', () => {
     const context = resolveDashboardTrainingBuildComparisonContext({
+      dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
+      excludesMergedEvents: true,
       disciplines: [{
         discipline: 'running',
         status: 'ready',
@@ -337,6 +365,8 @@ describe('dashboard-derived-metrics.helper', () => {
           trainingStressScore: null, trainingStressScoreEventCount: 0, activeWeekCount: 7,
           longestActivityDurationSeconds: 3_600, easySeconds: null, moderateSeconds: null, hardSeconds: null,
           intensitySourceEventCount: 0, efficiency: null, efficiencySampleCount: 0,
+          poolAveragePaceSecondsPer100m: null, poolPaceActivityCount: 0,
+          openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
         },
         benchmark: {
           periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 2, 1), windowEndDayMs: Date.UTC(2026, 4, 23),
@@ -344,6 +374,8 @@ describe('dashboard-derived-metrics.helper', () => {
           trainingStressScore: 510, trainingStressScoreEventCount: 9, activeWeekCount: 8,
           longestActivityDurationSeconds: 4_000, easySeconds: 8_000, moderateSeconds: 3_000, hardSeconds: 1_000,
           intensitySourceEventCount: 9, efficiency: 1.9, efficiencySampleCount: 9,
+          poolAveragePaceSecondsPer100m: null, poolPaceActivityCount: 0,
+          openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
         },
         suggestedRaces: [{
           eventId: 'race-1', startDayMs: Date.UTC(2026, 4, 24), label: 'Spring marathon',
@@ -355,10 +387,12 @@ describe('dashboard-derived-metrics.helper', () => {
         }],
       }, {
         discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
+      }, {
+        discipline: 'swimming', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
       }],
     });
 
-    expect(context?.disciplines).toHaveLength(2);
+    expect(context?.disciplines).toHaveLength(3);
     expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
     expect(context?.disciplines[0].selection?.mode).toBe('race');
     expect(context?.disciplines[0].suggestedEvents).toEqual([
@@ -372,7 +406,7 @@ describe('dashboard-derived-metrics.helper', () => {
   });
 
   it('rejects incomplete or duplicated sport build comparison snapshots for self-healing', () => {
-    const buildDiscipline = (discipline: 'running' | 'cycling') => ({
+    const buildDiscipline = (discipline: 'running' | 'cycling' | 'swimming') => ({
       discipline,
       status: 'not-configured',
       selection: null,
@@ -383,12 +417,20 @@ describe('dashboard-derived-metrics.helper', () => {
     });
 
     expect(resolveDashboardTrainingBuildComparisonContext({
+      dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
+      excludesMergedEvents: true,
       disciplines: [buildDiscipline('running')],
     })).toBeNull();
     expect(resolveDashboardTrainingBuildComparisonContext({
+      dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
+      excludesMergedEvents: true,
       disciplines: [buildDiscipline('running'), buildDiscipline('running')],
+    })).toBeNull();
+    expect(resolveDashboardTrainingBuildComparisonContext({
+      asOfDayMs: Date.UTC(2026, 5, 30),
+      disciplines: [buildDiscipline('running'), buildDiscipline('cycling'), buildDiscipline('swimming')],
     })).toBeNull();
 
     const snapshotWithoutActivitySummaries = buildDiscipline('running');
@@ -396,9 +438,80 @@ describe('dashboard-derived-metrics.helper', () => {
       eventId: 'old-event', startDayMs: Date.UTC(2026, 3, 1), label: 'New event',
     }];
     expect(resolveDashboardTrainingBuildComparisonContext({
+      dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
+      excludesMergedEvents: true,
       disciplines: [snapshotWithoutActivitySummaries, buildDiscipline('cycling')],
     })).toBeNull();
 
+  });
+
+  it('normalizes exactly 12 paired pool and open-water swim weeks', () => {
+    const weekStarts = Array.from({ length: 12 }, (_, index) => Date.UTC(2026, 3, 6 + index * 7));
+    const weeks = weekStarts.flatMap((weekStartMs, index) => ([
+      {
+        weekStartMs, environment: 'pool' as const, activityCount: 1, distanceMeters: 1_500,
+        averagePaceSecondsPer100m: 100 + index, paceActivityCount: 1,
+        swolf: index === 11 ? 42 : null, swolfLengthCount: index === 11 ? 60 : 0,
+      },
+      {
+        weekStartMs, environment: 'open-water' as const, activityCount: 0, distanceMeters: 0,
+        averagePaceSecondsPer100m: null, paceActivityCount: 0, swolf: null, swolfLengthCount: 0,
+      },
+    ]));
+
+    const context = resolveDashboardTrainingSwimPerformanceContext({
+      dayBoundary: 'UTC', asOfDayMs: weekStarts[11], weekCount: 12, excludesMergedEvents: true,
+      swolfContext: { stroke: 'freestyle', poolLengthMeters: 25 }, weeks,
+    });
+
+    expect(context?.weeks).toHaveLength(24);
+    expect(context?.swolfContext).toEqual({ stroke: 'freestyle', poolLengthMeters: 25 });
+    expect(context?.weeks.at(-1)?.weekStartMs).toBe(weekStarts[11]);
+  });
+
+  it('rejects malformed swim week pairs and open-water SWOLF', () => {
+    const weekStarts = Array.from({ length: 12 }, (_, index) => Date.UTC(2026, 0, 5 + index * 7));
+    const buildWeeks = () => weekStarts.flatMap(weekStartMs => ([
+      {
+        weekStartMs, environment: 'pool', activityCount: 0, distanceMeters: 0,
+        averagePaceSecondsPer100m: null, paceActivityCount: 0, swolf: null, swolfLengthCount: 0,
+      },
+      {
+        weekStartMs, environment: 'open-water', activityCount: 0, distanceMeters: 0,
+        averagePaceSecondsPer100m: null, paceActivityCount: 0, swolf: null, swolfLengthCount: 0,
+      },
+    ]));
+    const payload = (weeks: unknown[]) => ({
+      dayBoundary: 'UTC', asOfDayMs: weekStarts[11], weekCount: 12, excludesMergedEvents: true,
+      swolfContext: null, weeks,
+    });
+    const duplicatedWeek = buildWeeks();
+    duplicatedWeek[duplicatedWeek.length - 2] = { ...duplicatedWeek[0] };
+    duplicatedWeek[duplicatedWeek.length - 1] = { ...duplicatedWeek[1] };
+    expect(resolveDashboardTrainingSwimPerformanceContext(payload(duplicatedWeek))).toBeNull();
+
+    const openWaterSwolf = buildWeeks();
+    openWaterSwolf[1] = { ...openWaterSwolf[1], swolf: 40, swolfLengthCount: 20 };
+    expect(resolveDashboardTrainingSwimPerformanceContext(payload(openWaterSwolf))).toBeNull();
+
+    const paceWithoutSamples = buildWeeks();
+    paceWithoutSamples[0] = {
+      ...paceWithoutSamples[0],
+      activityCount: 1,
+      distanceMeters: 1_500,
+      averagePaceSecondsPer100m: 100,
+      paceActivityCount: 0,
+    };
+    expect(resolveDashboardTrainingSwimPerformanceContext(payload(paceWithoutSamples))).toBeNull();
+
+    const swolfWithoutContext = buildWeeks();
+    swolfWithoutContext[0] = {
+      ...swolfWithoutContext[0],
+      activityCount: 1,
+      swolf: 40,
+      swolfLengthCount: 20,
+    };
+    expect(resolveDashboardTrainingSwimPerformanceContext(payload(swolfWithoutContext))).toBeNull();
   });
 });

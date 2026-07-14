@@ -144,6 +144,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         Cycling: 'Cycling',
         EBiking: 'E-Biking',
         EnduroMTB: 'Enduro MTB',
+        MountainBiking: 'Mountain Biking',
         DownhillCycling: 'Downhill Cycling',
         Running: 'Running',
         Walking: 'Walking',
@@ -172,6 +173,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         MountainBikingGroup: 'mountain_biking_group',
         RunningGroup: 'running_group',
         TrailRunningGroup: 'trail_running_group',
+        SwimmingGroup: 'swimming_group',
     },
     ActivityTypesHelper: {
         getActivityTypesForActivityGroup: (group: string) => {
@@ -184,6 +186,8 @@ vi.mock('@sports-alliance/sports-lib', () => ({
                     return ['Running', 'Treadmill', 'Indoor Running', 'Virtual Running'];
                 case 'trail_running_group':
                     return ['Trail Running'];
+                case 'swimming_group':
+                    return ['Swimming', 'Open Water Swimming'];
                 default:
                     return [];
             }
@@ -211,6 +215,8 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     DataPowerZoneSixDuration: { type: 'Power Zone 6 Duration' },
     DataPowerZoneSevenDuration: { type: 'Power Zone 7 Duration' },
     DataRecoveryTime: { type: 'Recovery Time' },
+    DataSwimDistance: { type: 'Swim Distance' },
+    DataSwimPaceAvg: { type: 'Average Swim Pace' },
     DataVO2Max: { type: 'VO2 Max' },
     RoutePreviewUtilities: {
         buildRouteFilePreview: (routeFile: any) => {

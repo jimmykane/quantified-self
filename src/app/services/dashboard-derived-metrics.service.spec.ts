@@ -56,6 +56,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingBuildComparison: null,
     trainingCapacity: null,
     powerCurve: null,
+    trainingSwimPerformance: null,
     formStatus: 'missing',
     recoveryNowStatus: 'missing',
     acwrStatus: 'missing',
@@ -73,6 +74,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingBuildComparisonStatus: 'missing',
     trainingCapacityStatus: 'missing',
     powerCurveStatus: 'missing',
+    trainingSwimPerformanceStatus: 'missing',
   });
 
   beforeEach(() => {
@@ -425,6 +427,44 @@ describe('DashboardDerivedMetricsService', () => {
     })).toBe('stale');
   });
 
+  it('maps a valid Swimming performance snapshot and self-heals malformed week pairs', async () => {
+    const uid = 'user-1';
+    const today = new Date();
+    const asOfDayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    const currentWeekStartMs = asOfDayMs - (((today.getUTCDay() + 6) % 7) * 24 * 60 * 60 * 1000);
+    const firstWeekStartMs = currentWeekStartMs - (11 * 7 * 24 * 60 * 60 * 1000);
+    const weeks = Array.from({ length: 12 }, (_, index) => firstWeekStartMs + index * 7 * 24 * 60 * 60 * 1000)
+      .flatMap(weekStartMs => ([
+        {
+          weekStartMs, environment: 'pool', activityCount: 1, distanceMeters: 1_500,
+          averagePaceSecondsPer100m: 100, paceActivityCount: 1, swolf: 42, swolfLengthCount: 60,
+        },
+        {
+          weekStartMs, environment: 'open-water', activityCount: 0, distanceMeters: 0,
+          averagePaceSecondsPer100m: null, paceActivityCount: 0, swolf: null, swolfLengthCount: 0,
+        },
+      ]));
+    const validPayload = {
+      dayBoundary: 'UTC', asOfDayMs, weekCount: 12, excludesMergedEvents: true,
+      swolfContext: { stroke: 'freestyle', poolLengthMeters: 25 }, weeks,
+    };
+    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
+    hoisted.docDataMock.mockReturnValue(of({
+      status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload: validPayload,
+    }));
+
+    const state = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingSwimPerformance],
+    }));
+
+    expect(state.trainingSwimPerformanceStatus).toBe('ready');
+    expect(state.trainingSwimPerformance?.weeks).toHaveLength(24);
+    expect((service as any).resolveSnapshotStatus(DERIVED_METRIC_KINDS.TrainingSwimPerformance, {
+      status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: { ...validPayload, weeks: validPayload.weeks.slice(0, 23) },
+    })).toBe('stale');
+  });
+
   it('marks a ready build comparison stale when its current window is from yesterday', () => {
     vi.useFakeTimers();
     try {
@@ -626,6 +666,7 @@ describe('DashboardDerivedMetricsService', () => {
       metricKinds: [
         DERIVED_METRIC_KINDS.TrainingCapacity,
         DERIVED_METRIC_KINDS.TrainingBuildComparison,
+        DERIVED_METRIC_KINDS.TrainingSwimPerformance,
       ],
     });
     resolveDashboardProbe?.({ data: { accepted: true } });

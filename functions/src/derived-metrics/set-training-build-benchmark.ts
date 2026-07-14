@@ -13,11 +13,11 @@ import { enforceAppCheck } from '../utils';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { applyEventTagChanges, getEventTags } from '../../../shared/event-tags';
+import { isTrainingDiscipline, resolveTrainingDisciplineFromActivityType } from '../../../shared/training-disciplines';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import {
     isRaceTaggedEvent,
     normalizeTrainingBuildBenchmarkSelection,
-    resolveTrainingDiscipline,
     markDerivedMetricsDirtyAndMaybeQueue,
 } from './derived-metrics.service';
 
@@ -64,10 +64,10 @@ function toMillis(value: unknown): number | null {
 }
 
 function requireDiscipline(value: unknown): DerivedTrainingDiscipline {
-    if (value === 'running' || value === 'cycling') {
+    if (isTrainingDiscipline(value)) {
         return value;
     }
-    throw new HttpsError('invalid-argument', 'discipline must be running or cycling.');
+    throw new HttpsError('invalid-argument', 'discipline must be running, cycling, or swimming.');
 }
 
 export function parseTrainingBuildBenchmarkRequest(value: unknown): SetTrainingBuildBenchmarkRequest {
@@ -104,6 +104,7 @@ function currentWindowStartDayMs(selection: TrainingBuildBenchmarkSelection, now
 
 function validateRaceBenchmarkEvent(
     eventData: Record<string, unknown>,
+    activityTypes: readonly unknown[],
     discipline: DerivedTrainingDiscipline,
     selection: Extract<TrainingBuildBenchmarkSelection, { mode: 'race' }>,
     nowMs: number,
@@ -113,7 +114,7 @@ function validateRaceBenchmarkEvent(
     if (
         isBenchmarkEventForTrainingMetrics(eventData)
         || (!allowRaceTagCreation && !isRaceTaggedEvent(eventData))
-        || resolveTrainingDiscipline(eventData) !== discipline
+        || !activityTypes.some(activityType => resolveTrainingDisciplineFromActivityType(activityType) === discipline)
         || startMs === null
     ) {
         throw new HttpsError('failed-precondition', 'The selected event is not an eligible tagged race for this sport.');
@@ -178,7 +179,14 @@ export const setTrainingBuildBenchmark = onCall({
                     throw new HttpsError('not-found', 'The selected race was not found.');
                 }
                 const eventData = asRecord(eventSnapshot.data()) || {};
-                validateRaceBenchmarkEvent(eventData, discipline, selection, nowMs, !!markRaceEventId);
+                const activitiesQuery = db.collection('users')
+                    .doc(uid)
+                    .collection('activities')
+                    .where('eventID', '==', selection.raceEventId)
+                    .select('type');
+                const activitiesSnapshot = await transaction.get(activitiesQuery);
+                const activityTypes = activitiesSnapshot.docs.map(activityDoc => activityDoc.data().type);
+                validateRaceBenchmarkEvent(eventData, activityTypes, discipline, selection, nowMs, !!markRaceEventId);
                 if (markRaceEventId) {
                     let tags: string[];
                     try {
