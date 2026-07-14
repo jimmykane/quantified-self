@@ -316,6 +316,27 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.isAutomaticSportVisibility).toBe(false);
   });
 
+  it('opens the benchmark picker as a wide dialog bounded by the viewport', () => {
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+    );
+
+    component.openTrainingBuildBenchmarkDialog('cycling');
+
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      width: '720px',
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: 'calc(100vh - 32px)',
+      data: expect.objectContaining({ discipline: 'cycling' }),
+    }));
+  });
+
   it('does not retain a pending override when settings propagated before the dialog result', () => {
     const afterClosed = new Subject<{ saved: true; visibleDisciplines: ['cycling'] }>();
     const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };

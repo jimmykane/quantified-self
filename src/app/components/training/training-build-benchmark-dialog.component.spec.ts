@@ -58,16 +58,43 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
 
     component.selectMode('period');
     component.updatePeriodEndDate('invalid');
+    expect(component.canSave).toBe(false);
     await component.save();
     expect(functionsService.call).not.toHaveBeenCalled();
     expect(component.errorMessage).toContain('Choose the final day');
 
+    component.updatePeriodEndDate('2025-12-31');
+    expect(component.canSave).toBe(false);
+    expect(component.errorMessage).toContain('must end before');
+    await component.save();
+    expect(functionsService.call).not.toHaveBeenCalled();
+    expect(component.errorMessage).toContain('must end before');
+
     component.updatePeriodEndDate('2025-06-15');
+    expect(component.canSave).toBe(true);
     await component.save();
     expect(functionsService.call).toHaveBeenCalledWith('setTrainingBuildBenchmark', {
       discipline: 'cycling',
       selection: { mode: 'period', durationWeeks: 12, endDayMs: Date.UTC(2025, 5, 15) },
     });
+  });
+
+  it('keeps the suggested manual period adjacent to the current build when duration changes', () => {
+    const asOfDayMs = Date.UTC(2026, 0, 1);
+    const { component } = createDialog({
+      discipline: 'cycling',
+      asOfDayMs,
+      selection: null,
+      suggestedRaces: [],
+    });
+
+    expect(component.periodEndDate).toBe('2025-10-09');
+
+    component.selectDurationWeeks(8);
+    component.selectMode('period');
+
+    expect(component.periodEndDate).toBe('2025-11-06');
+    expect(component.canSave).toBe(true);
   });
 
   it('uses swim-distance presentation for Swimming event choices', () => {
@@ -122,6 +149,22 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
       expect.objectContaining({ eventId: 'valid-for-8-only', isEligible: false }),
       expect.objectContaining({ eventId: 'valid-for-12', isEligible: true }),
     ]);
+  });
+
+  it('handles Material selection-list values defensively', () => {
+    const { component } = createDialog({
+      discipline: 'running',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [{ eventId: 'race-1', startDayMs: Date.UTC(2025, 8, 12), label: 'Autumn marathon' }],
+    });
+
+    component.selectEventOption(undefined);
+    expect(component.eventId).toBeNull();
+
+    component.selectEventOption(' race-1 ');
+    expect(component.eventId).toBe('race-1');
+    expect(component.selectedEvent?.eventId).toBe('race-1');
   });
 
   it('explicitly marks a selected historical event as Race before using it', async () => {
@@ -268,5 +311,49 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     expect(component.selectedEvent?.isEligible).toBe(false);
     expect(component.errorMessage).toContain('eligible');
     expect(functionsService.call).not.toHaveBeenCalled();
+  });
+
+  it('clears a selected event when a longer duration makes it overlap the current build', () => {
+    const { component } = createDialog({
+      discipline: 'running',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: { mode: 'race', durationWeeks: 8, raceEventId: 'autumn-event' },
+      suggestedRaces: [{
+        eventId: 'autumn-event',
+        startDayMs: Date.UTC(2025, 9, 31),
+        label: 'Autumn race',
+      }],
+    });
+
+    expect(component.selectedEvent?.isEligible).toBe(true);
+
+    component.selectDurationWeeks(12);
+
+    expect(component.eventId).toBeNull();
+    expect(component.selectedEvent).toBeNull();
+    expect(component.canSave).toBe(false);
+    expect(component.errorMessage).toContain('overlaps your current 12-week build');
+  });
+
+  it('does not leak event validation into the manual-period flow', () => {
+    const { component } = createDialog({
+      discipline: 'running',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [{
+        eventId: 'autumn-event',
+        startDayMs: Date.UTC(2025, 9, 31),
+        label: 'Autumn race',
+      }],
+    });
+
+    component.selectDurationWeeks(8);
+    component.selectEvent('autumn-event');
+    component.selectMode('period');
+    component.selectDurationWeeks(12);
+
+    expect(component.eventId).toBeNull();
+    expect(component.canSave).toBe(true);
+    expect(component.errorMessage).toBeNull();
   });
 });

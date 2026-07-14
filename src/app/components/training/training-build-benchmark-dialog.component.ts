@@ -113,8 +113,27 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   public selectDurationWeeks(durationWeeks: TrainingBuildDurationWeeks): void {
+    const previousAutomaticPeriodEndDate = this.formatDateInput(this.defaultPeriodEndDayMs());
+    const usesAutomaticPeriodEndDate = this.data.selection?.mode !== 'period'
+      && this.periodEndDate === previousAutomaticPeriodEndDate;
     this.durationWeeks = durationWeeks;
+    if (usesAutomaticPeriodEndDate) {
+      this.periodEndDate = this.formatDateInput(this.defaultPeriodEndDayMs());
+    }
     this.refreshEventOptions();
+    if (this.selectedEvent && !this.selectedEvent.isEligible) {
+      this.eventId = null;
+      this.refreshSelectedEvent();
+      if (this.mode === 'event') {
+        this.errorMessage = `That event overlaps your current ${durationWeeks}-week build. Choose an earlier event or a shorter build.`;
+        return;
+      }
+    }
+    const periodEndDayMs = this.parseDateInput(this.periodEndDate);
+    if (this.mode === 'period' && periodEndDayMs !== null && !this.isPeriodEndDayEligible(periodEndDayMs)) {
+      this.errorMessage = this.periodOverlapErrorMessage();
+      return;
+    }
     this.errorMessage = null;
   }
 
@@ -122,6 +141,14 @@ export class TrainingBuildBenchmarkDialogComponent {
     this.eventId = eventId;
     this.refreshSelectedEvent();
     this.errorMessage = null;
+  }
+
+  public selectEventOption(value: unknown): void {
+    const eventId = `${value || ''}`.trim();
+    if (!eventId) {
+      return;
+    }
+    this.selectEvent(eventId);
   }
 
   public selectEventDateFilter(value: TrainingBuildEventDateFilter): void {
@@ -141,7 +168,11 @@ export class TrainingBuildBenchmarkDialogComponent {
 
   public updatePeriodEndDate(value: string): void {
     this.periodEndDate = value;
-    this.errorMessage = null;
+    this.refreshSaveActionLabel();
+    const endDayMs = this.parseDateInput(value);
+    this.errorMessage = endDayMs !== null && !this.isPeriodEndDayEligible(endDayMs)
+      ? this.periodOverlapErrorMessage()
+      : null;
   }
 
   public async save(): Promise<void> {
@@ -167,6 +198,10 @@ export class TrainingBuildBenchmarkDialogComponent {
     const endDayMs = this.parseDateInput(this.periodEndDate);
     if (endDayMs === null) {
       this.errorMessage = 'Choose the final day of the historical build.';
+      return null;
+    }
+    if (!this.isPeriodEndDayEligible(endDayMs)) {
+      this.errorMessage = this.periodOverlapErrorMessage();
       return null;
     }
     return { mode: 'period', durationWeeks: this.durationWeeks, endDayMs };
@@ -204,7 +239,7 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   private defaultPeriodEndDayMs(): number {
-    return this.resolveAsOfDayMs() - ((12 * 7) * DAY_MS);
+    return this.resolveAsOfDayMs() - ((this.durationWeeks * 7) * DAY_MS);
   }
 
   private refreshEventOptions(): void {
@@ -336,11 +371,19 @@ export class TrainingBuildBenchmarkDialogComponent {
   private refreshSaveActionLabel(): void {
     if (this.mode === 'period') {
       this.saveActionLabel = 'Save benchmark';
-      this.canSave = true;
+      this.canSave = this.isPeriodEndDayEligible(this.parseDateInput(this.periodEndDate));
       return;
     }
     this.canSave = !!this.selectedEvent?.isEligible;
     this.saveActionLabel = this.selectedEventNeedsRaceTag ? 'Mark as Race and use event' : 'Use event';
+  }
+
+  private isPeriodEndDayEligible(endDayMs: number | null): boolean {
+    return endDayMs !== null && endDayMs < this.resolveCurrentBuildStartDayMs();
+  }
+
+  private periodOverlapErrorMessage(): string {
+    return `The historical build must end before your current ${this.durationWeeks}-week build begins.`;
   }
 
   private resolveCurrentBuildStartDayMs(): number {

@@ -468,8 +468,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const card = this.trainingBuildCards.find(item => item.discipline === discipline);
     const selection = this.resolveEffectiveTrainingBuildSelection(discipline);
     const dialogRef = this.dialog.open(TrainingBuildBenchmarkDialogComponent, {
-      width: 'min(100vw - 32px, 560px)',
-      maxWidth: '560px',
+      width: '720px',
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: 'calc(100vh - 32px)',
       data: {
         discipline,
         asOfDayMs: this.derivedState.trainingBuildComparison?.asOfDayMs ?? this.resolveCurrentUtcDayMs(),
