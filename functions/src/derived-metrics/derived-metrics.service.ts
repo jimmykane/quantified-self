@@ -85,7 +85,7 @@ import {
     TRAINING_BUILD_DURATION_WEEKS,
     getDerivedMetricDocId,
     getTrainingBuildBenchmarkSelectionKey,
-    normalizeTrainingBuildRaceEventId,
+    normalizeTrainingBuildEventId,
     normalizeTrainingBuildPeriodEndDayMs,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
@@ -1847,10 +1847,10 @@ export function normalizeTrainingBuildBenchmarkSelection(value: unknown): Traini
     if (!isTrainingBuildDurationWeeks(durationWeeks)) {
         return null;
     }
-    if (raw.mode === 'race') {
-        const raceEventId = normalizeTrainingBuildRaceEventId(raw.raceEventId);
-        return raceEventId
-            ? { mode: 'race', durationWeeks, raceEventId }
+    if (raw.mode === 'event') {
+        const eventId = normalizeTrainingBuildEventId(raw.eventId);
+        return eventId
+            ? { mode: 'event', durationWeeks, eventId }
             : null;
     }
     if (raw.mode === 'period') {
@@ -2042,13 +2042,13 @@ function resolveTrainingBuildBenchmarkReference(
     let windowEndDayMs: number;
     let label: string | null = null;
 
-    if (selection.mode === 'race') {
-        const race = events.find(event => event.eventId === selection.raceEventId && isRaceTaggedEvent(event.eventData));
-        if (!race || race.discipline !== discipline) {
+    if (selection.mode === 'event') {
+        const selectedEvent = events.find(event => event.eventId === selection.eventId);
+        if (!selectedEvent || selectedEvent.discipline !== discipline) {
             return null;
         }
-        windowEndDayMs = race.eventStartDayMs - DAY_MS;
-        label = toSafeString(race.eventData.name).trim() || 'Tagged race';
+        windowEndDayMs = selectedEvent.eventStartDayMs - DAY_MS;
+        label = toSafeString(selectedEvent.eventData.name).trim() || 'Historical event';
     } else {
         windowEndDayMs = resolveUtcDayStartMs(selection.endDayMs);
     }
@@ -2114,13 +2114,13 @@ function groupTrainingBuildActivitiesByEvent(
 function buildTrainingBuildRaceSuggestions(
     events: readonly ResolvedTrainingBuildEvent[],
     currentStartDayMs: number,
-    selectedRaceEventId: string | null = null,
+    selectedEventId: string | null = null,
 ): DerivedTrainingBuildRaceSuggestion[] {
     const eligibleGroups = groupTrainingBuildActivitiesByEvent(events)
         .filter(group => (group[0].eventStartDayMs - DAY_MS) < currentStartDayMs && isRaceTaggedEvent(group[0].eventData))
         .sort((left, right) => right[0].eventStartDayMs - left[0].eventStartDayMs || left[0].eventId.localeCompare(right[0].eventId));
-    const selectedGroupIndex = selectedRaceEventId
-        ? eligibleGroups.findIndex(group => group[0].eventId === selectedRaceEventId)
+    const selectedGroupIndex = selectedEventId
+        ? eligibleGroups.findIndex(group => group[0].eventId === selectedEventId)
         : -1;
     if (selectedGroupIndex > 0) {
         const [selectedGroup] = eligibleGroups.splice(selectedGroupIndex, 1);
@@ -2134,10 +2134,19 @@ function buildTrainingBuildRaceSuggestions(
 function buildTrainingBuildEventSuggestions(
     events: readonly ResolvedTrainingBuildEvent[],
     currentStartDayMs: number,
+    selectedEventId: string | null = null,
 ): DerivedTrainingBuildEventSuggestion[] {
-    return groupTrainingBuildActivitiesByEvent(events)
+    const eligibleGroups = groupTrainingBuildActivitiesByEvent(events)
         .filter(group => (group[0].eventStartDayMs - DAY_MS) < currentStartDayMs && !isRaceTaggedEvent(group[0].eventData))
-        .sort((left, right) => right[0].eventStartDayMs - left[0].eventStartDayMs || left[0].eventId.localeCompare(right[0].eventId))
+        .sort((left, right) => right[0].eventStartDayMs - left[0].eventStartDayMs || left[0].eventId.localeCompare(right[0].eventId));
+    const selectedGroupIndex = selectedEventId
+        ? eligibleGroups.findIndex(group => group[0].eventId === selectedEventId)
+        : -1;
+    if (selectedGroupIndex > 0) {
+        const [selectedGroup] = eligibleGroups.splice(selectedGroupIndex, 1);
+        eligibleGroups.unshift(selectedGroup);
+    }
+    return eligibleGroups
         .slice(0, TRAINING_BUILD_EVENT_SUGGESTION_LIMIT)
         .map(group => buildTrainingBuildEventSuggestion(group));
 }
@@ -2172,9 +2181,13 @@ export function buildTrainingBuildComparisonMetricPayload(
         const suggestedRaces = buildTrainingBuildRaceSuggestions(
             events,
             shortestCurrentStartDayMs,
-            selection?.mode === 'race' ? selection.raceEventId : null,
+            selection?.mode === 'event' ? selection.eventId : null,
         );
-        const suggestedEvents = buildTrainingBuildEventSuggestions(events, shortestCurrentStartDayMs);
+        const suggestedEvents = buildTrainingBuildEventSuggestions(
+            events,
+            shortestCurrentStartDayMs,
+            selection?.mode === 'event' ? selection.eventId : null,
+        );
         if (!selection) {
             return {
                 discipline,

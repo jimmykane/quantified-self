@@ -117,7 +117,7 @@ describe('setTrainingBuildBenchmark', () => {
             app: { appId: 'app-check' },
             data: {
                 discipline: 'running',
-                selection: { mode: 'race', durationWeeks: 12, raceEventId: 'race-1' },
+                selection: { mode: 'event', durationWeeks: 12, eventId: 'race-1' },
             },
         });
 
@@ -127,7 +127,7 @@ describe('setTrainingBuildBenchmark', () => {
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
             trainingSettings: {
                 buildBenchmarks: {
-                    running: { mode: 'race', durationWeeks: 12, raceEventId: 'race-1' },
+                    running: { mode: 'event', durationWeeks: 12, eventId: 'race-1' },
                 },
             },
         }, { merge: true });
@@ -137,7 +137,7 @@ describe('setTrainingBuildBenchmark', () => {
         expect(result).toEqual({ accepted: true, queued: true, generation: 14 });
     });
 
-    it('accepts a valid tagged race with a legacy ISO start date', async () => {
+    it('accepts a valid historical event with an ISO start date', async () => {
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
@@ -153,13 +153,13 @@ describe('setTrainingBuildBenchmark', () => {
             app: { appId: 'app-check' },
             data: {
                 discipline: 'running',
-                selection: { mode: 'race', durationWeeks: 12, raceEventId: 'race-1' },
+                selection: { mode: 'event', durationWeeks: 12, eventId: 'race-1' },
             },
         })).resolves.toMatchObject({ accepted: true });
         expect(hoisted.transactionSet).toHaveBeenCalled();
     });
 
-    it('rejects races without an exact Race tag and overlapping manual periods', async () => {
+    it('accepts an untagged event and rejects overlapping manual periods', async () => {
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
@@ -170,8 +170,10 @@ describe('setTrainingBuildBenchmark', () => {
         });
         await expect((setTrainingBuildBenchmark as any)({
             auth: { uid: 'user-1' }, app: {},
-            data: { discipline: 'running', selection: { mode: 'race', durationWeeks: 12, raceEventId: 'race-1' } },
-        })).rejects.toMatchObject({ code: 'failed-precondition' });
+            data: { discipline: 'running', selection: { mode: 'event', durationWeeks: 12, eventId: 'race-1' } },
+        })).resolves.toMatchObject({ accepted: true });
+        expect(hoisted.transactionUpdate).not.toHaveBeenCalled();
+        hoisted.transactionSet.mockClear();
 
         await expect((setTrainingBuildBenchmark as any)({
             auth: { uid: 'user-1' }, app: {},
@@ -216,15 +218,15 @@ describe('setTrainingBuildBenchmark', () => {
         })).toThrow('selection must be a valid');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
-            selection: { mode: 'race', durationWeeks: 8, raceEventId: 'race/other-user' },
+            selection: { mode: 'event', durationWeeks: 8, eventId: 'event/other-user' },
         })).toThrow('selection must be a valid');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
-            selection: { mode: 'race', durationWeeks: 8, raceEventId: '..' },
+            selection: { mode: 'event', durationWeeks: 8, eventId: '..' },
         })).toThrow('selection must be a valid');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
-            selection: { mode: 'race', durationWeeks: 8, raceEventId: '__reserved__' },
+            selection: { mode: 'event', durationWeeks: 8, eventId: '__reserved__' },
         })).toThrow('selection must be a valid');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
@@ -232,14 +234,13 @@ describe('setTrainingBuildBenchmark', () => {
         })).toThrow('selection must be a valid');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
-            selection: { mode: 'race', durationWeeks: 8, raceEventId: '🏃'.repeat(400) },
+            selection: { mode: 'event', durationWeeks: 8, eventId: '🏃'.repeat(400) },
         })).toThrow('selection must be a valid');
         expect(() => parseTrainingBuildBenchmarkRequest({ discipline: 'rowing', selection: null })).toThrow('discipline');
         expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
-            selection: { mode: 'race', durationWeeks: 8, raceEventId: 'event-1' },
-            markRaceEventId: 'other-event',
-        })).toThrow('markRaceEventId');
+            selection: { mode: 'session', durationWeeks: 8, eventId: 'event-1' },
+        })).toThrow('selection must be a valid');
     });
 
     it('accepts Swimming when the selected parent event has a swimming activity leg', async () => {
@@ -257,19 +258,19 @@ describe('setTrainingBuildBenchmark', () => {
             auth: { uid: 'user-1' }, app: {},
             data: {
                 discipline: 'swimming',
-                selection: { mode: 'race', durationWeeks: 8, raceEventId: 'triathlon-1' },
+                selection: { mode: 'event', durationWeeks: 8, eventId: 'triathlon-1' },
             },
         })).resolves.toMatchObject({ accepted: true });
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
             trainingSettings: {
                 buildBenchmarks: {
-                    swimming: { mode: 'race', durationWeeks: 8, raceEventId: 'triathlon-1' },
+                    swimming: { mode: 'event', durationWeeks: 8, eventId: 'triathlon-1' },
                 },
             },
         }, { merge: true });
     });
 
-    it('adds the Race tag and saves the matching benchmark in one transaction', async () => {
+    it('saves an untagged event benchmark without changing the event', async () => {
         hoisted.transactionGet.mockResolvedValueOnce({
             exists: true,
             data: () => ({
@@ -285,19 +286,15 @@ describe('setTrainingBuildBenchmark', () => {
             auth: { uid: 'user-1' }, app: {},
             data: {
                 discipline: 'running',
-                selection: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
-                markRaceEventId: 'event-1',
+                selection: { mode: 'event', durationWeeks: 12, eventId: 'event-1' },
             },
         })).resolves.toMatchObject({ accepted: true });
 
-        expect(hoisted.transactionUpdate).toHaveBeenCalledWith(
-            { path: 'users/user-1/events/event-1' },
-            { tags: ['Marathon block', 'Race'], benchmarkReviewTags: { __delete__: true } },
-        );
+        expect(hoisted.transactionUpdate).not.toHaveBeenCalled();
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
             trainingSettings: {
                 buildBenchmarks: {
-                    running: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
+                    running: { mode: 'event', durationWeeks: 12, eventId: 'event-1' },
                 },
             },
         }, { merge: true });

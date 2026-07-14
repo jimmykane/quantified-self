@@ -10,7 +10,7 @@ function createDialog(data: any) {
 }
 
 describe('TrainingBuildBenchmarkDialogComponent', () => {
-  it('saves an exact tagged race selection with the chosen duration', async () => {
+  it('saves an exact event selection with the chosen duration', async () => {
     const { component, dialogRef, functionsService } = createDialog({
       discipline: 'running',
       asOfDayMs: Date.UTC(2026, 0, 1),
@@ -24,11 +24,11 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
 
     expect(functionsService.call).toHaveBeenCalledWith('setTrainingBuildBenchmark', {
       discipline: 'running',
-      selection: { mode: 'race', durationWeeks: 10, raceEventId: 'race-1' },
+      selection: { mode: 'event', durationWeeks: 10, eventId: 'race-1' },
     });
     expect(dialogRef.close).toHaveBeenCalledWith({
       saved: true,
-      selection: { mode: 'race', durationWeeks: 10, raceEventId: 'race-1' },
+      selection: { mode: 'event', durationWeeks: 10, eventId: 'race-1' },
     });
   });
 
@@ -167,7 +167,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     expect(component.selectedEvent?.eventId).toBe('race-1');
   });
 
-  it('explicitly marks a selected historical event as Race before using it', async () => {
+  it('uses a selected untagged historical event without changing its tags', async () => {
     const { component, dialogRef, functionsService } = createDialog({
       discipline: 'running',
       asOfDayMs: Date.UTC(2026, 0, 1),
@@ -181,13 +181,12 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
 
     expect(functionsService.call).toHaveBeenCalledWith('setTrainingBuildBenchmark', {
       discipline: 'running',
-      selection: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
-      markRaceEventId: 'event-1',
+      selection: { mode: 'event', durationWeeks: 12, eventId: 'event-1' },
     });
-    expect(component.saveActionLabel).toBe('Mark as Race and use event');
+    expect(component.saveActionLabel).toBe('Use event');
     expect(dialogRef.close).toHaveBeenCalledWith({
       saved: true,
-      selection: { mode: 'race', durationWeeks: 12, raceEventId: 'event-1' },
+      selection: { mode: 'event', durationWeeks: 12, eventId: 'event-1' },
     });
   });
 
@@ -317,7 +316,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
     const { component } = createDialog({
       discipline: 'running',
       asOfDayMs: Date.UTC(2026, 0, 1),
-      selection: { mode: 'race', durationWeeks: 8, raceEventId: 'autumn-event' },
+      selection: { mode: 'event', durationWeeks: 8, eventId: 'autumn-event' },
       suggestedRaces: [{
         eventId: 'autumn-event',
         startDayMs: Date.UTC(2025, 9, 31),

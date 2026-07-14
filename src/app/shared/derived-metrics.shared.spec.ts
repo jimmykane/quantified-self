@@ -9,8 +9,8 @@ import {
   buildDerivedFormDailyLoads,
   getDerivedMetricDocId,
   getTrainingBuildBenchmarkSelectionKey,
+  normalizeTrainingBuildEventId,
   normalizeTrainingBuildPeriodEndDayMs,
-  normalizeTrainingBuildRaceEventId,
   isDerivedMetricKind,
   normalizeDerivedFormDailyLoads,
   normalizeDerivedMetricKinds,
@@ -59,13 +59,16 @@ describe('derived-metrics shared helpers', () => {
     expect(getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)).toBe('recovery_now');
   });
 
-  it('normalizes only Firestore-safe race event IDs for saved build references', () => {
-    expect(normalizeTrainingBuildRaceEventId(' race-1 ')).toBe('race-1');
-    expect(normalizeTrainingBuildRaceEventId('race/other')).toBeNull();
-    expect(normalizeTrainingBuildRaceEventId('.')).toBeNull();
-    expect(normalizeTrainingBuildRaceEventId('..')).toBeNull();
-    expect(normalizeTrainingBuildRaceEventId('__reserved__')).toBeNull();
-    expect(normalizeTrainingBuildRaceEventId('🏃'.repeat(400))).toBeNull();
+  it('normalizes only Firestore-safe event IDs for saved build references', () => {
+    expect(normalizeTrainingBuildEventId(' event-1 ')).toBe('event-1');
+    expect(normalizeTrainingBuildEventId('event/other')).toBeNull();
+    expect(normalizeTrainingBuildEventId('.')).toBeNull();
+    expect(normalizeTrainingBuildEventId('..')).toBeNull();
+    expect(normalizeTrainingBuildEventId('__reserved__')).toBeNull();
+    expect(normalizeTrainingBuildEventId('🏃'.repeat(400))).toBeNull();
+    expect(getTrainingBuildBenchmarkSelectionKey({
+      mode: 'event', durationWeeks: 10, eventId: 'event-1',
+    })).toBe('event:10:event-1');
   });
 
   it('uses one UTC day and key for manual build benchmark dates', () => {

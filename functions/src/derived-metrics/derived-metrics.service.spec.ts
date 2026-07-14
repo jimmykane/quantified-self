@@ -392,7 +392,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
 });
 
 describe('buildTrainingBuildComparisonMetricPayload', () => {
-    it('keeps sport windows separate, excludes the race anchor, and leaves optional metrics explicit', async () => {
+    it('keeps sport windows separate, excludes the event anchor, and leaves optional metrics explicit', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
         const raceDayMs = Date.UTC(2026, 3, 20);
@@ -447,7 +447,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         const result = buildTrainingBuildComparisonMetricPayload(buildTrainingActivitySources(docs), {
             trainingSettings: {
                 buildBenchmarks: {
-                    running: { mode: 'race', durationWeeks: 8, raceEventId: 'race-anchor' },
+                    running: { mode: 'event', durationWeeks: 8, eventId: 'race-anchor' },
                     cycling: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 1) },
                 },
             },
@@ -484,7 +484,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
             trainingSettings: {
                 buildBenchmarks: {
                     running: { mode: 'period', durationWeeks: 12, endDayMs: Date.UTC(2026, 5, 29) },
-                    cycling: { mode: 'race', durationWeeks: 9, raceEventId: 'missing' },
+                    cycling: { mode: 'event', durationWeeks: 9, eventId: 'missing' },
                 },
             },
         }, nowMs);
@@ -493,15 +493,15 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(result.payload.disciplines.find(item => item.discipline === 'cycling')?.status).toBe('not-configured');
     });
 
-    it('honours a legacy Race tag when resolving a saved race benchmark', async () => {
+    it('keeps an existing Race-tagged event prioritized when resolving its saved benchmark', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
         const raceDayMs = Date.UTC(2026, 3, 20);
         const docs = [
             {
-                id: 'legacy-race',
+                id: 'tagged-race',
                 data: () => ({
-                    name: 'Legacy marathon',
+                    name: 'Tagged marathon',
                     benchmarkReviewTags: ['Race'],
                     startDate: raceDayMs,
                     stats: { [DataActivityTypes.type]: [ActivityTypes.Running] },
@@ -512,24 +512,24 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         const result = buildTrainingBuildComparisonMetricPayload(buildTrainingActivitySources(docs), {
             trainingSettings: {
                 buildBenchmarks: {
-                    running: { mode: 'race', durationWeeks: 8, raceEventId: 'legacy-race' },
+                    running: { mode: 'event', durationWeeks: 8, eventId: 'tagged-race' },
                 },
             },
         }, nowMs);
 
         const running = result.payload.disciplines.find(item => item.discipline === 'running');
         expect(running?.status).toBe('ready');
-        expect(running?.selection?.label).toBe('Legacy marathon');
+        expect(running?.selection?.label).toBe('Tagged marathon');
         expect(running?.suggestedRaces).toEqual([
             {
-                eventId: 'legacy-race', startDayMs: raceDayMs, label: 'Legacy marathon',
+                eventId: 'tagged-race', startDayMs: raceDayMs, label: 'Tagged marathon',
                 distanceMeters: null, durationSeconds: null, trainingStressScore: null,
             },
         ]);
         expect(running?.suggestedEvents).toEqual([]);
     });
 
-    it('keeps an older saved race visible when newer suggestions reach the bounded limit', async () => {
+    it('keeps an older saved Race-tagged event visible when newer suggestions reach the bounded limit', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
         const docs = Array.from({ length: 21 }, (_, index) => ({
@@ -545,7 +545,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         const result = buildTrainingBuildComparisonMetricPayload(buildTrainingActivitySources(docs), {
             trainingSettings: {
                 buildBenchmarks: {
-                    running: { mode: 'race', durationWeeks: 8, raceEventId: 'race-0' },
+                    running: { mode: 'event', durationWeeks: 8, eventId: 'race-0' },
                 },
             },
         }, nowMs);
@@ -554,6 +554,32 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running?.status).toBe('ready');
         expect(running?.suggestedRaces).toHaveLength(20);
         expect(running?.suggestedRaces[0]?.eventId).toBe('race-0');
+    });
+
+    it('keeps an older saved untagged event visible when event suggestions reach the bounded limit', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
+        const docs = Array.from({ length: 101 }, (_, index) => ({
+            id: `event-${index}`,
+            data: () => ({
+                name: `Training event ${index}`,
+                startDate: Date.UTC(2024, 0, index + 1),
+                stats: { [DataActivityTypes.type]: [ActivityTypes.Running] },
+            }),
+        })) as any;
+
+        const result = buildTrainingBuildComparisonMetricPayload(buildTrainingActivitySources(docs), {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'event', durationWeeks: 8, eventId: 'event-0' },
+                },
+            },
+        }, nowMs);
+
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+        expect(running?.status).toBe('ready');
+        expect(running?.suggestedEvents).toHaveLength(100);
+        expect(running?.suggestedEvents[0]?.eventId).toBe('event-0');
     });
 
     it('keeps newer anchors available when a saved benchmark uses a longer duration', async () => {
@@ -582,7 +608,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         const result = buildTrainingBuildComparisonMetricPayload(buildTrainingActivitySources(docs), {
             trainingSettings: {
                 buildBenchmarks: {
-                    running: { mode: 'race', durationWeeks: 12, raceEventId: 'saved-race' },
+                    running: { mode: 'event', durationWeeks: 12, eventId: 'saved-race' },
                 },
             },
         }, nowMs);
@@ -1322,9 +1348,9 @@ describe('activity-level Training sources and swimming performance', () => {
         const result = buildTrainingBuildComparisonMetricPayload(joined, {
             trainingSettings: {
                 buildBenchmarks: {
-                    running: { mode: 'race', durationWeeks: 8, raceEventId: 'triathlon-race' },
-                    cycling: { mode: 'race', durationWeeks: 8, raceEventId: 'triathlon-race' },
-                    swimming: { mode: 'race', durationWeeks: 8, raceEventId: 'triathlon-race' },
+                    running: { mode: 'event', durationWeeks: 8, eventId: 'triathlon-race' },
+                    cycling: { mode: 'event', durationWeeks: 8, eventId: 'triathlon-race' },
+                    swimming: { mode: 'event', durationWeeks: 8, eventId: 'triathlon-race' },
                 },
             },
         }, nowMs);

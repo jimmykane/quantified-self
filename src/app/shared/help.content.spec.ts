@@ -102,6 +102,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('does not filter the overall comparison or notable changes');
     expect(gettingStartedSection?.content).toContain('Mountain Biking groups');
     expect(gettingStartedSection?.content).toContain('one activity leg at a time');
+    expect(gettingStartedSection?.content).toContain('shown first as quick picks');
+    expect(gettingStartedSection?.content).toContain('selecting an event never changes its tags');
     expect(gettingStartedSection?.content).toContain('keeps pool and open-water evidence separate');
     expect(gettingStartedSection?.content).toContain('does not infer Critical Swim Speed');
     expect(gettingStartedSection?.content).toContain('zero-session result');

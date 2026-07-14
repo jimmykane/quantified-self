@@ -279,10 +279,6 @@ mat-dialog-actions mat-spinner {
   flex: 0 0 18px;
 }
 
-.save-action-label-compact {
-  display: none;
-}
-
 @media (max-width: 680px) {
   .dialog-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -368,13 +364,6 @@ mat-dialog-actions mat-spinner {
     margin-left: 0;
   }
 
-  .save-action-label-full {
-    display: none;
-  }
-
-  .save-action-label-compact {
-    display: inline;
-  }
 }
 
 @media (max-width: 680px) {

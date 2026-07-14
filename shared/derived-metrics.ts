@@ -312,9 +312,9 @@ export type TrainingBuildDurationWeeks = typeof TRAINING_BUILD_DURATION_WEEKS[nu
 
 export type TrainingBuildBenchmarkSelection =
   | {
-    mode: 'race';
+    mode: 'event';
     durationWeeks: TrainingBuildDurationWeeks;
-    raceEventId: string;
+    eventId: string;
   }
   | {
     mode: 'period';
@@ -359,11 +359,6 @@ export function normalizeTrainingVisibleDisciplines(value: unknown): TrainingVis
 export interface SetTrainingBuildBenchmarkRequest {
   discipline: DerivedTrainingDiscipline;
   selection: TrainingBuildBenchmarkSelection | null;
-  /**
-   * When present, the selected event is explicitly promoted to a Race tag as
-   * part of saving this benchmark. It must match selection.raceEventId.
-   */
-  markRaceEventId?: string;
 }
 
 export interface SetTrainingBuildBenchmarkResponse {
@@ -377,22 +372,22 @@ export interface SetTrainingBuildBenchmarkResponse {
  * Keeping this aligned with Firestore's document-ID constraints means a malformed
  * callable payload cannot turn into an invalid document path during validation.
  */
-export function normalizeTrainingBuildRaceEventId(value: unknown): string | null {
+export function normalizeTrainingBuildEventId(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
   }
-  const raceEventId = value.trim();
+  const eventId = value.trim();
   if (
-    !raceEventId
-    || raceEventId === '.'
-    || raceEventId === '..'
-    || /^__.*__$/.test(raceEventId)
-    || raceEventId.includes('/')
-    || new TextEncoder().encode(raceEventId).byteLength > 1_500
+    !eventId
+    || eventId === '.'
+    || eventId === '..'
+    || /^__.*__$/.test(eventId)
+    || eventId.includes('/')
+    || new TextEncoder().encode(eventId).byteLength > 1_500
   ) {
     return null;
   }
-  return raceEventId;
+  return eventId;
 }
 
 /**
@@ -425,9 +420,9 @@ export function getTrainingBuildBenchmarkSelectionKey(value: unknown): string | 
   if (!TRAINING_BUILD_DURATION_WEEKS.includes(durationWeeks as TrainingBuildDurationWeeks)) {
     return null;
   }
-  if (selection.mode === 'race') {
-    const raceEventId = normalizeTrainingBuildRaceEventId(selection.raceEventId);
-    return raceEventId ? `race:${durationWeeks}:${raceEventId}` : null;
+  if (selection.mode === 'event') {
+    const eventId = normalizeTrainingBuildEventId(selection.eventId);
+    return eventId ? `event:${durationWeeks}:${eventId}` : null;
   }
   if (selection.mode === 'period') {
     const endDayMs = normalizeTrainingBuildPeriodEndDayMs(selection.endDayMs);
@@ -564,7 +559,7 @@ export interface DerivedTrainingBuildComparisonDiscipline {
   current: DerivedTrainingBuildWindow | null;
   benchmark: DerivedTrainingBuildWindow | null;
   suggestedRaces: DerivedTrainingBuildRaceSuggestion[];
-  // Bounded, historical, untagged events for the explicit “mark as Race” flow.
+  // Bounded historical events without an exact Race tag; tagged races are prioritized above.
   suggestedEvents: DerivedTrainingBuildEventSuggestion[];
 }
 

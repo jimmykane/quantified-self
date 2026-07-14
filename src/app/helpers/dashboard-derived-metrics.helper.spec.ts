@@ -348,7 +348,7 @@ describe('dashboard-derived-metrics.helper', () => {
   });
 
   it('normalizes separate sport build comparisons and preserves unavailable optional metrics', () => {
-    const context = resolveDashboardTrainingBuildComparisonContext({
+    const payload = {
       dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
       excludesMergedEvents: true,
@@ -356,11 +356,11 @@ describe('dashboard-derived-metrics.helper', () => {
         discipline: 'running',
         status: 'ready',
         selection: {
-          mode: 'race', durationWeeks: 12, raceEventId: 'race-1', selectionKey: 'race:12:race-1',
-          windowStartDayMs: Date.UTC(2026, 2, 1), windowEndDayMs: Date.UTC(2026, 4, 23), label: 'Spring marathon',
+          mode: 'event', durationWeeks: 12, eventId: 'race-1', selectionKey: 'event:12:race-1',
+          windowStartDayMs: Date.UTC(2026, 2, 1), windowEndDayMs: Date.UTC(2026, 4, 23), label: ' Spring marathon ',
         },
         current: {
-          periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 4, 8), windowEndDayMs: Date.UTC(2026, 5, 30),
+          periodWeeks: 12, windowStartDayMs: Date.UTC(2026, 3, 8), windowEndDayMs: Date.UTC(2026, 5, 30),
           activityCount: 8, durationSeconds: 12_000, distanceMeters: 82_000, distanceEventCount: 8,
           trainingStressScore: null, trainingStressScoreEventCount: 0, activeWeekCount: 7,
           longestActivityDurationSeconds: 3_600, easySeconds: null, moderateSeconds: null, hardSeconds: null,
@@ -390,11 +390,13 @@ describe('dashboard-derived-metrics.helper', () => {
       }, {
         discipline: 'swimming', status: 'not-configured', selection: null, current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
       }],
-    });
+    };
+    const context = resolveDashboardTrainingBuildComparisonContext(payload);
 
     expect(context?.disciplines).toHaveLength(3);
     expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
-    expect(context?.disciplines[0].selection?.mode).toBe('race');
+    expect(context?.disciplines[0].selection?.mode).toBe('event');
+    expect(context?.disciplines[0].selection?.label).toBe('Spring marathon');
     expect(context?.disciplines[0].suggestedEvents).toEqual([
       {
         eventId: 'event-1', startDayMs: Date.UTC(2026, 4, 12), label: 'Long run',
@@ -403,6 +405,18 @@ describe('dashboard-derived-metrics.helper', () => {
     ]);
     expect(context?.disciplines[1].status).toBe('not-configured');
     expect(context?.disciplines[1].suggestedEvents).toEqual([]);
+
+    payload.disciplines[0].suggestedEvents[0].eventId = 'race-1';
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+    payload.disciplines[0].suggestedEvents[0].eventId = 'event-1';
+    payload.disciplines[0].selection!.selectionKey = 'event:12:another-event';
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+    payload.disciplines[0].selection!.selectionKey = 'event:12:race-1';
+    payload.disciplines[0].selection!.windowStartDayMs += 24 * 60 * 60 * 1000;
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+    payload.disciplines[0].selection!.windowStartDayMs -= 24 * 60 * 60 * 1000;
+    payload.disciplines[0].benchmark!.windowStartDayMs += 24 * 60 * 60 * 1000;
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
   });
 
   it('rejects incomplete or duplicated sport build comparison snapshots for self-healing', () => {

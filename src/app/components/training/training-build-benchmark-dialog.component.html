@@ -20,7 +20,7 @@
     <div class="dialog-field">
       <span class="field-label">Reference</span>
       <mat-button-toggle-group class="benchmark-segmented-control" hideSingleSelectionIndicator [value]="mode" (change)="selectMode($event.value)" [disabled]="isSaving" aria-label="Benchmark reference type">
-        <mat-button-toggle value="event"><span class="full-toggle-label">Race or event</span><span class="compact-toggle-label">Event</span></mat-button-toggle>
+        <mat-button-toggle value="event">Event</mat-button-toggle>
         <mat-button-toggle value="period"><span class="full-toggle-label">Manual period</span><span class="compact-toggle-label">Dates</span></mat-button-toggle>
       </mat-button-toggle-group>
     </div>
@@ -30,11 +30,11 @@
     @if (eventSuggestionsState === 'ready') {
       <div class="event-picker" [class.event-picker-with-races]="visibleSuggestedRaces.length" aria-label="Race and event suggestions">
         @if (visibleSuggestedRaces.length) {
-          <mat-card appearance="outlined" class="event-picker-section qs-card-plain" aria-label="Tagged races">
+          <mat-card appearance="outlined" class="event-picker-section qs-card-plain" aria-label="Race-tagged events">
             <div class="event-picker-heading">
               <div>
-                <span class="field-label">Your tagged races</span>
-                <p>Use an existing <strong>Race</strong>-tagged event.</p>
+                <span class="field-label">Race-tagged events</span>
+                <p>Quick picks from events already tagged <strong>Race</strong>.</p>
               </div>
               @if (visibleSuggestedRaces.length > displayedSuggestedRaces.length) {
                 <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show all</button>
@@ -76,11 +76,7 @@
           <div class="event-picker-heading">
             <div>
               <span class="field-label">Choose an event</span>
-              @if (visibleSuggestedRaces.length) {
-                <p>Or pick by activity facts. We will add the <strong>Race</strong> tag when you save.</p>
-              } @else {
-                <p>Pick an event. If needed, we will add the <strong>Race</strong> tag when you save.</p>
-              }
+              <p>{{ visibleSuggestedRaces.length ? 'Or choose' : 'Choose' }} any eligible event. Its tags will not change.</p>
             </div>
           </div>
           <div class="event-picker-filters">
@@ -111,7 +107,7 @@
               <div class="event-selection-block">
                 <span class="event-selection-label">Benchmark window · event excluded</span>
                 <strong>{{ selectedBuildStartDayMs | date:'mediumDate':'UTC' }} – {{ selectedBenchmarkEndDayMs | date:'mediumDate':'UTC' }}</strong>
-                <span>{{ durationWeeks }} weeks@if (selectedEventNeedsRaceTag) { · Adds <strong>Race</strong> tag on save }</span>
+                <span>{{ durationWeeks }} weeks</span>
               </div>
             </div>
           } @else {
@@ -196,8 +192,7 @@
   <button class="dialog-primary-action" mat-flat-button color="primary" (click)="save()" [disabled]="isSaving || !canSave">
     <span class="dialog-action-content">
       @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> }
-      <span class="save-action-label-full">{{ saveActionLabel }}</span>
-      <span class="save-action-label-compact">{{ selectedEventNeedsRaceTag ? 'Add Race tag and use' : saveActionLabel }}</span>
+      <span>{{ saveActionLabel }}</span>
     </span>
   </button>
 </mat-dialog-actions>

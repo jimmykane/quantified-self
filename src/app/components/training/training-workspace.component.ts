@@ -615,8 +615,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (!selection) {
       return '';
     }
-    if (selection.mode === 'race') {
-      return selection.label || 'Tagged race';
+    if (selection.mode === 'event') {
+      return selection.label || 'Historical event';
     }
     return 'Manual historical period';
   }

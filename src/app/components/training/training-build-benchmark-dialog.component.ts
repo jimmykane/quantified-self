@@ -73,7 +73,6 @@ export class TrainingBuildBenchmarkDialogComponent {
   public selectedEvent: TrainingBuildEventOption | null = null;
   public selectedBuildStartDayMs: number | null = null;
   public selectedBenchmarkEndDayMs: number | null = null;
-  public selectedEventNeedsRaceTag = false;
   public saveActionLabel = 'Save benchmark';
   public canSave = true;
 
@@ -89,7 +88,7 @@ export class TrainingBuildBenchmarkDialogComponent {
     const selection = data.selection;
     this.durationWeeks = selection?.durationWeeks || 12;
     this.mode = selection?.mode === 'period' ? 'period' : 'event';
-    this.eventId = selection?.mode === 'race' ? selection.raceEventId : null;
+    this.eventId = selection?.mode === 'event' ? selection.eventId : null;
     this.eventSuggestionsState = data.eventSuggestionsState || 'ready';
     this.periodEndDate = selection?.mode === 'period'
       ? this.formatDateInput(selection.endDayMs)
@@ -190,10 +189,10 @@ export class TrainingBuildBenchmarkDialogComponent {
   private buildSelection(): TrainingBuildBenchmarkSelection | null {
     if (this.mode === 'event') {
       if (!this.selectedEvent || !this.selectedEvent.isEligible) {
-        this.errorMessage = 'Choose an eligible tagged race or historical event.';
+        this.errorMessage = 'Choose an eligible historical event.';
         return null;
       }
-      return { mode: 'race', durationWeeks: this.durationWeeks, raceEventId: this.selectedEvent.eventId };
+      return { mode: 'event', durationWeeks: this.durationWeeks, eventId: this.selectedEvent.eventId };
     }
     const endDayMs = this.parseDateInput(this.periodEndDate);
     if (endDayMs === null) {
@@ -214,9 +213,6 @@ export class TrainingBuildBenchmarkDialogComponent {
       const request: SetTrainingBuildBenchmarkRequest = {
         discipline: this.data.discipline,
         selection,
-        ...(selection?.mode === 'race' && this.selectedEventNeedsRaceTag
-          ? { markRaceEventId: selection.raceEventId }
-          : {}),
       };
       const response = await this.functionsService.call<
         SetTrainingBuildBenchmarkRequest,
@@ -359,8 +355,6 @@ export class TrainingBuildBenchmarkDialogComponent {
     const selected = [...this.visibleSuggestedRaces, ...this.toEventOptions(this.data.suggestedEvents || [])]
       .find(event => event.eventId === this.eventId) || null;
     this.selectedEvent = selected;
-    this.selectedEventNeedsRaceTag = !!selected
-      && !this.visibleSuggestedRaces.some(event => event.eventId === selected.eventId);
     this.selectedBenchmarkEndDayMs = selected ? selected.startDayMs - DAY_MS : null;
     this.selectedBuildStartDayMs = this.selectedBenchmarkEndDayMs === null
       ? null
@@ -375,7 +369,7 @@ export class TrainingBuildBenchmarkDialogComponent {
       return;
     }
     this.canSave = !!this.selectedEvent?.isEligible;
-    this.saveActionLabel = this.selectedEventNeedsRaceTag ? 'Mark as Race and use event' : 'Use event';
+    this.saveActionLabel = 'Use event';
   }
 
   private isPeriodEndDayEligible(endDayMs: number | null): boolean {

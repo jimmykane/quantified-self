@@ -25,11 +25,18 @@ import type {
   DerivedTrainingSwimPerformanceMetricPayload,
   DerivedTrainingSwimWeek,
 } from '@shared/derived-metrics';
+import {
+  getTrainingBuildBenchmarkSelectionKey,
+  normalizeTrainingBuildEventId,
+  normalizeTrainingBuildPeriodEndDayMs,
+} from '@shared/derived-metrics';
 import { isTrainingDiscipline, TRAINING_DISCIPLINES } from '@shared/training-disciplines';
 import {
   extendDashboardFormPointsWithZeroLoadUntil,
   type DashboardFormPoint,
 } from './dashboard-form.helper';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface DashboardDerivedTrendPoint {
   time: number;
@@ -660,20 +667,29 @@ function resolveDashboardTrainingBuildSelection(value: unknown): DashboardTraini
     (durationWeeks !== 8 && durationWeeks !== 10 && durationWeeks !== 12)
     || windowStartDayMs === null
     || windowEndDayMs === null
+    || resolveUtcDayStartMs(windowStartDayMs) !== windowStartDayMs
+    || resolveUtcDayStartMs(windowEndDayMs) !== windowEndDayMs
+    || windowEndDayMs - windowStartDayMs !== ((durationWeeks * 7) - 1) * DAY_MS
     || !selectionKey
   ) {
     return null;
   }
-  const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label : null;
-  if (raw.mode === 'race') {
-    const raceEventId = typeof raw.raceEventId === 'string' && raw.raceEventId.trim() ? raw.raceEventId : null;
-    return raceEventId ? {
-      mode: 'race', durationWeeks, raceEventId, selectionKey, windowStartDayMs, windowEndDayMs, label,
+  const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : null;
+  if (raw.mode === 'event') {
+    const eventId = normalizeTrainingBuildEventId(raw.eventId);
+    const expectedSelectionKey = getTrainingBuildBenchmarkSelectionKey({ mode: 'event', durationWeeks, eventId });
+    return eventId && selectionKey === expectedSelectionKey ? {
+      mode: 'event', durationWeeks, eventId, selectionKey, windowStartDayMs, windowEndDayMs, label,
     } : null;
   }
   if (raw.mode === 'period') {
-    const endDayMs = toFiniteNumber(raw.endDayMs);
-    return endDayMs === null ? null : {
+    const rawEndDayMs = toFiniteNumber(raw.endDayMs);
+    const endDayMs = normalizeTrainingBuildPeriodEndDayMs(rawEndDayMs);
+    const expectedSelectionKey = getTrainingBuildBenchmarkSelectionKey({ mode: 'period', durationWeeks, endDayMs });
+    return endDayMs === null
+      || endDayMs !== rawEndDayMs
+      || endDayMs !== windowEndDayMs
+      || selectionKey !== expectedSelectionKey ? null : {
       mode: 'period', durationWeeks, endDayMs, selectionKey, windowStartDayMs, windowEndDayMs, label,
     };
   }
@@ -703,7 +719,7 @@ function resolveDashboardTrainingBuildSuggestions(value: unknown): DashboardTrai
       return null;
     }
     const raw = candidate as Partial<DerivedTrainingBuildEventSuggestion>;
-    const eventId = typeof raw.eventId === 'string' && raw.eventId.trim() ? raw.eventId : null;
+    const eventId = normalizeTrainingBuildEventId(raw.eventId);
     const startDayMs = toFiniteNumber(raw.startDayMs);
     const distanceMeters = resolveDashboardTrainingBuildSuggestionMetric(raw.distanceMeters, true);
     const durationSeconds = resolveDashboardTrainingBuildSuggestionMetric(raw.durationSeconds);
@@ -711,6 +727,7 @@ function resolveDashboardTrainingBuildSuggestions(value: unknown): DashboardTrai
     if (
       !eventId
       || startDayMs === null
+      || resolveUtcDayStartMs(startDayMs) !== startDayMs
       || distanceMeters === undefined
       || durationSeconds === undefined
       || trainingStressScore === undefined
@@ -720,7 +737,7 @@ function resolveDashboardTrainingBuildSuggestions(value: unknown): DashboardTrai
     suggestions.push({
       eventId,
       startDayMs,
-      label: typeof raw.label === 'string' && raw.label.trim() ? raw.label : null,
+      label: typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : null,
       distanceMeters,
       durationSeconds,
       trainingStressScore,
@@ -755,13 +772,28 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
     }
     const suggestedRaces = resolveDashboardTrainingBuildSuggestions(source.suggestedRaces);
     const suggestedEvents = resolveDashboardTrainingBuildSuggestions(source.suggestedEvents);
-    if (!suggestedRaces || !suggestedEvents) {
+    const suggestionIds = [...(suggestedRaces || []), ...(suggestedEvents || [])].map(suggestion => suggestion.eventId);
+    if (!suggestedRaces || !suggestedEvents || new Set(suggestionIds).size !== suggestionIds.length) {
       return [];
     }
     const selection = resolveDashboardTrainingBuildSelection(source.selection);
     const current = source.current === null ? null : resolveDashboardTrainingBuildWindow(source.current);
     const benchmark = source.benchmark === null ? null : resolveDashboardTrainingBuildWindow(source.benchmark);
-    if (source.status === 'ready' && (!selection || !current || !benchmark)) {
+    if (source.status === 'ready') {
+      if (
+        !selection
+        || !current
+        || !benchmark
+        || current.periodWeeks !== selection.durationWeeks
+        || current.windowEndDayMs !== asOfDayMs
+        || current.windowStartDayMs !== asOfDayMs - (((selection.durationWeeks * 7) - 1) * DAY_MS)
+        || benchmark.periodWeeks !== selection.durationWeeks
+        || benchmark.windowStartDayMs !== selection.windowStartDayMs
+        || benchmark.windowEndDayMs !== selection.windowEndDayMs
+      ) {
+        return [];
+      }
+    } else if (source.selection !== null || source.current !== null || source.benchmark !== null) {
       return [];
     }
     return [{

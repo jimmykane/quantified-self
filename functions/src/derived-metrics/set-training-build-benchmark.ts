@@ -3,7 +3,6 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
     DERIVED_METRIC_KINDS,
-    normalizeTrainingBuildRaceEventId,
     type DerivedTrainingDiscipline,
     type SetTrainingBuildBenchmarkRequest,
     type SetTrainingBuildBenchmarkResponse,
@@ -11,12 +10,9 @@ import {
 } from '../../../shared/derived-metrics';
 import { enforceAppCheck } from '../utils';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
-import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
-import { applyEventTagChanges, getEventTags } from '../../../shared/event-tags';
 import { isTrainingDiscipline, resolveTrainingDisciplineFromActivityType } from '../../../shared/training-disciplines';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import {
-    isRaceTaggedEvent,
     normalizeTrainingBuildBenchmarkSelection,
     markDerivedMetricsDirtyAndMaybeQueue,
 } from './derived-metrics.service';
@@ -74,27 +70,13 @@ export function parseTrainingBuildBenchmarkRequest(value: unknown): SetTrainingB
     const request = asRecord(value);
     const discipline = requireDiscipline(request?.discipline);
     if (request?.selection === null) {
-        if (request?.markRaceEventId !== undefined) {
-            throw new HttpsError('invalid-argument', 'markRaceEventId requires a selected race benchmark.');
-        }
         return { discipline, selection: null };
     }
     const selection = normalizeTrainingBuildBenchmarkSelection(request?.selection);
     if (!selection) {
-        throw new HttpsError('invalid-argument', 'selection must be a valid 8, 10, or 12 week race or period benchmark.');
+        throw new HttpsError('invalid-argument', 'selection must be a valid 8, 10, or 12 week event or period benchmark.');
     }
-    if (request?.markRaceEventId === undefined) {
-        return { discipline, selection };
-    }
-    const markRaceEventId = normalizeTrainingBuildRaceEventId(request.markRaceEventId);
-    if (
-        !markRaceEventId
-        || selection.mode !== 'race'
-        || markRaceEventId !== selection.raceEventId
-    ) {
-        throw new HttpsError('invalid-argument', 'markRaceEventId must match the selected race event.');
-    }
-    return { discipline, selection, markRaceEventId };
+    return { discipline, selection };
 }
 
 function currentWindowStartDayMs(selection: TrainingBuildBenchmarkSelection, nowMs: number): number {
@@ -102,22 +84,20 @@ function currentWindowStartDayMs(selection: TrainingBuildBenchmarkSelection, now
     return asOfDayMs - (((selection.durationWeeks * 7) - 1) * DAY_MS);
 }
 
-function validateRaceBenchmarkEvent(
+function validateEventBenchmarkEvent(
     eventData: Record<string, unknown>,
     activityTypes: readonly unknown[],
     discipline: DerivedTrainingDiscipline,
-    selection: Extract<TrainingBuildBenchmarkSelection, { mode: 'race' }>,
+    selection: Extract<TrainingBuildBenchmarkSelection, { mode: 'event' }>,
     nowMs: number,
-    allowRaceTagCreation: boolean,
 ): void {
     const startMs = toMillis(eventData.startDate);
     if (
         isBenchmarkEventForTrainingMetrics(eventData)
-        || (!allowRaceTagCreation && !isRaceTaggedEvent(eventData))
         || !activityTypes.some(activityType => resolveTrainingDisciplineFromActivityType(activityType) === discipline)
         || startMs === null
     ) {
-        throw new HttpsError('failed-precondition', 'The selected event is not an eligible tagged race for this sport.');
+        throw new HttpsError('failed-precondition', 'The selected event is not eligible for this sport.');
     }
 
     const benchmarkEndDayMs = resolveUtcDayStartMs(startMs) - DAY_MS;
@@ -155,7 +135,7 @@ export const setTrainingBuildBenchmark = onCall({
     }
     enforceAppCheck(request);
 
-    const { discipline, selection, markRaceEventId } = parseTrainingBuildBenchmarkRequest(request.data);
+    const { discipline, selection } = parseTrainingBuildBenchmarkRequest(request.data);
     const uid = request.auth.uid;
     const db = admin.firestore();
     const deletionGuard = await getUserDeletionGuardState(db, uid);
@@ -172,33 +152,21 @@ export const setTrainingBuildBenchmark = onCall({
                 throw new HttpsError('failed-precondition', 'This account is being deleted or is no longer available.');
             }
 
-            if (selection?.mode === 'race') {
-                const eventRef = db.doc(`users/${uid}/events/${selection.raceEventId}`);
+            if (selection?.mode === 'event') {
+                const eventRef = db.doc(`users/${uid}/events/${selection.eventId}`);
                 const eventSnapshot = await transaction.get(eventRef);
                 if (!eventSnapshot.exists) {
-                    throw new HttpsError('not-found', 'The selected race was not found.');
+                    throw new HttpsError('not-found', 'The selected event was not found.');
                 }
                 const eventData = asRecord(eventSnapshot.data()) || {};
                 const activitiesQuery = db.collection('users')
                     .doc(uid)
                     .collection('activities')
-                    .where('eventID', '==', selection.raceEventId)
+                    .where('eventID', '==', selection.eventId)
                     .select('type');
                 const activitiesSnapshot = await transaction.get(activitiesQuery);
                 const activityTypes = activitiesSnapshot.docs.map(activityDoc => activityDoc.data().type);
-                validateRaceBenchmarkEvent(eventData, activityTypes, discipline, selection, nowMs, !!markRaceEventId);
-                if (markRaceEventId) {
-                    let tags: string[];
-                    try {
-                        tags = applyEventTagChanges(getEventTags(eventData), { add: ['Race'], remove: [] });
-                    } catch {
-                        throw new HttpsError('failed-precondition', 'The selected event already has the maximum number of tags.');
-                    }
-                    transaction.update(eventRef, sanitizeEventFirestoreWritePayload({
-                        tags,
-                        benchmarkReviewTags: admin.firestore.FieldValue.delete(),
-                    }));
-                }
+                validateEventBenchmarkEvent(eventData, activityTypes, discipline, selection, nowMs);
             }
 
             const settingsRef = db.doc(`users/${uid}/config/settings`);
