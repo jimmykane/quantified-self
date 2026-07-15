@@ -297,6 +297,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
       showArrows: false,
       showEndpointMarkers: this.showEndpointMarkers !== false
         && tracks.length <= ROUTE_PREVIEW_ENDPOINT_MARKER_TRACK_LIMIT,
+      endpointMarkerStyle: 'dots',
       strokeWidth: 2.75,
       onTrackClick: (event) => this.zone.run(() => this.selectRouteFromTrackClick(event)),
     });

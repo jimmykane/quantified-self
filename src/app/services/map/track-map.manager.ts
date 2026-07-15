@@ -58,6 +58,7 @@ export interface TrackMapCursorRenderData extends TrackMapPosition {
 export interface TrackMapRenderOptions {
   showArrows: boolean;
   showEndpointMarkers?: boolean;
+  endpointMarkerStyle?: 'icons' | 'dots';
   strokeWidth: number;
   onTrackClick?: (event: TrackMapClickEvent) => void;
 }
@@ -97,6 +98,7 @@ export class TrackMapManager {
   private currentOptions: ResolvedTrackMapRenderOptions = {
     showArrows: true,
     showEndpointMarkers: true,
+    endpointMarkerStyle: 'icons',
     strokeWidth: 3,
   };
 
@@ -158,6 +160,7 @@ export class TrackMapManager {
     this.currentOptions = {
       showArrows: options?.showArrows !== false,
       showEndpointMarkers: options?.showEndpointMarkers !== false,
+      endpointMarkerStyle: options?.endpointMarkerStyle === 'dots' ? 'dots' : 'icons',
       strokeWidth: Number.isFinite(options?.strokeWidth) ? options.strokeWidth : 3,
       ...(options?.onTrackClick ? { onTrackClick: options.onTrackClick } : {}),
     };
@@ -167,6 +170,7 @@ export class TrackMapManager {
       trackCount: this.currentTracks.length,
       showArrows: this.currentOptions.showArrows,
       showEndpointMarkers: this.currentOptions.showEndpointMarkers,
+      endpointMarkerStyle: this.currentOptions.endpointMarkerStyle,
       strokeWidth: this.currentOptions.strokeWidth,
     });
   }
@@ -501,14 +505,14 @@ export class TrackMapManager {
     const end = coordinates[coordinates.length - 1];
     if (this.currentOptions.showEndpointMarkers) {
       this.startMarkers.set(track.id, this.createMarker(
-        this.markerFactory.createHomeMarker(track.strokeColor),
+        this.createEndpointMarker(track, 'start'),
         start[0],
         start[1],
         'center',
         track,
       ));
       this.endMarkers.set(track.id, this.createMarker(
-        this.markerFactory.createFlagMarker(track.strokeColor),
+        this.createEndpointMarker(track, 'end'),
         end[0],
         end[1],
         'center',
@@ -526,6 +530,23 @@ export class TrackMapManager {
         track,
       ));
     this.extraMarkers.set(track.id, customMarkers);
+  }
+
+  private createEndpointMarker(track: TrackMapRenderData, endpoint: 'start' | 'end'): HTMLElement {
+    if (this.currentOptions.endpointMarkerStyle === 'dots') {
+      const routeLabel = `${track.label || 'Route'}`.trim() || 'Route';
+      const endpointLabel = endpoint === 'start' ? 'start' : 'end';
+      return this.markerFactory.createEndpointDotMarker({
+        color: track.strokeColor,
+        endpoint,
+        title: `${routeLabel} ${endpointLabel}`,
+        ariaLabel: `${routeLabel} ${endpointLabel}`,
+      });
+    }
+
+    return endpoint === 'start'
+      ? this.markerFactory.createHomeMarker(track.strokeColor)
+      : this.markerFactory.createFlagMarker(track.strokeColor);
   }
 
   private createMarker(element: HTMLElement, lng: number, lat: number, anchor: string, track?: TrackMapRenderData): any {

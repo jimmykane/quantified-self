@@ -68,6 +68,7 @@ describe('TrackMapManager', () => {
     markerFactory = {
       createHomeMarker: vi.fn(() => createMarkerElement()),
       createFlagMarker: vi.fn(() => createMarkerElement()),
+      createEndpointDotMarker: vi.fn(() => createMarkerElement()),
       createCursorMarker: vi.fn(() => createMarkerElement()),
     } as unknown as MarkerFactoryService;
     manager = new TrackMapManager(markerFactory, {
@@ -113,6 +114,37 @@ describe('TrackMapManager', () => {
     }));
     expect(markerFactory.createHomeMarker).toHaveBeenCalledWith('#1e88e5');
     expect(markerFactory.createFlagMarker).toHaveBeenCalledWith('#1e88e5');
+  });
+
+  it('renders compact endpoint dots when requested', () => {
+    manager.renderTrackData([{
+      id: 'route-1',
+      label: 'Morning route',
+      strokeColor: '#1e88e5',
+      positions: [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+    }], {
+      showArrows: false,
+      endpointMarkerStyle: 'dots',
+      strokeWidth: 3,
+    });
+
+    expect(markerFactory.createEndpointDotMarker).toHaveBeenNthCalledWith(1, {
+      color: '#1e88e5',
+      endpoint: 'start',
+      title: 'Morning route start',
+      ariaLabel: 'Morning route start',
+    });
+    expect(markerFactory.createEndpointDotMarker).toHaveBeenNthCalledWith(2, {
+      color: '#1e88e5',
+      endpoint: 'end',
+      title: 'Morning route end',
+      ariaLabel: 'Morning route end',
+    });
+    expect(markerFactory.createHomeMarker).not.toHaveBeenCalled();
+    expect(markerFactory.createFlagMarker).not.toHaveBeenCalled();
   });
 
   it('detaches style lifecycle handlers when cleared', () => {

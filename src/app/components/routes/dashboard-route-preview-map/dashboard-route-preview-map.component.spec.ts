@@ -137,7 +137,10 @@ describe('DashboardRoutePreviewMapComponent', () => {
 
     expect(renderSpy).toHaveBeenCalledWith(
       expect.any(Array),
-      expect.objectContaining({ showEndpointMarkers: false })
+      expect.objectContaining({
+        showEndpointMarkers: false,
+        endpointMarkerStyle: 'dots',
+      })
     );
   });
 

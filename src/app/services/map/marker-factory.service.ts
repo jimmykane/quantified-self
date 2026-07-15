@@ -8,6 +8,13 @@ export interface IconPinMarkerOptions {
   ariaLabel?: string;
 }
 
+export interface EndpointDotMarkerOptions {
+  color: string;
+  endpoint: 'start' | 'end';
+  title?: string;
+  ariaLabel?: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -132,6 +139,43 @@ export class MarkerFactoryService {
     icon.style.pointerEvents = 'none';
 
     marker.appendChild(icon);
+    return marker;
+  }
+
+  createEndpointDotMarker(options: EndpointDotMarkerOptions): HTMLDivElement {
+    const marker = document.createElement('div');
+    marker.dataset.endpoint = options.endpoint;
+    marker.style.position = 'absolute';
+    marker.style.width = '14px';
+    marker.style.height = '14px';
+    marker.style.boxSizing = 'border-box';
+    marker.style.display = 'flex';
+    marker.style.alignItems = 'center';
+    marker.style.justifyContent = 'center';
+    marker.style.border = '2px solid #fff';
+    marker.style.borderRadius = '50%';
+    marker.style.backgroundColor = options.color;
+    marker.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.32)';
+
+    if (options.title) {
+      marker.title = options.title;
+    }
+    if (options.ariaLabel) {
+      marker.setAttribute('aria-label', options.ariaLabel);
+      marker.setAttribute('role', 'img');
+    }
+
+    if (options.endpoint === 'end') {
+      const center = document.createElement('span');
+      center.setAttribute('aria-hidden', 'true');
+      center.style.width = '4px';
+      center.style.height = '4px';
+      center.style.borderRadius = '50%';
+      center.style.backgroundColor = '#fff';
+      center.style.pointerEvents = 'none';
+      marker.appendChild(center);
+    }
+
     return marker;
   }
 
