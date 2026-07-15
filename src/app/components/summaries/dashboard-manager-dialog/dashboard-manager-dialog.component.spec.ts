@@ -15,7 +15,6 @@ import {
   DataDuration,
   DataEnergy,
   DataHeartRateAvg,
-  DataRecoveryTime,
   TileTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -657,7 +656,7 @@ describe('DashboardManagerDialogComponent', () => {
     });
   });
 
-  it('preserves saved Power Curve event filters when editing the same scope tile', async () => {
+  it('normalizes edited Cycling Power Curve filters to derived scope defaults', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [{
       type: TileTypes.Chart,
       order: 0,
@@ -680,11 +679,11 @@ describe('DashboardManagerDialogComponent', () => {
 
     expect(dialogData.user.settings.dashboardSettings.tiles[0]).toMatchObject({
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      eventFilters: { range: '30d', activityTypes: [ActivityTypes.Cycling] },
+      eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('cycling') },
     });
   });
 
-  it('preserves Running Power Curve scope when editing manually while Cycling Power Curve exists', async () => {
+  it('preserves Running Power Curve scope while normalizing derived filters when Cycling exists', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [
       {
         type: TileTypes.Chart,
@@ -722,7 +721,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.tiles[1]).toMatchObject({
       name: 'Running Power Curve',
       chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] },
+      eventFilters: { range: '1y', activityTypes: getDashboardPowerCurveActivityTypes('running') },
     });
   });
 
