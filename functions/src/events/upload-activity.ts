@@ -7,7 +7,14 @@ import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
-import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
+import {
+  ALLOWED_CORS_ORIGINS,
+  ENFORCE_APP_CHECK,
+  assertEventWriteUserActive,
+  hasBasicAccess,
+  hasProAccess,
+  setEventDocumentIfUserActive,
+} from '../utils';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
@@ -22,6 +29,7 @@ import {
   MAX_ACTIVITY_UPLOAD_BYTES,
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
@@ -310,19 +318,30 @@ function generateUploadEventID(userID: string, payload: Buffer, resolvedExtensio
     .digest('hex');
 }
 
-function getFirestoreAdapter(): FirestoreAdapter {
+function getFirestoreAdapter(userID: string): FirestoreAdapter {
   return {
     setDoc: async (path: string[], data: unknown) => {
-      await admin.firestore().doc(path.join('/')).set(data as Record<string, unknown>);
+      const documentPath = path.join('/');
+      const documentRef = admin.firestore().doc(documentPath);
+      const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+      await setEventDocumentIfUserActive(
+        userID,
+        `activity_upload_writer:${documentPath}`,
+        documentRef,
+        data,
+        undefined,
+        isEventDocument ? preserveEventTagsOnRewrite : undefined,
+      );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),
     generateID: () => admin.firestore().collection('tmp').doc().id,
   };
 }
 
-function getStorageAdapter(): StorageAdapter {
+function getStorageAdapter(userID: string): StorageAdapter {
   return {
     uploadFile: async (path: string, data: unknown) => {
+      await assertEventWriteUserActive(userID, `activity_upload_original_file:${path}`);
       const file = admin.storage().bucket().file(path);
       await file.save(data as Buffer);
       const [metadata] = await file.getMetadata();
@@ -340,9 +359,15 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     processedAt: FieldValue.serverTimestamp(),
   };
 
-  await admin.firestore()
-    .doc(`users/${userID}/events/${eventID}/metaData/processing`)
-    .set(processingPayload, { merge: true });
+  const processingRef = admin.firestore()
+    .doc(`users/${userID}/events/${eventID}/metaData/processing`);
+  await setEventDocumentIfUserActive(
+    userID,
+    'activity_upload_processing_metadata',
+    processingRef,
+    processingPayload,
+    { merge: true },
+  );
 }
 
 export const uploadActivity = onRequest({
@@ -358,6 +383,7 @@ export const uploadActivity = onRequest({
   try {
     const userID = await verifyFirebaseUserIDFromAuthorizationHeader(request.header('authorization'));
     await verifyAppCheckHeader(request.header('X-Firebase-AppCheck') || request.header('x-firebase-appcheck'));
+    await assertEventWriteUserActive(userID, 'activity_upload_start');
     const originalFilename = resolveOriginalFilename(
       request.header('X-Original-Filename-Encoded') || request.header('x-original-filename-encoded') || undefined,
       request.header('X-Original-Filename') || request.header('x-original-filename') || undefined,
@@ -427,7 +453,7 @@ export const uploadActivity = onRequest({
       originalFilename,
     };
 
-    const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
+    const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
     await writer.writeAllEventData(userID, event, originalFile);
     await persistProcessingMetadata(userID, eventID);
 

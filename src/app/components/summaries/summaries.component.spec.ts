@@ -178,6 +178,13 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('does not expose the Training action during staged rollout', () => {
+    component.showActions = true;
+
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link')).toBeNull();
+  });
+
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
     const kpiTile = {
       type: TileTypes.Chart,
@@ -574,6 +581,7 @@ describe('SummariesComponent', () => {
         startMs: expect.any(Number),
         endMs: expect.any(Number),
       }),
+      startOfWeek: null,
       logger: mockLogger,
       derivedMetrics: {
         formPoints: null,
@@ -589,6 +597,7 @@ describe('SummariesComponent', () => {
         freshnessForecast: null,
         intensityDistribution: null,
         efficiencyTrend: null,
+        powerCurve: null,
       },
     });
     expect(component.tiles).toBe(builtTiles);
@@ -771,7 +780,7 @@ describe('SummariesComponent', () => {
     expect(buildDashboardTileViewModelsSpy.mock.calls[0][0]).not.toHaveProperty('dashboardDateRange');
   });
 
-  it('should subscribe per custom, map, and event-backed curated tile using the event owner, not derived tiles', async () => {
+  it('should subscribe per custom and map tile using the event owner, not derived tiles', async () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
@@ -868,18 +877,14 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(3);
-    expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner', 'event-owner']);
+    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner']);
     expect(mockEventService.getEventsBy.mock.calls[0][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (90 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
     expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
-      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
-    ]);
-    expect(mockEventService.getEventsBy.mock.calls[2][1]).toEqual([
-      { fieldPath: 'startDate', opStr: '>=', value: nowMs - (365 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
   });
@@ -1228,6 +1233,37 @@ describe('SummariesComponent', () => {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
     expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
+  });
+
+  it('should switch Power Curve ranges without a query or all-range confirmation', async () => {
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            name: 'Running Power Curve',
+            chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+            eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling, ActivityTypes.Running] },
+          }],
+        },
+      },
+    } as any;
+
+    await component.onTileEventFilterRangeChange(0, 'all');
+
+    expect(mockDialog.open).not.toHaveBeenCalled();
+    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({
+      range: 'all',
+      activityTypes: getDashboardPowerCurveActivityTypes('running'),
+    });
   });
 
   it('should persist derived chart range changes on the owning tile', async () => {

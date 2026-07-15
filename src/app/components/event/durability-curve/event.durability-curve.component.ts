@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -27,6 +28,7 @@ import { LoggerService } from '../../../services/logger.service';
 import {
   PerformanceCurveBestEffortMarker,
   PerformanceCurveDataService,
+  PerformanceCurveDurabilityActivitySummary,
   PerformanceCurveDurabilitySeries,
 } from '../../../services/performance-curve-data.service';
 import {
@@ -46,12 +48,20 @@ import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../he
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
-const DEFAULT_ROLLING_WINDOW_SECONDS = 180;
 const BEST_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600, 7200];
 const DURATION_TICK_CANDIDATES_SECONDS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1200, 1800, 3600, 7200];
 const EFFICIENCY_TICK_CANDIDATES = [0.05, 0.1, 0.2, 0.25, 0.5];
 const EFFORT_MARKER_COLORS = ['#ff7043', '#ffa726', '#ffd54f', '#66bb6a', '#42a5f5', '#ab47bc'];
 const DURABILITY_FALLBACK_COLORS = ['#16B4EA', '#FF7043', '#66BB6A', '#AB47BC', '#FFA726', '#42A5F5', '#EC407A'];
+
+interface EventDurabilitySummaryViewModel {
+  activityId: string;
+  label: string;
+  eligibilityText: string;
+  contextText: string;
+  evidenceText: string | null;
+  isEligible: boolean;
+}
 
 @Component({
   selector: 'app-event-durability-curve',
@@ -68,6 +78,9 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
+  public chartDescription = 'Aerobic efficiency over time. Downward drift can indicate fatigue.';
+  public summaryViewModels: EventDurabilitySummaryViewModel[] = [];
+
   private chartHost: EChartsHostController;
   private isMobile = false;
   private breakpointSubscription: Subscription;
@@ -77,7 +90,8 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService,
-    private performanceCurveDataService: PerformanceCurveDataService
+    private performanceCurveDataService: PerformanceCurveDataService,
+    private changeDetector: ChangeDetectorRef,
   ) {
     this.chartHost = new EChartsHostController({
       eChartsLoader: this.eChartsLoader,
@@ -130,12 +144,14 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       return;
     }
 
-    const { renderSeries: durabilitySeries, markerSourceSeries } = this.performanceCurveDataService
+    const { renderSeries: durabilitySeries, markerSourceSeries, activitySummaries } = this.performanceCurveDataService
       .buildDurabilitySeriesWithMarkerSource(this.activities, {
         isMerge: this.isMerge,
-        rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
         maxPointsPerSeries: this.isMobile ? 220 : 640,
       });
+    this.summaryViewModels = this.buildSummaryViewModels(activitySummaries);
+    this.chartDescription = this.resolveChartDescription(durabilitySeries);
+    this.changeDetector.markForCheck();
     const bestEffortMarkers = this.performanceCurveDataService.buildBestEffortMarkers(markerSourceSeries, {
       windowDurations: BEST_EFFORT_WINDOWS,
       maxMarkersPerWindow: this.isMobile ? 3 : 6,
@@ -185,6 +201,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       fallbackMax: 2.5,
     });
     const efficiencyAxis = this.buildEfficiencyAxisConfig(efficiencyMin, efficiencyMax);
+    const efficiencyUnitLabel = this.resolveEfficiencyUnitLabel(durabilitySeries);
 
     const usedSeriesColors = new Set<string>();
     const series: Array<Record<string, unknown>> = durabilitySeries.map((seriesEntry, seriesIndex) => {
@@ -198,7 +215,8 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
           value: [point.duration, point.efficiency],
           duration: point.duration,
           efficiency: point.efficiency,
-          power: point.power,
+          output: point.output,
+          outputUnit: point.outputUnit,
           heartRate: point.heartRate,
         })),
         showSymbol: false,
@@ -248,7 +266,8 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
           value: [marker.duration, marker.efficiency],
           duration: marker.duration,
           efficiency: marker.efficiency,
-          markerPower: marker.power,
+          markerOutput: marker.output,
+          outputUnit: marker.outputUnit,
           startDuration: marker.startDuration,
           endDuration: marker.endDuration,
           windowLabel: marker.windowLabel,
@@ -310,7 +329,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         min: efficiencyAxis.min,
         max: efficiencyAxis.max,
         interval: efficiencyAxis.interval,
-        name: 'W/bpm',
+        name: efficiencyUnitLabel,
         nameLocation: 'middle',
         nameGap: this.isMobile ? 36 : 42,
         nameTextStyle: {
@@ -386,7 +405,8 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     if (paneType === 'durability') {
       const duration = toFiniteEventEChartsNumber(data.duration) ?? this.extractTupleValue(entry.value, 0) ?? 0;
       const efficiency = toFiniteEventEChartsNumber(data.efficiency) ?? this.extractTupleValue(entry.value, 1);
-      const power = toFiniteEventEChartsNumber(data.power);
+      const output = toFiniteEventEChartsNumber(data.output);
+      const outputUnit = data.outputUnit === 'm/s' ? 'm/s' : 'W';
       const heartRate = toFiniteEventEChartsNumber(data.heartRate);
 
       if (efficiency === null) {
@@ -398,9 +418,9 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         lines.push(`${entry.seriesName}`);
       }
 
-      lines.push(`Efficiency: <b>${efficiency.toFixed(2)} W/bpm</b>`);
-      if (power !== null && heartRate !== null) {
-        lines.push(`Rolling: <b>${this.formatPowerLabel(power, true)}</b> / <b>${this.formatHeartRateLabel(heartRate, true)}</b>`);
+      lines.push(`Efficiency: <b>${efficiency.toFixed(outputUnit === 'W' ? 2 : 4)} ${outputUnit}/bpm</b>`);
+      if (output !== null && heartRate !== null) {
+        lines.push(`Rolling: <b>${this.formatOutputLabel(output, outputUnit)}</b> / <b>${this.formatHeartRateLabel(heartRate, true)}</b>`);
       }
 
       return lines.join('<br/>');
@@ -409,11 +429,12 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     if (paneType === 'effort') {
       const windowLabel = `${data.windowLabel ?? entry.seriesName ?? ''}`;
       const activityLabel = `${data.activityLabel ?? ''}`;
-      const power = toFiniteEventEChartsNumber(data.markerPower);
+      const output = toFiniteEventEChartsNumber(data.markerOutput);
+      const outputUnit = data.outputUnit === 'm/s' ? 'm/s' : 'W';
       const startDuration = toFiniteEventEChartsNumber(data.startDuration);
       const endDuration = toFiniteEventEChartsNumber(data.endDuration);
 
-      if (!windowLabel || power === null) {
+      if (!windowLabel || output === null) {
         return '';
       }
 
@@ -426,7 +447,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         lines.push(activityLabel);
       }
 
-      lines.push(`Power: <b>${this.formatPowerLabel(power, true)}</b>`);
+      lines.push(`Output: <b>${this.formatOutputLabel(output, outputUnit)}</b>`);
       if (intervalLabel.length > 0) {
         lines.push(`Window: <b>${intervalLabel}</b>`);
       }
@@ -559,6 +580,13 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       : value;
   }
 
+  private formatOutputLabel(output: number, unit: 'W' | 'm/s'): string {
+    if (unit === 'W') {
+      return this.formatPowerLabel(output, true);
+    }
+    return `${output.toFixed(2)} m/s`;
+  }
+
   private formatHeartRateLabel(heartRate: number, includeUnit = false): string {
     if (!Number.isFinite(heartRate)) {
       return '';
@@ -574,6 +602,60 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     return unit.length > 0
       ? `${value} ${unit}`
       : value;
+  }
+
+  private resolveEfficiencyUnitLabel(series: PerformanceCurveDurabilitySeries[]): string {
+    const units = new Set(series.map(item => item.outputUnit));
+    if (units.size !== 1) {
+      return 'Output/HR';
+    }
+    return `${series[0]?.outputUnit || 'Output'}/bpm`;
+  }
+
+  private resolveChartDescription(series: PerformanceCurveDurabilitySeries[]): string {
+    const units = new Set(series.map(item => item.outputUnit));
+    if (units.size === 1 && units.has('W')) {
+      return 'Power per heartbeat over time. The comparison window excludes warm-up and cooldown.';
+    }
+    if (units.size === 1 && units.has('m/s')) {
+      return 'Speed per heartbeat over time. The comparison window excludes warm-up and cooldown.';
+    }
+    return 'Aerobic efficiency over time. The comparison window excludes warm-up and cooldown.';
+  }
+
+  private buildSummaryViewModels(
+    summaries: PerformanceCurveDurabilityActivitySummary[] | undefined,
+  ): EventDurabilitySummaryViewModel[] {
+    return (summaries || []).map((item) => {
+      const { summary } = item;
+      const coveragePercent = Math.round(summary.coverageRatio * 100);
+      const durationText = this.formatDurationLabel(summary.durationSeconds) || 'Unknown duration';
+      const contextText = summary.context
+        ? `${summary.context.poolLengthMeters} m · ${summary.context.stroke} · ${summary.eligibility.validSampleCount} comparable lengths`
+        : `${durationText} · ${coveragePercent}% paired coverage · ${this.formatDurationLabel(summary.qualifyingDurationSeconds) || 'No'} qualifying data`;
+      let evidenceText: string | null = null;
+      if (summary.evidence?.kind === 'aerobic-efficiency') {
+        evidenceText = `${this.formatSigned(summary.evidence.decouplingPercent)}% decoupling · ${summary.evidence.outputRetentionPercent.toFixed(1)}% output retained · ${this.formatSigned(summary.evidence.heartRateDriftBpm)} bpm HR drift`;
+      } else if (summary.evidence?.kind === 'pool-consistency') {
+        const swolfText = summary.evidence.swolfChange === null
+          ? ''
+          : ` · ${this.formatSigned(summary.evidence.swolfChange)} SWOLF`;
+        evidenceText = `${summary.evidence.paceRetentionPercent.toFixed(1)}% pace retained · ${summary.evidence.firstPaceSecondsPer100m.toFixed(1)}s → ${summary.evidence.finalPaceSecondsPer100m.toFixed(1)}s / 100 m${swolfText}`;
+      }
+      return {
+        activityId: item.activityId,
+        label: item.label,
+        eligibilityText: item.eligibilityLabel,
+        contextText,
+        evidenceText,
+        isEligible: summary.eligibility.eligible,
+      };
+    });
+  }
+
+  private formatSigned(value: number): string {
+    const formatted = Math.abs(value).toFixed(1).replace(/\.0$/, '');
+    return value > 0 ? `+${formatted}` : value < 0 ? `−${formatted}` : formatted;
   }
 
 }

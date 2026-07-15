@@ -175,7 +175,13 @@ export { reprocessRoute } from './routes/reprocess-route';
 export { mergeEvents } from './events/merge-events';
 export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
-export { onDashboardDerivedMetricsEventWrite } from './derived-metrics/derived-metrics.trigger';
+export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
+export { setTrainingVisibleDisciplines } from './derived-metrics/set-training-visible-disciplines';
+export {
+  onDashboardDerivedMetricsActivityWrite,
+  onDashboardDerivedMetricsEventWrite,
+  onDashboardDerivedMetricsSleepWrite,
+} from './derived-metrics/derived-metrics.trigger';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
 export { onSubscriptionUpdated } from './stripe/subscriptions';

@@ -20,6 +20,7 @@ export {
   addDoc,
   clearIndexedDbPersistence,
   collection,
+  deleteField,
   deleteDoc,
   doc,
   documentId,

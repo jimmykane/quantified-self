@@ -1,0 +1,507 @@
+<main class="training-workspace" aria-labelledby="training-title">
+  <header class="training-page-header">
+    <div>
+      <p class="training-eyebrow">28-day training analysis</p>
+      <h1 id="training-title">Training</h1>
+    </div>
+    <div class="training-page-actions">
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="openTrainingSportVisibilityDialog()"
+        [attr.aria-label]="visibleDisciplinesAccessibleLabel"
+      >
+        <mat-icon aria-hidden="true">tune</mat-icon>
+        <span>{{ visibleDisciplinesCompactLabel }}</span>
+      </button>
+      <a mat-stroked-button routerLink="/dashboard" aria-label="Return to dashboard">
+        <mat-icon aria-hidden="true">dashboard</mat-icon>
+        <span class="training-dashboard-action-label">Dashboard</span>
+      </a>
+    </div>
+  </header>
+
+  @if (isLoading) {
+    <div class="training-loading" role="status"><mat-spinner diameter="28"></mat-spinner></div>
+  } @else {
+    <section class="training-section training-status" aria-labelledby="training-status-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Your training, in context</p>
+          <h2 id="training-status-title">Compared with your usual 28 days</h2>
+        </div>
+        <span class="training-section-note">Running, cycling/MTB, and swimming</span>
+      </div>
+      <div class="training-status-grid">
+        <article class="training-state-panel qs-glass-card-panel">
+          <span class="training-metric-label">State</span>
+          <strong>{{ trainingStatus.stateLabel }}</strong>
+          <span>{{ trainingStatus.stateCaption }}</span>
+        </article>
+        @if (trainingComparisonState === 'preparing') {
+          <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel" role="status">
+            <span class="training-metric-label">Training comparison</span>
+            <strong>Preparing</strong>
+            <span>Reading your recent running, cycling/MTB, and swimming sessions.</span>
+          </article>
+        } @else if (trainingComparisonState === 'unavailable') {
+          <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel">
+            <span class="training-metric-label">Training comparison</span>
+            <strong>Unavailable</strong>
+            <span>Refresh to request another comparison snapshot.</span>
+          </article>
+        } @else {
+          <article class="training-comparison-panel qs-glass-card-panel">
+            <span class="training-metric-label">Training time</span>
+            <strong>{{ trainingStatus.volumeText }}</strong>
+            <span>{{ trainingStatus.volumeCaption }}</span>
+          </article>
+          <article class="training-comparison-panel qs-glass-card-panel">
+            <span class="training-metric-label">Sessions</span>
+            <strong>{{ trainingStatus.sessionsText }}</strong>
+            <span>{{ trainingStatus.sessionsCaption }}</span>
+          </article>
+        }
+        @if (trainingRecoveryEstimate; as estimate) {
+          <article class="training-comparison-panel training-recovery-estimate-panel qs-glass-card-panel">
+            <span class="training-metric-label">Recovery remaining</span>
+            <strong>{{ estimate.valueText }}</strong>
+            <span>{{ estimate.detailText }}</span>
+            @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
+          </article>
+        }
+      </div>
+      <article class="training-recovery-panel qs-glass-card-panel" aria-labelledby="training-recovery-title">
+        <header class="training-recovery-header">
+          <div>
+            <span class="training-metric-label">Recovery context</span>
+            <h3 id="training-recovery-title">Recorded sleep alongside training</h3>
+          </div>
+          <span>Current 28 days / previous 84 days</span>
+        </header>
+        @if (trainingRecovery.isUpdating) {
+          <p class="training-recovery-update" role="status">Updating recovery context…</p>
+        }
+        <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
+        @if (trainingRecovery.metricRows.length) {
+          <dl class="training-recovery-table">
+            <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
+            @for (row of trainingRecovery.metricRows; track row.label) {
+              <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+            }
+          </dl>
+        }
+        <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
+      </article>
+    </section>
+
+    <section class="training-section" aria-labelledby="training-build-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Historical reference</p>
+          <h2 id="training-build-title">Best build vs now</h2>
+        </div>
+        <span class="training-section-note">Choose one benchmark per sport</span>
+      </div>
+      <div class="training-build-grid">
+        @for (card of trainingBuildCards; track card.discipline) {
+          <article class="training-build-card qs-glass-card-panel">
+            <header class="training-build-card-header">
+              <div>
+                <span class="training-metric-label">{{ card.label }}</span>
+                <h3>{{ card.state === 'ready' ? card.referenceText : 'Historical benchmark' }}</h3>
+              </div>
+              <button mat-stroked-button (click)="openTrainingBuildBenchmarkDialog(card.discipline)">
+                <mat-icon aria-hidden="true">{{ card.expectedSelection ? 'edit' : 'add' }}</mat-icon>
+                <span>{{ card.expectedSelection ? 'Change' : 'Set benchmark' }}</span>
+              </button>
+            </header>
+
+            @if (card.state === 'not-configured') {
+              <div class="training-build-status">
+                <strong>Set a build to compare</strong>
+                <p>Pick a past event or end date. Both windows use the same length.</p>
+              </div>
+            } @else if (card.state === 'updating') {
+              <div class="training-build-status" role="status">
+                <mat-spinner diameter="24"></mat-spinner>
+                <div><strong>Updating comparison</strong><p>Reading the saved benchmark and your derived training history.</p></div>
+              </div>
+            } @else if (card.state === 'invalid') {
+              <div class="training-build-status">
+                <strong>Benchmark needs attention</strong>
+                <p>The saved race or period no longer makes a valid non-overlapping build. Choose another reference.</p>
+              </div>
+            } @else if (card.state === 'unavailable') {
+              <div class="training-build-status">
+                <strong>Comparison unavailable</strong>
+                <p>Refresh to request another derived comparison snapshot.</p>
+              </div>
+            } @else {
+              <p class="training-build-range">{{ card.source?.selection?.durationWeeks }} weeks · {{ card.rangeText }}</p>
+              @if (card.emptyMessage) {
+                <p class="training-build-empty">{{ card.emptyMessage }}</p>
+              }
+              <dl class="training-build-table">
+                <div class="training-build-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Benchmark</dd><dd>Change</dd></div>
+                @for (row of card.metricRows; track row.label) {
+                  <div [class.training-build-intensity-row]="row.isIntensity"><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.benchmarkText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+                }
+              </dl>
+              @if (card.recovery; as recovery) {
+                <section class="training-build-recovery" [attr.aria-label]="card.label + ' recovery comparison'">
+                  <div class="training-build-recovery-heading">
+                    <strong>Recovery during these builds</strong>
+                    @if (recovery.isUpdating) { <span role="status">Updating…</span> }
+                  </div>
+                  <p>{{ recovery.detailText }}</p>
+                  @if (recovery.metricRows.length) {
+                    <dl class="training-recovery-table training-build-recovery-table">
+                      <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ recovery.currentLabel }}</dd><dd>{{ recovery.referenceLabel }}</dd><dd>Change</dd></div>
+                      @for (row of recovery.metricRows; track row.label) {
+                        <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+                      }
+                    </dl>
+                  }
+                  <small>{{ recovery.sourceText }}</small>
+                </section>
+              }
+              @if (card.discipline === 'swimming') {
+                <p class="training-build-footnote">Pool and open-water pace stay separate. Missing pace, TSS, or intensity remains unavailable rather than zero.</p>
+              } @else {
+                <p class="training-build-footnote">Merged events are excluded. Durability compares only eligible, context-matched activities; missing evidence remains unavailable.</p>
+              }
+            }
+          </article>
+        }
+      </div>
+    </section>
+
+    <section class="training-section" aria-labelledby="training-insights-title">
+      <div class="training-section-heading">
+        <div>
+          <p>What drove this</p>
+          <h2 id="training-insights-title">Load, contributors, and rhythm</h2>
+        </div>
+        <span class="training-section-note">Current 28 days / median of the prior three blocks</span>
+      </div>
+      <div class="training-insights-grid">
+        @if (derivedState.trainingExplanationStatus === 'failed') {
+          <p class="training-empty-state">Training drivers are unavailable right now. Refresh to request another snapshot.</p>
+        } @else if (trainingExplanationView; as explanation) {
+          @if (derivedState.trainingExplanationStatus !== 'ready') {
+            <p class="training-empty-state" role="status">Updating training drivers. The latest complete explanation remains visible.</p>
+          }
+          @for (card of explanation.cards; track card.key) {
+            <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
+              <span class="training-metric-label">{{ card.title }}</span>
+              <strong>{{ card.valueText }}</strong>
+              <p>{{ card.description }}</p>
+            </article>
+          }
+          <p class="training-explanation-coverage">{{ explanation.coverageText }}</p>
+        } @else {
+          <div class="training-capacity-loading qs-glass-card-panel" role="status">
+            <mat-spinner diameter="24"></mat-spinner>
+            <div><strong>Preparing training drivers</strong><p>Comparing parent-event load, child sport groups, and training rhythm.</p></div>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="training-section" aria-labelledby="load-trajectory-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Load trajectory</p>
+          <h2 id="load-trajectory-title">How your load is changing</h2>
+        </div>
+        <span class="training-section-note">All activities with TSS</span>
+      </div>
+      <div class="training-load-grid">
+        @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
+          <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
+            <app-form-chart [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" timelineWindow="m"></app-form-chart>
+          </article>
+        } @else {
+          <article class="training-chart-state training-chart-state-form qs-glass-card-panel" role="status">
+            @if (derivedState.formStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+            @else { <mat-spinner diameter="24"></mat-spinner> }
+            <div>
+              <strong>{{ derivedState.formStatus === 'failed' ? 'Load chart unavailable' : 'Preparing load chart' }}</strong>
+              <p>{{ derivedState.formStatus === 'failed' ? 'Refresh to request the fitness, fatigue, and form snapshot again.' : 'Calculating fitness, fatigue, and form from recorded training load.' }}</p>
+            </div>
+          </article>
+        }
+        @if (derivedState.freshnessForecastStatus === 'ready' || derivedState.freshnessForecast?.points?.length) {
+          <article class="training-chart-panel qs-glass-card-panel">
+            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()"></app-freshness-forecast-chart>
+          </article>
+        } @else {
+          <article class="training-chart-state training-chart-state-forecast qs-glass-card-panel" role="status">
+            @if (derivedState.freshnessForecastStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+            @else { <mat-spinner diameter="24"></mat-spinner> }
+            <div>
+              <strong>{{ derivedState.freshnessForecastStatus === 'failed' ? 'Freshness forecast unavailable' : 'Preparing freshness forecast' }}</strong>
+              <p>{{ derivedState.freshnessForecastStatus === 'failed' ? 'Refresh to request the seven-day scenario again.' : 'Projecting seven days with no additional training load.' }}</p>
+            </div>
+          </article>
+        }
+        <dl class="training-metric-panel training-load-metrics qs-glass-card-panel">
+          <div><dt>CTL</dt><dd>{{ loadMetrics.ctlText }}</dd></div>
+          <div><dt>ATL</dt><dd>{{ loadMetrics.atlText }}</dd></div>
+          <div><dt>Ramp</dt><dd>{{ loadMetrics.rampText }}</dd></div>
+          <div><dt>ACWR</dt><dd>{{ loadMetrics.acwrText }}</dd></div>
+          <div><dt>Monotony</dt><dd>{{ loadMetrics.monotonyText }}</dd></div>
+          <div><dt>Strain</dt><dd>{{ loadMetrics.strainText }}</dd></div>
+          <div><dt>Now</dt><dd>{{ loadMetrics.freshnessNowText }}</dd></div>
+          <div><dt>+7 days</dt><dd>{{ loadMetrics.freshnessPlusSevenDaysText }}</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="training-section" aria-labelledby="training-mix-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Training mix</p>
+          <h2 id="training-mix-title">Where your effort is going</h2>
+        </div>
+        <span class="training-section-note">Intensity chart uses all eligible zone data</span>
+      </div>
+      <div class="training-mix-grid">
+        @if (trainingComparisonState === 'unavailable') {
+          <p class="training-empty-state">Training mix comparison is unavailable right now.</p>
+        } @else if (trainingComparisonState !== 'preparing') {
+          @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
+            <article class="training-mix-panel qs-glass-card-panel">
+              <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
+              <div class="training-mix-summary"><strong>{{ discipline.activityCountText }}</strong><span>activities</span><strong>{{ discipline.durationText }}</strong><span>time</span></div>
+              <dl>
+                <div><dt>Easy</dt><dd>{{ discipline.easyText }} <span>/ {{ discipline.baselineEasyText }}</span></dd></div>
+                <div><dt>Moderate</dt><dd>{{ discipline.moderateText }} <span>/ {{ discipline.baselineModerateText }}</span></dd></div>
+                <div><dt>Hard</dt><dd>{{ discipline.hardText }} <span>/ {{ discipline.baselineHardText }}</span></dd></div>
+              </dl>
+            </article>
+          } @empty {
+            <p class="training-empty-state">No eligible {{ visibleDisciplinesActivityLabel }} in the last 28 days.</p>
+          }
+        }
+        @if (derivedState.intensityDistributionStatus === 'ready' || derivedState.intensityDistribution?.weeks?.length) {
+          <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
+            <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" range="6m"></app-intensity-distribution-chart>
+          </article>
+        } @else {
+          <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
+            @if (derivedState.intensityDistributionStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+            @else { <mat-spinner diameter="24"></mat-spinner> }
+            <div>
+              <strong>{{ derivedState.intensityDistributionStatus === 'failed' ? 'Intensity chart unavailable' : 'Preparing intensity chart' }}</strong>
+              <p>{{ derivedState.intensityDistributionStatus === 'failed' ? 'Refresh to request the zone distribution again.' : 'Grouping eligible power and heart-rate zones by week.' }}</p>
+            </div>
+          </article>
+        }
+      </div>
+    </section>
+
+    <section class="training-section" aria-labelledby="performance-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Performance markers</p>
+          <h2 id="performance-title">Settings vs recent evidence</h2>
+        </div>
+        <span class="training-section-note">Source, time window, and fit quality stay visible</span>
+      </div>
+      <div class="training-performance-grid">
+        @if (hasPowerCapacityVisible) {
+          @if (derivedState.trainingCapacityStatus === 'failed') {
+            <p class="training-empty-state">Capacity markers are unavailable right now. Refresh to request another derived snapshot.</p>
+          } @else if (derivedState.trainingCapacityStatus === 'ready') {
+            @for (discipline of capacityDisciplines; track discipline.discipline) {
+            <article class="training-capacity-panel qs-glass-card-panel">
+              <header>
+                <div>
+                  <h3 class="qs-dashboard-chart-title">{{ discipline.label }} capacity evidence</h3>
+                </div>
+                <span class="training-capacity-window">90-day performance</span>
+              </header>
+
+              <div class="training-capacity-markers">
+                @if (discipline.ftpSetting; as ftpSetting) {
+                  <div class="training-capacity-marker">
+                    <span>{{ ftpSetting.label }}</span>
+                    <strong>{{ ftpSetting.valueText }}</strong>
+                    <small>{{ ftpSetting.detailText }}</small>
+                  </div>
+                }
+                <div class="training-capacity-marker">
+                  <span>{{ discipline.modeledCriticalPower.label }}</span>
+                  <strong>{{ discipline.modeledCriticalPower.valueText }}</strong>
+                  <small>{{ discipline.modeledCriticalPower.detailText }}</small>
+                </div>
+                @if (discipline.importedVo2Max; as importedVo2Max) {
+                  <div class="training-capacity-marker training-capacity-aerobic-marker">
+                    <span>{{ importedVo2Max.label }}</span>
+                    <strong>{{ importedVo2Max.valueText }}</strong>
+                    <small>{{ importedVo2Max.detailText }}</small>
+                  </div>
+                }
+              </div>
+
+              <div
+                class="training-capacity-interpretation"
+                [class.training-capacity-interpretation-positive]="discipline.interpretation.tone === 'positive'"
+                [class.training-capacity-interpretation-caution]="discipline.interpretation.tone === 'caution'">
+                <strong>{{ discipline.interpretation.title }}</strong>
+                <p>{{ discipline.interpretation.description }}</p>
+              </div>
+            </article>
+            } @empty {
+              <p class="training-empty-state">No capacity snapshot is available for the sports shown.</p>
+            }
+          } @else {
+            <div class="training-capacity-loading qs-glass-card-panel" role="status">
+              <mat-spinner diameter="24"></mat-spinner>
+              <div><strong>Preparing capacity evidence</strong><p>Reading imported markers and the derived 90-day power curve.</p></div>
+            </div>
+          }
+        }
+        @if (isSwimmingVisible) {
+          @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
+            <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
+              <app-training-swim-performance-chart
+                [performance]="derivedState.trainingSwimPerformance"
+                [status]="derivedState.trainingSwimPerformanceStatus"
+                [darkTheme]="isDarkTheme()"
+                [unitSettings]="unitSettings"
+              ></app-training-swim-performance-chart>
+            </article>
+          } @else {
+            <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
+              @if (derivedState.trainingSwimPerformanceStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+              @else { <mat-spinner diameter="24"></mat-spinner> }
+              <div>
+                <strong>{{ derivedState.trainingSwimPerformanceStatus === 'failed' ? 'Swimming pace unavailable' : 'Preparing swimming pace' }}</strong>
+                <p>{{ derivedState.trainingSwimPerformanceStatus === 'failed' ? 'Refresh to request the pool and open-water snapshot again.' : 'Comparing pool and open-water pace without mixing contexts.' }}</p>
+              </div>
+            </article>
+          }
+        }
+        <article class="training-durability-panel qs-glass-card-panel" aria-labelledby="training-durability-title">
+          <header>
+            <div>
+              <h3 id="training-durability-title" class="qs-dashboard-chart-title">Durability</h3>
+              <p>Current 28 days compared with the median of the prior three 28-day blocks</p>
+            </div>
+            <span>12-week evidence trail</span>
+          </header>
+          @if (derivedState.trainingDurabilityStatus === 'failed') {
+            <p class="training-empty-state">Durability evidence is unavailable right now. Refresh to request another snapshot.</p>
+          } @else if (trainingDurabilityScopes.length) {
+            @if (derivedState.trainingDurabilityStatus !== 'ready') {
+              <p class="training-recovery-update" role="status">Updating durability evidence…</p>
+            }
+            <mat-tab-group mat-stretch-tabs="false" animationDuration="200ms">
+              @for (scope of trainingDurabilityScopes; track scope.scope) {
+                <mat-tab [label]="scope.label">
+                  <div class="training-durability-tab">
+                    <div class="training-durability-evidence">
+                      <strong>{{ scope.evidenceText }}</strong>
+                      <span>{{ scope.coverageText }}</span>
+                      <small>{{ scope.trendText }}</small>
+                      @if (scope.exclusionText) { <small>{{ scope.exclusionText }}</small> }
+                    </div>
+                    @for (context of scope.contexts; track context.contextKey) {
+                      <section class="training-durability-context">
+                        <header><strong>{{ context.label }}</strong><span>{{ context.sampleText }}</span></header>
+                        @if (context.metrics.length) {
+                          <dl class="training-durability-table">
+                            <div class="training-durability-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Usual</dd><dd>Change</dd></div>
+                            @for (metric of context.metrics; track metric.label) {
+                              <div><dt><strong>{{ metric.label }}</strong><small>{{ metric.detailText }}</small></dt><dd>{{ metric.currentText }}</dd><dd>{{ metric.usualText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="metric.deltaTone">{{ metric.deltaText }}</dd></div>
+                            }
+                          </dl>
+                        } @else {
+                          <p class="training-empty-state">No comparable durability metric for this context.</p>
+                        }
+                        <app-training-durability-trajectory-chart
+                          [trajectory]="context.trajectory"
+                          [status]="derivedState.trainingDurabilityStatus"
+                          [darkTheme]="isDarkTheme()"
+                        ></app-training-durability-trajectory-chart>
+                      </section>
+                    } @empty {
+                      <p class="training-empty-state">No eligible context in the current 28-day window.</p>
+                    }
+                    @if (scope.supportingEventsText) { <p class="training-durability-support">{{ scope.supportingEventsText }}</p> }
+                  </div>
+                </mat-tab>
+              }
+            </mat-tab-group>
+          } @else {
+            <div class="training-capacity-loading" role="status">
+              <mat-spinner diameter="24"></mat-spinner>
+              <div><strong>Preparing durability evidence</strong><p>Reading comparable activity-level evidence for the sports shown.</p></div>
+            </div>
+          }
+        </article>
+        @if (isCyclingVisible) {
+          @if (derivedState.powerCurveStatus === 'ready' || cyclingPowerCurve?.series?.length) {
+            <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
+              @if (cyclingPowerProfile; as profile) {
+                <div class="training-power-profile-summary">
+                  <strong>90-day profile vs 1 year</strong>
+                  <span>{{ profile.activityCountText }}</span>
+                  @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
+                  @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
+                  @if (profile.anchors.length) {
+                    <div class="training-power-profile-anchors">
+                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                    </div>
+                  } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+                </div>
+              }
+              <app-power-curve-chart title="Cycling Power Curve" [isLoading]="false" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+            </article>
+          } @else {
+            <article class="training-chart-state training-power-profile-panel qs-glass-card-panel" role="status">
+              @if (derivedState.powerCurveStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+              @else { <mat-spinner diameter="24"></mat-spinner> }
+              <div>
+                <strong>{{ derivedState.powerCurveStatus === 'failed' ? 'Cycling power profile unavailable' : 'Preparing cycling power profile' }}</strong>
+                <p>{{ derivedState.powerCurveStatus === 'failed' ? 'Refresh to request the derived power curve again.' : 'Comparing your recent 90-day profile with the one-year curve.' }}</p>
+              </div>
+            </article>
+          }
+        }
+        @if (isRunningVisible) {
+          @if (derivedState.powerCurveStatus === 'ready' || runningPowerCurve?.series?.length) {
+            <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
+              @if (runningPowerProfile; as profile) {
+                <div class="training-power-profile-summary">
+                  <strong>90-day profile vs 1 year</strong>
+                  <span>{{ profile.activityCountText }}</span>
+                  @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
+                  @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
+                  @if (profile.anchors.length) {
+                    <div class="training-power-profile-anchors">
+                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                    </div>
+                  } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+                </div>
+              }
+              <app-power-curve-chart title="Running Power Curve" [isLoading]="false" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+            </article>
+          } @else {
+            <article class="training-chart-state training-power-profile-panel qs-glass-card-panel" role="status">
+              @if (derivedState.powerCurveStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+              @else { <mat-spinner diameter="24"></mat-spinner> }
+              <div>
+                <strong>{{ derivedState.powerCurveStatus === 'failed' ? 'Running power profile unavailable' : 'Preparing running power profile' }}</strong>
+                <p>{{ derivedState.powerCurveStatus === 'failed' ? 'Refresh to request the derived power curve again.' : 'Comparing your recent 90-day profile with the one-year curve.' }}</p>
+              </div>
+            </article>
+          }
+        }
+      </div>
+    </section>
+  }
+</main>

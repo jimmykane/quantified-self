@@ -128,6 +128,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/training",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/mytracks",
           "destination": "/index.csr.html"
         },
@@ -281,6 +285,10 @@
         },
         {
           "source": "/dashboard",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training",
           "destination": "/index.csr.html"
         },
         {

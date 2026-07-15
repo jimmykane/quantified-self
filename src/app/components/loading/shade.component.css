@@ -49,10 +49,10 @@
   gap: 6px;
   justify-items: center;
   width: min(320px, 100%);
-  padding: 16px;
-  border: 1px solid var(--qs-overlay-surface-border);
-  border-radius: 8px;
-  background: var(--qs-overlay-surface);
+  padding: var(--loading-shade-error-padding, 16px);
+  border: var(--loading-shade-error-border, 1px solid var(--qs-overlay-surface-border));
+  border-radius: var(--loading-shade-error-radius, 8px);
+  background: var(--loading-shade-error-background, var(--qs-overlay-surface));
   color: var(--mat-sys-on-surface);
   text-align: center;
 }

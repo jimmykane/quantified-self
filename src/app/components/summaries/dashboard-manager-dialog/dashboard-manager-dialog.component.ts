@@ -181,7 +181,7 @@ interface DashboardManagerSettingsSnapshot {
   autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
-type DashboardManagerSavingAction = 'save' | 'addDefaults' | 'addAll' | 'removeAll' | null;
+type DashboardManagerSavingAction = 'save' | 'addAll' | 'removeAll' | 'simplify' | null;
 
 @Component({
   selector: 'app-dashboard-manager-dialog',
@@ -405,6 +405,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public isSaving = false;
   public savingAction: DashboardManagerSavingAction = null;
   public saveError = '';
+  public isSimplifyDashboardPreviewOpen = false;
+  public selectedLegacyTrainingTileOrders = new Set<number>();
 
   private hasSavedChanges = false;
   private hasSleepDataForAddAll = false;
@@ -547,10 +549,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return false;
   }
 
-  get isAddDefaultsDisabled(): boolean {
-    return this.isSaving || this.getMissingDefaultDashboardTiles().length === 0;
-  }
-
   get isAddAllDisabled(): boolean {
     return this.isSaving || this.getMissingAllDashboardTiles().length === 0;
   }
@@ -559,12 +557,23 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return this.isSaving || this.dashboardTiles.length === 0;
   }
 
-  get isSaveSaving(): boolean {
-    return this.savingAction === 'save';
+  get legacyTrainingTiles(): TileSettingsInterface[] {
+    return this.chartTiles.filter(tile => (
+      isDashboardCuratedChartType(tile.chartType)
+      || isDashboardKpiChartType(tile.chartType)
+    ));
   }
 
-  get isAddDefaultsSaving(): boolean {
-    return this.savingAction === 'addDefaults';
+  get isSimplifyDashboardDisabled(): boolean {
+    return this.isSaving || this.legacyTrainingTiles.length === 0;
+  }
+
+  get hasSelectedLegacyTrainingTiles(): boolean {
+    return this.selectedLegacyTrainingTileOrders.size > 0;
+  }
+
+  get isSaveSaving(): boolean {
+    return this.savingAction === 'save';
   }
 
   get isAddAllSaving(): boolean {
@@ -573,6 +582,68 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
   get isRemoveAllSaving(): boolean {
     return this.savingAction === 'removeAll';
+  }
+
+  get isSimplifyDashboardSaving(): boolean {
+    return this.savingAction === 'simplify';
+  }
+
+  toggleSimplifyDashboardPreview(): void {
+    if (this.isSimplifyDashboardDisabled) {
+      return;
+    }
+    this.hapticsService.selection();
+    this.isSimplifyDashboardPreviewOpen = !this.isSimplifyDashboardPreviewOpen;
+    if (!this.isSimplifyDashboardPreviewOpen) {
+      this.selectedLegacyTrainingTileOrders.clear();
+    }
+  }
+
+  isLegacyTrainingTileSelected(order: number): boolean {
+    return this.selectedLegacyTrainingTileOrders.has(order);
+  }
+
+  toggleLegacyTrainingTileSelection(order: number, selected: boolean): void {
+    if (selected) {
+      this.selectedLegacyTrainingTileOrders.add(order);
+    } else {
+      this.selectedLegacyTrainingTileOrders.delete(order);
+    }
+    this.selectedLegacyTrainingTileOrders = new Set(this.selectedLegacyTrainingTileOrders);
+  }
+
+  async removeSelectedLegacyTrainingTiles(): Promise<void> {
+    if (this.isSaving || !this.hasSelectedLegacyTrainingTiles) {
+      return;
+    }
+    const selectedOrders = new Set(this.selectedLegacyTrainingTileOrders);
+    const selectedTiles = this.legacyTrainingTiles.filter(tile => selectedOrders.has(tile.order));
+    if (!selectedTiles.length || !await this.confirmSimplifyDashboard(selectedTiles.length)) {
+      return;
+    }
+
+    this.startSaving('simplify');
+    this.saveError = '';
+    const dashboardSettings = this.data.user.settings.dashboardSettings;
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
+    try {
+      const nextTiles = this.cloneTiles(dashboardSettings.tiles || [])
+        .filter(tile => !selectedOrders.has(tile.order))
+        .map((tile, index) => ({ ...tile, order: index }));
+      dashboardSettings.tiles = nextTiles;
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, nextTiles);
+      await this.persistDashboardSettings(dashboardSettings);
+      this.hasSavedChanges = true;
+      this.selectedLegacyTrainingTileOrders.clear();
+      this.isSimplifyDashboardPreviewOpen = false;
+      this.hapticsService.success();
+      this.dialogRef.close({ saved: true });
+    } catch (error) {
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
+    } finally {
+      this.stopSaving();
+    }
   }
 
   onModeChange(nextMode: 'add' | 'edit'): void {
@@ -890,48 +961,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
 
-      await this.persistDashboardSettings(dashboardSettings);
-      this.hasSavedChanges = true;
-      this.hapticsService.success();
-      this.dialogRef.close({ saved: true });
-    } catch (error) {
-      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
-      this.handleDashboardSettingsSaveError(error);
-    } finally {
-      this.stopSaving();
-    }
-  }
-
-  async addDefaultTiles(): Promise<void> {
-    if (this.isAddDefaultsDisabled) {
-      return;
-    }
-
-    this.hapticsService.selection();
-    this.startSaving('addDefaults');
-    this.saveError = '';
-    const dashboardSettings = this.data.user.settings.dashboardSettings;
-    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
-
-    try {
-      await this.refreshSleepEligibilityForAddAll();
-      const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
-      const missingTiles = this.getMissingDefaultDashboardTiles(clonedTiles);
-      if (!missingTiles.length) {
-        this.saveError = 'Default dashboard tiles are already on your dashboard.';
-        this.stopSaving();
-        return;
-      }
-
-      const bulkAppendError = this.appendBulkTiles(clonedTiles, missingTiles);
-      if (bulkAppendError) {
-        this.saveError = bulkAppendError;
-        this.stopSaving();
-        return;
-      }
-
-      dashboardSettings.tiles = clonedTiles;
-      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
       this.hapticsService.success();
@@ -1490,14 +1519,18 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return confirmed === true;
   }
 
-  private getMissingDefaultDashboardTiles(
-    tiles: TileSettingsInterface[] = this.dashboardTiles,
-  ): TileSettingsInterface[] {
-    const defaultTiles = AppUserUtilities.getDefaultUserDashboardTiles();
-    if (this.hasSleepDataForAddAll) {
-      defaultTiles.push(buildDashboardSleepTrendAutoTile(defaultTiles.length));
-    }
-    return defaultTiles.filter(defaultTile => !tiles.some(tile => this.isTileForBulkDashboardTile(tile, defaultTile)));
+  private async confirmSimplifyDashboard(selectedCount: number): Promise<boolean> {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Remove selected training tiles?',
+        message: `${selectedCount} selected training tile${selectedCount === 1 ? '' : 's'} will be removed. Activity, map, and custom tiles will remain.`,
+        confirmLabel: 'Remove selected',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      },
+    });
+    const confirmed = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+    return confirmed === true;
   }
 
   private getMissingAllDashboardTiles(

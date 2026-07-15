@@ -21,6 +21,10 @@ import { resolvePrimaryUnitAwareDisplayStat, buildHeroMetric } from '../../helpe
 import { resolvePreferredSpeedDerivedAverageTypeForActivity } from '../../helpers/summary-stats.helper';
 import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
 import { EventDevicesService } from '../../services/event-devices.service';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
+import { EventTagService } from '../../services/event-tag.service';
+import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 
 @Component({
   selector: 'app-event-summary',
@@ -62,12 +66,15 @@ export class EventSummaryComponent implements OnChanges {
   private cachedEventRef: AppEventInterface | null = null;
   private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
   private templateStateInitialized = false;
+  private eventTagsValue: string[] = [];
 
   constructor(
     private cd: ChangeDetectorRef,
     private bottomSheet: MatBottomSheet,
     private benchmarkFlow: AppBenchmarkFlowService,
     private eventDevicesService: EventDevicesService,
+    private dialog: MatDialog,
+    private eventTagService: EventTagService,
   ) {
   }
 
@@ -123,6 +130,48 @@ export class EventSummaryComponent implements OnChanges {
     return this.isOwner ? this.user || null : null;
   }
 
+  get eventTags(): string[] {
+    this.ensureTemplateState();
+    return this.eventTagsValue;
+  }
+
+  async openTags(): Promise<void> {
+    if (!this.isOwner || !this.user || !this.event?.getID?.()) {
+      return;
+    }
+    const targetEvent = this.event;
+    const targetEventID = targetEvent.getID();
+    const targetUser = this.user;
+    const originalTags = this.eventTags;
+    const dialogRef = this.dialog.open(EventTagsDialogComponent, {
+      width: 'min(34rem, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)',
+      data: {
+        title: 'Event tags',
+        tags: originalTags,
+        save: async (tags: string[]) => {
+          const savedTags = await this.eventTagService.saveTags(targetUser, targetEvent, tags, originalTags);
+          this.applySavedTagsToCurrentEvent(targetEventID, savedTags);
+          return savedTags;
+        },
+      },
+    });
+    const savedTags = await firstValueFrom(dialogRef.afterClosed());
+    if (!Array.isArray(savedTags)) {
+      return;
+    }
+  }
+
+  private applySavedTagsToCurrentEvent(targetEventID: string, savedTags: string[]): void {
+    if (this.event?.getID?.() !== targetEventID) {
+      return;
+    }
+    this.event.tags = savedTags;
+    delete this.event.benchmarkReviewTags;
+    this.rebuildTemplateState();
+    this.cd.markForCheck();
+  }
+
   get heroStats(): string[] {
     this.ensureTemplateState();
     return this.heroStatsValue;
@@ -143,28 +192,34 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   async openBenchmark() {
+    const targetEvent = this.event;
+    const targetEventID = targetEvent.getID();
     await this.benchmarkFlow.openBenchmarkEntry({
-      event: this.event,
+      event: targetEvent,
       user: this.user,
       initialSelection: this.selectedActivities,
       onResult: (result) => {
         this.benchmarkResult = result;
         this.rebuildTemplateState();
         this.cd.detectChanges();
-      }
+      },
+      onEventTagsSaved: (tags) => this.applySavedTagsToCurrentEvent(targetEventID, tags),
     });
   }
 
   openBenchmarkDialog(): void {
+    const targetEvent = this.event;
+    const targetEventID = targetEvent.getID();
     this.benchmarkFlow.openBenchmarkSelectionDialog({
-      event: this.event,
+      event: targetEvent,
       user: this.user,
       initialSelection: this.selectedActivities,
       onResult: (result) => {
         this.benchmarkResult = result;
         this.rebuildTemplateState();
         this.cd.detectChanges();
-      }
+      },
+      onEventTagsSaved: (tags) => this.applySavedTagsToCurrentEvent(targetEventID, tags),
     });
   }
 
@@ -263,6 +318,7 @@ export class EventSummaryComponent implements OnChanges {
         : (this.hasDevicesValue ? 'Device details available' : ''));
     this.deviceSourceSuppressedLabelsValue = this.deviceChipLabelValue ? [this.deviceChipLabelValue] : [];
     this.benchmarkCountValue = this.event?.benchmarkResults ? Object.keys(this.event.benchmarkResults).length : 0;
+    this.eventTagsValue = this.eventTagService.getTags(this.event);
 
     const feelingStat = this.event?.getStat(DataFeeling.type) as DataFeeling;
     this.feelingValue = feelingStat ? feelingStat.getValue() as Feelings : null;

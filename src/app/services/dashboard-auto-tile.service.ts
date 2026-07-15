@@ -15,43 +15,16 @@ import {
   AppUserInterface,
 } from '../models/app-user.interface';
 import {
-  DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE,
-  DASHBOARD_AUTO_TILE_CURATED_SOURCE,
-  DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
-  DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
-  DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
-  DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
-  DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
-  DASHBOARD_AUTO_TILE_KPI_SOURCE,
-  DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
-  buildDashboardCuratedAutoTile,
-  buildDashboardKpiAutoTile,
-  buildDashboardPowerCurveAutoTile,
   buildDashboardRoutePreviewAutoTile,
-  buildDashboardSleepTrendAutoTile,
   ensureDashboardAutoTiles,
-  isDashboardCuratedAutoTile,
-  isDashboardKpiAutoTile,
   isDashboardRoutePreviewTile,
-  isDashboardSleepTrendTile,
   markDashboardAutoTileAdded,
   markDashboardAutoTileDismissed,
 } from '../helpers/dashboard-auto-tile.helper';
-import {
-  getDefaultDashboardCuratedChartDefinitions,
-  getDefaultDashboardKpiChartDefinitions,
-} from '../helpers/dashboard-special-chart-types';
 import { cloneDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 import { cloneDashboardChartTileDisplaySettingsForChartType } from '../helpers/dashboard-chart-display-settings.helper';
-import {
-  getDashboardPowerCurveActivityTypes,
-  getDashboardPowerCurveScopeDefinitions,
-  isDashboardPowerCurveTileForScope,
-} from '../helpers/dashboard-power-curve-scope.helper';
-import { AppSleepService } from './app.sleep.service';
-import { AppEventService } from './app.event.service';
 import { AppRouteService } from './app.route.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
@@ -73,46 +46,7 @@ export interface DashboardAutoTileApplyResult {
   persisted: boolean;
 }
 
-const DASHBOARD_KPI_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDefaultDashboardKpiChartDefinitions().map(definition => ({
-  id: DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType],
-  label: definition.label,
-  source: DASHBOARD_AUTO_TILE_KPI_SOURCE,
-  qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType]] === true,
-  isPresent: (tiles) => tiles.some(tile => isDashboardKpiAutoTile(tile, definition.chartType)),
-  createTile: (order) => buildDashboardKpiAutoTile(definition.chartType, order),
-}));
-
-const DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDefaultDashboardCuratedChartDefinitions()
-  .map((definition) => {
-    const chartType = definition.chartType;
-    return {
-      id: DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType],
-      label: buildDashboardCuratedAutoTile(chartType, 0).name,
-      source: DASHBOARD_AUTO_TILE_CURATED_SOURCE,
-      qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType]] === true,
-      isPresent: (tiles) => tiles.some(tile => isDashboardCuratedAutoTile(tile, chartType)),
-      createTile: (order) => buildDashboardCuratedAutoTile(chartType, order),
-    };
-  });
-
-const DASHBOARD_POWER_CURVE_AUTO_TILE_RULES: DashboardAutoTileRule[] = getDashboardPowerCurveScopeDefinitions()
-  .map(definition => ({
-    id: definition.autoTileId,
-    label: definition.label,
-    source: definition.source,
-    qualifies: (eligibility) => eligibility[definition.autoTileId] === true,
-    isPresent: (tiles) => tiles.some(tile => isDashboardPowerCurveTileForScope(tile, definition.scope)),
-    createTile: (order) => buildDashboardPowerCurveAutoTile(definition.scope, order),
-  }));
-
 export const DASHBOARD_AUTO_TILE_RULES: readonly DashboardAutoTileRule[] = [{
-  id: DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
-  label: 'Sleep',
-  source: DASHBOARD_AUTO_TILE_SLEEP_TREND_SOURCE,
-  qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_SLEEP_TREND_ID] === true,
-  isPresent: (tiles) => tiles.some(tile => isDashboardSleepTrendTile(tile)),
-  createTile: (order) => buildDashboardSleepTrendAutoTile(order),
-}, {
   id: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
   label: 'Routes',
   source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
@@ -120,14 +54,12 @@ export const DASHBOARD_AUTO_TILE_RULES: readonly DashboardAutoTileRule[] = [{
   qualifies: (eligibility) => eligibility[DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID] === true,
   isPresent: (tiles) => tiles.some(tile => isDashboardRoutePreviewTile(tile)),
   createTile: (order) => buildDashboardRoutePreviewAutoTile(order),
-}, ...DASHBOARD_DEFAULT_CURATED_AUTO_TILE_RULES, ...DASHBOARD_POWER_CURVE_AUTO_TILE_RULES, ...DASHBOARD_KPI_AUTO_TILE_RULES];
+}];
 
 @Injectable({
   providedIn: 'root',
 })
 export class DashboardAutoTileService {
-  private sleepService = inject(AppSleepService);
-  private eventService = inject(AppEventService);
   private routeService = inject(AppRouteService);
   private userService = inject(AppUserService);
   private snackBar = inject(MatSnackBar);
@@ -165,16 +97,6 @@ export class DashboardAutoTileService {
 
     scheduleApply();
 
-    subscription.add(this.sleepService.watchHasAnySleepSession(uid).subscribe({
-      next: (hasSleepSession) => {
-        eligibility[DASHBOARD_AUTO_TILE_SLEEP_TREND_ID] = hasSleepSession;
-        scheduleApply();
-      },
-      error: (error) => {
-        this.logger.warn('[DashboardAutoTileService] Failed to watch sleep auto-tile eligibility', error);
-        scheduleApply();
-      },
-    }));
     subscription.add(this.routeService.watchHasAnyRoutePreview(uid).subscribe({
       next: (hasRoutePreview) => {
         eligibility[DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID] = hasRoutePreview;
@@ -185,21 +107,6 @@ export class DashboardAutoTileService {
         scheduleApply();
       },
     }));
-    getDashboardPowerCurveScopeDefinitions().forEach((definition) => {
-      subscription.add(this.eventService.watchHasAnyPowerCurveEventForActivityTypes(
-        uid,
-        getDashboardPowerCurveActivityTypes(definition.scope),
-      ).subscribe({
-        next: (hasPowerCurveEvent) => {
-          eligibility[definition.autoTileId] = hasPowerCurveEvent;
-          scheduleApply();
-        },
-        error: (error) => {
-          this.logger.warn('[DashboardAutoTileService] Failed to watch scoped Power Curve auto-tile eligibility', error);
-          scheduleApply();
-        },
-      }));
-    });
     subscription.add(() => {
       isClosed = true;
     });
@@ -240,9 +147,6 @@ export class DashboardAutoTileService {
       eligibleRules.forEach((rule) => {
         tiles.push(rule.createTile(nextOrder));
         markDashboardAutoTileAdded(dashboardSettings, rule.id, rule.source, nowMs);
-        if (rule.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
-          dashboardSettings.dismissedCuratedRecoveryNowTile = false;
-        }
         nextOrder += 1;
       });
       dashboardSettings.tiles = tiles;
@@ -301,9 +205,6 @@ export class DashboardAutoTileService {
         .map((tile, index) => ({ ...tile, order: index }));
       rules.forEach((rule) => {
         markDashboardAutoTileDismissed(dashboardSettings, rule.id, rule.source, nowMs);
-        if (rule.id === DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID) {
-          dashboardSettings.dismissedCuratedRecoveryNowTile = true;
-        }
       });
       await this.persistDashboardTileState(user, dashboardSettings);
     } catch (error) {
@@ -345,32 +246,10 @@ export class DashboardAutoTileService {
     });
   }
 
-  private buildDefaultDashboardEligibility(user: AppUserInterface): DashboardAutoTileEligibility {
+  private buildDefaultDashboardEligibility(_user: AppUserInterface): DashboardAutoTileEligibility {
     return {
-      ...this.buildDefaultCuratedEligibility(),
-      ...this.buildDefaultKpiEligibility(),
+      [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: false,
     };
-  }
-
-  private buildDefaultCuratedEligibility(): DashboardAutoTileEligibility {
-    return getDefaultDashboardCuratedChartDefinitions()
-      .reduce<DashboardAutoTileEligibility>((eligibility, definition) => {
-        const chartType = definition.chartType;
-        const id = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[chartType];
-        eligibility[id] = true;
-        return eligibility;
-      }, {
-        [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: false,
-        [DASHBOARD_AUTO_TILE_POWER_CURVE_ID]: false,
-        [DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID]: false,
-      });
-  }
-
-  private buildDefaultKpiEligibility(): DashboardAutoTileEligibility {
-    return getDefaultDashboardKpiChartDefinitions().reduce<DashboardAutoTileEligibility>((eligibility, definition) => {
-      eligibility[DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType]] = true;
-      return eligibility;
-    }, {});
   }
 
   private ensureDashboardSettings(user: AppUserInterface): AppDashboardSettingsInterface {

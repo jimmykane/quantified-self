@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
-import { SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME } from '../../shared/functions-manifest';
+import { FUNCTIONS_MANIFEST, SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME } from '../../shared/functions-manifest';
 
 // Load .env file automatically for local development
 dotenv.config();
@@ -32,9 +32,9 @@ interface CloudTasksConfig {
     sportsLibReparseQueue: string;
     sportsLibReparseHeavyQueue: string;
     sportsLibRouteReparseQueue: string;
+    derivedMetricsIngressQueue: string;
     derivedMetricsQueue: string;
     derivedMetricsIngressBucketSeconds: number;
-    serviceAccountEmail: string;
 }
 
 interface DebugConfig {
@@ -90,9 +90,9 @@ export const config: AppConfig = {
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME,
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
+            derivedMetricsIngressQueue: FUNCTIONS_MANIFEST.processDerivedMetricsIngressTask.name,
             derivedMetricsQueue: 'processDerivedMetricsTask',
             derivedMetricsIngressBucketSeconds: 30,
-            serviceAccountEmail: `${process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId}@appspot.gserviceaccount.com`,
         };
     },
     get debug() {

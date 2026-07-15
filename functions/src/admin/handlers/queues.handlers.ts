@@ -129,6 +129,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             sportsLibReparseQueue,
             sportsLibReparseHeavyQueue,
             sportsLibRouteReparseQueue,
+            derivedMetricsIngressQueue,
             derivedMetricsQueue,
         } = config.cloudtasks;
         const [
@@ -140,6 +141,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             sportsLibReparseCloudTaskStats,
             sportsLibReparseHeavyCloudTaskStats,
             sportsLibRouteReparseCloudTaskStats,
+            derivedMetricsIngressCloudTaskStats,
             derivedMetricsCloudTaskStats,
         ] = await Promise.all([
             getAdminCloudTaskQueueStats(workoutQueue),
@@ -150,6 +152,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             getAdminCloudTaskQueueStats(sportsLibReparseQueue),
             getAdminCloudTaskQueueStats(sportsLibReparseHeavyQueue),
             getAdminCloudTaskQueueStats(sportsLibRouteReparseQueue),
+            getAdminCloudTaskQueueStats(derivedMetricsIngressQueue),
             getAdminCloudTaskQueueStats(derivedMetricsQueue),
         ]);
         const reparseCloudTaskDepth = sportsLibReparseCloudTaskStats.pending + sportsLibReparseHeavyCloudTaskStats.pending;
@@ -160,6 +163,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             + sleepSyncCloudTaskStats.pending
             + reparseCloudTaskDepth
             + sportsLibRouteReparseCloudTaskStats.pending
+            + derivedMetricsIngressCloudTaskStats.pending
             + derivedMetricsCloudTaskStats.pending;
         const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
         const routeReparseJobsCollection = db.collection(SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION);
@@ -1009,6 +1013,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     sportsLibReparse: sportsLibReparseCloudTaskStats,
                     sportsLibReparseHeavy: sportsLibReparseHeavyCloudTaskStats,
                     sportsLibRouteReparse: sportsLibRouteReparseCloudTaskStats,
+                    derivedMetricsIngress: derivedMetricsIngressCloudTaskStats,
                     derivedMetrics: derivedMetricsCloudTaskStats,
                 },
             },

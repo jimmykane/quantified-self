@@ -99,9 +99,17 @@ service cloud.firestore {
            
       }
 
-      // Config Settings (Private / Owner Read-Write)
+      // Config Settings (Private / Owner Read-Write). Training benchmarks are
+      // deliberately server-owned so every selection is validated and queues
+      // a targeted derived-metrics refresh through its App-Check callable.
       match /config/settings {
-         allow read, write: if request.auth.uid == userID;
+         allow read: if request.auth.uid == userID;
+         allow create: if request.auth.uid == userID
+           && !request.resource.data.keys().hasAny(['trainingSettings']);
+         allow update: if request.auth.uid == userID
+           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['trainingSettings']);
+         allow delete: if request.auth.uid == userID
+           && !resource.data.keys().hasAny(['trainingSettings']);
       }
 
       // AI Insights Latest Snapshot (Private / Owner Read/Delete, fixed latest doc only)
@@ -143,6 +151,43 @@ service cloud.firestore {
             ];
           }
 
+          function isValidEventTag(tags, index) {
+            return tags.size() <= index
+              || (tags[index] is string
+                && tags[index].size() > 0
+                && tags[index].size() <= 32
+                && tags[index].matches('^\\S+( \\S+)*$'));
+          }
+
+          function isValidEventTagList(tags) {
+            return tags is list
+              && tags.size() <= 10
+              && tags.toSet().size() == tags.size()
+              && isValidEventTag(tags, 0)
+              && isValidEventTag(tags, 1)
+              && isValidEventTag(tags, 2)
+              && isValidEventTag(tags, 3)
+              && isValidEventTag(tags, 4)
+              && isValidEventTag(tags, 5)
+              && isValidEventTag(tags, 6)
+              && isValidEventTag(tags, 7)
+              && isValidEventTag(tags, 8)
+              && isValidEventTag(tags, 9);
+          }
+
+          function hasValidUpdatedEventTags() {
+            let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+            return (!affectedKeys.hasAny(['tags'])
+                || (request.resource.data.keys().hasAny(['tags'])
+                  && isValidEventTagList(request.resource.data.tags))
+                || (!request.resource.data.keys().hasAny(['tags'])
+                  && (!request.resource.data.keys().hasAny(['benchmarkReviewTags'])
+                    || isValidEventTagList(request.resource.data.benchmarkReviewTags))))
+              && (!affectedKeys.hasAny(['benchmarkReviewTags'])
+                || !request.resource.data.keys().hasAny(['benchmarkReviewTags'])
+                || isValidEventTagList(request.resource.data.benchmarkReviewTags));
+          }
+
           // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
@@ -150,7 +195,8 @@ service cloud.firestore {
           allow list: if isOwner();
           allow create: if false;
           allow update: if request.auth.uid == userID
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOwnedEventFields());
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOwnedEventFields())
+            && hasValidUpdatedEventTags();
           allow delete: if request.auth.uid == userID;
 
 

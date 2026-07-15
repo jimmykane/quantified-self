@@ -535,7 +535,7 @@ describe('TileChartComponent', () => {
     expect(directions).toEqual(['older']);
   });
 
-  it('should render Power Curve as an event-backed curated tile without the generic activity filter', () => {
+  it('should render Power Curve with prepared range and comparison controls only', () => {
     const powerCurve = {
       eventCount: 1,
       series: [],
@@ -559,9 +559,9 @@ describe('TileChartComponent', () => {
     expect(chart.powerCurve).toBe(powerCurve);
     expect(chart.infoTooltip).toContain('Power Curve compares');
     expect(chart.reserveTitleActionSpace).toBe(true);
-    const filters = getEventFiltersComponent();
-    expect(filters.eventFilters).toEqual(component.eventFilters);
-    expect(filters.showActivityFilter).toBe(false);
+    expect(getEventFiltersComponent()).toBeUndefined();
+    const rangeSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve range');
+    expect(rangeSelector?.value).toBe('1y');
     const compareSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve comparison');
     expect(compareSelector).toBeTruthy();
     expect(compareSelector?.value).toBe('best30d');

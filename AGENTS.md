@@ -14,6 +14,9 @@ Always-on rules:
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
 - When building a feature, review the app help page and update or add help content when needed.
+- Before changing the Training workspace, Training settings, Training-derived metrics, or sports-lib durability integration,
+  read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the
+  single detailed Training source of truth instead of creating a competing Training architecture document.
 - When adding a new provider/service integration, add or update a focused public `/integrations/<provider>` page when it has a clear product or search purpose. Keep integration routes intentional, and update route metadata, sitemap/robots, internal links, help content, and tests alongside the page.
 - Never deploy, publish, push, or otherwise mutate production/cloud infrastructure as part of an implementation task. Prepare and verify changes locally, then report the exact manual command or ask for a separate explicit approval for that specific action.
 
@@ -21,3 +24,13 @@ Layer entry points:
 - Frontend: `src/AGENTS.md`
 - Functions: `functions/AGENTS.md`
 - Extensions: `extensions/AGENTS.md`
+
+Documentation routing:
+- Put durable architecture, data-flow, operational, and maintenance documentation under `docs/` and link new entry
+  points from the Architecture Documentation section in `README.md`.
+- Put Training implementation details, calculations, product rules, diagnostics, extension guidance, and maintenance
+  checklists in `docs/training-workspace.md`.
+- Put user-facing explanations in the app help content as required by the feature rule above; developer documentation
+  does not replace product help.
+- Put area-specific agent instructions in the nearest deeper `AGENTS.md`, keeping them additive and minimal.
+- Never store credentials, tokens, private keys, personal user data, or production exports in repository documentation.

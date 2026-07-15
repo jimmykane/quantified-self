@@ -160,6 +160,8 @@ export class DataTypeIconComponent {
         return 'timer';
       case '#':
         return 'tag';
+      case 'Tags':
+        return 'sell';
       case 'Lap':
       case 'Split':
         return 'linear_scale';

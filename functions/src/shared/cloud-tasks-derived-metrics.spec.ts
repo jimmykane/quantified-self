@@ -1,154 +1,122 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { enqueueDerivedMetricsIngressTask, enqueueDerivedMetricsTask, resetCloudTasksClient } from './cloud-tasks';
+import { enqueueDerivedMetricsIngressTask, enqueueDerivedMetricsTask } from './cloud-tasks';
+import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 
 const hoisted = vi.hoisted(() => {
-  const mockCloudTasksClient = {
-    queuePath: vi.fn(),
-    createTask: vi.fn(),
-  };
-  const CloudTasksClientSpy = vi.fn(() => mockCloudTasksClient);
-
-  return {
-    mockCloudTasksClient,
-    CloudTasksClientSpy,
-  };
+    const mockTaskQueue = { enqueue: vi.fn() };
+    return {
+        mockTaskQueue,
+        mockFunctions: { taskQueue: vi.fn(() => mockTaskQueue) },
+    };
 });
 
-vi.mock('@google-cloud/tasks', () => ({
-  v2beta3: {
-    CloudTasksClient: hoisted.CloudTasksClientSpy,
-  },
-}));
-
+vi.mock('firebase-admin/functions', () => ({ getFunctions: () => hoisted.mockFunctions }));
 vi.mock('../config', () => ({
-  config: {
-    cloudtasks: {
-      projectId: 'test-project',
-      location: 'test-location',
-      workoutQueue: 'processWorkoutTask',
-      activitySyncQueue: 'processActivitySyncTask',
-      sportsLibReparseQueue: 'processSportsLibReparseTask',
-      sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
-      derivedMetricsQueue: 'processDerivedMetricsTask',
-      derivedMetricsIngressBucketSeconds: 30,
-      serviceAccountEmail: 'sa@test.com',
+    config: {
+        cloudtasks: {
+            projectId: 'test-project',
+            location: 'test-location',
+            derivedMetricsIngressQueue: 'processDerivedMetricsIngressTask',
+            derivedMetricsQueue: 'processDerivedMetricsTask',
+            derivedMetricsIngressBucketSeconds: 30,
+        },
     },
-  },
 }));
+vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
-vi.mock('firebase-functions/logger', () => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-}));
-
-describe('enqueueDerivedMetricsTask', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetCloudTasksClient();
-    hoisted.mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
-    hoisted.mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-  });
-
-  it('enqueues a deterministic task with sanitized uid and normalized generation', async () => {
-    await expect(enqueueDerivedMetricsTask('user/with spaces', 7.8)).resolves.toBe(true);
-
-    expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
-      'test-project',
-      'test-location',
-      'processDerivedMetricsTask',
-    );
-
-    expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-      parent: 'projects/p/locations/l/queues/q',
-      task: expect.objectContaining({
-        name: 'projects/p/locations/l/queues/q/tasks/derived-metrics-user-with-spaces-7',
-        httpRequest: expect.objectContaining({
-          url: 'https://test-location-test-project.cloudfunctions.net/processDerivedMetricsTask',
-          body: expect.any(String),
-        }),
-      }),
+describe('derived metrics task dispatch', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        hoisted.mockTaskQueue.enqueue.mockResolvedValue(undefined);
     });
 
-    const encodedBody = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.httpRequest.body;
-    const payload = JSON.parse(Buffer.from(encodedBody, 'base64').toString('utf8'));
-    expect(payload).toEqual({ data: { uid: 'user/with spaces', generation: 7 } });
-  });
+    it('uses the derived metrics worker queue with the direct worker payload', async () => {
+        await expect(enqueueDerivedMetricsTask('user/with spaces', 7.8)).resolves.toBe(true);
 
-  it('returns false for already-existing deterministic tasks', async () => {
-    const err: any = new Error('Already exists');
-    err.code = 6;
-    hoisted.mockCloudTasksClient.createTask.mockRejectedValue(err);
-
-    await expect(enqueueDerivedMetricsTask('user-1', 1)).resolves.toBe(false);
-  });
-});
-
-describe('enqueueDerivedMetricsIngressTask', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetCloudTasksClient();
-    hoisted.mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
-    hoisted.mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-  });
-
-  it('enqueues deterministic ingress task per uid + bucket', async () => {
-    await expect(enqueueDerivedMetricsIngressTask('user/with spaces', undefined, 1_712_000_015_000)).resolves.toBe(true);
-
-    expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-      parent: 'projects/p/locations/l/queues/q',
-      task: expect.objectContaining({
-        name: 'projects/p/locations/l/queues/q/tasks/derived-metrics-ingress-user-with-spaces-1712000010',
-        scheduleTime: {
-          seconds: 1712000042,
-        },
-        httpRequest: expect.objectContaining({
-          url: 'https://test-location-test-project.cloudfunctions.net/processDerivedMetricsIngressTask',
-        }),
-      }),
+        expect(hoisted.mockFunctions.taskQueue).toHaveBeenCalledWith(
+            'projects/test-project/locations/test-location/functions/processDerivedMetricsTask',
+        );
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+            { uid: 'user/with spaces', generation: 7 },
+            { id: 'derived-metrics-user-with-spaces-7', scheduleDelaySeconds: 1 },
+        );
     });
 
-    const encodedBody = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.httpRequest.body;
-    const payload = JSON.parse(Buffer.from(encodedBody, 'base64').toString('utf8'));
-    expect(payload).toEqual({
-      data: {
-        uid: 'user/with spaces',
-        bucketStartEpochSec: 1712000010,
-      },
+    it('maps Firebase duplicate errors to a skipped deterministic enqueue', async () => {
+        hoisted.mockTaskQueue.enqueue.mockRejectedValue(Object.assign(new Error('Already exists'), {
+            code: 'functions/task-already-exists',
+        }));
+
+        await expect(enqueueDerivedMetricsTask('user-1', 1)).resolves.toBe(false);
     });
-  });
 
-  it('returns false for already-existing ingress bucket tasks', async () => {
-    const err: any = new Error('Already exists');
-    err.code = 6;
-    hoisted.mockCloudTasksClient.createTask.mockRejectedValue(err);
+    it('uses the ingress worker queue and an absolute delivery time for each debounce bucket', async () => {
+        await expect(enqueueDerivedMetricsIngressTask('user/with spaces', undefined, 1_712_000_015_000)).resolves.toBe(true);
 
-    await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000)).resolves.toBe(false);
-  });
-
-  it('uses different deterministic task names across different buckets', async () => {
-    await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000)).resolves.toBe(true);
-    await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_055_000)).resolves.toBe(true);
-
-    const firstTaskName = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.name as string;
-    const secondTaskName = hoisted.mockCloudTasksClient.createTask.mock.calls[1][0].task.name as string;
-
-    expect(firstTaskName).toContain('derived-metrics-ingress-user-1-1712000010');
-    expect(secondTaskName).toContain('derived-metrics-ingress-user-1-1712000040');
-    expect(firstTaskName).not.toBe(secondTaskName);
-  });
-
-  it('supports explicit schedule delay override for manual enqueue call-sites', async () => {
-    await expect(enqueueDerivedMetricsIngressTask('user-1', 9, 1_712_000_015_000)).resolves.toBe(true);
-
-    expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-      parent: 'projects/p/locations/l/queues/q',
-      task: expect.objectContaining({
-        name: 'projects/p/locations/l/queues/q/tasks/derived-metrics-ingress-user-1-1712000010',
-        scheduleTime: {
-          seconds: 1712000024,
-        },
-      }),
+        expect(hoisted.mockFunctions.taskQueue).toHaveBeenCalledWith(
+            'projects/test-project/locations/test-location/functions/processDerivedMetricsIngressTask',
+        );
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+            { uid: 'user/with spaces', bucketStartEpochSec: 1_712_000_010 },
+            { id: 'derived-metrics-ingress-user-with-spaces-1712000010', scheduleTime: new Date(1_712_000_042_000) },
+        );
     });
-  });
+
+    it('keeps different debounce buckets separate', async () => {
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000);
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_055_000);
+
+        expect(hoisted.mockTaskQueue.enqueue.mock.calls[0][1]).toMatchObject({
+            id: 'derived-metrics-ingress-user-1-1712000010',
+        });
+        expect(hoisted.mockTaskQueue.enqueue.mock.calls[1][1]).toMatchObject({
+            id: 'derived-metrics-ingress-user-1-1712000040',
+        });
+    });
+
+    it('keeps targeted sleep ingress separate from event ingress in the same bucket', async () => {
+        await enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            taskScope: 'sleep',
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            incrementEventMutationVersion: false,
+        });
+
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+            {
+                uid: 'user-1',
+                bucketStartEpochSec: 1_712_000_010,
+                metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+                incrementEventMutationVersion: false,
+            },
+            {
+                id: 'derived-metrics-ingress-user-1-1712000010-sleep',
+                scheduleTime: new Date(1_712_000_042_000),
+            },
+        );
+    });
+
+    it('rejects invalid ingress scopes and empty targeted metric lists before dispatch', async () => {
+        await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            taskScope: 'sleep/other',
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+        })).rejects.toThrow('task scope is invalid');
+        await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            taskScope: 'sleep',
+            metricKinds: [],
+        })).rejects.toThrow('metric kinds are invalid');
+        await expect(enqueueDerivedMetricsIngressTask('user-1', undefined, 1_712_000_015_000, {
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+        })).rejects.toThrow('requires a task scope');
+
+        expect(hoisted.mockTaskQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('honors an explicit ingress delay override', async () => {
+        await expect(enqueueDerivedMetricsIngressTask('user-1', 9, 1_712_000_015_000)).resolves.toBe(true);
+
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+            { uid: 'user-1', bucketStartEpochSec: 1_712_000_010 },
+            { id: 'derived-metrics-ingress-user-1-1712000010', scheduleTime: new Date(1_712_000_024_000) },
+        );
+    });
 });

@@ -1,0 +1,198 @@
+<h2 mat-dialog-title>Set {{ disciplineLabel }} benchmark</h2>
+
+<mat-dialog-content
+  class="benchmark-dialog-content qs-scrollbar"
+  [class.benchmark-dialog-content-scrollable]="mode === 'event' && eventSuggestionsState === 'ready'"
+  [class.benchmark-dialog-content-with-clear]="!!data.selection"
+>
+  <p class="dialog-intro">Compare matching historical and current builds. Event day is excluded.</p>
+
+  <div class="dialog-controls">
+    <div class="dialog-field">
+      <span class="field-label">Build length</span>
+      <mat-button-toggle-group class="benchmark-segmented-control" hideSingleSelectionIndicator [value]="durationWeeks" (change)="selectDurationWeeks($event.value)" [disabled]="isSaving" aria-label="Build length">
+        <mat-button-toggle [value]="8"><span class="full-toggle-label">8 weeks</span><span class="compact-toggle-label">8</span></mat-button-toggle>
+        <mat-button-toggle [value]="10"><span class="full-toggle-label">10 weeks</span><span class="compact-toggle-label">10</span></mat-button-toggle>
+        <mat-button-toggle [value]="12"><span class="full-toggle-label">12 weeks</span><span class="compact-toggle-label">12</span></mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+
+    <div class="dialog-field">
+      <span class="field-label">Reference</span>
+      <mat-button-toggle-group class="benchmark-segmented-control" hideSingleSelectionIndicator [value]="mode" (change)="selectMode($event.value)" [disabled]="isSaving" aria-label="Benchmark reference type">
+        <mat-button-toggle value="event">Event</mat-button-toggle>
+        <mat-button-toggle value="period"><span class="full-toggle-label">Manual period</span><span class="compact-toggle-label">Dates</span></mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+  </div>
+
+  @if (mode === 'event') {
+    @if (eventSuggestionsState === 'ready') {
+      <div class="event-picker" [class.event-picker-with-races]="visibleSuggestedRaces.length" aria-label="Race and event suggestions">
+        @if (visibleSuggestedRaces.length) {
+          <mat-card appearance="outlined" class="event-picker-section qs-card-plain" aria-label="Race-tagged events">
+            <div class="event-picker-heading">
+              <div>
+                <span class="field-label">Race-tagged events</span>
+                <p>Quick picks from events already tagged <strong>Race</strong>.</p>
+              </div>
+              @if (visibleSuggestedRaces.length > displayedSuggestedRaces.length) {
+                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show all</button>
+              } @else if (isRaceListExpanded && visibleSuggestedRaces.length > 3) {
+                <button mat-button type="button" (click)="toggleRaceList()" [disabled]="isSaving">Show less</button>
+              }
+            </div>
+            <mat-selection-list
+              class="event-option-list event-option-list-tagged qs-scrollbar"
+              [attr.aria-label]="'Tagged ' + data.discipline + ' races'"
+              [multiple]="false"
+              [hideSingleSelectionIndicator]="true"
+              [disabled]="isSaving"
+              (selectionChange)="selectEventOption($event.options[0]?.value)"
+            >
+              @for (race of displayedSuggestedRaces; track race.eventId) {
+                <mat-list-option
+                  class="event-option"
+                  [class.event-option-selected]="race.eventId === eventId"
+                  [value]="race.eventId"
+                  [selected]="race.eventId === eventId"
+                  [disabled]="!race.isEligible"
+                >
+                  <span class="event-option-copy">
+                    <span class="event-option-title">{{ race.displayLabel || (race.startDayMs | date:'mediumDate':'UTC') }}</span>
+                    <span class="event-option-details">
+                      @if (race.displayLabel) { {{ race.startDayMs | date:'mediumDate':'UTC' }} · }
+                      {{ race.detailsText }}
+                    </span>
+                    @if (!race.isEligible) { <small>Not available for this build length</small> }
+                  </span>
+                </mat-list-option>
+              }
+            </mat-selection-list>
+          </mat-card>
+        }
+
+        <mat-card appearance="outlined" class="event-picker-section qs-card-plain" aria-label="Other historical events">
+          <div class="event-picker-heading">
+            <div>
+              <span class="field-label">Choose an event</span>
+              <p>{{ visibleSuggestedRaces.length ? 'Or choose' : 'Choose' }} any eligible event. Its tags will not change.</p>
+            </div>
+          </div>
+          <div class="event-picker-filters">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-date-filter">
+              <mat-label>History</mat-label>
+              <mat-select [value]="eventDateFilter" (selectionChange)="selectEventDateFilter($event.value)" [disabled]="isSaving">
+                <mat-option value="all">All history</mat-option>
+                <mat-option value="recent">Past year</mat-option>
+                <mat-option value="earlier">Earlier history</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <div class="event-sort-control">
+              <span class="field-label">Order</span>
+              <mat-button-toggle-group class="benchmark-segmented-control" hideSingleSelectionIndicator [value]="eventSort" (change)="selectEventSort($event.value)" [disabled]="isSaving" aria-label="Event order">
+                <mat-button-toggle value="latest">Latest</mat-button-toggle>
+                <mat-button-toggle value="longest">Longest</mat-button-toggle>
+                <mat-button-toggle value="highest-load">Highest load</mat-button-toggle>
+              </mat-button-toggle-group>
+            </div>
+          </div>
+          @if (selectedEvent && selectedBuildStartDayMs !== null && selectedBenchmarkEndDayMs !== null) {
+            <div class="event-selection-preview">
+              <div class="event-selection-block">
+                <span class="event-selection-label">Selected event</span>
+                <strong>{{ selectedEvent.displayLabel || (selectedEvent.startDayMs | date:'mediumDate':'UTC') }}</strong>
+                <span>@if (selectedEvent.displayLabel) { {{ selectedEvent.startDayMs | date:'mediumDate':'UTC' }} · }{{ selectedEvent.detailsText }}</span>
+              </div>
+              <div class="event-selection-block">
+                <span class="event-selection-label">Benchmark window · event excluded</span>
+                <strong>{{ selectedBuildStartDayMs | date:'mediumDate':'UTC' }} – {{ selectedBenchmarkEndDayMs | date:'mediumDate':'UTC' }}</strong>
+                <span>{{ durationWeeks }} weeks</span>
+              </div>
+            </div>
+          } @else {
+            <div class="event-eligibility-note">
+              <strong>{{ visibleSuggestedEvents.length }} eligible {{ visibleSuggestedEvents.length === 1 ? 'event' : 'events' }} through {{ eventEligibilityCutoffDayMs | date:'mediumDate':'UTC' }}</strong>
+              @if (hiddenOverlappingEventCount) {
+                <span>{{ hiddenOverlappingEventCount }} newer {{ hiddenOverlappingEventCount === 1 ? 'event is' : 'events are' }} hidden because the build would overlap your current one.</span>
+              }
+            </div>
+          }
+          <mat-selection-list
+            class="event-option-list event-option-list-scroll qs-scrollbar"
+            [attr.aria-label]="'Eligible ' + data.discipline + ' events'"
+            [multiple]="false"
+            [hideSingleSelectionIndicator]="true"
+            [disabled]="isSaving"
+            (selectionChange)="selectEventOption($event.options[0]?.value)"
+          >
+            @for (event of visibleSuggestedEvents; track event.eventId) {
+              <mat-list-option
+                class="event-option"
+                [class.event-option-selected]="event.eventId === eventId"
+                [value]="event.eventId"
+                [selected]="event.eventId === eventId"
+                [disabled]="!event.isEligible"
+              >
+                <span class="event-option-copy">
+                  <span class="event-option-title">{{ event.displayLabel || (event.startDayMs | date:'mediumDate':'UTC') }}</span>
+                  <span class="event-option-details">
+                    @if (event.displayLabel) { {{ event.startDayMs | date:'mediumDate':'UTC' }} · }
+                    {{ event.detailsText }}
+                  </span>
+                </span>
+              </mat-list-option>
+            } @empty {
+              <p class="dialog-empty">No eligible {{ data.discipline }} events with activity details in this time range.</p>
+            }
+          </mat-selection-list>
+          @if (visibleSuggestedEvents.length) {
+            <p class="event-picker-hint">
+              {{ selectedEvent
+                ? 'Choose another row to compare a different historical window.'
+                : 'Choose a row to preview its exact build dates before saving.' }}
+            </p>
+          }
+        </mat-card>
+
+      </div>
+    } @else {
+      <div class="event-suggestions-status">
+        @if (eventSuggestionsState === 'loading') {
+          <mat-spinner diameter="22"></mat-spinner>
+        }
+        <div class="event-suggestions-status-copy">
+          <strong>{{ eventSuggestionsState === 'loading' ? 'Finding past events' : 'Event suggestions unavailable' }}</strong>
+          @if (eventSuggestionsState === 'loading') {
+            <p role="status">You can switch to Manual period if you already know the historical end date.</p>
+          } @else {
+            <p>Switch to Manual period to choose a historical end date instead.</p>
+          }
+        </div>
+      </div>
+    }
+  } @else {
+    <mat-form-field appearance="outline" class="period-input">
+      <mat-label>Historical build end date</mat-label>
+      <input matInput type="date" [value]="periodEndDate" (input)="updatePeriodEndDate($any($event.target).value)" [disabled]="isSaving">
+      <mat-hint>The build ends on this day and cannot overlap your current build.</mat-hint>
+    </mat-form-field>
+  }
+
+  @if (errorMessage) {
+    <p class="dialog-error" role="alert">{{ errorMessage }}</p>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (data.selection) {
+    <button class="dialog-clear-action" mat-button color="warn" (click)="clear()" [disabled]="isSaving">Clear benchmark</button>
+  }
+  <button class="dialog-cancel-action" mat-button mat-dialog-close [disabled]="isSaving">Cancel</button>
+  <button class="dialog-primary-action" mat-flat-button color="primary" (click)="save()" [disabled]="isSaving || !canSave">
+    <span class="dialog-action-content">
+      @if (isSaving) { <mat-spinner diameter="18"></mat-spinner> }
+      <span>{{ saveActionLabel }}</span>
+    </span>
+  </button>
+</mat-dialog-actions>

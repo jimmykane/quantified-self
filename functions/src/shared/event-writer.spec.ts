@@ -97,6 +97,38 @@ describe('EventWriter', () => {
         );
     });
 
+    it('should include shared app event tags that sports-lib omits from toJSON', async () => {
+        eventMock.tags = [' Race ', 'race', '2026'];
+        eventMock.benchmarkReviewTags = ['Legacy'];
+        eventMock.toJSON.mockReturnValue({
+            id: 'event-1',
+            benchmarkReviewTags: ['Serialized legacy'],
+        });
+
+        await writer.writeAllEventData('user-1', eventMock);
+
+        const eventWrite = vi.mocked(adapter.setDoc).mock.calls.find(([path]) => path[2] === 'events');
+        expect(eventWrite).toEqual([
+            ['users', 'user-1', 'events', 'event-1'],
+            expect.objectContaining({ tags: ['Race', '2026'] }),
+        ]);
+        expect(eventWrite?.[1]).not.toHaveProperty('benchmarkReviewTags');
+    });
+
+    it('should strip malformed serialized tag fields', async () => {
+        eventMock.toJSON.mockReturnValue({
+            id: 'event-1',
+            tags: { injected: true },
+            benchmarkReviewTags: 'not-a-list',
+        });
+
+        await writer.writeAllEventData('user-1', eventMock);
+
+        const eventWrite = vi.mocked(adapter.setDoc).mock.calls.find(([path]) => path[2] === 'events');
+        expect(eventWrite?.[1]).not.toHaveProperty('tags');
+        expect(eventWrite?.[1]).not.toHaveProperty('benchmarkReviewTags');
+    });
+
     it('should upload original file if provided', async () => {
         const originalFile = {
             data: Buffer.from('test'),

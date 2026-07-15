@@ -1,6 +1,8 @@
 import { DataDuration, DataRecoveryTime, type EventInterface } from '@sports-alliance/sports-lib';
 import { DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS } from '@shared/derived-metrics';
 
+export const RECOVERY_NOW_REFRESH_INTERVAL_MS = 60 * 1000;
+
 export interface DashboardRecoveryNowSegment {
   totalSeconds: number;
   endTimeMs: number;

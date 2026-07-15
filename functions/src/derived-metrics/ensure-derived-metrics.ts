@@ -6,7 +6,7 @@ import {
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
-    PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
+    CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
     getDerivedMetricDocId,
     normalizeDerivedMetricKinds,
     type EnsureDerivedMetricsRequest,
@@ -52,7 +52,7 @@ interface DerivedMetricsFreshnessDecision {
     | 'missing_snapshot_event_mutation_version'
     | 'missing_completed_at'
     | 'event_mutation_version_behind'
-    | 'projection_day_behind'
+    | 'calendar_day_behind'
     | 'latest_event_update_after_completion'
     | 'fresh';
 }
@@ -115,8 +115,8 @@ function resolveUtcDayStartMs(timeMs: number): number {
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
-function isProjectionSensitiveMetricKind(kind: DerivedMetricKind): boolean {
-    return PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS.includes(kind);
+function isCalendarSensitiveMetricKind(kind: DerivedMetricKind): boolean {
+    return CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS.includes(kind);
 }
 
 export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInput): DerivedMetricsFreshnessDecision {
@@ -169,7 +169,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
         };
     }
 
-    const projectionStaleKinds: DerivedMetricKind[] = [];
+    const calendarStaleKinds: DerivedMetricKind[] = [];
     const hardStaleKinds: DerivedMetricKind[] = [];
     const todayUtcDayMs = resolveUtcDayStartMs(input.nowMs);
 
@@ -200,10 +200,10 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
             hardStaleKinds.push(metricKind);
             continue;
         }
-        if (isProjectionSensitiveMetricKind(metricKind)) {
+        if (isCalendarSensitiveMetricKind(metricKind)) {
             const asOfDayMs = toFiniteNumber(snapshot.asOfDayMs);
             if (!Number.isFinite(asOfDayMs) || (asOfDayMs as number) < todayUtcDayMs) {
-                projectionStaleKinds.push(metricKind);
+                calendarStaleKinds.push(metricKind);
             }
         }
     }
@@ -237,11 +237,11 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
         };
     }
 
-    if (projectionStaleKinds.length > 0) {
+    if (calendarStaleKinds.length > 0) {
         return {
             shouldQueue: true,
-            metricKindsToQueue: projectionStaleKinds,
-            reason: 'projection_day_behind',
+            metricKindsToQueue: calendarStaleKinds,
+            reason: 'calendar_day_behind',
         };
     }
     // Fallback safety net for missed trigger executions:

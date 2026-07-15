@@ -69,6 +69,14 @@
   min-width: 0;
   min-height: 0;
   overflow: visible;
+  gap: 10px;
+}
+
+.tag-filter-field {
+  --mat-form-field-container-height: 46px;
+  --mat-form-field-container-vertical-padding: 10px;
+  flex: 0 0 150px;
+  width: 150px;
 }
 
 .table-toolbar-filters:empty {
@@ -182,6 +190,32 @@
 
 .mat-column-Checkbox {
   width: 50px;
+}
+
+.mat-column-Tags,
+.cdk-column-Tags {
+  width: 190px;
+  max-width: 190px;
+}
+
+.event-tags-cell-button {
+  justify-content: flex-start;
+  min-width: 0;
+  width: 100%;
+}
+
+.event-tags-add-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.event-tags-chip-set {
+  --mat-chip-container-height: 28px;
+  --mat-chip-label-text-size: 0.78rem;
+  display: block;
+  max-width: 170px;
+  overflow: hidden;
 }
 
 /* Responsive width for the Start Date column */

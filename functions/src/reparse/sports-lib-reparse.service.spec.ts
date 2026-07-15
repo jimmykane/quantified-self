@@ -834,6 +834,7 @@ describe('sports-lib-reparse.service', () => {
             notes: 'notes',
             rpe: 7,
             feeling: 3,
+            tags: [' Race ', 'race', '2026'],
             name: 'new-name',
         });
         expect(event.isMerge).toBe(false);
@@ -843,6 +844,7 @@ describe('sports-lib-reparse.service', () => {
         expect(event.notes).toBe('notes');
         expect(event.rpe).toBe(7);
         expect(event.feeling).toBe(3);
+        expect(event.tags).toEqual(['Race', '2026']);
         expect(event.name).toBeUndefined();
     });
 
@@ -1329,6 +1331,38 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: 'users/u1/events/e1' }),
             { probe: true },
+            undefined,
+        );
+    });
+
+    it('persistReparsedEvent should preserve the latest event tags inside the write transaction', async () => {
+        hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
+            set: hoisted.mockTransactionSet,
+            delete: hoisted.mockTransactionDelete,
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ tags: ['Latest'] }) }),
+        }));
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            set: vi.fn().mockResolvedValue(undefined),
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+        hoisted.mockWriteAllEventData.mockImplementationOnce(async () => {
+            const ctorArgs = hoisted.eventWriterCtorArgs.at(-1);
+            await ctorArgs!.adapter.setDoc(['users', 'u1', 'events', 'e1'], { tags: ['Stale'] });
+        });
+
+        await persistReparsedEvent(
+            'u1',
+            'e1',
+            { setID: vi.fn(), getActivities: vi.fn(() => [{ getID: () => 'a1' }]) } as any,
+            {},
+            [{ id: 'a1', data: () => ({}) } as any],
+            TARGET_SPORTS_LIB_VERSION,
+        );
+
+        expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
+            expect.objectContaining({ path: 'users/u1/events/e1' }),
+            { tags: ['Latest'] },
             undefined,
         );
     });

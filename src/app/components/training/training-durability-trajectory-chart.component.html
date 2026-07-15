@@ -1,0 +1,30 @@
+@if (trajectory; as view) {
+  <section class="durability-trajectory">
+    <header>
+      <div>
+        <h4>{{ view.contextLabel }} trajectory</h4>
+        <p>{{ view.metricDescription }}</p>
+      </div>
+      <div class="durability-trajectory-status" [attr.aria-live]="isUpdating ? 'polite' : null">
+        @if (isUpdating) {
+          <mat-spinner diameter="16"></mat-spinner>
+          <span>Updating</span>
+        } @else {
+          <span>12 weeks</span>
+        }
+      </div>
+    </header>
+    <div class="durability-trajectory-scroll">
+      <div
+        #chartDiv
+        class="durability-trajectory-chart"
+        role="img"
+        [attr.aria-label]="chartAriaLabel"
+      ></div>
+    </div>
+    <footer>
+      <span>{{ availabilityText }}</span>
+      <span>Bars show eligible activity samples; the line does not bridge empty weeks.</span>
+    </footer>
+  </section>
+}

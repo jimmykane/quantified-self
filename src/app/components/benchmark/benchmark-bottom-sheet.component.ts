@@ -142,19 +142,20 @@ export class BenchmarkBottomSheetComponent {
       this.snackBar.open('Sign in to edit review tags.', undefined, { duration: 3000 });
       return;
     }
+    const originalTags = [...this.benchmarkReviewTags];
 
     const dialogRef = this.dialog.open(BenchmarkReviewTagsDialogComponent, {
       width: 'min(34rem, calc(100vw - 32px))',
       maxWidth: 'calc(100vw - 32px)',
       data: {
         title: 'Benchmark tags',
-        tags: this.benchmarkReviewTags,
+        tags: originalTags,
         suggestions: this.benchmarkReviewService.normalizeTags([
           ...(this.data.reviewTagSuggestions || []),
           ...this.benchmarkReviewTags,
         ]),
         save: async (tags: string[]) => {
-          const savedTags = await this.benchmarkReviewService.saveEventTags(user, event, tags);
+          const savedTags = await this.benchmarkReviewService.saveEventTags(user, event, tags, originalTags);
           this.benchmarkReviewTags = savedTags;
           this.data.onEventTagsSaved?.(savedTags);
           return savedTags;

@@ -257,8 +257,8 @@ export function isDashboardCuratedChartType(chartType: unknown): chartType is Da
     || isDashboardPowerCurveChartType(chartType);
 }
 
-export function isDashboardEventBackedSpecialChartType(chartType: unknown): chartType is DashboardPowerCurveChartType {
-  return isDashboardPowerCurveChartType(chartType);
+export function isDashboardEventBackedSpecialChartType(_chartType: unknown): _chartType is never {
+  return false;
 }
 
 export function isDashboardAcwrKpiChartType(chartType: unknown): chartType is DashboardKpiAcwrChartType {

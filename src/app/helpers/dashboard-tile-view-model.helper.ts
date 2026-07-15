@@ -52,13 +52,15 @@ import {
   type DashboardSleepTrendWindow,
 } from './dashboard-sleep-chart.helper';
 import {
-  buildDashboardPowerCurveContext,
+  buildDashboardPowerCurveContextFromSnapshot,
   type DashboardPowerCurveContext,
 } from './dashboard-power-curve.helper';
 import {
+  DASHBOARD_POWER_CURVE_DEFAULT_RANGE,
   getDashboardPowerCurveScopeDefinition,
   resolveDashboardPowerCurveTileDisplayScope,
 } from './dashboard-power-curve-scope.helper';
+import type { DerivedPowerCurveMetricPayload, DerivedPowerCurveRange } from '@shared/derived-metrics';
 import {
   DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
   dashboardTileEventRangeDays,
@@ -162,6 +164,7 @@ interface BuildDashboardTileViewModelsInput {
   sleepTrendWindow?: DashboardSleepTrendWindow | null;
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
+  startOfWeek?: number | null;
   derivedMetrics?: {
     formPoints?: DashboardFormPoint[] | null;
     recoveryNow?: DashboardRecoveryNowContext | null;
@@ -176,6 +179,7 @@ interface BuildDashboardTileViewModelsInput {
     freshnessForecast?: DashboardFreshnessForecastContext | null;
     intensityDistribution?: DashboardIntensityDistributionContext | null;
     efficiencyTrend?: DashboardEfficiencyTrendContext | null;
+    powerCurve?: DerivedPowerCurveMetricPayload | null;
   } | null;
 }
 
@@ -281,6 +285,7 @@ export function buildDashboardTileViewModels(
   const derivedFreshnessForecastContext = input.derivedMetrics?.freshnessForecast || null;
   const derivedIntensityDistributionContext = input.derivedMetrics?.intensityDistribution || null;
   const derivedEfficiencyTrendContext = input.derivedMetrics?.efficiencyTrend || null;
+  const derivedPowerCurvePayload = input.derivedMetrics?.powerCurve || null;
   const sleepTrendContext = buildDashboardSleepTrendContext(input.sleepSessions || [], {
     sleepWindow: input.sleepTrendWindow || null,
   });
@@ -537,13 +542,21 @@ export function buildDashboardTileViewModels(
     }
 
     if (isDashboardPowerCurveChartType(chartTile.chartType)) {
-      const tileEvents = resolveEventsForTile(input, chartTile, normalizedEvents);
+      const displayScope = resolveDashboardPowerCurveTileDisplayScope(chartTile) || 'cycling';
+      const filters = normalizeDashboardTileEventFilters(
+        chartTile.eventFilters,
+        DASHBOARD_POWER_CURVE_DEFAULT_RANGE,
+        [],
+      );
       viewModels.push({
         ...chartTile,
         chartType: DASHBOARD_POWER_CURVE_CHART_TYPE as unknown as ChartTypes,
         timeInterval: TimeIntervals.Auto,
         data: [],
-        powerCurve: buildDashboardPowerCurveContext(tileEvents, {
+        powerCurve: buildDashboardPowerCurveContextFromSnapshot(derivedPowerCurvePayload, {
+          scope: displayScope,
+          range: filters.range as DerivedPowerCurveRange,
+          startOfWeek: input.startOfWeek,
           latestSeriesLabel: resolveDashboardPowerCurveLatestSeriesLabel(chartTile),
           compareMode: chartTile.displaySettings?.powerCurveCompareMode,
         }),

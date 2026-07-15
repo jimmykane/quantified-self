@@ -1,0 +1,51 @@
+<h2 mat-dialog-title>Sports shown</h2>
+
+<mat-dialog-content>
+  <p class="dialog-intro">Choose the sport-specific Training cards you want to see.</p>
+
+  @if (data.isAutomatic) {
+    <div class="automatic-note">
+      <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+      <div>
+        <strong>Automatic selection</strong>
+        <span>Based on your last 28 days and saved benchmarks. Keep these sports to make this selection fixed.</span>
+      </div>
+    </div>
+  }
+
+  <div class="sport-options" role="group" aria-label="Sports shown on Training">
+    @for (option of disciplineOptions; track option.discipline) {
+      <mat-checkbox
+        [checked]="selectedDisciplines[option.discipline]"
+        (change)="setDisciplineSelected(option.discipline, $event.checked)"
+        [disabled]="isSaving"
+      >
+        <span class="sport-option-copy"><strong>{{ option.label }}</strong><small>{{ option.details }}</small></span>
+      </mat-checkbox>
+    }
+  </div>
+
+  <p class="scope-note">This changes detailed cards only. Overall comparison, load, intensity, efficiency, and sleep remain unfiltered.</p>
+
+  @if (errorMessage) {
+    <p class="dialog-error" role="alert">{{ errorMessage }}</p>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (!data.isAutomatic) {
+    <button mat-button type="button" (click)="useAutomaticSelection()" [disabled]="isSaving">
+      <span class="dialog-action-content">
+        @if (savingAction === 'automatic') { <mat-spinner diameter="18"></mat-spinner> }
+        <span>Use automatic selection</span>
+      </span>
+    </button>
+  }
+  <button mat-button mat-dialog-close [disabled]="isSaving">Cancel</button>
+  <button mat-flat-button color="primary" type="button" (click)="save()" [disabled]="isSaving || !canSave">
+    <span class="dialog-action-content">
+      @if (savingAction === 'save') { <mat-spinner diameter="18"></mat-spinner> }
+      <span>{{ saveActionLabel }}</span>
+    </span>
+  </button>
+</mat-dialog-actions>

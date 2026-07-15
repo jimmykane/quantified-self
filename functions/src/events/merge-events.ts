@@ -11,7 +11,14 @@ import {
   EventUtilities,
 } from '@sports-alliance/sports-lib';
 
-import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasBasicAccess, hasProAccess } from '../utils';
+import {
+  ALLOWED_CORS_ORIGINS,
+  assertEventWriteUserActive,
+  enforceAppCheck,
+  hasBasicAccess,
+  hasProAccess,
+  setEventDocumentIfUserActive,
+} from '../utils';
 import { EventWriter, FirestoreAdapter, OriginalFile, StorageAdapter } from '../shared/event-writer';
 import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
@@ -351,19 +358,26 @@ function clearGeneratedMergeDescription(event: EventInterface): void {
   eventAny.description = '';
 }
 
-function getFirestoreAdapter(): FirestoreAdapter {
+function getFirestoreAdapter(userID: string): FirestoreAdapter {
   return {
     setDoc: async (path: string[], data: unknown) => {
-      await admin.firestore().doc(path.join('/')).set(data as Record<string, unknown>);
+      const documentPath = path.join('/');
+      await setEventDocumentIfUserActive(
+        userID,
+        `merge_event_writer:${documentPath}`,
+        admin.firestore().doc(documentPath),
+        data,
+      );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),
     generateID: () => admin.firestore().collection('tmp').doc().id,
   };
 }
 
-function getStorageAdapter(): StorageAdapter {
+function getStorageAdapter(userID: string): StorageAdapter {
   return {
     uploadFile: async (path: string, data: unknown) => {
+      await assertEventWriteUserActive(userID, `merge_event_original_file_upload:${path}`);
       const file = admin.storage().bucket().file(path);
       await file.save(data as Buffer);
       const [metadata] = await file.getMetadata();
@@ -381,9 +395,13 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     processedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
-  await admin.firestore()
-    .doc(`users/${userID}/events/${eventID}/metaData/processing`)
-    .set(processingPayload, { merge: true });
+  await setEventDocumentIfUserActive(
+    userID,
+    'merge_event_processing_metadata',
+    admin.firestore().doc(`users/${userID}/events/${eventID}/metaData/processing`),
+    processingPayload,
+    { merge: true },
+  );
 }
 
 async function finalizeMergedEventMetadata(userID: string, eventID: string, mergeType: MergeType): Promise<void> {
@@ -392,7 +410,13 @@ async function finalizeMergedEventMetadata(userID: string, eventID: string, merg
     mergeType,
   });
   const results = await Promise.allSettled([
-    admin.firestore().doc(`users/${userID}/events/${eventID}`).set(mergeMetadataPayload, { merge: true }),
+    setEventDocumentIfUserActive(
+      userID,
+      'merge_event_metadata',
+      admin.firestore().doc(`users/${userID}/events/${eventID}`),
+      mergeMetadataPayload,
+      { merge: true },
+    ),
     persistProcessingMetadata(userID, eventID),
   ]);
 
@@ -543,16 +567,17 @@ export const mergeEvents = onCall({
   const eventIDs = normalizeEventIds(payload?.eventIds);
   const mergeType = normalizeMergeType(payload?.mergeType);
 
-  const currentCount = await getEventCountForUser(userID);
-  const uploadLimit = await resolveUploadLimitForUser(userID);
-  if (uploadLimit !== null && currentCount >= uploadLimit) {
-    throw new HttpsError(
-      'resource-exhausted',
-      `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`,
-    );
-  }
-
   try {
+    await assertEventWriteUserActive(userID, 'merge_event_start');
+    const currentCount = await getEventCountForUser(userID);
+    const uploadLimit = await resolveUploadLimitForUser(userID);
+    if (uploadLimit !== null && currentCount >= uploadLimit) {
+      throw new HttpsError(
+        'resource-exhausted',
+        `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`,
+      );
+    }
+
     const sourceLoadResults: SourceEventLoadResult[] = [];
     for (const eventID of eventIDs) {
       sourceLoadResults.push(await loadSourceEvent(userID, eventID));
@@ -570,7 +595,7 @@ export const mergeEvents = onCall({
     (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).mergeType = mergeType;
     clearGeneratedMergeDescription(mergedEvent);
 
-    const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
+    const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
     await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
     await finalizeMergedEventMetadata(userID, mergedEventID, mergeType);
 

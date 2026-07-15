@@ -86,6 +86,8 @@ describe('EventCardChartComponent', () => {
       ...defaultChartSettings,
     });
     mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
+    mockUserService.getUserChartDataTypesToUse.mockReset();
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue(['power']);
     mockActivityCursorService.setCursor.mockReset();
     mockChartSettingsStorage.getDataTypeIDsToShow.mockReturnValue([]);
     mockChartSettingsStorage.setDataTypeIDsToShow.mockReset();
@@ -413,7 +415,7 @@ describe('EventCardChartComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.seriesMenuSummary).toBe('Series 1/2');
+    expect(component.seriesMenuSummary).toBe('Visible charts: 1/2');
   });
 
   it('should persist showAllData changes', async () => {
@@ -774,6 +776,44 @@ describe('EventCardChartComponent', () => {
     await fixture.whenStable();
 
     expect(component.chartPanels.map((panel) => panel.dataType)).toEqual(['power', 'speed']);
+  });
+
+  it('lists extra recorded metrics without showing them by default', async () => {
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      showAllData: true,
+    });
+    mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
+    const panels = [
+      {
+        dataType: DataPower.type,
+        displayName: 'Power',
+        unit: 'W',
+        colorGroupKey: 'Power',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+      {
+        dataType: 'Temperature',
+        displayName: 'Temperature',
+        unit: '°C',
+        colorGroupKey: 'Temperature',
+        minX: 0,
+        maxX: 100,
+        series: [],
+      },
+    ] as any;
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue(panels);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.chartPanels.map((panel) => panel.dataType)).toEqual([DataPower.type]);
+    expect(component.dataTypeLegendItems).toEqual([
+      expect.objectContaining({ dataType: DataPower.type, visible: true }),
+      expect.objectContaining({ dataType: 'Temperature', visible: false }),
+    ]);
   });
 
   it('updates visible panels and persists when datatype selection changes', async () => {

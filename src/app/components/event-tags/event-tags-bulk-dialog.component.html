@@ -1,0 +1,63 @@
+<h2 mat-dialog-title>Update event tags</h2>
+
+<mat-dialog-content class="event-tags-bulk-dialog-content qs-scrollbar">
+  <p class="selection-description">Apply tag changes to {{ selectedCount }} selected {{ selectedCount === 1 ? 'event' : 'events' }}.</p>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Tags to add</mat-label>
+    <mat-chip-grid #addGrid aria-label="Tags to add">
+      @for (tag of addTags(); track tag) {
+      <mat-chip-row [disabled]="isSaving()" (removed)="removeTag('add', tag)">
+        {{ tag }}
+        <button matChipRemove type="button" [disabled]="isSaving()" [attr.aria-label]="'Remove ' + tag + ' from additions'">
+          <mat-icon>close</mat-icon>
+        </button>
+      </mat-chip-row>
+      }
+      <input #addInputElement matInput placeholder="Add tag" [attr.maxlength]="tagMaxLength"
+        [disabled]="isSaving() || addTags().length >= tagLimit"
+        [matChipInputFor]="addGrid" [matChipInputSeparatorKeyCodes]="separatorKeysCodes"
+        [matChipInputAddOnBlur]="true" [matAutocomplete]="addAutocomplete"
+        (input)="updateInput('add', $any($event.target).value)" (matChipInputTokenEnd)="addFromInput('add', $event)">
+    </mat-chip-grid>
+    <mat-autocomplete #addAutocomplete="matAutocomplete" (optionSelected)="selectSuggestion('add', $event)">
+      @for (suggestion of filteredAddSuggestions(); track suggestion) {
+      <mat-option [value]="suggestion">{{ suggestion }}</mat-option>
+      }
+    </mat-autocomplete>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Tags to remove</mat-label>
+    <mat-chip-grid #removeGrid aria-label="Tags to remove">
+      @for (tag of removeTags(); track tag) {
+      <mat-chip-row [disabled]="isSaving()" (removed)="removeTag('remove', tag)">
+        {{ tag }}
+        <button matChipRemove type="button" [disabled]="isSaving()" [attr.aria-label]="'Remove ' + tag + ' from removals'">
+          <mat-icon>close</mat-icon>
+        </button>
+      </mat-chip-row>
+      }
+      <input #removeInputElement matInput placeholder="Remove tag" [attr.maxlength]="tagMaxLength"
+        [disabled]="isSaving() || removeTags().length >= tagLimit"
+        [matChipInputFor]="removeGrid" [matChipInputSeparatorKeyCodes]="separatorKeysCodes"
+        [matChipInputAddOnBlur]="true" [matAutocomplete]="removeAutocomplete"
+        (input)="updateInput('remove', $any($event.target).value)" (matChipInputTokenEnd)="addFromInput('remove', $event)">
+    </mat-chip-grid>
+    <mat-autocomplete #removeAutocomplete="matAutocomplete" (optionSelected)="selectSuggestion('remove', $event)">
+      @for (suggestion of filteredRemoveSuggestions(); track suggestion) {
+      <mat-option [value]="suggestion">{{ suggestion }}</mat-option>
+      }
+    </mat-autocomplete>
+  </mat-form-field>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [mat-dialog-close]="false" [disabled]="isSaving()">Cancel</button>
+  <button mat-flat-button class="qs-mat-primary" type="button" [disabled]="isSaving() || !hasChanges()" (click)="apply()">
+    <span class="bulk-dialog-action-content">
+      @if (isSaving()) { <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner> }
+      <span>Apply</span>
+    </span>
+  </button>
+</mat-dialog-actions>

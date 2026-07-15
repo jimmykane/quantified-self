@@ -303,7 +303,7 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check Cloud Tasks stats
         expect(result.cloudTasks).toEqual({
-            pending: 66,
+            pending: 71,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0),
@@ -313,6 +313,7 @@ describe('getQueueStats Cloud Function', () => {
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 8),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 2),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
+                derivedMetricsIngress: expectedQueueStats('processDerivedMetricsIngressTask', 5),
                 derivedMetrics: expectedQueueStats('processDerivedMetricsTask', 6),
             },
         });
@@ -562,7 +563,7 @@ describe('getQueueStats Cloud Function', () => {
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
         expect(result.cloudTasks).toEqual({
-            pending: 69,
+            pending: 74,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0, 'UNKNOWN', null),
@@ -572,9 +573,34 @@ describe('getQueueStats Cloud Function', () => {
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 1),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 6),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
+                derivedMetricsIngress: expectedQueueStats('processDerivedMetricsIngressTask', 5),
                 derivedMetrics: expectedQueueStats('processDerivedMetricsTask', 6),
             },
         });
+    });
+
+    it('keeps derived worker and total stats available when the ingress queue lookup fails', async () => {
+        mockGetCloudTaskQueueStatsForQueue.mockImplementation(async (queueId: string) => {
+            if (queueId === 'processDerivedMetricsIngressTask') {
+                throw new Error('Ingress queue unavailable');
+            }
+            return {
+                queueId,
+                pending: await mockGetCloudTaskQueueDepthForQueue(queueId),
+                state: 'RUNNING',
+                enabled: true,
+            };
+        });
+
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.cloudTasks.pending).toBe(66);
+        expect(result.cloudTasks.queues.derivedMetricsIngress).toEqual(
+            expectedQueueStats('processDerivedMetricsIngressTask', 0, 'UNKNOWN', null),
+        );
+        expect(result.cloudTasks.queues.derivedMetrics).toEqual(
+            expectedQueueStats('processDerivedMetricsTask', 6),
+        );
     });
 
     it('should return safe derived coordinator defaults when coordinator query fails', async () => {
@@ -627,6 +653,7 @@ describe('getQueueStats Cloud Function', () => {
         });
 
         const result = await (getQueueStats as any)(request);
+        expect(result.cloudTasks.queues.derivedMetricsIngress).toEqual(expectedQueueStats('processDerivedMetricsIngressTask', 5));
         expect(result.cloudTasks.queues.derivedMetrics).toEqual(expectedQueueStats('processDerivedMetricsTask', 6));
         expect(result.derivedMetrics).toEqual({
             coordinators: {

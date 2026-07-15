@@ -41,6 +41,7 @@ export interface CloudTaskQueueBreakdown {
     sportsLibReparse: CloudTaskQueueStats;
     sportsLibReparseHeavy: CloudTaskQueueStats;
     sportsLibRouteReparse: CloudTaskQueueStats;
+    derivedMetricsIngress: CloudTaskQueueStats;
     derivedMetrics: CloudTaskQueueStats;
     sleepSync: CloudTaskQueueStats;
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { UserSettingsComponent } from './user-settings.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -147,6 +149,13 @@ describe('UserSettingsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('labels expanded chart availability as recorded metrics', () => {
+        const template = readFileSync(resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.html'), 'utf8');
+
+        expect(template).toContain('Include all recorded metrics');
+        expect(template).not.toContain('Show All Data Points');
     });
 
     it('shows email in the profile header when available', () => {
@@ -950,7 +959,7 @@ describe('UserSettingsComponent', () => {
         const dataTypeDiagnostic = diagnostics.find(entry => entry.control === 'dataTypesToUse');
 
         expect(dataTypeDiagnostic).toBeTruthy();
-        expect(dataTypeDiagnostic?.label).toBe('Visible Metrics');
+        expect(dataTypeDiagnostic?.label).toBe('Default chart metrics');
         expect(dataTypeDiagnostic?.errors).toContain('required');
     });
 });

@@ -7,7 +7,8 @@
  * - Singleton client management for performance
  */
 
-import { protos, v2beta3 } from '@google-cloud/tasks';
+import { v2beta3 } from '@google-cloud/tasks';
+import { getFunctions, TaskOptions } from 'firebase-admin/functions';
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -15,7 +16,10 @@ import {
     REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
     REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
 } from './activity-processing-config';
-import { SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME } from '../../../shared/functions-manifest';
+import {
+    normalizeDerivedMetricKindsStrict,
+    type DerivedMetricKind,
+} from '../../../shared/derived-metrics';
 
 // Lazy-initialized singleton client for performance
 let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
@@ -39,6 +43,19 @@ function getCloudTasksClient(): v2beta3.CloudTasksClient {
     return _cloudTasksClient;
 }
 
+function getCloudTasksEmulatorHost(): string | null {
+    const host = process.env.CLOUD_TASKS_EMULATOR_HOST?.trim();
+    return host || null;
+}
+
+function getTaskFunctionResource(projectId: string, location: string, functionName: string): string {
+    return `projects/${projectId}/locations/${location}/functions/${functionName}`;
+}
+
+function getCloudTaskName(projectId: string, location: string, queueId: string, taskId: string): string {
+    return `projects/${projectId}/locations/${location}/queues/${queueId}/tasks/${taskId}`;
+}
+
 function sanitizeTaskNamePart(value: string): string {
     return value.replace(/[^a-zA-Z0-9-_]/g, '-');
 }
@@ -54,6 +71,13 @@ function isCloudTaskNotFoundError(error: unknown): boolean {
 }
 
 async function cloudTaskExists(taskName: string): Promise<boolean> {
+    // The task emulator does not expose an individual task lookup endpoint. A
+    // duplicate enqueue there is sufficient evidence that the task is still
+    // reserved, and avoids falling through to the production Cloud Tasks API.
+    if (getCloudTasksEmulatorHost()) {
+        return true;
+    }
+
     try {
         await getCloudTasksClient().getTask({ name: taskName });
         return true;
@@ -129,13 +153,32 @@ export async function getCloudTaskQueueStatsForQueue(queueId: string, forceRefre
         return cached.stats;
     }
 
-    const client = getCloudTasksClient();
     const { projectId, location } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
+    const emulatorHost = getCloudTasksEmulatorHost();
+    if (emulatorHost) {
+        const response = await fetch(`http://${emulatorHost}/queueStats`);
+        if (!response.ok) {
+            throw new Error(`Cloud Tasks emulator queue stats request failed: ${response.status}`);
+        }
+
+        const queueStats = await response.json() as Record<string, { numberOfTasks?: unknown }>;
+        const statsKey = `queue:${projectId}-${location}-${queueId}`;
+        const reportedPending = Number(queueStats[statsKey]?.numberOfTasks || 0);
+        const stats = {
+            pending: Number.isFinite(reportedPending) ? Math.max(0, reportedPending) : 0,
+            state: 'RUNNING' as const,
+            enabled: true,
+        };
+        cachedQueueStatsByQueue.set(queueId, { stats, timestamp: Date.now() });
+        return stats;
+    }
+
+    const client = getCloudTasksClient();
     const name = client.queuePath(projectId, location, queueId);
 
     const [response] = await client.getQueue({
@@ -183,30 +226,29 @@ export async function enqueueWorkoutTask(
     scheduleDelaySeconds?: number,
     options: EnqueueWorkoutTaskOptions = {},
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, workoutQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, workoutQueue } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processWorkoutTask`;
-    const parent = client.queuePath(projectId, location, workoutQueue);
-
     const sanitizedServiceName = sanitizeTaskNamePart(serviceName);
+    const safeQueueItemId = sanitizeTaskNamePart(`${queueItemId}`);
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
 
     // Use dateCreated to ensure uniqueness for re-created items (race condition fix)
     // while preserving deduplication for retries of the SAME item.
-    const taskName = `${parent}/tasks/${sanitizedServiceName}-${queueItemId}-${dateCreated}`;
+    const taskId = `${sanitizedServiceName}-${safeQueueItemId}-${safeDateCreated}`;
+    const taskName = getCloudTaskName(projectId, location, workoutQueue, taskId);
 
-    const payload = { data: { queueItemId, serviceName } };
+    const payload = { queueItemId, serviceName };
 
     const taskCreated = await enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: workoutQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
         failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
@@ -221,14 +263,15 @@ export async function enqueueWorkoutTask(
     }
 
     const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
-    const recoveryTaskName = `${taskName}-dedupe-recovery-${recoveryTaskKey}`;
+    const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
+    const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
     logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
     const recoveryTaskCreated = await enqueueTaskWithRetry({
-        parent,
-        taskName: recoveryTaskName,
+        projectId,
+        location,
+        functionName: workoutQueue,
+        taskId: recoveryTaskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         alreadyExistsLogMessage: `[Dispatcher] Recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
         failedLogPrefix: `[Dispatcher] Failed to enqueue recovery task for ${serviceName}:${queueItemId}:`,
@@ -255,27 +298,23 @@ export async function enqueueActivitySyncTask(
     dateCreated: number,
     scheduleDelaySeconds?: number,
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, activitySyncQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, activitySyncQueue } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processActivitySyncTask`;
-    const parent = client.queuePath(projectId, location, activitySyncQueue);
-
     const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
     const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const taskName = `${parent}/tasks/activity-sync-${safeQueueItemId}-${safeDateCreated}`;
-    const payload = { data: { queueItemId } };
+    const taskId = `activity-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { queueItemId };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: activitySyncQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         alreadyExistsLogMessage: `[ActivitySyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[ActivitySyncDispatcher] Failed to enqueue activity sync task for ${queueItemId}:`,
@@ -291,27 +330,23 @@ export async function enqueueRouteSyncTask(
     dateCreated: number,
     scheduleDelaySeconds?: number,
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, routeSyncQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, routeSyncQueue } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processRouteSyncTask`;
-    const parent = client.queuePath(projectId, location, routeSyncQueue);
-
     const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
     const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const taskName = `${parent}/tasks/route-sync-${safeQueueItemId}-${safeDateCreated}`;
-    const payload = { data: { queueItemId } };
+    const taskId = `route-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { queueItemId };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: routeSyncQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         alreadyExistsLogMessage: `[RouteSyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[RouteSyncDispatcher] Failed to enqueue route sync task for ${queueItemId}:`,
@@ -327,27 +362,23 @@ export async function enqueueRouteDeliverySyncTask(
     dateCreated: number,
     scheduleDelaySeconds?: number,
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, routeDeliverySyncQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, routeDeliverySyncQueue } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processRouteDeliverySyncTask`;
-    const parent = client.queuePath(projectId, location, routeDeliverySyncQueue);
-
     const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
     const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const taskName = `${parent}/tasks/route-delivery-sync-${safeQueueItemId}-${safeDateCreated}`;
-    const payload = { data: { queueItemId } };
+    const taskId = `route-delivery-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { queueItemId };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: routeDeliverySyncQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         alreadyExistsLogMessage: `[RouteDeliverySyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[RouteDeliverySyncDispatcher] Failed to enqueue route delivery sync task for ${queueItemId}:`,
@@ -363,27 +394,23 @@ export async function enqueueSleepSyncTask(
     dateCreated: number,
     scheduleDelaySeconds?: number,
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, sleepSyncQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, sleepSyncQueue } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processSleepSyncTask`;
-    const parent = client.queuePath(projectId, location, sleepSyncQueue);
-
     const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
     const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const taskName = `${parent}/tasks/sleep-sync-${safeQueueItemId}-${safeDateCreated}`;
-    const payload = { data: { queueItemId } };
+    const taskId = `sleep-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const payload = { queueItemId };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: sleepSyncQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         alreadyExistsLogMessage: `[SleepSyncDispatcher] Task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[SleepSyncDispatcher] Failed to enqueue sleep sync task for ${queueItemId}:`,
@@ -394,24 +421,21 @@ export async function enqueueSleepSyncTask(
  * Enqueue a single sports-lib reparse job task.
  */
 export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, sportsLibReparseQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, sportsLibReparseQueue } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const parent = client.queuePath(projectId, location, sportsLibReparseQueue);
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processSportsLibReparseTask`;
     const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
-    const taskName = `${parent}/tasks/reparse-${safeJobId}`;
-    const payload = { data: { jobId } };
+    const taskId = `reparse-${safeJobId}`;
+    const payload = { jobId };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: sportsLibReparseQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[ReparseDispatcher] Task already exists for job ${jobId}, skipping`,
@@ -426,8 +450,7 @@ export async function enqueueSportsLibReparseHeavyTask(
     jobId: string,
     optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseHeavyTaskOptions | number,
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, sportsLibReparseHeavyQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, sportsLibReparseHeavyQueue } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
@@ -435,21 +458,19 @@ export async function enqueueSportsLibReparseHeavyTask(
     const options = typeof optionsOrScheduleDelaySeconds === 'number'
         ? { scheduleDelaySeconds: optionsOrScheduleDelaySeconds }
         : (optionsOrScheduleDelaySeconds || {});
-    const parent = client.queuePath(projectId, location, sportsLibReparseHeavyQueue);
-    const url = `https://${location}-${projectId}.cloudfunctions.net/${SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME}`;
     const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
     const safeTaskNameSuffix = options.taskNameSuffix
         ? `-${options.taskNameSuffix.replace(/[^a-zA-Z0-9-_]/g, '-')}`
         : '';
-    const taskName = `${parent}/tasks/reparse-heavy-${safeJobId}${safeTaskNameSuffix}`;
-    const payload = { data: { jobId } };
+    const taskId = `reparse-heavy-${safeJobId}${safeTaskNameSuffix}`;
+    const payload = { jobId };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: sportsLibReparseHeavyQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds: options.scheduleDelaySeconds,
         dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_HEAVY_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[ReparseHeavyDispatcher] Task already exists for job ${jobId}, skipping`,
@@ -464,24 +485,21 @@ export async function enqueueSportsLibRouteReparseTask(
     jobId: string,
     scheduleDelaySeconds?: number,
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, sportsLibRouteReparseQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, sportsLibRouteReparseQueue } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const parent = client.queuePath(projectId, location, sportsLibRouteReparseQueue);
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processSportsLibRouteReparseTask`;
     const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
-    const taskName = `${parent}/tasks/route-reparse-${safeJobId}`;
-    const payload = { data: { jobId } };
+    const taskId = `route-reparse-${safeJobId}`;
+    const payload = { jobId };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: sportsLibRouteReparseQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[RouteReparseDispatcher] Task already exists for job ${jobId}, skipping`,
@@ -498,25 +516,22 @@ export async function enqueueDerivedMetricsTask(
     generation: number,
     scheduleDelaySeconds?: number,
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
-    const { projectId, location, derivedMetricsQueue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, derivedMetricsQueue } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const parent = client.queuePath(projectId, location, derivedMetricsQueue);
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processDerivedMetricsTask`;
     const safeUid = `${uid}`.replace(/[^a-zA-Z0-9-_]/g, '-');
     const safeGeneration = Number.isFinite(generation) ? Math.max(0, Math.floor(generation)) : 0;
-    const taskName = `${parent}/tasks/derived-metrics-${safeUid}-${safeGeneration}`;
-    const payload = { data: { uid, generation: safeGeneration } };
+    const taskId = `derived-metrics-${safeUid}-${safeGeneration}`;
+    const payload = { uid, generation: safeGeneration };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: derivedMetricsQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         alreadyExistsLogMessage: `[DerivedMetricsDispatcher] Task already exists for ${uid} generation ${safeGeneration}, skipping`,
         failedLogPrefix: `[DerivedMetricsDispatcher] Failed to enqueue derived metrics task for ${uid} generation ${safeGeneration}:`,
@@ -531,22 +546,37 @@ export async function enqueueDerivedMetricsIngressTask(
     uid: string,
     scheduleDelaySeconds?: number,
     nowMs?: number,
+    options?: {
+        taskScope?: string;
+        metricKinds?: readonly DerivedMetricKind[];
+        incrementEventMutationVersion?: boolean;
+    },
 ): Promise<boolean> {
-    const client = getCloudTasksClient();
     const {
         projectId,
         location,
-        derivedMetricsQueue,
+        derivedMetricsIngressQueue,
         derivedMetricsIngressBucketSeconds,
-        serviceAccountEmail,
     } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const parent = client.queuePath(projectId, location, derivedMetricsQueue);
-    const url = `https://${location}-${projectId}.cloudfunctions.net/processDerivedMetricsIngressTask`;
     const safeUid = `${uid}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const taskScope = `${options?.taskScope || ''}`.trim();
+    if (taskScope && !/^[a-zA-Z0-9-_]+$/.test(taskScope)) {
+        throw new Error('Derived metrics ingress task scope is invalid');
+    }
+    const hasTargetedMetricKinds = options?.metricKinds !== undefined;
+    const metricKinds = hasTargetedMetricKinds
+        ? normalizeDerivedMetricKindsStrict(options.metricKinds)
+        : [];
+    if (hasTargetedMetricKinds && !metricKinds.length) {
+        throw new Error('Derived metrics ingress metric kinds are invalid');
+    }
+    if (hasTargetedMetricKinds && !taskScope) {
+        throw new Error('Targeted derived metrics ingress requires a task scope');
+    }
     const bucketSeconds = Math.max(1, Math.floor(Number(derivedMetricsIngressBucketSeconds) || 30));
     const currentEpochSeconds = Math.max(0, Math.floor(((Number.isFinite(nowMs) ? nowMs : Date.now()) as number) / 1000));
     const bucketStartEpochSec = currentEpochSeconds - (currentEpochSeconds % bucketSeconds);
@@ -560,15 +590,20 @@ export async function enqueueDerivedMetricsIngressTask(
     const effectiveScheduleEpochSeconds = overrideScheduleDelaySeconds === null
         ? computedScheduleEpochSec
         : (currentEpochSeconds + effectiveScheduleDelaySeconds);
-    const taskName = `${parent}/tasks/derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}`;
-    const payload = { data: { uid, bucketStartEpochSec } };
+    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}`;
+    const payload = {
+        uid,
+        bucketStartEpochSec,
+        ...(hasTargetedMetricKinds ? { metricKinds } : {}),
+        ...(options?.incrementEventMutationVersion === false ? { incrementEventMutationVersion: false } : {}),
+    };
 
     return enqueueTaskWithRetry({
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName: derivedMetricsIngressQueue,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds: effectiveScheduleDelaySeconds,
         scheduleAtEpochSeconds: effectiveScheduleEpochSeconds,
         alreadyExistsLogMessage: `[DerivedMetricsIngressDispatcher] Task already exists for ${uid} bucket ${bucketStartEpochSec}, skipping`,
@@ -577,11 +612,11 @@ export async function enqueueDerivedMetricsIngressTask(
 }
 
 interface EnqueueTaskParams {
-    parent: string;
-    taskName: string;
-    payload: unknown;
-    serviceAccountEmail: string;
-    url: string;
+    projectId: string;
+    location: string;
+    functionName: string;
+    taskId: string;
+    payload: Record<string, unknown>;
     scheduleDelaySeconds?: number;
     scheduleAtEpochSeconds?: number;
     dispatchDeadlineSeconds?: number;
@@ -591,11 +626,11 @@ interface EnqueueTaskParams {
 
 async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean> {
     const {
-        parent,
-        taskName,
+        projectId,
+        location,
+        functionName,
+        taskId,
         payload,
-        serviceAccountEmail,
-        url,
         scheduleDelaySeconds,
         scheduleAtEpochSeconds,
         dispatchDeadlineSeconds,
@@ -603,62 +638,47 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
         failedLogPrefix,
     } = params;
 
-    const task: protos.google.cloud.tasks.v2beta3.ITask = {
-        name: taskName,
-        httpRequest: {
-            httpMethod: 'POST' as const,
-            url,
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: Buffer.from(JSON.stringify(payload)).toString('base64'),
-            oidcToken: {
-                serviceAccountEmail,
-            },
-        },
-    };
-
+    const taskOptions: TaskOptions = { id: taskId };
     if (Number.isFinite(dispatchDeadlineSeconds)) {
-        task.dispatchDeadline = {
-            seconds: Math.max(1, Math.floor(dispatchDeadlineSeconds as number)),
-        };
+        taskOptions.dispatchDeadlineSeconds = Math.max(1, Math.floor(dispatchDeadlineSeconds as number));
     }
 
     if (Number.isFinite(scheduleAtEpochSeconds)) {
-        task.scheduleTime = {
-            seconds: Math.max(1, Math.floor(scheduleAtEpochSeconds as number)),
-        };
+        taskOptions.scheduleTime = new Date(Math.max(1, Math.floor(scheduleAtEpochSeconds as number)) * 1000);
     } else {
-        const minDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
-        task.scheduleTime = {
-            seconds: Math.floor(Date.now() / 1000) + minDelaySeconds
-        };
+        taskOptions.scheduleDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
     }
+
+    const taskName = getCloudTaskName(projectId, location, functionName, taskId);
+    const taskQueue = getFunctions().taskQueue<Record<string, unknown>>(
+        getTaskFunctionResource(projectId, location, functionName),
+    );
 
     let attempt = 0;
     const MAX_RETRIES = 3;
 
     while (attempt < MAX_RETRIES) {
         try {
-            const currentClient = getCloudTasksClient();
-            const [response] = await currentClient.createTask({ parent, task });
-            logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
+            await taskQueue.enqueue(payload, taskOptions);
+            logger.info(`[Dispatcher] Enqueued task: ${taskName}`);
             return true;
         } catch (error) {
             const cloudTaskError = error as { code?: unknown; message?: unknown };
             const errorMessage = `${cloudTaskError.message || ''}`;
 
-            if (cloudTaskError.code === 6) {
+            if (cloudTaskError.code === 6 || cloudTaskError.code === 'functions/task-already-exists') {
                 logger.info(alreadyExistsLogMessage);
                 return false;
             }
 
-            const isRetryable = (cloudTaskError.code === 14) ||
+            const isRetryable = (cloudTaskError.code === 14)
+                || cloudTaskError.code === 'functions/unavailable'
+                || cloudTaskError.code === 'functions/internal-error'
+                ||
                 (errorMessage.includes('ECONNRESET') || errorMessage.includes('Unavailable'));
 
             if (isRetryable && attempt < MAX_RETRIES - 1) {
-                logger.warn(`[Dispatcher] Transient error enqueueing task (attempt ${attempt + 1}/${MAX_RETRIES}): ${errorMessage}. Resetting client and retrying...`);
-                _cloudTasksClient = null;
+                logger.warn(`[Dispatcher] Transient error enqueueing task (attempt ${attempt + 1}/${MAX_RETRIES}): ${errorMessage}. Retrying...`);
                 attempt++;
                 const delayMs = 1000 * Math.pow(2, attempt - 1);
                 await new Promise(resolve => setTimeout(resolve, delayMs));

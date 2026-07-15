@@ -358,7 +358,7 @@ export class ToolsComparePageComponent implements OnInit {
     const filter = this.comparisonFilter().trim().toLowerCase();
     const deviceFilter = this.comparisonDeviceFilter();
     const activityTypeFilter = this.comparisonActivityTypeFilter();
-    const tagFilter = this.comparisonTagFilter();
+    const tagFilter = this.comparisonTagFilter().toLowerCase();
     const items = this.comparisonItems();
     if (!filter && !deviceFilter && !activityTypeFilter && !tagFilter) {
       return items;
@@ -374,7 +374,7 @@ export class ToolsComparePageComponent implements OnInit {
       if (activityTypeFilter && !item.activityTypeFilterValues.includes(activityTypeFilter)) {
         return false;
       }
-      if (tagFilter && !item.tagFilterValues.includes(tagFilter)) {
+      if (tagFilter && !item.tagFilterValues.some(tag => tag.toLowerCase() === tagFilter)) {
         return false;
       }
       return true;
@@ -629,11 +629,16 @@ export class ToolsComparePageComponent implements OnInit {
       return;
     }
 
-    if (this.comparisonTagFilter() === value) {
+    const requestedValue = `${value || ''}`;
+    const canonicalValue = requestedValue
+      ? this.comparisonTagFilterOptions()
+        .find(option => option.value.toLowerCase() === requestedValue.toLowerCase())?.value || ''
+      : '';
+    if (this.comparisonTagFilter() === canonicalValue) {
       return;
     }
 
-    this.comparisonTagFilter.set(value);
+    this.comparisonTagFilter.set(canonicalValue);
     this.applyComparisonFacetFilterChange();
   }
 
@@ -1230,7 +1235,8 @@ export class ToolsComparePageComponent implements OnInit {
 
   private applyBenchmarkReviewTagsToComparisonRow(eventID: string, tags: string[]): void {
     this.updateComparisonEventInLoadedRows(eventID, (event) => {
-      event.benchmarkReviewTags = this.benchmarkReviewService.normalizeTags(tags);
+      event.tags = this.benchmarkReviewService.normalizeTags(tags);
+      delete event.benchmarkReviewTags;
       return event;
     });
   }
@@ -1443,18 +1449,20 @@ export class ToolsComparePageComponent implements OnInit {
     this.analyticsService.logToolCompareSavedAction('tags_edit', this.getComparisonSavedActionAnalytics(item, {
       tagCount: item.benchmarkReviewTags.length,
     }));
+    const originalTags = [...item.benchmarkReviewTags];
 
     const dialogRef = this.dialog.open(BenchmarkReviewTagsDialogComponent, {
       width: 'min(34rem, calc(100vw - 32px))',
       maxWidth: 'calc(100vw - 32px)',
       data: {
         title: 'Comparison tags',
-        tags: item.benchmarkReviewTags,
+        tags: originalTags,
         suggestions: this.comparisonTagFilterOptions().map(option => option.label),
         save: async (tags: string[]) => {
-          const savedTags = await this.benchmarkReviewService.saveEventTags(user, item.event, tags);
+          const savedTags = await this.benchmarkReviewService.saveEventTags(user, item.event, tags, originalTags);
           this.updateComparisonEventInLoadedRows(item.id, (event) => {
-            event.benchmarkReviewTags = savedTags;
+            event.tags = savedTags;
+            delete event.benchmarkReviewTags;
             return event;
           });
           return savedTags;
@@ -1605,6 +1613,7 @@ export class ToolsComparePageComponent implements OnInit {
       .sort(([firstPageIndex], [secondPageIndex]) => firstPageIndex - secondPageIndex)
       .flatMap(([, pageEvents]) => pageEvents);
     this.comparisons.set(events);
+    this.reconcileComparisonTagFilterWithOptions();
     this.reconcileComparisonSelectionWithItems(this.comparisonItems());
   }
 
@@ -1635,6 +1644,7 @@ export class ToolsComparePageComponent implements OnInit {
       }
       return updateEvent(event);
     }));
+    this.reconcileComparisonTagFilterWithOptions();
   }
 
   private removeComparisonEventFromLoadedRows(eventID: string): void {
@@ -1665,6 +1675,7 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.comparisons.update(events => events.filter(event => !eventIDSet.has(event.getID())));
+    this.reconcileComparisonTagFilterWithOptions();
     eventIDs.forEach(eventID => this.comparisonSelection.deselect(eventID));
     this.syncSelectedComparisonIDs();
   }
@@ -1672,6 +1683,25 @@ export class ToolsComparePageComponent implements OnInit {
   private clearComparisonPageCache(): void {
     this.loadedComparisonPages = new Map<number, AppEventInterface[]>();
     this.comparisonPageCursors = new Map<number, EventQueryCursor | null>([[0, null]]);
+  }
+
+  private reconcileComparisonTagFilterWithOptions(): void {
+    const currentValue = this.comparisonTagFilter();
+    if (!currentValue) {
+      return;
+    }
+
+    const canonicalValue = this.comparisonTagFilterOptions()
+      .find(option => option.value.toLowerCase() === currentValue.toLowerCase())?.value || '';
+    if (canonicalValue === currentValue) {
+      return;
+    }
+
+    this.comparisonTagFilter.set(canonicalValue);
+    if (!canonicalValue) {
+      this.resetComparisonPage();
+      this.reconcileComparisonSelectionWithItems(this.filteredComparisonItems());
+    }
   }
 
   private resetComparisonData(): void {

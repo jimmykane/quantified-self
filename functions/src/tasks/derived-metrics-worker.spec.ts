@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 
 vi.mock('firebase-functions/v2/tasks', () => ({
     onTaskDispatched: (_opts: unknown, handler: any) => handler,
@@ -28,8 +28,11 @@ const hoisted = vi.hoisted(() => ({
     fetchDerivedFormSnapshotSeed: vi.fn(),
     completeDerivedMetricsProcessing: vi.fn(),
     failDerivedMetricsProcessing: vi.fn(),
+    fetchDerivedMetricsActivityDocs: vi.fn(),
     fetchDerivedMetricsEventDocs: vi.fn(),
     fetchRecoveryLookbackEventDocs: vi.fn(),
+    fetchTrainingBuildBenchmarkSettings: vi.fn(),
+    fetchTrainingBuildSleepDocs: vi.fn(),
     getDerivedRecoveryLookbackWindowSeconds: vi.fn(() => 0),
     isDerivedMetricsUserWriteBlocked: vi.fn(),
     markDerivedMetricSnapshotsBuilding: vi.fn(),
@@ -48,8 +51,11 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         fetchDerivedFormSnapshotSeed: hoisted.fetchDerivedFormSnapshotSeed,
         completeDerivedMetricsProcessing: hoisted.completeDerivedMetricsProcessing,
         failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
+        fetchDerivedMetricsActivityDocs: hoisted.fetchDerivedMetricsActivityDocs,
         fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
         fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
+        fetchTrainingBuildBenchmarkSettings: hoisted.fetchTrainingBuildBenchmarkSettings,
+        fetchTrainingBuildSleepDocs: hoisted.fetchTrainingBuildSleepDocs,
         getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
         isDerivedMetricsUserWriteBlocked: hoisted.isDerivedMetricsUserWriteBlocked,
         markDerivedMetricSnapshotsBuilding: hoisted.markDerivedMetricSnapshotsBuilding,
@@ -79,7 +85,10 @@ describe('processDerivedMetricsTask', () => {
         hoisted.isDerivedMetricsUserWriteBlocked.mockResolvedValue(false);
         hoisted.markDerivedMetricSnapshotsBuilding.mockResolvedValue(undefined);
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValue([{ id: 'form-doc' }] as any);
+        hoisted.fetchDerivedMetricsActivityDocs.mockResolvedValue([{ id: 'activity-doc' }] as any);
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValue([{ id: 'recovery-doc' }] as any);
+        hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValue({ trainingSettings: {} });
+        hoisted.fetchTrainingBuildSleepDocs.mockResolvedValue([{ id: 'sleep-doc' }] as any);
         hoisted.writeDerivedMetricSnapshotsReady.mockResolvedValue(undefined);
         hoisted.completeDerivedMetricsProcessing.mockResolvedValue({
             requeued: false,
@@ -103,7 +112,9 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'form-doc' }],
             recoveryNowDocs: [{ id: 'recovery-doc' }],
+            trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 11,
             formDailyLoads: [],
             formSourceEventCount: null,
@@ -134,7 +145,9 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'tss-doc' }],
             recoveryNowDocs: [],
+            trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 12,
             formDailyLoads: [],
             formSourceEventCount: null,
@@ -150,7 +163,7 @@ describe('processDerivedMetricsTask', () => {
         });
         hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({
             status: 'ready',
-            schemaVersion: 7,
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             builtFromEventMutationVersion: 12,
             sourceEventCount: 5,
             sourceDocCount: 7,
@@ -174,7 +187,9 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [],
             recoveryNowDocs: [],
+            trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 12,
             formDailyLoads: [
                 { dayMs: Date.UTC(2026, 0, 1), load: 10 },
@@ -183,6 +198,85 @@ describe('processDerivedMetricsTask', () => {
             formSourceEventCount: 5,
             formSourceDocCount: 7,
         });
+    });
+
+    it('reads parent events and activities for activity-backed metrics instead of using a Form projection seed', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingSummary],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 12,
+        });
+        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            builtFromEventMutationVersion: 12,
+            sourceEventCount: 5,
+            sourceDocCount: 7,
+            dailyLoads: [{ dayMs: Date.UTC(2026, 0, 1), load: 10 }],
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'power-doc' }] as any);
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-power', generation: 91 },
+        });
+
+        expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-power');
+        expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledWith('user-power', {
+            includeSwimLengths: false,
+        });
+    });
+
+    it('includes swim lengths only when swimming performance is requested', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingSwimPerformance],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 12,
+        });
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-swim', generation: 92 },
+        });
+
+        expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledWith('user-swim', {
+            includeSwimLengths: true,
+        });
+        expect(hoisted.fetchTrainingBuildBenchmarkSettings).not.toHaveBeenCalled();
+    });
+
+    it('fetches benchmark settings only for the training build comparison and passes them to its builder', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 13,
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'training-doc' }] as any);
+        const settings = { trainingSettings: { buildBenchmarks: { running: { mode: 'period', durationWeeks: 12 } } } };
+        hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValueOnce(settings);
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-training-build', generation: 92 },
+        });
+
+        expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-training-build');
+        expect(hoisted.fetchTrainingBuildBenchmarkSettings).toHaveBeenCalledWith('user-training-build');
+        expect(hoisted.fetchTrainingBuildSleepDocs).toHaveBeenCalledWith(
+            'user-training-build',
+            [{ id: 'training-doc' }],
+            [{ id: 'activity-doc' }],
+            settings,
+            expect.any(Number),
+        );
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-training-build', [
+            DERIVED_METRIC_KINDS.TrainingBuildComparison,
+        ], {
+            formDocs: [{ id: 'training-doc' }],
+            recoveryNowDocs: [],
+            trainingActivityDocs: [{ id: 'activity-doc' }],
+            trainingBuildBenchmarkSettings: settings,
+            trainingBuildSleepDocs: [{ id: 'sleep-doc' }],
+        }, expect.objectContaining({ builtFromEventMutationVersion: 13 }));
     });
 
     it('exits before snapshot writes when user deletion becomes active after claiming work', async () => {
@@ -275,7 +369,9 @@ describe('processDerivedMetricsTask', () => {
         ], {
             formDocs: [{ id: 'kpi-doc' }],
             recoveryNowDocs: [],
+            trainingActivityDocs: [],
         }, {
+            buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 13,
             formDailyLoads: [],
             formSourceEventCount: null,

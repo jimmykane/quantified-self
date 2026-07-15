@@ -21,13 +21,10 @@ import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../helpers/dashboard-
 import {
     DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
     DASHBOARD_FORM_CHART_TYPE,
-    DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
     DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
     DASHBOARD_POWER_CURVE_CHART_TYPE,
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
     DASHBOARD_SLEEP_TREND_CHART_TYPE,
-    getDefaultDashboardCuratedChartDefinitions,
-    getDefaultDashboardKpiChartDefinitions,
     isDashboardCuratedChartType,
     isDashboardKpiChartType,
     isDashboardSpecialChartType,
@@ -190,41 +187,8 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should include the lean curated tile set in default dashboard tiles', () => {
-            const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
-            const curatedDefinitions = getDefaultDashboardCuratedChartDefinitions();
-            const curatedTiles = tiles.filter((tile: any) => (
-                tile?.type === TileTypes.Chart && isDashboardCuratedChartType(tile?.chartType)
-            ));
-
-            expect(curatedTiles.map(tile => tile.chartType)).toEqual(curatedDefinitions.map(definition => definition.chartType));
-            expect(curatedTiles.map(tile => tile.name)).toEqual([
-                'Form',
-                'Intensity Distribution',
-            ]);
-            curatedTiles.forEach((tile, index) => {
-                expect(tile).toMatchObject({
-                    order: index,
-                    dataCategoryType: ChartDataCategoryTypes.DateType,
-                    dataValueType: ChartDataValueTypes.Total,
-                });
-                expect(tile.eventFilters).toBeUndefined();
-            });
-            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_FORM_CHART_TYPE)).toMatchObject({
-                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-                dataTimeInterval: TimeIntervals.Daily,
-                size: { columns: 2, rows: 1 },
-                displaySettings: { formTimelineWindow: 'w' },
-            });
-            expect(curatedTiles.find(tile => tile.chartType === DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toMatchObject({
-                size: { columns: 1, rows: 1 },
-                dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-                dataTimeInterval: TimeIntervals.Weekly,
-                displaySettings: { derivedChartRange: '1y' },
-            });
-            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(false);
-            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE)).toBe(false);
-            expect(curatedTiles.some(tile => tile.chartType === DASHBOARD_EFFICIENCY_TREND_CHART_TYPE)).toBe(false);
+        it('should start new dashboard settings without curated training tiles', () => {
+            expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
         });
 
         it('should not include sleep tile in default dashboard tiles', () => {
@@ -237,27 +201,8 @@ describe('AppUserUtilities', () => {
             expect(sleepTiles).toHaveLength(0);
         });
 
-        it('should include recommended KPI tiles in default dashboard tiles', () => {
-            const tiles = AppUserUtilities.getDefaultUserDashboardTiles() as any[];
-            const kpiDefinitions = getDefaultDashboardKpiChartDefinitions();
-            const kpiTiles = tiles.filter(tile => (
-                tile?.type === TileTypes.Chart && isDashboardKpiChartType(tile?.chartType)
-            ));
-
-            expect(kpiTiles.map(tile => tile.chartType)).toEqual(kpiDefinitions.map(definition => definition.chartType));
-            const firstKpiOrder = kpiTiles[0]?.order ?? 0;
-            kpiTiles.forEach((tile, index) => {
-                expect(tile).toMatchObject({
-                    name: kpiDefinitions[index].label,
-                    order: firstKpiOrder + index,
-                    size: { columns: 1, rows: 1 },
-                    dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-                    dataCategoryType: ChartDataCategoryTypes.DateType,
-                    dataValueType: ChartDataValueTypes.Total,
-                    dataTimeInterval: TimeIntervals.Weekly,
-                });
-                expect(tile.eventFilters).toBeUndefined();
-            });
+        it('should start new dashboard settings without KPI tiles', () => {
+            expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
         });
 
         it('should fill defaults for empty settings', () => {
