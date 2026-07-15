@@ -93,9 +93,12 @@ describe('refreshed email template catalog', () => {
 
         expect(render('welcome_email', 'basic-trial')).toContain('trial has started');
         expect(render('welcome_email', 'pro-paid')).toContain('independent, privacy-first development');
-        expect(render('registration_welcome', 'named-user')).toContain('thank you for joining the platform');
-        expect(render('registration_welcome', 'named-user')).toContain('have a feature request');
-        expect(render('registration_welcome', 'named-user')).toContain('I read every response personally');
+        const registrationWelcome = render('registration_welcome', 'named-user');
+        expect(registrationWelcome).toContain('People come to the platform for different reasons');
+        expect(registrationWelcome).toContain('make it useful on your own terms');
+        expect(registrationWelcome).toContain('have a feature request');
+        expect(registrationWelcome).toContain('I read every reply personally');
+        expect(registrationWelcome).not.toMatch(/\btrack(?:ing)?\b/i);
         expect(render('subscription_downgrade', 'pro-to-basic')).toContain('Device sync is not included');
         expect(render('subscription_downgrade', 'basic-to-free')).not.toContain('Device sync is not included');
         expect(render('subscription_downgrade', 'unknown-role')).not.toContain('Up to');
