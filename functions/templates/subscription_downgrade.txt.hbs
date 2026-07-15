@@ -1,0 +1,17 @@
+{{> email_transactional_header}}
+Your membership is now {{new_role}}
+
+This confirms your change from {{old_role}} → {{new_role}}.
+
+Your existing activities and routes remain in Quantified Self. Future uploads use the limits of your {{new_role}} plan.
+
+{{#if plan_details_available}}Your new limits:
+- {{activity_description}}
+- {{route_description}}
+- {{ai_insights_description}}
+{{#if device_sync_description}}- {{device_sync_description}}
+{{/if}}{{/if}}
+{{#if device_sync_will_end}}Device sync is not included in {{new_role}}. Your grace-period details and connection status are available in Quantified Self.
+
+{{/if}}Manage membership: {{membership_url}}
+{{> email_transactional_footer}}

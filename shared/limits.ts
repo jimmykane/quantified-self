@@ -18,6 +18,8 @@ export const AI_INSIGHTS_REQUEST_LIMITS = {
 
 export type SubscriptionRole = LimitedSubscriptionRole | 'pro';
 
+export const DEVICE_SYNC_ENABLED_ROLES = ['pro'] as const satisfies readonly SubscriptionRole[];
+
 export function isLimitedSubscriptionRole(role: string): role is LimitedSubscriptionRole {
     return Object.prototype.hasOwnProperty.call(USAGE_LIMITS, role);
 }
@@ -54,4 +56,14 @@ export function getAiInsightsRequestLimitForRole(role: string): number {
     throw new Error(`Unsupported subscription role '${role}' for AI insights request limits.`);
 }
 
+export function isDeviceSyncEnabledForRole(role: string): boolean {
+    return DEVICE_SYNC_ENABLED_ROLES.some(enabledRole => enabledRole === role);
+}
+
 export const GRACE_PERIOD_DAYS = 30;
+export const GRACE_PERIOD_MILLISECONDS = GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+
+export function calculateGracePeriodEnd(start: Date | number): Date {
+    const startMilliseconds = start instanceof Date ? start.getTime() : start;
+    return new Date(startMilliseconds + GRACE_PERIOD_MILLISECONDS);
+}

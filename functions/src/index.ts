@@ -179,6 +179,7 @@ export { onDashboardDerivedMetricsEventWrite } from './derived-metrics/derived-m
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
+export { sendRegistrationWelcomeEmail } from './email/registration-welcome';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
 export { retryPendingServiceDisconnects } from './schedule/retry-pending-service-disconnects';
 export { checkSubscriptionNotifications } from './schedule/notifications';

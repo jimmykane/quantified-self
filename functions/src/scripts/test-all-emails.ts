@@ -2,8 +2,15 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
+import {
+    FOUNDER_EMAIL_FROM,
+    FOUNDER_EMAIL_REPLY_TO,
+    TRANSACTIONAL_EMAIL_FROM,
+    TRANSACTIONAL_EMAIL_REPLY_TO,
+} from '../email/config';
+import { REFRESHED_EMAIL_TEMPLATE_CATALOG } from '../email/template-catalog';
+import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 
-// Load environment variables
 dotenv.config({ path: resolve(__dirname, '../../.env') });
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -16,74 +23,41 @@ admin.initializeApp({
 
 const MAIL_COLLECTION = 'mail';
 
-interface EmailTestConfig {
-    templateName: string;
-    data: any;
-}
-
-const EMAIL_TESTS: EmailTestConfig[] = [
-    {
-        templateName: 'welcome_email',
-        data: { role: 'pro' }
-    },
-    {
-        templateName: 'account_deleted_confirmation',
-        data: {}
-    },
-    {
-        templateName: 'subscription_upgrade',
-        data: { new_role: 'pro' }
-    },
-    {
-        templateName: 'subscription_downgrade',
-        data: { new_role: 'free', limit: '100' }
-    },
-    {
-        templateName: 'subscription_cancellation',
-        data: { role: 'pro' }
-    },
-    {
-        templateName: 'subscription_expiring_soon',
-        data: { role: 'pro', expiration_date: 'December 31, 2025', free_limit: '100' }
-    },
-    {
-        templateName: 'development_update',
-        data: { first_name: 'Alex', last_name: 'Example', free_limit: '100', basic_limit: '1000' }
-    }
-];
-
-async function sendTestEmails(targetEmail: string) {
+async function sendTestEmails(targetEmail: string): Promise<void> {
     if (!targetEmail) {
-        logger.error('Please provide an email address as an argument.');
-        logger.error('Usage: npm run test-emails -- target@example.com');
-        process.exit(1);
+        throw new Error('Usage: npm run test-emails -- target@example.com');
     }
 
-    logger.info(`Queueing ${EMAIL_TESTS.length} test emails for: ${targetEmail}...`);
+    const previewCases = REFRESHED_EMAIL_TEMPLATE_CATALOG.flatMap(template =>
+        template.previewCases.map(preview => ({ template, preview }))
+    );
+    logger.info(`Queueing ${previewCases.length} refreshed-template smoke tests for ${targetEmail}.`);
 
     const db = admin.firestore();
     const batch = db.batch();
 
-    for (const test of EMAIL_TESTS) {
+    for (const { template, preview } of previewCases) {
+        const isFounderNote = template.id === 'registration_welcome';
         const docRef = db.collection(MAIL_COLLECTION).doc();
         batch.set(docRef, {
             to: targetEmail,
-            from: 'Quantified Self <hello@quantified-self.io>',
+            from: isFounderNote ? FOUNDER_EMAIL_FROM : TRANSACTIONAL_EMAIL_FROM,
+            replyTo: isFounderNote ? FOUNDER_EMAIL_REPLY_TO : TRANSACTIONAL_EMAIL_REPLY_TO,
             template: {
-                name: test.templateName,
-                data: test.data
+                name: template.id,
+                data: preview.data,
             },
-            sent: false // Flag for extension to pick up (though usually it watches for creation)
+            expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
         });
-        logger.info(`Queued: ${test.templateName}`);
+        logger.info(`Queued ${template.id} (${preview.name})`);
     }
 
     await batch.commit();
-    logger.info('✅ All test emails have been queued in the "mail" collection.');
+    logger.info('All refreshed-template smoke tests were queued. development_update was excluded.');
 }
 
-// Get email from command line args
-const args = process.argv.slice(2);
-const email = args[0];
-
-sendTestEmails(email).catch(logger.error);
+const targetEmail = process.argv.slice(2)[0];
+sendTestEmails(targetEmail).catch(error => {
+    logger.error('Failed to queue refreshed-template smoke tests.', error);
+    process.exitCode = 1;
+});

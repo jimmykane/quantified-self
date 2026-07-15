@@ -134,6 +134,13 @@ This project uses `eslint` and `prettier` for code formatting.
 **Core Libraries:**
 This project relies heavily on [Quantified Self Lib](https://github.com/jimmykane/quantified-self-lib) for file parsing logics.
 
+## Architecture Documentation
+
+- [Email lifecycle and rollout](docs/email-lifecycle.md)
+- [Pricing and limits](docs/PRICING_AND_LIMITS.md)
+- [Queue processing](docs/queue-processing.md)
+- [Sleep sync operations](docs/sleep-sync-operations.md)
+
 ## 📄 License
 
 See [LICENSE](LICENSE) for more details.

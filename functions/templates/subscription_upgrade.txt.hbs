@@ -1,0 +1,15 @@
+{{> email_transactional_header}}
+You’re now on {{new_role}}
+
+Your membership has changed from {{old_role}} → {{new_role}}.
+
+Thank you for supporting Quantified Self.
+
+{{#if plan_details_available}}Your new plan includes:
+- {{activity_description}}
+- {{route_description}}
+- {{ai_insights_description}}
+{{#if device_sync_description}}- {{device_sync_description}}
+{{/if}}{{/if}}
+Open dashboard: {{dashboard_url}}
+{{> email_transactional_footer}}

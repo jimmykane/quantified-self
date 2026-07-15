@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
     AI_INSIGHTS_REQUEST_LIMITS,
+    DEVICE_SYNC_ENABLED_ROLES,
     getAiInsightsRequestLimitForRole,
     getRouteUsageLimitForRole,
     getUsageLimitForRole,
+    isDeviceSyncEnabledForRole,
     ROUTE_USAGE_LIMITS,
     USAGE_LIMITS,
 } from '../../../shared/limits';
@@ -60,5 +62,13 @@ describe('USAGE_LIMITS', () => {
         expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
         expect(getAiInsightsRequestLimitForRole('basic')).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
         expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
+    });
+
+    it('should define device sync entitlement from the shared plan contract', () => {
+        expect(DEVICE_SYNC_ENABLED_ROLES).toEqual(['pro']);
+        expect(isDeviceSyncEnabledForRole('free')).toBe(false);
+        expect(isDeviceSyncEnabledForRole('basic')).toBe(false);
+        expect(isDeviceSyncEnabledForRole('pro')).toBe(true);
+        expect(isDeviceSyncEnabledForRole('enterprise')).toBe(false);
     });
 });

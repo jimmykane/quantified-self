@@ -6,6 +6,10 @@ import * as admin from 'firebase-admin';
 import { isCorsAllowed } from '../utils';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import {
+    TRANSACTIONAL_EMAIL_FROM,
+    TRANSACTIONAL_EMAIL_REPLY_TO,
+} from '../email/config';
 
 type FirebaseAuthErrorLike = {
     errorInfo?: {
@@ -95,10 +99,13 @@ export const deleteSelf = functions
                 try {
                     await admin.firestore().collection('mail').doc(`account_deleted_confirmation_${uid}`).set({
                         to: userEmail,
-                        from: 'Quantified Self <hello@quantified-self.io>',
+                        from: TRANSACTIONAL_EMAIL_FROM,
+                        replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
                         template: {
                             name: 'account_deleted_confirmation',
-                            data: {}
+                            data: {
+                                support_email: TRANSACTIONAL_EMAIL_REPLY_TO,
+                            }
                         },
                         expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
                     });

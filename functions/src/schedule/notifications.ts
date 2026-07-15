@@ -2,16 +2,22 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { USAGE_LIMITS } from '../../../shared/limits';
+import {
+    buildEmailPlanDetails,
+    EMAIL_LINKS,
+    formatEmailDate,
+    getRoleDisplayName,
+    TRANSACTIONAL_EMAIL_FROM,
+    TRANSACTIONAL_EMAIL_REPLY_TO,
+} from '../email/config';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { isDeviceSyncEnabledForRole } from '../../../shared/limits';
+import {
+    getCanonicalEndingSubscription,
+    getTimestampMillis,
+} from '../stripe/subscription-state';
 
-// Reusing the same ROLE_DISPLAY_NAMES map or importing simple map if needed
-const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
-    'free': 'Free',
-    'basic': 'Basic',
-    'pro': 'Pro'
-};
-
-export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 hours', region: 'europe-west2' }, async (event) => {
+export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 hours', region: 'europe-west2' }, async () => {
     const db = admin.firestore();
     const now = new Date();
 
@@ -25,15 +31,13 @@ export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 h
 
     // Firestore timestamp serialization of active intent
     const snapshot = await db.collectionGroup('subscriptions')
-        .where('status', '==', 'active')
+        .where('status', 'in', ['active', 'trialing'])
         .where('cancel_at_period_end', '==', true)
         .where('current_period_end', '>=', admin.firestore.Timestamp.fromDate(threeDaysFromNow))
         .where('current_period_end', '<', admin.firestore.Timestamp.fromDate(fourDaysFromNow))
         .get();
 
     logger.info(`Found ${snapshot.size} subscriptions expiring between ${threeDaysFromNow.toISOString()} and ${fourDaysFromNow.toISOString()}`);
-
-
 
     for (const doc of snapshot.docs) {
         const sub = doc.data();
@@ -44,43 +48,97 @@ export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 h
             continue;
         }
 
-        const expirationDate = sub.current_period_end.toDate().toLocaleDateString('en-US', {
-            year: 'numeric', month: 'long', day: 'numeric'
-        });
-
         const idempotencyKey = `expiring_${doc.id}_${sub.current_period_end.seconds}`;
         const mailRef = db.collection('mail').doc(idempotencyKey);
 
-        // Optimistic check: create only if not exists
-        // Since we are batching, we can use create() which fails if doc exists, 
-        // but we want to avoid batch failure. Ideally we check existence or use separate transactions.
-        // For simplicity in a scheduled job, we'll check existence first (slower but safer for batch)
-        // OR better: use runTransaction or just create singular writes if volume is low.
-        // Given the scale, singular writes for notifications are fine to start, or we can just try/catch the create.
+        const systemStatusRef = db.doc(`users/${uid}/system/status`);
+        const activeSubscriptionsQuery = doc.ref.parent
+            .where('status', 'in', ['active', 'trialing']);
+        const queueResult = await db.runTransaction(async transaction => {
+            const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+            if (deletionGuard.shouldSkip) {
+                return 'skip-deleted-user' as const;
+            }
 
-        // Actually, the extensions work by listening to 'mail' collection.
-        // We can just set() with merge: true? No, we want unique triggers.
-        // Let's check existence to be clean.
-        const mailDoc = await mailRef.get();
-        if (mailDoc.exists) {
-            logger.info(`Skipping existing expiring email for ${doc.id}`);
+            const [currentSubscriptionDoc, activeSubscriptionsSnapshot, mailDoc] = await Promise.all([
+                transaction.get(doc.ref),
+                transaction.get(activeSubscriptionsQuery),
+                transaction.get(mailRef),
+            ]);
+            const currentSubscription = currentSubscriptionDoc.data();
+            const snapshotPeriodEndMs = getTimestampMillis(sub.current_period_end);
+            const currentPeriodEndMs = getTimestampMillis(currentSubscription?.current_period_end);
+            if (!currentSubscriptionDoc.exists
+                || !currentSubscription
+                || !['active', 'trialing'].includes(`${currentSubscription.status || ''}`)
+                || currentSubscription?.cancel_at_period_end !== true
+                || snapshotPeriodEndMs === null
+                || currentPeriodEndMs !== snapshotPeriodEndMs) {
+                return 'skip-stale-subscription' as const;
+            }
+
+            const canonicalEndingSubscription = getCanonicalEndingSubscription(
+                activeSubscriptionsSnapshot.docs,
+            );
+            if (!canonicalEndingSubscription
+                || canonicalEndingSubscription.subscriptionId !== doc.id
+                || canonicalEndingSubscription.currentPeriodEndMs !== currentPeriodEndMs) {
+                return 'skip-nonterminal-entitlement' as const;
+            }
+
+            const expirationDate = formatEmailDate(
+                canonicalEndingSubscription.subscription.current_period_end,
+            );
+            const scheduledGracePeriodUntil = canonicalEndingSubscription.scheduledGracePeriodUntil;
+            const freePlanDetails = buildEmailPlanDetails('free');
+            const deviceSyncWillEnd = activeSubscriptionsSnapshot.docs.some(subscriptionDoc => (
+                isDeviceSyncEnabledForRole(`${subscriptionDoc.data().role || ''}`)
+            ));
+            transaction.set(systemStatusRef, { scheduledGracePeriodUntil }, { merge: true });
+            if (mailDoc.exists) {
+                return 'already-queued' as const;
+            }
+
+            transaction.set(mailRef, {
+                toUids: [uid],
+                from: TRANSACTIONAL_EMAIL_FROM,
+                replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
+                template: {
+                    name: 'subscription_expiring_soon',
+                    data: {
+                        role: getRoleDisplayName(canonicalEndingSubscription.subscription.role),
+                        expiration_date: expirationDate,
+                        grace_period_end: formatEmailDate(scheduledGracePeriodUntil),
+                        free_activity_description: freePlanDetails.activity_description,
+                        free_route_description: freePlanDetails.route_description,
+                        free_ai_insights_description: freePlanDetails.ai_insights_description,
+                        device_sync_will_end: deviceSyncWillEnd,
+                        membership_url: EMAIL_LINKS.membership,
+                    }
+                },
+                expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
+            });
+            return 'queued' as const;
+        });
+
+        if (queueResult === 'skip-deleted-user') {
+            logger.info(`Skipping expiring email for deleted or missing user ${uid}`);
             continue;
         }
 
-        await mailRef.set({
-            toUids: [uid],
-            from: 'Quantified Self <hello@quantified-self.io>',
-            template: {
-                name: 'subscription_expiring_soon',
-                data: {
-                    role: ROLE_DISPLAY_NAMES[sub.role] || sub.role,
-                    expiration_date: expirationDate,
-                    free_limit: String(USAGE_LIMITS.free)
-                }
-            },
-            expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-        });
-        logger.info(`Queued expiring email for user ${uid}`);
+        if (queueResult === 'skip-stale-subscription') {
+            logger.info(`Skipping stale expiring subscription snapshot for ${doc.id}`);
+            continue;
+        }
+
+        if (queueResult === 'skip-nonterminal-entitlement') {
+            logger.info(`Skipping expiring subscription ${doc.id} because another active entitlement continues or ends later.`);
+            continue;
+        }
+
+        logger.info(queueResult === 'queued'
+            ? `Queued expiring email for user ${uid}`
+            : `Expiring email for ${doc.id} was already queued; repaired its canonical grace deadline.`);
     }
 
     logger.info('Subscription notification check complete.');

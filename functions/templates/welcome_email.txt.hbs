@@ -1,0 +1,13 @@
+{{> email_transactional_header}}
+Your {{role}} membership is active
+
+{{#if is_trial}}Your {{role}} trial has started. You can explore the plan now, and we’ll keep your membership details visible in Quantified Self.{{else}}Thank you for becoming a {{role}} member. Your support helps fund independent, privacy-first development of Quantified Self.{{/if}}
+
+{{#if plan_details_available}}What’s included:
+- {{activity_description}}
+- {{route_description}}
+- {{ai_insights_description}}
+{{#if device_sync_description}}- {{device_sync_description}}
+{{/if}}{{/if}}
+Open dashboard: {{dashboard_url}}
+{{> email_transactional_footer}}
