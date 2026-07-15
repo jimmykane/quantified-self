@@ -81,7 +81,11 @@ import type {
   AppDashboardTileEventFilterRange,
   AppDashboardTileEventFiltersInterface,
 } from '../../../models/app-user.interface';
-import type { DashboardTileEventNavigationDirection } from '../../../helpers/dashboard-tile-event-filters.helper';
+import {
+  DASHBOARD_TILE_EVENT_RANGE_OPTIONS,
+  normalizeDashboardTileEventFilterRange,
+  type DashboardTileEventNavigationDirection,
+} from '../../../helpers/dashboard-tile-event-filters.helper';
 import type { ChartRangeSelectorOption } from '../../charts/shared/chart-range-selector/chart-range-selector.component';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 import {
@@ -231,6 +235,12 @@ export class TileChartComponent extends TileAbstractDirective {
     shortLabel: option.shortLabel,
     menuLabel: option.menuLabel,
   }));
+  public readonly powerCurveRangeSelectorOptions: ReadonlyArray<ChartRangeSelectorOption> = DASHBOARD_TILE_EVENT_RANGE_OPTIONS.map(option => ({
+    value: option.range,
+    label: option.label,
+    shortLabel: option.shortLabel,
+    menuLabel: option.label,
+  }));
   public readonly dashboardMobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
 
   get chartInfoTooltip(): string | null {
@@ -242,10 +252,6 @@ export class TileChartComponent extends TileAbstractDirective {
       !isDashboardSpecialChartType(this.chartType)
       || isDashboardEventBackedSpecialChartType(this.chartType)
     );
-  }
-
-  get showEventActivityFilter(): boolean {
-    return this.chartType !== this.powerCurveChartType;
   }
 
   get showDerivedRangeSelector(): boolean {
@@ -264,11 +270,20 @@ export class TileChartComponent extends TileAbstractDirective {
     return this.chartType === this.powerCurveChartType;
   }
 
+  get showPowerCurveRangeSelector(): boolean {
+    return this.chartType === this.powerCurveChartType;
+  }
+
+  get powerCurveRange(): AppDashboardTileEventFilterRange {
+    return normalizeDashboardTileEventFilterRange(this.eventFilters?.range, '1y');
+  }
+
   get showSharedRangeControls(): boolean {
     return this.showEventFilters
       || this.showDerivedRangeSelector
       || this.showFormRangeSelector
       || this.showSleepRangeControls
+      || this.showPowerCurveRangeSelector
       || this.showPowerCurveCompareSelector;
   }
 
@@ -277,7 +292,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showStackedMobileHeaderControls(): boolean {
-    return this.showPowerCurveCompareSelector && this.showEventFilters;
+    return this.showPowerCurveCompareSelector && this.showPowerCurveRangeSelector;
   }
 
   onDerivedRangeSelection(value: unknown): void {
@@ -309,6 +324,10 @@ export class TileChartComponent extends TileAbstractDirective {
     }
     this.selectedPowerCurveCompareMode = nextMode;
     this.powerCurveCompareModeChange.emit(nextMode);
+  }
+
+  onPowerCurveRangeSelection(value: unknown): void {
+    this.eventFilterRangeChange.emit(normalizeDashboardTileEventFilterRange(value, '1y'));
   }
 
   onTileActionSaving(isSaving: boolean): void {

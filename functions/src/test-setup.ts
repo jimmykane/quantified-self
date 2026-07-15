@@ -138,10 +138,17 @@ vi.mock('./request-helper', () => ({
     post: () => Promise.resolve({}),
 }));
 
-// Mock sports-lib to avoid resolution errors
-vi.mock('@sports-alliance/sports-lib', () => ({
+// Keep broad sports-lib fixtures lightweight while exercising the real canonical
+// durability parser used by production.
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+    return ({
     ActivityTypes: {
         Cycling: 'Cycling',
+        EBiking: 'E-Biking',
+        EnduroMTB: 'Enduro MTB',
+        MountainBiking: 'Mountain Biking',
+        DownhillCycling: 'Downhill Cycling',
         Running: 'Running',
         Walking: 'Walking',
         Swimming: 'Swimming',
@@ -164,7 +171,37 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         'Weight Training': 'Weight Training',
         'Mountain Biking': 'Mountain Biking',
     },
+    ActivityTypeGroups: {
+        CyclingGroup: 'cycling_group',
+        MountainBikingGroup: 'mountain_biking_group',
+        RunningGroup: 'running_group',
+        TrailRunningGroup: 'trail_running_group',
+        SwimmingGroup: 'swimming_group',
+    },
+    ActivityTypesHelper: {
+        getActivityTypesForActivityGroup: (group: string) => {
+            switch (group) {
+                case 'cycling_group':
+                    return ['Cycling', 'Indoor Cycling', 'Virtual Cycling', 'E-Biking'];
+                case 'mountain_biking_group':
+                    return ['Mountain Biking', 'Enduro MTB', 'Downhill Cycling'];
+                case 'running_group':
+                    return ['Running', 'Treadmill', 'Indoor Running', 'Virtual Running'];
+                case 'trail_running_group':
+                    return ['Trail Running'];
+                case 'swimming_group':
+                    return ['Swimming', 'Open Water Swimming'];
+                default:
+                    return [];
+            }
+        },
+    },
+    DataActivityTypes: { type: 'Activity Types' },
+    DataCriticalPower: { type: 'Critical Power' },
+    DataDistance: { type: 'Distance' },
+    DataDurabilityEvidence: { type: 'Durability Evidence' },
     DataDuration: { type: 'Duration' },
+    DataFTP: { type: 'FTP' },
     DataHeartRateAvg: { type: 'Heart Rate Avg' },
     DataHeartRateZoneOneDuration: { type: 'Heart Rate Zone 1 Duration' },
     DataHeartRateZoneTwoDuration: { type: 'Heart Rate Zone 2 Duration' },
@@ -182,6 +219,39 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     DataPowerZoneSixDuration: { type: 'Power Zone 6 Duration' },
     DataPowerZoneSevenDuration: { type: 'Power Zone 7 Duration' },
     DataRecoveryTime: { type: 'Recovery Time' },
+    DataSwimDistance: { type: 'Swim Distance' },
+    DataSwimPaceAvg: { type: 'Average Swim Pace' },
+    DataVO2Max: { type: 'VO2 Max' },
+    DURABILITY_PROTOCOL_VERSION: 1,
+    normalizeDurabilityEvidenceValue: actual.normalizeDurabilityEvidenceValue,
+    samplePowerCurveAtDuration: (
+        points: Array<Record<string, unknown>>,
+        duration: number,
+        options: { key?: 'power' | 'wattsPerKg'; maximumBracketDurationRatio?: number } = {},
+    ) => {
+        const key = options.key || 'power';
+        const maximumRatio = options.maximumBracketDurationRatio || 1.25;
+        const normalized = points
+            .map(point => ({ duration: Number(point.duration), value: Number(point[key]) }))
+            .filter(point => Number.isFinite(point.duration) && point.duration > 0
+                && Number.isFinite(point.value) && point.value > 0)
+            .sort((left, right) => left.duration - right.duration);
+        const exact = normalized.find(point => point.duration === duration);
+        if (exact) {
+            return exact.value;
+        }
+        const rightIndex = normalized.findIndex(point => point.duration > duration);
+        if (rightIndex <= 0) {
+            return null;
+        }
+        const left = normalized[rightIndex - 1];
+        const right = normalized[rightIndex];
+        if ((right.duration / left.duration) > maximumRatio) {
+            return null;
+        }
+        const ratio = ((1 / duration) - (1 / left.duration)) / ((1 / right.duration) - (1 / left.duration));
+        return left.value + ((right.value - left.value) * ratio);
+    },
     RoutePreviewUtilities: {
         buildRouteFilePreview: (routeFile: any) => {
             const routes = Array.isArray(routeFile?.routes)
@@ -233,7 +303,8 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         toHeader: () => ({}),
         authorize: () => ({}),
     }),
-}));
+    });
+});
 
 // Mock firebase-functions/logger globally
 vi.mock('firebase-functions/logger', () => ({

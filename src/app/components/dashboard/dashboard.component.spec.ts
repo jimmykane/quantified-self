@@ -1337,6 +1337,17 @@ describe('DashboardComponent', () => {
         expect(component.events[0].startDate.getTime()).toBe(date2.getTime());
     });
 
+    it('treats tag-only event changes as distinct dashboard updates', () => {
+        const previous = {
+            getID: () => 'event-1', name: 'Run', startDate: new Date(1000), tags: ['Race'],
+        } as any;
+        const current = {
+            getID: () => 'event-1', name: 'Run', startDate: new Date(1000), tags: ['Recovery'],
+        } as any;
+
+        expect((component as any).areEventsEquivalentByIdentity([previous], [current])).toBe(false);
+    });
+
     it('should restore previous state when persisting dashboard search fails', async () => {
         const previousStartDate = new Date('2025-01-01T00:00:00.000Z');
         const previousEndDate = new Date('2025-01-31T23:59:59.000Z');

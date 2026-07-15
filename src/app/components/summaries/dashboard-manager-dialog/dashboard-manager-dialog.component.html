@@ -7,16 +7,6 @@
   <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Bulk actions</div>
     <div class="dashboard-manager-bulk-actions">
-      <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-defaults-button" (click)="addDefaultTiles()" [disabled]="isAddDefaultsDisabled" [attr.aria-busy]="isAddDefaultsSaving">
-        <span class="dashboard-manager-button-content">
-          @if (isAddDefaultsSaving) {
-          <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
-          } @else {
-          <mat-icon>dashboard_customize</mat-icon>
-          }
-          <span>{{ isAddDefaultsSaving ? 'Adding...' : 'Add defaults' }}</span>
-        </span>
-      </button>
       <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-all-button" (click)="addAllTiles()" [disabled]="isAddAllDisabled" [attr.aria-busy]="isAddAllSaving">
         <span class="dashboard-manager-button-content">
           @if (isAddAllSaving) {
@@ -37,11 +27,37 @@
           <span>{{ isRemoveAllSaving ? 'Removing...' : 'Remove all' }}</span>
         </span>
       </button>
+      <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-simplify-dashboard-button" (click)="toggleSimplifyDashboardPreview()" [disabled]="isSimplifyDashboardDisabled" [attr.aria-expanded]="isSimplifyDashboardPreviewOpen">
+        <span class="dashboard-manager-button-content">
+          <mat-icon>auto_awesome_mosaic</mat-icon>
+          <span>Simplify dashboard</span>
+        </span>
+      </button>
     </div>
     <p class="dashboard-manager-hint">
-      Add defaults inserts the recommended dashboard. Add all inserts every available curated, KPI, map, and preset tile. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
+      Add all inserts every available curated, KPI, map, and preset tile. Simplify dashboard previews legacy training tiles for explicit removal. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
     </p>
   </section>
+
+  @if (isSimplifyDashboardPreviewOpen) {
+  <section class="dashboard-manager-section dashboard-manager-simplify-preview" aria-label="Simplify dashboard preview">
+    <div class="dashboard-manager-section-title">Select legacy training tiles</div>
+    <div class="dashboard-manager-simplify-list">
+      @for (tile of legacyTrainingTiles; track tile.order) {
+      <mat-checkbox [checked]="isLegacyTrainingTileSelected(tile.order)" [disabled]="isSaving" (change)="toggleLegacyTrainingTileSelection(tile.order, $event.checked)">
+        {{ getEditTileLabel(tile) }}
+      </mat-checkbox>
+      }
+    </div>
+    <div class="dashboard-manager-simplify-actions">
+      <button mat-stroked-button type="button" (click)="toggleSimplifyDashboardPreview()" [disabled]="isSaving">Cancel</button>
+      <button mat-flat-button type="button" color="warn" (click)="removeSelectedLegacyTrainingTiles()" [disabled]="!hasSelectedLegacyTrainingTiles || isSaving" [attr.aria-busy]="isSimplifyDashboardSaving">
+        @if (isSimplifyDashboardSaving) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>delete</mat-icon> }
+        <span>Remove selected</span>
+      </button>
+    </div>
+  </section>
+  }
 
   <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Mode</div>

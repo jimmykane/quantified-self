@@ -360,6 +360,9 @@ export class AppEventService implements OnDestroy {
     if (Array.isArray(event.benchmarkReviewTags)) {
       clonedEvent.benchmarkReviewTags = [...event.benchmarkReviewTags];
     }
+    if (Array.isArray(event.tags)) {
+      clonedEvent.tags = [...event.tags];
+    }
     if (typeof event.sourceFilesCount === 'number') {
       clonedEvent.sourceFilesCount = event.sourceFilesCount;
     }
@@ -400,6 +403,7 @@ export class AppEventService implements OnDestroy {
     return this.buildSnapshotFingerprint({
       eventID: typeof eventAny?.getID === 'function' ? eventAny.getID() : null,
       event: eventSnapshot,
+      tags: Array.isArray(event.tags) ? event.tags : event.benchmarkReviewTags,
       activities: activitySnapshots,
     });
   }

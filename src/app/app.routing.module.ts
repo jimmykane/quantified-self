@@ -344,6 +344,12 @@ export const routes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'training',
+    loadChildren: () => import('./modules/training.module').then(module => module.TrainingModule),
+    data: { title: 'Training', animation: 'Training', preload: true },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'mytracks',
     loadChildren: () => import('./modules/my-tracks.module').then(module => module.MyTracksModule),
     data: { title: 'MyTracks', animation: 'MyTracks', disableRouteAnimation: true, preload: true },

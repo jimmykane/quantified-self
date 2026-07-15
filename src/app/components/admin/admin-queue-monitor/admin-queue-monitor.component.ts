@@ -109,7 +109,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
 
         if (this.queueView === 'derived') {
             this.pageTitle = 'Derived Metrics Queue';
-            this.pageSubtitle = 'Monitor derived metrics queue depth, coordinator status, and failure diagnostics';
+            this.pageSubtitle = 'Monitor ingress coalescing, snapshot workers, coordinator status, and failure diagnostics';
             return;
         }
 

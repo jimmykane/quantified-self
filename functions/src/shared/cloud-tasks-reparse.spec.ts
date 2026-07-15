@@ -1,153 +1,64 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetCloudTasksClient } from './cloud-tasks';
+import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask, enqueueSportsLibRouteReparseTask } from './cloud-tasks';
 
 const hoisted = vi.hoisted(() => {
-    const mockCloudTasksClient = {
-        queuePath: vi.fn(),
-        createTask: vi.fn(),
-    };
-    const CloudTasksClientSpy = vi.fn(() => mockCloudTasksClient);
+    const mockTaskQueue = { enqueue: vi.fn() };
     return {
-        mockCloudTasksClient,
-        CloudTasksClientSpy,
+        mockTaskQueue,
+        mockFunctions: { taskQueue: vi.fn(() => mockTaskQueue) },
     };
 });
 
-vi.mock('@google-cloud/tasks', () => ({
-    v2beta3: {
-        CloudTasksClient: hoisted.CloudTasksClientSpy,
-    }
-}));
-
+vi.mock('firebase-admin/functions', () => ({ getFunctions: () => hoisted.mockFunctions }));
 vi.mock('../config', () => ({
     config: {
         cloudtasks: {
             projectId: 'test-project',
             location: 'test-location',
-            workoutQueue: 'processWorkoutTask',
-            activitySyncQueue: 'processActivitySyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
-            derivedMetricsQueue: 'processDerivedMetricsTask',
-            queue: 'processWorkoutTask',
-            serviceAccountEmail: 'sa@test.com',
-        }
-    }
+        },
+    },
 }));
+vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
-vi.mock('firebase-functions/logger', () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-}));
-
-import { enqueueSportsLibReparseHeavyTask, enqueueSportsLibReparseTask, enqueueSportsLibRouteReparseTask } from './cloud-tasks';
-
-describe('enqueueSportsLibReparseTask', () => {
+describe('sports-lib reparse task dispatch', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        resetCloudTasksClient();
-        hoisted.mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
-        hoisted.mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
+        hoisted.mockTaskQueue.enqueue.mockResolvedValue(undefined);
     });
 
-    it('should enqueue reparse task with deterministic name and payload', async () => {
-        await expect(enqueueSportsLibReparseTask('job-abc-123')).resolves.toBe(true);
+    it.each([
+        [enqueueSportsLibReparseTask, 'processSportsLibReparseTask', 'reparse-job-abc-123'],
+        [enqueueSportsLibRouteReparseTask, 'processSportsLibRouteReparseTask', 'route-reparse-job-abc-123'],
+    ])('uses direct worker payloads and dispatch deadlines', async (enqueue, functionName, taskId) => {
+        await expect(enqueue('job-abc-123')).resolves.toBe(true);
 
-        expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
-            'test-project',
-            'test-location',
-            'processSportsLibReparseTask'
+        expect(hoisted.mockFunctions.taskQueue).toHaveBeenCalledWith(
+            `projects/test-project/locations/test-location/functions/${functionName}`,
         );
-
-        expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-            parent: 'projects/p/locations/l/queues/q',
-            task: expect.objectContaining({
-                name: 'projects/p/locations/l/queues/q/tasks/reparse-job-abc-123',
-                dispatchDeadline: { seconds: 1800 },
-                httpRequest: expect.objectContaining({
-                    url: 'https://test-location-test-project.cloudfunctions.net/processSportsLibReparseTask',
-                    body: expect.any(String),
-                }),
-            }),
-        });
-
-        const encodedBody = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.httpRequest.body;
-        const payload = JSON.parse(Buffer.from(encodedBody, 'base64').toString('utf8'));
-        expect(payload).toEqual({ data: { jobId: 'job-abc-123' } });
-    });
-
-    it('should swallow ALREADY_EXISTS errors', async () => {
-        const err: any = new Error('Already exists');
-        err.code = 6;
-        hoisted.mockCloudTasksClient.createTask.mockRejectedValue(err);
-
-        await expect(enqueueSportsLibReparseTask('job-abc-123')).resolves.toBe(false);
-    });
-
-    it('should enqueue heavy reparse task with deterministic name and payload', async () => {
-        await expect(enqueueSportsLibReparseHeavyTask('job-abc-123')).resolves.toBe(true);
-
-        expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
-            'test-project',
-            'test-location',
-            'processSportsLibReparseHeavyTask'
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+            { jobId: 'job-abc-123' },
+            { id: taskId, dispatchDeadlineSeconds: 1800, scheduleDelaySeconds: 1 },
         );
-
-        expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-            parent: 'projects/p/locations/l/queues/q',
-            task: expect.objectContaining({
-                name: 'projects/p/locations/l/queues/q/tasks/reparse-heavy-job-abc-123',
-                dispatchDeadline: { seconds: 1800 },
-                httpRequest: expect.objectContaining({
-                    url: 'https://test-location-test-project.cloudfunctions.net/processSportsLibReparseHeavyTask',
-                    body: expect.any(String),
-                }),
-            }),
-        });
-
-        const encodedBody = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.httpRequest.body;
-        const payload = JSON.parse(Buffer.from(encodedBody, 'base64').toString('utf8'));
-        expect(payload).toEqual({ data: { jobId: 'job-abc-123' } });
     });
 
-    it('should enqueue manual heavy retry with a unique task name suffix', async () => {
+    it('uses a unique deterministic id for a manual heavy retry', async () => {
         await expect(enqueueSportsLibReparseHeavyTask('job-abc-123', {
             taskNameSuffix: 'manual-1700000000000-abc',
         })).resolves.toBe(true);
 
-        expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-            parent: 'projects/p/locations/l/queues/q',
-            task: expect.objectContaining({
-                name: 'projects/p/locations/l/queues/q/tasks/reparse-heavy-job-abc-123-manual-1700000000000-abc',
-            }),
-        });
-    });
-
-    it('should enqueue route reparse task with deterministic name and payload', async () => {
-        await expect(enqueueSportsLibRouteReparseTask('job-abc-123')).resolves.toBe(true);
-
-        expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
-            'test-project',
-            'test-location',
-            'processSportsLibRouteReparseTask'
+        expect(hoisted.mockFunctions.taskQueue).toHaveBeenCalledWith(
+            'projects/test-project/locations/test-location/functions/processSportsLibReparseHeavyTask',
         );
-
-        expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-            parent: 'projects/p/locations/l/queues/q',
-            task: expect.objectContaining({
-                name: 'projects/p/locations/l/queues/q/tasks/route-reparse-job-abc-123',
-                dispatchDeadline: { seconds: 1800 },
-                httpRequest: expect.objectContaining({
-                    url: 'https://test-location-test-project.cloudfunctions.net/processSportsLibRouteReparseTask',
-                    body: expect.any(String),
-                }),
-            }),
-        });
-
-        const encodedBody = hoisted.mockCloudTasksClient.createTask.mock.calls[0][0].task.httpRequest.body;
-        const payload = JSON.parse(Buffer.from(encodedBody, 'base64').toString('utf8'));
-        expect(payload).toEqual({ data: { jobId: 'job-abc-123' } });
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+            { jobId: 'job-abc-123' },
+            {
+                id: 'reparse-heavy-job-abc-123-manual-1700000000000-abc',
+                dispatchDeadlineSeconds: 1800,
+                scheduleDelaySeconds: 1,
+            },
+        );
     });
 });

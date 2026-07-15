@@ -71,6 +71,36 @@ describe('processDerivedMetricsIngressTask', () => {
         );
     });
 
+    it('marks only the requested metric dirty for sleep ingress without changing event mutation version', async () => {
+        await (processDerivedMetricsIngressTask as any)({
+            data: {
+                uid: 'user-1',
+                bucketStartEpochSec: 1712000010,
+                metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+                incrementEventMutationVersion: false,
+            },
+        });
+
+        expect(hoisted.getDefaultDerivedMetricKindsForDashboard).not.toHaveBeenCalled();
+        expect(hoisted.markDerivedMetricsDirtyAndMaybeQueue).toHaveBeenCalledWith(
+            'user-1',
+            [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            { incrementEventMutationVersion: false },
+        );
+    });
+
+    it('rejects malformed targeted metric kinds instead of rebuilding every metric', async () => {
+        await (processDerivedMetricsIngressTask as any)({
+            data: {
+                uid: 'user-1',
+                metricKinds: ['not-a-metric'],
+            },
+        });
+
+        expect(hoisted.getDefaultDerivedMetricKindsForDashboard).not.toHaveBeenCalled();
+        expect(hoisted.markDerivedMetricsDirtyAndMaybeQueue).not.toHaveBeenCalled();
+    });
+
     it('skips payloads missing uid', async () => {
         await (processDerivedMetricsIngressTask as any)({
             data: {
@@ -94,4 +124,3 @@ describe('processDerivedMetricsIngressTask', () => {
         })).rejects.toThrow('transient_ingress_failure');
     });
 });
-

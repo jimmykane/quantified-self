@@ -190,6 +190,11 @@ vi.mock('./utils', () => ({
 import * as utils from './utils';
 import requestHelper from './request-helper';
 
+vi.mock('./queue/provider-event-id', () => ({
+    resolveProviderImportEventID: vi.fn().mockResolvedValue('standardized-event-id'),
+}));
+import { resolveProviderImportEventID } from './queue/provider-event-id';
+
 vi.mock('./tokens', () => {
     class MockTerminalServiceAuthError extends Error {
         readonly name = 'TerminalServiceAuthError';
@@ -2235,6 +2240,13 @@ describe('queue', () => {
                 undefined,
                 undefined
             );
+            expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith({
+                userID: 'mock-user-id',
+                startDate: new Date('2026-01-14T10:00:00.000Z'),
+                serviceName: ServiceNames.SuuntoApp,
+                providerEventID: 'sw1',
+                providerEventIDField: 'serviceWorkoutID',
+            });
         });
 
         it('should mark processed as skipped without retrying or writing user data when token owner is being deleted before token refresh', async () => {
@@ -2642,6 +2654,15 @@ describe('queue', () => {
                 undefined,
                 undefined
             );
+            expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith({
+                userID: 'mock-user-id',
+                startDate: new Date('2026-01-14T10:00:00.000Z'),
+                serviceName: ServiceNames.COROSAPI,
+                providerEventID: 'cw1',
+                providerEventIDField: 'serviceWorkoutID',
+                providerEventSecondaryID: 'https://coros.com/fit',
+                providerEventSecondaryIDField: 'serviceFITFileURI',
+            });
         });
 
         it('should handle 401 Unauthorized with token refresh and retry', async () => {

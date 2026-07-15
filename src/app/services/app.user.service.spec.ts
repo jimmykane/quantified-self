@@ -1300,6 +1300,27 @@ describe('AppUserService', () => {
             expect(setDoc).toHaveBeenCalledWith(expect.anything(), settings, { merge: true });
         });
 
+        it('does not replay server-owned training settings with unrelated preference writes', async () => {
+            const user = { uid: 'u1' } as AppUserInterface;
+            const updates = {
+                displayName: 'New Name',
+                settings: {
+                    theme: 'dark',
+                    trainingSettings: {
+                        visibleDisciplines: ['cycling'],
+                        buildBenchmarks: {
+                            running: { mode: 'period', durationWeeks: 12, endDayMs: 1_746_403_200_000 },
+                        },
+                    },
+                },
+            };
+
+            await service.updateUserProperties(user, updates);
+
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), { theme: 'dark' }, { merge: true });
+            expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
+        });
+
         it('should split writes for legal fields', async () => {
             const user = { uid: 'test-uid' } as AppUserInterface;
             const propertiesToUpdate = {
@@ -1499,6 +1520,31 @@ describe('AppUserService', () => {
             expect(writtenData.lastSignInDate).toBeUndefined();
             expect(writtenData.impersonatedBy).toBeUndefined();
             expect(writtenData.privacy).toBeUndefined();
+        });
+
+        it('does not include server-owned training settings in full user writes', async () => {
+            const user = {
+                uid: 'test-uid',
+                displayName: 'Test User',
+                settings: {
+                    appSettings: { theme: 'dark' },
+                    trainingSettings: {
+                        visibleDisciplines: ['cycling'],
+                        buildBenchmarks: {
+                            cycling: { mode: 'period', durationWeeks: 8, endDayMs: 1_746_403_200_000 },
+                        },
+                    },
+                },
+            } as AppUserInterface;
+
+            await service.updateUser(user);
+
+            expect(setDoc).toHaveBeenNthCalledWith(
+                2,
+                expect.anything(),
+                { appSettings: { theme: 'dark' } },
+                { merge: true },
+            );
         });
 
         it('should retry full user write without creationDate when merge write is permission-denied', async () => {

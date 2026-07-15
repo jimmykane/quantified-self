@@ -1,8 +1,13 @@
 import { DataAltitude, DataHeartRate } from '@sports-alliance/sports-lib';
 import { BenchmarkResult, BenchmarkStreamMetrics } from '@shared/app-event.interface';
+import {
+  EVENT_TAG_LIMIT,
+  EVENT_TAG_MAX_LENGTH,
+  normalizeEventTags,
+} from '@shared/event-tags';
 
-export const BENCHMARK_REVIEW_TAG_LIMIT = 10;
-export const BENCHMARK_REVIEW_TAG_MAX_LENGTH = 32;
+export const BENCHMARK_REVIEW_TAG_LIMIT = EVENT_TAG_LIMIT;
+export const BENCHMARK_REVIEW_TAG_MAX_LENGTH = EVENT_TAG_MAX_LENGTH;
 
 export interface BenchmarkAtAGlanceItem {
   key: string;
@@ -19,29 +24,7 @@ export interface BenchmarkReviewerSummary {
 }
 
 export function normalizeBenchmarkReviewTags(value: unknown): string[] {
-  const source = Array.isArray(value) ? value : [];
-  const seen = new Set<string>();
-  const normalizedTags: string[] = [];
-
-  for (const item of source) {
-    if (typeof item !== 'string') {
-      continue;
-    }
-
-    const tag = item.trim().replace(/\s+/g, ' ').slice(0, BENCHMARK_REVIEW_TAG_MAX_LENGTH);
-    const key = tag.toLowerCase();
-    if (!tag || seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    normalizedTags.push(tag);
-    if (normalizedTags.length >= BENCHMARK_REVIEW_TAG_LIMIT) {
-      break;
-    }
-  }
-
-  return normalizedTags;
+  return normalizeEventTags(value);
 }
 
 export function buildBenchmarkReviewerSummary(

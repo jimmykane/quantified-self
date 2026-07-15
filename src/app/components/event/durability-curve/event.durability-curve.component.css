@@ -35,3 +35,54 @@
   flex: 1 1 auto;
   min-height: 0;
 }
+
+.durability-summary-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 6px;
+  padding: 4px 2px 6px;
+}
+
+.durability-summary {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.durability-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.durability-summary > div span,
+.durability-summary small {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.durability-summary > div span {
+  text-align: right;
+}
+
+.durability-summary small {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.durability-summary p {
+  margin: 4px 0 0;
+  color: var(--mat-sys-on-surface);
+  font-size: 10px;
+}
+
+.durability-summary-eligible {
+  border-color: var(--mat-sys-primary);
+}
+
+.durability-curve-chart-empty {
+  min-height: 12px;
+}

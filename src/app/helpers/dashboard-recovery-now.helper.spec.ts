@@ -132,6 +132,19 @@ describe('dashboard-recovery-now.helper', () => {
     expect(resolveRemainingRecoverySeconds(context, 8_000_000)).toBe(0);
   });
 
+  it('uses recovery segments instead of the aggregate payload total for recovery left', () => {
+    const nowMs = 10_000_000;
+    const context = {
+      totalSeconds: 376 * 60 * 60,
+      endTimeMs: nowMs,
+      segments: [
+        { totalSeconds: 8 * 60 * 60, endTimeMs: nowMs - (2 * 60 * 60 * 1000) },
+      ],
+    };
+
+    expect(resolveRemainingRecoverySeconds(context, nowMs)).toBe(6 * 60 * 60);
+  });
+
   it('resolves active total recovery from currently active segments only', () => {
     const context = {
       totalSeconds: 7200,

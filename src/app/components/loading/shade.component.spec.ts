@@ -53,9 +53,9 @@ describe('ShadeComponent', () => {
     expect(styles).toContain('padding: 16px;');
     expect(styles).toContain('.loading-shade.pass-through .error {');
     expect(styles).toContain('width: min(320px, 100%);');
-    expect(styles).toContain('background: var(--qs-overlay-surface);');
-    expect(styles).toContain('border: 1px solid var(--qs-overlay-surface-border);');
-    expect(styles).toContain('border-radius: 8px;');
+    expect(styles).toContain('background: var(--loading-shade-error-background, var(--qs-overlay-surface));');
+    expect(styles).toContain('border: var(--loading-shade-error-border, 1px solid var(--qs-overlay-surface-border));');
+    expect(styles).toContain('border-radius: var(--loading-shade-error-radius, 8px);');
     expect(styles).toContain('color: var(--mat-sys-on-surface);');
     expect(styles).toContain('.loading-shade.pass-through .error-copy {');
     expect(styles).toContain('display: contents;');

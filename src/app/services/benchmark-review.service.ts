@@ -5,37 +5,31 @@ import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface'
 import {
   BenchmarkReviewerSummary,
   buildBenchmarkReviewerSummary,
-  normalizeBenchmarkReviewTags,
 } from '../helpers/benchmark-review.helper';
-import { AppEventService } from './app.event.service';
+import { EventTagService } from './event-tag.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class BenchmarkReviewService {
-  private eventService = inject(AppEventService);
+  private eventTagService = inject(EventTagService);
   private clipboard = inject(Clipboard);
 
   normalizeTags(value: unknown): string[] {
-    return normalizeBenchmarkReviewTags(value);
+    return this.eventTagService.normalizeTags(value);
   }
 
   getEventTags(event: AppEventInterface | null | undefined): string[] {
-    return this.normalizeTags(event?.benchmarkReviewTags);
+    return this.eventTagService.getTags(event);
   }
 
-  async saveEventTags(user: User, event: AppEventInterface, tags: unknown): Promise<string[]> {
-    const eventID = event.getID?.();
-    if (!eventID) {
-      throw new Error('Cannot save tags for a comparison without an event ID.');
-    }
-
-    const normalizedTags = this.normalizeTags(tags);
-    await this.eventService.updateEventProperties(user, eventID, {
-      benchmarkReviewTags: normalizedTags,
-    });
-    event.benchmarkReviewTags = normalizedTags;
-    return normalizedTags;
+  async saveEventTags(
+    user: User,
+    event: AppEventInterface,
+    tags: unknown,
+    expectedTags?: unknown,
+  ): Promise<string[]> {
+    return this.eventTagService.saveTags(user, event, tags, expectedTags);
   }
 
   buildSummary(result: BenchmarkResult | null | undefined, tags: unknown): BenchmarkReviewerSummary {

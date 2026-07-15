@@ -401,7 +401,7 @@ describe('AdminQueueStatsComponent', () => {
                 stuck: 0,
                 providers: [],
                 cloudTasks: {
-                    pending: 60,
+                    pending: 65,
                     queues: {
                         workout: { queueId: 'processWorkoutTask', pending: 42 },
                         activitySync: { queueId: 'processActivitySyncTask', pending: 4 },
@@ -411,6 +411,7 @@ describe('AdminQueueStatsComponent', () => {
                         sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 },
                         sportsLibReparseHeavy: { queueId: 'processSportsLibReparseHeavyTask', pending: 2 },
                         sportsLibRouteReparse: { queueId: 'processSportsLibRouteReparseTask', pending: 5 },
+                        derivedMetricsIngress: { queueId: 'processDerivedMetricsIngressTask', pending: 5 },
                         derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
                     }
                 },
@@ -430,7 +431,8 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Cloud Tasks (Reparse Normal)');
             expect(host.textContent).toContain('Cloud Tasks (Reparse Heavy)');
             expect(host.textContent).toContain('Cloud Tasks (Route Reparse)');
-            expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
+            expect(host.textContent).toContain('Cloud Tasks (Derived Ingress)');
+            expect(host.textContent).toContain('Cloud Tasks (Derived Workers)');
             expect(host.textContent).not.toContain('Cloud Tasks (All Queues)');
             expect(host.textContent).toContain('42');
             expect(host.textContent).toContain('4');
@@ -475,7 +477,8 @@ describe('AdminQueueStatsComponent', () => {
             expect(readCardValue('Cloud Tasks (Reparse Normal)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Reparse Heavy)')).toBe('0');
             expect(readCardValue('Cloud Tasks (Route Reparse)')).toBe('0');
-            expect(readCardValue('Cloud Tasks (Derived Metrics)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Derived Ingress)')).toBe('0');
+            expect(readCardValue('Cloud Tasks (Derived Workers)')).toBe('0');
         });
     });
 
@@ -1055,8 +1058,9 @@ describe('AdminQueueStatsComponent', () => {
                 stuck: 0,
                 providers: [],
                 cloudTasks: {
-                    pending: 7,
+                    pending: 9,
                     queues: {
+                        derivedMetricsIngress: { queueId: 'processDerivedMetricsIngressTask', pending: 2 },
                         derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 7 }
                     }
                 },
@@ -1084,7 +1088,14 @@ describe('AdminQueueStatsComponent', () => {
 
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
-            expect(host.textContent).toContain('Cloud Tasks (Derived Metrics)');
+            expect(host.textContent).toContain('Cloud Tasks (Derived Ingress)');
+            expect(host.textContent).toContain('Cloud Tasks (Derived Workers)');
+            const derivedCards = Array.from(host.querySelectorAll('.app-stat-card')) as HTMLElement[];
+            const readDerivedCardValue = (label: string): string | undefined => derivedCards.find((card) =>
+                card.querySelector('.app-stat-header span')?.textContent?.trim() === label
+            )?.querySelector('.app-stat-value')?.textContent?.trim();
+            expect(readDerivedCardValue('Cloud Tasks (Derived Ingress)')).toBe('2');
+            expect(readDerivedCardValue('Cloud Tasks (Derived Workers)')).toBe('7');
             expect(host.textContent).toContain('Coordinators (Queued)');
             expect(host.textContent).toContain('Coordinators (Processing)');
             expect(host.textContent).toContain('Coordinators (Stale Queued)');

@@ -1217,17 +1217,29 @@
         </h3>
 
         <div class="stats-grid">
+            <mat-card class="app-stat-card status-pending"
+                matTooltip="Debounced invalidation tasks waiting to coalesce event, activity, sleep, and settings changes before a derived-metrics worker is queued.">
+                <div class="app-stat-header">
+                    <mat-icon>input</mat-icon>
+                    <span>Cloud Tasks (Derived Ingress)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.derivedMetricsIngress?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">coalesces invalidations</span>
+            </mat-card>
             <mat-card class="app-stat-card status-info"
-                matTooltip="Tasks currently in flight or scheduled in the derived metrics Cloud Tasks queue.">
+                matTooltip="Derived snapshot build tasks currently in flight or scheduled after ingress coalescing.">
                 <div class="app-stat-header">
                     <mat-icon>monitor_heart</mat-icon>
-                    <span>Cloud Tasks (Derived Metrics)</span>
+                    <span>Cloud Tasks (Derived Workers)</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.derivedMetrics?.pending ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: derived metrics</span>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">builds snapshots</span>
             </mat-card>
             <mat-card class="app-stat-card status-pending">
                 <div class="app-stat-header">

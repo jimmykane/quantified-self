@@ -408,7 +408,7 @@ describe('AppEventService', () => {
         expect(event.comparisonTitle).toBe('Device comparison');
         expect(event.sourceFilesCount).toBe(2);
         expect(event.activitiesCount).toBe(5);
-        expect(event.benchmarkReviewTags).toEqual(['firmware', 'gps']);
+        expect(event.tags).toEqual(['firmware', 'gps']);
     });
 
     it('should preserve saved tool comparison metadata when cloning event details with activities', () => {
@@ -418,7 +418,7 @@ describe('AppEventService', () => {
         event.comparisonTitle = 'Device comparison';
         event.sourceFilesCount = 2;
         event.activitiesCount = 5;
-        event.benchmarkReviewTags = ['firmware', 'gps'];
+        event.tags = ['firmware', 'gps'];
         event.hasBenchmark = false;
         event.benchmarkDevices = ['garmin forerunner 265'];
         event.benchmarkLatestAt = new Date('2026-01-01T00:00:00.000Z');
@@ -432,13 +432,23 @@ describe('AppEventService', () => {
         expect(clonedEvent.comparisonTitle).toBe('Device comparison');
         expect(clonedEvent.sourceFilesCount).toBe(2);
         expect(clonedEvent.activitiesCount).toBe(5);
-        expect(clonedEvent.benchmarkReviewTags).toEqual(['firmware', 'gps']);
-        expect(clonedEvent.benchmarkReviewTags).not.toBe(event.benchmarkReviewTags);
+        expect(clonedEvent.tags).toEqual(['firmware', 'gps']);
+        expect(clonedEvent.tags).not.toBe(event.tags);
         expect(clonedEvent.hasBenchmark).toBe(false);
         expect(clonedEvent.benchmarkDevices).toEqual(['garmin forerunner 265']);
         expect(clonedEvent.benchmarkDevices).not.toBe(event.benchmarkDevices);
         expect(clonedEvent.benchmarkLatestAt?.toISOString()).toBe(event.benchmarkLatestAt?.toISOString());
         expect(clonedEvent.benchmarkLatestAt).not.toBe(event.benchmarkLatestAt);
+    });
+
+    it('includes shared tags in the event-details live fingerprint', () => {
+        const previous = createMockEvent({ name: 'Run' }) as AppEventInterface;
+        previous.tags = ['Race'];
+        const current = createMockEvent({ name: 'Run' }) as AppEventInterface;
+        current.tags = ['Recovery'];
+
+        expect((service as any).buildEventDetailsFingerprint(previous))
+            .not.toBe((service as any).buildEventDetailsFingerprint(current));
     });
 
     describe('getEventsOnceByIds', () => {

@@ -1,0 +1,38 @@
+<app-loading-overlay
+  [isLoading]="false"
+  [hasError]="showEmpty"
+  [allowErrorPassthrough]="true"
+  [errorMessage]="emptyTitle"
+  [errorHint]="emptyHint"
+  errorIcon="pool"
+  [showSkeleton]="false"
+  height="100%"
+  [style.height.%]="100"
+>
+  <section class="swim-performance-layout">
+    <header>
+      <div>
+        <h3 class="qs-dashboard-chart-title">Swimming pace</h3>
+        <p>12 weekly points · pool and open water stay separate</p>
+      </div>
+      <div class="swim-performance-status" [attr.aria-live]="isUpdating ? 'polite' : null">
+        @if (isUpdating && view.hasPace) {
+          <mat-spinner diameter="16"></mat-spinner>
+          <span>Updating</span>
+        } @else {
+          <span>{{ view.paceUnit }}</span>
+        }
+      </div>
+    </header>
+    <div #chartDiv class="swim-performance-chart" role="img" aria-label="Twelve-week pool and open-water average swimming pace chart"></div>
+    <footer>
+      @if (view.swolfContextText && view.latestSwolfText) {
+        <strong>Comparable pool SWOLF {{ view.latestSwolfText }}</strong>
+        <span>{{ view.swolfContextText }} · latest matching week</span>
+      } @else {
+        <strong>No comparable pool SWOLF</strong>
+        <span>Shown only when active lengths share one dominant stroke and pool length.</span>
+      }
+    </footer>
+  </section>
+</app-loading-overlay>

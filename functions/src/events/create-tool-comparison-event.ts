@@ -31,6 +31,7 @@ import { sportsLibVersionToCode } from '../reparse/sports-lib-reparse.service';
 import { USAGE_LIMITS } from '../../../shared/limits';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
+import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 import {
   TOOL_COMPARISON_EVENT_ID_HEADER,
   buildToolComparisonContentHashParts,
@@ -593,11 +594,14 @@ function getFirestoreAdapter(userID: string): FirestoreAdapter {
   return {
     setDoc: async (path: string[], data: unknown) => {
       const documentPath = path.join('/');
+      const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
       await setEventDocumentIfUserActive(
         userID,
         `tool_comparison_writer:${documentPath}`,
         admin.firestore().doc(documentPath),
         data,
+        undefined,
+        isEventDocument ? preserveEventTagsOnRewrite : undefined,
       );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),

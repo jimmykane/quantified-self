@@ -70,6 +70,17 @@ describe('EventCardChartActionsComponent', () => {
     expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
   });
 
+  it('uses availability and visibility terminology in the chart menus', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
+    const template = readFileSync(templatePath, 'utf8');
+
+    expect(template).toContain('Include all recorded metrics');
+    expect(template).toContain('Visible charts');
+    expect(template).toContain('Show all charts');
+    expect(template).not.toContain('Show All Data');
+    expect(template).not.toContain('Show all data types');
+  });
+
   it('should emit xAxisType changes and log analytics', async () => {
     const xAxisTypeEmitSpy = vi.spyOn(component.xAxisTypeChange, 'emit');
 
@@ -222,5 +233,18 @@ describe('EventCardChartActionsComponent', () => {
     ];
 
     expect(component.seriesBadgeLabel).toBe('2/3');
+  });
+
+  it('offers to show all charts whenever at least one available chart is hidden', () => {
+    component.seriesMenuItems = [
+      { dataType: 'power', label: 'Power', color: '#111111', visible: true },
+      { dataType: 'temperature', label: 'Temperature', color: '#222222', visible: false },
+    ];
+
+    expect(component.shouldShowAllSeriesAction).toBe(true);
+
+    component.seriesMenuItems = component.seriesMenuItems.map((item) => ({ ...item, visible: true }));
+
+    expect(component.shouldShowAllSeriesAction).toBe(false);
   });
 });

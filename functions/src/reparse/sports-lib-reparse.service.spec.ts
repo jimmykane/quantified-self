@@ -51,7 +51,7 @@ const hoisted = vi.hoisted(() => {
     const gpxImporter = { getFromString: vi.fn() };
     const tcxImporter = { getFromXML: vi.fn() };
     const suuntoJSONImporter = { getFromJSONString: vi.fn() };
-    const suuntoSMLImporter = { getFromXML: vi.fn() };
+    const suuntoSMLImporter = { getFromXML: vi.fn(), getFromJSONString: vi.fn() };
     const mergeEvents = vi.fn((events: any[]) => events[0]);
     const reGenerateStatsForEvent = vi.fn();
     const generateMissingStreamsAndStatsForActivity = vi.fn();
@@ -209,9 +209,12 @@ import {
     shouldEventBeReparsed,
     writeReparseStatus,
     buildSportsLibReparseJobId,
+    isSportsLibReparseDurationHeavy,
     isSportsLibReparseTerminalFailureMessage,
+    resolveSportsLibReparseRoutingDecision,
     getEventAndActivitiesForReparse,
     reparseEventFromOriginalFiles,
+    SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SPORTS_LIB_PRIMARY_BUCKET,
     applyAutoHealedSourceBucketMetadata,
@@ -292,6 +295,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.tcxImporter.getFromXML.mockResolvedValue(makeEvent());
         hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.suuntoSMLImporter.getFromXML.mockResolvedValue(makeEvent());
+        hoisted.suuntoSMLImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(() => { });
         hoisted.mockGenerateActivityIDFromSourceKey.mockImplementation(
             async (eventID: string, sourceActivityKey: string) => `new-${eventID}-${sourceActivityKey}`,
@@ -301,6 +305,25 @@ describe('sports-lib-reparse.service', () => {
     it('enables the event reparse scanner by default', () => {
         expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(true);
         expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist).toEqual([]);
+    });
+
+    it('routes events at or above 24h to the heavy reparse worker', () => {
+        expect(SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS).toBe(24 * 60 * 60 * 1000);
+        expect(isSportsLibReparseDurationHeavy((24 * 60 * 60 * 1000) - 1)).toBe(false);
+        expect(isSportsLibReparseDurationHeavy(24 * 60 * 60 * 1000)).toBe(true);
+
+        const incidentDurationMs = 89625000;
+        const startDate = new Date('2026-07-01T00:00:00.000Z');
+        const routingDecision = resolveSportsLibReparseRoutingDecision({
+            startDate,
+            endDate: new Date(startDate.getTime() + incidentDurationMs),
+        });
+
+        expect(routingDecision).toEqual({
+            processingTier: 'heavy',
+            heavyReason: 'duration_gte_24h',
+            eventDurationMs: incidentDurationMs,
+        });
     });
 
     it('hasPaidOrGraceAccess should return true for basic claim', async () => {
@@ -603,6 +626,20 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mergeEvents).toHaveBeenCalledTimes(1);
     });
 
+    it('parseFromOriginalFilesStrict should use the Suunto SML JSON fallback for samples-only JSON files', async () => {
+        const fallbackParsedEvent = makeEvent();
+        hoisted.suuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('missing DeviceLog'));
+        hoisted.suuntoSMLImporter.getFromJSONString.mockResolvedValueOnce(fallbackParsedEvent);
+
+        const result = await parseFromOriginalFilesStrict([
+            { path: 'users/u1/events/e1/original.json' },
+        ]);
+
+        expect(hoisted.suuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+        expect(hoisted.suuntoSMLImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+        expect(result.parsedEvents).toEqual([fallbackParsedEvent]);
+    });
+
     it('parseFromOriginalFilesStrict should stamp source keys deterministically when parsed order changes', async () => {
         const buildActivity = (input: {
             creator: string;
@@ -797,6 +834,7 @@ describe('sports-lib-reparse.service', () => {
             notes: 'notes',
             rpe: 7,
             feeling: 3,
+            tags: [' Race ', 'race', '2026'],
             name: 'new-name',
         });
         expect(event.isMerge).toBe(false);
@@ -806,6 +844,7 @@ describe('sports-lib-reparse.service', () => {
         expect(event.notes).toBe('notes');
         expect(event.rpe).toBe(7);
         expect(event.feeling).toBe(3);
+        expect(event.tags).toEqual(['Race', '2026']);
         expect(event.name).toBeUndefined();
     });
 
@@ -1296,6 +1335,38 @@ describe('sports-lib-reparse.service', () => {
         );
     });
 
+    it('persistReparsedEvent should preserve the latest event tags inside the write transaction', async () => {
+        hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
+            set: hoisted.mockTransactionSet,
+            delete: hoisted.mockTransactionDelete,
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ tags: ['Latest'] }) }),
+        }));
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            set: vi.fn().mockResolvedValue(undefined),
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+        hoisted.mockWriteAllEventData.mockImplementationOnce(async () => {
+            const ctorArgs = hoisted.eventWriterCtorArgs.at(-1);
+            await ctorArgs!.adapter.setDoc(['users', 'u1', 'events', 'e1'], { tags: ['Stale'] });
+        });
+
+        await persistReparsedEvent(
+            'u1',
+            'e1',
+            { setID: vi.fn(), getActivities: vi.fn(() => [{ getID: () => 'a1' }]) } as any,
+            {},
+            [{ id: 'a1', data: () => ({}) } as any],
+            TARGET_SPORTS_LIB_VERSION,
+        );
+
+        expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
+            expect.objectContaining({ path: 'users/u1/events/e1' }),
+            { tags: ['Latest'] },
+            undefined,
+        );
+    });
+
     it('persistReparsedEvent should skip adapter writes when account deletion starts inside persistence', async () => {
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1479,6 +1550,9 @@ describe('sports-lib-reparse.service', () => {
             '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
         )).toBe(true);
         expect(isSportsLibReparseTerminalFailureMessage('Event e1 was not found for user u1')).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage(
+            'Strict original-file reparse failed. users/u1/events/e1/original.gpx.gz: No activities found in GPX; use importRoutesFromGPX for routes',
+        )).toBe(true);
         expect(isSportsLibReparseTerminalFailureMessage('parse failed')).toBe(false);
     });
 

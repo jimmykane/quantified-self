@@ -28,7 +28,13 @@ function asArray(value: unknown): unknown[] {
 }
 
 function asNumber(value: unknown): number | null {
-    const numberValue = typeof value === 'number' ? value : Number(value);
+    if (
+        (typeof value !== 'number' && typeof value !== 'string')
+        || (typeof value === 'string' && !value.trim())
+    ) {
+        return null;
+    }
+    const numberValue = Number(value);
     return Number.isFinite(numberValue) ? numberValue : null;
 }
 

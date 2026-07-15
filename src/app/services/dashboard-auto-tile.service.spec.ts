@@ -1,86 +1,42 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import {
-  ChartDataCategoryTypes,
-  ChartDataValueTypes,
-  ChartTypes,
-  DataRecoveryTime,
-  TileSettingsInterface,
-  TileTypes,
-  TimeIntervals,
-} from '@sports-alliance/sports-lib';
-import { Subject, of, throwError } from 'rxjs';
+import { ChartDataCategoryTypes, ChartDataValueTypes, ChartTypes, DataDistance, TileTypes, TimeIntervals } from '@sports-alliance/sports-lib';
+import { Subject, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE,
-  DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
-  DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
-  DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
-  DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
-  DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
-  DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,
-  buildDashboardSleepTrendAutoTile,
 } from '../helpers/dashboard-auto-tile.helper';
-import { getDashboardPowerCurveActivityTypes } from '../helpers/dashboard-power-curve-scope.helper';
-import {
-  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
-  DASHBOARD_POWER_CURVE_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_SLEEP_TREND_CHART_TYPE,
-  getDefaultDashboardCuratedChartDefinitions,
-  getDefaultDashboardKpiChartDefinitions,
-} from '../helpers/dashboard-special-chart-types';
-import { AppUserInterface } from '../models/app-user.interface';
-import { AppEventService } from './app.event.service';
+import type { AppUserInterface } from '../models/app-user.interface';
 import { AppRouteService } from './app.route.service';
-import { AppSleepService } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
-import { DashboardAutoTileRule, DashboardAutoTileService } from './dashboard-auto-tile.service';
+import {
+  DASHBOARD_AUTO_TILE_RULES,
+  DashboardAutoTileService,
+  type DashboardAutoTileRule,
+} from './dashboard-auto-tile.service';
 import { LoggerService } from './logger.service';
 
 describe('DashboardAutoTileService', () => {
   let service: DashboardAutoTileService;
-  let mockSleepService: { watchHasAnySleepSession: ReturnType<typeof vi.fn> };
-  let mockEventService: { watchHasAnyPowerCurveEventForActivityTypes: ReturnType<typeof vi.fn> };
+  let routeEligibility$: Subject<boolean>;
   let mockRouteService: { watchHasAnyRoutePreview: ReturnType<typeof vi.fn> };
   let mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> };
   let mockSnackBar: { open: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
-  let actionSubject: Subject<void>;
+  let undo$: Subject<void>;
 
   beforeEach(() => {
-    vi.useRealTimers();
-    mockSleepService = {
-      watchHasAnySleepSession: vi.fn().mockReturnValue(of(false)),
-    };
-    mockEventService = {
-      watchHasAnyPowerCurveEventForActivityTypes: vi.fn().mockReturnValue(of(false)),
-    };
-    mockRouteService = {
-      watchHasAnyRoutePreview: vi.fn().mockReturnValue(of(false)),
-    };
-    mockUserService = {
-      updateUserProperties: vi.fn().mockResolvedValue(true),
-    };
-    actionSubject = new Subject<void>();
-    mockSnackBar = {
-      open: vi.fn().mockReturnValue({
-        onAction: () => actionSubject.asObservable(),
-      }),
-    };
-    mockLogger = {
-      error: vi.fn(),
-      warn: vi.fn(),
-    };
+    routeEligibility$ = new Subject<boolean>();
+    undo$ = new Subject<void>();
+    mockRouteService = { watchHasAnyRoutePreview: vi.fn(() => routeEligibility$.asObservable()) };
+    mockUserService = { updateUserProperties: vi.fn().mockResolvedValue(true) };
+    mockSnackBar = { open: vi.fn(() => ({ onAction: () => undo$.asObservable() })) };
+    mockLogger = { error: vi.fn(), warn: vi.fn() };
 
     TestBed.configureTestingModule({
       providers: [
         DashboardAutoTileService,
-        { provide: AppSleepService, useValue: mockSleepService },
-        { provide: AppEventService, useValue: mockEventService },
         { provide: AppRouteService, useValue: mockRouteService },
         { provide: AppUserService, useValue: mockUserService },
         { provide: MatSnackBar, useValue: mockSnackBar },
@@ -90,58 +46,13 @@ describe('DashboardAutoTileService', () => {
     service = TestBed.inject(DashboardAutoTileService);
   });
 
-  it('adds Sleep Trend once when sleep data exists', async () => {
-    const user = createUser([createCustomTile(0)]);
-
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]: true,
-    });
-
-    expect(result.persisted).toBe(true);
-    expect(result.addedRules.map(rule => rule.id)).toEqual([DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]);
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(2);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_SLEEP_TREND_CHART_TYPE);
-    expect(user.settings?.dashboardSettings?.autoTiles?.sleepTrend?.state).toBe('added');
-    expect(user.settings?.dashboardSettings?.autoTiles?.sleepTrend?.source).toBe('sleep-sync');
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expectDashboardSettingsOnlyWrite(mockUserService, user);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Sleep chart to your dashboard.', 'Undo', { duration: 7000 });
+  it('keeps the default automatic rule set limited to route previews', () => {
+    expect(DASHBOARD_AUTO_TILE_RULES).toHaveLength(1);
+    expect(DASHBOARD_AUTO_TILE_RULES[0].id).toBe(DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID);
   });
 
-  it('does not add Sleep Trend when the tile already exists', async () => {
-    const user = createUser([buildDashboardSleepTrendAutoTile(0)]);
-
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]: true,
-    });
-
-    expect(result.persisted).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
-    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockSnackBar.open).not.toHaveBeenCalled();
-  });
-
-  it('does not add Sleep Trend when it was dismissed', async () => {
-    const user = createUser([createCustomTile(0)], {
-      sleepTrend: {
-        state: 'dismissed',
-        dismissedAt: 1_777_000_000_000,
-        source: 'sleep-sync',
-      },
-    });
-
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]: true,
-    });
-
-    expect(result.persisted).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
-    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockSnackBar.open).not.toHaveBeenCalled();
-  });
-
-  it('adds Routes map once when route previews exist', async () => {
-    const user = createUser([createCustomTile(0)]);
+  it('adds a route-preview map once when route previews qualify', async () => {
+    const user = createUser();
 
     const result = await service.applyEligibleAutoTiles(user, {
       [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: true,
@@ -149,592 +60,95 @@ describe('DashboardAutoTileService', () => {
 
     expect(result.persisted).toBe(true);
     expect(result.addedRules.map(rule => rule.id)).toEqual([DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]);
-    const routeTile = user.settings?.dashboardSettings?.tiles?.[1] as any;
-    expect(routeTile).toMatchObject({
-      name: 'Routes',
-      type: TileTypes.Map,
-      mapSource: 'routes',
-      mapStyle: 'default',
-      clusterMarkers: false,
-      size: { columns: 2, rows: 1 },
-    });
-    expect(routeTile).not.toHaveProperty('eventFilters');
-    expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
-      state: 'added',
-      source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
-    });
-    expectDashboardSettingsOnlyWrite(mockUserService, user);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Routes map to your dashboard.', 'Undo', { duration: 7000 });
-  });
-
-  it('does not add Routes map when a route-preview map already exists', async () => {
-    const user = createUser([{
-      type: TileTypes.Map,
-      order: 0,
-      name: 'Routes',
-      mapSource: 'routes',
-      size: { columns: 2, rows: 2 },
-    } as any]);
-
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: true,
-    });
-
-    expect(result.persisted).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
-    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockSnackBar.open).not.toHaveBeenCalled();
-  });
-
-  it('batches multiple eligible rules into one settings write and one snackbar', async () => {
-    const user = createUser([createCustomTile(0)]);
-    const rules = [
-      createRule('first', 'First'),
-      createRule('second', 'Second'),
-    ];
-
-    const result = await service.applyEligibleAutoTiles(user, {
-      first: true,
-      second: true,
-    }, rules);
-
-    expect(result.persisted).toBe(true);
-    expect(user.settings?.dashboardSettings?.tiles?.map(tile => tile.name)).toEqual(['Base', 'First', 'Second']);
-    expect((user.settings?.dashboardSettings?.autoTiles as any).first.state).toBe('added');
-    expect((user.settings?.dashboardSettings?.autoTiles as any).second.state).toBe('added');
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added 2 dashboard tiles: First, Second.', 'Undo', { duration: 7000 });
-  });
-
-  it('adds missing default KPI tiles as one auto-tile batch', async () => {
-    const user = createUser([createCustomTile(0)]);
-    const eligibility = getDefaultDashboardKpiChartDefinitions().reduce<Record<string, boolean>>((result, definition) => {
-      result[DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType]] = true;
-      return result;
-    }, {});
-
-    const result = await service.applyEligibleAutoTiles(user, eligibility);
-
-    const kpiDefinitions = getDefaultDashboardKpiChartDefinitions();
-    expect(result.persisted).toBe(true);
-    expect(result.addedRules.map(rule => rule.id)).toEqual(kpiDefinitions.map(definition => (
-      DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType]
-    )));
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1 + kpiDefinitions.length);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
-    expect(user.settings?.dashboardSettings?.autoTiles?.kpiLoadStatus).toMatchObject({
-      state: 'added',
-      source: 'default-kpi',
-    });
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 6 dashboard tiles: Load Status, Form Now, Fitness Trend, and 3 more.',
-      'Undo',
-      { duration: 7000 },
-    );
-  });
-
-  it('adds missing lean default curated tiles as one auto-tile batch', async () => {
-    const user = createUser([createCustomTile(0)]);
-    const curatedDefinitions = getDefaultDashboardCuratedChartDefinitions();
-    const eligibility = curatedDefinitions.reduce<Record<string, boolean>>((result, definition) => {
-      result[DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[definition.chartType]] = true;
-      return result;
-    }, {});
-
-    const result = await service.applyEligibleAutoTiles(user, eligibility);
-
-    expect(result.persisted).toBe(true);
-    expect(result.addedRules.map(rule => rule.id)).toEqual(curatedDefinitions.map(definition => (
-      DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[definition.chartType]
-    )));
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1 + curatedDefinitions.length);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).name).toBe('Form');
-    expect(user.settings?.dashboardSettings?.autoTiles?.curatedIntensityDistribution).toMatchObject({
-      state: 'added',
-      source: 'default-curated',
-    });
-    expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toBeUndefined();
-    expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toBeUndefined();
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 2 dashboard tiles: Form, Intensity Distribution.',
-      'Undo',
-      { duration: 7000 },
-    );
-  });
-
-  it('adds Cycling Power Curve with scoped event filters when eligible power data exists', async () => {
-    const user = createUser([createCustomTile(0)]);
-
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_POWER_CURVE_ID]: true,
-    });
-
-    expect(result.persisted).toBe(true);
-    expect(result.addedRules.map(rule => rule.id)).toEqual([DASHBOARD_AUTO_TILE_POWER_CURVE_ID]);
-    const powerCurveTile = user.settings?.dashboardSettings?.tiles?.[1] as any;
-    expect(powerCurveTile).toMatchObject({
-      name: 'Cycling Power Curve',
-      chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
-      size: { columns: 2, rows: 1 },
-      eventFilters: {
-        range: '1y',
-        activityTypes: getDashboardPowerCurveActivityTypes('cycling'),
-      },
-    });
-    expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toMatchObject({
-      state: 'added',
-      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
-    });
-    expectDashboardSettingsOnlyWrite(mockUserService, user);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Cycling Power Curve chart to your dashboard.', 'Undo', { duration: 7000 });
-  });
-
-  it('does not add Recovery when a legacy recovery metric tile already exists', async () => {
-    const user = createUser([{
-      ...createCustomTile(0),
-      name: 'Recovery',
-      chartType: ChartTypes.LinesVertical,
-      dataType: DataRecoveryTime.type,
+    expect(user.settings?.dashboardSettings?.tiles).toMatchObject([{
+      name: 'Routes', type: TileTypes.Map, mapSource: 'routes', size: { columns: 2, rows: 1 },
     }]);
-
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID]: true,
+    expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
+      state: 'added', source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
     });
-
-    expect(result.persisted).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
-    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockSnackBar.open).not.toHaveBeenCalled();
   });
 
-  it('undo removes the whole auto-added batch and marks those rules dismissed', async () => {
-    const user = createUser([createCustomTile(0)]);
-    const rules = [
-      createRule('first', 'First'),
-      createRule('second', 'Second'),
-    ];
-    await service.applyEligibleAutoTiles(user, {
-      first: true,
-      second: true,
-    }, rules);
-    mockUserService.updateUserProperties.mockClear();
+  it('does not auto-add a KPI, curated chart, sleep, or power curve from unrelated eligibility', async () => {
+    const user = createUser();
 
-    actionSubject.next();
+    const result = await service.applyEligibleAutoTiles(user, {
+      kpiLoadStatus: true,
+      curatedForm: true,
+      sleepTrend: true,
+      powerCurve: true,
+    });
+
+    expect(result).toEqual({ addedRules: [], persisted: false });
+    expect(user.settings?.dashboardSettings?.tiles).toEqual([]);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('watches route-preview eligibility without starting unrelated dashboard watchers', async () => {
+    const user = createUser();
+    const subscription = service.watchForDashboard(user);
+
+    expect(mockRouteService.watchHasAnyRoutePreview).toHaveBeenCalledWith('user-1');
+    routeEligibility$.next(true);
     await flushMicrotasks();
 
-    expect(user.settings?.dashboardSettings?.tiles?.map(tile => tile.name)).toEqual(['Base']);
-    expect(user.settings?.dashboardSettings?.tiles?.[0].order).toBe(0);
-    expect((user.settings?.dashboardSettings?.autoTiles as any).first.state).toBe('dismissed');
-    expect((user.settings?.dashboardSettings?.autoTiles as any).second.state).toBe('dismissed');
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expectDashboardSettingsOnlyWrite(mockUserService, user);
+    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
+    expect((user.settings?.dashboardSettings?.tiles?.[0] as { mapSource?: string }).mapSource).toBe('routes');
+    subscription.unsubscribe();
   });
 
-  it('does not auto-add Recovery as part of the lean default auto-tile set', async () => {
-    const user = createUser([createCustomTile(0)]);
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID]: true,
-    });
+  it('undoes a route-preview auto tile by dismissing only that explicit suggestion', async () => {
+    const user = createUser();
+    await service.applyEligibleAutoTiles(user, { [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: true });
 
-    expect(result.persisted).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles?.map(tile => tile.name)).toEqual(['Base']);
-    expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toBeUndefined();
-    expect(user.settings?.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBeUndefined();
-    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    undo$.next();
+    await flushMicrotasks();
+
+    expect(user.settings?.dashboardSettings?.tiles).toEqual([]);
+    expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({ state: 'dismissed' });
   });
 
-  it('rolls back in-memory settings when persistence fails', async () => {
-    const user = createUser([createCustomTile(0)]);
-    mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('failed'));
+  it('rolls back a route-preview addition when persistence fails', async () => {
+    mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('write failed'));
+    const user = createUser();
 
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]: true,
-    });
+    const result = await service.applyEligibleAutoTiles(user, { [DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_ID]: true });
 
-    expect(result.persisted).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles?.map(tile => tile.name)).toEqual(['Base']);
+    expect(result).toEqual({ addedRules: [], persisted: false });
+    expect(user.settings?.dashboardSettings?.tiles).toEqual([]);
     expect(user.settings?.dashboardSettings?.autoTiles).toEqual({});
-    expect(mockSnackBar.open).not.toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalled();
   });
 
-  it('rolls back the legacy recovery flag when a default curated add fails', async () => {
-    const user = createUser([createCustomTile(0)]);
-    user.settings!.dashboardSettings!.dismissedCuratedRecoveryNowTile = true;
-    mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('failed'));
+  it('still supports an explicitly supplied manual rule for reusable service behavior', async () => {
+    const customRule: DashboardAutoTileRule = {
+      id: 'manual-rule', label: 'Manual', source: 'test',
+      qualifies: eligibility => eligibility['manual-rule'] === true,
+      isPresent: tiles => tiles.some(tile => tile.name === 'Manual'),
+      createTile: order => ({
+        name: 'Manual', order, type: TileTypes.Chart, chartType: ChartTypes.ColumnsVertical,
+        dataType: DataDistance.type, dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType, dataTimeInterval: TimeIntervals.Daily,
+        size: { columns: 1, rows: 1 },
+      }),
+    };
+    const user = createUser();
 
-    const result = await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID]: true,
-    });
+    const result = await service.applyEligibleAutoTiles(user, { 'manual-rule': true }, [customRule]);
 
-    expect(result.persisted).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles?.map(tile => tile.name)).toEqual(['Base']);
-    expect(user.settings?.dashboardSettings?.autoTiles).toEqual({});
-    expect(user.settings?.dashboardSettings?.dismissedCuratedRecoveryNowTile).toBe(true);
-  });
-
-  it('preserves nested tile event filters when rolling back a failed add', async () => {
-    const baseTile = createCustomTile(0) as TileSettingsInterface & { eventFilters?: { range: string; activityTypes: unknown[] } };
-    baseTile.eventFilters = { range: '30d', activityTypes: [] };
-    const user = createUser([baseTile]);
-    mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('failed'));
-
-    await service.applyEligibleAutoTiles(user, {
-      [DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]: true,
-    });
-
-    expect((user.settings?.dashboardSettings?.tiles?.[0] as any).eventFilters).toEqual({
-      range: '30d',
-      activityTypes: [],
-    });
-  });
-
-  it('watches eligibility and applies Sleep Trend plus default KPI rules together', async () => {
-    const sleepEligibility = new Subject<boolean>();
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
-    const user = createUser([createCustomTile(0)]);
-
-    const subscription = service.watchForDashboard(user);
-    sleepEligibility.next(true);
-    await flushMicrotasks();
-
-    expect(mockSleepService.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
-    expect(mockEventService.watchHasAnyPowerCurveEventForActivityTypes).toHaveBeenCalledWith(
-      'user-1',
-      getDashboardPowerCurveActivityTypes('cycling'),
-    );
-    expect(mockEventService.watchHasAnyPowerCurveEventForActivityTypes).toHaveBeenCalledWith(
-      'user-1',
-      getDashboardPowerCurveActivityTypes('running'),
-    );
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(10);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).chartType).toBe(DASHBOARD_SLEEP_TREND_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[2] as any).name).toBe('Form');
-    expect((user.settings?.dashboardSettings?.tiles?.[3] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[4] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 9 dashboard tiles: Sleep, Form, Intensity Distribution, and 6 more.',
-      'Undo',
-      { duration: 7000 },
-    );
-    subscription.unsubscribe();
-  });
-
-  it('applies default curated and KPI rules without waiting for sleep eligibility to emit', async () => {
-    const sleepEligibility = new Subject<boolean>();
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
-    const user = createUser([createCustomTile(0)]);
-
-    const subscription = service.watchForDashboard(user);
-    await flushMicrotasks();
-
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(9);
-    expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
-      (tile as any).chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE
-    ))).toBe(false);
-    expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
-      (tile as any).chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
-    ))).toBe(false);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).name).toBe('Form');
-    expect((user.settings?.dashboardSettings?.tiles?.[2] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
-    expect((user.settings?.dashboardSettings?.tiles?.[3] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 8 dashboard tiles: Form, Intensity Distribution, Load Status, and 5 more.',
-      'Undo',
-      { duration: 7000 },
-    );
-    subscription.unsubscribe();
-  });
-
-  it('adds Cycling Power Curve from the scoped eligibility watcher after cycling power data qualifies', async () => {
-    const sleepEligibility = new Subject<boolean>();
-    const cyclingPowerCurveEligibility = new Subject<boolean>();
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
-    mockEventService.watchHasAnyPowerCurveEventForActivityTypes
-      .mockReturnValueOnce(cyclingPowerCurveEligibility.asObservable())
-      .mockReturnValueOnce(of(false));
-    const user = createUser([createCustomTile(0)]);
-
-    const subscription = service.watchForDashboard(user);
-    await flushMicrotasks();
-    mockUserService.updateUserProperties.mockClear();
-    mockSnackBar.open.mockClear();
-
-    cyclingPowerCurveEligibility.next(true);
-    await flushMicrotasks();
-
-    expect(mockEventService.watchHasAnyPowerCurveEventForActivityTypes).toHaveBeenNthCalledWith(
-      1,
-      'user-1',
-      getDashboardPowerCurveActivityTypes('cycling'),
-    );
-    const powerCurveTile = user.settings?.dashboardSettings?.tiles?.find(tile => (
-      (tile as any).chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
-    )) as any;
-    expect(powerCurveTile).toMatchObject({
-      name: 'Cycling Power Curve',
-      size: { columns: 2, rows: 1 },
-      eventFilters: {
-        range: '1y',
-        activityTypes: getDashboardPowerCurveActivityTypes('cycling'),
-      },
-    });
-    expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toMatchObject({
-      state: 'added',
-      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
-    });
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Cycling Power Curve chart to your dashboard.', 'Undo', { duration: 7000 });
-    subscription.unsubscribe();
-  });
-
-  it('adds Routes map from the route preview eligibility watcher', async () => {
-    const sleepEligibility = new Subject<boolean>();
-    const routePreviewEligibility = new Subject<boolean>();
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
-    mockRouteService.watchHasAnyRoutePreview.mockReturnValueOnce(routePreviewEligibility.asObservable());
-    const user = createUser([createCustomTile(0)]);
-
-    const subscription = service.watchForDashboard(user);
-    await flushMicrotasks();
-    mockUserService.updateUserProperties.mockClear();
-    mockSnackBar.open.mockClear();
-
-    routePreviewEligibility.next(true);
-    await flushMicrotasks();
-
-    expect(mockRouteService.watchHasAnyRoutePreview).toHaveBeenCalledWith('user-1');
-    const routeTile = user.settings?.dashboardSettings?.tiles?.find(tile => (
-      tile.type === TileTypes.Map && (tile as any).mapSource === 'routes'
-    )) as any;
-    expect(routeTile).toMatchObject({
-      name: 'Routes',
-      size: { columns: 2, rows: 1 },
-      clusterMarkers: false,
-      showRouteEndpointMarkers: true,
-    });
-    expect(user.settings?.dashboardSettings?.autoTiles?.routePreview).toMatchObject({
-      state: 'added',
-      source: DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
-    });
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Routes map to your dashboard.', 'Undo', { duration: 7000 });
-    subscription.unsubscribe();
-  });
-
-  it('adds Running Power Curve independently from Cycling Power Curve', async () => {
-    const sleepEligibility = new Subject<boolean>();
-    const runningPowerCurveEligibility = new Subject<boolean>();
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
-    mockEventService.watchHasAnyPowerCurveEventForActivityTypes
-      .mockReturnValueOnce(of(false))
-      .mockReturnValueOnce(runningPowerCurveEligibility.asObservable());
-    const user = createUser([createCustomTile(0)], {
-      [DASHBOARD_AUTO_TILE_POWER_CURVE_ID]: {
-        state: 'dismissed',
-        source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
-      },
-    });
-
-    const subscription = service.watchForDashboard(user);
-    await flushMicrotasks();
-    mockUserService.updateUserProperties.mockClear();
-    mockSnackBar.open.mockClear();
-
-    runningPowerCurveEligibility.next(true);
-    await flushMicrotasks();
-
-    const powerCurveTile = user.settings?.dashboardSettings?.tiles?.find(tile => (
-      (tile as any).chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
-    )) as any;
-    expect(powerCurveTile).toMatchObject({
-      name: 'Running Power Curve',
-      size: { columns: 2, rows: 1 },
-      eventFilters: {
-        range: '1y',
-        activityTypes: getDashboardPowerCurveActivityTypes('running'),
-      },
-    });
-    expect(user.settings?.dashboardSettings?.autoTiles?.runningPowerCurve).toMatchObject({
-      state: 'added',
-      source: DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
-    });
-    expect(user.settings?.dashboardSettings?.autoTiles?.powerCurve).toMatchObject({
-      state: 'dismissed',
-      source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
-    });
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith('Added Running Power Curve chart to your dashboard.', 'Undo', { duration: 7000 });
-    subscription.unsubscribe();
-  });
-
-  it('respects the legacy Recovery dismissal while still applying other default curated and KPI rules', async () => {
-    const sleepEligibility = new Subject<boolean>();
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
-    const user = createUser([createCustomTile(0)]);
-    user.settings!.dashboardSettings!.dismissedCuratedRecoveryNowTile = true;
-
-    const subscription = service.watchForDashboard(user);
-    await flushMicrotasks();
-
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(9);
-    expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
-      (tile as any).chartType === DASHBOARD_RECOVERY_NOW_CHART_TYPE
-    ))).toBe(false);
-    expect((user.settings?.dashboardSettings?.tiles?.[1] as any).name).toBe('Form');
-    expect((user.settings?.dashboardSettings?.tiles?.[2] as any).chartType).toBe(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE);
-    expect(user.settings?.dashboardSettings?.autoTiles?.curatedRecoveryNow).toBeUndefined();
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Added 8 dashboard tiles: Form, Intensity Distribution, Load Status, and 5 more.',
-      'Undo',
-      { duration: 7000 },
-    );
-    subscription.unsubscribe();
-  });
-
-  it('does not apply a scheduled auto-tile batch after the watcher is unsubscribed', async () => {
-    const sleepEligibility = new Subject<boolean>();
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(sleepEligibility.asObservable());
-    const user = createUser([createCustomTile(0)]);
-
-    const subscription = service.watchForDashboard(user);
-    subscription.unsubscribe();
-    await flushMicrotasks();
-
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(1);
-    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockSnackBar.open).not.toHaveBeenCalled();
-  });
-
-  it('replays the latest eligibility when an auto-tile write is already in flight', async () => {
-    const user = createUser([createCustomTile(0)]);
-    const kpiEligibility = getDefaultDashboardKpiChartDefinitions().reduce<Record<string, boolean>>((result, definition) => {
-      result[DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE[definition.chartType]] = true;
-      return result;
-    }, {});
-    let resolveFirstWrite: ((value: unknown) => void) | null = null;
-    mockUserService.updateUserProperties
-      .mockImplementationOnce(() => new Promise(resolve => {
-        resolveFirstWrite = resolve;
-      }))
-      .mockResolvedValue(true);
-
-    const firstApply = service.applyEligibleAutoTiles(user, kpiEligibility);
-    const queuedApplyResult = await service.applyEligibleAutoTiles(user, {
-      ...kpiEligibility,
-      [DASHBOARD_AUTO_TILE_SLEEP_TREND_ID]: true,
-    });
-
-    expect(queuedApplyResult.persisted).toBe(false);
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
-
-    resolveFirstWrite?.(true);
-    await firstApply;
-    await flushMicrotasks();
-
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(2);
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(8);
-    expect(user.settings?.dashboardSettings?.tiles?.some(tile => (
-      (tile as any).chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE
-    ))).toBe(true);
-    expect(user.settings?.dashboardSettings?.autoTiles?.sleepTrend).toMatchObject({
-      state: 'added',
-      source: 'sleep-sync',
-    });
-  });
-
-  it('still applies default KPI rules when sleep eligibility watch fails', async () => {
-    mockSleepService.watchHasAnySleepSession.mockReturnValueOnce(throwError(() => new Error('watch failed')));
-    const user = createUser([createCustomTile(0)]);
-
-    service.watchForDashboard(user);
-    await flushMicrotasks();
-
-    expect(mockLogger.warn).toHaveBeenCalled();
-    expect(user.settings?.dashboardSettings?.tiles).toHaveLength(9);
-    expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+    expect(result.persisted).toBe(true);
+    expect(user.settings?.dashboardSettings?.tiles?.[0]?.name).toBe('Manual');
   });
 });
 
-function createUser(
-  tiles: TileSettingsInterface[],
-  autoTiles: Record<string, any> = {},
-): AppUserInterface {
+function createUser(): AppUserInterface {
   return {
     uid: 'user-1',
-    settings: {
-      appSettings: { theme: 'dark' } as any,
-      unitSettings: { startOfTheWeek: 1 } as any,
-      dashboardSettings: {
-        tiles,
-        autoTiles,
-      },
-    },
+    settings: { dashboardSettings: { tiles: [], autoTiles: {} } },
   } as AppUserInterface;
 }
 
-function expectDashboardSettingsOnlyWrite(
-  mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> },
-  user: AppUserInterface,
-): void {
-  const calls = mockUserService.updateUserProperties.mock.calls;
-  const dashboardSettings = user.settings?.dashboardSettings;
-  const dashboardSettingsPatch: Record<string, unknown> = {
-    tiles: dashboardSettings?.tiles || [],
-    autoTiles: dashboardSettings?.autoTiles || {},
-  };
-  if (dashboardSettings?.dismissedCuratedRecoveryNowTile !== undefined) {
-    dashboardSettingsPatch.dismissedCuratedRecoveryNowTile = dashboardSettings.dismissedCuratedRecoveryNowTile;
-  }
-  const settingsPayload = calls[calls.length - 1][1].settings;
-  expect(settingsPayload).toEqual({
-    dashboardSettings: dashboardSettingsPatch,
-  });
-  expect(settingsPayload.appSettings).toBeUndefined();
-  expect(settingsPayload.unitSettings).toBeUndefined();
-}
-
-function createCustomTile(order: number): TileSettingsInterface {
-  return {
-    name: 'Base',
-    type: TileTypes.Chart,
-    order,
-    size: { columns: 1, rows: 1 },
-    chartType: ChartTypes.ColumnsVertical,
-    dataType: 'Distance',
-    dataValueType: ChartDataValueTypes.Total,
-    dataCategoryType: ChartDataCategoryTypes.DateType,
-    dataTimeInterval: TimeIntervals.Daily,
-  } as TileSettingsInterface;
-}
-
-function createRule(id: string, label: string): DashboardAutoTileRule {
-  return {
-    id,
-    label,
-    source: 'test',
-    qualifies: (eligibility) => eligibility[id] === true,
-    isPresent: (tiles) => tiles.some(tile => tile.name === label),
-    createTile: (order) => ({
-      name: label,
-      type: TileTypes.Chart,
-      order,
-      size: { columns: 1, rows: 1 },
-      chartType: ChartTypes.ColumnsVertical,
-      dataType: label,
-      dataValueType: ChartDataValueTypes.Total,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Daily,
-    } as TileSettingsInterface),
-  };
-}
-
 async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }

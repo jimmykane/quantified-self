@@ -21,11 +21,11 @@
   }
 
   @if (showSeriesMenu) {
-  <span [matTooltip]="seriesMenuSummary || 'Series visibility'">
+  <span [matTooltip]="seriesMenuSummary || 'Visible charts'">
     <button mat-icon-button type="button"
       class="qs-action-menu-icon-button event-chart-actions__icon-button"
       [matMenuTriggerFor]="seriesMenu"
-      aria-label="Series visibility">
+      aria-label="Visible charts">
       <mat-icon
         class="event-chart-actions__series-icon qs-app-badge qs-app-badge--large"
         [matBadge]="seriesBadgeLabel"
@@ -50,6 +50,7 @@
 
 <mat-menu #seriesMenu="matMenu" xPosition="before" class="qs-menu-panel">
   <div class="series-menu" (click)="$event.stopPropagation()">
+    <p class="series-menu__header">Visible charts</p>
     @for (item of seriesMenuItems; track item.dataType) {
     <button type="button" class="series-menu__item" [attr.aria-pressed]="item.visible"
       (click)="$event.stopPropagation(); onSeriesVisibilityToggle(item.dataType, !item.visible)">
@@ -61,7 +62,7 @@
     @if (shouldShowAllSeriesAction) {
     <div class="series-menu__actions">
       <button mat-stroked-button type="button" (click)="$event.stopPropagation(); onShowAllSeries()">
-        Show all data types
+        Show all charts
       </button>
     </div>
     }
@@ -121,8 +122,9 @@
 
   <section mat-menu-item>
     <mat-slide-toggle [checked]="showAllData" [disabled]="!user"
+      matTooltip="Adds every chartable metric recorded by the activity to Visible charts without changing which charts are visible."
       (click)="$event.stopPropagation()" (change)="onShowAllDataToggle($event.checked)">
-      Show All Data
+      Include all recorded metrics
     </mat-slide-toggle>
   </section>
 </mat-menu>

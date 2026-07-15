@@ -12,12 +12,12 @@ import {
 describe('BenchmarkReviewTagsDialogComponent', () => {
   let fixture: ComponentFixture<BenchmarkReviewTagsDialogComponent>;
   let component: BenchmarkReviewTagsDialogComponent;
-  let dialogRefMock: { close: ReturnType<typeof vi.fn> };
+  let dialogRefMock: { close: ReturnType<typeof vi.fn>; disableClose: boolean };
   let snackBarMock: { open: ReturnType<typeof vi.fn> };
   let dialogData: BenchmarkReviewTagsDialogData;
 
   beforeEach(async () => {
-    dialogRefMock = { close: vi.fn() };
+    dialogRefMock = { close: vi.fn(), disableClose: false };
     snackBarMock = { open: vi.fn() };
     dialogData = {
       title: 'Comparison tags',
@@ -68,6 +68,19 @@ describe('BenchmarkReviewTagsDialogComponent', () => {
     expect(removeIcon?.textContent?.trim()).toBe('close');
   });
 
+  it('labels the shared chip grid with the active dialog context', () => {
+    const chipGrid = fixture.nativeElement.querySelector('mat-chip-grid') as HTMLElement | null;
+
+    expect(chipGrid?.getAttribute('aria-label')).toBe('Comparison tags');
+  });
+
+  it('exposes the persisted tag length limit on the input', () => {
+    const input = fixture.nativeElement.querySelector('input[placeholder="Add tag"]') as HTMLInputElement;
+
+    expect(input.maxLength).toBe(32);
+    expect(fixture.nativeElement.textContent).toContain('32 characters per tag');
+  });
+
   it('saves staged tags and closes with normalized saved tags', async () => {
     component.addTagFromInput({
       value: ' route ',
@@ -93,6 +106,25 @@ describe('BenchmarkReviewTagsDialogComponent', () => {
     expect(dialogRefMock.close).not.toHaveBeenCalled();
     expect(snackBarMock.open).toHaveBeenCalledWith('write failed', undefined, { duration: 3000 });
     expect(component.isSaving()).toBe(false);
+    expect(dialogRefMock.disableClose).toBe(false);
+  });
+
+  it('prevents escape and backdrop close while saving', async () => {
+    let resolveSave!: (tags: string[]) => void;
+    dialogData.save = vi.fn(() => new Promise<string[]>(resolve => {
+      resolveSave = resolve;
+    }));
+    component.addTagFromInput({ value: 'route', chipInput: { clear: vi.fn() } } as never);
+
+    const applyPromise = component.apply();
+    expect(component.isSaving()).toBe(true);
+    expect(dialogRefMock.disableClose).toBe(true);
+
+    resolveSave(['firmware', 'route']);
+    await applyPromise;
+
+    expect(dialogRefMock.disableClose).toBe(false);
+    expect(dialogRefMock.close).toHaveBeenCalledWith(['firmware', 'route']);
   });
 
   it('closes without saving when tags are unchanged', async () => {

@@ -1,28 +1,27 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ServiceNames } from '@sports-alliance/sports-lib';
 import { resetCloudTaskQueueDepthCache, resetCloudTasksClient } from './cloud-tasks';
 
-// Mock @google-cloud/tasks
-const { mockCloudTasksClient, CloudTasksClientSpy } = vi.hoisted(() => {
+const hoisted = vi.hoisted(() => {
     const mockCloudTasksClient = {
         queuePath: vi.fn(),
         getQueue: vi.fn(),
         getTask: vi.fn(),
-        createTask: vi.fn(),
-        close: vi.fn(),
     };
     const CloudTasksClientSpy = vi.fn(() => mockCloudTasksClient);
-    return { mockCloudTasksClient, CloudTasksClientSpy };
+    const mockTaskQueue = { enqueue: vi.fn() };
+    const mockFunctions = { taskQueue: vi.fn(() => mockTaskQueue) };
+    return { mockCloudTasksClient, CloudTasksClientSpy, mockTaskQueue, mockFunctions };
 });
 
-vi.mock('@google-cloud/tasks', () => {
-    return {
-        v2beta3: {
-            CloudTasksClient: CloudTasksClientSpy,
-        }
-    };
-});
+vi.mock('@google-cloud/tasks', () => ({
+    v2beta3: { CloudTasksClient: hoisted.CloudTasksClientSpy },
+}));
 
-// Mock config
+vi.mock('firebase-admin/functions', () => ({
+    getFunctions: () => hoisted.mockFunctions,
+}));
+
 vi.mock('../config', () => ({
     config: {
         cloudtasks: {
@@ -34,15 +33,15 @@ vi.mock('../config', () => ({
             routeSyncQueue: 'processRouteSyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
+            sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
+            derivedMetricsIngressQueue: 'processDerivedMetricsIngressTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
-            queue: 'processWorkoutTask',
-            serviceAccountEmail: 'sa@test.com'
-        }
-    }
+            derivedMetricsIngressBucketSeconds: 30,
+        },
+    },
 }));
 
-// Mock logger
 vi.mock('firebase-functions/logger', () => ({
     info: vi.fn(),
     error: vi.fn(),
@@ -52,659 +51,176 @@ vi.mock('firebase-functions/logger', () => ({
 describe('Cloud Tasks Utils', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.unstubAllGlobals();
+        delete process.env.CLOUD_TASKS_EMULATOR_HOST;
         resetCloudTaskQueueDepthCache();
         resetCloudTasksClient();
-        // Setup default mock behaviors
-        mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
-        CloudTasksClientSpy.mockClear();
+        hoisted.mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
+        hoisted.mockTaskQueue.enqueue.mockResolvedValue(undefined);
     });
 
-    describe('getCloudTaskQueueDepth', () => {
-        it('should return number of tasks using getQueue stats', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
+    afterEach(() => {
+        delete process.env.CLOUD_TASKS_EMULATOR_HOST;
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+    });
 
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                {
-                    stats: {
-                        tasksCount: '42'
-                    }
-                }
-            ]);
-
-            const depth = await getCloudTaskQueueDepth();
-
-            expect(depth).toBe(42);
-            expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'processWorkoutTask');
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledWith({
-                name: 'projects/p/locations/l/queues/q',
-                readMask: { paths: ['stats', 'state'] }
-            });
-        });
-
-        it('should return queue depth for a specific queue', async () => {
-            const { getCloudTaskQueueDepthForQueue } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                { stats: { tasksCount: '17' } }
-            ]);
-
-            const depth = await getCloudTaskQueueDepthForQueue('processSportsLibReparseTask');
-
-            expect(depth).toBe(17);
-            expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'processSportsLibReparseTask');
-        });
-
-        it('should return queue runtime stats with enabled state', async () => {
+    describe('queue monitoring', () => {
+        it('reads and caches production queue state through the Cloud Tasks client', async () => {
             const { getCloudTaskQueueStatsForQueue } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                {
-                    stats: { tasksCount: '7' },
-                    state: 2,
-                }
+            hoisted.mockCloudTasksClient.getQueue.mockResolvedValue([
+                { stats: { tasksCount: '7' }, state: 2 },
             ]);
 
-            const stats = await getCloudTaskQueueStatsForQueue('processSportsLibReparseTask');
-
-            expect(stats).toEqual({
+            await expect(getCloudTaskQueueStatsForQueue('processWorkoutTask')).resolves.toEqual({
                 pending: 7,
                 state: 'PAUSED',
                 enabled: false,
             });
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledWith({
-                name: 'projects/p/locations/l/queues/q',
-                readMask: { paths: ['stats', 'state'] }
-            });
-        });
+            await getCloudTaskQueueStatsForQueue('processWorkoutTask');
 
-        it('should cache queue depth independently by queue id', async () => {
-            const { getCloudTaskQueueDepthForQueue } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue
-                .mockResolvedValueOnce([{ stats: { tasksCount: '10' } }])
-                .mockResolvedValueOnce([{ stats: { tasksCount: '20' } }]);
-
-            const workoutDepth = await getCloudTaskQueueDepthForQueue('processWorkoutTask');
-            const reparseDepth = await getCloudTaskQueueDepthForQueue('processSportsLibReparseTask');
-            const workoutDepthCached = await getCloudTaskQueueDepthForQueue('processWorkoutTask');
-
-            expect(workoutDepth).toBe(10);
-            expect(reparseDepth).toBe(20);
-            expect(workoutDepthCached).toBe(10);
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(2);
-        });
-
-        it('should use cached value if called multiple times within TTL', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                { stats: { tasksCount: '10' } }
-            ]);
-
-            const depth1 = await getCloudTaskQueueDepth();
-            expect(depth1).toBe(10);
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
-
-            // Second call should return cached value without hitting API
-            const depth2 = await getCloudTaskQueueDepth();
-            expect(depth2).toBe(10);
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
-        });
-
-        it('should bypass cache when forceRefresh is true', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValueOnce([
-                { stats: { tasksCount: '10' } }
-            ]);
-
-            await getCloudTaskQueueDepth(); // Fill cache
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
-
-            mockCloudTasksClient.getQueue.mockResolvedValueOnce([
-                { stats: { tasksCount: '20' } }
-            ]);
-
-            // Call with forceRefresh = true
-            const depth = await getCloudTaskQueueDepth(true);
-            expect(depth).toBe(20);
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(2);
-        });
-
-        it('should return 0 if tasksCount is missing', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                {
-                    stats: {}
-                }
-            ]);
-
-            const depth = await getCloudTaskQueueDepth();
-            expect(depth).toBe(0);
-        });
-
-        it('should return 0 if stats is missing', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                {}
-            ]);
-
-            const depth = await getCloudTaskQueueDepth();
-            expect(depth).toBe(0);
-        });
-
-        it('should throw error if projectId is missing', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-            const { config } = await import('../config');
-
-            const originalProjectId = config.cloudtasks.projectId;
-            (config.cloudtasks as unknown as Record<string, unknown>).projectId = undefined;
-
-            await expect(getCloudTaskQueueDepth()).rejects.toThrow('Project ID is not defined in config');
-
-            (config.cloudtasks as unknown as Record<string, unknown>).projectId = originalProjectId;
-        });
-
-        it('should handle large task counts', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                { stats: { tasksCount: '999999' } }
-            ]);
-
-            const depth = await getCloudTaskQueueDepth();
-            expect(depth).toBe(999999);
-        });
-
-        it('should handle tasksCount as number type', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                { stats: { tasksCount: 123 } }
-            ]);
-
-            const depth = await getCloudTaskQueueDepth();
-            expect(depth).toBe(123);
-        });
-
-        it('should handle tasksCount as BigInt string', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                { stats: { tasksCount: '9007199254740991' } } // Max safe integer
-            ]);
-
-            const depth = await getCloudTaskQueueDepth();
-            expect(depth).toBe(9007199254740991);
-        });
-
-        it('should propagate API errors', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            const apiError = new Error('API Error');
-            mockCloudTasksClient.getQueue.mockRejectedValue(apiError);
-
-            await expect(getCloudTaskQueueDepth()).rejects.toThrow('API Error');
-        });
-
-        it('should update cache after forceRefresh', async () => {
-            const { getCloudTaskQueueDepth } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.getQueue.mockResolvedValueOnce([
-                { stats: { tasksCount: '10' } }
-            ]);
-            await getCloudTaskQueueDepth();
-
-            mockCloudTasksClient.getQueue.mockResolvedValueOnce([
-                { stats: { tasksCount: '50' } }
-            ]);
-            await getCloudTaskQueueDepth(true);
-
-            // Third call should use new cached value
-            const depth = await getCloudTaskQueueDepth();
-            expect(depth).toBe(50);
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(2);
-        });
-
-
-    });
-
-    describe('enqueueWorkoutTask', () => {
-        it('should enqueue task with correct payload', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            const dateCreated = 1000;
-            const result = await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', dateCreated);
-
-            expect(result).toBe(true);
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-                parent: 'projects/p/locations/l/queues/q',
-                task: expect.objectContaining({
-                    name: 'projects/p/locations/l/queues/q/tasks/garminAPI-item-123-1000',
-                    httpRequest: expect.objectContaining({
-                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/processWorkoutTask'),
-                        httpMethod: 'POST',
-                        body: expect.any(String),
-                    })
-                })
-            });
-        });
-
-        it('should include scheduleTime if delay is provided', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000, 60);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    task: expect.objectContaining({
-                        scheduleTime: expect.objectContaining({
-                            seconds: expect.any(Number)
-                        })
-                    })
-                })
+            expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
+                'test-project',
+                'test-location',
+                'processWorkoutTask',
             );
+            expect(hoisted.mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
         });
 
-        it('should treat ALREADY_EXISTS as enqueued when the existing workout task is still live', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const error = new Error('Already Exists');
-            (error as Error & { code: number }).code = 6;
-            mockCloudTasksClient.createTask.mockRejectedValue(error);
-            mockCloudTasksClient.getTask.mockResolvedValue([{ name: 'projects/p/locations/l/queues/q/tasks/garminAPI-item-123-1000' }]);
-
-            const result = await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000);
-
-            expect(result).toBe(true);
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(1);
-            expect(mockCloudTasksClient.getTask).toHaveBeenCalledWith({
-                name: 'projects/p/locations/l/queues/q/tasks/garminAPI-item-123-1000',
-            });
-        });
-
-        it('should enqueue a recovery workout task when ALREADY_EXISTS is only a stale task-name reservation', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const alreadyExistsError = new Error('Already Exists');
-            (alreadyExistsError as Error & { code: number }).code = 6;
-            const notFoundError = new Error('NOT_FOUND');
-            (notFoundError as Error & { code: number }).code = 5;
-            mockCloudTasksClient.createTask
-                .mockRejectedValueOnce(alreadyExistsError)
-                .mockResolvedValueOnce([{ name: 'recovery-task-name' }]);
-            mockCloudTasksClient.getTask.mockRejectedValueOnce(notFoundError);
-
-            const result = await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000, undefined, {
-                recoveryTaskKey: 7,
-            });
-
-            expect(result).toBe(true);
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
-            const firstTaskName = mockCloudTasksClient.createTask.mock.calls[0][0].task.name;
-            const recoveryTaskName = mockCloudTasksClient.createTask.mock.calls[1][0].task.name;
-            expect(firstTaskName).toBe('projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000');
-            expect(recoveryTaskName).toBe('projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000-dedupe-recovery-7');
-            expect(recoveryTaskName).not.toBe(firstTaskName);
-        });
-
-        it('should treat ALREADY_EXISTS recovery as enqueued when the deterministic recovery task is still live', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const alreadyExistsError = new Error('Already Exists');
-            (alreadyExistsError as Error & { code: number }).code = 6;
-            const notFoundError = new Error('NOT_FOUND');
-            (notFoundError as Error & { code: number }).code = 5;
-            mockCloudTasksClient.createTask.mockRejectedValue(alreadyExistsError);
-            mockCloudTasksClient.getTask
-                .mockRejectedValueOnce(notFoundError)
-                .mockResolvedValueOnce([{ name: 'projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000-dedupe-recovery-7' }]);
-
-            const result = await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000, undefined, {
-                recoveryTaskKey: 7,
-            });
-
-            expect(result).toBe(true);
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
-            expect(mockCloudTasksClient.getTask).toHaveBeenNthCalledWith(1, {
-                name: 'projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000',
-            });
-            expect(mockCloudTasksClient.getTask).toHaveBeenNthCalledWith(2, {
-                name: 'projects/p/locations/l/queues/q/tasks/suuntoApp-item-123-1000-dedupe-recovery-7',
-            });
-        });
-
-        it('should leave the dispatch marker untouched when original and recovery task names are reserved but not live', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const alreadyExistsError = new Error('Already Exists');
-            (alreadyExistsError as Error & { code: number }).code = 6;
-            const notFoundError = new Error('NOT_FOUND');
-            (notFoundError as Error & { code: number }).code = 5;
-            mockCloudTasksClient.createTask.mockRejectedValue(alreadyExistsError);
-            mockCloudTasksClient.getTask
-                .mockRejectedValueOnce(notFoundError)
-                .mockRejectedValueOnce(notFoundError);
-
-            const result = await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-123', 1000, undefined, {
-                recoveryTaskKey: 7,
-            });
-
-            expect(result).toBe(false);
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
-            expect(mockCloudTasksClient.getTask).toHaveBeenCalledTimes(2);
-        });
-
-        it('should rethrow non-6 errors', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const error = new Error('Some other error');
-            mockCloudTasksClient.createTask.mockRejectedValue(error);
-
-            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000)).rejects.toThrow('Some other error');
-        });
-
-        it('should throw error if projectId is missing', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { config } = await import('../config');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const originalProjectId = config.cloudtasks.projectId;
-            (config.cloudtasks as unknown as Record<string, unknown>).projectId = undefined;
-
-            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000))
-                .rejects.toThrow('Project ID is not defined in config');
-
-            (config.cloudtasks as unknown as Record<string, unknown>).projectId = originalProjectId;
-        });
-
-        it('should sanitize serviceName with special characters', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            // Using a string with special chars (simulating edge case)
-            await enqueueWorkoutTask('service.with.dots' as any, 'item-123', 1000);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    task: expect.objectContaining({
-                        name: expect.stringContaining('service-with-dots-item-123-1000')
-                    })
-                })
-            );
-        });
-
-        it('should include OIDC token for authentication', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            await enqueueWorkoutTask(ServiceNames.SuuntoApp, 'item-abc', 2000);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    task: expect.objectContaining({
-                        httpRequest: expect.objectContaining({
-                            oidcToken: {
-                                serviceAccountEmail: 'sa@test.com'
-                            }
-                        })
-                    })
-                })
-            );
-        });
-
-        it('should encode payload as base64', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            await enqueueWorkoutTask(ServiceNames.COROSAPI, 'item-xyz', 3000);
-
-            const call = mockCloudTasksClient.createTask.mock.calls[0][0];
-            const body = call.task.httpRequest.body;
-
-            // Verify it's valid base64
-            const decoded = JSON.parse(Buffer.from(body, 'base64').toString());
-            expect(decoded).toEqual({
-                data: {
-                    queueItemId: 'item-xyz',
-                    serviceName: ServiceNames.COROSAPI
-                }
-            });
-        });
-
-        it('should enforce minimum 1 second delay (race condition fix)', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000, 0);
-
-            // With delay of 0, scheduleTime should still be set with minimum 1 second
-            const call = mockCloudTasksClient.createTask.mock.calls[0][0];
-            expect(call.task.scheduleTime).toBeDefined();
-            expect(call.task.scheduleTime.seconds).toBeGreaterThan(0);
-        });
-
-        it('should use dateCreated in task name for deduplication', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            // Same queueItemId but different dateCreated
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000);
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 2000);
-
-            const calls = mockCloudTasksClient.createTask.mock.calls;
-            const taskName1 = calls[0][0].task.name;
-            const taskName2 = calls[1][0].task.name;
-
-            expect(taskName1).toContain('item-123-1000');
-            expect(taskName2).toContain('item-123-2000');
-            expect(taskName1).not.toBe(taskName2);
-        });
-
-        it('should handle very long queueItemId', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            const longId = 'a'.repeat(200);
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, longId, 1000);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalled();
-        });
-
-        it('should handle PERMISSION_DENIED error (code 7)', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-            const logger = await import('firebase-functions/logger');
-
-            const error = new Error('Permission denied');
-            (error as Error & { code: number }).code = 7;
-            mockCloudTasksClient.createTask.mockRejectedValue(error);
-
-            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000)).rejects.toThrow('Permission denied');
-            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enqueue task'), error);
-        });
-
-        it('should handle network timeout errors', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-            const logger = await import('firebase-functions/logger');
-
-            const error = new Error('DEADLINE_EXCEEDED');
-            (error as Error & { code: number }).code = 4;
-            mockCloudTasksClient.createTask.mockRejectedValue(error);
-
-            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000)).rejects.toThrow('DEADLINE_EXCEEDED');
-            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enqueue task'), error);
-        });
-
-        it('should retry on UNAVAILABLE (code 14) error and reset client', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const unavailableError = new Error('Unavailable');
-            (unavailableError as any).code = 14;
-
-            mockCloudTasksClient.createTask
-                .mockRejectedValueOnce(unavailableError)
-                .mockResolvedValueOnce([{ name: 'task-name' }]);
-
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-retry', 1000);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
-            // First call (lazy init) + Second call (re-init after invalidation) = 2 constructor calls
-            // Wait, if _cloudTasksClient is null initially -> 1 call.
-            // Then invalidation -> _cloudTasksClient = null.
-            // Next retry -> new instantiation -> 1 call.
-            // Total 2 constructor calls.
-            expect(CloudTasksClientSpy).toHaveBeenCalledTimes(2);
-        });
-
-        it('should retry on ECONNRESET error and reset client', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-            const { ServiceNames } = await import('@sports-alliance/sports-lib');
-
-            const connResetError = new Error('read ECONNRESET');
-            (connResetError as any).code = 14; // Often matches UNAVAILABLE but text matters too
-
-            mockCloudTasksClient.createTask
-                .mockRejectedValueOnce(connResetError)
-                .mockResolvedValueOnce([{ name: 'task-name' }]);
-
-            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-retry-reset', 1000);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
-            expect(CloudTasksClientSpy).toHaveBeenCalledTimes(2);
-        });
-    });
-
-    describe('enqueueActivitySyncTask', () => {
-        it('should enqueue activity sync task with deterministic name', async () => {
-            const { enqueueActivitySyncTask } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            await enqueueActivitySyncTask('activitySync__route__user__event', 1234);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-                parent: 'projects/p/locations/l/queues/q',
-                task: expect.objectContaining({
-                    name: expect.stringContaining('/tasks/activity-sync-activitySync__route__user__event-1234'),
-                    httpRequest: expect.objectContaining({
-                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/processActivitySyncTask'),
-                        httpMethod: 'POST',
-                        body: expect.any(String),
-                    }),
+        it('reads local queue depth from the task emulator without touching Cloud Tasks', async () => {
+            process.env.CLOUD_TASKS_EMULATOR_HOST = '127.0.0.1:9199';
+            const fetchMock = vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    'queue:test-project-test-location-processWorkoutTask': { numberOfTasks: 3 },
                 }),
             });
+            vi.stubGlobal('fetch', fetchMock);
+            const { getCloudTaskQueueStatsForQueue } = await import('./cloud-tasks');
 
-            const call = mockCloudTasksClient.createTask.mock.calls[0][0];
-            const decodedBody = JSON.parse(Buffer.from(call.task.httpRequest.body, 'base64').toString());
-            expect(decodedBody).toEqual({
-                data: { queueItemId: 'activitySync__route__user__event' },
+            await expect(getCloudTaskQueueStatsForQueue('processWorkoutTask')).resolves.toEqual({
+                pending: 3,
+                state: 'RUNNING',
+                enabled: true,
             });
+
+            expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:9199/queueStats');
+            expect(hoisted.mockCloudTasksClient.getQueue).not.toHaveBeenCalled();
         });
 
-        it('should handle ALREADY_EXISTS for activity sync dispatch', async () => {
-            const { enqueueActivitySyncTask } = await import('./cloud-tasks');
-
-            const error = new Error('Already Exists');
-            (error as Error & { code: number }).code = 6;
-            mockCloudTasksClient.createTask.mockRejectedValue(error);
-
-            const enqueued = await enqueueActivitySyncTask('activitySync__route__user__event', 1234);
-            expect(enqueued).toBe(false);
-        });
-    });
-
-    describe('enqueueRouteDeliverySyncTask', () => {
-        it('should enqueue route delivery sync task with deterministic name', async () => {
-            const { enqueueRouteDeliverySyncTask } = await import('./cloud-tasks');
-
-            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
-
-            await enqueueRouteDeliverySyncTask('routeDeliverySync__route__user__savedRoute__revision', 1234);
-
-            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
-                parent: 'projects/p/locations/l/queues/q',
-                task: expect.objectContaining({
-                    name: expect.stringContaining('/tasks/route-delivery-sync-routeDeliverySync__route__user__savedRoute__revision-1234'),
-                    httpRequest: expect.objectContaining({
-                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/processRouteDeliverySyncTask'),
-                        httpMethod: 'POST',
-                        body: expect.any(String),
-                    }),
+        it('clamps invalid negative task-emulator counts to zero', async () => {
+            process.env.CLOUD_TASKS_EMULATOR_HOST = '127.0.0.1:9199';
+            vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    'queue:test-project-test-location-processWorkoutTask': { numberOfTasks: -1 },
                 }),
-            });
+            }));
+            const { getCloudTaskQueueStatsForQueue } = await import('./cloud-tasks');
 
-            const call = mockCloudTasksClient.createTask.mock.calls[0][0];
-            const decodedBody = JSON.parse(Buffer.from(call.task.httpRequest.body, 'base64').toString());
-            expect(decodedBody).toEqual({
-                data: { queueItemId: 'routeDeliverySync__route__user__savedRoute__revision' },
-            });
-        });
-
-        it('should handle ALREADY_EXISTS for route delivery sync dispatch', async () => {
-            const { enqueueRouteDeliverySyncTask } = await import('./cloud-tasks');
-
-            const error = new Error('Already Exists');
-            (error as Error & { code: number }).code = 6;
-            mockCloudTasksClient.createTask.mockRejectedValue(error);
-
-            const enqueued = await enqueueRouteDeliverySyncTask('routeDeliverySync__route__user__savedRoute__revision', 1234);
-            expect(enqueued).toBe(false);
+            await expect(getCloudTaskQueueStatsForQueue('processWorkoutTask')).resolves.toMatchObject({ pending: 0 });
         });
     });
 
-    describe('resetCloudTaskQueueDepthCache', () => {
-        it('should clear the cache', async () => {
-            const { getCloudTaskQueueDepth, resetCloudTaskQueueDepthCache } = await import('./cloud-tasks');
+    describe('task dispatch', () => {
+        it('enqueues workout work through the fully-qualified Firebase task queue', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
 
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                { stats: { tasksCount: '100' } }
-            ]);
+            await expect(enqueueWorkoutTask('garminAPI' as ServiceNames, 'item-123', 1000, 60)).resolves.toBe(true);
 
-            await getCloudTaskQueueDepth();
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
-
-            resetCloudTaskQueueDepthCache();
-
-            mockCloudTasksClient.getQueue.mockResolvedValue([
-                { stats: { tasksCount: '200' } }
-            ]);
-
-            const depth = await getCloudTaskQueueDepth();
-            expect(depth).toBe(200);
-            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(2);
+            expect(hoisted.mockFunctions.taskQueue).toHaveBeenCalledWith(
+                'projects/test-project/locations/test-location/functions/processWorkoutTask',
+            );
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                { queueItemId: 'item-123', serviceName: 'garminAPI' },
+                { id: 'garminAPI-item-123-1000', scheduleDelaySeconds: 60 },
+            );
         });
 
-        it('should be safe to call when cache is already empty', () => {
-            expect(() => resetCloudTaskQueueDepthCache()).not.toThrow();
+        it('keeps workout task ids valid when an upstream queue item id is not', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+
+            await expect(enqueueWorkoutTask('service.with.dots' as ServiceNames, 'item/with spaces', 7.8)).resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                { queueItemId: 'item/with spaces', serviceName: 'service.with.dots' },
+                { id: 'service-with-dots-item-with-spaces-7', scheduleDelaySeconds: 1 },
+            );
+        });
+
+        it('preserves the workout recovery path for a stale production task-name reservation', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+            const duplicateError = Object.assign(new Error('Already exists'), {
+                code: 'functions/task-already-exists',
+            });
+            const notFoundError = Object.assign(new Error('NOT_FOUND'), { code: 5 });
+            hoisted.mockTaskQueue.enqueue
+                .mockRejectedValueOnce(duplicateError)
+                .mockResolvedValueOnce(undefined);
+            hoisted.mockCloudTasksClient.getTask.mockRejectedValueOnce(notFoundError);
+
+            await expect(enqueueWorkoutTask('suuntoApp' as ServiceNames, 'item-123', 1000, undefined, {
+                recoveryTaskKey: 7,
+            })).resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(1,
+                { queueItemId: 'item-123', serviceName: 'suuntoApp' },
+                { id: 'suuntoApp-item-123-1000', scheduleDelaySeconds: 1 },
+            );
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(2,
+                { queueItemId: 'item-123', serviceName: 'suuntoApp' },
+                { id: 'suuntoApp-item-123-1000-dedupe-recovery-7', scheduleDelaySeconds: 1 },
+            );
+            expect(hoisted.mockCloudTasksClient.getTask).toHaveBeenCalledWith({
+                name: 'projects/test-project/locations/test-location/queues/processWorkoutTask/tasks/suuntoApp-item-123-1000',
+            });
+        });
+
+        it('treats a local duplicate as live without querying the production task API', async () => {
+            process.env.CLOUD_TASKS_EMULATOR_HOST = '127.0.0.1:9199';
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+            hoisted.mockTaskQueue.enqueue.mockRejectedValue(Object.assign(new Error('Already exists'), {
+                code: 'functions/task-already-exists',
+            }));
+
+            await expect(enqueueWorkoutTask('garminAPI' as ServiceNames, 'item-123', 1000)).resolves.toBe(true);
+
+            expect(hoisted.mockCloudTasksClient.getTask).not.toHaveBeenCalled();
+            expect(hoisted.CloudTasksClientSpy).not.toHaveBeenCalled();
+        });
+
+        it('retries Firebase task queue transient errors', async () => {
+            vi.useFakeTimers();
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+            hoisted.mockTaskQueue.enqueue
+                .mockRejectedValueOnce(Object.assign(new Error('Unavailable'), { code: 'functions/unavailable' }))
+                .mockResolvedValueOnce(undefined);
+
+            const enqueue = enqueueWorkoutTask('garminAPI' as ServiceNames, 'item-retry', 1000);
+            await vi.advanceTimersByTimeAsync(1_000);
+
+            await expect(enqueue).resolves.toBe(true);
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledTimes(2);
+        });
+
+        it.each([
+            ['enqueueActivitySyncTask', 'processActivitySyncTask', 'activity-sync-item-123-9'],
+            ['enqueueRouteSyncTask', 'processRouteSyncTask', 'route-sync-item-123-9'],
+            ['enqueueRouteDeliverySyncTask', 'processRouteDeliverySyncTask', 'route-delivery-sync-item-123-9'],
+            ['enqueueSleepSyncTask', 'processSleepSyncTask', 'sleep-sync-item-123-9'],
+        ])('uses the matching function queue for %s', async (dispatcher, functionName, taskId) => {
+            const tasks = await import('./cloud-tasks');
+            const enqueue = tasks[dispatcher as keyof typeof tasks] as unknown as (id: string, date: number) => Promise<boolean>;
+
+            await expect(enqueue('item-123', 9)).resolves.toBe(true);
+
+            expect(hoisted.mockFunctions.taskQueue).toHaveBeenCalledWith(
+                `projects/test-project/locations/test-location/functions/${functionName}`,
+            );
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                { queueItemId: 'item-123' },
+                { id: taskId, scheduleDelaySeconds: 1 },
+            );
         });
     });
-
-
 });

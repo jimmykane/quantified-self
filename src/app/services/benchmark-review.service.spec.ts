@@ -2,12 +2,17 @@ import { Clipboard } from '@angular/cdk/clipboard';
 import { TestBed } from '@angular/core/testing';
 import { BenchmarkResult } from '@shared/app-event.interface';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
-import { AppEventService } from './app.event.service';
+import { EventTagService } from './event-tag.service';
 import { BenchmarkReviewService } from './benchmark-review.service';
+import { normalizeBenchmarkReviewTags } from '../helpers/benchmark-review.helper';
 
 describe('BenchmarkReviewService', () => {
   let service: BenchmarkReviewService;
-  let eventServiceMock: { updateEventProperties: ReturnType<typeof vi.fn> };
+  let eventTagServiceMock: {
+    normalizeTags: ReturnType<typeof vi.fn>;
+    getTags: ReturnType<typeof vi.fn>;
+    saveTags: ReturnType<typeof vi.fn>;
+  };
   let clipboardMock: { copy: ReturnType<typeof vi.fn> };
 
   const result: BenchmarkResult = {
@@ -56,8 +61,14 @@ describe('BenchmarkReviewService', () => {
   };
 
   beforeEach(() => {
-    eventServiceMock = {
-      updateEventProperties: vi.fn().mockResolvedValue(undefined),
+    eventTagServiceMock = {
+      normalizeTags: vi.fn((value: unknown) => normalizeBenchmarkReviewTags(value)),
+      getTags: vi.fn((event: any) => normalizeBenchmarkReviewTags(event.tags ?? event.benchmarkReviewTags)),
+      saveTags: vi.fn(async (_user: unknown, event: any, value: unknown) => {
+        const tags = normalizeBenchmarkReviewTags(value);
+        event.tags = tags;
+        return tags;
+      }),
     };
     clipboardMock = {
       copy: vi.fn().mockReturnValue(true),
@@ -66,7 +77,7 @@ describe('BenchmarkReviewService', () => {
     TestBed.configureTestingModule({
       providers: [
         BenchmarkReviewService,
-        { provide: AppEventService, useValue: eventServiceMock },
+        { provide: EventTagService, useValue: eventTagServiceMock },
         { provide: Clipboard, useValue: clipboardMock },
       ],
     });
@@ -155,18 +166,24 @@ describe('BenchmarkReviewService', () => {
   it('saves normalized event tags through AppEventService', async () => {
     const user = { uid: 'user-1' };
     const event = {
-      benchmarkReviewTags: [],
+      tags: [],
       getID: () => 'event-1',
     };
 
-    const tags = await service.saveEventTags(user as never, event as never, [' review ', 'Review', 'firmware']);
+    const tags = await service.saveEventTags(
+      user as never,
+      event as never,
+      [' review ', 'Review', 'firmware'],
+      ['original'],
+    );
 
     expect(tags).toEqual(['review', 'firmware']);
-    expect(eventServiceMock.updateEventProperties).toHaveBeenCalledWith(
+    expect(eventTagServiceMock.saveTags).toHaveBeenCalledWith(
       user,
-      'event-1',
-      { benchmarkReviewTags: ['review', 'firmware'] },
+      event,
+      [' review ', 'Review', 'firmware'],
+      ['original'],
     );
-    expect(event.benchmarkReviewTags).toEqual(['review', 'firmware']);
+    expect(event.tags).toEqual(['review', 'firmware']);
   });
 });

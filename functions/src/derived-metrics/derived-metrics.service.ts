@@ -1,7 +1,12 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
+    ActivityTypes,
+    ActivityTypesHelper,
+    DataDurabilityEvidence,
     DataDuration,
+    DataDistance,
+    DataFTP,
     DataHeartRateAvg,
     DataHeartRateZoneFiveDuration,
     DataHeartRateZoneFourDuration,
@@ -19,7 +24,19 @@ import {
     DataPowerZoneThreeDuration,
     DataPowerZoneTwoDuration,
     DataRecoveryTime,
+    DataSwimDistance,
+    DataSwimPaceAvg,
+    DataVO2Max,
+    normalizeDurabilityEvidenceValue,
+    samplePowerCurveAtDuration,
 } from '@sports-alliance/sports-lib';
+import {
+    buildPowerCurveEnvelope,
+    filterPowerCurvePointsByMaxDuration,
+    normalizePowerCurvePoints,
+    POWER_CURVE_STAT_TYPE,
+    type PowerCurvePoint,
+} from '../../../shared/power-curve';
 import {
     buildDerivedFormDailyLoads,
     DERIVED_METRIC_KINDS,
@@ -30,6 +47,11 @@ import {
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
     DEFAULT_DERIVED_METRIC_KINDS,
+    DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS,
+    DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
+    DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
+    DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
+    DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedFormDailyLoadEntry,
@@ -46,15 +68,72 @@ import {
     type DerivedMetricKind,
     type DerivedMetricsCoordinator,
     type DerivedMonotonyStrainMetricPayload,
+    type DerivedPowerCurveMetricPayload,
+    type DerivedPowerCurvePointSeries,
+    type DerivedPowerCurveRange,
+    type DerivedPowerCurveRangeSnapshot,
+    type DerivedPowerCurveScope,
     type DerivedRampRateMetricPayload,
     type DerivedRecoveryNowMetricPayload,
+    type DerivedTrainingCapacityImportedMetric,
+    type DerivedTrainingCapacityImportedMetricKind,
+    type DerivedTrainingCapacityMetricPayload,
+    type DerivedTrainingBuildDurabilityComparison,
+    type DerivedTrainingDiscipline,
+    type DerivedTrainingDisciplineSummary,
+    type DerivedTrainingBuildBenchmarkReference,
+    type DerivedTrainingBuildComparisonDiscipline,
+    type DerivedTrainingBuildEventSuggestion,
+    type DerivedTrainingBuildComparisonMetricPayload,
+    type DerivedTrainingBuildRaceSuggestion,
+    type DerivedTrainingRecoveryComparison,
+    type DerivedTrainingRecoveryCoverage,
+    type DerivedTrainingRecoveryWindow,
+    type DerivedTrainingBuildWindow,
+    type DerivedTrainingDurabilityContext,
+    type DerivedTrainingDurabilityContextSummary,
+    type DerivedTrainingDurabilityMetricPayload,
+    type DerivedTrainingDurabilityScope,
+    type DerivedTrainingDurabilityWindow,
+    type DerivedTrainingDurabilityWindowMetrics,
+    type DerivedTrainingExplanationContributor,
+    type DerivedTrainingExplanationLoadCoverage,
+    type DerivedTrainingExplanationMetricPayload,
+    type DerivedTrainingExplanationRhythm,
+    type DerivedTrainingExplanationSportBucket,
+    type DerivedTrainingExplanationSportLoad,
+    type DerivedTrainingExplanationWindow,
+    type DerivedTrainingExplanationWindowMetrics,
+    type DerivedTrainingSwimEnvironment,
+    type DerivedTrainingSwimPerformanceMetricPayload,
+    type DerivedTrainingSummaryMetricPayload,
+    type TrainingBuildBenchmarkSelection,
+    type TrainingBuildDurationWeeks,
+    TRAINING_BUILD_DURATION_WEEKS,
     getDerivedMetricDocId,
+    getDerivedTrainingRecoveryMinimumComparableNights,
+    getTrainingBuildBenchmarkSelectionKey,
+    normalizeTrainingBuildEventId,
+    normalizeTrainingBuildPeriodEndDayMs,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
     normalizeDerivedFormDailyLoads,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
+import {
+    normalizeSleepProvider,
+    SLEEP_PROVIDERS,
+    SLEEP_SESSIONS_COLLECTION_ID,
+    type SleepProvider,
+} from '../../../shared/sleep';
+import {
+    POWER_CAPACITY_DISCIPLINES,
+    TRAINING_DISCIPLINES,
+    resolveTrainingDisciplineFromActivityType,
+} from '../../../shared/training-disciplines';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
+import { getEventTags } from '../../../shared/event-tags';
+import { getActivityTypeGroupLabel } from '../../../shared/activity-type-group.metadata';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
 import {
     getUserDeletionGuardState,
@@ -64,12 +143,50 @@ import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './der
 
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
-const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'isMerge', 'mergeType'] as const;
+const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'tags', 'benchmarkReviewTags', 'name', 'isMerge', 'mergeType', 'creator', 'serviceName', 'sourceServiceName'] as const;
+const DERIVED_METRICS_ACTIVITY_FIELDS = ['eventID', 'startDate', 'endDate', 'type', 'stats', 'creator', 'serviceName', 'sourceServiceName'] as const;
+const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
+    'source.provider',
+    'sleepDate',
+    'startTimeMs',
+    'endTimeMs',
+    'timezoneOffsetSeconds',
+    'durationSeconds',
+    'isNap',
+    'vitals.overnightHrvMs',
+    'vitals.averageHrvMs',
+] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
 const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
+const TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
+const TRAINING_SUMMARY_BASELINE_WINDOW_DAYS = 84;
+const TRAINING_EXPLANATION_WINDOW_DAYS = 28 as const;
+const TRAINING_EXPLANATION_BASELINE_BLOCK_COUNT = 3 as const;
+const TRAINING_DURABILITY_WINDOW_DAYS = 28 as const;
+const TRAINING_DURABILITY_BASELINE_BLOCK_COUNT = 3 as const;
+const TRAINING_DURABILITY_WEEKLY_POINT_COUNT = 12 as const;
+const TRAINING_RECOVERY_CURRENT_WINDOW_DAYS = 28;
+const TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS = 84;
+const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
+const TRAINING_CAPACITY_MODEL_WINDOW_DAYS = 90 as const;
+const TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS = [180, 300, 600, 900, 1200] as const;
+const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
+const TRAINING_CAPACITY_MAX_IMPLIED_WEIGHT_RATIO = 1.05;
+const POWER_CURVE_MAX_STORED_POINTS = 128;
+const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600] as const;
+type PowerCurveDurationRange = Exclude<DerivedPowerCurveRange, 'thisWeek' | 'thisMonth' | 'all'>;
+const POWER_CURVE_RANGE_DAYS: Record<PowerCurveDurationRange, number> = {
+    '14d': 14,
+    '30d': 30,
+    '90d': 90,
+    '1y': 365,
+    '2y': 365 * 2,
+    '3y': 365 * 3,
+    '4y': 365 * 4,
+};
 const DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
 const DERIVED_METRICS_STUCK_PROCESSING_THRESHOLD_MS = 15 * 60 * 1000;
 const POWER_ZONE_STAT_TYPES = [
@@ -100,7 +217,30 @@ interface DerivedMetricBuildResult<TPayload> {
     payload: TPayload;
 }
 
-type DerivedMetricBuildSourceDependency = 'formDocs' | 'recoveryNowDocs';
+type DerivedMetricBuildSourceDependency = 'formDocs' | 'recoveryNowDocs' | 'trainingActivityDocs' | 'trainingBuildBenchmarkSettings' | 'trainingBuildSleepDocs';
+
+export interface DerivedTrainingActivitySource {
+    activityId: string;
+    eventId: string;
+    discipline: DerivedTrainingDiscipline;
+    activityData: Record<string, unknown>;
+    eventData: Record<string, unknown>;
+    metricData: Record<string, unknown>;
+    startMs: number;
+    startDayMs: number;
+    eventStartMs: number;
+    eventStartDayMs: number;
+}
+
+export interface DerivedTrainingExplanationActivitySource {
+    activityId: string;
+    eventId: string;
+    activityData: Record<string, unknown>;
+    eventData: Record<string, unknown>;
+    metricData: Record<string, unknown>;
+    startMs: number;
+    startDayMs: number;
+}
 
 interface DerivedLoadPoint {
     dayMs: number;
@@ -134,15 +274,26 @@ interface DerivedMetricBuildExecutionContext {
     nowMs: number;
     formDocs: readonly FirestoreQueryDocumentSnapshot[];
     recoveryNowDocs: readonly FirestoreQueryDocumentSnapshot[];
+    trainingBuildSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
+    trainingActivities: readonly DerivedTrainingActivitySource[];
+    trainingExplanationActivities: readonly DerivedTrainingExplanationActivitySource[];
     getDailyLoadContext: () => ReturnType<typeof buildDailyLoadContext>;
     getDerivedLoadPoints: () => DerivedLoadPoint[];
     getKpiDerivedLoadPoints: () => DerivedLoadPoint[];
     getIntensityDistributionBuildResult: () => DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload>;
     getEfficiencyTrendBuildResult: () => DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload>;
+    getTrainingSummaryBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload>;
+    getTrainingCapacityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload>;
+    getPowerCurveBuildResult: () => DerivedMetricBuildResult<DerivedPowerCurveMetricPayload>;
+    getTrainingExplanationBuildResult: () => DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload>;
+    getTrainingDurabilityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload>;
+    getTrainingBuildComparisonBuildResult: () => DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload>;
+    getTrainingSwimPerformanceBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload>;
 }
 
 interface DerivedMetricBuildDefinition {
     sourceDependencies: readonly DerivedMetricBuildSourceDependency[];
+    includeTrainingSwimLengths?: boolean;
     build: (context: DerivedMetricBuildExecutionContext) => DerivedMetricBuildResult<unknown>;
 }
 
@@ -336,16 +487,32 @@ function resolveRawStats(eventData: Record<string, unknown>): Record<string, unk
     return stats as Record<string, unknown>;
 }
 
-function resolveRawStatNumericValue(
+function resolveRawStatValue(
     eventData: Record<string, unknown>,
     statType: string,
-): number | null {
+): unknown {
     const stats = resolveRawStats(eventData);
     if (!Object.prototype.hasOwnProperty.call(stats, statType)) {
         return null;
     }
 
     const rawStat = stats[statType];
+    if (!rawStat || typeof rawStat !== 'object' || Array.isArray(rawStat)) {
+        return rawStat;
+    }
+
+    const statObject = rawStat as Record<string, unknown>;
+    return statObject.value
+        ?? statObject.rawValue
+        ?? statObject._value
+        ?? rawStat;
+}
+
+function resolveRawStatNumericValue(
+    eventData: Record<string, unknown>,
+    statType: string,
+): number | null {
+    const rawStat = resolveRawStatValue(eventData, statType);
     const directValue = toFiniteNumber(rawStat);
     if (directValue !== null) {
         return directValue;
@@ -904,6 +1071,2441 @@ function resolveZoneDurations(
     });
 }
 
+interface TrainingCapacityObservation {
+    eventId: string;
+    sourceKey: string | null;
+    timeMs: number;
+    value: number;
+}
+
+interface TrainingSummaryWindowAccumulator {
+    activityCount: number;
+    durationSeconds: number;
+    easySeconds: number;
+    moderateSeconds: number;
+    hardSeconds: number;
+}
+
+interface TrainingSummaryDisciplineAccumulator {
+    current: TrainingSummaryWindowAccumulator;
+    baseline: TrainingSummaryWindowAccumulator;
+}
+
+function createTrainingSummaryWindowAccumulator(): TrainingSummaryWindowAccumulator {
+    return {
+        activityCount: 0,
+        durationSeconds: 0,
+        easySeconds: 0,
+        moderateSeconds: 0,
+        hardSeconds: 0,
+    };
+}
+
+function createTrainingSummaryDisciplineAccumulator(): TrainingSummaryDisciplineAccumulator {
+    return {
+        current: createTrainingSummaryWindowAccumulator(),
+        baseline: createTrainingSummaryWindowAccumulator(),
+    };
+}
+
+export function joinTrainingActivitySources(
+    activityDocs: readonly FirestoreQueryDocumentSnapshot[],
+    eventDocs: readonly FirestoreQueryDocumentSnapshot[],
+): DerivedTrainingActivitySource[] {
+    const eventById = new Map<string, Record<string, unknown>>();
+    eventDocs.forEach((doc) => {
+        const eventId = `${doc.id || ''}`.trim();
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        if (eventId && !isMergedEvent(eventData)) {
+            eventById.set(eventId, eventData);
+        }
+    });
+
+    return activityDocs.flatMap((doc): DerivedTrainingActivitySource[] => {
+        const activityData = (doc.data() || {}) as Record<string, unknown>;
+        const eventId = toSafeString(activityData.eventID).trim();
+        const eventData = eventById.get(eventId);
+        const discipline = resolveTrainingDisciplineFromActivityType(activityData.type);
+        if (!eventId || !eventData || !discipline) {
+            return [];
+        }
+        const startMs = toMillis(activityData.startDate) ?? toMillis(eventData.startDate);
+        const eventStartMs = toMillis(eventData.startDate) ?? startMs;
+        if (startMs === null || eventStartMs === null) {
+            return [];
+        }
+        return [{
+            activityId: `${doc.id || ''}`.trim(),
+            eventId,
+            discipline,
+            activityData,
+            eventData,
+            metricData: {
+                ...activityData,
+                creator: activityData.creator || eventData.creator,
+                serviceName: activityData.serviceName || eventData.serviceName,
+                sourceServiceName: activityData.sourceServiceName || eventData.sourceServiceName,
+                stats: activityData.stats && typeof activityData.stats === 'object'
+                    ? activityData.stats
+                    : {},
+            },
+            startMs,
+            startDayMs: resolveUtcDayStartMs(startMs),
+            eventStartMs,
+            eventStartDayMs: resolveUtcDayStartMs(eventStartMs),
+        }];
+    });
+}
+
+/**
+ * Joins every child activity to a trustworthy parent event. Unlike the curated
+ * Training join above, this retains unsupported and missing activity types so
+ * explanation coverage can report Other and unclassified work explicitly.
+ */
+export function joinTrainingExplanationActivitySources(
+    activityDocs: readonly FirestoreQueryDocumentSnapshot[],
+    eventDocs: readonly FirestoreQueryDocumentSnapshot[],
+): DerivedTrainingExplanationActivitySource[] {
+    const eventById = new Map<string, Record<string, unknown>>();
+    eventDocs.forEach((doc) => {
+        const eventId = `${doc.id || ''}`.trim();
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        if (eventId && !isMergedEvent(eventData)) {
+            eventById.set(eventId, eventData);
+        }
+    });
+
+    return activityDocs.flatMap((doc): DerivedTrainingExplanationActivitySource[] => {
+        const activityData = (doc.data() || {}) as Record<string, unknown>;
+        const eventId = toSafeString(activityData.eventID).trim();
+        const eventData = eventById.get(eventId);
+        if (!eventId || !eventData) {
+            return [];
+        }
+        const startMs = toMillis(activityData.startDate) ?? toMillis(eventData.startDate);
+        if (startMs === null) {
+            return [];
+        }
+        return [{
+            activityId: `${doc.id || ''}`.trim(),
+            eventId,
+            activityData,
+            eventData,
+            metricData: {
+                ...activityData,
+                stats: activityData.stats && typeof activityData.stats === 'object'
+                    ? activityData.stats
+                    : {},
+            },
+            startMs,
+            startDayMs: resolveUtcDayStartMs(startMs),
+        }];
+    });
+}
+
+interface ResolvedPowerCurveEvent {
+    eventId: string | null;
+    startMs: number;
+    points: PowerCurvePoint[];
+}
+
+function resolvePowerCurveDurationSeconds(eventData: Record<string, unknown>): number | null {
+    const statDuration = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type));
+    if (statDuration !== null) {
+        return statDuration;
+    }
+    const startMs = toMillis(eventData.startDate);
+    const endMs = toMillis(eventData.endDate);
+    if (startMs === null || endMs === null || endMs <= startMs) {
+        return null;
+    }
+    return (endMs - startMs) / 1000;
+}
+
+function resolvePowerCurveEvent(
+    activity: DerivedTrainingActivitySource,
+): { discipline: DerivedPowerCurveScope; source: ResolvedPowerCurveEvent | null; startMs: number } | null {
+    const { discipline, metricData, startMs } = activity;
+    if (!POWER_CAPACITY_DISCIPLINES.includes(discipline as DerivedPowerCurveScope)) {
+        return null;
+    }
+    const powerDiscipline = discipline as DerivedPowerCurveScope;
+
+    const points = filterPowerCurvePointsByMaxDuration(
+        normalizePowerCurvePoints(resolveRawStatValue(metricData, POWER_CURVE_STAT_TYPE)).points,
+        resolvePowerCurveDurationSeconds(metricData),
+    );
+    if (!points.length) {
+        return { discipline: powerDiscipline, source: null, startMs };
+    }
+
+    return {
+        discipline: powerDiscipline,
+        startMs,
+        source: {
+            eventId: activity.eventId || null,
+            startMs,
+            points,
+        },
+    };
+}
+
+function isPowerCurveEventInWindow(
+    startMs: number,
+    window: { startMs: number | null; endMs: number | null },
+): boolean {
+    return (window.startMs === null || startMs >= window.startMs)
+        && (window.endMs === null || startMs <= window.endMs);
+}
+
+function resolvePowerCurveRangeWindow(
+    range: DerivedPowerCurveRange,
+    nowMs: number,
+    weekStartDay: number | null = null,
+): { startMs: number | null; endMs: number | null } {
+    if (range === 'all') {
+        return { startMs: null, endMs: null };
+    }
+    if (range === 'thisMonth') {
+        const now = new Date(nowMs);
+        return {
+            startMs: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+            endMs: nowMs,
+        };
+    }
+    if (range === 'thisWeek') {
+        const now = new Date(nowMs);
+        const normalizedWeekStartDay = Number.isFinite(weekStartDay)
+            ? Math.max(0, Math.min(6, Math.floor(weekStartDay as number)))
+            : 1;
+        const daysSinceStart = (now.getUTCDay() - normalizedWeekStartDay + 7) % 7;
+        return {
+            startMs: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceStart),
+            endMs: nowMs,
+        };
+    }
+
+    const days = POWER_CURVE_RANGE_DAYS[range as keyof typeof POWER_CURVE_RANGE_DAYS];
+    return {
+        startMs: nowMs - (days * DAY_MS),
+        endMs: nowMs,
+    };
+}
+
+function samplePowerCurvePoints(points: readonly PowerCurvePoint[]): PowerCurvePoint[] {
+    if (points.length <= POWER_CURVE_MAX_STORED_POINTS) {
+        return points.map(point => ({ ...point }));
+    }
+
+    const selectedIndexes = new Set<number>([0, points.length - 1]);
+    POWER_CURVE_BENCHMARK_DURATIONS_SECONDS.forEach((duration) => {
+        const index = points.findIndex(point => point.duration === duration);
+        if (index >= 0) {
+            selectedIndexes.add(index);
+        }
+    });
+
+    const firstDuration = points[0].duration;
+    const lastDuration = points[points.length - 1].duration;
+    const logStart = Math.log(firstDuration);
+    const logSpan = Math.log(lastDuration) - logStart;
+    const targetCount = POWER_CURVE_MAX_STORED_POINTS;
+    for (let slot = 1; selectedIndexes.size < targetCount && slot < targetCount - 1; slot += 1) {
+        const targetDuration = Math.exp(logStart + ((logSpan * slot) / (targetCount - 1)));
+        let closestIndex = 0;
+        let closestDistance = Number.POSITIVE_INFINITY;
+        points.forEach((point, index) => {
+            const distance = Math.abs(Math.log(point.duration) - Math.log(targetDuration));
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = index;
+            }
+        });
+        selectedIndexes.add(closestIndex);
+    }
+
+    for (let index = 0; selectedIndexes.size < targetCount && index < points.length; index += 1) {
+        const evenlySpacedIndex = Math.round((index * (points.length - 1)) / (targetCount - 1));
+        selectedIndexes.add(evenlySpacedIndex);
+    }
+
+    return [...selectedIndexes]
+        .sort((left, right) => left - right)
+        .slice(0, targetCount)
+        .map(index => ({ ...points[index] }));
+}
+
+function serializePowerCurvePoints(points: readonly PowerCurvePoint[]): DerivedPowerCurvePointSeries {
+    return samplePowerCurvePoints(points).flatMap(point => [
+        point.duration,
+        point.power,
+        point.wattsPerKg ?? 0,
+    ]);
+}
+
+function comparePowerCurveEvents(left: ResolvedPowerCurveEvent, right: ResolvedPowerCurveEvent): number {
+    if (left.startMs !== right.startMs) {
+        return left.startMs - right.startMs;
+    }
+    return `${left.eventId || ''}`.localeCompare(`${right.eventId || ''}`);
+}
+
+function buildPowerCurveRangeSnapshot(
+    sourceEvents: readonly { startMs: number; source: ResolvedPowerCurveEvent | null }[],
+    window: { startMs: number | null; endMs: number | null },
+    nowMs: number,
+): DerivedPowerCurveRangeSnapshot {
+    const rangeSourceEvents = sourceEvents.filter(event => isPowerCurveEventInWindow(event.startMs, window));
+    const matchedEvents = rangeSourceEvents
+        .map(event => event.source)
+        .filter((event): event is ResolvedPowerCurveEvent => event !== null)
+        .sort(comparePowerCurveEvents);
+    const latestActivity = matchedEvents[matchedEvents.length - 1] || null;
+    const bestPoints = buildPowerCurveEnvelope(matchedEvents.map(event => event.points));
+    // Preserve the prior dashboard behavior: recent-best comparisons are anchored
+    // to the latest usable activity in the selected range, not wall-clock now.
+    const comparisonAnchorMs = latestActivity?.startMs ?? nowMs;
+    const buildRecentWindow = (days: number): ResolvedPowerCurveEvent[] => matchedEvents.filter(event => (
+        event.startMs >= comparisonAnchorMs - (days * DAY_MS)
+        && event.startMs <= comparisonAnchorMs
+    ));
+    const recent30d = buildRecentWindow(30);
+    const recent90d = buildRecentWindow(90);
+
+    return {
+        sourceEventCount: rangeSourceEvents.length,
+        matchedEventCount: matchedEvents.length,
+        latestActivity: latestActivity
+            ? {
+                eventId: latestActivity.eventId,
+                startMs: latestActivity.startMs,
+                points: serializePowerCurvePoints(latestActivity.points),
+            }
+            : null,
+        bestPoints: serializePowerCurvePoints(bestPoints),
+        best30dPoints: serializePowerCurvePoints(buildPowerCurveEnvelope(recent30d.map(event => event.points))),
+        best30dEventCount: recent30d.length,
+        best90dPoints: serializePowerCurvePoints(buildPowerCurveEnvelope(recent90d.map(event => event.points))),
+        best90dEventCount: recent90d.length,
+    };
+}
+
+export function buildPowerCurveMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> {
+    const eventsByScope: Record<DerivedPowerCurveScope, Array<{ startMs: number; source: ResolvedPowerCurveEvent | null }>> = {
+        cycling: [],
+        running: [],
+    };
+
+    activities.forEach((activity) => {
+        if (activity.startMs > nowMs) {
+            return;
+        }
+        const resolved = resolvePowerCurveEvent(activity);
+        if (resolved) {
+            eventsByScope[resolved.discipline].push({
+                startMs: resolved.startMs,
+                source: resolved.source,
+            });
+        }
+    });
+
+    const buildScope = (scope: DerivedPowerCurveScope) => {
+        const events = eventsByScope[scope];
+        const ranges = {
+            thisMonth: buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('thisMonth', nowMs), nowMs),
+            '14d': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('14d', nowMs), nowMs),
+            '30d': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('30d', nowMs), nowMs),
+            '90d': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('90d', nowMs), nowMs),
+            '1y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('1y', nowMs), nowMs),
+            '2y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('2y', nowMs), nowMs),
+            '3y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('3y', nowMs), nowMs),
+            '4y': buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('4y', nowMs), nowMs),
+            all: buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('all', nowMs), nowMs),
+        };
+        const thisWeekByStartDay = Array.from({ length: 7 }, (_, day) => [
+            `${day}`,
+            buildPowerCurveRangeSnapshot(events, resolvePowerCurveRangeWindow('thisWeek', nowMs, day), nowMs),
+        ] as const).reduce<Record<string, DerivedPowerCurveRangeSnapshot>>((result, [day, snapshot]) => {
+            result[day] = snapshot;
+            return result;
+        }, {});
+        return { ranges, thisWeekByStartDay };
+    };
+
+    return {
+        sourceEventCount: eventsByScope.cycling.length + eventsByScope.running.length,
+        payload: {
+            asOfDayMs: resolveUtcDayStartMs(nowMs),
+            excludesMergedEvents: true,
+            pointSamplingVersion: 1,
+            scopes: {
+                cycling: buildScope('cycling'),
+                running: buildScope('running'),
+            },
+        },
+    };
+}
+
+function normalizeTrainingCapacityImportedValue(
+    kind: DerivedTrainingCapacityImportedMetricKind,
+    value: number,
+): number {
+    return kind === 'ftp-setting'
+        ? Math.round(value)
+        : toRoundedNumber(value, 1);
+}
+
+function buildTrainingCapacityImportedMetric(
+    kind: DerivedTrainingCapacityImportedMetricKind,
+    observations: readonly TrainingCapacityObservation[],
+): DerivedTrainingCapacityImportedMetric | null {
+    const sorted = observations
+        .map(observation => ({
+            ...observation,
+            value: normalizeTrainingCapacityImportedValue(kind, observation.value),
+        }))
+        .sort((left, right) => (
+            left.timeMs - right.timeMs
+            || left.eventId.localeCompare(right.eventId)
+        ));
+    if (!sorted.length) {
+        return null;
+    }
+
+    const latest = sorted[sorted.length - 1];
+    let currentRunStartIndex = sorted.length - 1;
+    while (currentRunStartIndex > 0) {
+        const previous = sorted[currentRunStartIndex - 1];
+        if (previous.value !== latest.value || previous.sourceKey !== latest.sourceKey) {
+            break;
+        }
+        currentRunStartIndex -= 1;
+    }
+
+    const currentRun = sorted.slice(currentRunStartIndex);
+    const previous = currentRunStartIndex > 0 ? sorted[currentRunStartIndex - 1] : null;
+    const hasComparablePrevious = previous !== null
+        && previous.sourceKey !== null
+        && previous.sourceKey === latest.sourceKey
+        && previous.value > 0;
+
+    return {
+        kind,
+        value: latest.value,
+        sourceKey: latest.sourceKey,
+        provenance: 'imported-activity-stat',
+        firstSeenAtMs: currentRun[0].timeMs,
+        lastSeenAtMs: latest.timeMs,
+        observationCount: currentRun.length,
+        previousValue: previous?.value ?? null,
+        previousAtMs: previous?.timeMs ?? null,
+        previousSourceKey: previous?.sourceKey ?? null,
+        changePct: hasComparablePrevious
+            ? toRoundedNumber(((latest.value - previous.value) / previous.value) * 100, 2)
+            : null,
+    };
+}
+
+function deserializeTrainingCapacityPowerCurve(series: DerivedPowerCurvePointSeries): PowerCurvePoint[] {
+    const points: PowerCurvePoint[] = [];
+    for (let index = 0; index < series.length; index += 3) {
+        const duration = toFinitePositiveNumber(series[index]);
+        const power = toFinitePositiveNumber(series[index + 1]);
+        const wattsPerKg = toFinitePositiveNumber(series[index + 2]);
+        if (duration === null || power === null) {
+            continue;
+        }
+        points.push({
+            duration,
+            power,
+            ...(wattsPerKg !== null ? { wattsPerKg } : {}),
+        });
+    }
+    return points.sort((left, right) => left.duration - right.duration);
+}
+
+function interpolateTrainingCapacityPowerCurveValue(
+    points: readonly PowerCurvePoint[],
+    duration: number,
+    key: 'power' | 'wattsPerKg',
+): number | null {
+    return samplePowerCurveAtDuration(points, duration, { key });
+}
+
+interface CriticalPowerModelFit {
+    criticalPower: number;
+    wPrime: number;
+    rSquared: number;
+    normalizedRmse: number;
+}
+
+function fitTrainingCapacityCriticalPowerModel(
+    samples: readonly { duration: number; value: number }[],
+): CriticalPowerModelFit | null {
+    if (samples.length < 3) {
+        return null;
+    }
+    const xValues = samples.map(sample => 1 / sample.duration);
+    const meanX = xValues.reduce((sum, value) => sum + value, 0) / samples.length;
+    const meanY = samples.reduce((sum, sample) => sum + sample.value, 0) / samples.length;
+    const covariance = samples.reduce((sum, sample, index) => (
+        sum + ((xValues[index] - meanX) * (sample.value - meanY))
+    ), 0);
+    const varianceX = xValues.reduce((sum, value) => sum + Math.pow(value - meanX, 2), 0);
+    if (!Number.isFinite(varianceX) || varianceX <= 0 || !Number.isFinite(meanY) || meanY <= 0) {
+        return null;
+    }
+
+    const wPrime = covariance / varianceX;
+    const criticalPower = meanY - (wPrime * meanX);
+    if (!Number.isFinite(wPrime) || !Number.isFinite(criticalPower) || wPrime <= 0 || criticalPower <= 0) {
+        return null;
+    }
+
+    const residualSumSquares = samples.reduce((sum, sample) => {
+        const predicted = criticalPower + (wPrime / sample.duration);
+        return sum + Math.pow(sample.value - predicted, 2);
+    }, 0);
+    const totalSumSquares = samples.reduce((sum, sample) => sum + Math.pow(sample.value - meanY, 2), 0);
+    if (!Number.isFinite(residualSumSquares) || totalSumSquares <= 0) {
+        return null;
+    }
+
+    const rSquared = 1 - (residualSumSquares / totalSumSquares);
+    const normalizedRmse = Math.sqrt(residualSumSquares / samples.length) / meanY;
+    if (!Number.isFinite(rSquared) || !Number.isFinite(normalizedRmse)) {
+        return null;
+    }
+    return { criticalPower, wPrime, rSquared, normalizedRmse };
+}
+
+function buildModeledCriticalPower(
+    snapshot: DerivedPowerCurveRangeSnapshot | null | undefined,
+): DerivedTrainingCapacityMetricPayload['disciplines'][number]['modeledCriticalPower'] {
+    const points = deserializeTrainingCapacityPowerCurve(snapshot?.bestPoints || []);
+    const minDurationSeconds = points.length ? points[0].duration : null;
+    const maxDurationSeconds = points.length ? points[points.length - 1].duration : null;
+    const wattAnchors = TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.flatMap((duration) => {
+        const value = interpolateTrainingCapacityPowerCurveValue(points, duration, 'power');
+        return value === null ? [] : [{ duration, value }];
+    });
+    const base = {
+        windowDays: TRAINING_CAPACITY_MODEL_WINDOW_DAYS,
+        sourceEventCount: snapshot?.matchedEventCount || 0,
+        anchorPointCount: wattAnchors.length,
+        minDurationSeconds,
+        maxDurationSeconds,
+    } as const;
+    if (wattAnchors.length !== TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.length) {
+        return {
+            ...base,
+            status: 'insufficient-evidence',
+            valueWatts: null,
+            valueWattsPerKg: null,
+            wPrimeJoules: null,
+            confidence: null,
+            rSquared: null,
+            normalizedRmse: null,
+        };
+    }
+
+    const fit = fitTrainingCapacityCriticalPowerModel(wattAnchors);
+    const lowestAnchorPower = Math.min(...wattAnchors.map(anchor => anchor.value));
+    if (!fit || fit.criticalPower >= lowestAnchorPower) {
+        return {
+            ...base,
+            status: 'poor-fit',
+            valueWatts: null,
+            valueWattsPerKg: null,
+            wPrimeJoules: null,
+            confidence: 'low',
+            rSquared: fit ? toRoundedNumber(fit.rSquared, 4) : null,
+            normalizedRmse: fit ? toRoundedNumber(fit.normalizedRmse, 4) : null,
+        };
+    }
+
+    const sourceEventCount = snapshot?.matchedEventCount || 0;
+    const confidence = sourceEventCount >= 3 && fit.rSquared >= 0.97 && fit.normalizedRmse <= 0.04
+        ? 'high'
+        : sourceEventCount >= 1 && fit.rSquared >= 0.9 && fit.normalizedRmse <= 0.07
+            ? 'medium'
+            : 'low';
+    if (confidence === 'low') {
+        return {
+            ...base,
+            status: 'poor-fit',
+            valueWatts: null,
+            valueWattsPerKg: null,
+            wPrimeJoules: null,
+            confidence,
+            rSquared: toRoundedNumber(fit.rSquared, 4),
+            normalizedRmse: toRoundedNumber(fit.normalizedRmse, 4),
+        };
+    }
+
+    const wattsPerKgAnchors = TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.flatMap((duration) => {
+        const value = interpolateTrainingCapacityPowerCurveValue(points, duration, 'wattsPerKg');
+        return value === null ? [] : [{ duration, value }];
+    });
+    const wattsPerKgFit = wattsPerKgAnchors.length === TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.length
+        ? fitTrainingCapacityCriticalPowerModel(wattsPerKgAnchors)
+        : null;
+    const impliedWeights = wattsPerKgAnchors.map((anchor, index) => (
+        wattAnchors[index].value / anchor.value
+    ));
+    const minImpliedWeight = impliedWeights.length ? Math.min(...impliedWeights) : null;
+    const maxImpliedWeight = impliedWeights.length ? Math.max(...impliedWeights) : null;
+    const hasConsistentImpliedWeight = minImpliedWeight !== null
+        && maxImpliedWeight !== null
+        && minImpliedWeight > 0
+        && (maxImpliedWeight / minImpliedWeight) <= TRAINING_CAPACITY_MAX_IMPLIED_WEIGHT_RATIO;
+    const wattsPerKgFitIsReliable = !!wattsPerKgFit
+        && hasConsistentImpliedWeight
+        && wattsPerKgFit.criticalPower < Math.min(...wattsPerKgAnchors.map(anchor => anchor.value))
+        && wattsPerKgFit.rSquared >= 0.9
+        && wattsPerKgFit.normalizedRmse <= 0.07;
+
+    return {
+        ...base,
+        status: 'ready',
+        valueWatts: Math.round(fit.criticalPower),
+        valueWattsPerKg: wattsPerKgFitIsReliable
+            ? toRoundedNumber(wattsPerKgFit.criticalPower, 2)
+            : null,
+        wPrimeJoules: Math.round(fit.wPrime),
+        confidence,
+        rSquared: toRoundedNumber(fit.rSquared, 4),
+        normalizedRmse: toRoundedNumber(fit.normalizedRmse, 4),
+    };
+}
+
+function isTrainingCapacitySessionDerivedFtp(
+    eventData: Record<string, unknown>,
+    ftp: number,
+): boolean {
+    const twentyMinutePoint = normalizePowerCurvePoints(
+        resolveRawStatValue(eventData, POWER_CURVE_STAT_TYPE),
+    ).points.find(point => point.duration === 1_200);
+    if (!twentyMinutePoint) {
+        return false;
+    }
+    return Math.round(twentyMinutePoint.power * TRAINING_CAPACITY_SESSION_FTP_FACTOR) === Math.round(ftp);
+}
+
+export function buildTrainingCapacityMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    powerCurvePayload: DerivedPowerCurveMetricPayload,
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> {
+    const observations: Record<DerivedPowerCurveScope, {
+        ftpSetting: TrainingCapacityObservation[];
+        importedVo2Max: TrainingCapacityObservation[];
+    }> = {
+        running: { ftpSetting: [], importedVo2Max: [] },
+        cycling: { ftpSetting: [], importedVo2Max: [] },
+    };
+    let sourceEventCount = 0;
+
+    activities.forEach((activity) => {
+        const { discipline, metricData: eventData, startMs: timeMs } = activity;
+        if (timeMs > nowMs || !POWER_CAPACITY_DISCIPLINES.includes(discipline as DerivedPowerCurveScope)) {
+            return;
+        }
+        const powerDiscipline = discipline as DerivedPowerCurveScope;
+        const sourceKey = resolveTrainingSourceKey(eventData);
+        const ftp = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataFTP.type));
+        const vo2Max = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataVO2Max.type));
+        const eventId = activity.eventId;
+        if (ftp !== null && !isTrainingCapacitySessionDerivedFtp(eventData, ftp)) {
+            observations[powerDiscipline].ftpSetting.push({ eventId, sourceKey, timeMs, value: ftp });
+        }
+        if (vo2Max !== null) {
+            observations[powerDiscipline].importedVo2Max.push({ eventId, sourceKey, timeMs, value: vo2Max });
+        }
+        sourceEventCount += 1;
+    });
+
+    const disciplines = (['running', 'cycling'] as const).map((discipline) => ({
+        discipline,
+        ftpSetting: buildTrainingCapacityImportedMetric('ftp-setting', observations[discipline].ftpSetting),
+        importedVo2Max: buildTrainingCapacityImportedMetric('vo2-max', observations[discipline].importedVo2Max),
+        modeledCriticalPower: buildModeledCriticalPower(
+            powerCurvePayload.scopes[discipline].ranges['90d'],
+        ),
+    }));
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs: resolveUtcDayStartMs(nowMs),
+            excludesMergedEvents: true,
+            disciplines,
+        },
+    };
+}
+
+function resolveTrainingSourceKey(eventData: Record<string, unknown>): string | null {
+  const creator = eventData.creator && typeof eventData.creator === 'object' && !Array.isArray(eventData.creator)
+    ? eventData.creator as Record<string, unknown>
+    : {};
+  const normalize = (value: unknown): string => toSafeString(value)
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  const provider = [
+    eventData.sourceServiceName,
+    eventData.serviceName,
+    creator.serviceName,
+    creator.manufacturer,
+  ]
+    .map(normalize)
+    .find(Boolean) || '';
+  const device = [creator.name, creator.deviceName, creator.productName]
+    .map(normalize)
+    .find(Boolean) || '';
+
+  // A provider-only source is still useful provenance for an imported setting.
+  // Keep device detail when it exists, without hiding the provider when it does not.
+  if (!device) {
+    return provider || null;
+  }
+
+  if (!provider || device === provider || device.startsWith(`${provider} `)) {
+    return device;
+  }
+  return `${provider} / ${device}`;
+}
+
+function buildTrainingSummaryWindow(
+    accumulator: TrainingSummaryWindowAccumulator,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+    normalizationFactor = 1,
+): DerivedTrainingSummaryMetricPayload['disciplines'][number]['current28d'] {
+    return {
+        periodDays: TRAINING_SUMMARY_CURRENT_WINDOW_DAYS,
+        windowStartDayMs,
+        windowEndDayMs,
+        activityCount: toRoundedNumber(accumulator.activityCount * normalizationFactor, 2),
+        durationSeconds: toRoundedNumber(accumulator.durationSeconds * normalizationFactor, 2),
+        easySeconds: toRoundedNumber(accumulator.easySeconds * normalizationFactor, 2),
+        moderateSeconds: toRoundedNumber(accumulator.moderateSeconds * normalizationFactor, 2),
+        hardSeconds: toRoundedNumber(accumulator.hardSeconds * normalizationFactor, 2),
+    };
+}
+
+export function buildTrainingSummaryMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const currentStartDayMs = asOfDayMs - ((TRAINING_SUMMARY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
+    const baselineEndDayMs = currentStartDayMs - DAY_MS;
+    const baselineStartDayMs = baselineEndDayMs - ((TRAINING_SUMMARY_BASELINE_WINDOW_DAYS - 1) * DAY_MS);
+    const accumulators: Record<DerivedTrainingDiscipline, TrainingSummaryDisciplineAccumulator> = {
+        running: createTrainingSummaryDisciplineAccumulator(),
+        cycling: createTrainingSummaryDisciplineAccumulator(),
+        swimming: createTrainingSummaryDisciplineAccumulator(),
+    };
+    let sourceEventCount = 0;
+
+    activities.forEach((activity) => {
+        const eventData = activity.metricData;
+        const discipline = activity.discipline;
+        const eventDayMs = activity.startDayMs;
+        if (activity.startMs > nowMs || eventDayMs < baselineStartDayMs || eventDayMs > asOfDayMs) {
+            return;
+        }
+
+        const accumulator = accumulators[discipline];
+        const window = eventDayMs >= currentStartDayMs ? accumulator.current : accumulator.baseline;
+        const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
+        const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
+        const zones = powerZones.reduce((sum, value) => sum + value, 0) > 0
+            ? powerZones
+            : heartRateZones;
+        window.activityCount += 1;
+        window.durationSeconds += toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type)) || 0;
+        window.easySeconds += (zones[0] || 0) + (zones[1] || 0);
+        window.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
+        window.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+
+        sourceEventCount += 1;
+    });
+
+    const disciplines: DerivedTrainingDisciplineSummary[] = TRAINING_DISCIPLINES.map((discipline) => {
+        const accumulator = accumulators[discipline];
+        return {
+            discipline,
+            current28d: buildTrainingSummaryWindow(accumulator.current, currentStartDayMs, asOfDayMs),
+            baseline28d: buildTrainingSummaryWindow(
+                accumulator.baseline,
+                baselineStartDayMs,
+                baselineEndDayMs,
+                TRAINING_SUMMARY_CURRENT_WINDOW_DAYS / TRAINING_SUMMARY_BASELINE_WINDOW_DAYS,
+            ),
+        };
+    });
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            currentWindowDays: TRAINING_SUMMARY_CURRENT_WINDOW_DAYS,
+            baselineWindowDays: TRAINING_SUMMARY_BASELINE_WINDOW_DAYS,
+            disciplines,
+            excludesMergedEvents: true,
+        },
+    };
+}
+
+interface TrainingExplanationParentEvent {
+    eventId: string;
+    eventData: Record<string, unknown>;
+    startMs: number;
+    startDayMs: number;
+}
+
+const TRAINING_EXPLANATION_SPORT_BUCKETS: readonly DerivedTrainingExplanationSportBucket[] = [
+    'running',
+    'cycling',
+    'swimming',
+    'other',
+    'unclassified',
+];
+
+function resolveCanonicalActivityType(value: unknown): string | null {
+    const raw = toSafeString(value).trim();
+    if (!raw) {
+        return null;
+    }
+    return (ActivityTypes as Record<string, string>)[raw] || raw;
+}
+
+function resolveTrainingExplanationSportBucket(activityType: unknown): DerivedTrainingExplanationSportBucket {
+    const discipline = resolveTrainingDisciplineFromActivityType(activityType);
+    if (discipline) {
+        return discipline;
+    }
+    const canonicalType = resolveCanonicalActivityType(activityType);
+    if (!canonicalType) {
+        return 'unclassified';
+    }
+    try {
+        const group = ActivityTypesHelper.getActivityGroupForActivityType(canonicalType as ActivityTypes);
+        // Resolve the metadata here as a defensive validation that the persisted
+        // activity belongs to a sports-lib activity group. Curated groups above
+        // remain distinct; every other known group is intentionally "Other".
+        if (group && getActivityTypeGroupLabel(group)) {
+            return 'other';
+        }
+    } catch {
+        // Unknown provider activity strings belong in explicit unclassified coverage.
+    }
+    if ((Object.values(ActivityTypes) as string[]).includes(canonicalType)) {
+        return 'other';
+    }
+    return 'unclassified';
+}
+
+function getTrainingExplanationSportLabel(bucket: DerivedTrainingExplanationSportBucket): string {
+    return bucket === 'running'
+        ? 'Running'
+        : bucket === 'cycling'
+            ? 'Cycling'
+            : bucket === 'swimming'
+                ? 'Swimming'
+                : bucket === 'other'
+                    ? 'Other'
+                    : 'Unclassified';
+}
+
+function buildTrainingExplanationCoverage(
+    totalCount: number,
+    loadedCount: number,
+    classifiedCount: number,
+): DerivedTrainingExplanationLoadCoverage {
+    return {
+        totalCount,
+        loadedCount,
+        classifiedCount,
+        unclassifiedCount: Math.max(0, totalCount - classifiedCount),
+        ratio: totalCount > 0 ? toRoundedNumber(loadedCount / totalCount, 4) : 0,
+    };
+}
+
+function median(values: readonly number[]): number | null {
+    const finiteValues = values.filter(Number.isFinite).sort((left, right) => left - right);
+    if (!finiteValues.length) {
+        return null;
+    }
+    const middle = Math.floor(finiteValues.length / 2);
+    return finiteValues.length % 2 === 0
+        ? (finiteValues[middle - 1] + finiteValues[middle]) / 2
+        : finiteValues[middle];
+}
+
+function medianNullable(values: readonly (number | null)[], precision = 2): number | null {
+    const value = median(values.flatMap(item => item === null ? [] : [item]));
+    return value === null ? null : toRoundedNumber(value, precision);
+}
+
+function resolveTrainingExplanationDurationSeconds(activity: DerivedTrainingExplanationActivitySource): number | null {
+    const statDuration = toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataDuration.type));
+    if (statDuration !== null) {
+        return statDuration;
+    }
+    const endMs = toMillis(activity.activityData.endDate);
+    return endMs !== null && endMs > activity.startMs ? (endMs - activity.startMs) / 1000 : null;
+}
+
+function buildTrainingExplanationRhythm(
+    activities: readonly DerivedTrainingExplanationActivitySource[],
+    discipline: DerivedTrainingDiscipline,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+): DerivedTrainingExplanationRhythm {
+    const disciplineActivities = activities.filter(
+        activity => resolveTrainingDisciplineFromActivityType(activity.activityData.type) === discipline,
+    );
+    const activeDays = new Set(disciplineActivities.map(activity => activity.startDayMs));
+    const activeWeeks = new Set(disciplineActivities.map(
+        activity => Math.floor((activity.startDayMs - windowStartDayMs) / (7 * DAY_MS)),
+    ));
+    let longestInactivityGapDays = 0;
+    let currentGapDays = 0;
+    for (let dayMs = windowStartDayMs; dayMs <= windowEndDayMs; dayMs += DAY_MS) {
+        if (activeDays.has(dayMs)) {
+            currentGapDays = 0;
+        } else {
+            currentGapDays += 1;
+            longestInactivityGapDays = Math.max(longestInactivityGapDays, currentGapDays);
+        }
+    }
+    const durations = disciplineActivities.flatMap((activity) => {
+        const durationSeconds = resolveTrainingExplanationDurationSeconds(activity);
+        return durationSeconds === null ? [] : [durationSeconds];
+    });
+    return {
+        discipline,
+        sessionCount: disciplineActivities.length,
+        activeDayCount: activeDays.size,
+        activeWeekCount: activeWeeks.size,
+        longestInactivityGapDays,
+        longestSessionDurationSeconds: durations.length
+            ? toRoundedNumber(Math.max(...durations), 2)
+            : null,
+    };
+}
+
+function buildTrainingExplanationSportLoads(
+    activities: readonly DerivedTrainingExplanationActivitySource[],
+): DerivedTrainingExplanationSportLoad[] {
+    const accumulators = new Map<DerivedTrainingExplanationSportBucket, {
+        activityCount: number;
+        loadActivityCount: number;
+        trainingStressScore: number;
+    }>();
+    TRAINING_EXPLANATION_SPORT_BUCKETS.forEach(bucket => accumulators.set(bucket, {
+        activityCount: 0,
+        loadActivityCount: 0,
+        trainingStressScore: 0,
+    }));
+    activities.forEach((activity) => {
+        const bucket = resolveTrainingExplanationSportBucket(activity.activityData.type);
+        const accumulator = accumulators.get(bucket)!;
+        accumulator.activityCount += 1;
+        const load = resolveTrainingStressScore(activity.metricData);
+        if (load !== null) {
+            accumulator.loadActivityCount += 1;
+            accumulator.trainingStressScore += load;
+        }
+    });
+    const totalCoveredLoad = [...accumulators.values()].reduce(
+        (sum, item) => sum + item.trainingStressScore,
+        0,
+    );
+    return TRAINING_EXPLANATION_SPORT_BUCKETS.map((bucket) => {
+        const accumulator = accumulators.get(bucket)!;
+        return {
+            sport: bucket,
+            label: getTrainingExplanationSportLabel(bucket),
+            activityCount: accumulator.activityCount,
+            loadActivityCount: accumulator.loadActivityCount,
+            trainingStressScore: accumulator.loadActivityCount > 0
+                ? toRoundedNumber(accumulator.trainingStressScore, 2)
+                : null,
+            loadSharePercent: accumulator.loadActivityCount > 0 && totalCoveredLoad > 0
+                ? toRoundedNumber((accumulator.trainingStressScore / totalCoveredLoad) * 100, 2)
+                : null,
+        };
+    });
+}
+
+function buildTrainingExplanationWindow(
+    parentEvents: readonly TrainingExplanationParentEvent[],
+    activities: readonly DerivedTrainingExplanationActivitySource[],
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+): DerivedTrainingExplanationWindow {
+    const windowEvents = parentEvents.filter(
+        event => event.startDayMs >= windowStartDayMs && event.startDayMs <= windowEndDayMs,
+    );
+    const windowActivities = activities.filter(
+        activity => activity.startDayMs >= windowStartDayMs && activity.startDayMs <= windowEndDayMs,
+    );
+    const parentLoads = windowEvents.flatMap((event) => {
+        const load = resolveTrainingStressScore(event.eventData);
+        return load === null ? [] : [load];
+    });
+    const childLoads = windowActivities.flatMap((activity) => {
+        const load = resolveTrainingStressScore(activity.metricData);
+        return load === null ? [] : [load];
+    });
+    const classifiedActivityCount = windowActivities.filter(
+        activity => resolveTrainingExplanationSportBucket(activity.activityData.type) !== 'unclassified',
+    ).length;
+    return {
+        periodDays: TRAINING_EXPLANATION_WINDOW_DAYS,
+        windowStartDayMs,
+        windowEndDayMs,
+        parentEventCount: windowEvents.length,
+        parentLoadEventCount: parentLoads.length,
+        parentTrainingStressScore: parentLoads.length
+            ? toRoundedNumber(parentLoads.reduce((sum, value) => sum + value, 0), 2)
+            : null,
+        parentLoadCoverage: buildTrainingExplanationCoverage(windowEvents.length, parentLoads.length, windowEvents.length),
+        childActivityCount: windowActivities.length,
+        childLoadActivityCount: childLoads.length,
+        childTrainingStressScore: childLoads.length
+            ? toRoundedNumber(childLoads.reduce((sum, value) => sum + value, 0), 2)
+            : null,
+        childLoadCoverage: buildTrainingExplanationCoverage(
+            windowActivities.length,
+            childLoads.length,
+            classifiedActivityCount,
+        ),
+        sportLoads: buildTrainingExplanationSportLoads(windowActivities),
+        rhythms: TRAINING_DISCIPLINES.map(discipline => buildTrainingExplanationRhythm(
+            windowActivities,
+            discipline,
+            windowStartDayMs,
+            windowEndDayMs,
+        )),
+    };
+}
+
+function buildMedianTrainingExplanationWindowMetrics(
+    windows: readonly DerivedTrainingExplanationWindow[],
+): DerivedTrainingExplanationWindowMetrics {
+    const medianNumber = (selector: (window: DerivedTrainingExplanationWindow) => number): number => (
+        toRoundedNumber(median(windows.map(selector)) || 0, 2)
+    );
+    const buildCoverage = (
+        selector: (window: DerivedTrainingExplanationWindow) => DerivedTrainingExplanationLoadCoverage,
+    ): DerivedTrainingExplanationLoadCoverage => ({
+        totalCount: medianNumber(window => selector(window).totalCount),
+        loadedCount: medianNumber(window => selector(window).loadedCount),
+        classifiedCount: medianNumber(window => selector(window).classifiedCount),
+        unclassifiedCount: medianNumber(window => selector(window).unclassifiedCount),
+        ratio: toRoundedNumber(median(windows.map(window => selector(window).ratio)) || 0, 4),
+    });
+    return {
+        parentEventCount: medianNumber(window => window.parentEventCount),
+        parentLoadEventCount: medianNumber(window => window.parentLoadEventCount),
+        parentTrainingStressScore: medianNullable(windows.map(window => window.parentTrainingStressScore)),
+        parentLoadCoverage: buildCoverage(window => window.parentLoadCoverage),
+        childActivityCount: medianNumber(window => window.childActivityCount),
+        childLoadActivityCount: medianNumber(window => window.childLoadActivityCount),
+        childTrainingStressScore: medianNullable(windows.map(window => window.childTrainingStressScore)),
+        childLoadCoverage: buildCoverage(window => window.childLoadCoverage),
+        sportLoads: TRAINING_EXPLANATION_SPORT_BUCKETS.map((sport, index) => ({
+            sport,
+            label: getTrainingExplanationSportLabel(sport),
+            activityCount: medianNumber(window => window.sportLoads[index].activityCount),
+            loadActivityCount: medianNumber(window => window.sportLoads[index].loadActivityCount),
+            trainingStressScore: medianNullable(windows.map(window => window.sportLoads[index].trainingStressScore)),
+            loadSharePercent: medianNullable(windows.map(window => window.sportLoads[index].loadSharePercent)),
+        })),
+        rhythms: TRAINING_DISCIPLINES.map((discipline, index) => ({
+            discipline,
+            sessionCount: medianNumber(window => window.rhythms[index].sessionCount),
+            activeDayCount: medianNumber(window => window.rhythms[index].activeDayCount),
+            activeWeekCount: medianNumber(window => window.rhythms[index].activeWeekCount),
+            longestInactivityGapDays: medianNumber(window => window.rhythms[index].longestInactivityGapDays),
+            longestSessionDurationSeconds: medianNullable(
+                windows.map(window => window.rhythms[index].longestSessionDurationSeconds),
+            ),
+        })),
+    };
+}
+
+function buildTrainingExplanationContributorComposition(
+    eventId: string,
+    activities: readonly DerivedTrainingExplanationActivitySource[],
+): DerivedTrainingExplanationSportLoad[] {
+    return buildTrainingExplanationSportLoads(activities.filter(activity => activity.eventId === eventId))
+        .filter(item => item.activityCount > 0);
+}
+
+export function buildTrainingExplanationMetricPayload(
+    eventDocs: readonly FirestoreQueryDocumentSnapshot[],
+    activities: readonly DerivedTrainingExplanationActivitySource[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const earliestDayMs = asOfDayMs
+        - (((TRAINING_EXPLANATION_BASELINE_BLOCK_COUNT + 1) * TRAINING_EXPLANATION_WINDOW_DAYS - 1) * DAY_MS);
+    const parentEvents = eventDocs.flatMap((doc): TrainingExplanationParentEvent[] => {
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        const startMs = toMillis(eventData.startDate);
+        if (isMergedEvent(eventData) || startMs === null || startMs > nowMs) {
+            return [];
+        }
+        const startDayMs = resolveUtcDayStartMs(startMs);
+        return startDayMs < earliestDayMs || startDayMs > asOfDayMs
+            ? []
+            : [{ eventId: `${doc.id || ''}`.trim(), eventData, startMs, startDayMs }];
+    });
+    const eligibleActivities = activities.filter(
+        activity => activity.startMs <= nowMs && activity.startDayMs >= earliestDayMs && activity.startDayMs <= asOfDayMs,
+    );
+    const buildBlock = (blockIndex: number): DerivedTrainingExplanationWindow => {
+        const windowEndDayMs = asOfDayMs - (blockIndex * TRAINING_EXPLANATION_WINDOW_DAYS * DAY_MS);
+        const windowStartDayMs = windowEndDayMs - ((TRAINING_EXPLANATION_WINDOW_DAYS - 1) * DAY_MS);
+        return buildTrainingExplanationWindow(parentEvents, eligibleActivities, windowStartDayMs, windowEndDayMs);
+    };
+    const current = buildBlock(0);
+    const baselineBlocks = Array.from(
+        { length: TRAINING_EXPLANATION_BASELINE_BLOCK_COUNT },
+        (_, index) => buildBlock(index + 1),
+    );
+    const currentParentLoad = current.parentTrainingStressScore;
+    const currentParentById = parentEvents
+        .filter(event => event.startDayMs >= current.windowStartDayMs && event.startDayMs <= current.windowEndDayMs)
+        .flatMap((event): DerivedTrainingExplanationContributor[] => {
+            const load = resolveTrainingStressScore(event.eventData);
+            if (load === null) {
+                return [];
+            }
+            return [{
+                eventId: event.eventId,
+                label: toSafeString(event.eventData.name).trim() || null,
+                startDayMs: event.startDayMs,
+                trainingStressScore: toRoundedNumber(load, 2),
+                loadSharePercent: currentParentLoad !== null && currentParentLoad > 0
+                    ? toRoundedNumber((load / currentParentLoad) * 100, 2)
+                    : 0,
+                childComposition: buildTrainingExplanationContributorComposition(event.eventId, eligibleActivities),
+            }];
+        })
+        .sort((left, right) => right.trainingStressScore - left.trainingStressScore || right.startDayMs - left.startDayMs)
+        .slice(0, 5);
+
+    return {
+        sourceEventCount: parentEvents.length,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            currentWindowDays: TRAINING_EXPLANATION_WINDOW_DAYS,
+            baselineBlockCount: TRAINING_EXPLANATION_BASELINE_BLOCK_COUNT,
+            excludesMergedEvents: true,
+            excludesMissingDates: true,
+            excludesFutureEvents: true,
+            current,
+            baselineBlocks,
+            baselineMedian: buildMedianTrainingExplanationWindowMetrics(baselineBlocks),
+            topContributors: currentParentById,
+        },
+    };
+}
+
+interface ParsedDurabilityEvidence {
+    context: DerivedTrainingDurabilityContext;
+    durationSeconds: number | null;
+    coverageRatio: number | null;
+    eligible: boolean;
+    exclusionReason: string | null;
+    decouplingPercent: number | null;
+    outputRetentionPercent: number | null;
+    heartRateDriftBpm: number | null;
+    paceRetentionPercent: number | null;
+    swolfChange: number | null;
+}
+
+function resolveTrainingDurabilityScope(
+    activity: DerivedTrainingActivitySource,
+): DerivedTrainingDurabilityScope {
+    if (activity.discipline === 'running' || activity.discipline === 'cycling') {
+        return activity.discipline;
+    }
+    return resolveTrainingSwimEnvironment(activity.activityData.type) === 'open-water'
+        ? 'open-water-swimming'
+        : 'pool-swimming';
+}
+
+function resolveDurabilityContext(
+    raw: Record<string, unknown>,
+    evidence: Record<string, unknown>,
+    scope: DerivedTrainingDurabilityScope,
+): DerivedTrainingDurabilityContext | null {
+    const outputSource = toSafeString(raw.outputSource).trim();
+    const outputUnit = toSafeString(raw.outputUnit).trim();
+    if (!outputSource || !outputUnit) {
+        return null;
+    }
+    const rawContext = raw.context && typeof raw.context === 'object' && !Array.isArray(raw.context)
+        ? raw.context as Record<string, unknown>
+        : {};
+    const poolLengthMeters = toFinitePositiveNumber(evidence.poolLengthMeters)
+        ?? toFinitePositiveNumber(rawContext.poolLengthMeters);
+    const stroke = toSafeString(evidence.stroke || rawContext.stroke).trim() || null;
+    const normalizedPoolLength = scope === 'pool-swimming' ? poolLengthMeters : null;
+    const normalizedStroke = scope === 'pool-swimming' ? stroke : null;
+    const contextKey = [
+        scope,
+        outputSource,
+        outputUnit,
+        normalizedPoolLength === null ? '-' : toRoundedNumber(normalizedPoolLength, 3),
+        normalizedStroke || '-',
+    ].join('|');
+    return {
+        contextKey,
+        scope,
+        outputSource,
+        outputUnit,
+        poolLengthMeters: normalizedPoolLength,
+        stroke: normalizedStroke,
+    };
+}
+
+function parsePersistedDurabilityEvidence(
+    activity: DerivedTrainingActivitySource,
+): ParsedDurabilityEvidence | null {
+    const rawValue = resolveRawStatValue(activity.metricData, DataDurabilityEvidence.type);
+    const raw = normalizeDurabilityEvidenceValue(rawValue);
+    if (!raw) {
+        return null;
+    }
+    const evidence = raw.evidence
+        ? raw.evidence as unknown as Record<string, unknown>
+        : {};
+    const scope = resolveTrainingDurabilityScope(activity);
+    if (raw.discipline !== scope) {
+        return null;
+    }
+    const context = resolveDurabilityContext(raw as unknown as Record<string, unknown>, evidence, scope);
+    if (!context) {
+        return null;
+    }
+    const kind = raw.evidence?.kind || null;
+    const eligible = raw.eligibility.eligible && raw.evidence !== null;
+    return {
+        context,
+        durationSeconds: raw.durationSeconds,
+        coverageRatio: raw.coverageRatio,
+        eligible,
+        exclusionReason: eligible
+            ? null
+            : raw.eligibility.reason,
+        decouplingPercent: kind === 'aerobic-efficiency' ? toFiniteNumber(evidence.decouplingPercent) : null,
+        outputRetentionPercent: kind === 'aerobic-efficiency' ? toFiniteNumber(evidence.outputRetentionPercent) : null,
+        heartRateDriftBpm: kind === 'aerobic-efficiency' ? toFiniteNumber(evidence.heartRateDriftBpm) : null,
+        paceRetentionPercent: kind === 'pool-consistency' ? toFiniteNumber(evidence.paceRetentionPercent) : null,
+        swolfChange: kind === 'pool-consistency' ? toFiniteNumber(evidence.swolfChange) : null,
+    };
+}
+
+function summarizeDurabilityContext(
+    context: DerivedTrainingDurabilityContext,
+    evidence: readonly ParsedDurabilityEvidence[],
+): DerivedTrainingDurabilityContextSummary {
+    return {
+        context,
+        sampleCount: evidence.length,
+        medianDurationSeconds: medianNullable(evidence.map(item => item.durationSeconds)),
+        medianCoverageRatio: medianNullable(evidence.map(item => item.coverageRatio), 4),
+        medianDecouplingPercent: medianNullable(evidence.map(item => item.decouplingPercent)),
+        medianOutputRetentionPercent: medianNullable(evidence.map(item => item.outputRetentionPercent)),
+        medianHeartRateDriftBpm: medianNullable(evidence.map(item => item.heartRateDriftBpm)),
+        medianPaceRetentionPercent: medianNullable(evidence.map(item => item.paceRetentionPercent)),
+        medianSwolfChange: medianNullable(evidence.map(item => item.swolfChange)),
+    };
+}
+
+/**
+ * Pure aggregation over already-persisted activity evidence. It deliberately
+ * never derives durability from raw streams, average power, pace, or heart rate.
+ * The standalone snapshot and Best Build comparison both use this function.
+ */
+export function aggregatePersistedTrainingDurability(
+    activities: readonly DerivedTrainingActivitySource[],
+): DerivedTrainingDurabilityWindowMetrics {
+    const parsedByActivity = activities.map(activity => ({
+        activity,
+        parsed: parsePersistedDurabilityEvidence(activity),
+    }));
+    const parsed = parsedByActivity.flatMap(item => item.parsed ? [item.parsed] : []);
+    const eligible = parsed.filter(item => item.eligible);
+    const exclusions = new Map<string, number>();
+    parsed.filter(item => !item.eligible).forEach((item) => {
+        const reason = item.exclusionReason || 'ineligible';
+        exclusions.set(reason, (exclusions.get(reason) || 0) + 1);
+    });
+    const evidenceByContext = new Map<string, ParsedDurabilityEvidence[]>();
+    eligible.forEach((item) => {
+        const rows = evidenceByContext.get(item.context.contextKey) || [];
+        rows.push(item);
+        evidenceByContext.set(item.context.contextKey, rows);
+    });
+    return {
+        coverage: {
+            candidateActivityCount: activities.length,
+            evidenceActivityCount: parsed.length,
+            eligibleActivityCount: eligible.length,
+            missingEvidenceActivityCount: activities.length - parsed.length,
+            excludedActivityCount: parsed.length - eligible.length,
+            eligibilityRatio: activities.length > 0
+                ? toRoundedNumber(eligible.length / activities.length, 4)
+                : null,
+            exclusions: [...exclusions.entries()]
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([reason, activityCount]) => ({ reason, activityCount })),
+        },
+        summaries: [...evidenceByContext.values()]
+            .map(rows => summarizeDurabilityContext(rows[0].context, rows))
+            .sort((left, right) => left.context.contextKey.localeCompare(right.context.contextKey)),
+    };
+}
+
+function buildTrainingDurabilityWindow(
+    activities: readonly DerivedTrainingActivitySource[],
+    periodDays: 28 | 7,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+    nowMs: number,
+): DerivedTrainingDurabilityWindow {
+    const windowActivities = activities.filter(activity => (
+        activity.startMs <= nowMs
+        && activity.startDayMs >= windowStartDayMs
+        && activity.startDayMs <= windowEndDayMs
+    ));
+    return {
+        periodDays,
+        windowStartDayMs,
+        windowEndDayMs,
+        ...aggregatePersistedTrainingDurability(windowActivities),
+    };
+}
+
+function buildMedianTrainingDurabilityMetrics(
+    windows: readonly DerivedTrainingDurabilityWindow[],
+): DerivedTrainingDurabilityWindowMetrics {
+    const medianCount = (selector: (window: DerivedTrainingDurabilityWindow) => number): number => (
+        toRoundedNumber(median(windows.map(selector)) || 0, 2)
+    );
+    const exclusionReasons = new Set(windows.flatMap(window => window.coverage.exclusions.map(item => item.reason)));
+    const summariesByKey = new Map<string, DerivedTrainingDurabilityContextSummary[]>();
+    windows.forEach(window => window.summaries.forEach((summary) => {
+        const rows = summariesByKey.get(summary.context.contextKey) || [];
+        rows.push(summary);
+        summariesByKey.set(summary.context.contextKey, rows);
+    }));
+    return {
+        coverage: {
+            candidateActivityCount: medianCount(window => window.coverage.candidateActivityCount),
+            evidenceActivityCount: medianCount(window => window.coverage.evidenceActivityCount),
+            eligibleActivityCount: medianCount(window => window.coverage.eligibleActivityCount),
+            missingEvidenceActivityCount: medianCount(window => window.coverage.missingEvidenceActivityCount),
+            excludedActivityCount: medianCount(window => window.coverage.excludedActivityCount),
+            eligibilityRatio: medianNullable(windows.map(window => window.coverage.eligibilityRatio), 4),
+            exclusions: [...exclusionReasons].sort().map(reason => ({
+                reason,
+                activityCount: medianCount(window => (
+                    window.coverage.exclusions.find(item => item.reason === reason)?.activityCount || 0
+                )),
+            })),
+        },
+        summaries: [...summariesByKey.values()].map((summaries) => {
+            const sampleCount = toRoundedNumber(median([
+                ...summaries.map(summary => summary.sampleCount),
+                ...Array.from({ length: windows.length - summaries.length }, () => 0),
+            ]) || 0, 2);
+            const hasUsualEvidence = summaries.length >= 2
+                && summaries.reduce((sum, summary) => sum + summary.sampleCount, 0) >= 2;
+            const usualMedian = (
+                selector: (summary: DerivedTrainingDurabilityContextSummary) => number | null,
+                precision = 2,
+            ): number | null => hasUsualEvidence ? medianNullable(summaries.map(selector), precision) : null;
+            return {
+                context: summaries[0].context,
+                sampleCount,
+                medianDurationSeconds: usualMedian(summary => summary.medianDurationSeconds),
+                medianCoverageRatio: usualMedian(summary => summary.medianCoverageRatio, 4),
+                medianDecouplingPercent: usualMedian(summary => summary.medianDecouplingPercent),
+                medianOutputRetentionPercent: usualMedian(summary => summary.medianOutputRetentionPercent),
+                medianHeartRateDriftBpm: usualMedian(summary => summary.medianHeartRateDriftBpm),
+                medianPaceRetentionPercent: usualMedian(summary => summary.medianPaceRetentionPercent),
+                medianSwolfChange: usualMedian(summary => summary.medianSwolfChange),
+            };
+        }).sort((left, right) => left.context.contextKey.localeCompare(right.context.contextKey)),
+    };
+}
+
+function buildTrainingDurabilitySupportingEvents(
+    activities: readonly DerivedTrainingActivitySource[],
+    currentStartDayMs: number,
+    nowMs: number,
+): DerivedTrainingDurabilityMetricPayload['scopes'][number]['recentSupportingEvents'] {
+    return activities
+        .filter(activity => activity.startMs <= nowMs && activity.startDayMs >= currentStartDayMs)
+        .flatMap((activity) => {
+            const evidence = parsePersistedDurabilityEvidence(activity);
+            if (!evidence?.eligible) {
+                return [];
+            }
+            return [{
+                activityId: activity.activityId,
+                eventId: activity.eventId,
+                label: toSafeString(activity.eventData.name).trim() || null,
+                startDayMs: activity.startDayMs,
+                contextKey: evidence.context.contextKey,
+                decouplingPercent: evidence.decouplingPercent,
+                outputRetentionPercent: evidence.outputRetentionPercent,
+                heartRateDriftBpm: evidence.heartRateDriftBpm,
+                paceRetentionPercent: evidence.paceRetentionPercent,
+                swolfChange: evidence.swolfChange,
+            }];
+        })
+        .sort((left, right) => right.startDayMs - left.startDayMs || left.activityId.localeCompare(right.activityId))
+        .slice(0, 5);
+}
+
+export function buildTrainingDurabilityMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const currentWeekStartMs = resolveUtcWeekStartMs(asOfDayMs);
+    const scopeComparisons = ([
+        'running',
+        'cycling',
+        'pool-swimming',
+        'open-water-swimming',
+    ] as const).map((scope) => {
+        const scopedActivities = activities.filter(activity => resolveTrainingDurabilityScope(activity) === scope);
+        const buildBlock = (blockIndex: number): DerivedTrainingDurabilityWindow => {
+            const windowEndDayMs = asOfDayMs - (blockIndex * TRAINING_DURABILITY_WINDOW_DAYS * DAY_MS);
+            const windowStartDayMs = windowEndDayMs - ((TRAINING_DURABILITY_WINDOW_DAYS - 1) * DAY_MS);
+            return buildTrainingDurabilityWindow(
+                scopedActivities,
+                TRAINING_DURABILITY_WINDOW_DAYS,
+                windowStartDayMs,
+                windowEndDayMs,
+                nowMs,
+            );
+        };
+        const current = buildBlock(0);
+        const baselineBlocks = Array.from(
+            { length: TRAINING_DURABILITY_BASELINE_BLOCK_COUNT },
+            (_, index) => buildBlock(index + 1),
+        );
+        const weeks = Array.from({ length: TRAINING_DURABILITY_WEEKLY_POINT_COUNT }, (_, index) => {
+            const weekStartDayMs = currentWeekStartMs
+                - ((TRAINING_DURABILITY_WEEKLY_POINT_COUNT - index - 1) * 7 * DAY_MS);
+            return buildTrainingDurabilityWindow(
+                scopedActivities,
+                7,
+                weekStartDayMs,
+                Math.min(weekStartDayMs + (6 * DAY_MS), asOfDayMs),
+                nowMs,
+            );
+        });
+        return {
+            scope,
+            current,
+            baselineBlocks,
+            usual: buildMedianTrainingDurabilityMetrics(baselineBlocks),
+            weeks,
+            recentSupportingEvents: buildTrainingDurabilitySupportingEvents(
+                scopedActivities,
+                current.windowStartDayMs,
+                nowMs,
+            ),
+        };
+    });
+    const earliestBaselineDayMs = asOfDayMs
+        - (((TRAINING_DURABILITY_BASELINE_BLOCK_COUNT + 1) * TRAINING_DURABILITY_WINDOW_DAYS - 1) * DAY_MS);
+    return {
+        sourceEventCount: activities.filter(
+            activity => activity.startMs <= nowMs && activity.startDayMs >= earliestBaselineDayMs,
+        ).length,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            currentWindowDays: TRAINING_DURABILITY_WINDOW_DAYS,
+            baselineBlockCount: TRAINING_DURABILITY_BASELINE_BLOCK_COUNT,
+            weeklyPointCount: TRAINING_DURABILITY_WEEKLY_POINT_COUNT,
+            excludesMergedEvents: true,
+            excludesFutureEvents: true,
+            evidenceSource: 'persisted-activity-stat',
+            scopes: scopeComparisons,
+        },
+    };
+}
+
+interface TrainingBuildWindowAccumulator {
+    activityCount: number;
+    durationSeconds: number;
+    distanceMeters: number;
+    distanceEventCount: number;
+    trainingStressScore: number;
+    trainingStressScoreEventCount: number;
+    activeWeekBuckets: Set<number>;
+    longestActivityDurationSeconds: number | null;
+    easySeconds: number;
+    moderateSeconds: number;
+    hardSeconds: number;
+    intensitySourceEventCount: number;
+    poolWeightedPaceSeconds: number;
+    poolPaceDistanceMeters: number;
+    poolPaceActivityCount: number;
+    openWaterWeightedPaceSeconds: number;
+    openWaterPaceDistanceMeters: number;
+    openWaterPaceActivityCount: number;
+}
+
+type ResolvedTrainingBuildEvent = DerivedTrainingActivitySource;
+
+const TRAINING_BUILD_RACE_SUGGESTION_LIMIT = 20;
+const TRAINING_BUILD_EVENT_SUGGESTION_LIMIT = 100;
+
+function createTrainingBuildWindowAccumulator(): TrainingBuildWindowAccumulator {
+    return {
+        activityCount: 0,
+        durationSeconds: 0,
+        distanceMeters: 0,
+        distanceEventCount: 0,
+        trainingStressScore: 0,
+        trainingStressScoreEventCount: 0,
+        activeWeekBuckets: new Set<number>(),
+        longestActivityDurationSeconds: null,
+        easySeconds: 0,
+        moderateSeconds: 0,
+        hardSeconds: 0,
+        intensitySourceEventCount: 0,
+        poolWeightedPaceSeconds: 0,
+        poolPaceDistanceMeters: 0,
+        poolPaceActivityCount: 0,
+        openWaterWeightedPaceSeconds: 0,
+        openWaterPaceDistanceMeters: 0,
+        openWaterPaceActivityCount: 0,
+    };
+}
+
+function isTrainingBuildDurationWeeks(value: unknown): value is TrainingBuildDurationWeeks {
+    return TRAINING_BUILD_DURATION_WEEKS.includes(Number(value) as TrainingBuildDurationWeeks);
+}
+
+export function normalizeTrainingBuildBenchmarkSelection(value: unknown): TrainingBuildBenchmarkSelection | null {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+    const raw = value as Partial<TrainingBuildBenchmarkSelection>;
+    const durationWeeks = Number(raw.durationWeeks);
+    if (!isTrainingBuildDurationWeeks(durationWeeks)) {
+        return null;
+    }
+    if (raw.mode === 'event') {
+        const eventId = normalizeTrainingBuildEventId(raw.eventId);
+        return eventId
+            ? { mode: 'event', durationWeeks, eventId }
+            : null;
+    }
+    if (raw.mode === 'period') {
+        const endDayMs = normalizeTrainingBuildPeriodEndDayMs(raw.endDayMs);
+        return endDayMs === null
+            ? null
+            : { mode: 'period', durationWeeks, endDayMs };
+    }
+    return null;
+}
+
+export function resolveTrainingBuildBenchmarkSelections(
+    value: unknown,
+): Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>> {
+    const settings = value && typeof value === 'object'
+        ? value as Record<string, unknown>
+        : {};
+    const trainingSettings = settings.trainingSettings && typeof settings.trainingSettings === 'object'
+        ? settings.trainingSettings as Record<string, unknown>
+        : {};
+    const rawBenchmarks = trainingSettings.buildBenchmarks && typeof trainingSettings.buildBenchmarks === 'object'
+        ? trainingSettings.buildBenchmarks as Record<string, unknown>
+        : {};
+
+    return TRAINING_DISCIPLINES.reduce<Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>>>(
+        (benchmarks, discipline) => {
+            const selection = normalizeTrainingBuildBenchmarkSelection(rawBenchmarks[discipline]);
+            if (selection) {
+                benchmarks[discipline] = selection;
+            }
+            return benchmarks;
+        },
+        {},
+    );
+}
+
+export function isRaceTaggedEvent(eventData: Record<string, unknown>): boolean {
+    return getEventTags(eventData).some(tag => tag.toLowerCase() === 'race');
+}
+
+function resolveTrainingBuildActivityDurationSeconds(eventData: Record<string, unknown>): number | null {
+    const statDuration = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type));
+    if (statDuration !== null) {
+        return statDuration;
+    }
+    const startMs = toMillis(eventData.startDate);
+    const endMs = toMillis(eventData.endDate);
+    return startMs !== null && endMs !== null && endMs > startMs
+        ? (endMs - startMs) / 1000
+        : null;
+}
+
+function resolveTrainingSwimEnvironment(activityType: unknown): DerivedTrainingSwimEnvironment {
+    const canonicalType = (ActivityTypes as Record<string, string>)[toSafeString(activityType).trim()]
+        || toSafeString(activityType).trim();
+    return canonicalType === ActivityTypes.OpenWaterSwimming ? 'open-water' : 'pool';
+}
+
+function addTrainingBuildEventToWindow(
+    accumulator: TrainingBuildWindowAccumulator,
+    event: ResolvedTrainingBuildEvent,
+    windowStartDayMs: number,
+): void {
+    const { metricData: eventData, startDayMs } = event;
+    accumulator.activityCount += 1;
+    accumulator.activeWeekBuckets.add(Math.floor((startDayMs - windowStartDayMs) / (7 * DAY_MS)));
+
+    const durationSeconds = resolveTrainingBuildActivityDurationSeconds(eventData);
+    if (durationSeconds !== null) {
+        accumulator.durationSeconds += durationSeconds;
+        accumulator.longestActivityDurationSeconds = Math.max(
+            accumulator.longestActivityDurationSeconds || 0,
+            durationSeconds,
+        );
+    }
+
+    const distanceMeters = toFiniteNumber(resolveRawStatNumericValue(
+        eventData,
+        event.discipline === 'swimming' ? DataSwimDistance.type : DataDistance.type,
+    )) ?? (event.discipline === 'swimming'
+        ? toFiniteNumber(resolveRawStatNumericValue(eventData, DataDistance.type))
+        : null);
+    if (distanceMeters !== null && distanceMeters >= 0) {
+        accumulator.distanceMeters += distanceMeters;
+        accumulator.distanceEventCount += 1;
+    }
+
+    const trainingStressScore = resolveTrainingStressScore(eventData);
+    if (trainingStressScore !== null && trainingStressScore >= 0) {
+        accumulator.trainingStressScore += trainingStressScore;
+        accumulator.trainingStressScoreEventCount += 1;
+    }
+
+    const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
+    const powerZoneTotal = powerZones.reduce((sum, value) => sum + value, 0);
+    const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
+    const heartRateZoneTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
+    const zones = powerZoneTotal > 0 ? powerZones : (heartRateZoneTotal > 0 ? heartRateZones : null);
+    if (zones) {
+        accumulator.easySeconds += (zones[0] || 0) + (zones[1] || 0);
+        accumulator.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
+        accumulator.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+        accumulator.intensitySourceEventCount += 1;
+    }
+
+    if (event.discipline === 'swimming' && distanceMeters !== null && distanceMeters > 0) {
+        const paceSecondsPer100m = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataSwimPaceAvg.type));
+        if (paceSecondsPer100m !== null) {
+            if (resolveTrainingSwimEnvironment(event.activityData.type) === 'open-water') {
+                accumulator.openWaterWeightedPaceSeconds += paceSecondsPer100m * distanceMeters;
+                accumulator.openWaterPaceDistanceMeters += distanceMeters;
+                accumulator.openWaterPaceActivityCount += 1;
+            } else {
+                accumulator.poolWeightedPaceSeconds += paceSecondsPer100m * distanceMeters;
+                accumulator.poolPaceDistanceMeters += distanceMeters;
+                accumulator.poolPaceActivityCount += 1;
+            }
+        }
+    }
+}
+
+function buildTrainingBuildWindow(
+    events: readonly ResolvedTrainingBuildEvent[],
+    durationWeeks: TrainingBuildDurationWeeks,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+    asOfMs: number,
+): DerivedTrainingBuildWindow {
+    const accumulator = createTrainingBuildWindowAccumulator();
+    const windowEvents = events.filter((event) => (
+            event.startMs <= asOfMs
+            && event.startDayMs >= windowStartDayMs
+            && event.startDayMs <= windowEndDayMs
+    ));
+    windowEvents.forEach(event => addTrainingBuildEventToWindow(accumulator, event, windowStartDayMs));
+    const durability = aggregatePersistedTrainingDurability(windowEvents);
+    return {
+        periodWeeks: durationWeeks,
+        windowStartDayMs,
+        windowEndDayMs,
+        activityCount: accumulator.activityCount,
+        durationSeconds: toRoundedNumber(accumulator.durationSeconds, 2),
+        distanceMeters: accumulator.distanceEventCount ? toRoundedNumber(accumulator.distanceMeters, 2) : null,
+        distanceEventCount: accumulator.distanceEventCount,
+        trainingStressScore: accumulator.trainingStressScoreEventCount
+            ? toRoundedNumber(accumulator.trainingStressScore, 2)
+            : null,
+        trainingStressScoreEventCount: accumulator.trainingStressScoreEventCount,
+        activeWeekCount: accumulator.activeWeekBuckets.size,
+        longestActivityDurationSeconds: accumulator.longestActivityDurationSeconds === null
+            ? null
+            : toRoundedNumber(accumulator.longestActivityDurationSeconds, 2),
+        easySeconds: accumulator.intensitySourceEventCount ? toRoundedNumber(accumulator.easySeconds, 2) : null,
+        moderateSeconds: accumulator.intensitySourceEventCount ? toRoundedNumber(accumulator.moderateSeconds, 2) : null,
+        hardSeconds: accumulator.intensitySourceEventCount ? toRoundedNumber(accumulator.hardSeconds, 2) : null,
+        intensitySourceEventCount: accumulator.intensitySourceEventCount,
+        durability: durability.coverage.eligibleActivityCount > 0 ? durability : null,
+        poolAveragePaceSecondsPer100m: accumulator.poolPaceDistanceMeters > 0
+            ? toRoundedNumber(accumulator.poolWeightedPaceSeconds / accumulator.poolPaceDistanceMeters, 2)
+            : null,
+        poolPaceActivityCount: accumulator.poolPaceActivityCount,
+        openWaterAveragePaceSecondsPer100m: accumulator.openWaterPaceDistanceMeters > 0
+            ? toRoundedNumber(accumulator.openWaterWeightedPaceSeconds / accumulator.openWaterPaceDistanceMeters, 2)
+            : null,
+        openWaterPaceActivityCount: accumulator.openWaterPaceActivityCount,
+    };
+}
+
+function resolveTrainingBuildBenchmarkReference(
+    selection: TrainingBuildBenchmarkSelection,
+    discipline: DerivedTrainingDiscipline,
+    events: readonly ResolvedTrainingBuildEvent[],
+    currentStartDayMs: number,
+): DerivedTrainingBuildBenchmarkReference | null {
+    const periodDays = selection.durationWeeks * 7;
+    let windowEndDayMs: number;
+    let label: string | null = null;
+
+    if (selection.mode === 'event') {
+        const selectedEvent = events.find(event => event.eventId === selection.eventId);
+        if (!selectedEvent || selectedEvent.discipline !== discipline) {
+            return null;
+        }
+        windowEndDayMs = selectedEvent.eventStartDayMs - DAY_MS;
+        label = toSafeString(selectedEvent.eventData.name).trim() || 'Historical event';
+    } else {
+        windowEndDayMs = resolveUtcDayStartMs(selection.endDayMs);
+    }
+
+    if (windowEndDayMs >= currentStartDayMs) {
+        return null;
+    }
+    const selectionKey = getTrainingBuildBenchmarkSelectionKey(selection);
+    if (!selectionKey) {
+        return null;
+    }
+    return {
+        ...selection,
+        selectionKey,
+        windowStartDayMs: windowEndDayMs - ((periodDays - 1) * DAY_MS),
+        windowEndDayMs,
+        label,
+    };
+}
+
+function buildTrainingBuildEventSuggestion(
+    events: readonly ResolvedTrainingBuildEvent[],
+): DerivedTrainingBuildEventSuggestion {
+    const event = events[0];
+    const sumOptional = (values: Array<number | null>): number | null => {
+        const available = values.filter((value): value is number => value !== null && value >= 0);
+        return available.length ? available.reduce((sum, value) => sum + value, 0) : null;
+    };
+    const distanceMeters = sumOptional(events.map(item => (
+        toFiniteNumber(resolveRawStatNumericValue(
+            item.metricData,
+            item.discipline === 'swimming' ? DataSwimDistance.type : DataDistance.type,
+        )) ?? (item.discipline === 'swimming'
+            ? toFiniteNumber(resolveRawStatNumericValue(item.metricData, DataDistance.type))
+            : null)
+    )));
+    const trainingStressScore = sumOptional(events.map(item => resolveTrainingStressScore(item.metricData)));
+    const durationSeconds = sumOptional(events.map(item => resolveTrainingBuildActivityDurationSeconds(item.metricData)));
+    return {
+        eventId: event.eventId,
+        startDayMs: event.eventStartDayMs,
+        label: toSafeString(event.eventData.name).trim() || null,
+        distanceMeters: distanceMeters !== null && distanceMeters >= 0 ? toRoundedNumber(distanceMeters, 2) : null,
+        durationSeconds: durationSeconds === null ? null : toRoundedNumber(durationSeconds, 2),
+        trainingStressScore: trainingStressScore !== null && trainingStressScore >= 0
+            ? toRoundedNumber(trainingStressScore, 2)
+            : null,
+    };
+}
+
+function groupTrainingBuildActivitiesByEvent(
+    events: readonly ResolvedTrainingBuildEvent[],
+): ResolvedTrainingBuildEvent[][] {
+    const byEventId = new Map<string, ResolvedTrainingBuildEvent[]>();
+    events.forEach((event) => {
+        const grouped = byEventId.get(event.eventId) || [];
+        grouped.push(event);
+        byEventId.set(event.eventId, grouped);
+    });
+    return [...byEventId.values()];
+}
+
+function buildTrainingBuildRaceSuggestions(
+    events: readonly ResolvedTrainingBuildEvent[],
+    currentStartDayMs: number,
+    selectedEventId: string | null = null,
+): DerivedTrainingBuildRaceSuggestion[] {
+    const eligibleGroups = groupTrainingBuildActivitiesByEvent(events)
+        .filter(group => (group[0].eventStartDayMs - DAY_MS) < currentStartDayMs && isRaceTaggedEvent(group[0].eventData))
+        .sort((left, right) => right[0].eventStartDayMs - left[0].eventStartDayMs || left[0].eventId.localeCompare(right[0].eventId));
+    const selectedGroupIndex = selectedEventId
+        ? eligibleGroups.findIndex(group => group[0].eventId === selectedEventId)
+        : -1;
+    if (selectedGroupIndex > 0) {
+        const [selectedGroup] = eligibleGroups.splice(selectedGroupIndex, 1);
+        eligibleGroups.unshift(selectedGroup);
+    }
+    return eligibleGroups
+        .slice(0, TRAINING_BUILD_RACE_SUGGESTION_LIMIT)
+        .map(group => buildTrainingBuildEventSuggestion(group));
+}
+
+function buildTrainingBuildEventSuggestions(
+    events: readonly ResolvedTrainingBuildEvent[],
+    currentStartDayMs: number,
+    selectedEventId: string | null = null,
+): DerivedTrainingBuildEventSuggestion[] {
+    const eligibleGroups = groupTrainingBuildActivitiesByEvent(events)
+        .filter(group => (group[0].eventStartDayMs - DAY_MS) < currentStartDayMs && !isRaceTaggedEvent(group[0].eventData))
+        .sort((left, right) => right[0].eventStartDayMs - left[0].eventStartDayMs || left[0].eventId.localeCompare(right[0].eventId));
+    const selectedGroupIndex = selectedEventId
+        ? eligibleGroups.findIndex(group => group[0].eventId === selectedEventId)
+        : -1;
+    if (selectedGroupIndex > 0) {
+        const [selectedGroup] = eligibleGroups.splice(selectedGroupIndex, 1);
+        eligibleGroups.unshift(selectedGroup);
+    }
+    return eligibleGroups
+        .slice(0, TRAINING_BUILD_EVENT_SUGGESTION_LIMIT)
+        .map(group => buildTrainingBuildEventSuggestion(group));
+}
+
+interface ResolvedTrainingSleepNight {
+    provider: SleepProvider;
+    sleepDayMs: number;
+    durationSeconds: number;
+    localBedtimeMinutes: number | null;
+    overnightHrvMs: number | null;
+}
+
+interface TrainingSleepNightCandidate {
+    provider: SleepProvider;
+    sleepDayMs: number;
+    durationSeconds: number;
+    startTimeMs: number;
+    timezoneOffsetSeconds: number | null;
+    overnightHrvMs: number | null;
+}
+
+const TRAINING_SLEEP_PROVIDERS = Object.values(SLEEP_PROVIDERS) as SleepProvider[];
+
+function formatUtcDayKey(dayMs: number): string {
+    return new Date(dayMs).toISOString().slice(0, 10);
+}
+
+function resolveSleepDateDayMs(value: unknown): number | null {
+    const sleepDate = toSafeString(value).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sleepDate)) {
+        return null;
+    }
+    const dayMs = Date.parse(`${sleepDate}T00:00:00.000Z`);
+    return Number.isFinite(dayMs) && formatUtcDayKey(dayMs) === sleepDate
+        ? dayMs
+        : null;
+}
+
+function resolveLocalClockMinutes(startTimeMs: number, timezoneOffsetSeconds: number): number {
+    const startTimeOfDayMs = startTimeMs % DAY_MS;
+    const offsetTimeOfDayMs = (timezoneOffsetSeconds * 1000) % DAY_MS;
+    const localTimeOfDayMs = ((startTimeOfDayMs + offsetTimeOfDayMs) % DAY_MS + DAY_MS) % DAY_MS;
+    return Math.floor(localTimeOfDayMs / (60 * 1000));
+}
+
+function resolveTrainingSleepNights(
+    sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
+): ResolvedTrainingSleepNight[] {
+    const candidates = new Map<string, TrainingSleepNightCandidate>();
+    sleepDocs.forEach((doc) => {
+        const data = (doc.data() || {}) as Record<string, unknown>;
+        if (data.isNap !== false) {
+            return;
+        }
+        const source = data.source && typeof data.source === 'object' && !Array.isArray(data.source)
+            ? data.source as Record<string, unknown>
+            : {};
+        const provider = normalizeSleepProvider(source.provider);
+        const sleepDayMs = resolveSleepDateDayMs(data.sleepDate);
+        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const endTimeMs = toFiniteNumber(data.endTimeMs);
+        const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
+        const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
+            ? storedDurationSeconds
+            : (startTimeMs !== null && endTimeMs !== null && endTimeMs > startTimeMs
+                ? (endTimeMs - startTimeMs) / 1000
+                : null);
+        if (
+            !provider
+            || sleepDayMs === null
+            || startTimeMs === null
+            || durationSeconds === null
+            || durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            || durationSeconds > DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
+        ) {
+            return;
+        }
+        const rawTimezoneOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
+        const timezoneOffsetSeconds = rawTimezoneOffsetSeconds !== null
+            && Math.abs(rawTimezoneOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
+            ? rawTimezoneOffsetSeconds
+            : null;
+        const localStartTimeMs = startTimeMs + ((timezoneOffsetSeconds || 0) * 1000);
+        if (
+            !Number.isFinite(localStartTimeMs)
+            || localStartTimeMs < sleepDayMs - DAY_MS
+            || localStartTimeMs >= sleepDayMs + (2 * DAY_MS)
+        ) {
+            return;
+        }
+        const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
+            ? data.vitals as Record<string, unknown>
+            : {};
+        const overnightHrvMs = toFinitePositiveNumber(vitals.overnightHrvMs)
+            ?? toFinitePositiveNumber(vitals.averageHrvMs);
+        const key = `${provider}:${formatUtcDayKey(sleepDayMs)}`;
+        const existing = candidates.get(key);
+        const shouldKeepExisting = existing
+            && (
+                existing.durationSeconds > durationSeconds
+                || (existing.durationSeconds === durationSeconds
+                    && existing.overnightHrvMs !== null
+                    && overnightHrvMs === null)
+                || (existing.durationSeconds === durationSeconds
+                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
+                    && existing.timezoneOffsetSeconds !== null
+                    && timezoneOffsetSeconds === null)
+                || (existing.durationSeconds === durationSeconds
+                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
+                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
+                    && existing.startTimeMs <= startTimeMs)
+            );
+        if (shouldKeepExisting) {
+            return;
+        }
+        candidates.set(key, {
+            provider,
+            sleepDayMs,
+            durationSeconds,
+            startTimeMs,
+            timezoneOffsetSeconds,
+            overnightHrvMs,
+        });
+    });
+
+    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => ({
+        provider: night.provider,
+        sleepDayMs: night.sleepDayMs,
+        durationSeconds: night.durationSeconds,
+        localBedtimeMinutes: night.timezoneOffsetSeconds === null
+            ? null
+            : resolveLocalClockMinutes(night.startTimeMs, night.timezoneOffsetSeconds),
+        overnightHrvMs: night.overnightHrvMs,
+    }));
+}
+
+function resolveMedian(values: readonly number[]): number | null {
+    if (!values.length) {
+        return null;
+    }
+    const sorted = [...values].sort((left, right) => left - right);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function resolveCircularMinuteDistance(left: number, right: number): number {
+    const absoluteDistance = Math.abs(left - right) % (24 * 60);
+    return Math.min(absoluteDistance, (24 * 60) - absoluteDistance);
+}
+
+function resolveBedtimeVariationMinutes(values: readonly number[]): number | null {
+    if (!values.length) {
+        return null;
+    }
+    const center = [...new Set(values)]
+        .map(value => ({
+            value,
+            totalDistance: values.reduce(
+                (total, candidate) => total + resolveCircularMinuteDistance(value, candidate),
+                0,
+            ),
+        }))
+        .sort((left, right) => left.totalDistance - right.totalDistance || left.value - right.value)[0]?.value;
+    if (center === undefined) {
+        return null;
+    }
+    return resolveMedian(values.map(value => resolveCircularMinuteDistance(value, center)));
+}
+
+function resolveTrainingRecoveryCoverage(
+    recordedNightCount: number,
+    expectedNightCount: number,
+): DerivedTrainingRecoveryCoverage {
+    if (recordedNightCount <= 0) {
+        return 'none';
+    }
+    const sufficientNightCount = getDerivedTrainingRecoveryMinimumComparableNights(expectedNightCount);
+    return recordedNightCount >= sufficientNightCount ? 'sufficient' : 'limited';
+}
+
+function buildTrainingRecoveryWindow(
+    nights: readonly ResolvedTrainingSleepNight[],
+    provider: SleepProvider | null,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+): DerivedTrainingRecoveryWindow {
+    const periodDays = Math.max(1, Math.round((windowEndDayMs - windowStartDayMs) / DAY_MS) + 1);
+    const selectedNights = provider
+        ? nights.filter(night => night.provider === provider
+            && night.sleepDayMs >= windowStartDayMs
+            && night.sleepDayMs <= windowEndDayMs)
+        : [];
+    const hrvValues = selectedNights.flatMap(night => night.overnightHrvMs === null ? [] : [night.overnightHrvMs]);
+    const localBedtimes = selectedNights.flatMap(
+        night => night.localBedtimeMinutes === null ? [] : [night.localBedtimeMinutes],
+    );
+    const bedtimeVariationMinutes = localBedtimes.length >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
+        ? resolveBedtimeVariationMinutes(localBedtimes)
+        : null;
+    return {
+        periodDays,
+        windowStartDayMs,
+        windowEndDayMs,
+        provider,
+        recordedNightCount: selectedNights.length,
+        expectedNightCount: periodDays,
+        coverage: resolveTrainingRecoveryCoverage(selectedNights.length, periodDays),
+        averageSleepSeconds: selectedNights.length >= DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS
+            ? Math.round(selectedNights.reduce((sum, night) => sum + night.durationSeconds, 0) / selectedNights.length)
+            : null,
+        bedtimeVariationMinutes: bedtimeVariationMinutes === null ? null : Math.round(bedtimeVariationMinutes),
+        medianOvernightHrvMs: hrvValues.length >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS
+            ? Math.round((resolveMedian(hrvValues) || 0) * 10) / 10
+            : null,
+        overnightHrvNightCount: hrvValues.length,
+    };
+}
+
+function countTrainingRecoveryNights(
+    nights: readonly ResolvedTrainingSleepNight[],
+    provider: SleepProvider,
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+): number {
+    return nights.filter(night => night.provider === provider
+        && night.sleepDayMs >= windowStartDayMs
+        && night.sleepDayMs <= windowEndDayMs).length;
+}
+
+function resolveDominantTrainingSleepProvider(
+    nights: readonly ResolvedTrainingSleepNight[],
+    windowStartDayMs: number,
+    windowEndDayMs: number,
+): SleepProvider | null {
+    const candidates = TRAINING_SLEEP_PROVIDERS
+        .map(provider => ({
+            provider,
+            count: countTrainingRecoveryNights(nights, provider, windowStartDayMs, windowEndDayMs),
+        }))
+        .sort((left, right) => right.count - left.count
+            || TRAINING_SLEEP_PROVIDERS.indexOf(left.provider) - TRAINING_SLEEP_PROVIDERS.indexOf(right.provider));
+    return candidates[0]?.count ? candidates[0].provider : null;
+}
+
+function buildTrainingRecoveryComparison(
+    nights: readonly ResolvedTrainingSleepNight[],
+    currentStartDayMs: number,
+    currentEndDayMs: number,
+    referenceStartDayMs: number,
+    referenceEndDayMs: number,
+): DerivedTrainingRecoveryComparison {
+    const currentExpectedNights = Math.round((currentEndDayMs - currentStartDayMs) / DAY_MS) + 1;
+    const referenceExpectedNights = Math.round((referenceEndDayMs - referenceStartDayMs) / DAY_MS) + 1;
+    const comparableProviders = TRAINING_SLEEP_PROVIDERS.map(provider => {
+        const currentCount = countTrainingRecoveryNights(nights, provider, currentStartDayMs, currentEndDayMs);
+        const referenceCount = countTrainingRecoveryNights(nights, provider, referenceStartDayMs, referenceEndDayMs);
+        return {
+            provider,
+            currentCount,
+            referenceCount,
+            sufficient: resolveTrainingRecoveryCoverage(currentCount, currentExpectedNights) === 'sufficient'
+                && resolveTrainingRecoveryCoverage(referenceCount, referenceExpectedNights) === 'sufficient',
+        };
+    }).filter(candidate => candidate.sufficient)
+        .sort((left, right) => Math.min(right.currentCount / currentExpectedNights, right.referenceCount / referenceExpectedNights)
+            - Math.min(left.currentCount / currentExpectedNights, left.referenceCount / referenceExpectedNights)
+            || (right.currentCount + right.referenceCount) - (left.currentCount + left.referenceCount)
+            || TRAINING_SLEEP_PROVIDERS.indexOf(left.provider) - TRAINING_SLEEP_PROVIDERS.indexOf(right.provider));
+    const sharedProvider = comparableProviders[0]?.provider || null;
+    const currentProvider = sharedProvider || resolveDominantTrainingSleepProvider(nights, currentStartDayMs, currentEndDayMs);
+    const referenceProvider = sharedProvider || resolveDominantTrainingSleepProvider(nights, referenceStartDayMs, referenceEndDayMs);
+    const current = buildTrainingRecoveryWindow(nights, currentProvider, currentStartDayMs, currentEndDayMs);
+    const reference = buildTrainingRecoveryWindow(nights, referenceProvider, referenceStartDayMs, referenceEndDayMs);
+    const sameProvider = current.provider !== null && current.provider === reference.provider;
+    return {
+        current,
+        reference,
+        sameProvider,
+        isComparable: sameProvider && current.coverage === 'sufficient' && reference.coverage === 'sufficient',
+    };
+}
+
+function groupTrainingBuildActivitiesByDiscipline(
+    activities: readonly DerivedTrainingActivitySource[],
+): Record<DerivedTrainingDiscipline, ResolvedTrainingBuildEvent[]> {
+    const grouped: Record<DerivedTrainingDiscipline, ResolvedTrainingBuildEvent[]> = {
+        running: [],
+        cycling: [],
+        swimming: [],
+    };
+    activities.forEach((activity) => grouped[activity.discipline].push(activity));
+    return grouped;
+}
+
+function buildTrainingBuildDurabilityComparisons(
+    current: DerivedTrainingBuildWindow,
+    benchmark: DerivedTrainingBuildWindow,
+): DerivedTrainingBuildDurabilityComparison[] {
+    const currentByKey = new Map(
+        (current.durability?.summaries || []).map(summary => [summary.context.contextKey, summary]),
+    );
+    const benchmarkByKey = new Map(
+        (benchmark.durability?.summaries || []).map(summary => [summary.context.contextKey, summary]),
+    );
+    const contextKeys = new Set([...currentByKey.keys(), ...benchmarkByKey.keys()]);
+    return [...contextKeys].sort().map((contextKey) => {
+        const currentSummary = currentByKey.get(contextKey) || null;
+        const benchmarkSummary = benchmarkByKey.get(contextKey) || null;
+        return {
+            context: (currentSummary || benchmarkSummary)!.context,
+            current: currentSummary,
+            benchmark: benchmarkSummary,
+            isComparable: (currentSummary?.sampleCount || 0) >= 2
+                && (benchmarkSummary?.sampleCount || 0) >= 2,
+        };
+    });
+}
+
+export function buildTrainingBuildComparisonMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    benchmarkSettings: unknown,
+    nowMs = Date.now(),
+    sleepDocs: readonly FirestoreQueryDocumentSnapshot[] = [],
+): DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const sleepNights = resolveTrainingSleepNights(sleepDocs);
+    const recoveryCurrentStartDayMs = asOfDayMs - ((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
+    const recoveryReferenceEndDayMs = recoveryCurrentStartDayMs - DAY_MS;
+    const recoveryReferenceStartDayMs = recoveryReferenceEndDayMs - ((TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS - 1) * DAY_MS);
+    const eventsByDiscipline = groupTrainingBuildActivitiesByDiscipline(activities);
+
+    const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
+    const disciplines = TRAINING_DISCIPLINES.map((discipline): DerivedTrainingBuildComparisonDiscipline => {
+        const selection = selections[discipline] || null;
+        const events = eventsByDiscipline[discipline];
+        // Keep anchors that can be valid for at least the shortest supported build.
+        // The dialog marks candidates unavailable as the athlete switches 8/10/12 weeks.
+        // Do not narrow this list to an already saved benchmark duration: a user
+        // must be able to change from 12 weeks to a newer, valid 8-week anchor.
+        const shortestCurrentStartDayMs = asOfDayMs - ((8 * 7 - 1) * DAY_MS);
+        const suggestedRaces = buildTrainingBuildRaceSuggestions(
+            events,
+            shortestCurrentStartDayMs,
+            selection?.mode === 'event' ? selection.eventId : null,
+        );
+        const suggestedEvents = buildTrainingBuildEventSuggestions(
+            events,
+            shortestCurrentStartDayMs,
+            selection?.mode === 'event' ? selection.eventId : null,
+        );
+        if (!selection) {
+            return {
+                discipline,
+                status: 'not-configured',
+                selection: null,
+                current: null,
+                benchmark: null,
+                recovery: null,
+                durabilityComparisons: [],
+                suggestedRaces,
+                suggestedEvents,
+            };
+        }
+        const currentStartDayMs = asOfDayMs - ((selection.durationWeeks * 7 - 1) * DAY_MS);
+        const reference = resolveTrainingBuildBenchmarkReference(selection, discipline, events, currentStartDayMs);
+        if (!reference) {
+            return {
+                discipline,
+                status: 'invalid-selection',
+                selection: null,
+                current: null,
+                benchmark: null,
+                recovery: null,
+                durabilityComparisons: [],
+                suggestedRaces,
+                suggestedEvents,
+            };
+        }
+        const current = buildTrainingBuildWindow(
+            events,
+            selection.durationWeeks,
+            currentStartDayMs,
+            asOfDayMs,
+            nowMs,
+        );
+        const benchmark = buildTrainingBuildWindow(
+            events,
+            selection.durationWeeks,
+            reference.windowStartDayMs,
+            reference.windowEndDayMs,
+            nowMs,
+        );
+        return {
+            discipline,
+            status: 'ready',
+            selection: reference,
+            current,
+            benchmark,
+            recovery: buildTrainingRecoveryComparison(
+                sleepNights,
+                currentStartDayMs,
+                asOfDayMs,
+                reference.windowStartDayMs,
+                reference.windowEndDayMs,
+            ),
+            durabilityComparisons: buildTrainingBuildDurabilityComparisons(current, benchmark),
+            suggestedRaces,
+            suggestedEvents,
+        };
+    });
+
+    return {
+        sourceEventCount: activities.length,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            excludesMergedEvents: true,
+            recovery: buildTrainingRecoveryComparison(
+                sleepNights,
+                recoveryCurrentStartDayMs,
+                asOfDayMs,
+                recoveryReferenceStartDayMs,
+                recoveryReferenceEndDayMs,
+            ),
+            disciplines,
+        },
+    };
+}
+
+interface TrainingSwimWeekAccumulator {
+    activityCount: number;
+    distanceMeters: number;
+    weightedPaceSeconds: number;
+    paceDistanceMeters: number;
+    paceActivityCount: number;
+    swolfSum: number;
+    swolfLengthCount: number;
+}
+
+interface ResolvedTrainingSwolfLength {
+    stroke: string;
+    poolLengthMeters: number;
+    swolf: number;
+}
+
+function createTrainingSwimWeekAccumulator(): TrainingSwimWeekAccumulator {
+    return {
+        activityCount: 0,
+        distanceMeters: 0,
+        weightedPaceSeconds: 0,
+        paceDistanceMeters: 0,
+        paceActivityCount: 0,
+        swolfSum: 0,
+        swolfLengthCount: 0,
+    };
+}
+
+function resolveStoredNumericValue(value: unknown): number | null {
+    const direct = toFiniteNumber(value);
+    if (direct !== null) {
+        return direct;
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+    return toFiniteNumber((value as Record<string, unknown>).value);
+}
+
+function resolveTrainingSwolfLengths(activityData: Record<string, unknown>): ResolvedTrainingSwolfLength[] {
+    const swimLengths = Array.isArray(activityData.swimLengths) ? activityData.swimLengths : [];
+    return swimLengths.flatMap((candidate): ResolvedTrainingSwolfLength[] => {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+            return [];
+        }
+        const row = candidate as Record<string, unknown>;
+        if (toSafeString(row.type).trim().toLowerCase() !== 'active') {
+            return [];
+        }
+        const stroke = toSafeString(row.stroke).trim().toLowerCase();
+        const poolLengthMeters = resolveStoredNumericValue(row.poolLength);
+        const swolf = resolveStoredNumericValue(row.swolf);
+        if (!stroke || poolLengthMeters === null || poolLengthMeters <= 0 || swolf === null || swolf <= 0) {
+            return [];
+        }
+        return [{ stroke, poolLengthMeters, swolf }];
+    });
+}
+
+function getTrainingSwolfContextKey(length: Pick<ResolvedTrainingSwolfLength, 'stroke' | 'poolLengthMeters'>): string {
+    return `${length.stroke}|${toRoundedNumber(length.poolLengthMeters, 3)}`;
+}
+
+export function buildTrainingSwimPerformanceMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const currentWeekStartMs = resolveUtcWeekStartMs(asOfDayMs);
+    const firstWeekStartMs = currentWeekStartMs - (11 * 7 * DAY_MS);
+    const swimmingActivities = activities.filter(activity => (
+        activity.discipline === 'swimming'
+        && activity.startMs <= nowMs
+        && activity.startDayMs >= firstWeekStartMs
+    ));
+
+    const swolfContextCounts = new Map<string, { length: ResolvedTrainingSwolfLength; count: number }>();
+    swimmingActivities.forEach((activity) => {
+        if (resolveTrainingSwimEnvironment(activity.activityData.type) !== 'pool') {
+            return;
+        }
+        resolveTrainingSwolfLengths(activity.activityData).forEach((length) => {
+            const key = getTrainingSwolfContextKey(length);
+            const existing = swolfContextCounts.get(key);
+            swolfContextCounts.set(key, {
+                length,
+                count: (existing?.count || 0) + 1,
+            });
+        });
+    });
+    const dominantSwolfContext = [...swolfContextCounts.entries()]
+        .sort((left, right) => right[1].count - left[1].count || left[0].localeCompare(right[0]))[0]?.[1] || null;
+    const dominantSwolfContextKey = dominantSwolfContext
+        ? getTrainingSwolfContextKey(dominantSwolfContext.length)
+        : null;
+
+    const buckets = new Map<string, TrainingSwimWeekAccumulator>();
+    const getBucket = (weekStartMs: number, environment: DerivedTrainingSwimEnvironment): TrainingSwimWeekAccumulator => {
+        const key = `${weekStartMs}:${environment}`;
+        const bucket = buckets.get(key) || createTrainingSwimWeekAccumulator();
+        buckets.set(key, bucket);
+        return bucket;
+    };
+
+    swimmingActivities.forEach((activity) => {
+        const environment = resolveTrainingSwimEnvironment(activity.activityData.type);
+        const weekStartMs = resolveUtcWeekStartMs(activity.startDayMs);
+        const bucket = getBucket(weekStartMs, environment);
+        bucket.activityCount += 1;
+        const distanceMeters = toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataSwimDistance.type))
+            ?? toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataDistance.type));
+        if (distanceMeters !== null) {
+            bucket.distanceMeters += distanceMeters;
+            const paceSecondsPer100m = toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataSwimPaceAvg.type));
+            if (paceSecondsPer100m !== null) {
+                bucket.weightedPaceSeconds += paceSecondsPer100m * distanceMeters;
+                bucket.paceDistanceMeters += distanceMeters;
+                bucket.paceActivityCount += 1;
+            }
+        }
+        if (environment === 'pool' && dominantSwolfContextKey) {
+            resolveTrainingSwolfLengths(activity.activityData)
+                .filter(length => getTrainingSwolfContextKey(length) === dominantSwolfContextKey)
+                .forEach((length) => {
+                    bucket.swolfSum += length.swolf;
+                    bucket.swolfLengthCount += 1;
+                });
+        }
+    });
+
+    const weeks = Array.from({ length: 12 }, (_, index) => firstWeekStartMs + (index * 7 * DAY_MS))
+        .flatMap(weekStartMs => (['pool', 'open-water'] as const).map((environment) => {
+            const bucket = buckets.get(`${weekStartMs}:${environment}`) || createTrainingSwimWeekAccumulator();
+            return {
+                weekStartMs,
+                environment,
+                activityCount: bucket.activityCount,
+                distanceMeters: toRoundedNumber(bucket.distanceMeters, 2),
+                averagePaceSecondsPer100m: bucket.paceDistanceMeters > 0
+                    ? toRoundedNumber(bucket.weightedPaceSeconds / bucket.paceDistanceMeters, 2)
+                    : null,
+                paceActivityCount: bucket.paceActivityCount,
+                swolf: environment === 'pool' && bucket.swolfLengthCount > 0
+                    ? toRoundedNumber(bucket.swolfSum / bucket.swolfLengthCount, 2)
+                    : null,
+                swolfLengthCount: environment === 'pool' ? bucket.swolfLengthCount : 0,
+            };
+        }));
+
+    return {
+        sourceEventCount: swimmingActivities.length,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            weekCount: 12,
+            excludesMergedEvents: true,
+            swolfContext: dominantSwolfContext
+                ? {
+                    stroke: dominantSwolfContext.length.stroke,
+                    poolLengthMeters: toRoundedNumber(dominantSwolfContext.length.poolLengthMeters, 3),
+                }
+                : null,
+            weeks,
+        },
+    };
+}
+
 function buildIntensityDistributionMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> {
@@ -1327,12 +3929,44 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs'],
         build: (context) => context.getEfficiencyTrendBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.TrainingSummary]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        build: (context) => context.getTrainingSummaryBuildResult(),
+    },
+    [DERIVED_METRIC_KINDS.TrainingCapacity]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        build: (context) => context.getTrainingCapacityBuildResult(),
+    },
+    [DERIVED_METRIC_KINDS.PowerCurve]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        build: (context) => context.getPowerCurveBuildResult(),
+    },
+    [DERIVED_METRIC_KINDS.TrainingExplanation]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        build: (context) => context.getTrainingExplanationBuildResult(),
+    },
+    [DERIVED_METRIC_KINDS.TrainingDurability]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        build: (context) => context.getTrainingDurabilityBuildResult(),
+    },
+    [DERIVED_METRIC_KINDS.TrainingBuildComparison]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs', 'trainingBuildBenchmarkSettings', 'trainingBuildSleepDocs'],
+        build: (context) => context.getTrainingBuildComparisonBuildResult(),
+    },
+    [DERIVED_METRIC_KINDS.TrainingSwimPerformance]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        includeTrainingSwimLengths: true,
+        build: (context) => context.getTrainingSwimPerformanceBuildResult(),
+    },
 };
 
 function createDerivedMetricBuildExecutionContext(
     sourceDocs: {
         formDocs?: readonly FirestoreQueryDocumentSnapshot[];
         recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        trainingActivityDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        trainingBuildBenchmarkSettings?: unknown;
+        trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
     },
     nowMs: number,
     options?: {
@@ -1341,12 +3975,26 @@ function createDerivedMetricBuildExecutionContext(
 ): DerivedMetricBuildExecutionContext {
     const formDocs = sourceDocs.formDocs || [];
     const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
+    const trainingBuildSleepDocs = sourceDocs.trainingBuildSleepDocs || [];
+    const trainingActivities = joinTrainingActivitySources(sourceDocs.trainingActivityDocs || [], formDocs);
+    const trainingExplanationActivities = joinTrainingExplanationActivitySources(
+        sourceDocs.trainingActivityDocs || [],
+        formDocs,
+    );
+    const trainingBuildBenchmarkSettings = sourceDocs.trainingBuildBenchmarkSettings || {};
 
     let dailyLoadContextCache: ReturnType<typeof buildDailyLoadContext> | null = null;
     let derivedLoadPointsCache: DerivedLoadPoint[] | null = null;
     let kpiDerivedLoadPointsCache: DerivedLoadPoint[] | null = null;
     let intensityDistributionBuildResultCache: DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> | null = null;
     let efficiencyTrendBuildResultCache: DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> | null = null;
+    let trainingSummaryBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> | null = null;
+    let trainingCapacityBuildResultCache: DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> | null = null;
+    let powerCurveBuildResultCache: DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> | null = null;
+    let trainingExplanationBuildResultCache: DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload> | null = null;
+    let trainingDurabilityBuildResultCache: DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload> | null = null;
+    let trainingBuildComparisonBuildResultCache: DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> | null = null;
+    let trainingSwimPerformanceBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload> | null = null;
 
     const getDailyLoadContext = (): ReturnType<typeof buildDailyLoadContext> => {
         if (dailyLoadContextCache) {
@@ -1398,15 +4046,94 @@ function createDerivedMetricBuildExecutionContext(
         return efficiencyTrendBuildResultCache;
     };
 
+    const getTrainingSummaryBuildResult = (): DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> => {
+        if (trainingSummaryBuildResultCache) {
+            return trainingSummaryBuildResultCache;
+        }
+        trainingSummaryBuildResultCache = buildTrainingSummaryMetricPayload(trainingActivities, nowMs);
+        return trainingSummaryBuildResultCache;
+    };
+
+    const getPowerCurveBuildResult = (): DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> => {
+        if (powerCurveBuildResultCache) {
+            return powerCurveBuildResultCache;
+        }
+        powerCurveBuildResultCache = buildPowerCurveMetricPayload(trainingActivities, nowMs);
+        return powerCurveBuildResultCache;
+    };
+
+    const getTrainingCapacityBuildResult = (): DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> => {
+        if (trainingCapacityBuildResultCache) {
+            return trainingCapacityBuildResultCache;
+        }
+        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(
+            trainingActivities,
+            getPowerCurveBuildResult().payload,
+            nowMs,
+        );
+        return trainingCapacityBuildResultCache;
+    };
+
+    const getTrainingExplanationBuildResult = (): DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload> => {
+        if (trainingExplanationBuildResultCache) {
+            return trainingExplanationBuildResultCache;
+        }
+        trainingExplanationBuildResultCache = buildTrainingExplanationMetricPayload(
+            formDocs,
+            trainingExplanationActivities,
+            nowMs,
+        );
+        return trainingExplanationBuildResultCache;
+    };
+
+    const getTrainingDurabilityBuildResult = (): DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload> => {
+        if (trainingDurabilityBuildResultCache) {
+            return trainingDurabilityBuildResultCache;
+        }
+        trainingDurabilityBuildResultCache = buildTrainingDurabilityMetricPayload(trainingActivities, nowMs);
+        return trainingDurabilityBuildResultCache;
+    };
+
+    const getTrainingBuildComparisonBuildResult = (): DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> => {
+        if (trainingBuildComparisonBuildResultCache) {
+            return trainingBuildComparisonBuildResultCache;
+        }
+        trainingBuildComparisonBuildResultCache = buildTrainingBuildComparisonMetricPayload(
+            trainingActivities,
+            trainingBuildBenchmarkSettings,
+            nowMs,
+            trainingBuildSleepDocs,
+        );
+        return trainingBuildComparisonBuildResultCache;
+    };
+
+    const getTrainingSwimPerformanceBuildResult = (): DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload> => {
+        if (trainingSwimPerformanceBuildResultCache) {
+            return trainingSwimPerformanceBuildResultCache;
+        }
+        trainingSwimPerformanceBuildResultCache = buildTrainingSwimPerformanceMetricPayload(trainingActivities, nowMs);
+        return trainingSwimPerformanceBuildResultCache;
+    };
+
     return {
         nowMs,
         formDocs,
         recoveryNowDocs,
+        trainingBuildSleepDocs,
+        trainingActivities,
+        trainingExplanationActivities,
         getDailyLoadContext,
         getDerivedLoadPoints,
         getKpiDerivedLoadPoints,
         getIntensityDistributionBuildResult,
         getEfficiencyTrendBuildResult,
+        getTrainingSummaryBuildResult,
+        getTrainingCapacityBuildResult,
+        getPowerCurveBuildResult,
+        getTrainingExplanationBuildResult,
+        getTrainingDurabilityBuildResult,
+        getTrainingBuildComparisonBuildResult,
+        getTrainingSwimPerformanceBuildResult,
     };
 }
 
@@ -1415,9 +4142,17 @@ export function resolveDerivedMetricSourceRequirements(
 ): {
     needsFormDocs: boolean;
     needsRecoveryNowDocs: boolean;
+    needsTrainingActivityDocs: boolean;
+    needsTrainingSwimLengths: boolean;
+    needsTrainingBuildBenchmarkSettings: boolean;
+    needsTrainingBuildSleepDocs: boolean;
 } {
     let needsFormDocs = false;
     let needsRecoveryNowDocs = false;
+    let needsTrainingActivityDocs = false;
+    let needsTrainingSwimLengths = false;
+    let needsTrainingBuildBenchmarkSettings = false;
+    let needsTrainingBuildSleepDocs = false;
 
     metricKinds.forEach((metricKind) => {
         const definition = DERIVED_METRIC_BUILD_REGISTRY[metricKind];
@@ -1430,11 +4165,27 @@ export function resolveDerivedMetricSourceRequirements(
         if (definition.sourceDependencies.includes('recoveryNowDocs')) {
             needsRecoveryNowDocs = true;
         }
+        if (definition.sourceDependencies.includes('trainingActivityDocs')) {
+            needsTrainingActivityDocs = true;
+        }
+        if (definition.includeTrainingSwimLengths) {
+            needsTrainingSwimLengths = true;
+        }
+        if (definition.sourceDependencies.includes('trainingBuildBenchmarkSettings')) {
+            needsTrainingBuildBenchmarkSettings = true;
+        }
+        if (definition.sourceDependencies.includes('trainingBuildSleepDocs')) {
+            needsTrainingBuildSleepDocs = true;
+        }
     });
 
     return {
         needsFormDocs,
         needsRecoveryNowDocs,
+        needsTrainingActivityDocs,
+        needsTrainingSwimLengths,
+        needsTrainingBuildBenchmarkSettings,
+        needsTrainingBuildSleepDocs,
     };
 }
 
@@ -1466,6 +4217,44 @@ function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFi
 async function queueDerivedMetricsTask(uid: string, generation: number): Promise<boolean> {
     const queued = await enqueueDerivedMetricsTask(uid, generation);
     return queued;
+}
+
+/**
+ * Records an enqueue failure only while the generation that attempted the enqueue
+ * is still waiting to be claimed. An enqueue can time out after Cloud Tasks has
+ * accepted it, or a newer dirty-mark can replace the generation while the failure
+ * path is running. In either case, an unconditional failure write would strand
+ * the healthy task by changing its coordinator status away from `queued`.
+ */
+async function markDerivedMetricsEnqueueFailed(
+    uid: string,
+    generation: number,
+    error: unknown,
+    logContext: string,
+    fallbackError: string,
+): Promise<void> {
+    const coordinatorRef = getCoordinatorDocRef(uid);
+    await admin.firestore().runTransaction(async (transaction) => {
+        const coordinatorSnapshot = await transaction.get(coordinatorRef);
+        if (!coordinatorSnapshot.exists) {
+            return;
+        }
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, logContext, { generation })) {
+            return;
+        }
+
+        const coordinator = parseCoordinator(coordinatorSnapshot.data());
+        if (coordinator.generation !== generation || coordinator.status !== 'queued') {
+            return;
+        }
+
+        transaction.set(coordinatorRef, {
+            entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
+            status: 'failed',
+            lastError: toSafeString((error as { message?: unknown } | null)?.message) || fallbackError,
+            updatedAtMs: Date.now(),
+        }, { merge: true });
+    });
 }
 
 async function readDerivedMetricsWriteBlocked(
@@ -1546,6 +4335,105 @@ export async function fetchDerivedMetricsEventDocs(uid: string): Promise<Firesto
         .select(...DERIVED_METRICS_EVENT_FIELDS)
         .get();
     return snapshot.docs;
+}
+
+export async function fetchDerivedMetricsActivityDocs(
+    uid: string,
+    options: { includeSwimLengths?: boolean } = {},
+): Promise<FirestoreQueryDocumentSnapshot[]> {
+    const fields = options.includeSwimLengths
+        ? [...DERIVED_METRICS_ACTIVITY_FIELDS, 'swimLengths']
+        : [...DERIVED_METRICS_ACTIVITY_FIELDS];
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection('activities')
+        .select(...fields)
+        .get();
+    return snapshot.docs;
+}
+
+export async function fetchTrainingBuildBenchmarkSettings(uid: string): Promise<unknown> {
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection('config')
+        .doc('settings')
+        .get();
+    return snapshot.data() || {};
+}
+
+interface TrainingSleepFetchRange {
+    startDayMs: number;
+    endDayMs: number;
+}
+
+function mergeTrainingSleepFetchRanges(
+    ranges: readonly TrainingSleepFetchRange[],
+): TrainingSleepFetchRange[] {
+    return [...ranges]
+        .sort((left, right) => left.startDayMs - right.startDayMs || left.endDayMs - right.endDayMs)
+        .reduce<TrainingSleepFetchRange[]>((merged, range) => {
+            const previous = merged[merged.length - 1];
+            if (previous && range.startDayMs <= previous.endDayMs + DAY_MS) {
+                previous.endDayMs = Math.max(previous.endDayMs, range.endDayMs);
+                return merged;
+            }
+            merged.push({ ...range });
+            return merged;
+        }, []);
+}
+
+export async function fetchTrainingBuildSleepDocs(
+    uid: string,
+    eventDocs: readonly FirestoreQueryDocumentSnapshot[],
+    activityDocs: readonly FirestoreQueryDocumentSnapshot[],
+    benchmarkSettings: unknown,
+    nowMs = Date.now(),
+): Promise<FirestoreQueryDocumentSnapshot[]> {
+    const activities = joinTrainingActivitySources(activityDocs, eventDocs);
+    const eventsByDiscipline = groupTrainingBuildActivitiesByDiscipline(activities);
+    const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const recentStartDayMs = asOfDayMs
+        - (((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS + TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS) - 1) * DAY_MS);
+    const ranges: TrainingSleepFetchRange[] = [{ startDayMs: recentStartDayMs, endDayMs: asOfDayMs }];
+    TRAINING_DISCIPLINES.forEach((discipline) => {
+        const selection = selections[discipline];
+        if (!selection) {
+            return;
+        }
+        const currentStartDayMs = asOfDayMs - ((selection.durationWeeks * 7 - 1) * DAY_MS);
+        const reference = resolveTrainingBuildBenchmarkReference(
+            selection,
+            discipline,
+            eventsByDiscipline[discipline],
+            currentStartDayMs,
+        );
+        if (!reference) {
+            return;
+        }
+        ranges.push({
+            startDayMs: currentStartDayMs,
+            endDayMs: asOfDayMs,
+        }, {
+            startDayMs: reference.windowStartDayMs,
+            endDayMs: reference.windowEndDayMs,
+        });
+    });
+    const snapshots = await Promise.all(mergeTrainingSleepFetchRanges(ranges).map(range => admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection(SLEEP_SESSIONS_COLLECTION_ID)
+        .where('sleepDate', '>=', formatUtcDayKey(range.startDayMs))
+        .where('sleepDate', '<=', formatUtcDayKey(range.endDayMs))
+        .select(...DERIVED_METRICS_TRAINING_SLEEP_FIELDS)
+        .get()));
+    const docsById = new Map<string, FirestoreQueryDocumentSnapshot>();
+    snapshots.forEach(snapshot => snapshot.docs.forEach((doc) => {
+        docsById.set(doc.id, doc);
+    }));
+    return [...docsById.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export interface DerivedFormSnapshotSeed {
@@ -1734,14 +4622,13 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
                 generation: generationToQueue,
                 error,
             });
-            if (!await readDerivedMetricsWriteBlocked(uid, 'dirty-mark enqueue failure write', { generation: generationToQueue })) {
-                await coordinatorRef.set({
-                    entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                    status: 'failed',
-                    lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_failed',
-                    updatedAtMs: Date.now(),
-                }, { merge: true });
-            }
+            await markDerivedMetricsEnqueueFailed(
+                uid,
+                generationToQueue,
+                error,
+                'dirty-mark enqueue failure write',
+                'enqueue_failed',
+            );
 
             return {
                 accepted: false,
@@ -1934,17 +4821,13 @@ export async function completeDerivedMetricsProcessing(
                 nextGeneration: completion.nextGeneration,
                 error,
             });
-            if (!await readDerivedMetricsWriteBlocked(uid, 'follow-up enqueue failure write', {
-                generation,
-                nextGeneration: completion.nextGeneration,
-            })) {
-                await coordinatorRef.set({
-                    entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                    status: 'failed',
-                    lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_follow_up_failed',
-                    updatedAtMs: Date.now(),
-                }, { merge: true });
-            }
+            await markDerivedMetricsEnqueueFailed(
+                uid,
+                completion.nextGeneration,
+                error,
+                'follow-up enqueue failure write',
+                'enqueue_follow_up_failed',
+            );
         }
     }
 
@@ -2215,8 +5098,12 @@ export async function writeDerivedMetricSnapshotsReady(
     sourceDocs: {
         formDocs?: readonly FirestoreQueryDocumentSnapshot[];
         recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        trainingActivityDocs?: readonly FirestoreQueryDocumentSnapshot[];
+        trainingBuildBenchmarkSettings?: unknown;
+        trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
     },
     options?: {
+        buildAtMs?: number | null;
         builtFromEventMutationVersion?: number | null;
         formDailyLoads?: readonly DerivedFormDailyLoadEntry[] | null;
         formSourceEventCount?: number | null;
@@ -2227,7 +5114,9 @@ export async function writeDerivedMetricSnapshotsReady(
         return;
     }
 
-    const nowMs = Date.now();
+    const nowMs = Number.isFinite(options?.buildAtMs)
+        ? options?.buildAtMs as number
+        : Date.now();
     const batch = admin.firestore().batch();
     const normalizedFormDailyLoads = normalizeDerivedFormDailyLoads(options?.formDailyLoads || []);
     const hasDailyLoadContextOverride = normalizedFormDailyLoads.length > 0
@@ -2243,6 +5132,8 @@ export async function writeDerivedMetricSnapshotsReady(
         ? Math.max(0, Math.floor(options?.formSourceDocCount as number))
         : (sourceDocs.formDocs?.length || 0);
     const recoveryNowSourceDocCount = sourceDocs.recoveryNowDocs?.length || 0;
+    const trainingActivitySourceDocCount = sourceDocs.trainingActivityDocs?.length || 0;
+    const trainingBuildSleepSourceDocCount = sourceDocs.trainingBuildSleepDocs?.length || 0;
     const buildContext = createDerivedMetricBuildExecutionContext(sourceDocs, nowMs, {
         dailyLoadContextOverride,
     });
@@ -2259,6 +5150,15 @@ export async function writeDerivedMetricSnapshotsReady(
         }
         if (sourceDependencies.includes('recoveryNowDocs')) {
             sourceDocCount += recoveryNowSourceDocCount;
+        }
+        if (sourceDependencies.includes('trainingActivityDocs')) {
+            sourceDocCount += trainingActivitySourceDocCount;
+        }
+        if (sourceDependencies.includes('trainingBuildBenchmarkSettings')) {
+            sourceDocCount += 1;
+        }
+        if (sourceDependencies.includes('trainingBuildSleepDocs')) {
+            sourceDocCount += trainingBuildSleepSourceDocCount;
         }
         return sourceDocCount;
     };

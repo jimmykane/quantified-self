@@ -2,21 +2,19 @@ import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import {
-  EventImporterFIT,
-  EventImporterGPX,
-  EventImporterSuuntoJSON,
-  EventImporterSuuntoSML,
-  EventImporterTCX,
-  EventInterface,
-} from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import * as xmldom from 'xmldom';
 
-import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
-import { createParsingOptions } from '../../../shared/parsing-options';
+import {
+  ALLOWED_CORS_ORIGINS,
+  ENFORCE_APP_CHECK,
+  assertEventWriteUserActive,
+  hasBasicAccess,
+  hasProAccess,
+  setEventDocumentIfUserActive,
+} from '../utils';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
@@ -30,8 +28,13 @@ import {
   MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
   MAX_ACTIVITY_UPLOAD_BYTES,
 } from '../shared/activity-processing-config';
+import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
+const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
+const ROUTE_ONLY_PARSER_ERROR_PATTERN = /no activities found in gpx.*importroutesfromgpx.*routes/i;
+const ROUTE_OR_COURSE_ACTIVITY_TYPES = new Set(['route', 'course']);
 
 class HttpStatusError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -40,12 +43,67 @@ class HttpStatusError extends Error {
   }
 }
 
-function toArrayBuffer(data: Buffer): ArrayBuffer {
-  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function decodeText(data: Buffer): string {
-  return new TextDecoder().decode(toArrayBuffer(data));
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getUnknownMethodResult(target: Record<string, unknown>, methodName: string): unknown {
+  const method = target[methodName];
+  if (typeof method !== 'function') {
+    return undefined;
+  }
+
+  try {
+    return method.call(target);
+  } catch {
+    return undefined;
+  }
+}
+
+function isRouteOrCourseActivityType(value: unknown): boolean {
+  return ROUTE_OR_COURSE_ACTIVITY_TYPES.has(normalizeString(value));
+}
+
+function isRouteOrCourseActivity(activity: unknown): boolean {
+  if (!isObjectRecord(activity)) {
+    return false;
+  }
+
+  const activityJSON = getUnknownMethodResult(activity, 'toJSON');
+  const activityJSONRecord = isObjectRecord(activityJSON) ? activityJSON : null;
+
+  return [
+    activity.type,
+    activity.activityType,
+    getUnknownMethodResult(activity, 'getType'),
+    getUnknownMethodResult(activity, 'getActivityType'),
+    activityJSONRecord?.type,
+    activityJSONRecord?.activityType,
+  ].some(isRouteOrCourseActivityType);
+}
+
+function assertUploadedActivitiesAreWorkouts(activities: readonly unknown[]): void {
+  if (activities.some(isRouteOrCourseActivity)) {
+    throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return '';
+}
+
+function isRouteOnlyParserError(error: unknown): boolean {
+  return ROUTE_ONLY_PARSER_ERROR_PATTERN.test(getErrorMessage(error));
 }
 
 function hasGzipMagic(data: Buffer): boolean {
@@ -248,36 +306,6 @@ async function eventExistsForUser(userID: string, eventID: string): Promise<bool
   return snapshot.exists;
 }
 
-async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): Promise<EventInterface> {
-  const parsingOptions = createParsingOptions();
-  const baseExtension = getBaseExtension(resolvedExtension);
-
-  if (baseExtension === 'fit') {
-    return EventImporterFIT.getFromArrayBuffer(toArrayBuffer(payload), parsingOptions);
-  }
-
-  const text = decodeText(payload);
-  if (baseExtension === 'gpx') {
-    return EventImporterGPX.getFromString(text, xmldom.DOMParser, parsingOptions);
-  }
-  if (baseExtension === 'tcx') {
-    const xml = new xmldom.DOMParser().parseFromString(text, 'application/xml');
-    return EventImporterTCX.getFromXML(xml, parsingOptions);
-  }
-  if (baseExtension === 'json') {
-    try {
-      return await EventImporterSuuntoJSON.getFromJSONString(text, parsingOptions);
-    } catch (_jsonError) {
-      return await EventImporterSuuntoSML.getFromJSONString(text, parsingOptions);
-    }
-  }
-  if (baseExtension === 'sml') {
-    return EventImporterSuuntoSML.getFromXML(text, parsingOptions);
-  }
-
-  throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}.`);
-}
-
 function generateUploadEventID(userID: string, payload: Buffer, resolvedExtension: string): string {
   const baseExtension = getBaseExtension(resolvedExtension);
 
@@ -290,19 +318,30 @@ function generateUploadEventID(userID: string, payload: Buffer, resolvedExtensio
     .digest('hex');
 }
 
-function getFirestoreAdapter(): FirestoreAdapter {
+function getFirestoreAdapter(userID: string): FirestoreAdapter {
   return {
     setDoc: async (path: string[], data: unknown) => {
-      await admin.firestore().doc(path.join('/')).set(data as Record<string, unknown>);
+      const documentPath = path.join('/');
+      const documentRef = admin.firestore().doc(documentPath);
+      const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+      await setEventDocumentIfUserActive(
+        userID,
+        `activity_upload_writer:${documentPath}`,
+        documentRef,
+        data,
+        undefined,
+        isEventDocument ? preserveEventTagsOnRewrite : undefined,
+      );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),
     generateID: () => admin.firestore().collection('tmp').doc().id,
   };
 }
 
-function getStorageAdapter(): StorageAdapter {
+function getStorageAdapter(userID: string): StorageAdapter {
   return {
     uploadFile: async (path: string, data: unknown) => {
+      await assertEventWriteUserActive(userID, `activity_upload_original_file:${path}`);
       const file = admin.storage().bucket().file(path);
       await file.save(data as Buffer);
       const [metadata] = await file.getMetadata();
@@ -320,9 +359,15 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     processedAt: FieldValue.serverTimestamp(),
   };
 
-  await admin.firestore()
-    .doc(`users/${userID}/events/${eventID}/metaData/processing`)
-    .set(processingPayload, { merge: true });
+  const processingRef = admin.firestore()
+    .doc(`users/${userID}/events/${eventID}/metaData/processing`);
+  await setEventDocumentIfUserActive(
+    userID,
+    'activity_upload_processing_metadata',
+    processingRef,
+    processingPayload,
+    { merge: true },
+  );
 }
 
 export const uploadActivity = onRequest({
@@ -338,6 +383,7 @@ export const uploadActivity = onRequest({
   try {
     const userID = await verifyFirebaseUserIDFromAuthorizationHeader(request.header('authorization'));
     await verifyAppCheckHeader(request.header('X-Firebase-AppCheck') || request.header('x-firebase-appcheck'));
+    await assertEventWriteUserActive(userID, 'activity_upload_start');
     const originalFilename = resolveOriginalFilename(
       request.header('X-Original-Filename-Encoded') || request.header('x-original-filename-encoded') || undefined,
       request.header('X-Original-Filename') || request.header('x-original-filename') || undefined,
@@ -368,14 +414,24 @@ export const uploadActivity = onRequest({
 
     let event: EventInterface;
     try {
-      event = await parseUploadedEvent(payloadForParsing, resolvedExtension);
+      event = await parseActivityFilePayload(payloadForParsing, resolvedExtension);
     } catch (error) {
       if (error instanceof HttpStatusError) {
         throw error;
       }
+      if (isRouteOnlyParserError(error)) {
+        logger.warn('[uploadActivity] Rejected route/course file submitted to activity upload', {
+          resolvedExtension,
+          error: getErrorMessage(error),
+        });
+        throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+      }
       logger.warn('[uploadActivity] Activity parsing failed', error);
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
+
+    const activities = event.getActivities();
+    assertUploadedActivitiesAreWorkouts(activities);
 
     event.setID(eventID);
 
@@ -384,7 +440,6 @@ export const uploadActivity = onRequest({
       event.name = resolvedEventName;
     }
 
-    const activities = event.getActivities();
     for (let i = 0; i < activities.length; i++) {
       if (!activities[i].getID()) {
         activities[i].setID(await generateActivityID(eventID, i));
@@ -398,7 +453,7 @@ export const uploadActivity = onRequest({
       originalFilename,
     };
 
-    const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
+    const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
     await writer.writeAllEventData(userID, event, originalFile);
     await persistProcessingMetadata(userID, eventID);
 

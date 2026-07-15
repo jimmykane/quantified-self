@@ -72,6 +72,7 @@ import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
+type ChartRefreshMode = 'merge' | 'replace';
 type PanelSeriesModel = EventChartPanelModel['series'][number];
 type ChartLineSeriesOption = LineSeriesOption;
 type FullscreenHostElement = HTMLElement & {
@@ -594,7 +595,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       });
   }
 
-  private refreshChart(): void {
+  private refreshChart(mode: ChartRefreshMode = 'merge'): void {
     const chart = this.chartHost.getChart();
     if (!chart) {
       return;
@@ -636,7 +637,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.seriesByID = new Map(this.panel.series.map((series) => [series.id, series]));
-    this.chartHost.setOption(this.buildOption(), ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS);
+    this.chartHost.setOption(
+      this.buildOption(),
+      mode === 'replace'
+        ? { notMerge: true, lazyUpdate: false }
+        : ECHARTS_INTERACTIVE_CARTESIAN_MERGE_UPDATE_SETTINGS
+    );
     this.syncAxisPointerCursorEmitBinding();
     this.applyCanonicalAxisScales();
     this.syncInteractionMode();
@@ -1984,6 +1990,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     chart.dispatchAction(hideTipAction);
   }
 
+  private hideTooltipForFullscreenTransition(chart: EChartsType): void {
+    this.activeMarkerTooltipKey = null;
+    try {
+      const hideTipAction: ChartAction = {
+        type: 'hideTip',
+        escapeConnect: true,
+      };
+      chart.dispatchAction(hideTipAction);
+    } catch (error) {
+      this.logger.warn('[EventCardChartPanelComponent] Failed to hide tooltip during fullscreen transition', error);
+    }
+  }
+
   private scheduleCanonicalAxisScaleUpdate(): void {
     if (this.pendingAxisScaleFrame !== null) {
       return;
@@ -2454,24 +2473,21 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     this.isFullscreen = nextFullscreenState;
-    this.recreateChartForFullscreenState();
+    this.refreshChartForFullscreenState();
     this.cdr.markForCheck();
   }
 
-  private recreateChartForFullscreenState(): void {
+  private refreshChartForFullscreenState(): void {
     const chart = this.chartHost.getChart();
     if (!chart) {
+      this.queueChartRefresh('fullscreenchange');
       return;
     }
 
     this.captureFullscreenTransitionZoomRange();
-    this.hideLocalLapTooltip();
+    this.hideTooltipForFullscreenTransition(chart);
     this.cancelPendingFrame('axisScale');
-    this.unbindMobileInteractionArm();
-    this.unbindAxisPointerCursorEmit();
-    this.eventsBound = false;
-    this.chartHost.dispose();
-    this.queueChartRefresh('fullscreenchange');
+    this.refreshChart('replace');
   }
 
   private isPanelFullscreen(): boolean {

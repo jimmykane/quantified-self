@@ -3,6 +3,7 @@ import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAc
 import { HttpsError } from 'firebase-functions/v2/https';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
+import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
 
 // Hoisted shared/id-generator mock
 vi.mock('./shared/id-generator', () => ({
@@ -263,6 +264,28 @@ describe('utils higher-level helpers', () => {
                 .rejects.toBeInstanceOf(EventWriteSkippedForDeletedUserError);
 
             expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        });
+
+        it('can preserve existing event tags inside the guarded write transaction', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            hoisted.transactionGet.mockResolvedValueOnce({
+                exists: true,
+                data: () => ({ tags: [' Race ', '2026'] }),
+            });
+
+            await setEventDocumentIfUserActive(
+                'user-1',
+                'event_rewrite',
+                docRef as any,
+                { name: 'Reparsed event', tags: ['Stale'] },
+                undefined,
+                preserveEventTagsOnRewrite,
+            );
+
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef, {
+                name: 'Reparsed event',
+                tags: ['Race', '2026'],
+            });
         });
     });
 

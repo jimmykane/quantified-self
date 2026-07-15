@@ -106,6 +106,10 @@ vi.mock('./utils', async (importOriginal) => {
     };
 });
 
+vi.mock('./queue/provider-event-id', () => ({
+    resolveProviderImportEventID: vi.fn().mockResolvedValue('event-id'),
+}));
+
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
     TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {

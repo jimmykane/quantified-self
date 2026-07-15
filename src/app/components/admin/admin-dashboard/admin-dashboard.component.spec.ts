@@ -94,7 +94,7 @@ describe('AdminDashboardComponent', () => {
         providers: [{ name: 'Garmin', pending: 2, succeeded: 5, stuck: 0, dead: 0 }],
         dlq: { total: 1, byContext: [], byProvider: [] },
         cloudTasks: {
-            pending: 14,
+            pending: 16,
             queues: {
                 workout: { queueId: 'workout', pending: 3 },
                 activitySync: { queueId: 'activity', pending: 0 },
@@ -104,6 +104,7 @@ describe('AdminDashboardComponent', () => {
                 sportsLibReparse: { queueId: 'reparse', pending: 4 },
                 sportsLibReparseHeavy: { queueId: 'heavy', pending: 1 },
                 sportsLibRouteReparse: { queueId: 'route-reparse', pending: 0 },
+                derivedMetricsIngress: { queueId: 'derived-ingress', pending: 2 },
                 derivedMetrics: { queueId: 'derived', pending: 3 },
             },
         },

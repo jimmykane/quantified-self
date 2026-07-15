@@ -65,6 +65,7 @@ function createActivity(options: {
         getData: () => streamMap[streamType],
       } as any;
     },
+    getStreamData: (streamType: string) => streamMap[streamType] || [],
   } as unknown as ActivityInterface;
 }
 
@@ -98,6 +99,7 @@ describe('PerformanceCurveDataService', () => {
   it('should return durability availability without power-curve stat', () => {
     const activity = createActivity({
       id: 'a1',
+      type: 'Cycling',
       powerCurve: null,
       streams: {
         [DataPower.type]: [200, 220, 240, 260, 250],
@@ -225,7 +227,7 @@ describe('PerformanceCurveDataService', () => {
     const activities = [
       createActivity({
         id: 'a1',
-        type: 'Run',
+        type: 'Cycling',
         creatorName: 'Watch A',
         streams: {
           [DataPower.type]: [200, 210, 220, null, 230],
@@ -234,7 +236,7 @@ describe('PerformanceCurveDataService', () => {
       }),
       createActivity({
         id: 'a2',
-        type: 'Run',
+        type: 'Cycling',
         creatorName: 'Watch B',
         streams: {
           [DataPower.type]: [180, 190, 205, 215, 220],
@@ -243,16 +245,16 @@ describe('PerformanceCurveDataService', () => {
       }),
     ];
 
-    const result = service.buildDurabilitySeries(activities, { isMerge: false, rollingWindowSeconds: 120 });
+    const result = service.buildDurabilitySeries(activities, { isMerge: false });
 
-    expect(result.map((series) => series.label)).toEqual(['Run', 'Run (2)']);
+    expect(result.map((series) => series.label)).toEqual(['Cycling', 'Cycling (2)']);
     expect(result[0].points.every((point) => point.efficiency > 0)).toBe(true);
   });
 
   it('should build durability render and marker source series in one pass', () => {
     const activity = createActivity({
       id: 'a1',
-      type: 'Run',
+      type: 'Cycling',
       creatorName: 'Watch A',
       streams: {
         [DataPower.type]: [200, 210, 220, 230, 240, 250, 260, 270],
@@ -260,7 +262,7 @@ describe('PerformanceCurveDataService', () => {
       },
     });
 
-    const options = { isMerge: false, rollingWindowSeconds: 120, maxPointsPerSeries: 3 };
+    const options = { isMerge: false, maxPointsPerSeries: 3 };
     const combined = service.buildDurabilitySeriesWithMarkerSource([activity], options);
     const renderOnly = service.buildDurabilitySeries([activity], options);
 
@@ -339,7 +341,7 @@ describe('PerformanceCurveDataService', () => {
   it('should extract best-effort markers for supported windows only', () => {
     const activity = createActivity({
       id: 'a1',
-      type: 'Ride',
+      type: 'Cycling',
       streams: {
         [DataPower.type]: [
           220, 230, 240, 250, 260, 270, 280, 300, 320, 340,
@@ -368,7 +370,7 @@ describe('PerformanceCurveDataService', () => {
     });
 
     expect(markers.map((marker) => marker.windowLabel)).toEqual(['5s', '30s', '1m']);
-    expect(markers[0].power).toBeGreaterThan(0);
+    expect(markers[0].output).toBeGreaterThan(0);
     expect(markers[0].endDuration).toBeGreaterThanOrEqual(markers[0].startDuration);
   });
 
@@ -385,7 +387,7 @@ describe('PerformanceCurveDataService', () => {
 
     const activity = createActivity({
       id: 'a1',
-      type: 'Ride',
+      type: 'Cycling',
       streams: {
         [DataPower.type]: power as unknown as (number | null)[],
         [DataHeartRate.type]: hr as unknown as (number | null)[],

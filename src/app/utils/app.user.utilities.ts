@@ -70,8 +70,6 @@ import {
 } from '../models/app-user.interface';
 import {
     DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-    getDefaultDashboardCuratedChartDefinitions,
-    getDefaultDashboardKpiChartDefinitions,
     isDashboardEventBackedSpecialChartType,
     isDashboardPowerCurveChartType,
     isDashboardRecoveryNowChartType,
@@ -87,7 +85,6 @@ import {
 } from '../helpers/dashboard-tile-event-filters.helper';
 import {
     buildDashboardCuratedAutoTile,
-    buildDashboardKpiAutoTile,
 } from '../helpers/dashboard-auto-tile.helper';
 import {
     getDashboardPowerCurveEventFiltersForScope,
@@ -182,26 +179,7 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        const defaultCuratedTiles = AppUserUtilities.getDefaultUserDashboardCuratedTiles(0);
-        return [
-            ...defaultCuratedTiles,
-            ...AppUserUtilities.getDefaultUserDashboardKpiTiles(defaultCuratedTiles.length),
-        ];
-    }
-
-    private static getDefaultUserDashboardCuratedTiles(startOrder: number): TileChartSettingsInterface[] {
-        return getDefaultDashboardCuratedChartDefinitions()
-            .map((definition, index) => buildDashboardCuratedAutoTile(
-                definition.chartType,
-                startOrder + index,
-            ));
-    }
-
-    private static getDefaultUserDashboardKpiTiles(startOrder: number): TileChartSettingsInterface[] {
-        return getDefaultDashboardKpiChartDefinitions().map((definition, index) => buildDashboardKpiAutoTile(
-            definition.chartType,
-            startOrder + index,
-        ));
+        return [];
     }
 
     private static getDefaultUserDashboardRecoveryTile(order: number): TileChartSettingsInterface {

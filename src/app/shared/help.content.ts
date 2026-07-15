@@ -92,6 +92,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Where things live
 
 - **Dashboard** is your main activity overview.
+- **Training** is your fixed workspace for baseline comparisons, load trajectory, training mix, capacity evidence, efficiency, sleep, and power interpretation.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
 - **Services** is where you connect Garmin, Suunto, and COROS.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.
@@ -114,13 +115,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
-- The recommended default dashboard starts lean with **Form/TSS**, **Intensity Distribution**, and the current-state KPI row set; activity overview charts, maps, Recovery, Freshness Forecast, and Efficiency Trend remain available from Dashboard manager or **Add all**.
-- The default KPI rows are the current-state set: **Load Status**, **Form Now**, **Fitness Trend**, **Fatigue Trend**, **Recovery Debt**, and **Training Balance**.
-- Additional KPI rows such as **Fitness (CTL)**, **Fatigue (ATL)**, **ACWR**, **Ramp Rate**, **Monotony / Strain**, **Form +7d**, **Easy %**, **Hard %**, and **Efficiency Δ (4w)** remain available from Dashboard manager.
-- KPI rows are shown in the compact **Today** section above the main dashboard grid.
+- New dashboards start clean. The Dashboard **Today** header has a flat current-state row and an **Open Training** action.
+- Load and recovery interpretation lives in **Training**: Form/TSS, freshness forecast, ACWR, ramp rate, monotony and strain, CTL/ATL, intensity distribution, efficiency, sleep context, and discipline-specific power curves.
+- Existing curated and KPI tiles are preserved. Use **Simplify dashboard** in Dashboard manager to preview and explicitly remove legacy training tiles without affecting activity, map, or custom tiles.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
-- The main dashboard groups chart and map tiles by intent, such as **Training State**, **Performance & Power**, **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
+- The main dashboard groups chart and map tiles by intent, such as **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
 - Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
 - New dashboard tiles use chart-aware default sizes: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
@@ -129,6 +129,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - Event search filters only the dashboard event table.
+- Event tags can be added from an event row or event details. The table supports an exact tag filter, and up to 250 selected events can receive atomic add/remove tag changes in bulk. Each event supports up to 10 tags of 32 characters; tags are visible on public event and comparison links.
 - **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
 - If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, and COROS.
 - Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.
@@ -138,15 +139,41 @@ export const HELP_SECTIONS: HelpSection[] = [
 - If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Garmin/COROS -> Suunto auto-sync routes stay disabled until you enable them again in **Services**; dismissing the card only hides the reminder.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles can use activity events or saved route previews as their source. Activity map tiles use their own tile date-range and activity filters, independent from the event table search; **Routes** map tiles show recent saved routes from lightweight route previews and do not use event filters.
-- **Cycling Power Curve** and **Running Power Curve** are curated event-backed charts: each uses its own tile date-range and activity filters, defaults to **1y**, and compares your best power per duration in range with either the latest matching activity or a saved recent-best comparison window.
+- **Cycling Power Curve** and **Running Power Curve** are curated derived snapshots: each uses its own prepared date range, defaults to **1y**, and compares your best power per duration with either the latest activity or a saved recent-best comparison window. Power Curve tiles do not use activity subfilters or historical window navigation.
 - Curated, KPI, form, recovery, sleep, and other derived tiles stay independent from event table filters and custom/map tile filters.
-- When sleep sync imports sleep sessions, the dashboard can add the **Sleep** tile once, and you can also add it manually from Dashboard manager; removing an auto-added Sleep tile prevents future automatic Sleep tile adds.
-- Existing dashboards can receive the lean default curated chart set and core KPI row set automatically once. **Cycling Power Curve** joins that auto-add flow only after a cycling or mountain biking event with stored Power Curve data exists; **Running Power Curve** does the same for running or trail running. The dashboard can also add a **Routes** map once saved routes have generated previews. Removing an auto-added curated chart, KPI, or Routes map prevents that tile from being suggested again.
+- The Dashboard does not automatically add sleep, KPI, curated training, or power-curve tiles. It can add a **Routes** map once saved routes have generated previews.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
-- Dashboard manager bulk actions can add the recommended default dashboard, add every available preset tile, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+- Dashboard manager bulk actions can add every available preset tile, simplify selected legacy training tiles, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+
+### Training workspace
+
+- **Training** has a fixed analytical layout rather than draggable dashboard tiles: a **28-day status** compared with your usual training, **What drove this**, **Load trajectory**, **Training mix**, **Durability**, and **Settings vs recent evidence**.
+- Use **Sports shown** to personalize the Running, Cycling, and Swimming detail cards. Until you save a choice, Training selects sports automatically from activities in the latest 28 days and any saved sport benchmark; if none qualifies, all three stay visible. A saved choice remains fixed until you change it, and **Use automatic selection** restores the automatic behavior.
+- Running includes the Running and Trail Running activity groups. Cycling includes the Cycling and Mountain Biking groups, including road, indoor, virtual, e-bike, and mountain-bike activities. Swimming uses the Swimming group for both pool and open-water sessions. Unsupported activity types and multisport aggregate records are not assigned to a Training discipline.
+- Multisport files are evaluated one activity leg at a time. A triathlon can therefore add one session to Running, one to Cycling, and one to Swimming; the parent event itself is not counted as an extra session. Merged events and activities without an eligible parent event are excluded.
+- Hiding a sport removes only that sport's **Best build vs now**, Training Mix, durability tab, and sport-specific performance cards. It does not filter the overall comparison or **What drove this**, which always combines eligible parent-event and child-activity evidence. Load and intensity charts can still include other eligible activities when their source data provides TSS or zones.
+- **Best build vs now** is a curated Training comparison for Running, Cycling, and Swimming. Set one saved benchmark per sport from a manual end date or any eligible historical event. A multisport event may anchor separate benchmarks for each discipline. Events tagged exactly **Race** (case-insensitive) are shown first as quick picks, but selecting an event never changes its tags. The picker identifies its latest 100 other historical events by distance, duration, and TSS when available, and can order them by latest, longest, or highest load. An event is only an anchor: its workload is excluded from the benchmark.
+- Choose an 8, 10, or 12-week build (12 weeks by default). The saved benchmark must finish before the matching current window, so comparisons never overlap. Merged events are excluded; missing TSS, zones, or durability evidence remains unavailable instead of being counted as zero. Durability rows require the same output or pool context and at least two eligible samples in both windows.
+- **What drove this** compares the current 28 days with the median of the prior three 28-day blocks. It separates parent-event TSS from child sport-group load, shows top parent-event contributors, keeps Other and unclassified child activities visible, reports load coverage, and compares sport-specific training rhythm. Raw load and composition changes use neutral higher/lower language because a larger load is not inherently good or bad.
+- **Recovery context** places recorded overnight sleep beside training without changing the Training state or claiming that sleep caused a performance change. The top comparison uses the current 28 days and the preceding 84 days; every ready **Best build vs now** card uses the exact current and saved benchmark date ranges. Build cards keep this second comparison compact and reveal its full metrics and source notes through **Details**.
+- Recovery context uses the longest valid main overnight record from each provider per sleep date; naps are excluded. Average sleep appears with at least three recorded nights, while bedtime variation and overnight HRV need at least five qualifying nights. Bedtime variation uses only nights with a trustworthy local timezone offset; a night without one can still contribute duration and HRV. Missing nights and missing HRV are never counted as zero, and sleep stages, provider scores, SpO₂, and respiration are not blended into a synthetic readiness score.
+- Deltas require the same sleep provider in both windows and sufficient coverage in each: at least seven recorded nights and at least half of the window. When coverage is limited or providers differ, Training can show the available values but withholds change claims. This protects comparisons when a device was connected late or changed between builds.
+- When a recent activity supplies a still-active device recovery estimate, Training can show the imported post-workout time remaining. It updates each minute, is omitted when missing or elapsed, is not a readiness score, and does not change the Training state.
+- Training Mix compares the latest 28 days with a normalized 84-day baseline for each Training discipline. Missing TSS or zone evidence stays unavailable rather than being interpreted as zero.
+- Swimming pace uses 12 UTC-aligned weeks and keeps pool and open-water evidence separate. It uses only stored **Average Swim Pace**, weighted by swimming distance; elapsed duration is never used to estimate pace because rests would distort it. The chart follows your /100 m or /100 yd setting.
+- Pool SWOLF is shown only for stored active lengths that share the dominant stroke and pool-length context. SWOLF from different strokes or pool lengths is not comparable and is not blended. See [Garmin's SWOLF guidance](https://support.garmin.com/en-US/?faq=z7QHGpBDDH7wDJsSKjxRi9).
+- Training does not infer Critical Swim Speed (CSS) from normal workouts. Reliable CSS requires deliberate maximal-distance trials, commonly 200 m and 400 m; see [Garmin's CSS protocol](https://support.garmin.com/en-US/?faq=h56ydwZxU8A7oi2OSh0y66) and the [critical-speed reliability evidence](https://pmc.ncbi.nlm.nih.gov/articles/PMC10875687/). Missing swim pace, active lengths, or comparable SWOLF remains explicitly unavailable.
+- When a derived comparison is missing or rebuilding, Training says it is preparing rather than showing a zero-session result. A confirmed empty state means no eligible activity leg was found in the latest 28 days.
+- **Durability** replaces the old aggregate efficiency trend on Training. Its Running, Cycling, Pool, and Open water tabs compare the current 28 days with the median of the prior three 28-day blocks, expose candidate and eligible activity coverage, preserve output and pool-length/stroke contexts, and show exclusion reasons. A context needs eligible evidence in at least two prior blocks before Training calls it usual. Each context also plots a readable 12-week trajectory: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. Bars show eligible activity samples, empty weeks stay explicit, and lines never bridge missing weeks. Evidence is generated when supported activities are processed; older activities that have not yet been reprocessed stay explicitly missing. Activity-level timelines remain on event detail pages and are not persisted in Training snapshots.
+- Capacity markers are separated by sport, meaning, source, and time window. **FTP setting** is the latest positive FTP imported with an eligible activity; repeated carried values are deduplicated and shown with when that setting was first and last seen. A value that exactly matches the session-derived estimate of 95% of that activity's 20-minute best is not presented as an imported setting.
+- **Modeled critical power** comes from the aggregate best 3–20 minute power curve over the latest 90 days, never from one activity's Critical Power field. It appears only when the curve covers the required durations without large interpolation gaps and passes fit-quality checks. The fit-quality label and number of activities with usable power curves stay visible; neither is a guarantee that every effort was maximal.
+- FTP and modeled critical power are interpreted as setting versus recent performance evidence. A lower model means recent efforts have not validated the setting; it does not by itself mean fitness declined, especially when the window lacks recent maximal efforts.
+- **Imported VO₂ max** is a separate aerobic marker, never a readiness score. Training does not call it a lab result or compare it numerically with power thresholds unless the source provides that methodological provenance.
+- Relative modeled power is withheld when its anchors imply inconsistent body weights. Other missing or unreliable inputs also remain explicit. Training does not infer LT1/LT2, race readiness, a universal athlete score, or workout-execution scoring.
+- Training power-profile callouts compare the best 90-day curve with the best one-year curve at 5 seconds, 1 minute, 5 minutes, 20 minutes, and 1 hour. They use bounded reciprocal-duration interpolation, never bridge duration brackets wider than 1.25×, show both activity counts, and call out the strongest retained duration and clearest gap. Missing comparable anchors stay explicit.
 
 ### Reorder dashboard tiles
 
@@ -212,7 +239,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
-- **Cycling Power Curve** and **Running Power Curve** use each event's stored PowerCurve stat to draw the best power envelope and a selectable comparison: latest matching activity, best last 30d, or best last 90d. Cycling and running power data stay in separate tiles.
+- **Cycling Power Curve** and **Running Power Curve** use a prepared PowerCurve snapshot to draw the best power envelope and a selectable comparison: latest activity, best last 30d, or best last 90d. Cycling and running power data stay in separate tiles.
 - Intensity Distribution and Efficiency Trend include compact **8w / 12w / 6m / 1y / All** range selectors that only change the visible derived weekly history and are saved per dashboard tile.
 - Training-derived tiles do not fall back to currently loaded dashboard events.
 
@@ -261,6 +288,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - In Event details, if selected indoor activities do not include distance data, the chart automatically falls back to a **Duration** x-axis.
 - In that case, the **Distance** x-axis option stays visible but is disabled until a compatible activity selection is active.
+- **Default chart metrics** in **Settings -> Charts** control which available charts are shown initially.
+- The chart option **Include all recorded metrics** makes other chartable streams, such as Temperature, available in **Visible charts**. It does not change which charts are currently visible.
+- Use **Visible charts** to show or hide individual charts, or **Show all charts** to display every available chart.
 - Each event chart panel can use the **Overlay** button to compare one other available metric on a shared y-axis when metrics are compatible, otherwise on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
 - Right-clicking an event chart copies a themed image of the full chart panel, including the chart title, legend, and range statistics.
 - Swim activities with per-length pool data show a **Show Swim Lengths** chart option that overlays swim length end boundaries on the chart; active and idle/rest lengths are both included.
@@ -270,6 +300,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
+      { label: 'Training', icon: 'monitoring', kind: 'route', target: '/training' },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],

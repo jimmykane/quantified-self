@@ -293,10 +293,12 @@ describe('ToolsComparePageComponent', () => {
       normalizeTags: vi.fn((tags: unknown) => Array.isArray(tags)
         ? tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean)
         : []),
-      getEventTags: vi.fn((event: AppEventInterface) => Array.isArray(event.benchmarkReviewTags) ? event.benchmarkReviewTags : []),
+      getEventTags: vi.fn((event: AppEventInterface) => Array.isArray(event.tags)
+        ? event.tags
+        : (Array.isArray(event.benchmarkReviewTags) ? event.benchmarkReviewTags : [])),
       saveEventTags: vi.fn(async (_user: User, event: AppEventInterface, tags: unknown) => {
         const normalizedTags = benchmarkReviewServiceMock.normalizeTags(tags);
-        event.benchmarkReviewTags = normalizedTags;
+        event.tags = normalizedTags;
         return normalizedTags;
       }),
     };
@@ -1889,8 +1891,14 @@ describe('ToolsComparePageComponent', () => {
         suggestions: ['Firmware', 'Route'],
       }),
     }));
-    expect(benchmarkReviewServiceMock.saveEventTags).toHaveBeenCalledWith(user, firmwareEvent, [' review ']);
-    expect(firmwareEvent.benchmarkReviewTags).toEqual(['review']);
+    expect(benchmarkReviewServiceMock.saveEventTags).toHaveBeenCalledWith(
+      user,
+      firmwareEvent,
+      [' review '],
+      ['Firmware'],
+    );
+    expect(firmwareEvent.tags).toEqual(['review']);
+    expect(firmwareEvent.benchmarkReviewTags).toBeUndefined();
     expect(component.comparisonItems()[0].benchmarkReviewTags).toEqual(['review']);
     expect(hapticsServiceMock.success).toHaveBeenCalled();
     expect(analyticsServiceMock.logToolCompareSavedAction).toHaveBeenCalledWith('tags_save', {
@@ -1901,6 +1909,35 @@ describe('ToolsComparePageComponent', () => {
       status: 'success',
       tagCount: 1,
     });
+  });
+
+  it('keeps the active tag filter aligned when a comparison tag is recased', () => {
+    const firmwareEvent = makeComparisonEvent('firmware-comparison', {
+      title: 'Firmware comparison',
+      benchmarkReviewTags: ['Firmware'],
+    });
+    component.comparisons.set([firmwareEvent]);
+
+    component.updateComparisonTagFilter('firmware');
+    expect(component.comparisonTagFilter()).toBe('Firmware');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['firmware-comparison']);
+
+    (component as any).updateComparisonEventInLoadedRows('firmware-comparison', (event: AppEventInterface) => {
+      event.tags = ['firmware'];
+      return event;
+    });
+
+    expect(component.comparisonTagFilterOptions()).toEqual([{ value: 'firmware', label: 'firmware' }]);
+    expect(component.comparisonTagFilter()).toBe('firmware');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['firmware-comparison']);
+
+    (component as any).updateComparisonEventInLoadedRows('firmware-comparison', (event: AppEventInterface) => {
+      event.tags = [];
+      return event;
+    });
+
+    expect(component.comparisonTagFilter()).toBe('');
+    expect(component.filteredComparisonItems().map(item => item.id)).toEqual(['firmware-comparison']);
   });
 
   it('renders dashboard-style icons in previous comparison table headers', () => {

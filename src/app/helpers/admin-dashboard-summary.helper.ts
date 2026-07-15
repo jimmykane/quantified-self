@@ -148,6 +148,9 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
 
     const queues = stats.cloudTasks?.queues;
     const reparseCloudTasks = normalizeCount(queues?.sportsLibReparse?.pending) + normalizeCount(queues?.sportsLibReparseHeavy?.pending);
+    const derivedMetricsIngressCloudTasks = normalizeCount(queues?.derivedMetricsIngress?.pending);
+    const derivedMetricsWorkerCloudTasks = normalizeCount(queues?.derivedMetrics?.pending);
+    const derivedMetricsCloudTasks = derivedMetricsIngressCloudTasks + derivedMetricsWorkerCloudTasks;
     const derivedCoordinators = stats.derivedMetrics?.coordinators;
     const staleDerived = normalizeCount(derivedCoordinators?.staleQueued) + normalizeCount(derivedCoordinators?.staleProcessing);
 
@@ -285,7 +288,7 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             icon: 'monitor_heart',
             route: '/admin/queues/derived-metrics',
             pendingDb: derivedCoordinators?.queued,
-            cloudTasks: queues?.derivedMetrics?.pending,
+            cloudTasks: derivedMetricsCloudTasks,
             completed: derivedCoordinators?.idle,
             completedLabel: 'Idle',
             problemCount: staleDerived,
@@ -293,6 +296,8 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             dead: derivedCoordinators?.failed,
             deadLabel: 'Failed',
             chips: [
+                ...countChip('Ingress tasks', derivedMetricsIngressCloudTasks),
+                ...countChip('Worker tasks', derivedMetricsWorkerCloudTasks),
                 ...countChip('Processing', derivedCoordinators?.processing),
                 ...countChip('Total', derivedCoordinators?.total),
             ],

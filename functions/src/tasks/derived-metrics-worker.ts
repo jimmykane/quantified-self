@@ -9,8 +9,11 @@ import {
     completeDerivedMetricsProcessing,
     failDerivedMetricsProcessing,
     fetchDerivedFormSnapshotSeed,
+    fetchDerivedMetricsActivityDocs,
     fetchDerivedMetricsEventDocs,
     fetchRecoveryLookbackEventDocs,
+    fetchTrainingBuildBenchmarkSettings,
+    fetchTrainingBuildSleepDocs,
     getDerivedRecoveryLookbackWindowSeconds,
     isDerivedMetricsUserWriteBlocked,
     markDerivedMetricSnapshotsBuilding,
@@ -27,7 +30,7 @@ interface DerivedMetricsTaskPayload {
 
 export const processDerivedMetricsTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
-    memory: '512MiB',
+    memory: '1GiB',
     timeoutSeconds: 540,
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
 }, async (request) => {
@@ -74,10 +77,15 @@ export const processDerivedMetricsTask = onTaskDispatched({
             return;
         }
         await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
+        const buildAtMs = Date.now();
         const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
         const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(dirtyMetricKinds);
         let projectionFormSnapshotSeed: Awaited<ReturnType<typeof fetchDerivedFormSnapshotSeed>> = null;
-        const canUseProjectionSeed = sourceRequirements.needsFormDocs && projectionOnlyKinds;
+        // Activity-backed metrics require both normalized activities and their parent
+        // event metadata. Form's daily-load seed cannot replace that join input.
+        const canUseProjectionSeed = sourceRequirements.needsFormDocs
+            && projectionOnlyKinds
+            && !sourceRequirements.needsTrainingActivityDocs;
         if (canUseProjectionSeed) {
             const candidateProjectionSeed = await fetchDerivedFormSnapshotSeed(uid);
             const hasCompatibleSchema = Number.isFinite(candidateProjectionSeed?.schemaVersion)
@@ -105,6 +113,23 @@ export const processDerivedMetricsTask = onTaskDispatched({
             // Reusing full-history form docs inflates segment counts and breaks "recovery left now" semantics.
             ? await fetchRecoveryLookbackEventDocs(uid)
             : [];
+        const trainingActivityDocs = sourceRequirements.needsTrainingActivityDocs
+            ? await fetchDerivedMetricsActivityDocs(uid, {
+                includeSwimLengths: sourceRequirements.needsTrainingSwimLengths,
+            })
+            : [];
+        const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
+            ? await fetchTrainingBuildBenchmarkSettings(uid)
+            : {};
+        const trainingBuildSleepDocs = sourceRequirements.needsTrainingBuildSleepDocs
+            ? await fetchTrainingBuildSleepDocs(
+                uid,
+                formDocs,
+                trainingActivityDocs,
+                trainingBuildBenchmarkSettings,
+                buildAtMs,
+            )
+            : [];
 
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
             await abandonAfterWriteBlock('task before snapshot ready write');
@@ -113,7 +138,11 @@ export const processDerivedMetricsTask = onTaskDispatched({
         await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
             formDocs,
             recoveryNowDocs,
+            trainingActivityDocs,
+            ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
+            ...(sourceRequirements.needsTrainingBuildSleepDocs ? { trainingBuildSleepDocs } : {}),
         }, {
+            buildAtMs,
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formDailyLoads: projectionFormSnapshotSeed?.dailyLoads || [],
             formSourceEventCount: projectionFormSnapshotSeed?.sourceEventCount ?? null,
@@ -132,6 +161,10 @@ export const processDerivedMetricsTask = onTaskDispatched({
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formEventDocsScanned: formDocs.length,
             recoveryEventDocsScanned: recoveryNowDocs.length,
+            trainingActivityDocsScanned: trainingActivityDocs.length,
+            trainingSwimLengthsFetched: sourceRequirements.needsTrainingSwimLengths,
+            trainingBuildBenchmarkSettingsFetched: sourceRequirements.needsTrainingBuildBenchmarkSettings,
+            trainingBuildSleepDocsScanned: trainingBuildSleepDocs.length,
             usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
             projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),

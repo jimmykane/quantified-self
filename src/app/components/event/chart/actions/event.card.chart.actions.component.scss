@@ -44,6 +44,13 @@ section.container {
   font: inherit;
 }
 
+.series-menu__header {
+  margin: 0;
+  padding: 4px 8px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+
 .series-menu__item:hover {
   background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
 }

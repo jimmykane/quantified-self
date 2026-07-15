@@ -210,6 +210,7 @@ describe('BenchmarkBottomSheetComponent', () => {
             component.data.user,
             component.data.persistEvent,
             [' route '],
+            ['firmware'],
         );
         expect(savedTags).toEqual(['firmware']);
         expect(onEventTagsSavedMock).toHaveBeenCalledWith(['firmware']);

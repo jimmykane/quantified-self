@@ -38,6 +38,7 @@ import {
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
 import { formatDashboardWeekRangeLabel } from '../../../helpers/dashboard-chart-data.helper';
+import { resolveTrainingStateClassification } from '../../../helpers/training-state.helper';
 import type {
   DashboardAcwrContext,
   DashboardEasyPercentContext,
@@ -515,7 +516,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     const rampRate = this.toFiniteNumber(this.rampRate?.rampRate);
     const fitness = this.toFiniteNumber(this.fitnessCtl?.value);
     const fatigue = this.toFiniteNumber(this.fatigueAtl?.value);
-    const status = this.resolveLoadStatusLabel(form, rampRate, fitness, fatigue);
+    const status = resolveTrainingStateClassification({ form, rampRate, fitness, fatigue });
     const detailParts = [
       form !== null ? `TSB ${this.formatPrimaryValue(form, { signed: true })}` : '',
       rampRate !== null ? `Ramp ${this.formatPrimaryValue(rampRate, { signed: true })}` : '',
@@ -524,7 +525,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     return {
       title: 'Load Status',
       primaryValue: null,
-      primaryValueText: status.label,
+      primaryValueText: status.label ?? undefined,
       primaryLabel: status.caption || 'Current state',
       secondaryLabel: detailParts.length ? 'Current signals' : 'Current form and ramp',
       secondaryValueText: detailParts.join(' / '),
@@ -606,46 +607,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       trend: (this.hardPercent?.trend8Weeks || this.easyPercent?.trend8Weeks || [])
         .map(point => ({ time: point.time, value: point.value })),
     };
-  }
-
-  private resolveLoadStatusLabel(
-    form: number | null,
-    rampRate: number | null,
-    fitness: number | null,
-    fatigue: number | null,
-  ): { label?: string; caption?: string } {
-    if (form === null && rampRate === null && fitness === null && fatigue === null) {
-      return {};
-    }
-
-    if (fitness !== null && fitness < 5 && fatigue !== null && fatigue < 10) {
-      return { label: 'Starting', caption: 'Low training history' };
-    }
-
-    if (
-      form !== null
-      && (form <= -30 || (form <= -20 && fatigue !== null && fitness !== null && fatigue > fitness * 1.25))
-    ) {
-      return { label: 'Overload', caption: 'Back off soon' };
-    }
-
-    if (form !== null && form <= -10) {
-      return { label: 'Fatigued', caption: 'Absorb the load' };
-    }
-
-    if (rampRate !== null && rampRate >= 1 && (form === null || form < 6)) {
-      return { label: 'Building', caption: 'Productive load' };
-    }
-
-    if (form !== null && form >= 8 && (rampRate === null || rampRate <= 0)) {
-      return { label: 'Fresh', caption: 'Ready to train' };
-    }
-
-    if (rampRate !== null && rampRate <= -3 && (form === null || form > -8)) {
-      return { label: 'Detraining', caption: 'Load is falling' };
-    }
-
-    return { label: 'Balanced', caption: 'Stable load' };
   }
 
   private resolveTrainingBalanceLabel(

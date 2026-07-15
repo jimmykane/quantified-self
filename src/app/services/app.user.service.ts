@@ -1149,6 +1149,18 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
+  private getClientWritableSettings(settings: unknown): Record<string, unknown> {
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      return {};
+    }
+
+    // Training preferences and benchmarks are written only by their validated callables.
+    // Generic profile saves can otherwise replay a stale value and make an
+    // unrelated preference update fail Firestore's server-owned-field rule.
+    const { trainingSettings: _trainingSettings, ...clientWritableSettings } = settings as Record<string, unknown>;
+    return clientWritableSettings;
+  }
+
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
     const promises = [];
     const hasIncompleteProfileReads = this.hasIncompleteProfileReads(user?.uid);
@@ -1158,12 +1170,15 @@ export class AppUserService implements OnDestroy {
           uid: user?.uid ?? null,
         });
       } else {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true })
-          .catch(err => {
-            this.logger.error('[AppUserService] Settings update FAILED', err);
-            throw err;
-          })
-        );
+        const clientWritableSettings = this.getClientWritableSettings(propertiesToUpdate.settings);
+        if (Object.keys(clientWritableSettings).length > 0) {
+          promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), clientWritableSettings, { merge: true })
+            .catch(err => {
+              this.logger.error('[AppUserService] Settings update FAILED', err);
+              throw err;
+            })
+          );
+        }
       }
       delete propertiesToUpdate.settings;
     }
@@ -1297,7 +1312,10 @@ export class AppUserService implements OnDestroy {
 
     // 2. Write Settings to Subcollection
     if (user.settings) {
-      promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), user.settings, { merge: true }));
+      const clientWritableSettings = this.getClientWritableSettings(user.settings);
+      if (Object.keys(clientWritableSettings).length > 0) {
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), clientWritableSettings, { merge: true }));
+      }
     }
 
     await Promise.all(promises);

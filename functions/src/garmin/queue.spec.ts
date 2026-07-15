@@ -22,6 +22,7 @@ const {
     mockCreateParsingOptions,
     mockEnqueueActivitySyncJobsForImportedEvent,
     mockResolveFirebaseUserIDForGarminUserID,
+    mockResolveProviderImportEventID,
     MockTerminalServiceAuthError,
     MockTokenRefreshSkippedForDeletedUserError,
     mockShouldSkipQueueWorkForDeletedUser,
@@ -53,6 +54,7 @@ const {
         mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
         mockEnqueueActivitySyncJobsForImportedEvent: vi.fn().mockResolvedValue({ queued: 1, skippedByReason: {} }),
         mockResolveFirebaseUserIDForGarminUserID: vi.fn(),
+        mockResolveProviderImportEventID: vi.fn(),
         MockTerminalServiceAuthError,
         MockTokenRefreshSkippedForDeletedUserError,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
@@ -124,6 +126,10 @@ vi.mock('../../../shared/parsing-options', () => ({
 
 vi.mock('../activity-sync/enqueue-imported-event', () => ({
     enqueueActivitySyncJobsForImportedEvent: mockEnqueueActivitySyncJobsForImportedEvent,
+}));
+
+vi.mock('../queue/provider-event-id', () => ({
+    resolveProviderImportEventID: mockResolveProviderImportEventID,
 }));
 
 // Mock queue utilities
@@ -212,6 +218,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
         mockRequestGet.mockResolvedValue(new ArrayBuffer(8));
         mockResolveFirebaseUserIDForGarminUserID.mockResolvedValue('firebase-user-id');
+        mockResolveProviderImportEventID.mockResolvedValue('event-id');
 
         // Force setEvent to fail
         vi.mocked(mockSetEvent).mockRejectedValue(new UsageLimitExceededError('Limit exceeded'));
@@ -508,6 +515,15 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 undefined,
                 undefined
             );
+            expect(mockResolveProviderImportEventID).toHaveBeenCalledWith({
+                userID: firebaseUserID,
+                startDate: expect.any(Date),
+                serviceName: ServiceNames.GarminAPI,
+                providerEventID: queueItem.activityFileID,
+                providerEventIDField: 'serviceActivityFileID',
+                providerEventSecondaryID: queueItem.activityFileType,
+                providerEventSecondaryIDField: 'serviceActivityFileType',
+            });
             expect(mockEnqueueActivitySyncJobsForImportedEvent).toHaveBeenCalledWith(expect.objectContaining({
                 userID: firebaseUserID,
                 eventID: 'saved-event-id',

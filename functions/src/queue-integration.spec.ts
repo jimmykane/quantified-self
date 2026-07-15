@@ -116,6 +116,10 @@ vi.mock('./utils', async (importOriginal) => {
     };
 });
 
+vi.mock('./queue/provider-event-id', () => ({
+    resolveProviderImportEventID: vi.fn().mockResolvedValue('event-123'),
+}));
+
 import { parseWorkoutQueueItemForServiceName } from './queue';
 import { getTokenData } from './tokens';
 import * as requestHelper from './request-helper';

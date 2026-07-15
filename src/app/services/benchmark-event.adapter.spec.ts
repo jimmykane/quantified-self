@@ -95,6 +95,6 @@ describe('BenchmarkEventAdapter', () => {
       benchmarkReviewTags: [' firmware ', 'gps   route', '', 123, 'publication'],
     });
 
-    expect(event.benchmarkReviewTags).toEqual(['firmware', 'gps route', 'publication']);
+    expect(event.tags).toEqual(['firmware', 'gps route', 'publication']);
   });
 });

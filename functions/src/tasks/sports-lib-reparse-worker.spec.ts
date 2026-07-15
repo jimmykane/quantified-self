@@ -12,7 +12,7 @@ const hoisted = vi.hoisted(() => {
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
     const getSportsLibReparseEventDurationMs = vi.fn(() => null);
     const isSportsLibReparseDurationHeavy = vi.fn((durationMs: number | null | undefined) =>
-        typeof durationMs === 'number' && durationMs > 32 * 60 * 60 * 1000);
+        typeof durationMs === 'number' && durationMs >= 24 * 60 * 60 * 1000);
     const enqueueSportsLibReparseHeavyTask = vi.fn().mockResolvedValue(true);
     const getUserDeletionGuardState = vi.fn().mockResolvedValue({
         userExists: true,
@@ -73,7 +73,7 @@ vi.mock('firebase-functions/v2/tasks', () => ({
 }));
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
-    SPORTS_LIB_REPARSE_HEAVY_REASONS: { Duration: 'duration_gt_32h', ManualAdmin: 'manual_admin' },
+    SPORTS_LIB_REPARSE_HEAVY_REASONS: { Duration: 'duration_gte_24h', ManualAdmin: 'manual_admin' },
     SPORTS_LIB_REPARSE_JOBS_COLLECTION: 'sportsLibReparseJobs',
     SPORTS_LIB_REPARSE_PROCESSING_TIERS: { Normal: 'normal', Heavy: 'heavy' },
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
@@ -129,7 +129,7 @@ describe('processSportsLibReparseTask', () => {
         hoisted.eventDocGet.mockResolvedValue({ exists: false, data: () => ({}) });
         hoisted.getSportsLibReparseEventDurationMs.mockReturnValue(null);
         hoisted.isSportsLibReparseDurationHeavy.mockImplementation((durationMs: number | null | undefined) =>
-            typeof durationMs === 'number' && durationMs > 32 * 60 * 60 * 1000);
+            typeof durationMs === 'number' && durationMs >= 24 * 60 * 60 * 1000);
         hoisted.isSportsLibReparseTerminalFailureMessage.mockImplementation((errorMessage: string) =>
             errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
             || /^Event .* was not found for user .*$/.test(errorMessage));
@@ -426,7 +426,7 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'pending',
             processingTier: 'heavy',
-            heavyReason: 'duration_gt_32h',
+            heavyReason: 'duration_gte_24h',
             eventDurationMs: 33 * 60 * 60 * 1000,
         }), { merge: true });
     });
@@ -453,7 +453,7 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
             status: 'pending',
             processingTier: 'heavy',
-            heavyReason: 'duration_gt_32h',
+            heavyReason: 'duration_gte_24h',
             eventDurationMs: 33 * 60 * 60 * 1000,
         }), { merge: true });
         expect(hoisted.jobSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
@@ -507,7 +507,7 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'pending',
             processingTier: 'heavy',
-            heavyReason: 'duration_gt_32h',
+            heavyReason: 'duration_gte_24h',
         }), { merge: true });
         expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
             path: 'sportsLibReparseJobs/job-1',
@@ -551,7 +551,7 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'pending',
             processingTier: 'heavy',
-            heavyReason: 'duration_gt_32h',
+            heavyReason: 'duration_gte_24h',
         }), { merge: true });
         expect(hoisted.recursiveDelete).toHaveBeenCalledWith(expect.objectContaining({
             path: 'sportsLibReparseJobs/job-1',

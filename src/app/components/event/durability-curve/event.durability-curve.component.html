@@ -1,7 +1,18 @@
 <div class="durability-curve-container">
   <div class="chart-intro">
     <div class="chart-title">Durability</div>
-    <div class="chart-description">W/bpm over time. Downward drift can indicate fatigue.</div>
+    <div class="chart-description">{{ chartDescription }}</div>
   </div>
+  @if (summaryViewModels.length) {
+    <div class="durability-summary-list" aria-label="Durability eligibility summary">
+      @for (summary of summaryViewModels; track summary.activityId) {
+        <article class="durability-summary" [class.durability-summary-eligible]="summary.isEligible">
+          <div><strong>{{ summary.label }}</strong><span>{{ summary.eligibilityText }}</span></div>
+          <small>{{ summary.contextText }}</small>
+          @if (summary.evidenceText) { <p>{{ summary.evidenceText }}</p> }
+        </article>
+      }
+    </div>
+  }
   <div class="durability-curve-chart" #chartDiv [style.min-width.%]="100"></div>
 </div>

@@ -3,22 +3,15 @@ import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import * as xmldom from 'xmldom';
 import semver from 'semver';
 import {
     ActivityUtilities,
     DataDistance,
     DataDuration,
-    EventImporterFIT,
-    EventImporterGPX,
-    EventImporterSuuntoJSON,
-    EventImporterSuuntoSML,
-    EventImporterTCX,
     EventInterface,
     EventUtilities,
 } from '@sports-alliance/sports-lib';
 import { FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
-import { createParsingOptions } from '../../../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { generateActivityIDFromSourceKey } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
@@ -39,6 +32,8 @@ import {
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import { getEventTags, preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
@@ -59,6 +54,7 @@ export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' |
 const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
     /^Event .* was not found for user .*$/,
+    /^Strict original-file reparse failed\. .*: No activities found in GPX; use importRoutesFromGPX for routes$/,
 ] as const;
 
 export function isSportsLibReparseTerminalFailureMessage(errorMessage: string): boolean {
@@ -206,23 +202,8 @@ function toDateOrUndefined(value: unknown): Date | undefined {
     return undefined;
 }
 
-function normalizeExtension(path: string): string {
-    const lower = path.toLowerCase();
-    const withoutGz = lower.endsWith('.gz') ? lower.slice(0, -3) : lower;
-    const parts = withoutGz.split('.');
-    return parts.pop() || '';
-}
-
 function isGzip(path: string): boolean {
     return path.toLowerCase().endsWith('.gz');
-}
-
-function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
-    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-}
-
-function decodeText(buffer: Buffer): string {
-    return new TextDecoder().decode(bufferToArrayBuffer(buffer));
 }
 
 function maybeDecompressOriginalFile(path: string, rawBytes: Buffer): Buffer {
@@ -258,7 +239,7 @@ export function getSportsLibReparseEventDurationMs(eventData: FirestoreEventJSON
 export function isSportsLibReparseDurationHeavy(eventDurationMs: number | null | undefined): boolean {
     return typeof eventDurationMs === 'number'
         && Number.isFinite(eventDurationMs)
-        && eventDurationMs > SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS;
+        && eventDurationMs >= SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS;
 }
 
 export function resolveSportsLibReparseRoutingDecision(
@@ -520,24 +501,7 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
             const fileBytes = maybeDecompressOriginalFile(sourceFile.path, rawBytes);
             const sourceContentHash = createHash('sha256').update(fileBytes).digest('hex');
             sourceContentHashes.push(sourceContentHash);
-            const extension = normalizeExtension(sourceFile.path);
-            const options = createParsingOptions();
-
-            let parsedEvent: EventInterface;
-            if (extension === 'fit') {
-                parsedEvent = await EventImporterFIT.getFromArrayBuffer(bufferToArrayBuffer(fileBytes), options);
-            } else if (extension === 'gpx') {
-                parsedEvent = await EventImporterGPX.getFromString(decodeText(fileBytes), xmldom.DOMParser, options);
-            } else if (extension === 'tcx') {
-                const xml = new xmldom.DOMParser().parseFromString(decodeText(fileBytes), 'application/xml');
-                parsedEvent = await EventImporterTCX.getFromXML(xml, options);
-            } else if (extension === 'json') {
-                parsedEvent = await EventImporterSuuntoJSON.getFromJSONString(decodeText(fileBytes));
-            } else if (extension === 'sml') {
-                parsedEvent = await EventImporterSuuntoSML.getFromXML(decodeText(fileBytes));
-            } else {
-                throw new Error(`Unsupported original file extension: ${extension}`);
-            }
+            const parsedEvent = await parseActivityFilePayload(fileBytes, sourceFile.path);
 
             parsedEvents.push(parsedEvent);
         } catch (error) {
@@ -670,6 +634,9 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     }
     if (Object.prototype.hasOwnProperty.call(existingAny, 'feeling')) {
         parsedAny.feeling = existingAny.feeling;
+    }
+    if (Array.isArray(existingAny.tags) || Array.isArray(existingAny.benchmarkReviewTags)) {
+        parsedAny.tags = getEventTags(existingAny);
     }
 }
 
@@ -1314,11 +1281,24 @@ async function setReparseDocIfUserActive(
     docRef: admin.firestore.DocumentReference,
     data: unknown,
     options?: admin.firestore.SetOptions,
+    transformExistingData?: (
+        incomingData: admin.firestore.DocumentData,
+        existingData: admin.firestore.DocumentData | null,
+    ) => admin.firestore.DocumentData,
 ): Promise<void> {
     const db = admin.firestore();
     await db.runTransaction(async (transaction) => {
         await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
-        transaction.set(docRef, data as admin.firestore.DocumentData, options as admin.firestore.SetOptions);
+        const incomingData = data as admin.firestore.DocumentData;
+        let resolvedData = incomingData;
+        if (transformExistingData) {
+            const existingSnapshot = await transaction.get(docRef);
+            resolvedData = transformExistingData(
+                incomingData,
+                existingSnapshot.exists ? existingSnapshot.data() || null : null,
+            );
+        }
+        transaction.set(docRef, resolvedData, options as admin.firestore.SetOptions);
     });
 }
 
@@ -1326,11 +1306,14 @@ function getFirestoreAdapter(uid: string): FirestoreAdapter {
     return {
         setDoc: async (path: string[], data: unknown) => {
             const documentPath = path.join('/');
+            const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
             await setReparseDocIfUserActive(
                 uid,
                 `sports_lib_reparse_writer:${documentPath}`,
                 admin.firestore().doc(documentPath),
                 data,
+                undefined,
+                isEventDocument ? preserveEventTagsOnRewrite : undefined,
             );
         },
         createBlob: (data: Uint8Array) => Buffer.from(data),

@@ -529,6 +529,8 @@ describe('createToolComparisonEvent', () => {
       'tool_comparison_writer:users/user-1/events/event-1',
       expect.anything(),
       { name: 'guarded event' },
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith(
       'user-1',
@@ -558,6 +560,8 @@ describe('createToolComparisonEvent', () => {
       'tool_comparison_writer:users/user-1/events/event-1',
       expect.anything(),
       { name: 'blocked event' },
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
   });
