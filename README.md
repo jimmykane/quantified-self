@@ -100,6 +100,12 @@ npm run test-coverage
 npm run test:rules
 ```
 
+## 📚 Architecture Documentation
+
+- [Training workspace architecture and maintenance guide](docs/training-workspace.md)
+- [Queue processing architecture](docs/queue-processing.md)
+- [Sleep sync operations](docs/sleep-sync-operations.md)
+
 ## 📦 Deployment
 
 Deployment is handled via Firebase CLI. Common scripts:
