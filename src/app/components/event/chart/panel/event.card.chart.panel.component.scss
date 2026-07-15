@@ -254,7 +254,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 16px 20px 20px;
-  background: var(--mat-sys-surface);
+  background: var(--mat-sys-surface-container-lowest);
   overflow: hidden;
 }
 

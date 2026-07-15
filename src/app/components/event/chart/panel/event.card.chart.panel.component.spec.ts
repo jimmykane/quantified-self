@@ -760,10 +760,12 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.tooltip?.confine).toBe(true);
   });
 
-  it('recreates the chart with confined tooltip placement when the panel enters fullscreen', async () => {
+  it('reconfigures the mounted chart with confined tooltip placement when the panel enters fullscreen', async () => {
     await renderComponent();
 
     const initCallsBeforeFullscreen = eChartsLoaderMock.init.mock.calls.length;
+    eChartsLoaderMock.dispose.mockClear();
+    chart.dispatchAction.mockClear();
     const panelElement = component.panelRoot.nativeElement;
     Object.defineProperty(document, 'fullscreenElement', {
       configurable: true,
@@ -774,13 +776,67 @@ describe('EventCardChartPanelComponent', () => {
     document.dispatchEvent(new Event('fullscreenchange'));
     await waitForChartStabilization();
 
-    expect(eChartsLoaderMock.dispose).toHaveBeenCalled();
-    expect(eChartsLoaderMock.init.mock.calls.length).toBeGreaterThan(initCallsBeforeFullscreen);
+    expect(eChartsLoaderMock.dispose).not.toHaveBeenCalled();
+    expect(eChartsLoaderMock.init.mock.calls.length).toBe(initCallsBeforeFullscreen);
+    expect(chart.dispatchAction).toHaveBeenCalledWith({
+      type: 'hideTip',
+      escapeConnect: true,
+    });
 
     const option = getRenderedOption();
     expect(option?.tooltip?.confine).toBe(true);
     expect(option?.tooltip?.appendTo).toBeUndefined();
     expect(option?.tooltip?.position).toBeUndefined();
+  });
+
+  it('keeps the ECharts instance and listeners stable through repeated fullscreen cycles', async () => {
+    await renderComponent();
+
+    const panelElement = component.panelRoot.nativeElement;
+    const initCallsBeforeFullscreen = eChartsLoaderMock.init.mock.calls.length;
+    const chartListenerCallsBeforeFullscreen = chart.on.mock.calls.length;
+    const rendererListenerCallsBeforeFullscreen = zr.on.mock.calls.length;
+    eChartsLoaderMock.dispose.mockClear();
+
+    for (let index = 0; index < 3; index += 1) {
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: panelElement,
+      });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      await waitForChartStabilization();
+      fixture.detectChanges();
+      expect(component.isFullscreen).toBe(true);
+      expect(panelElement.classList.contains('event-chart-panel--fullscreen')).toBe(true);
+      expect(getRenderedOption()?.tooltip).toEqual(expect.objectContaining({
+        confine: true,
+      }));
+      expect(getRenderedOption()?.tooltip?.appendTo).toBeUndefined();
+      expect(getRenderedOption()?.tooltip?.position).toBeUndefined();
+
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: null,
+      });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      await waitForChartStabilization();
+      fixture.detectChanges();
+      expect(component.isFullscreen).toBe(false);
+      expect(panelElement.classList.contains('event-chart-panel--fullscreen')).toBe(false);
+      expect(getRenderedOption()?.tooltip).toEqual(expect.objectContaining({
+        appendTo: getOrCreateEChartsTooltipHost,
+        confine: false,
+        position: getViewportConstrainedTooltipPosition,
+      }));
+    }
+
+    expect(eChartsLoaderMock.dispose).not.toHaveBeenCalled();
+    expect(eChartsLoaderMock.init.mock.calls.length).toBe(initCallsBeforeFullscreen);
+    expect(chart.on.mock.calls.length).toBe(chartListenerCallsBeforeFullscreen);
+    expect(zr.on.mock.calls.length).toBe(rendererListenerCallsBeforeFullscreen);
+    expect(getRenderedOption()?.series).toHaveLength(1);
   });
 
   it('preserves the current zoom range when exiting fullscreen before shared zoom input catches up', async () => {
