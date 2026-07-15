@@ -146,6 +146,7 @@ interface TrainingBuildMetricRowViewModel {
 type TrainingRecoveryState = 'updating' | 'unavailable' | 'empty' | 'limited' | 'ready';
 type TrainingComparisonDeltaTone = 'positive' | 'negative' | 'neutral';
 const TRAINING_SWIM_PACE_DELTA_DIRECTION = resolveMetricSemantics('Swim pace').direction;
+const TRAINING_RECOVERY_MEANINGFUL_SLEEP_DELTA_SECONDS = 15 * 60;
 
 interface TrainingRecoveryMetricRowViewModel {
   label: string;
@@ -160,6 +161,7 @@ interface TrainingRecoveryViewModel {
   isUpdating: boolean;
   currentLabel: string;
   referenceLabel: string;
+  compactText: string;
   detailText: string;
   sourceText: string;
   metricRows: TrainingRecoveryMetricRowViewModel[];
@@ -171,6 +173,7 @@ function createEmptyTrainingRecoveryViewModel(): TrainingRecoveryViewModel {
     isUpdating: true,
     currentLabel: 'Now',
     referenceLabel: 'Usual',
+    compactText: 'Updating recovery context…',
     detailText: 'Preparing recovery context from your recorded overnight sleep.',
     sourceText: 'Sleep context does not change your Training state.',
     metricRows: [],
@@ -234,6 +237,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public isCyclingVisible = true;
   public isSwimmingVisible = true;
   public hasPowerCapacityVisible = true;
+  public trainingBuildRecoveryExpanded: Record<DerivedTrainingDiscipline, boolean> = {
+    running: false,
+    cycling: false,
+    swimming: false,
+  };
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
   private readonly subscriptions = new Subscription();
@@ -317,6 +325,13 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.subscriptions.unsubscribe();
   }
 
+  public toggleTrainingBuildRecovery(discipline: DerivedTrainingDiscipline): void {
+    this.trainingBuildRecoveryExpanded = {
+      ...this.trainingBuildRecoveryExpanded,
+      [discipline]: !this.trainingBuildRecoveryExpanded[discipline],
+    };
+  }
+
   private formatNumber(value: number | null | undefined, fractionDigits = 1, signed = false): string {
     if (value === null || value === undefined || !Number.isFinite(value)) {
       return '--';
@@ -372,6 +387,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.isCyclingVisible = true;
     this.isSwimmingVisible = true;
     this.hasPowerCapacityVisible = true;
+    this.trainingBuildRecoveryExpanded = { running: false, cycling: false, swimming: false };
     this.trainingBuildCards = this.buildTrainingBuildCards();
   }
 
@@ -567,6 +583,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       if (!result?.saved) {
         return;
       }
+      this.trainingBuildRecoveryExpanded = {
+        ...this.trainingBuildRecoveryExpanded,
+        [discipline]: false,
+      };
       this.pendingTrainingBuildSelections.set(discipline, result.selection ?? null);
       this.refreshTrainingBuildCards();
       this.changeDetector.markForCheck();
@@ -847,6 +867,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         isUpdating: false,
         currentLabel,
         referenceLabel,
+        compactText: 'Recovery context unavailable.',
         detailText: 'Recovery context could not be refreshed. Refresh to request another derived snapshot.',
         sourceText: 'Sleep values are withheld because this derived snapshot may be incomplete or stale. Sleep context does not change your Training state.',
         metricRows: [],
@@ -858,6 +879,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         isUpdating,
         currentLabel,
         referenceLabel,
+        compactText: 'Updating recovery context…',
         detailText: 'Preparing recovery context from your recorded overnight sleep.',
         sourceText: 'Sleep context does not change your Training state.',
         metricRows: [],
@@ -868,15 +890,50 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const state: TrainingRecoveryState = !hasRecordedSleep
       ? 'empty'
       : (comparison.isComparable ? 'ready' : 'limited');
+    const detailText = this.resolveTrainingRecoveryDetail(comparison, currentLabel, referenceLabel, analysis);
     return {
       state,
       isUpdating,
       currentLabel,
       referenceLabel,
-      detailText: this.resolveTrainingRecoveryDetail(comparison, currentLabel, referenceLabel, analysis),
+      compactText: this.resolveTrainingRecoveryCompactText(comparison, detailText),
+      detailText,
       sourceText: this.resolveTrainingRecoverySourceText(comparison, currentLabel, referenceLabel),
       metricRows: hasRecordedSleep ? this.buildTrainingRecoveryRows(comparison) : [],
     };
+  }
+
+  private resolveTrainingRecoveryCompactText(
+    comparison: DashboardTrainingRecoveryComparison,
+    fallbackText: string,
+  ): string {
+    if (!comparison.isComparable) {
+      return fallbackText;
+    }
+    const summary: string[] = [];
+    const sleepCurrent = comparison.current.averageSleepSeconds;
+    const sleepReference = comparison.reference.averageSleepSeconds;
+    if (sleepCurrent !== null && sleepReference !== null) {
+      const sleepDelta = sleepCurrent - sleepReference;
+      summary.push(Math.abs(sleepDelta) < TRAINING_RECOVERY_MEANINGFUL_SLEEP_DELTA_SECONDS
+        ? 'Sleep is similar per night'
+        : `Sleep ${this.formatTrainingRecoveryDuration(Math.abs(sleepDelta))} ${sleepDelta > 0 ? 'longer' : 'shorter'} per night`);
+    }
+    const hrvCurrent = comparison.current.medianOvernightHrvMs;
+    const hrvReference = comparison.reference.medianOvernightHrvMs;
+    if (hrvCurrent !== null && hrvReference !== null) {
+      const hrvDelta = hrvCurrent - hrvReference;
+      summary.push(Math.abs(hrvDelta) < 0.05
+        ? 'Overnight HRV is similar'
+        : `Overnight HRV ${this.formatTrainingRecoveryHrvDelta(hrvCurrent, hrvReference)}`);
+    }
+    const bedtimeCurrent = comparison.current.bedtimeVariationMinutes;
+    const bedtimeReference = comparison.reference.bedtimeVariationMinutes;
+    if (summary.length < 2 && bedtimeCurrent !== null && bedtimeReference !== null) {
+      const bedtimeDelta = this.formatTrainingRecoveryVariationDelta(bedtimeCurrent, bedtimeReference);
+      summary.push(bedtimeDelta === 'Same' ? 'Bedtime consistency is similar' : `Bedtime ${bedtimeDelta}`);
+    }
+    return summary.join(' · ') || fallbackText;
   }
 
   private buildTrainingRecoveryRows(
@@ -972,7 +1029,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       : (Math.abs(loadDelta) < 10
         ? 'Training time is close to your usual level.'
         : `Training time is ${this.formatNumber(Math.abs(loadDelta), 0)}% ${loadDelta > 0 ? 'above' : 'below'} usual.`);
-    const sleepText = sleepDeltaSeconds === null || Math.abs(sleepDeltaSeconds) < 15 * 60
+    const sleepText = sleepDeltaSeconds === null
+      || Math.abs(sleepDeltaSeconds) < TRAINING_RECOVERY_MEANINGFUL_SLEEP_DELTA_SECONDS
       ? 'Recorded sleep per night is similar.'
       : `Recorded sleep averages ${this.formatTrainingRecoveryDuration(Math.abs(sleepDeltaSeconds))} ${sleepDeltaSeconds > 0 ? 'longer' : 'shorter'} per night.`;
     return `${loadText} ${sleepText}`;

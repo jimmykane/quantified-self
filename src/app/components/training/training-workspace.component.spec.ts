@@ -313,7 +313,8 @@ describe('TrainingWorkspaceComponent', () => {
   });
 
   it('opens the benchmark picker as a wide dialog bounded by the viewport', () => {
-    const dialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
+    const afterClosed = new Subject<{ saved: true; selection: null }>();
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
@@ -322,6 +323,7 @@ describe('TrainingWorkspaceComponent', () => {
       { markForCheck: vi.fn() } as any,
     );
 
+    component.toggleTrainingBuildRecovery('cycling');
     component.openTrainingBuildBenchmarkDialog('cycling');
 
     expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
@@ -330,6 +332,8 @@ describe('TrainingWorkspaceComponent', () => {
       maxHeight: 'calc(100vh - 32px)',
       data: expect.objectContaining({ discipline: 'cycling' }),
     }));
+    afterClosed.next({ saved: true, selection: null });
+    expect(component.trainingBuildRecoveryExpanded.cycling).toBe(false);
   });
 
   it('does not retain a pending override when settings propagated before the dialog result', () => {
@@ -444,6 +448,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const recoveryView = (component as any).buildTrainingRecoveryViewModel(recoveryComparison, 'Now', 'Usual');
     expect(recoveryView).toMatchObject({ state: 'ready', isUpdating: false });
+    expect(recoveryView.compactText).toBe('Sleep 1h 00m longer per night · Overnight HRV +10 ms');
     expect(recoveryView.metricRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Sleep / night', currentText: '8h 00m', deltaText: '+1h 00m', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Recorded nights', deltaTone: 'positive' }),
@@ -489,6 +494,41 @@ describe('TrainingWorkspaceComponent', () => {
     );
     expect(missingHrvRecoveryView.sourceText).not.toContain('Bedtime variation needs');
 
+    const bedtimeOnlyRecoveryView = (component as any).buildTrainingRecoveryViewModel({
+      ...recoveryComparison,
+      current: {
+        ...recoveryComparison.current,
+        averageSleepSeconds: null,
+        medianOvernightHrvMs: null,
+        overnightHrvNightCount: 0,
+      },
+      reference: {
+        ...recoveryComparison.reference,
+        averageSleepSeconds: null,
+        medianOvernightHrvMs: null,
+        overnightHrvNightCount: 0,
+      },
+    }, 'Now', 'Benchmark');
+    expect(bedtimeOnlyRecoveryView.compactText).toBe('Bedtime 15m steadier');
+
+    const similarSleepRecoveryView = (component as any).buildTrainingRecoveryViewModel({
+      ...recoveryComparison,
+      current: {
+        ...recoveryComparison.current,
+        averageSleepSeconds: recoveryComparison.reference.averageSleepSeconds + (10 * 60),
+        bedtimeVariationMinutes: null,
+        medianOvernightHrvMs: null,
+        overnightHrvNightCount: 0,
+      },
+      reference: {
+        ...recoveryComparison.reference,
+        bedtimeVariationMinutes: null,
+        medianOvernightHrvMs: null,
+        overnightHrvNightCount: 0,
+      },
+    }, 'Now', 'Benchmark');
+    expect(similarSleepRecoveryView.compactText).toBe('Sleep is similar per night');
+
     const lowerRecoveryView = (component as any).buildTrainingRecoveryViewModel({
       ...recoveryComparison,
       current: {
@@ -529,6 +569,11 @@ describe('TrainingWorkspaceComponent', () => {
     });
     expect(failedRecoveryView.detailText).toContain('could not be refreshed');
     expect(failedRecoveryView.sourceText).toContain('may be incomplete or stale');
+
+    expect(component.trainingBuildRecoveryExpanded.cycling).toBe(false);
+    component.toggleTrainingBuildRecovery('cycling');
+    expect(component.trainingBuildRecoveryExpanded.cycling).toBe(true);
+    expect(component.trainingBuildRecoveryExpanded.running).toBe(false);
 
     const swimWindow = {
       periodWeeks: 12, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 4,
@@ -655,6 +700,77 @@ describe('TrainingWorkspaceComponent', () => {
     } finally {
       dateTimeFormat.mockRestore();
     }
+  });
+
+  it('keeps build sleep comparison compact until details are requested', async () => {
+    const derivedState$ = new Subject<DashboardDerivedMetricsState>();
+    const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
+    const endDayMs = Date.UTC(2026, 2, 25);
+    const selection = { mode: 'period' as const, durationWeeks: 12 as const, endDayMs };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({
+          uid: 'user-1',
+          settings: { trainingSettings: { visibleDisciplines: ['cycling'], buildBenchmarks: { cycling: selection } } },
+        }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    derivedState$.next({
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingBuildComparisonStatus: 'ready',
+      trainingBuildComparison: {
+        asOfDayMs: Date.UTC(2026, 6, 15),
+        recovery: null,
+        disciplines: [{
+          discipline: 'cycling', status: 'ready',
+          selection: {
+            ...selection,
+            selectionKey: `period:12:${endDayMs}`,
+            windowStartDayMs: Date.UTC(2026, 0, 1), windowEndDayMs: endDayMs, label: null,
+          },
+          current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
+          recovery: {
+            sameProvider: true, isComparable: true,
+            current: {
+              periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
+              recordedNightCount: 78, expectedNightCount: 84, coverage: 'sufficient',
+              averageSleepSeconds: 31_200, bedtimeVariationMinutes: 36,
+              medianOvernightHrvMs: 33, overnightHrvNightCount: 78,
+            },
+            reference: {
+              periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
+              recordedNightCount: 78, expectedNightCount: 84, coverage: 'sufficient',
+              averageSleepSeconds: 32_400, bedtimeVariationMinutes: 35,
+              medianOvernightHrvMs: 30, overnightHrvNightCount: 78,
+            },
+          },
+        }],
+      },
+    } as any);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const toggle = element.querySelector<HTMLButtonElement>('.training-build-recovery-toggle');
+    expect(element.textContent).toContain('Sleep 20m shorter per night · Overnight HRV +3 ms');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    const details = element.querySelector<HTMLElement>('.training-build-recovery-details');
+    expect(details?.hidden).toBe(true);
+
+    toggle?.click();
+    fixture.detectChanges();
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(details?.hidden).toBe(false);
+    expect(details?.textContent).toContain('8h 40m');
+    expect(details?.textContent).toContain('Garmin');
   });
 
   it('updates an open benchmark dialog when event suggestions arrive', () => {

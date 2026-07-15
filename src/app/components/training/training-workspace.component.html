@@ -149,21 +149,40 @@
                 }
               </dl>
               @if (card.recovery; as recovery) {
-                <section class="training-build-recovery" [attr.aria-label]="card.label + ' recovery comparison'">
-                  <div class="training-build-recovery-heading">
-                    <strong>Recovery during these builds</strong>
-                    @if (recovery.isUpdating) { <span role="status">Updating…</span> }
+                <section class="training-build-recovery" [attr.aria-label]="card.label + ' sleep comparison'">
+                  <div class="training-build-recovery-summary">
+                    <div class="training-build-recovery-copy">
+                      <div class="training-build-recovery-heading">
+                        <strong>Sleep during builds</strong>
+                        @if (recovery.isUpdating) { <span role="status">Updating…</span> }
+                      </div>
+                      <span class="training-build-recovery-compact-text">{{ recovery.compactText }}</span>
+                    </div>
+                    @if (recovery.metricRows.length) {
+                      <button mat-button type="button" class="training-build-recovery-toggle"
+                        [attr.aria-expanded]="trainingBuildRecoveryExpanded[card.discipline]"
+                        [attr.aria-controls]="'training-build-recovery-details-' + card.discipline"
+                        [attr.aria-label]="(trainingBuildRecoveryExpanded[card.discipline] ? 'Hide' : 'Show') + ' sleep comparison details for ' + card.label"
+                        (click)="toggleTrainingBuildRecovery(card.discipline)">
+                        <span>{{ trainingBuildRecoveryExpanded[card.discipline] ? 'Hide' : 'Details' }}</span>
+                        <mat-icon aria-hidden="true">{{ trainingBuildRecoveryExpanded[card.discipline] ? 'expand_less' : 'expand_more' }}</mat-icon>
+                      </button>
+                    }
                   </div>
-                  <p>{{ recovery.detailText }}</p>
                   @if (recovery.metricRows.length) {
-                    <dl class="training-recovery-table training-build-recovery-table">
-                      <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ recovery.currentLabel }}</dd><dd>{{ recovery.referenceLabel }}</dd><dd>Change</dd></div>
-                      @for (row of recovery.metricRows; track row.label) {
-                        <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
-                      }
-                    </dl>
+                    <div class="training-build-recovery-details"
+                      [id]="'training-build-recovery-details-' + card.discipline"
+                      [hidden]="!trainingBuildRecoveryExpanded[card.discipline]">
+                      <p>{{ recovery.detailText }}</p>
+                      <dl class="training-recovery-table training-build-recovery-table">
+                        <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ recovery.currentLabel }}</dd><dd>{{ recovery.referenceLabel }}</dd><dd>Change</dd></div>
+                        @for (row of recovery.metricRows; track row.label) {
+                          <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+                        }
+                      </dl>
+                      <small>{{ recovery.sourceText }}</small>
+                    </div>
                   }
-                  <small>{{ recovery.sourceText }}</small>
                 </section>
               }
               @if (card.discipline === 'swimming') {

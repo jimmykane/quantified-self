@@ -481,7 +481,9 @@ activities. For example, cycling power cannot be compared with running speed, an
 combined with a 50 m breaststroke context.
 
 Every ready card also compares sleep over the exact current and historical build ranges using the same provider and
-coverage rules as the top recovery context.
+coverage rules as the top recovery context. To avoid duplicating the full recovery card, Best Build shows a compact
+key-metric summary by default and reveals its complete metric table, evidence limitations, and source text only when the
+user opens **Details**. Sleep differences under 15 minutes are summarized as similar; exact values remain in the table.
 
 Card states are `not-configured`, `updating`, `invalid`, `unavailable`, and `ready`. Optimistic pending selections remain
 updating until the snapshot's stable selection key matches the saved choice.
@@ -605,6 +607,9 @@ The shared sports-lib sampler:
 
 Retention is `recent / reference * 100`. Delta is retention minus 100 percentage points. The chart itself shows the
 one-year curve; summary chips explain the 90-day retention.
+
+The profile summary is a non-growing header above the embedded Power Curve. Its horizontal inset matches the chart
+header so the summary, chart title, benchmark values, and plot remain aligned at every responsive width.
 
 ## Durability Deep Dive
 
