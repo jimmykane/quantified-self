@@ -36,6 +36,14 @@ npm --prefix functions run build
 
 The template spec compiles every approved subject, HTML body, plaintext body, and partial with Free, Basic, Pro, trial, conditional-device-sync, and unknown-role examples. It validates rendered URLs, rejects unresolved variables, and pins the SHA-256 of `development_update.hbs` so an accidental byte change fails the test.
 
+To send the local, unseeded template sources through the already-installed Trigger Email extension, use the explicit inline smoke-test mode with a controlled inbox:
+
+```bash
+npm --prefix functions run test-emails -- controlled-inbox@example.com --inline
+```
+
+Inline mode compiles the local subjects, HTML, plaintext, and partials before writing each message to the `mail` collection. It does not read or modify `email_templates`, and `development_update` remains excluded. In an isolated worktree where the ignored `.env` and `service-account.json` files are not present, set `QS_EMAIL_TEST_CONFIG_DIR` to the trusted Functions directory that contains those local files. Because inline mode bypasses the extension's Firestore template lookup and Handlebars rendering, run at least one template-based smoke test after seeding as part of the final rollout.
+
 ## Firebase Authentication templates
 
 Keep magic-link and password-reset delivery in Firebase Authentication. This preserves Firebase's one-time action-code handling, expiry, abuse protections, and existing client SDK flow.
