@@ -9,6 +9,7 @@ const {
     mockLogger,
     mockIsServiceDisconnectPendingForUser,
     mockClearServiceDisconnectPending,
+    firestoreTriggerState,
 } = vi.hoisted(() => ({
     mockReconcileClaims: vi.fn(),
     mockCheckAndSendEmails: vi.fn(),
@@ -19,6 +20,9 @@ const {
     },
     mockIsServiceDisconnectPendingForUser: vi.fn(),
     mockClearServiceDisconnectPending: vi.fn(),
+    firestoreTriggerState: {
+        options: undefined as unknown,
+    },
 }));
 
 vi.mock('./claims', () => ({
@@ -38,7 +42,10 @@ vi.mock('firebase-functions/logger', () => mockLogger);
 
 // Mock firebase-functions BEFORE imports
 vi.mock('firebase-functions/v2/firestore', () => ({
-    onDocumentWritten: (opts: unknown, handler: unknown) => handler
+    onDocumentWritten: (options: unknown, handler: unknown) => {
+        firestoreTriggerState.options = options;
+        return handler;
+    }
 }));
 
 // Import AFTER mocks
@@ -57,6 +64,7 @@ describe('onSubscriptionUpdated', () => {
     let userExists: boolean;
     let systemStatusData: Record<string, unknown>;
     let hasActiveSubscription: boolean;
+    let activeSubscriptionData: Record<string, unknown>[];
     let deletionMarkerSequence: DeletionMarkerState[];
 
     const createMockEvent = (uid: string, subscriptionId: string, beforeData?: unknown, afterData?: unknown) => ({
@@ -73,8 +81,14 @@ describe('onSubscriptionUpdated', () => {
         systemStatusData = userData || {};
     };
 
-    const setupSubscriptionsQuery = (activeSubscriptionExists: boolean) => {
+    const setupSubscriptionsQuery = (
+        activeSubscriptionExists: boolean,
+        subscriptions?: Record<string, unknown>[],
+    ) => {
         hasActiveSubscription = activeSubscriptionExists;
+        activeSubscriptionData = activeSubscriptionExists
+            ? subscriptions || [{ status: 'active', role: 'pro', cancel_at_period_end: false }]
+            : [];
     };
 
     const setupDeletionMarkerSequence = (...states: DeletionMarkerState[]) => {
@@ -127,6 +141,14 @@ describe('onSubscriptionUpdated', () => {
         };
     };
 
+    it('retries transient subscription lifecycle failures', () => {
+        expect(firestoreTriggerState.options).toEqual(expect.objectContaining({
+            document: 'customers/{uid}/subscriptions/{subscriptionId}',
+            region: 'europe-west3',
+            retry: true,
+        }));
+    });
+
     beforeEach(() => {
         vi.clearAllMocks();
 
@@ -150,6 +172,7 @@ describe('onSubscriptionUpdated', () => {
         userExists = true;
         systemStatusData = {};
         hasActiveSubscription = false;
+        activeSubscriptionData = [];
         deletionMarkerSequence = [];
         mockIsServiceDisconnectPendingForUser.mockResolvedValue(false);
         mockClearServiceDisconnectPending.mockResolvedValue(undefined);
@@ -165,10 +188,14 @@ describe('onSubscriptionUpdated', () => {
             if (path.includes('subscriptions')) {
                 const query = {
                     where: vi.fn(() => query),
+                    orderBy: vi.fn(() => query),
                     limit: vi.fn(() => query),
                     get: vi.fn().mockResolvedValue({
                         empty: !hasActiveSubscription,
-                        docs: hasActiveSubscription ? [{ id: 'sub_123' }] : []
+                        docs: activeSubscriptionData.map((data, index) => ({
+                            id: `sub_${index + 1}`,
+                            data: () => data,
+                        }))
                     })
                 };
                 return query;
@@ -216,7 +243,7 @@ describe('onSubscriptionUpdated', () => {
 
             expect(deleteSpy).toHaveBeenCalledTimes(1);
             expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
-            expect(updateSpy).toHaveBeenCalled();
+            expect(setSpy).toHaveBeenCalled();
         });
 
         it('should skip processing if the user is marked for deletion', async () => {
@@ -338,8 +365,34 @@ describe('onSubscriptionUpdated', () => {
             expect(mockReconcileClaims).toHaveBeenCalledTimes(1);
             expect(mockCheckAndSendEmails).not.toHaveBeenCalled();
             expect(mockLogger.warn).toHaveBeenCalledWith(
-                `[onSubscriptionUpdated] User ${uid} was marked for deletion before setting grace period. Skipping follow-up processing.`
+                `[onSubscriptionUpdated] User ${uid} was marked for deletion before updating grace state. Skipping follow-up processing.`
             );
+        });
+
+        it('should skip the active-subscription status write if deletion starts mid-flight', async () => {
+            const uid = 'active_user_deleting_mid_flight';
+            const event = createMockEvent(
+                uid,
+                'sub456',
+                { status: 'active', role: 'pro', cancel_at_period_end: false },
+                { status: 'active', role: 'pro', cancel_at_period_end: true },
+            );
+
+            setupUserExists(true, {});
+            setupSubscriptionsQuery(true, [{
+                status: 'active',
+                role: 'pro',
+                cancel_at_period_end: true,
+                current_period_end: new Date('2026-01-15T12:00:00.000Z'),
+            }]);
+            setupDeletionMarkerSequence(false, true);
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            await onSubscriptionUpdated(event as any);
+
+            expect(setSpy).not.toHaveBeenCalled();
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(1);
+            expect(mockCheckAndSendEmails).not.toHaveBeenCalled();
         });
 
         it('should NOT set gracePeriodUntil if already set', async () => {
@@ -367,13 +420,156 @@ describe('onSubscriptionUpdated', () => {
 
             await onSubscriptionUpdated(event);
 
-            expect(updateSpy).toHaveBeenCalledWith({
+            expect(setSpy).toHaveBeenCalledWith({
                 gracePeriodUntil: 'DELETE_SENTINEL',
-                lastDowngradedAt: 'DELETE_SENTINEL'
-            });
+                scheduledGracePeriodUntil: 'DELETE_SENTINEL',
+                lastDowngradedAt: 'DELETE_SENTINEL',
+            }, { merge: true });
 
             // Should call reconcileClaims twice (initial + after clearing grace period)
             expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
+        });
+
+        it('should store the cancellation grace deadline before the active subscription ends', async () => {
+            const periodEnd = new Date('2026-01-15T12:00:00.000Z');
+            const event = createMockEvent(
+                'user123',
+                'sub456',
+                { status: 'active', role: 'pro', cancel_at_period_end: false, current_period_end: periodEnd },
+                { status: 'active', role: 'pro', cancel_at_period_end: true, current_period_end: periodEnd },
+            );
+
+            setupUserExists(true);
+            setupSubscriptionsQuery(true, [{
+                status: 'active',
+                role: 'pro',
+                cancel_at_period_end: true,
+                current_period_end: periodEnd,
+            }]);
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            await onSubscriptionUpdated(event as any);
+
+            expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+                gracePeriodUntil: 'DELETE_SENTINEL',
+                scheduledGracePeriodUntil: expect.anything(),
+                lastDowngradedAt: 'DELETE_SENTINEL',
+            }), { merge: true });
+            const scheduledWrite = setSpy.mock.calls[0][0].scheduledGracePeriodUntil;
+            expect(scheduledWrite.toDate()).toEqual(new Date('2026-02-14T12:00:00.000Z'));
+        });
+
+        it('should ignore a stale cancellation event after the current subscription has renewed', async () => {
+            const periodEnd = new Date('2026-01-15T12:00:00.000Z');
+            const event = createMockEvent(
+                'user123',
+                'sub456',
+                { status: 'active', role: 'pro', cancel_at_period_end: false, current_period_end: periodEnd },
+                { status: 'active', role: 'pro', cancel_at_period_end: true, current_period_end: periodEnd },
+            );
+
+            setupUserExists(true, { scheduledGracePeriodUntil: new Date('2026-02-14T12:00:00.000Z') });
+            setupSubscriptionsQuery(true, [{
+                status: 'active',
+                role: 'pro',
+                cancel_at_period_end: false,
+                current_period_end: new Date('2026-02-15T12:00:00.000Z'),
+            }]);
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            await onSubscriptionUpdated(event as any);
+
+            expect(setSpy).toHaveBeenCalledWith({
+                gracePeriodUntil: 'DELETE_SENTINEL',
+                scheduledGracePeriodUntil: 'DELETE_SENTINEL',
+                lastDowngradedAt: 'DELETE_SENTINEL',
+            }, { merge: true });
+        });
+
+        it('should use the latest deadline when every active subscription is ending', async () => {
+            const firstPeriodEnd = new Date('2026-01-15T12:00:00.000Z');
+            const lastPeriodEnd = new Date('2026-01-20T12:00:00.000Z');
+            const event = createMockEvent(
+                'user123',
+                'sub456',
+                { status: 'active', role: 'pro', cancel_at_period_end: false, current_period_end: firstPeriodEnd },
+                { status: 'active', role: 'pro', cancel_at_period_end: true, current_period_end: firstPeriodEnd },
+            );
+
+            setupUserExists(true);
+            setupSubscriptionsQuery(true, [
+                {
+                    status: 'active',
+                    role: 'pro',
+                    cancel_at_period_end: true,
+                    current_period_end: firstPeriodEnd,
+                },
+                {
+                    status: 'active',
+                    role: 'basic',
+                    cancel_at_period_end: true,
+                    current_period_end: lastPeriodEnd,
+                },
+            ]);
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            await onSubscriptionUpdated(event as any);
+
+            const scheduledWrite = setSpy.mock.calls[0][0].scheduledGracePeriodUntil;
+            expect(scheduledWrite.toDate()).toEqual(new Date('2026-02-19T12:00:00.000Z'));
+        });
+
+        it('should promote the stored cancellation deadline when the subscription ends', async () => {
+            const scheduledGracePeriodUntil = new Date('2026-02-14T12:00:00.000Z');
+            const event = createMockEvent(
+                'user123',
+                'sub456',
+                { status: 'active', role: 'pro', cancel_at_period_end: true },
+                { status: 'canceled', role: 'pro', cancel_at_period_end: true },
+            );
+
+            setupUserExists(true, { scheduledGracePeriodUntil });
+            setupSubscriptionsQuery(false);
+            mockReconcileClaims.mockResolvedValue({ role: 'free' });
+
+            await onSubscriptionUpdated(event as any);
+
+            expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+                gracePeriodUntil: expect.anything(),
+                scheduledGracePeriodUntil: 'DELETE_SENTINEL',
+                lastDowngradedAt: 'SERVER_TIMESTAMP',
+            }), { merge: true });
+            const promotedWrite = setSpy.mock.calls[0][0].gracePeriodUntil;
+            expect(promotedWrite.toDate()).toEqual(scheduledGracePeriodUntil);
+        });
+
+        it('should derive the canonical deadline from the ending subscription when no schedule was stored', async () => {
+            const periodEnd = new Date('2026-01-15T12:00:00.000Z');
+            const event = createMockEvent(
+                'user123',
+                'sub456',
+                {
+                    status: 'active',
+                    role: 'pro',
+                    cancel_at_period_end: true,
+                    current_period_end: periodEnd,
+                },
+                {
+                    status: 'canceled',
+                    role: 'pro',
+                    cancel_at_period_end: true,
+                    current_period_end: periodEnd,
+                },
+            );
+
+            setupUserExists(true, {});
+            setupSubscriptionsQuery(false);
+            mockReconcileClaims.mockResolvedValue({ role: 'free' });
+
+            await onSubscriptionUpdated(event as any);
+
+            const graceWrite = setSpy.mock.calls[0][0].gracePeriodUntil;
+            expect(graceWrite.toDate()).toEqual(new Date('2026-02-14T12:00:00.000Z'));
         });
 
         it('should clear pending disconnects when a Pro subscription is restored', async () => {
@@ -426,17 +622,17 @@ describe('onSubscriptionUpdated', () => {
             expect(mockClearServiceDisconnectPending).not.toHaveBeenCalledWith(uid, ServiceNames.COROSAPI);
         });
 
-        it('should handle update error gracefully when clearing grace period', async () => {
+        it('should surface transaction failures instead of continuing from partial state', async () => {
             const uid = 'user123';
             const event = createMockEvent(uid, 'sub456');
 
             setupUserExists(true);
             setupSubscriptionsQuery(true);
             mockReconcileClaims.mockResolvedValue({ role: 'pro' });
-            updateSpy.mockRejectedValueOnce(new Error('Update failed'));
+            const transactionFailure = new Error('Transaction failed');
+            runTransactionSpy.mockRejectedValueOnce(transactionFailure);
 
-            // Should not throw
-            await expect(onSubscriptionUpdated(event)).resolves.not.toThrow();
+            await expect(onSubscriptionUpdated(event)).rejects.toBe(transactionFailure);
         });
     });
 
@@ -483,8 +679,8 @@ describe('onSubscriptionUpdated', () => {
 
             await onSubscriptionUpdated(event as any);
 
-            // Should try to clear grace period (subscription is active)
-            expect(updateSpy).toHaveBeenCalled();
+            // Should clear grace period (subscription is active)
+            expect(setSpy).toHaveBeenCalled();
             expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
     });
@@ -516,24 +712,22 @@ describe('onSubscriptionUpdated', () => {
             expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
 
-        it('should log error for unexpected exceptions', async () => {
+        it('should reject unexpected reconciliation failures so the event retries', async () => {
             const uid = 'error_user';
             const event = createMockEvent(uid, 'sub_error');
 
             setupUserExists(true);
             const unexpectedError = new Error('Unexpected database error');
-            // Explicitly mock both calls
-            mockReconcileClaims
-                .mockRejectedValueOnce(unexpectedError) // 1st call
-                .mockResolvedValueOnce({ role: 'free' }); // 2nd call
+            mockReconcileClaims.mockRejectedValueOnce(unexpectedError);
 
-            await onSubscriptionUpdated(event as any);
+            await expect(onSubscriptionUpdated(event as any)).rejects.toBe(unexpectedError);
 
-            expect(mockLogger.warn).toHaveBeenCalledWith(
-                expect.stringContaining('Non-critical error during initial reconcileClaims'),
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                expect.stringContaining('retrying the subscription event'),
                 unexpectedError
             );
-            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(1);
+            expect(runTransactionSpy).not.toHaveBeenCalled();
         });
 
         it('should handle "No active subscription found" message in error', async () => {
@@ -675,7 +869,7 @@ describe('onSubscriptionUpdated', () => {
 
             await onSubscriptionUpdated(event as any);
 
-            expect(updateSpy).toHaveBeenCalled();
+            expect(setSpy).toHaveBeenCalled();
             expect(mockCheckAndSendEmails).not.toHaveBeenCalled();
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 `[onSubscriptionUpdated] User ${uid} was marked for deletion before email processing. Skipping email triggers.`
@@ -726,10 +920,11 @@ describe('onSubscriptionUpdated', () => {
             await onSubscriptionUpdated(event);
 
             // Should clear grace period
-            expect(updateSpy).toHaveBeenCalledWith({
+            expect(setSpy).toHaveBeenCalledWith({
                 gracePeriodUntil: 'DELETE_SENTINEL',
-                lastDowngradedAt: 'DELETE_SENTINEL'
-            });
+                scheduledGracePeriodUntil: 'DELETE_SENTINEL',
+                lastDowngradedAt: 'DELETE_SENTINEL',
+            }, { merge: true });
 
             // Should reconcile claims twice
             expect(mockReconcileClaims).toHaveBeenCalledTimes(2);

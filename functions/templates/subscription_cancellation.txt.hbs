@@ -1,0 +1,16 @@
+{{> email_transactional_header}}
+Your {{role}} membership will end on {{expiration_date}}
+
+Your {{role}} access remains active through {{expiration_date}}.
+
+A 30-day grace period follows and ends on {{grace_period_end}}. Your existing activity and route history remains in your account.
+
+After the grace period, Free limits apply to future uploads:
+- {{free_activity_description}}
+- {{free_route_description}}
+- {{free_ai_insights_description}}
+
+{{#if device_sync_will_end}}Because device sync is a Pro feature, Garmin, Suunto, and COROS connections will be disconnected after the grace period.
+
+{{/if}}Manage membership: {{membership_url}}
+{{> email_transactional_footer}}

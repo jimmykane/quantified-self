@@ -1,61 +1,44 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import * as fs from 'fs';
 import * as path from 'path';
-
-// Initialize Firebase Admin
-// Assumes this is run locally with GOOGLE_APPLICATION_CREDENTIALS or similar auth
-// or inside a function environment.
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
+import { loadEmailTemplateSeedDocuments } from '../email/template-loader';
 
 const TEMPLATES_COLLECTION = 'email_templates';
 const TEMPLATES_DIR = path.join(__dirname, '../../templates');
 
-const TEMPLATE_SUBJECTS: { [key: string]: string } = {
-    'subscription_upgrade': "You've upgraded to {{new_role}}!",
-    'subscription_downgrade': "Subscription Update: You are now on {{new_role}}",
-    'subscription_cancellation': "Subscription Cancellation Confirmed",
-    'subscription_expiring_soon': "Action Required: Your subscription is ending soon",
-    'welcome_email': "Welcome to Quantified Self Pro!",
-    'account_deleted_confirmation': "Your Quantified Self account has been deleted",
-    'development_update': "Quantified Self is back! Important updates inside."
-};
+function parseTemplateFilter(args: readonly string[]): readonly string[] | undefined {
+    const inline = args.find(arg => arg.startsWith('--templates='));
+    const templatesFlagIndex = args.indexOf('--templates');
+    const raw = inline?.slice('--templates='.length)
+        || (templatesFlagIndex >= 0 ? args[templatesFlagIndex + 1] : undefined);
 
-async function seedTemplates() {
-    logger.info(`Seeding templates from ${TEMPLATES_DIR} to collection '${TEMPLATES_COLLECTION}'...`);
-
-    // Check if directory exists
-    if (!fs.existsSync(TEMPLATES_DIR)) {
-        logger.error(`Templates directory not found: ${TEMPLATES_DIR}`);
-        process.exit(1);
+    if (!raw) {
+        return undefined;
     }
 
-    const files = fs.readdirSync(TEMPLATES_DIR);
-
-    for (const file of files) {
-        if (file.endsWith('.hbs')) {
-            const templateName = path.basename(file, '.hbs');
-            const subject = TEMPLATE_SUBJECTS[templateName] || 'Notification from Quantified Self';
-
-            const htmlContent = fs.readFileSync(path.join(TEMPLATES_DIR, file), 'utf8');
-
-            logger.info(`Uploading template: ${templateName}`);
-
-            try {
-                await admin.firestore().collection(TEMPLATES_COLLECTION).doc(templateName).set({
-                    subject: subject,
-                    html: htmlContent
-                });
-                logger.info(`✅ Successfully uploaded ${templateName}`);
-            } catch (error) {
-                logger.error(`❌ Failed to upload ${templateName}:`, error);
-            }
-        }
-    }
-
-    logger.info('Seeding complete.');
+    return raw.split(',').map(value => value.trim()).filter(Boolean);
 }
 
-seedTemplates().catch(logger.error);
+export async function seedTemplates(requestedTemplateIds?: readonly string[]): Promise<void> {
+    if (admin.apps.length === 0) {
+        admin.initializeApp();
+    }
+
+    const documents = loadEmailTemplateSeedDocuments(TEMPLATES_DIR, requestedTemplateIds);
+    logger.info(`Seeding ${documents.length} allowlisted email template documents to '${TEMPLATES_COLLECTION}'.`);
+
+    for (const document of documents) {
+        await admin.firestore().collection(TEMPLATES_COLLECTION).doc(document.id).set(document.data);
+        logger.info(`Seeded ${document.id}`);
+    }
+
+    logger.info('Email template seeding complete. development_update was not eligible for selection.');
+}
+
+if (require.main === module) {
+    const requestedTemplateIds = parseTemplateFilter(process.argv.slice(2));
+    seedTemplates(requestedTemplateIds).catch(error => {
+        logger.error('Email template seeding failed.', error);
+        process.exitCode = 1;
+    });
+}
