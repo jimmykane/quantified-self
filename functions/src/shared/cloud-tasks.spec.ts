@@ -35,6 +35,7 @@ vi.mock('../config', () => ({
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',
+            derivedMetricsIngressQueue: 'processDerivedMetricsIngressTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
             derivedMetricsIngressBucketSeconds: 30,
         },

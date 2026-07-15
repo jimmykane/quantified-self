@@ -124,7 +124,7 @@ describe('admin-dashboard-summary helper', () => {
             ],
             dlq: { total: 1, byContext: [], byProvider: [] },
             cloudTasks: {
-                pending: 14,
+                pending: 16,
                 queues: {
                     workout: { queueId: 'workout', pending: 3 },
                     activitySync: { queueId: 'activity', pending: 0 },
@@ -134,6 +134,7 @@ describe('admin-dashboard-summary helper', () => {
                     sportsLibReparse: { queueId: 'reparse', pending: 4, state: 'PAUSED', enabled: false },
                     sportsLibReparseHeavy: { queueId: 'heavy', pending: 1, state: 'RUNNING', enabled: true },
                     sportsLibRouteReparse: { queueId: 'route-reparse', pending: 0, state: 'DISABLED', enabled: false },
+                    derivedMetricsIngress: { queueId: 'derived-ingress', pending: 2 },
                     derivedMetrics: { queueId: 'derived', pending: 3 },
                 },
             },
@@ -246,6 +247,13 @@ describe('admin-dashboard-summary helper', () => {
         expect(rows.find(row => row.id === 'route-reparse')?.chips).toContain('Queue: disabled');
         expect(rows.find(row => row.id === 'route-reparse')?.severity).toBe('ok');
         expect(rows.find(row => row.id === 'sleep-sync')?.chips).toContain('Disabled: Garmin');
+        expect(rows.find(row => row.id === 'derived-metrics')?.cloudTasks).toBe(5);
+        expect(rows.find(row => row.id === 'derived-metrics')?.chips).toEqual([
+            'Ingress tasks: 2',
+            'Worker tasks: 3',
+            'Processing: 1',
+            'Total: 7',
+        ]);
         expect(rows.find(row => row.id === 'derived-metrics')?.problemLabel).toBe('Stale');
     });
 

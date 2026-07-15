@@ -83,6 +83,11 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming sessions.');
     expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBeGreaterThanOrEqual(3);
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
+    expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
+    expect(fixture.nativeElement.textContent).toContain('Preparing cycling power profile');
+    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-power-curve-chart')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
       { uid: 'user-1' },
       expect.objectContaining({ trainingSummaryStatus: 'missing' }),
@@ -155,6 +160,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       trainingSummaryStatus: 'ready',
+      powerCurveStatus: 'ready',
       trainingSummary: {
         asOfDayMs: 2,
         currentWindowDays: 28,
@@ -226,6 +232,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       trainingSummaryStatus: 'ready',
+      trainingSwimPerformanceStatus: 'ready',
       trainingSummary: {
         asOfDayMs: 2, currentWindowDays: 28, baselineWindowDays: 84,
         disciplines: [

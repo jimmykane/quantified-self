@@ -84,6 +84,12 @@ dd { margin: 5px 0 0; font-size: 19px; font-weight: 700; overflow-wrap: anywhere
 .training-chart-panel { --loading-shade-error-padding: 0; --loading-shade-error-border: 0; --loading-shade-error-radius: 0; --loading-shade-error-background: transparent; display: flex; flex-direction: column; min-width: 0; min-height: 300px; overflow: hidden; }
 .training-chart-panel > * { flex: 1 1 auto; min-height: 0; }
 .training-chart-panel-wide { grid-row: span 2; min-height: 380px; }
+.training-chart-state { box-sizing: border-box; align-self: start; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; width: 100%; min-width: 0; min-height: 112px; padding: 18px 20px; overflow: hidden; }
+.training-chart-state strong { display: block; line-height: 1.3; }
+.training-chart-state p { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.training-chart-state > mat-icon { color: var(--mat-sys-error); }
+.training-chart-state-wide { grid-column: 1 / -1; }
+.training-load-grid:has(.training-chart-state-form) > * { grid-column: 1 / -1; grid-row: auto; }
 .training-load-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .training-mix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 14px; }
 .training-mix-panel { padding: 20px; }

@@ -31,6 +31,7 @@ describe('AdminQueueMonitorComponent', () => {
                 sleepSync: { queueId: 'processSleepSyncTask', pending: 1 },
                 sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
                 sportsLibRouteReparse: { queueId: 'processSportsLibRouteReparseTask', pending: 4 },
+                derivedMetricsIngress: { queueId: 'processDerivedMetricsIngressTask', pending: 2 },
                 derivedMetrics: { queueId: 'processDerivedMetricsTask', pending: 6 }
             }
         },

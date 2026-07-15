@@ -16,6 +16,7 @@ vi.mock('../config', () => ({
         cloudtasks: {
             projectId: 'test-project',
             location: 'test-location',
+            derivedMetricsIngressQueue: 'processDerivedMetricsIngressTask',
             derivedMetricsQueue: 'processDerivedMetricsTask',
             derivedMetricsIngressBucketSeconds: 30,
         },

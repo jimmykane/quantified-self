@@ -281,6 +281,10 @@ kinds are deliberately excluded from default Dashboard subscriptions and freshne
 Ingress is debounced by UID and a short time bucket. Deterministic task names coalesce bursts of event/activity writes.
 The ingress worker marks the relevant kinds dirty and queues one derived worker generation.
 
+Admin queue observability treats these as two separate Cloud Tasks queues: derived ingress shows invalidations waiting to
+coalesce, while derived workers show snapshot builds waiting to run. The global Cloud Tasks depth and the Admin Dashboard
+Derived Metrics row include both queues so ingress backlogs cannot disappear from headline health totals.
+
 ### Frontend freshness probe
 
 On `/training`, the frontend:
@@ -762,9 +766,12 @@ UI principles:
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.
+- A chart with no previous payload is not mounted while its snapshot builds. Training shows a compact, bounded status card
+  instead, so chart minimum heights and overlays cannot stretch or bleed during the initial load.
 - A valid payload with zero eligible data shows a domain-specific empty state, not a spinner.
 - Null optional metrics render as an em dash or unavailable copy, never zero.
-- Loading and empty cards have enough height for readable messages; charts must not be compressed to hide no-data states.
+- Compact loading cards remain readable without reserving the full chart canvas. Ready empty states keep the full chart card
+  height so their domain-specific explanation is not compressed.
 - Comparison colors use metric semantics: more is not automatically better. Lower pace, lower absolute decoupling, lower
   bedtime variation, and lower SWOLF change have inverse semantics.
 

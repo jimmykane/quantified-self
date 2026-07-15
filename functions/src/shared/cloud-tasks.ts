@@ -16,7 +16,6 @@ import {
     REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS,
     REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS,
 } from './activity-processing-config';
-import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
     normalizeDerivedMetricKindsStrict,
     type DerivedMetricKind,
@@ -556,6 +555,7 @@ export async function enqueueDerivedMetricsIngressTask(
     const {
         projectId,
         location,
+        derivedMetricsIngressQueue,
         derivedMetricsIngressBucketSeconds,
     } = config.cloudtasks;
     if (!projectId) {
@@ -601,7 +601,7 @@ export async function enqueueDerivedMetricsIngressTask(
     return enqueueTaskWithRetry({
         projectId,
         location,
-        functionName: FUNCTIONS_MANIFEST.processDerivedMetricsIngressTask.name,
+        functionName: derivedMetricsIngressQueue,
         taskId,
         payload,
         scheduleDelaySeconds: effectiveScheduleDelaySeconds,

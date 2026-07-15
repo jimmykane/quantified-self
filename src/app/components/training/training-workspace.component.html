@@ -218,12 +218,34 @@
         <span class="training-section-note">All activities with TSS</span>
       </div>
       <div class="training-load-grid">
-        <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
-          <app-form-chart [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" timelineWindow="m"></app-form-chart>
-        </article>
-        <article class="training-chart-panel qs-glass-card-panel">
-          <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()"></app-freshness-forecast-chart>
-        </article>
+        @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
+          <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
+            <app-form-chart [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" timelineWindow="m"></app-form-chart>
+          </article>
+        } @else {
+          <article class="training-chart-state training-chart-state-form qs-glass-card-panel" role="status">
+            @if (derivedState.formStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+            @else { <mat-spinner diameter="24"></mat-spinner> }
+            <div>
+              <strong>{{ derivedState.formStatus === 'failed' ? 'Load chart unavailable' : 'Preparing load chart' }}</strong>
+              <p>{{ derivedState.formStatus === 'failed' ? 'Refresh to request the fitness, fatigue, and form snapshot again.' : 'Calculating fitness, fatigue, and form from recorded training load.' }}</p>
+            </div>
+          </article>
+        }
+        @if (derivedState.freshnessForecastStatus === 'ready' || derivedState.freshnessForecast?.points?.length) {
+          <article class="training-chart-panel qs-glass-card-panel">
+            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()"></app-freshness-forecast-chart>
+          </article>
+        } @else {
+          <article class="training-chart-state training-chart-state-forecast qs-glass-card-panel" role="status">
+            @if (derivedState.freshnessForecastStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+            @else { <mat-spinner diameter="24"></mat-spinner> }
+            <div>
+              <strong>{{ derivedState.freshnessForecastStatus === 'failed' ? 'Freshness forecast unavailable' : 'Preparing freshness forecast' }}</strong>
+              <p>{{ derivedState.freshnessForecastStatus === 'failed' ? 'Refresh to request the seven-day scenario again.' : 'Projecting seven days with no additional training load.' }}</p>
+            </div>
+          </article>
+        }
         <dl class="training-metric-panel training-load-metrics qs-glass-card-panel">
           <div><dt>CTL</dt><dd>{{ loadMetrics.ctlText }}</dd></div>
           <div><dt>ATL</dt><dd>{{ loadMetrics.atlText }}</dd></div>
@@ -263,9 +285,20 @@
             <p class="training-empty-state">No eligible {{ visibleDisciplinesActivityLabel }} in the last 28 days.</p>
           }
         }
-        <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
-          <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" range="6m"></app-intensity-distribution-chart>
-        </article>
+        @if (derivedState.intensityDistributionStatus === 'ready' || derivedState.intensityDistribution?.weeks?.length) {
+          <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
+            <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" range="6m"></app-intensity-distribution-chart>
+          </article>
+        } @else {
+          <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
+            @if (derivedState.intensityDistributionStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+            @else { <mat-spinner diameter="24"></mat-spinner> }
+            <div>
+              <strong>{{ derivedState.intensityDistributionStatus === 'failed' ? 'Intensity chart unavailable' : 'Preparing intensity chart' }}</strong>
+              <p>{{ derivedState.intensityDistributionStatus === 'failed' ? 'Refresh to request the zone distribution again.' : 'Grouping eligible power and heart-rate zones by week.' }}</p>
+            </div>
+          </article>
+        }
       </div>
     </section>
 
@@ -332,14 +365,25 @@
           }
         }
         @if (isSwimmingVisible) {
-          <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
-            <app-training-swim-performance-chart
-              [performance]="derivedState.trainingSwimPerformance"
-              [status]="derivedState.trainingSwimPerformanceStatus"
-              [darkTheme]="isDarkTheme()"
-              [unitSettings]="unitSettings"
-            ></app-training-swim-performance-chart>
-          </article>
+          @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
+            <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
+              <app-training-swim-performance-chart
+                [performance]="derivedState.trainingSwimPerformance"
+                [status]="derivedState.trainingSwimPerformanceStatus"
+                [darkTheme]="isDarkTheme()"
+                [unitSettings]="unitSettings"
+              ></app-training-swim-performance-chart>
+            </article>
+          } @else {
+            <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
+              @if (derivedState.trainingSwimPerformanceStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+              @else { <mat-spinner diameter="24"></mat-spinner> }
+              <div>
+                <strong>{{ derivedState.trainingSwimPerformanceStatus === 'failed' ? 'Swimming pace unavailable' : 'Preparing swimming pace' }}</strong>
+                <p>{{ derivedState.trainingSwimPerformanceStatus === 'failed' ? 'Refresh to request the pool and open-water snapshot again.' : 'Comparing pool and open-water pace without mixing contexts.' }}</p>
+              </div>
+            </article>
+          }
         }
         <article class="training-durability-panel qs-glass-card-panel" aria-labelledby="training-durability-title">
           <header>
@@ -400,40 +444,62 @@
           }
         </article>
         @if (isCyclingVisible) {
-          <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
-            @if (cyclingPowerProfile; as profile) {
-              <div class="training-power-profile-summary">
-                <strong>90-day profile vs 1 year</strong>
-                <span>{{ profile.activityCountText }}</span>
-                @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
-                @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
-                @if (profile.anchors.length) {
-                  <div class="training-power-profile-anchors">
-                    @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
-                  </div>
-                } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+          @if (derivedState.powerCurveStatus === 'ready' || cyclingPowerCurve?.series?.length) {
+            <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
+              @if (cyclingPowerProfile; as profile) {
+                <div class="training-power-profile-summary">
+                  <strong>90-day profile vs 1 year</strong>
+                  <span>{{ profile.activityCountText }}</span>
+                  @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
+                  @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
+                  @if (profile.anchors.length) {
+                    <div class="training-power-profile-anchors">
+                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                    </div>
+                  } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+                </div>
+              }
+              <app-power-curve-chart title="Cycling Power Curve" [isLoading]="false" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+            </article>
+          } @else {
+            <article class="training-chart-state training-power-profile-panel qs-glass-card-panel" role="status">
+              @if (derivedState.powerCurveStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+              @else { <mat-spinner diameter="24"></mat-spinner> }
+              <div>
+                <strong>{{ derivedState.powerCurveStatus === 'failed' ? 'Cycling power profile unavailable' : 'Preparing cycling power profile' }}</strong>
+                <p>{{ derivedState.powerCurveStatus === 'failed' ? 'Refresh to request the derived power curve again.' : 'Comparing your recent 90-day profile with the one-year curve.' }}</p>
               </div>
-            }
-            <app-power-curve-chart title="Cycling Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
-          </article>
+            </article>
+          }
         }
         @if (isRunningVisible) {
-          <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
-            @if (runningPowerProfile; as profile) {
-              <div class="training-power-profile-summary">
-                <strong>90-day profile vs 1 year</strong>
-                <span>{{ profile.activityCountText }}</span>
-                @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
-                @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
-                @if (profile.anchors.length) {
-                  <div class="training-power-profile-anchors">
-                    @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
-                  </div>
-                } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+          @if (derivedState.powerCurveStatus === 'ready' || runningPowerCurve?.series?.length) {
+            <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
+              @if (runningPowerProfile; as profile) {
+                <div class="training-power-profile-summary">
+                  <strong>90-day profile vs 1 year</strong>
+                  <span>{{ profile.activityCountText }}</span>
+                  @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
+                  @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
+                  @if (profile.anchors.length) {
+                    <div class="training-power-profile-anchors">
+                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                    </div>
+                  } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+                </div>
+              }
+              <app-power-curve-chart title="Running Power Curve" [isLoading]="false" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
+            </article>
+          } @else {
+            <article class="training-chart-state training-power-profile-panel qs-glass-card-panel" role="status">
+              @if (derivedState.powerCurveStatus === 'failed') { <mat-icon aria-hidden="true">error_outline</mat-icon> }
+              @else { <mat-spinner diameter="24"></mat-spinner> }
+              <div>
+                <strong>{{ derivedState.powerCurveStatus === 'failed' ? 'Running power profile unavailable' : 'Preparing running power profile' }}</strong>
+                <p>{{ derivedState.powerCurveStatus === 'failed' ? 'Refresh to request the derived power curve again.' : 'Comparing your recent 90-day profile with the one-year curve.' }}</p>
               </div>
-            }
-            <app-power-curve-chart title="Running Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
-          </article>
+            </article>
+          }
         }
       </div>
     </section>
