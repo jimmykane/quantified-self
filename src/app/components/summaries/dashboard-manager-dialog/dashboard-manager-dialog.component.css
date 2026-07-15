@@ -28,36 +28,6 @@
   min-width: 8rem;
 }
 
-.dashboard-manager-simplify-preview {
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 8px;
-  padding: 0.85rem;
-}
-
-.dashboard-manager-simplify-list {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0.65rem 0 0.85rem;
-}
-
-.dashboard-manager-simplify-list mat-checkbox {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.dashboard-manager-simplify-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
-.dashboard-manager-simplify-actions button {
-  align-items: center;
-  display: inline-flex;
-  gap: 0.35rem;
-}
-
 .dashboard-manager-button-content {
   align-items: center;
   display: inline-flex;

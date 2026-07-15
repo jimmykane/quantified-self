@@ -184,15 +184,24 @@
               [attr.aria-label]="row['Tag Action Label']"
               (click)="openEventTagsDialog($event, row.Event)">
               @if (row['Tag Values']?.length) {
+              <span class="event-tags-mobile-summary" aria-hidden="true">
+                <mat-icon>sell</mat-icon>
+                <span>{{ row['Tag Values'].length }}</span>
+              </span>
               <mat-chip-set class="event-tags-chip-set" aria-hidden="true">
                 @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip>{{ tag }}</mat-chip> }
                 @if (row['Tag Values'].length > 2) { <mat-chip>+{{ row['Tag Values'].length - 2 }}</mat-chip> }
               </mat-chip-set>
               } @else {
-              <span class="event-tags-add-label"><mat-icon>sell</mat-icon><span>Add tags</span></span>
+              <span class="event-tags-add-label"><mat-icon>sell</mat-icon><span class="event-tags-add-text">Add tags</span></span>
               }
             </button>
             } @else if (row['Tag Values']?.length) {
+            <span class="event-tags-mobile-summary" [matTooltip]="row['Tags Title']"
+              [attr.aria-label]="row['Tags Accessible Label']">
+              <mat-icon aria-hidden="true">sell</mat-icon>
+              <span aria-hidden="true">{{ row['Tag Values'].length }}</span>
+            </span>
             <mat-chip-set class="event-tags-chip-set" [matTooltip]="row['Tags Title']"
               [attr.aria-label]="row['Tags Accessible Label']">
               @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip>{{ tag }}</mat-chip> }

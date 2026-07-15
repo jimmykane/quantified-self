@@ -117,7 +117,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
 - New dashboards start clean. The Dashboard **Today** header has a flat current-state row and an **Open Training** action.
 - Load and recovery interpretation lives in **Training**: Form/TSS, freshness forecast, ACWR, ramp rate, monotony and strain, CTL/ATL, intensity distribution, efficiency, sleep context, and discipline-specific power curves.
-- Existing curated and KPI tiles are preserved. Use **Simplify dashboard** in Dashboard manager to preview and explicitly remove legacy training tiles without affecting activity, map, or custom tiles.
+- Existing curated and KPI tiles are preserved until you edit or remove them in Dashboard manager.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - The main dashboard groups chart and map tiles by intent, such as **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
@@ -146,7 +146,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
-- Dashboard manager bulk actions can add every available preset tile, simplify selected legacy training tiles, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+- Dashboard manager bulk actions can add every available preset tile or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
 
 ### Training workspace
 

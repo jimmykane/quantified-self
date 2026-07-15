@@ -464,6 +464,22 @@ describe('EventTableComponent', () => {
         expect(component.displayedColumns).not.toContain('Shared');
     });
 
+    it('should keep the compact Tags action beside Activity Types on handsets', () => {
+        component.selectedColumns = ['Duration', 'Activity Types', 'Distance'];
+        component.showActions = true;
+        (component as any).isHandset = true;
+
+        (component as any).updateDisplayedColumns();
+
+        expect(component.displayedColumns.slice(0, 5)).toEqual([
+            'Checkbox',
+            'Start Date',
+            'Activity Types',
+            'Tags',
+            'Duration',
+        ]);
+    });
+
     it('should derive shared row display and sorting state from event privacy', () => {
         const publicEvent = new MockEvent('public-event') as any;
         publicEvent.privacy = 'public';
@@ -708,6 +724,23 @@ describe('EventTableComponent', () => {
 
         expect(row['Tag Action Label']).toBe('Edit event tags for Test Run');
         expect(row['Tags Accessible Label']).toBe('Event tags for Test Run: Race, Long run, 2026');
+    });
+
+    it('should provide compact mobile tag markup and stack toolbar filters on small screens', () => {
+        const template = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
+            'utf8'
+        );
+        const styles = readFileSync(
+            join(process.cwd(), 'src/app/components/event-table/event.table.component.scss'),
+            'utf8'
+        );
+
+        expect(template).toContain('event-tags-mobile-summary');
+        expect(template).toContain('event-tags-add-text');
+        expect(template).toContain("[attr.aria-label]=\"row['Tags Accessible Label']\"");
+        expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.table-toolbar-filters\s*{[\s\S]*flex-direction:\s*column;/);
+        expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.mat-column-Tags[\s\S]*width:\s*52px !important;/);
     });
 
     it('should save tags from a row dialog without navigating the row', async () => {

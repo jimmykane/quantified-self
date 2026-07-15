@@ -937,7 +937,7 @@ describe('DashboardManagerDialogComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
     const styles = readFileSync(stylesPath, 'utf8');
 
-    expect(template).toContain('Simplify dashboard');
+    expect(template).not.toContain('Simplify dashboard');
     expect(template).toContain('Add all');
     expect(template).toContain('Remove all');
     expect(template).toContain('Preset category');
@@ -1005,27 +1005,6 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
-  it('previews legacy training tiles without selecting or removing them implicitly', () => {
-    dialogData.user.settings.dashboardSettings.tiles = [{
-      type: TileTypes.Chart,
-      order: 0,
-      name: 'Form',
-      chartType: DASHBOARD_FORM_CHART_TYPE,
-      dataType: DataDistance.type,
-      dataValueType: ChartDataValueTypes.Total,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Daily,
-      size: { columns: 2, rows: 1 },
-    }];
-
-    component.toggleSimplifyDashboardPreview();
-
-    expect(component.isSimplifyDashboardPreviewOpen).toBe(true);
-    expect(component.legacyTrainingTiles).toHaveLength(1);
-    expect(component.hasSelectedLegacyTrainingTiles).toBe(false);
-    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
-  });
-
   it('shows an Add all loading state while bulk all add is saving', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
     const saveDeferred = createDeferred<boolean>();
@@ -1059,42 +1038,6 @@ describe('DashboardManagerDialogComponent', () => {
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
     expect(sleepServiceMock.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
-  });
-
-  it('removes only explicitly selected legacy training tiles during simplification', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = [{
-      type: TileTypes.Chart,
-      order: 0,
-      name: 'Form',
-      chartType: DASHBOARD_FORM_CHART_TYPE,
-      dataType: DataDistance.type,
-      dataValueType: ChartDataValueTypes.Total,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Daily,
-      size: { columns: 1, rows: 1 },
-    }, {
-      type: TileTypes.Chart,
-      order: 1,
-      name: 'Distance',
-      chartType: ChartTypes.ColumnsVertical,
-      dataType: DataDistance.type,
-      dataValueType: ChartDataValueTypes.Total,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataTimeInterval: TimeIntervals.Daily,
-      size: { columns: 1, rows: 1 },
-    }];
-    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(true) });
-
-    component.toggleSimplifyDashboardPreview();
-    component.toggleLegacyTrainingTileSelection(0, true);
-    await component.removeSelectedLegacyTrainingTiles();
-
-    const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    expect(tiles).toHaveLength(1);
-    expect(tiles[0].name).toBe('Distance');
-    expect(tiles[0].order).toBe(0);
-    expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
-    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
   it('restores dashboard settings when adding all fails', async () => {

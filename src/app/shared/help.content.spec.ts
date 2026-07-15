@@ -89,7 +89,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('New dashboards start clean');
     expect(gettingStartedSection?.content).toContain('Open Training');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
-    expect(gettingStartedSection?.content).toContain('Simplify dashboard');
+    expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('does not automatically add sleep, KPI, curated training, or power-curve tiles');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
     expect(gettingStartedSection?.content).toContain('add every available preset tile');

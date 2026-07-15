@@ -188,6 +188,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           return;
         }
         this.isHandset = nextIsHandset;
+        this.updateDisplayedColumns();
         if (this.events && this.data.paginator && this.data.sort) {
           this.processChanges('breakpoint_change');
         }
@@ -762,11 +763,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       .filter(column => column !== 'Description' && column !== 'Shared' && column !== 'Tags')
       .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
 
+    const activityTypeColumn = sortedSelectedColumns.find(column => column === 'Activity Types');
+    const remainingSelectedColumns = activityTypeColumn
+      ? sortedSelectedColumns.filter(column => column !== activityTypeColumn)
+      : sortedSelectedColumns;
+    const dataColumns = this.isHandset
+      ? [...(activityTypeColumn ? [activityTypeColumn] : []), 'Tags', ...remainingSelectedColumns]
+      : [...sortedSelectedColumns, 'Tags'];
+
     const columns = [
       'Checkbox',
       'Start Date',
-      ...sortedSelectedColumns,
-      'Tags',
+      ...dataColumns,
       'Description',
       'Shared',
       'Actions',
