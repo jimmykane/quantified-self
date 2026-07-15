@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `11`
-- `@sports-alliance/sports-lib`: `17.1.0`
+- `@sports-alliance/sports-lib`: `17.1.1`
 - Training disciplines: Running, Cycling, and Swimming
 - Power/capacity disciplines: Running and Cycling only
 - Calendar boundaries: UTC unless a section explicitly says otherwise
