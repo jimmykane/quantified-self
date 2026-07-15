@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 
+const taskDispatchRegistration = vi.hoisted(() => ({
+    options: [] as unknown[],
+}));
+
 vi.mock('firebase-functions/v2/tasks', () => ({
-    onTaskDispatched: (_opts: unknown, handler: any) => handler,
+    onTaskDispatched: vi.fn((_opts: unknown, handler: any) => {
+        taskDispatchRegistration.options.push(_opts);
+        return handler;
+    }),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -94,6 +101,13 @@ describe('processDerivedMetricsTask', () => {
             requeued: false,
             nextGeneration: null,
         });
+    });
+
+    it('registers with enough memory for full-history Training builds', () => {
+        expect(taskDispatchRegistration.options).toContainEqual(expect.objectContaining({
+            memory: '2GiB',
+            timeoutSeconds: 540,
+        }));
     });
 
     it('queries recovery docs from lookback even when form docs are also requested', async () => {

@@ -303,6 +303,9 @@ snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
 
+`processDerivedMetricsTask` runs with 2 GiB of memory because full-history Training builds can hold large event,
+activity, and derived payload sets while producing all dirty snapshots for a generation.
+
 The derived worker:
 
 1. Claims the expected coordinator generation.
