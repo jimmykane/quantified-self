@@ -731,6 +731,7 @@ function resolveDashboardTrainingRecoveryWindow(value: unknown): DashboardTraini
   const bedtimeVariationMinutes = raw.bedtimeVariationMinutes === null ? null : toFiniteNumber(raw.bedtimeVariationMinutes);
   const medianOvernightHrvMs = raw.medianOvernightHrvMs === null ? null : toFiniteNumber(raw.medianOvernightHrvMs);
   const provider = raw.provider === null ? null : normalizeSleepProvider(raw.provider);
+  // Valid provider nights can omit local-time evidence, so regularity is optional even when sleep coverage is high.
   if (
     periodDays === null
     || !Number.isInteger(periodDays)
@@ -756,7 +757,10 @@ function resolveDashboardTrainingRecoveryWindow(value: unknown): DashboardTraini
     || (raw.bedtimeVariationMinutes !== null && (bedtimeVariationMinutes === null || bedtimeVariationMinutes < 0 || bedtimeVariationMinutes > DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES))
     || (raw.medianOvernightHrvMs !== null && (medianOvernightHrvMs === null || medianOvernightHrvMs <= 0))
     || (recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS) !== (averageSleepSeconds !== null)
-    || (recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS) !== (bedtimeVariationMinutes !== null)
+    || (
+      bedtimeVariationMinutes !== null
+      && recordedNightCount < DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
+    )
     || (overnightHrvNightCount >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS) !== (medianOvernightHrvMs !== null)
   ) {
     return null;

@@ -45,6 +45,18 @@ describe('sleep provider mappers', () => {
         expect(result?.session.spo2Samples?.[0].value).toBe(95);
     });
 
+    it('keeps a null Garmin timezone offset unavailable instead of treating it as UTC', () => {
+        const result = mapGarminSleepSummary({
+            summaryId: 'garmin-summary-without-offset',
+            calendarDate: '2026-04-28',
+            startTimeInSeconds: 1777330800,
+            startTimeOffsetInSeconds: null,
+            durationInSeconds: 28800,
+        }, 'garmin-user-1', 1000);
+
+        expect(result?.session.timezoneOffsetSeconds).toBeNull();
+    });
+
     it('maps Suunto 247 sleep samples and treats one-based SpO2 as percent', () => {
         const result = mapSuuntoSleepSample({
             timestamp: '2026-04-27T21:30:00.000Z',
@@ -147,7 +159,8 @@ describe('sleep provider mappers', () => {
             happenDay: 20260428,
             sleepStartTime: '2026-04-27 22:15:00',
             sleepEndTime: '2026-04-28 06:45:00',
-            startTimezone: 12,
+            timezoneOffsetSeconds: null,
+            startTimezone: null,
             endTimezone: 12,
         }, 'coros-open-id', 3000);
 

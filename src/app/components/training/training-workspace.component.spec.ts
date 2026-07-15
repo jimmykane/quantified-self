@@ -453,6 +453,42 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryView.sourceText).toContain('Garmin');
     expect(recoveryView.sourceText).toContain('naps are excluded');
 
+    const missingBedtimeRecoveryView = (component as any).buildTrainingRecoveryViewModel({
+      ...recoveryComparison,
+      reference: {
+        ...recoveryComparison.reference,
+        bedtimeVariationMinutes: null,
+      },
+    }, 'Now', 'Benchmark');
+    expect(missingBedtimeRecoveryView.metricRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Bedtime variation', referenceText: '--', deltaText: '--' }),
+      expect.objectContaining({ label: 'Overnight HRV', referenceText: '50 ms', deltaText: '+10 ms' }),
+    ]));
+    expect(missingBedtimeRecoveryView.detailText).toBe(
+      'Recorded sleep coverage supports comparison where matching metrics are available.',
+    );
+    expect(missingBedtimeRecoveryView.sourceText).toContain(
+      'Bedtime variation needs at least five nights that include local-time data.',
+    );
+    expect(missingBedtimeRecoveryView.sourceText).not.toContain('Overnight HRV needs');
+
+    const missingHrvRecoveryView = (component as any).buildTrainingRecoveryViewModel({
+      ...recoveryComparison,
+      reference: {
+        ...recoveryComparison.reference,
+        medianOvernightHrvMs: null,
+        overnightHrvNightCount: 0,
+      },
+    }, 'Now', 'Benchmark');
+    expect(missingHrvRecoveryView.metricRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Bedtime variation', referenceText: '±45m', deltaText: '15m steadier' }),
+      expect.objectContaining({ label: 'Overnight HRV', referenceText: '--', deltaText: '--' }),
+    ]));
+    expect(missingHrvRecoveryView.sourceText).toContain(
+      'Overnight HRV needs at least five nights that include HRV data.',
+    );
+    expect(missingHrvRecoveryView.sourceText).not.toContain('Bedtime variation needs');
+
     const lowerRecoveryView = (component as any).buildTrainingRecoveryViewModel({
       ...recoveryComparison,
       current: {

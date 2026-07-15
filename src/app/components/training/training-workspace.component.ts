@@ -16,6 +16,8 @@ import {
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { resolveMetricSemantics, type MetricSemanticsDirection } from '@shared/metric-semantics';
 import {
+  DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
+  DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
   getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
   isTrainingVisibleDiscipline,
@@ -949,7 +951,17 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return `More recorded nights are needed for a fair comparison (${current.recordedNightCount} / ${currentMinimum} ${currentLabel.toLowerCase()}, ${reference.recordedNightCount} / ${referenceMinimum} ${referenceLabel.toLowerCase()}).`;
     }
     if (!analysis) {
-      return 'Recorded recovery is comparable across both build windows.';
+      const hasUnavailableMetric = [
+        current.averageSleepSeconds,
+        reference.averageSleepSeconds,
+        current.bedtimeVariationMinutes,
+        reference.bedtimeVariationMinutes,
+        current.medianOvernightHrvMs,
+        reference.medianOvernightHrvMs,
+      ].some(value => value === null);
+      return hasUnavailableMetric
+        ? 'Recorded sleep coverage supports comparison where matching metrics are available.'
+        : 'Recorded recovery is comparable across both build windows.';
     }
     const loadDelta = analysis.duration.deltaPercent;
     const sleepDeltaSeconds = current.averageSleepSeconds !== null && reference.averageSleepSeconds !== null
@@ -981,7 +993,21 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const contextNote = referenceLabel === 'Usual'
       ? 'Main overnight sleep only; naps are excluded. Sleep context does not change your Training state.'
       : 'Main overnight sleep only; naps are excluded. This is context, not an explanation of training changes.';
-    return `${providerText} · ${contextNote}`;
+    const hasMissingBedtimeEvidence = [comparison.current, comparison.reference].some(window => (
+      window.recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
+      && window.bedtimeVariationMinutes === null
+    ));
+    const bedtimeNote = hasMissingBedtimeEvidence
+      ? ' Bedtime variation needs at least five nights that include local-time data.'
+      : '';
+    const hasMissingHrvEvidence = [comparison.current, comparison.reference].some(window => (
+      window.recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS
+      && window.medianOvernightHrvMs === null
+    ));
+    const hrvNote = hasMissingHrvEvidence
+      ? ' Overnight HRV needs at least five nights that include HRV data.'
+      : '';
+    return `${providerText} · ${contextNote}${bedtimeNote}${hrvNote}`;
   }
 
   private formatTrainingSleepProvider(provider: DashboardTrainingRecoveryWindow['provider']): string | null {

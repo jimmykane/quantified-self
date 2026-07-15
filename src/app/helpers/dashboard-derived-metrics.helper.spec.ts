@@ -454,6 +454,29 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(context?.recovery.current.periodDays).toBe(28);
     expect(context?.disciplines[0].recovery?.reference.periodDays).toBe(84);
 
+    for (const provider of ['GarminAPI', 'COROSAPI', 'SuuntoApp']) {
+      Object.assign(payload.recovery.current, {
+        provider,
+        recordedNightCount: 20,
+        coverage: 'sufficient',
+        averageSleepSeconds: 8 * 60 * 60,
+        bedtimeVariationMinutes: null,
+        medianOvernightHrvMs: 42,
+        overnightHrvNightCount: 18,
+      });
+      expect(resolveDashboardTrainingBuildComparisonContext(payload)).not.toBeNull();
+    }
+    Object.assign(payload.recovery.current, {
+      provider: 'GarminAPI',
+      recordedNightCount: 4,
+      coverage: 'limited',
+      averageSleepSeconds: 8 * 60 * 60,
+      bedtimeVariationMinutes: 30,
+      medianOvernightHrvMs: null,
+      overnightHrvNightCount: 0,
+    });
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+
     Object.assign(payload.recovery.current, {
       provider: 'GarminAPI',
       recordedNightCount: 5,
