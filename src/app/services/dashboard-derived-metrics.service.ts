@@ -40,6 +40,10 @@ import {
 } from '../helpers/dashboard-derived-metrics.helper';
 import type { DashboardRecoveryNowContext } from '../helpers/dashboard-recovery-now.helper';
 import { resolveDashboardPowerCurveMetricPayload } from '../helpers/dashboard-power-curve.helper';
+import {
+  resolveTrainingDurabilityMetricPayload,
+  resolveTrainingExplanationMetricPayload,
+} from '../helpers/training-derived-metrics.helper';
 import type { DashboardDerivedMetricStatus } from '../helpers/derived-metric-status.helper';
 import { AppFunctionsService } from './app.functions.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -51,6 +55,8 @@ import {
   getDerivedMetricDocId,
   type DerivedMetricKind,
   type DerivedPowerCurveMetricPayload,
+  type DerivedTrainingDurabilityMetricPayload,
+  type DerivedTrainingExplanationMetricPayload,
   type EnsureDerivedMetricsRequest,
   type EnsureDerivedMetricsResponse,
 } from '@shared/derived-metrics';
@@ -72,6 +78,8 @@ export interface DashboardDerivedMetricsState {
   trainingSummary: DashboardTrainingSummaryContext | null;
   trainingBuildComparison: DashboardTrainingBuildComparisonContext | null;
   trainingCapacity: DashboardTrainingCapacityContext | null;
+  trainingExplanation: DerivedTrainingExplanationMetricPayload | null;
+  trainingDurability: DerivedTrainingDurabilityMetricPayload | null;
   powerCurve: DerivedPowerCurveMetricPayload | null;
   trainingSwimPerformance: DashboardTrainingSwimPerformanceContext | null;
   formStatus: DashboardDerivedMetricStatus;
@@ -90,6 +98,8 @@ export interface DashboardDerivedMetricsState {
   trainingSummaryStatus: DashboardDerivedMetricStatus;
   trainingBuildComparisonStatus: DashboardDerivedMetricStatus;
   trainingCapacityStatus: DashboardDerivedMetricStatus;
+  trainingExplanationStatus: DashboardDerivedMetricStatus;
+  trainingDurabilityStatus: DashboardDerivedMetricStatus;
   powerCurveStatus: DashboardDerivedMetricStatus;
   trainingSwimPerformanceStatus: DashboardDerivedMetricStatus;
 }
@@ -112,6 +122,8 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     trainingSummary: null,
     trainingBuildComparison: null,
     trainingCapacity: null,
+    trainingExplanation: null,
+    trainingDurability: null,
     powerCurve: null,
     trainingSwimPerformance: null,
     formStatus: 'missing',
@@ -130,6 +142,8 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     trainingSummaryStatus: 'missing',
     trainingBuildComparisonStatus: 'missing',
     trainingCapacityStatus: 'missing',
+    trainingExplanationStatus: 'missing',
+    trainingDurabilityStatus: 'missing',
     powerCurveStatus: 'missing',
     trainingSwimPerformanceStatus: 'missing',
   };
@@ -155,6 +169,8 @@ type DerivedMetricStateContextKey =
   | 'trainingSummary'
   | 'trainingBuildComparison'
   | 'trainingCapacity'
+  | 'trainingExplanation'
+  | 'trainingDurability'
   | 'powerCurve'
   | 'trainingSwimPerformance';
 
@@ -175,6 +191,8 @@ type DerivedMetricStateStatusKey =
   | 'trainingSummaryStatus'
   | 'trainingBuildComparisonStatus'
   | 'trainingCapacityStatus'
+  | 'trainingExplanationStatus'
+  | 'trainingDurabilityStatus'
   | 'powerCurveStatus'
   | 'trainingSwimPerformanceStatus';
 
@@ -193,6 +211,8 @@ const ALL_DERIVED_METRIC_KINDS = Object.values(DERIVED_METRIC_KINDS) as DerivedM
 const DASHBOARD_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
   kind => kind !== DERIVED_METRIC_KINDS.TrainingBuildComparison
     && kind !== DERIVED_METRIC_KINDS.TrainingCapacity
+    && kind !== DERIVED_METRIC_KINDS.TrainingExplanation
+    && kind !== DERIVED_METRIC_KINDS.TrainingDurability
     && kind !== DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 );
 
@@ -305,6 +325,16 @@ export class DashboardDerivedMetricsService {
         contextKey: 'trainingCapacity',
         statusKey: 'trainingCapacityStatus',
         resolveContext: (snapshot) => resolveDashboardTrainingCapacityContext(this.resolveSnapshotPayload(snapshot)),
+      },
+      [DERIVED_METRIC_KINDS.TrainingExplanation]: {
+        contextKey: 'trainingExplanation',
+        statusKey: 'trainingExplanationStatus',
+        resolveContext: (snapshot) => resolveTrainingExplanationMetricPayload(this.resolveSnapshotPayload(snapshot)),
+      },
+      [DERIVED_METRIC_KINDS.TrainingDurability]: {
+        contextKey: 'trainingDurability',
+        statusKey: 'trainingDurabilityStatus',
+        resolveContext: (snapshot) => resolveTrainingDurabilityMetricPayload(this.resolveSnapshotPayload(snapshot)),
       },
       [DERIVED_METRIC_KINDS.PowerCurve]: {
         contextKey: 'powerCurve',
@@ -502,6 +532,22 @@ export class DashboardDerivedMetricsService {
       status === 'ready'
       && metricKind === DERIVED_METRIC_KINDS.TrainingCapacity
       && !resolveDashboardTrainingCapacityContext(this.resolveSnapshotPayload(snapshot))
+    ) {
+      return 'stale';
+    }
+
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.TrainingExplanation
+      && !resolveTrainingExplanationMetricPayload(this.resolveSnapshotPayload(snapshot))
+    ) {
+      return 'stale';
+    }
+
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.TrainingDurability
+      && !resolveTrainingDurabilityMetricPayload(this.resolveSnapshotPayload(snapshot))
     ) {
       return 'stale';
     }

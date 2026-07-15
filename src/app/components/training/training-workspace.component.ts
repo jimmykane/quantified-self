@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, computed } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, NgZone, OnDestroy, OnInit, Optional, computed } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { AppThemes, DataDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
@@ -33,12 +33,30 @@ import {
 import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
 import {
   buildTrainingAnalysis,
-  type TrainingAnalysisInsight,
   type TrainingAnalysis,
   type TrainingComparisonState,
   type TrainingWindowComparison,
   resolveTrainingComparisonState,
 } from '../../helpers/training-analysis.helper';
+import {
+  RECOVERY_NOW_REFRESH_INTERVAL_MS,
+} from '../../helpers/dashboard-recovery-now.helper';
+import {
+  buildTrainingRecoveryEstimateViewModel,
+  type TrainingRecoveryEstimateViewModel,
+} from '../../helpers/training-recovery-estimate.helper';
+import {
+  buildTrainingExplanationViewModel,
+  type TrainingExplanationViewModel,
+} from '../../helpers/training-explanation-view.helper';
+import {
+  buildTrainingDurabilityScopeViewModels,
+  type TrainingDurabilityScopeViewModel,
+} from '../../helpers/training-durability-view.helper';
+import {
+  buildTrainingPowerProfileViewModel,
+  type TrainingPowerProfileViewModel,
+} from '../../helpers/training-power-profile.helper';
 import { AppThemeService } from '../../services/app.theme.service';
 import {
   TrainingBuildBenchmarkDialogComponent,
@@ -192,11 +210,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public isLoading = true;
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
   public trainingRecovery = createEmptyTrainingRecoveryViewModel();
+  public trainingRecoveryEstimate: TrainingRecoveryEstimateViewModel | null = null;
+  public trainingExplanationView: TrainingExplanationViewModel | null = null;
+  public trainingDurabilityScopes: TrainingDurabilityScopeViewModel[] = [];
   public cyclingPowerCurve: DashboardPowerCurveContext | null = null;
   public runningPowerCurve: DashboardPowerCurveContext | null = null;
+  public cyclingPowerProfile: TrainingPowerProfileViewModel | null = null;
+  public runningPowerProfile: TrainingPowerProfileViewModel | null = null;
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
-  public trainingInsights: TrainingAnalysisInsight[] = [];
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
   public capacityDisciplines: TrainingCapacityDisciplineViewModel[] = [];
@@ -230,9 +252,19 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     private readonly themeService: AppThemeService,
     private readonly dialog: MatDialog,
     private readonly changeDetector: ChangeDetectorRef,
+    @Optional() private readonly ngZone: NgZone | null = null,
   ) {}
 
   ngOnInit(): void {
+    this.ngZone?.runOutsideAngular(() => {
+      const recoveryRefreshTimer = globalThis.setInterval(() => {
+        this.ngZone?.run(() => {
+          this.refreshTrainingRecoveryEstimate();
+          this.changeDetector.markForCheck();
+        });
+      }, RECOVERY_NOW_REFRESH_INTERVAL_MS);
+      this.subscriptions.add(() => globalThis.clearInterval(recoveryRefreshTimer));
+    });
     this.subscriptions.add(this.authService.user$.subscribe((user) => {
       const uid = `${user?.uid || ''}`.trim();
       if (uid === this.currentUserUID) {
@@ -312,11 +344,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
+    this.trainingRecoveryEstimate = null;
+    this.trainingExplanationView = null;
+    this.trainingDurabilityScopes = [];
     this.cyclingPowerCurve = null;
     this.runningPowerCurve = null;
+    this.cyclingPowerProfile = null;
+    this.runningPowerProfile = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
     this.trainingComparisonState = 'preparing';
-    this.trainingInsights = [];
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
     this.trainingMixDisciplines = [];
     this.capacityDisciplines = [];
@@ -339,16 +375,28 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private applyDerivedState(state: DashboardDerivedMetricsState): void {
     this.derivedState = state;
+    const cycling90dPowerCurve = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
+      scope: 'cycling',
+      range: '90d',
+      latestSeriesLabel: 'Latest cycling activity',
+    });
     this.cyclingPowerCurve = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
       scope: 'cycling',
-      range: 'all',
+      range: '1y',
       latestSeriesLabel: 'Latest cycling activity',
+    });
+    const running90dPowerCurve = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
+      scope: 'running',
+      range: '90d',
+      latestSeriesLabel: 'Latest running activity',
     });
     this.runningPowerCurve = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
       scope: 'running',
-      range: 'all',
+      range: '1y',
       latestSeriesLabel: 'Latest running activity',
     });
+    this.cyclingPowerProfile = buildTrainingPowerProfileViewModel(cycling90dPowerCurve, this.cyclingPowerCurve);
+    this.runningPowerProfile = buildTrainingPowerProfileViewModel(running90dPowerCurve, this.runningPowerCurve);
     this.refreshDerivedViewModels();
     this.refreshSportSpecificViewModels();
   }
@@ -393,6 +441,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       .filter(view => view.summary.current28d.activityCount > 0 || view.summary.baseline28d.activityCount > 0);
     this.capacityDisciplines = buildTrainingCapacityViewModels(this.derivedState.trainingCapacity)
       .filter(view => isTrainingVisibleDiscipline(view.discipline) && this.visibleDisciplines.includes(view.discipline));
+    this.trainingDurabilityScopes = buildTrainingDurabilityScopeViewModels(
+      this.derivedState.trainingDurability,
+      this.visibleDisciplines,
+    );
     this.refreshTrainingBuildCards();
   }
 
@@ -585,17 +637,20 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private resolveTrainingComparisonDeltaTone(
     current: number | null | undefined,
     reference: number | null | undefined,
-    direction: MetricSemanticsDirection = 'direct',
+    direction: MetricSemanticsDirection | 'absolute-inverse' = 'direct',
     minimumAbsoluteDelta = 0,
   ): TrainingComparisonDeltaTone {
     if (!Number.isFinite(current) || !Number.isFinite(reference)) {
       return 'neutral';
     }
-    const delta = (current as number) - (reference as number);
-    if (Math.abs(delta) < minimumAbsoluteDelta || delta === 0) {
+    const rawDelta = (current as number) - (reference as number);
+    const semanticDelta = direction === 'absolute-inverse'
+      ? Math.abs(current as number) - Math.abs(reference as number)
+      : rawDelta;
+    if (Math.abs(semanticDelta) < minimumAbsoluteDelta || semanticDelta === 0) {
       return 'neutral';
     }
-    const isPositive = direction === 'inverse' ? delta < 0 : delta > 0;
+    const isPositive = direction === 'direct' ? semanticDelta > 0 : semanticDelta < 0;
     return isPositive ? 'positive' : 'negative';
   }
 
@@ -633,6 +688,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return '--';
     }
     const delta = current - benchmark;
+    if (delta === 0) {
+      return 'Same';
+    }
     return `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${formatSleepDuration(Math.abs(delta))}`;
   }
 
@@ -700,7 +758,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       analysis.activities.baseline,
     );
     this.trainingStatus = this.buildTrainingStatus(analysis, this.trainingComparisonState);
-    this.trainingInsights = analysis.insights;
+    this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
+    this.refreshTrainingRecoveryEstimate();
     this.trainingRecovery = this.buildTrainingRecoveryViewModel(
       this.derivedState.trainingBuildComparison?.recovery || null,
       'Now',
@@ -717,6 +776,13 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       freshnessNowText: this.formatNumber(latestCurrentPoint?.formSameDay ?? this.derivedState.formNow?.value, 1, true),
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
+  }
+
+  private refreshTrainingRecoveryEstimate(): void {
+    this.trainingRecoveryEstimate = buildTrainingRecoveryEstimateViewModel(
+      this.derivedState.recoveryNow,
+      this.derivedState.recoveryNowStatus,
+    );
   }
 
   private refreshTrainingBuildCards(): void {
@@ -1028,6 +1094,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         currentText: this.formatTrainingBuildDistance(current.distanceMeters, discipline),
         benchmarkText: this.formatTrainingBuildDistance(benchmark.distanceMeters, discipline),
         deltaText: this.formatTrainingBuildDistanceDelta(current.distanceMeters, benchmark.distanceMeters, discipline),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(current.distanceMeters, benchmark.distanceMeters),
         isIntensity: false,
       },
       {
@@ -1035,6 +1102,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         currentText: this.formatTrainingBuildDuration(current.durationSeconds),
         benchmarkText: this.formatTrainingBuildDuration(benchmark.durationSeconds),
         deltaText: this.formatTrainingBuildDurationDelta(current.durationSeconds, benchmark.durationSeconds),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(current.durationSeconds, benchmark.durationSeconds),
         isIntensity: false,
       },
       {
@@ -1042,6 +1110,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         currentText: this.formatTrainingBuildNumber(current.activityCount),
         benchmarkText: this.formatTrainingBuildNumber(benchmark.activityCount),
         deltaText: this.formatTrainingBuildDelta(current.activityCount, benchmark.activityCount),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(current.activityCount, benchmark.activityCount),
         isIntensity: false,
       },
       {
@@ -1049,6 +1118,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         currentText: this.formatTrainingBuildActiveWeeks(current.activeWeekCount, current.periodWeeks),
         benchmarkText: this.formatTrainingBuildActiveWeeks(benchmark.activeWeekCount, benchmark.periodWeeks),
         deltaText: this.formatTrainingBuildDelta(current.activeWeekCount, benchmark.activeWeekCount),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(current.activeWeekCount, benchmark.activeWeekCount),
         isIntensity: false,
       },
       {
@@ -1056,6 +1126,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         currentText: this.formatTrainingBuildDuration(current.longestActivityDurationSeconds),
         benchmarkText: this.formatTrainingBuildDuration(benchmark.longestActivityDurationSeconds),
         deltaText: this.formatTrainingBuildDurationDelta(
+          current.longestActivityDurationSeconds,
+          benchmark.longestActivityDurationSeconds,
+        ),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(
           current.longestActivityDurationSeconds,
           benchmark.longestActivityDurationSeconds,
         ),
@@ -1101,18 +1175,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         currentText: this.formatTrainingBuildNumber(current.trainingStressScore),
         benchmarkText: this.formatTrainingBuildNumber(benchmark.trainingStressScore),
         deltaText: this.formatTrainingBuildDelta(current.trainingStressScore, benchmark.trainingStressScore),
+        deltaTone: this.resolveTrainingComparisonDeltaTone(current.trainingStressScore, benchmark.trainingStressScore),
         isIntensity: false,
       });
     }
-    if (discipline !== 'swimming' && (current.efficiency !== null || benchmark.efficiency !== null)) {
-      rows.push({
-        label: 'Power / HR',
-        currentText: this.formatTrainingBuildNumber(current.efficiency, 2),
-        benchmarkText: this.formatTrainingBuildNumber(benchmark.efficiency, 2),
-        deltaText: this.formatTrainingBuildDelta(current.efficiency, benchmark.efficiency, 2),
-        isIntensity: false,
-      });
-    }
+    rows.push(...this.buildTrainingBuildDurabilityRows(source));
     if (current.intensitySourceEventCount || benchmark.intensitySourceEventCount) {
       rows.push({
         label: 'Intensity mix',
@@ -1123,6 +1190,103 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       });
     }
     return rows;
+  }
+
+  private buildTrainingBuildDurabilityRows(
+    source: DashboardTrainingBuildComparisonDiscipline,
+  ): TrainingBuildMetricRowViewModel[] {
+    return (source.durabilityComparisons || []).flatMap((comparison) => {
+      const current = comparison.current;
+      const benchmark = comparison.benchmark;
+      if (!current && !benchmark) {
+        return [];
+      }
+      const contextLabel = this.formatTrainingBuildDurabilityContext(comparison.context);
+      const rows: TrainingBuildMetricRowViewModel[] = [{
+        label: `${contextLabel} evidence`,
+        currentText: current ? `${current.sampleCount} activities` : '—',
+        benchmarkText: benchmark ? `${benchmark.sampleCount} activities` : '—',
+        deltaText: comparison.isComparable ? 'Comparable' : 'Limited',
+        deltaTone: 'neutral',
+        isIntensity: false,
+      }];
+      if (!comparison.isComparable || !current || !benchmark) {
+        return rows;
+      }
+      const metrics = [{
+        label: `${contextLabel} decoupling`,
+        current: current.medianDecouplingPercent,
+        benchmark: benchmark.medianDecouplingPercent,
+        suffix: '%',
+        direction: 'absolute-inverse' as const,
+      }, {
+        label: `${contextLabel} output retained`,
+        current: current.medianOutputRetentionPercent,
+        benchmark: benchmark.medianOutputRetentionPercent,
+        suffix: '%',
+        direction: 'direct' as const,
+      }, {
+        label: `${contextLabel} HR drift`,
+        current: current.medianHeartRateDriftBpm,
+        benchmark: benchmark.medianHeartRateDriftBpm,
+        suffix: ' bpm',
+        direction: 'absolute-inverse' as const,
+      }, {
+        label: `${contextLabel} pace retained`,
+        current: current.medianPaceRetentionPercent,
+        benchmark: benchmark.medianPaceRetentionPercent,
+        suffix: '%',
+        direction: 'direct' as const,
+      }, {
+        label: `${contextLabel} SWOLF change`,
+        current: current.medianSwolfChange,
+        benchmark: benchmark.medianSwolfChange,
+        suffix: '',
+        direction: 'inverse' as const,
+      }];
+      return [...rows, ...metrics.flatMap((metric) => {
+        if (metric.current === null && metric.benchmark === null) {
+          return [];
+        }
+        const delta = metric.current !== null && metric.benchmark !== null
+          ? metric.current - metric.benchmark
+          : null;
+        return [{
+          label: metric.label,
+          currentText: this.formatTrainingBuildDurabilityMetric(metric.current, metric.suffix),
+          benchmarkText: this.formatTrainingBuildDurabilityMetric(metric.benchmark, metric.suffix),
+          deltaText: delta === null
+            ? '—'
+            : (Math.abs(delta) < 0.05 ? 'Same' : `${delta > 0 ? '+' : '−'}${this.formatTrainingBuildDurabilityMetric(Math.abs(delta), metric.suffix)}`),
+          deltaTone: this.resolveTrainingComparisonDeltaTone(
+            metric.current,
+            metric.benchmark,
+            metric.direction,
+            0.05,
+          ),
+          isIntensity: false,
+        }];
+      })];
+    });
+  }
+
+  private formatTrainingBuildDurabilityContext(
+    context: DashboardTrainingBuildComparisonDiscipline['durabilityComparisons'][number]['context'],
+  ): string {
+    if (context.scope === 'pool-swimming') {
+      return `${context.poolLengthMeters === null ? 'Pool' : `${this.formatNumber(context.poolLengthMeters, 0)} m`} ${context.stroke || 'swim'}`;
+    }
+    if (context.scope === 'open-water-swimming') {
+      return 'Open-water';
+    }
+    if (context.outputSource === 'grade-adjusted-speed') {
+      return 'Grade-adjusted';
+    }
+    return context.outputSource === 'power' ? 'Power' : 'Speed';
+  }
+
+  private formatTrainingBuildDurabilityMetric(value: number | null, suffix: string): string {
+    return value === null ? '—' : `${this.formatNumber(value, 1)}${suffix}`;
   }
 
   private resolveEffectiveTrainingBuildSelection(discipline: DerivedTrainingDiscipline): TrainingBuildBenchmarkSelection | null {

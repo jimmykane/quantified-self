@@ -326,6 +326,60 @@ describe('EventDurabilityCurveComponent', () => {
     expect(option.yAxis).toEqual([]);
   });
 
+  it('should show pool context and eligibility summaries without inventing a timeline', async () => {
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [],
+      markerSourceSeries: [],
+      activitySummaries: [{
+        activity: { getID: () => 'swim-1' } as any,
+        activityId: 'swim-1',
+        label: 'Pool Swimming',
+        eligibilityLabel: 'Comparable early and late thirds',
+        summary: {
+          protocolVersion: 1,
+          discipline: 'pool-swimming',
+          outputSource: 'pool-length-speed',
+          outputUnit: 'm/s',
+          context: { poolLengthMeters: 25, stroke: 'freestyle' },
+          durationSeconds: 3600,
+          qualifyingDurationSeconds: 1800,
+          coverageRatio: 1,
+          eligibility: {
+            eligible: true,
+            reason: 'eligible',
+            validSampleCount: 30,
+            comparisonSegments: 'outer-thirds',
+            earlySampleCount: 10,
+            lateSampleCount: 10,
+            outputCoefficientOfVariation: null,
+            hardZoneRatio: null,
+          },
+          evidence: {
+            kind: 'pool-consistency',
+            poolLengthMeters: 25,
+            stroke: 'freestyle',
+            comparableLengthCount: 30,
+            firstPaceSecondsPer100m: 100,
+            finalPaceSecondsPer100m: 102,
+            paceRetentionPercent: 98,
+            firstSwolf: 42,
+            finalSwolf: 43,
+            swolfChange: 1,
+          },
+        },
+      }],
+    });
+    mockService.buildBestEffortMarkers.mockReturnValue([]);
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('25 m · freestyle · 30 comparable lengths');
+    expect(fixture.nativeElement.textContent).toContain('98.0% pace retained');
+    expect(getLastOption().series).toEqual([]);
+  });
+
   it('should refresh on mobile breakpoint changes', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();

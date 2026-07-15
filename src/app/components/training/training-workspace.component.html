@@ -62,6 +62,14 @@
             <span>{{ trainingStatus.sessionsCaption }}</span>
           </article>
         }
+        @if (trainingRecoveryEstimate; as estimate) {
+          <article class="training-comparison-panel training-recovery-estimate-panel qs-glass-card-panel">
+            <span class="training-metric-label">Recovery remaining</span>
+            <strong>{{ estimate.valueText }}</strong>
+            <span>{{ estimate.detailText }}</span>
+            @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
+          </article>
+        }
       </div>
       <article class="training-recovery-panel qs-glass-card-panel" aria-labelledby="training-recovery-title">
         <header class="training-recovery-header">
@@ -161,7 +169,7 @@
               @if (card.discipline === 'swimming') {
                 <p class="training-build-footnote">Pool and open-water pace stay separate. Missing pace, TSS, or intensity remains unavailable rather than zero.</p>
               } @else {
-                <p class="training-build-footnote">Merged events are excluded. TSS, intensity, and Power / HR appear only when your source activities provide them.</p>
+                <p class="training-build-footnote">Merged events are excluded. Durability compares only eligible, context-matched activities; missing evidence remains unavailable.</p>
               }
             }
           </article>
@@ -169,37 +177,37 @@
       </div>
     </section>
 
-    @if (trainingComparisonState !== 'preparing') {
-      <section class="training-section" aria-labelledby="training-insights-title">
-        <div class="training-section-heading">
-          <p>Notable changes</p>
-          <h2 id="training-insights-title">What changed from your normal</h2>
+    <section class="training-section" aria-labelledby="training-insights-title">
+      <div class="training-section-heading">
+        <div>
+          <p>What drove this</p>
+          <h2 id="training-insights-title">Load, contributors, and rhythm</h2>
         </div>
-        <div class="training-insights-grid">
-          @if (trainingComparisonState === 'unavailable') {
-            <p class="training-empty-state">Training comparison is unavailable right now. Refresh to request another snapshot.</p>
-          } @else {
-            @if (trainingComparisonState === 'updating') {
-              <p class="training-empty-state" role="status">Updating your training comparison. The latest available values remain visible.</p>
-            }
-            @for (insight of trainingInsights; track insight.title) {
-              <article class="training-insight-panel qs-glass-card-panel">
-                <span class="training-metric-label">{{ insight.title }}</span>
-                <p>{{ insight.description }}</p>
-              </article>
-            } @empty {
-              @if (trainingComparisonState === 'empty') {
-                <p class="training-empty-state">No eligible running, cycling/MTB, or swimming sessions in the last 28 days. Add one to start your comparison.</p>
-              } @else if (trainingComparisonState === 'building-baseline') {
-                <p class="training-empty-state">Your baseline is building. Keep training to compare your next 28 days with your usual pattern.</p>
-              } @else {
-                <p class="training-empty-state">No meaningful differences from your usual 28 days yet.</p>
-              }
-            }
+        <span class="training-section-note">Current 28 days / median of the prior three blocks</span>
+      </div>
+      <div class="training-insights-grid">
+        @if (derivedState.trainingExplanationStatus === 'failed') {
+          <p class="training-empty-state">Training drivers are unavailable right now. Refresh to request another snapshot.</p>
+        } @else if (trainingExplanationView; as explanation) {
+          @if (derivedState.trainingExplanationStatus !== 'ready') {
+            <p class="training-empty-state" role="status">Updating training drivers. The latest complete explanation remains visible.</p>
           }
-        </div>
-      </section>
-    }
+          @for (card of explanation.cards; track card.key) {
+            <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
+              <span class="training-metric-label">{{ card.title }}</span>
+              <strong>{{ card.valueText }}</strong>
+              <p>{{ card.description }}</p>
+            </article>
+          }
+          <p class="training-explanation-coverage">{{ explanation.coverageText }}</p>
+        } @else {
+          <div class="training-capacity-loading qs-glass-card-panel" role="status">
+            <mat-spinner diameter="24"></mat-spinner>
+            <div><strong>Preparing training drivers</strong><p>Comparing parent-event load, child sport groups, and training rhythm.</p></div>
+          </div>
+        }
+      </div>
+    </section>
 
     <section class="training-section" aria-labelledby="load-trajectory-title">
       <div class="training-section-heading">
@@ -333,16 +341,97 @@
             ></app-training-swim-performance-chart>
           </article>
         }
-        <article class="training-chart-panel qs-glass-card-panel">
-          <app-efficiency-trend-chart [trend]="derivedState.efficiencyTrend" [status]="derivedState.efficiencyTrendStatus" [darkTheme]="isDarkTheme()" range="1y"></app-efficiency-trend-chart>
+        <article class="training-durability-panel qs-glass-card-panel" aria-labelledby="training-durability-title">
+          <header>
+            <div>
+              <h3 id="training-durability-title" class="qs-dashboard-chart-title">Durability</h3>
+              <p>Current 28 days compared with the median of the prior three 28-day blocks</p>
+            </div>
+            <span>12-week evidence trail</span>
+          </header>
+          @if (derivedState.trainingDurabilityStatus === 'failed') {
+            <p class="training-empty-state">Durability evidence is unavailable right now. Refresh to request another snapshot.</p>
+          } @else if (trainingDurabilityScopes.length) {
+            @if (derivedState.trainingDurabilityStatus !== 'ready') {
+              <p class="training-recovery-update" role="status">Updating durability evidence…</p>
+            }
+            <mat-tab-group mat-stretch-tabs="false" animationDuration="200ms">
+              @for (scope of trainingDurabilityScopes; track scope.scope) {
+                <mat-tab [label]="scope.label">
+                  <div class="training-durability-tab">
+                    <div class="training-durability-evidence">
+                      <strong>{{ scope.evidenceText }}</strong>
+                      <span>{{ scope.coverageText }}</span>
+                      <small>{{ scope.trendText }}</small>
+                      @if (scope.exclusionText) { <small>{{ scope.exclusionText }}</small> }
+                    </div>
+                    @for (context of scope.contexts; track context.contextKey) {
+                      <section class="training-durability-context">
+                        <header><strong>{{ context.label }}</strong><span>{{ context.sampleText }}</span></header>
+                        @if (context.metrics.length) {
+                          <dl class="training-durability-table">
+                            <div class="training-durability-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Usual</dd><dd>Change</dd></div>
+                            @for (metric of context.metrics; track metric.label) {
+                              <div><dt><strong>{{ metric.label }}</strong><small>{{ metric.detailText }}</small></dt><dd>{{ metric.currentText }}</dd><dd>{{ metric.usualText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="metric.deltaTone">{{ metric.deltaText }}</dd></div>
+                            }
+                          </dl>
+                        } @else {
+                          <p class="training-empty-state">No comparable durability metric for this context.</p>
+                        }
+                        <app-training-durability-trajectory-chart
+                          [trajectory]="context.trajectory"
+                          [status]="derivedState.trainingDurabilityStatus"
+                          [darkTheme]="isDarkTheme()"
+                        ></app-training-durability-trajectory-chart>
+                      </section>
+                    } @empty {
+                      <p class="training-empty-state">No eligible context in the current 28-day window.</p>
+                    }
+                    @if (scope.supportingEventsText) { <p class="training-durability-support">{{ scope.supportingEventsText }}</p> }
+                  </div>
+                </mat-tab>
+              }
+            </mat-tab-group>
+          } @else {
+            <div class="training-capacity-loading" role="status">
+              <mat-spinner diameter="24"></mat-spinner>
+              <div><strong>Preparing durability evidence</strong><p>Reading comparable activity-level evidence for the sports shown.</p></div>
+            </div>
+          }
         </article>
         @if (isCyclingVisible) {
-          <article class="training-chart-panel qs-glass-card-panel">
+          <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
+            @if (cyclingPowerProfile; as profile) {
+              <div class="training-power-profile-summary">
+                <strong>90-day profile vs 1 year</strong>
+                <span>{{ profile.activityCountText }}</span>
+                @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
+                @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
+                @if (profile.anchors.length) {
+                  <div class="training-power-profile-anchors">
+                    @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                  </div>
+                } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+              </div>
+            }
             <app-power-curve-chart title="Cycling Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="cyclingPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
           </article>
         }
         @if (isRunningVisible) {
-          <article class="training-chart-panel qs-glass-card-panel">
+          <article class="training-chart-panel training-power-profile-panel qs-glass-card-panel">
+            @if (runningPowerProfile; as profile) {
+              <div class="training-power-profile-summary">
+                <strong>90-day profile vs 1 year</strong>
+                <span>{{ profile.activityCountText }}</span>
+                @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
+                @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
+                @if (profile.anchors.length) {
+                  <div class="training-power-profile-anchors">
+                    @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                  </div>
+                } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
+              </div>
+            }
             <app-power-curve-chart title="Running Power Curve" [isLoading]="derivedState.powerCurveStatus !== 'ready'" [powerCurve]="runningPowerCurve" [darkTheme]="isDarkTheme()"></app-power-curve-chart>
           </article>
         }

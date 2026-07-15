@@ -55,6 +55,8 @@ describe('DashboardDerivedMetricsService', () => {
     trainingSummary: null,
     trainingBuildComparison: null,
     trainingCapacity: null,
+    trainingExplanation: null,
+    trainingDurability: null,
     powerCurve: null,
     trainingSwimPerformance: null,
     formStatus: 'missing',
@@ -73,6 +75,8 @@ describe('DashboardDerivedMetricsService', () => {
     trainingSummaryStatus: 'missing',
     trainingBuildComparisonStatus: 'missing',
     trainingCapacityStatus: 'missing',
+    trainingExplanationStatus: 'missing',
+    trainingDurabilityStatus: 'missing',
     powerCurveStatus: 'missing',
     trainingSwimPerformanceStatus: 'missing',
   });
@@ -630,6 +634,8 @@ describe('DashboardDerivedMetricsService', () => {
     }));
 
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(true);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingExplanation))).toBe(true);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingDurability))).toBe(true);
     service.ensureForDashboard({ uid }, state, {
       metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
     });
@@ -665,6 +671,8 @@ describe('DashboardDerivedMetricsService', () => {
     expect(mockFunctionsService.call).toHaveBeenLastCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
       metricKinds: [
         DERIVED_METRIC_KINDS.TrainingCapacity,
+        DERIVED_METRIC_KINDS.TrainingExplanation,
+        DERIVED_METRIC_KINDS.TrainingDurability,
         DERIVED_METRIC_KINDS.TrainingBuildComparison,
         DERIVED_METRIC_KINDS.TrainingSwimPerformance,
       ],

@@ -50,14 +50,14 @@ describe('TrainingWorkspaceComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(element.textContent).toContain('Compared with your usual 28 days');
-    expect(element.textContent).toContain('Notable changes');
+    expect(element.textContent).toContain('What drove this');
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
     expect(element.textContent).toContain('Settings vs recent evidence');
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling/MTB, or swimming sessions in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling or swimming sessions in the last 28 days.');
     expect(element.textContent).toContain('Preparing capacity evidence');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
@@ -81,8 +81,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming sessions.');
-    expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBe(3);
-    expect(fixture.nativeElement.textContent).not.toContain('What changed from your normal');
+    expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBeGreaterThanOrEqual(3);
+    expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
       { uid: 'user-1' },
       expect.objectContaining({ trainingSummaryStatus: 'missing' }),
@@ -414,6 +414,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect((component as any).resolveTrainingBuildCardState('running', null, selection)).toBe('unavailable');
     expect(component.formatTrainingBuildDelta(14, 10)).toBe('+4');
     expect(component.formatTrainingBuildDurationDelta(5_400, 3_600)).toBe('+30m');
+    expect(component.formatTrainingBuildDurationDelta(3_600, 3_600)).toBe('Same');
     expect((component as any).formatTrainingBuildActiveWeeks(8, 12)).toBe('8 / 12');
     expect((component as any).formatTrainingBuildActiveWeeks(8, null)).toBe('--');
 
@@ -489,21 +490,105 @@ describe('TrainingWorkspaceComponent', () => {
     const swimWindow = {
       periodWeeks: 12, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 4,
       durationSeconds: 10_000, distanceMeters: 8_000, distanceEventCount: 4,
-      trainingStressScore: null, trainingStressScoreEventCount: 0, activeWeekCount: 4,
+      trainingStressScore: 250, trainingStressScoreEventCount: 4, activeWeekCount: 4,
       longestActivityDurationSeconds: 3_000, easySeconds: null, moderateSeconds: null, hardSeconds: null,
-      intensitySourceEventCount: 0, efficiency: 2, efficiencySampleCount: 4,
+      intensitySourceEventCount: 0,
+      durability: {
+        evidenceActivityCount: 4,
+        medianDurationSeconds: 3_600,
+        medianCoverageRatio: 0.9,
+        aerobic: {
+          sampleCount: 4,
+          medianDecouplingPercent: 3,
+          medianOutputRetentionPercent: 97,
+          medianHeartRateDriftBpm: 4,
+        },
+        pool: null,
+      },
       poolAveragePaceSecondsPer100m: 95, poolPaceActivityCount: 3,
       openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
     };
     const swimRows = (component as any).buildTrainingBuildMetricRows({
       current: swimWindow,
-      benchmark: { ...swimWindow, poolAveragePaceSecondsPer100m: 100 },
+      benchmark: {
+        ...swimWindow,
+        activityCount: 3,
+        durationSeconds: 9_000,
+        distanceMeters: 7_000,
+        trainingStressScore: 200,
+        activeWeekCount: 3,
+        longestActivityDurationSeconds: 2_500,
+        poolAveragePaceSecondsPer100m: 100,
+      },
     }, 'swimming');
     expect(swimRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Distance', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Time', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Sessions', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Active weeks', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Longest session', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m faster', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Open-water pace', currentText: '--', benchmarkText: '--', deltaTone: 'neutral' }),
+      expect.objectContaining({ label: 'TSS', deltaTone: 'positive' }),
     ]));
     expect(swimRows).not.toEqual(expect.arrayContaining([expect.objectContaining({ label: 'Power / HR' })]));
+    const durabilityContext = {
+      contextKey: 'pool:25:freestyle', scope: 'pool-swimming', outputSource: 'pool-length-speed',
+      outputUnit: 'm/s', poolLengthMeters: 25, stroke: 'freestyle',
+    };
+    const durabilitySummary = {
+      context: durabilityContext,
+      sampleCount: 3,
+      medianDurationSeconds: 3_600,
+      medianCoverageRatio: 0.9,
+      medianDecouplingPercent: null,
+      medianOutputRetentionPercent: null,
+      medianHeartRateDriftBpm: null,
+      medianPaceRetentionPercent: 98,
+      medianSwolfChange: 1,
+    };
+    const durabilityRows = (component as any).buildTrainingBuildMetricRows({
+      current: swimWindow,
+      benchmark: swimWindow,
+      durabilityComparisons: [{
+        context: durabilityContext,
+        current: durabilitySummary,
+        benchmark: { ...durabilitySummary, sampleCount: 4, medianPaceRetentionPercent: 96, medianSwolfChange: 2 },
+        isComparable: true,
+      }],
+    }, 'swimming');
+    expect(durabilityRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '25 m freestyle evidence', currentText: '3 activities', benchmarkText: '4 activities' }),
+      expect.objectContaining({ label: '25 m freestyle pace retained', deltaText: '+2%', deltaTone: 'positive' }),
+      expect.objectContaining({ label: '25 m freestyle SWOLF change', deltaText: '−1', deltaTone: 'positive' }),
+    ]));
+    const aerobicContext = {
+      contextKey: 'running:power', scope: 'running', outputSource: 'power',
+      outputUnit: 'W', poolLengthMeters: null, stroke: null,
+    };
+    const aerobicSummary = {
+      ...durabilitySummary,
+      context: aerobicContext,
+      medianDecouplingPercent: -5,
+      medianOutputRetentionPercent: 95,
+      medianHeartRateDriftBpm: -5,
+      medianPaceRetentionPercent: null,
+      medianSwolfChange: null,
+    };
+    const aerobicRows = (component as any).buildTrainingBuildMetricRows({
+      current: swimWindow,
+      benchmark: swimWindow,
+      durabilityComparisons: [{
+        context: aerobicContext,
+        current: aerobicSummary,
+        benchmark: { ...aerobicSummary, medianDecouplingPercent: 1, medianHeartRateDriftBpm: 1 },
+        isComparable: true,
+      }],
+    }, 'running');
+    expect(aerobicRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Power decoupling', deltaText: '−6%', deltaTone: 'negative' }),
+      expect.objectContaining({ label: 'Power HR drift', deltaText: '−6 bpm', deltaTone: 'negative' }),
+    ]));
     const slowerSwimRows = (component as any).buildTrainingBuildMetricRows({
       current: { ...swimWindow, poolAveragePaceSecondsPer100m: 105 },
       benchmark: { ...swimWindow, poolAveragePaceSecondsPer100m: 100 },

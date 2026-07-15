@@ -1,5 +1,15 @@
 import { Injectable } from '@angular/core';
-import { ActivityInterface, DataCadence, DataDuration, DataHeartRate, DataPower } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  DataCadence,
+  DataDuration,
+  DataPower,
+  analyzeActivityDurability,
+  type DurabilityDiscipline,
+  type DurabilityEligibilityReason,
+  type DurabilityEvidenceValue,
+  type DurabilityOutputSource,
+} from '@sports-alliance/sports-lib';
 import {
   filterPowerCurvePointsByMaxDuration,
   normalizePowerCurvePoints,
@@ -7,7 +17,6 @@ import {
   type PowerCurvePoint as SharedPowerCurvePoint,
 } from '@shared/power-curve';
 
-const DEFAULT_ROLLING_WINDOW_SECONDS = 180;
 const DEFAULT_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600];
 const MIN_VALID_CADENCE = 35;
 const MIN_VALID_POWER = 20;
@@ -29,7 +38,6 @@ export interface BuildPowerCurveSeriesOptions {
 export interface BuildPerformanceCurveSeriesOptions {
   isMerge?: boolean;
   maxPointsPerSeries?: number;
-  rollingWindowSeconds?: number;
   minCadencePowerBinCount?: number;
   minCadenceValueCount?: number;
 }
@@ -55,22 +63,37 @@ export interface PowerCurveChartSeries {
 export interface PerformanceCurveDurabilityPoint {
   duration: number;
   efficiency: number;
-  power: number;
+  output: number;
+  outputUnit: 'W' | 'm/s';
   heartRate: number;
-  rawPower: number;
+  rawOutput: number;
   rawHeartRate: number;
+  inComparisonWindow: boolean;
+  comparisonHalf: 'first' | 'second' | null;
 }
 
 export interface PerformanceCurveDurabilitySeries {
   activity: ActivityInterface;
   activityId: string;
   label: string;
+  discipline: DurabilityDiscipline;
+  outputSource: DurabilityOutputSource;
+  outputUnit: 'W' | 'm/s';
   points: PerformanceCurveDurabilityPoint[];
+}
+
+export interface PerformanceCurveDurabilityActivitySummary {
+  activity: ActivityInterface;
+  activityId: string;
+  label: string;
+  summary: DurabilityEvidenceValue;
+  eligibilityLabel: string;
 }
 
 export interface BuildDurabilitySeriesResult {
   renderSeries: PerformanceCurveDurabilitySeries[];
   markerSourceSeries: PerformanceCurveDurabilitySeries[];
+  activitySummaries: PerformanceCurveDurabilityActivitySummary[];
 }
 
 export interface PerformanceCurveCadencePowerPoint {
@@ -95,7 +118,8 @@ export interface PerformanceCurveBestEffortMarker {
   windowLabel: string;
   duration: number;
   efficiency: number;
-  power: number;
+  output: number;
+  outputUnit: 'W' | 'm/s';
   startDuration: number;
   endDuration: number;
 }
@@ -126,10 +150,12 @@ export class PerformanceCurveDataService {
 
     const buildOptions = { isMerge: options.isMerge === true };
     const hasPowerCurve = this.buildPowerCurveSeries(activities, buildOptions).length > 0;
-    const hasDurability = this.buildDurabilitySeries(activities, {
+    const durabilityResult = this.buildDurabilitySeriesWithMarkerSource(activities, {
       ...buildOptions,
       maxPointsPerSeries: 2,
-    }).length > 0;
+    });
+    const hasDurability = durabilityResult.renderSeries.length > 0
+      || durabilityResult.activitySummaries.length > 0;
     const hasCadencePower = this.buildCadencePowerSeries(activities, {
       ...buildOptions,
       maxPointsPerSeries: 2,
@@ -197,70 +223,44 @@ export class PerformanceCurveDataService {
       return {
         renderSeries: [],
         markerSourceSeries: [],
+        activitySummaries: [],
       };
     }
 
-    const rollingWindowSeconds = options.rollingWindowSeconds ?? DEFAULT_ROLLING_WINDOW_SECONDS;
     const activityDescriptors = this.buildActivityLabels(activities, options.isMerge === true);
 
     const renderSeries: PerformanceCurveDurabilitySeries[] = [];
     const markerSourceSeries: PerformanceCurveDurabilitySeries[] = [];
+    const activitySummaries: PerformanceCurveDurabilityActivitySummary[] = [];
 
     activityDescriptors.forEach((descriptor) => {
-      const powerData = this.getStreamData(descriptor.activity, DataPower.type);
-      const heartRateData = this.getStreamData(descriptor.activity, DataHeartRate.type);
-      const length = Math.min(powerData.length, heartRateData.length);
-
-      if (length < 3) {
+      const analysis = analyzeActivityDurability(descriptor.activity, { includeTimeline: true });
+      const summary = analysis.summary;
+      if (!summary) {
         return;
       }
-
-      const rawSamples: Array<{ duration: number; power: number; heartRate: number }> = [];
-
-      for (let index = 0; index < length; index += 1) {
-        const power = this.toFiniteNumber(powerData[index]);
-        const heartRate = this.toFiniteNumber(heartRateData[index]);
-        if (!power || !heartRate || power <= 0 || heartRate <= 0) {
-          continue;
-        }
-
-        rawSamples.push({
-          duration: index + 1,
-          power,
-          heartRate,
-        });
-      }
-
-      if (rawSamples.length < 3) {
-        return;
-      }
-
-      const sampleInterval = this.getMedianDurationStep(rawSamples.map((sample) => sample.duration));
-      const windowSamples = Math.max(1, Math.round(rollingWindowSeconds / sampleInterval));
-
-      const powerPrefix = [0];
-      const heartRatePrefix = [0];
-      rawSamples.forEach((sample, index) => {
-        powerPrefix[index + 1] = powerPrefix[index] + sample.power;
-        heartRatePrefix[index + 1] = heartRatePrefix[index] + sample.heartRate;
+      activitySummaries.push({
+        activity: descriptor.activity,
+        activityId: descriptor.activityId,
+        label: descriptor.label,
+        summary,
+        eligibilityLabel: this.formatDurabilityEligibility(
+          summary.eligibility.reason,
+          summary.eligibility.comparisonSegments,
+        ),
       });
 
-      const points: PerformanceCurveDurabilityPoint[] = rawSamples.map((sample, index) => {
-        const start = Math.max(0, index - windowSamples + 1);
-        const count = index - start + 1;
-        const avgPower = (powerPrefix[index + 1] - powerPrefix[start]) / count;
-        const avgHeartRate = (heartRatePrefix[index + 1] - heartRatePrefix[start]) / count;
-        const efficiency = avgHeartRate > 0 ? avgPower / avgHeartRate : 0;
-
-        return {
-          duration: sample.duration,
-          efficiency,
-          power: avgPower,
-          heartRate: avgHeartRate,
-          rawPower: sample.power,
-          rawHeartRate: sample.heartRate,
-        };
-      }).filter((point) => Number.isFinite(point.efficiency) && point.efficiency > 0);
+      const points: PerformanceCurveDurabilityPoint[] = analysis.timeline.map(point => ({
+        duration: point.elapsedSeconds,
+        efficiency: point.aerobicEfficiency,
+        output: point.output,
+        outputUnit: summary.outputUnit,
+        heartRate: point.heartRateBpm,
+        rawOutput: point.rawOutput,
+        rawHeartRate: point.rawHeartRateBpm,
+        inComparisonWindow: point.inComparisonWindow,
+        comparisonHalf: point.comparisonHalf,
+      })).filter((point) => Number.isFinite(point.efficiency) && point.efficiency > 0);
 
       if (points.length < 2) {
         return;
@@ -270,6 +270,9 @@ export class PerformanceCurveDataService {
         activity: descriptor.activity,
         activityId: descriptor.activityId,
         label: descriptor.label,
+        discipline: summary.discipline,
+        outputSource: summary.outputSource,
+        outputUnit: summary.outputUnit,
         points,
       };
       markerSourceSeries.push(markerSeriesEntry);
@@ -283,6 +286,9 @@ export class PerformanceCurveDataService {
         activity: descriptor.activity,
         activityId: descriptor.activityId,
         label: descriptor.label,
+        discipline: summary.discipline,
+        outputSource: summary.outputSource,
+        outputUnit: summary.outputUnit,
         points: downsampledPoints,
       });
     });
@@ -290,6 +296,7 @@ export class PerformanceCurveDataService {
     return {
       renderSeries,
       markerSourceSeries,
+      activitySummaries,
     };
   }
 
@@ -433,13 +440,13 @@ export class PerformanceCurveDataService {
       }
 
       const durations = series.points.map((point) => point.duration);
-      const powers = series.points.map((point) => point.rawPower);
+      const outputs = series.points.map((point) => point.rawOutput);
       const totalDurationSpan = durations[durations.length - 1] - durations[0];
       const sampleInterval = this.getMedianDurationStep(durations);
       const powerPrefix = [0];
 
-      powers.forEach((power, index) => {
-        powerPrefix[index + 1] = powerPrefix[index] + power;
+      outputs.forEach((output, index) => {
+        powerPrefix[index + 1] = powerPrefix[index] + output;
       });
 
       windows.forEach((windowSeconds) => {
@@ -490,7 +497,8 @@ export class PerformanceCurveDataService {
           windowLabel: this.formatEffortWindow(windowSeconds),
           duration: endPoint.duration,
           efficiency: endPoint.efficiency,
-          power: bestPower,
+          output: bestPower,
+          outputUnit: series.outputUnit,
           startDuration: series.points[bestStart]?.duration ?? endPoint.duration,
           endDuration: endPoint.duration,
         });
@@ -498,7 +506,7 @@ export class PerformanceCurveDataService {
     });
 
     if (!Number.isFinite(options.maxMarkersPerWindow) || (options.maxMarkersPerWindow ?? 0) <= 0) {
-      return markers.sort((left, right) => left.windowSeconds - right.windowSeconds || right.power - left.power);
+      return markers.sort((left, right) => left.windowSeconds - right.windowSeconds || right.output - left.output);
     }
 
     const grouped = new Map<number, PerformanceCurveBestEffortMarker[]>();
@@ -511,7 +519,7 @@ export class PerformanceCurveDataService {
     return [...grouped.entries()]
       .sort((left, right) => left[0] - right[0])
       .flatMap(([, markerCollection]) => markerCollection
-        .sort((left, right) => right.power - left.power)
+        .sort((left, right) => right.output - left.output)
         .slice(0, options.maxMarkersPerWindow)
       );
   }
@@ -641,6 +649,27 @@ export class PerformanceCurveDataService {
     }
 
     return `${hours.toFixed(1)}h`;
+  }
+
+  private formatDurabilityEligibility(
+    reason: DurabilityEligibilityReason,
+    comparisonSegments: DurabilityEvidenceValue['eligibility']['comparisonSegments'],
+  ): string {
+    const labels: Record<DurabilityEligibilityReason, string> = {
+      eligible: comparisonSegments === 'outer-thirds'
+        ? 'Comparable early and late thirds'
+        : 'Comparable first and second halves',
+      'unsupported-activity': 'This activity type is not supported',
+      'missing-output': 'Missing supported output data',
+      'missing-heart-rate': 'Missing heart-rate data',
+      'insufficient-duration': 'Too short for the durability protocol',
+      'insufficient-coverage': 'Not enough paired output and heart-rate coverage',
+      'too-variable': 'Output varied too much for a steady comparison',
+      'too-intense': 'Too much time was recorded in hard zones',
+      'insufficient-halves': 'Not enough comparable early and late evidence',
+      'unsupported-context': 'The activity context is not supported',
+    };
+    return labels[reason];
   }
 
   private toFiniteNumber(value: unknown): number | null {

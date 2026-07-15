@@ -1,0 +1,12 @@
+:host { display: block; min-width: 0; }
+.durability-trajectory { min-width: 0; margin-top: 14px; padding: 14px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; background: var(--mat-sys-surface-container-low); }
+header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+h4 { margin: 0; color: var(--mat-sys-on-surface); font-size: 14px; }
+header p, footer { color: var(--mat-sys-on-surface-variant); font-size: 11px; line-height: 1.4; }
+header p { margin: 4px 0 0; }
+.durability-trajectory-status { display: inline-flex; align-items: center; gap: 6px; color: var(--mat-sys-on-surface-variant); font-size: 11px; white-space: nowrap; }
+.durability-trajectory-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.durability-trajectory-chart { width: 100%; min-width: 720px; height: 270px; }
+footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px solid var(--mat-sys-outline-variant); }
+footer span:last-child { text-align: right; }
+@media (max-width: 640px) { .durability-trajectory { padding: 12px; } header, footer { display: grid; } footer span:last-child { text-align: left; } }

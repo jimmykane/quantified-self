@@ -8,6 +8,7 @@ import {
     ActivityTypes,
     DataActivityTypes,
     DataCriticalPower,
+    DataDurabilityEvidence,
     DataDuration,
     DataFTP,
     DataHeartRateAvg,
@@ -26,6 +27,7 @@ import {
     DataSwimDistance,
     DataSwimPaceAvg,
     DataVO2Max,
+    DURABILITY_PROTOCOL_VERSION,
 } from '@sports-alliance/sports-lib';
 import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
 import { POWER_CURVE_STAT_TYPE } from '../../../shared/power-curve';
@@ -456,6 +458,24 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         });
     });
 
+    it('uses parent events and child activities for training explanation and durability', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        for (const metricKind of [
+            DERIVED_METRIC_KINDS.TrainingExplanation,
+            DERIVED_METRIC_KINDS.TrainingDurability,
+        ]) {
+            expect(resolveDerivedMetricSourceRequirements([metricKind])).toEqual({
+                needsFormDocs: true,
+                needsRecoveryNowDocs: false,
+                needsTrainingActivityDocs: true,
+                needsTrainingSwimLengths: false,
+                needsTrainingBuildBenchmarkSettings: false,
+                needsTrainingBuildSleepDocs: false,
+            });
+        }
+    });
+
     it('fetches settings only for the training build comparison snapshot', async () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
 
@@ -729,6 +749,40 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         });
     });
 
+    it('retains sleep evidence without inventing bedtime regularity when timezone is missing', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const dayMs = 24 * 60 * 60 * 1000;
+        const firstSleepDayMs = Date.UTC(2026, 5, 26);
+        const sleepDocs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = firstSleepDayMs + (index * dayMs);
+            return {
+                id: `no-timezone-${index}`,
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (2 * 60 * 60 * 1000),
+                    durationSeconds: 8 * 3600,
+                    isNap: false,
+                    vitals: { overnightHrvMs: 50 + index },
+                }),
+            };
+        });
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs as any,
+        );
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 5,
+            averageSleepSeconds: 8 * 3600,
+            bedtimeVariationMinutes: null,
+            medianOvernightHrvMs: 52,
+        });
+    });
+
     it('keeps sport windows separate, excludes the event anchor, and leaves optional metrics explicit', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 5, 30, 12, 0, 0);
@@ -798,7 +852,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running.benchmark?.distanceMeters).toBe(10_000);
         expect(running.benchmark?.trainingStressScore).toBe(70);
         expect(running.benchmark?.easySeconds).toBeNull();
-        expect(running.benchmark?.efficiency).toBeNull();
+        expect(running.benchmark?.durability).toBeNull();
         expect(running.suggestedRaces).toEqual([{
             eventId: 'race-anchor', startDayMs: raceDayMs, label: 'Spring marathon',
             distanceMeters: 42_195, durationSeconds: 12_000, trainingStressScore: null,
@@ -1538,6 +1592,291 @@ describe('buildTrainingSummaryMetricPayload', () => {
     });
 });
 
+describe('training explanation and durability metrics', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const eventDoc = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
+    const activityDoc = (id: string, eventID: string, data: Record<string, unknown>) => ({
+        id,
+        data: () => ({ eventID, ...data }),
+    });
+    const aerobicEvidence = (
+        decouplingPercent: number,
+        overrides: Record<string, unknown> = {},
+    ) => {
+        const firstHalfOutput = 100;
+        const firstHalfHeartRateBpm = 100;
+        const secondHalfHeartRateBpm = 105;
+        const secondHalfEfficiency = 1 - (decouplingPercent / 100);
+        const secondHalfOutput = secondHalfEfficiency * secondHalfHeartRateBpm;
+        return {
+            protocolVersion: DURABILITY_PROTOCOL_VERSION,
+            sourceFingerprint: 'durability-v1:0000000000000001',
+            discipline: 'running',
+            outputSource: 'grade-adjusted-speed',
+            outputUnit: 'm/s',
+            context: null,
+            durationSeconds: 3600,
+            qualifyingDurationSeconds: 3240,
+            coverageRatio: 0.9,
+            eligibility: {
+                eligible: true,
+                reason: 'eligible',
+                validSampleCount: 3240,
+                comparisonSegments: 'halves',
+                earlySampleCount: 1620,
+                lateSampleCount: 1620,
+                outputCoefficientOfVariation: 0.03,
+                hardZoneRatio: 0.05,
+            },
+            evidence: {
+                kind: 'aerobic-efficiency',
+                firstHalfEfficiency: 1,
+                secondHalfEfficiency,
+                decouplingPercent,
+                firstHalfOutput,
+                secondHalfOutput,
+                outputRetentionPercent: (secondHalfOutput / firstHalfOutput) * 100,
+                firstHalfHeartRateBpm,
+                secondHalfHeartRateBpm,
+                heartRateDriftBpm: secondHalfHeartRateBpm - firstHalfHeartRateBpm,
+            },
+            ...overrides,
+        };
+    };
+
+    it('explains current load against prior-block medians with sport coverage and discipline rhythm', async () => {
+        const {
+            buildTrainingExplanationMetricPayload,
+            joinTrainingExplanationActivitySources,
+        } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const currentDayMs = Date.UTC(2026, 6, 12, 8);
+        const eventDocs = [
+            eventDoc('current', {
+                name: 'Current brick',
+                startDate: currentDayMs,
+                stats: { 'Training Stress Score': 100 },
+            }),
+            ...[50, 70, 90].map((load, index) => eventDoc(`baseline-${index}`, {
+                startDate: nowMs - ((35 + (index * 28)) * DAY_MS),
+                stats: { 'Training Stress Score': load },
+            })),
+            eventDoc('future', { startDate: nowMs + DAY_MS, stats: { 'Training Stress Score': 999 } }),
+            eventDoc('merged', { startDate: currentDayMs, isMerge: true, stats: { 'Training Stress Score': 999 } }),
+            eventDoc('missing-date', { stats: { 'Training Stress Score': 999 } }),
+        ];
+        const activityDocs = [
+            activityDoc('run', 'current', {
+                startDate: currentDayMs,
+                type: ActivityTypes.Running,
+                stats: { [DataDuration.type]: 3600, 'Training Stress Score': 60 },
+            }),
+            activityDoc('yoga', 'current', { startDate: currentDayMs, type: ActivityTypes.Yoga, stats: {} }),
+            activityDoc('unknown', 'current', { startDate: currentDayMs, type: 'Provider Mystery', stats: {} }),
+            activityDoc('future-child', 'future', { startDate: nowMs + DAY_MS, type: ActivityTypes.Running, stats: {} }),
+            activityDoc('merged-child', 'merged', { startDate: currentDayMs, type: ActivityTypes.Running, stats: {} }),
+        ];
+        const activities = joinTrainingExplanationActivitySources(activityDocs as never, eventDocs as never);
+        const result = buildTrainingExplanationMetricPayload(eventDocs as never, activities, nowMs);
+
+        expect(result.sourceEventCount).toBe(4);
+        expect(result.payload.current).toMatchObject({
+            parentEventCount: 1,
+            parentTrainingStressScore: 100,
+            childActivityCount: 3,
+            childTrainingStressScore: 60,
+            childLoadCoverage: {
+                totalCount: 3,
+                loadedCount: 1,
+                classifiedCount: 2,
+                unclassifiedCount: 1,
+                ratio: 0.3333,
+            },
+        });
+        expect(result.payload.baselineMedian.parentTrainingStressScore).toBe(70);
+        expect(result.payload.current.sportLoads).toEqual(expect.arrayContaining([
+            expect.objectContaining({ sport: 'running', activityCount: 1, trainingStressScore: 60 }),
+            expect.objectContaining({ sport: 'other', activityCount: 1, trainingStressScore: null }),
+            expect.objectContaining({ sport: 'unclassified', activityCount: 1, trainingStressScore: null }),
+        ]));
+        expect(result.payload.current.rhythms.find(item => item.discipline === 'running')).toMatchObject({
+            sessionCount: 1,
+            activeDayCount: 1,
+            activeWeekCount: 1,
+            longestInactivityGapDays: 25,
+            longestSessionDurationSeconds: 3600,
+        });
+        expect(result.payload.topContributors[0]).toMatchObject({
+            eventId: 'current',
+            trainingStressScore: 100,
+            childComposition: expect.arrayContaining([expect.objectContaining({ sport: 'running' })]),
+        });
+    });
+
+    it('aggregates only persisted eligible evidence into current, usual, weekly, and Best Build contexts', async () => {
+        const {
+            buildTrainingBuildComparisonMetricPayload,
+            buildTrainingDurabilityMetricPayload,
+        } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const makeActivity = (
+            id: string,
+            startDate: number,
+            evidence: unknown | null,
+            activityType: string = ActivityTypes.Running,
+        ) => ({
+            id,
+            data: () => ({
+                startDate,
+                stats: {
+                    [DataActivityTypes.type]: [activityType],
+                    ...(evidence ? { [DataDurabilityEvidence.type]: evidence } : {}),
+                },
+            }),
+        });
+        const currentDates = [Date.UTC(2026, 6, 10), Date.UTC(2026, 6, 12)];
+        const baselineDates = [Date.UTC(2026, 5, 10), Date.UTC(2026, 4, 10), Date.UTC(2026, 3, 10)];
+        const docs = [
+            ...currentDates.map((date, index) => makeActivity(`current-${index}`, date, aerobicEvidence(3 + index * 2))),
+            ...baselineDates.map((date, index) => makeActivity(`baseline-${index}`, date, aerobicEvidence(4 + index * 2))),
+            makeActivity('missing', Date.UTC(2026, 6, 11), null),
+            makeActivity('malformed', Date.UTC(2026, 6, 10), aerobicEvidence(7, {
+                qualifyingDurationSeconds: undefined,
+            })),
+            makeActivity('excluded', Date.UTC(2026, 6, 9), aerobicEvidence(99, {
+                eligibility: {
+                    eligible: false,
+                    reason: 'too-intense',
+                    validSampleCount: 3240,
+                    comparisonSegments: 'halves',
+                    earlySampleCount: 1620,
+                    lateSampleCount: 1620,
+                    outputCoefficientOfVariation: 0.03,
+                    hardZoneRatio: 0.25,
+                },
+                evidence: null,
+            })),
+            makeActivity('pool', Date.UTC(2026, 6, 8), {
+                protocolVersion: DURABILITY_PROTOCOL_VERSION,
+                sourceFingerprint: 'durability-v1:0000000000000002',
+                discipline: 'pool-swimming',
+                outputSource: 'pool-length-speed',
+                outputUnit: 'm/s',
+                context: { poolLengthMeters: 25, stroke: 'freestyle' },
+                durationSeconds: 2400,
+                qualifyingDurationSeconds: 1800,
+                coverageRatio: 0.95,
+                eligibility: {
+                    eligible: true,
+                    reason: 'eligible',
+                    validSampleCount: 24,
+                    comparisonSegments: 'outer-thirds',
+                    earlySampleCount: 8,
+                    lateSampleCount: 8,
+                    outputCoefficientOfVariation: 0.03,
+                    hardZoneRatio: 0.05,
+                },
+                evidence: {
+                    kind: 'pool-consistency',
+                    firstPaceSecondsPer100m: 100,
+                    finalPaceSecondsPer100m: 103,
+                    paceRetentionPercent: (100 / 103) * 100,
+                    firstSwolf: 40,
+                    finalSwolf: 42,
+                    swolfChange: 2,
+                    poolLengthMeters: 25,
+                    stroke: 'freestyle',
+                    comparableLengthCount: 24,
+                },
+            }, ActivityTypes.Swimming),
+            makeActivity('open-water', Date.UTC(2026, 6, 7), aerobicEvidence(4, {
+                discipline: 'open-water-swimming',
+                outputSource: 'speed',
+            }), ActivityTypes.OpenWaterSwimming),
+            makeActivity('future', nowMs + DAY_MS, aerobicEvidence(999)),
+        ];
+        const activities = buildTrainingActivitySources(docs);
+        const result = buildTrainingDurabilityMetricPayload(activities, nowMs);
+        const running = result.payload.scopes.find(item => item.scope === 'running')!;
+
+        expect(result.payload.weeklyPointCount).toBe(12);
+        expect(running.weeks).toHaveLength(12);
+        expect(running.current.coverage).toMatchObject({
+            candidateActivityCount: 5,
+            evidenceActivityCount: 3,
+            eligibleActivityCount: 2,
+            missingEvidenceActivityCount: 2,
+            excludedActivityCount: 1,
+            eligibilityRatio: 0.4,
+            exclusions: [{ reason: 'too-intense', activityCount: 1 }],
+        });
+        expect(running.current.summaries[0]).toMatchObject({
+            sampleCount: 2,
+            medianDecouplingPercent: 4,
+            medianOutputRetentionPercent: 100.8,
+            medianHeartRateDriftBpm: 5,
+        });
+        expect(running.usual.summaries[0].medianDecouplingPercent).toBe(6);
+        expect(running.recentSupportingEvents).toHaveLength(2);
+        expect(result.payload.scopes.find(item => item.scope === 'pool-swimming')?.current.summaries[0]).toMatchObject({
+            context: { poolLengthMeters: 25, stroke: 'freestyle' },
+            medianPaceRetentionPercent: 97.09,
+            medianSwolfChange: 2,
+        });
+        expect(result.payload.scopes.find(item => item.scope === 'open-water-swimming')?.current.summaries[0]).toMatchObject({
+            context: { outputSource: 'speed', poolLengthMeters: null, stroke: null },
+            medianDecouplingPercent: 4,
+        });
+
+        const comparison = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: {
+                buildBenchmarks: {
+                    running: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 4, 19) },
+                },
+            },
+        }, nowMs);
+        const runningBuild = comparison.payload.disciplines.find(item => item.discipline === 'running')!;
+        expect(runningBuild.current?.durability?.summaries[0].sampleCount).toBe(3);
+        expect(runningBuild.durabilityComparisons[0]).toMatchObject({
+            context: { outputSource: 'grade-adjusted-speed', outputUnit: 'm/s' },
+            isComparable: true,
+        });
+    });
+
+    it('does not present a context from one historical block as the athlete usual', async () => {
+        const { buildTrainingDurabilityMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const docs = [
+            eventDoc('sparse-current', {
+                startDate: Date.UTC(2026, 6, 10),
+                stats: {
+                    [DataActivityTypes.type]: [ActivityTypes.Running],
+                    [DataDurabilityEvidence.type]: aerobicEvidence(3, { outputSource: 'speed' }),
+                },
+            }),
+            eventDoc('sparse-baseline', {
+                startDate: Date.UTC(2026, 5, 10),
+                stats: {
+                    [DataActivityTypes.type]: [ActivityTypes.Running],
+                    [DataDurabilityEvidence.type]: aerobicEvidence(5, { outputSource: 'speed' }),
+                },
+            }),
+        ];
+
+        const running = buildTrainingDurabilityMetricPayload(buildTrainingActivitySources(docs), nowMs)
+            .payload.scopes.find(scope => scope.scope === 'running')!;
+
+        expect(running.usual.summaries[0]).toMatchObject({
+            sampleCount: 0,
+            medianDurationSeconds: null,
+            medianCoverageRatio: null,
+            medianDecouplingPercent: null,
+            medianOutputRetentionPercent: null,
+            medianHeartRateDriftBpm: null,
+        });
+    });
+});
+
 describe('activity-level Training sources and swimming performance', () => {
     const activityDoc = (id: string, eventID: string, data: Record<string, unknown>) => ({
         id,
@@ -1571,6 +1910,40 @@ describe('activity-level Training sources and swimming performance', () => {
             ['cycling', 1],
             ['swimming', 1],
         ]);
+    });
+
+    it('uses parent timing only as an anchor and never leaks parent workload into a child leg', async () => {
+        const {
+            buildTrainingExplanationMetricPayload,
+            buildTrainingSummaryMetricPayload,
+            joinTrainingActivitySources,
+            joinTrainingExplanationActivitySources,
+        } = await import('./derived-metrics.service');
+        const startDate = Date.UTC(2026, 6, 10, 8);
+        const eventDocs = [eventDoc('parent', {
+            startDate,
+            endDate: startDate + (10 * 60 * 60 * 1000),
+            stats: { [DataDuration.type]: 36_000, 'Training Stress Score': 500 },
+        })];
+        const activityDocs = [activityDoc('leg', 'parent', {
+            type: ActivityTypes.Running,
+            stats: {},
+        })];
+        const sources = joinTrainingActivitySources(activityDocs as never, eventDocs as never);
+        const explanationSources = joinTrainingExplanationActivitySources(activityDocs as never, eventDocs as never);
+
+        expect(sources[0].startMs).toBe(startDate);
+        expect(sources[0].metricData).not.toHaveProperty('endDate');
+        expect(buildTrainingSummaryMetricPayload(sources, Date.UTC(2026, 6, 14)).payload.disciplines[0].current28d)
+            .toMatchObject({ activityCount: 1, durationSeconds: 0 });
+        expect(buildTrainingExplanationMetricPayload(
+            eventDocs as never,
+            explanationSources,
+            Date.UTC(2026, 6, 14),
+        ).payload.current).toMatchObject({
+            parentTrainingStressScore: 500,
+            childTrainingStressScore: null,
+        });
     });
 
     it('builds fixed pool/open-water pace series and compares SWOLF only in the dominant context', async () => {
@@ -1705,11 +2078,11 @@ describe('activity-level Training sources and swimming performance', () => {
         expect(cycling.suggestedRaces[0]).toMatchObject({ distanceMeters: 40_000, durationSeconds: 5_000 });
         expect(swimming.benchmark).toMatchObject({
             activityCount: 1, distanceMeters: 2_000, poolAveragePaceSecondsPer100m: 105,
-            openWaterAveragePaceSecondsPer100m: null, efficiency: null,
+            openWaterAveragePaceSecondsPer100m: null, durability: null,
         });
         expect(swimming.current).toMatchObject({
             activityCount: 1, distanceMeters: 3_000, poolAveragePaceSecondsPer100m: null,
-            openWaterAveragePaceSecondsPer100m: 115, efficiency: null,
+            openWaterAveragePaceSecondsPer100m: 115, durability: null,
         });
     });
 });

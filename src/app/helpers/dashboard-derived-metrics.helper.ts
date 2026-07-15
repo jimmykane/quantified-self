@@ -16,6 +16,7 @@ import type {
   DerivedTrainingBuildBenchmarkReference,
   DerivedTrainingBuildComparisonDiscipline,
   DerivedTrainingBuildComparisonMetricPayload,
+  DerivedTrainingBuildDurabilityComparison,
   DerivedTrainingBuildEventSuggestion,
   DerivedTrainingBuildRaceSuggestion,
   DerivedTrainingBuildWindow,
@@ -45,6 +46,11 @@ import {
   extendDashboardFormPointsWithZeroLoadUntil,
   type DashboardFormPoint,
 } from './dashboard-form.helper';
+import {
+  resolveTrainingDurabilityContext,
+  resolveTrainingDurabilityContextSummary,
+  resolveTrainingDurabilityWindowMetrics,
+} from './training-derived-metrics.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -198,16 +204,18 @@ export interface DashboardTrainingCapacityContext {
 }
 
 export type DashboardTrainingBuildWindow = DerivedTrainingBuildWindow;
+export type DashboardTrainingBuildDurabilityComparison = DerivedTrainingBuildDurabilityComparison;
 export type DashboardTrainingBuildEventSuggestion = DerivedTrainingBuildEventSuggestion;
 export type DashboardTrainingBuildRaceSuggestion = DerivedTrainingBuildRaceSuggestion;
 export type DashboardTrainingBuildBenchmarkReference = DerivedTrainingBuildBenchmarkReference;
 export type DashboardTrainingRecoveryWindow = DerivedTrainingRecoveryWindow;
 export type DashboardTrainingRecoveryComparison = DerivedTrainingRecoveryComparison;
 
-export interface DashboardTrainingBuildComparisonDiscipline extends Omit<DerivedTrainingBuildComparisonDiscipline, 'current' | 'benchmark' | 'selection' | 'suggestedRaces' | 'suggestedEvents'> {
+export interface DashboardTrainingBuildComparisonDiscipline extends Omit<DerivedTrainingBuildComparisonDiscipline, 'current' | 'benchmark' | 'selection' | 'durabilityComparisons' | 'suggestedRaces' | 'suggestedEvents'> {
   current: DashboardTrainingBuildWindow | null;
   benchmark: DashboardTrainingBuildWindow | null;
   selection: DashboardTrainingBuildBenchmarkReference | null;
+  durabilityComparisons: DashboardTrainingBuildDurabilityComparison[];
   suggestedRaces: DashboardTrainingBuildRaceSuggestion[];
   suggestedEvents: DashboardTrainingBuildEventSuggestion[];
 }
@@ -623,7 +631,7 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
   const trainingStressScoreEventCount = toFiniteNumber(raw.trainingStressScoreEventCount);
   const activeWeekCount = toFiniteNumber(raw.activeWeekCount);
   const intensitySourceEventCount = toFiniteNumber(raw.intensitySourceEventCount);
-  const efficiencySampleCount = toFiniteNumber(raw.efficiencySampleCount);
+  const durability = raw.durability === null ? null : resolveTrainingDurabilityWindowMetrics(raw.durability);
   const poolPaceActivityCount = toFiniteNumber(raw.poolPaceActivityCount);
   const openWaterPaceActivityCount = toFiniteNumber(raw.openWaterPaceActivityCount);
   if (
@@ -636,7 +644,7 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
     || trainingStressScoreEventCount === null
     || activeWeekCount === null
     || intensitySourceEventCount === null
-    || efficiencySampleCount === null
+    || (raw.durability !== null && !durability)
     || poolPaceActivityCount === null
     || openWaterPaceActivityCount === null
   ) {
@@ -658,8 +666,7 @@ function resolveDashboardTrainingBuildWindow(value: unknown): DashboardTrainingB
     moderateSeconds: toFiniteNumber(raw.moderateSeconds),
     hardSeconds: toFiniteNumber(raw.hardSeconds),
     intensitySourceEventCount,
-    efficiency: toFiniteNumber(raw.efficiency),
-    efficiencySampleCount,
+    durability,
     poolAveragePaceSecondsPer100m: toFiniteNumber(raw.poolAveragePaceSecondsPer100m),
     poolPaceActivityCount,
     openWaterAveragePaceSecondsPer100m: toFiniteNumber(raw.openWaterAveragePaceSecondsPer100m),
@@ -890,6 +897,42 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
     const disciplineRecovery = source.recovery === null
       ? null
       : resolveDashboardTrainingRecoveryComparison(source.recovery);
+    const durabilityComparisons = Array.isArray(source.durabilityComparisons)
+      ? source.durabilityComparisons.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== 'object') {
+          return [];
+        }
+        const comparison = candidate as Partial<DerivedTrainingBuildDurabilityComparison>;
+        const context = resolveTrainingDurabilityContext(comparison.context);
+        const currentSummary = comparison.current === null
+          ? null
+          : resolveTrainingDurabilityContextSummary(comparison.current);
+        const benchmarkSummary = comparison.benchmark === null
+          ? null
+          : resolveTrainingDurabilityContextSummary(comparison.benchmark);
+        if (
+          !context
+          || typeof comparison.isComparable !== 'boolean'
+          || (comparison.current !== null && !currentSummary)
+          || (comparison.benchmark !== null && !benchmarkSummary)
+          || (
+            comparison.isComparable
+            && (
+              !currentSummary
+              || !benchmarkSummary
+              || currentSummary.sampleCount < 2
+              || benchmarkSummary.sampleCount < 2
+            )
+          )
+        ) {
+          return [];
+        }
+        return [{ context, current: currentSummary, benchmark: benchmarkSummary, isComparable: comparison.isComparable }];
+      })
+      : null;
+    if (!durabilityComparisons || durabilityComparisons.length !== source.durabilityComparisons?.length) {
+      return [];
+    }
     if (source.status === 'ready') {
       if (
         !selection
@@ -920,6 +963,7 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
       current,
       benchmark,
       recovery: disciplineRecovery,
+      durabilityComparisons,
       suggestedRaces,
       suggestedEvents,
     }];

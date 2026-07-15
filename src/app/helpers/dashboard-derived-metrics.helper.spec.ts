@@ -367,6 +367,29 @@ describe('dashboard-derived-metrics.helper', () => {
       sameProvider: false,
       isComparable: false,
     });
+    const durabilityCoverage = {
+      candidateActivityCount: 4,
+      evidenceActivityCount: 4,
+      eligibleActivityCount: 4,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 0,
+      eligibilityRatio: 1,
+      exclusions: [],
+    };
+    const durabilitySummary = {
+      context: {
+        contextKey: 'running:power', scope: 'running', outputSource: 'power', outputUnit: 'W',
+        poolLengthMeters: null, stroke: null,
+      },
+      sampleCount: 4,
+      medianDurationSeconds: 3_600,
+      medianCoverageRatio: 0.9,
+      medianDecouplingPercent: 3.5,
+      medianOutputRetentionPercent: 97,
+      medianHeartRateDriftBpm: 4,
+      medianPaceRetentionPercent: null,
+      medianSwolfChange: null,
+    };
     const payload = {
       dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
@@ -384,7 +407,7 @@ describe('dashboard-derived-metrics.helper', () => {
           activityCount: 8, durationSeconds: 12_000, distanceMeters: 82_000, distanceEventCount: 8,
           trainingStressScore: null, trainingStressScoreEventCount: 0, activeWeekCount: 7,
           longestActivityDurationSeconds: 3_600, easySeconds: null, moderateSeconds: null, hardSeconds: null,
-          intensitySourceEventCount: 0, efficiency: null, efficiencySampleCount: 0,
+          intensitySourceEventCount: 0, durability: null,
           poolAveragePaceSecondsPer100m: null, poolPaceActivityCount: 0,
           openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
         },
@@ -393,11 +416,13 @@ describe('dashboard-derived-metrics.helper', () => {
           activityCount: 9, durationSeconds: 14_000, distanceMeters: 94_000, distanceEventCount: 9,
           trainingStressScore: 510, trainingStressScoreEventCount: 9, activeWeekCount: 8,
           longestActivityDurationSeconds: 4_000, easySeconds: 8_000, moderateSeconds: 3_000, hardSeconds: 1_000,
-          intensitySourceEventCount: 9, efficiency: 1.9, efficiencySampleCount: 9,
+          intensitySourceEventCount: 9,
+          durability: { coverage: durabilityCoverage, summaries: [durabilitySummary] },
           poolAveragePaceSecondsPer100m: null, poolPaceActivityCount: 0,
           openWaterAveragePaceSecondsPer100m: null, openWaterPaceActivityCount: 0,
         },
         recovery: emptyRecoveryComparison(Date.UTC(2026, 3, 8), 84, Date.UTC(2026, 0, 14), 84),
+        durabilityComparisons: [],
         suggestedRaces: [{
           eventId: 'race-1', startDayMs: Date.UTC(2026, 3, 8), label: 'Spring marathon',
           distanceMeters: 42_195, durationSeconds: 12_600, trainingStressScore: 310,
@@ -407,9 +432,9 @@ describe('dashboard-derived-metrics.helper', () => {
           distanceMeters: 18_000, durationSeconds: 6_000, trainingStressScore: null,
         }],
       }, {
-        discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, recovery: null, suggestedRaces: [], suggestedEvents: [],
+        discipline: 'cycling', status: 'not-configured', selection: null, current: null, benchmark: null, recovery: null, durabilityComparisons: [], suggestedRaces: [], suggestedEvents: [],
       }, {
-        discipline: 'swimming', status: 'not-configured', selection: null, current: null, benchmark: null, recovery: null, suggestedRaces: [], suggestedEvents: [],
+        discipline: 'swimming', status: 'not-configured', selection: null, current: null, benchmark: null, recovery: null, durabilityComparisons: [], suggestedRaces: [], suggestedEvents: [],
       }],
     };
     const context = resolveDashboardTrainingBuildComparisonContext(payload);

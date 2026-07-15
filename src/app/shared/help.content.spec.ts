@@ -95,11 +95,14 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('add every available preset tile');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('Load and recovery interpretation lives in **Training**');
-    expect(gettingStartedSection?.content).toContain('Notable changes');
+    expect(gettingStartedSection?.content).toContain('What drove this');
+    expect(gettingStartedSection?.content).toContain('neutral higher/lower language');
+    expect(gettingStartedSection?.content).toContain('plots a readable 12-week trajectory');
+    expect(gettingStartedSection?.content).toContain('empty weeks stay explicit');
     expect(gettingStartedSection?.content).toContain('**Sports shown**');
     expect(gettingStartedSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
     expect(gettingStartedSection?.content).toContain('**Use automatic selection**');
-    expect(gettingStartedSection?.content).toContain('does not filter the overall comparison or notable changes');
+    expect(gettingStartedSection?.content).toContain('does not filter the overall comparison or **What drove this**');
     expect(gettingStartedSection?.content).toContain('Mountain Biking groups');
     expect(gettingStartedSection?.content).toContain('one activity leg at a time');
     expect(gettingStartedSection?.content).toContain('shown first as quick picks');

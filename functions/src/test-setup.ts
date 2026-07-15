@@ -138,8 +138,11 @@ vi.mock('./request-helper', () => ({
     post: () => Promise.resolve({}),
 }));
 
-// Mock sports-lib to avoid resolution errors
-vi.mock('@sports-alliance/sports-lib', () => ({
+// Keep broad sports-lib fixtures lightweight while exercising the real canonical
+// durability parser used by production.
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+    return ({
     ActivityTypes: {
         Cycling: 'Cycling',
         EBiking: 'E-Biking',
@@ -196,6 +199,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     DataActivityTypes: { type: 'Activity Types' },
     DataCriticalPower: { type: 'Critical Power' },
     DataDistance: { type: 'Distance' },
+    DataDurabilityEvidence: { type: 'Durability Evidence' },
     DataDuration: { type: 'Duration' },
     DataFTP: { type: 'FTP' },
     DataHeartRateAvg: { type: 'Heart Rate Avg' },
@@ -218,6 +222,36 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     DataSwimDistance: { type: 'Swim Distance' },
     DataSwimPaceAvg: { type: 'Average Swim Pace' },
     DataVO2Max: { type: 'VO2 Max' },
+    DURABILITY_PROTOCOL_VERSION: 1,
+    normalizeDurabilityEvidenceValue: actual.normalizeDurabilityEvidenceValue,
+    samplePowerCurveAtDuration: (
+        points: Array<Record<string, unknown>>,
+        duration: number,
+        options: { key?: 'power' | 'wattsPerKg'; maximumBracketDurationRatio?: number } = {},
+    ) => {
+        const key = options.key || 'power';
+        const maximumRatio = options.maximumBracketDurationRatio || 1.25;
+        const normalized = points
+            .map(point => ({ duration: Number(point.duration), value: Number(point[key]) }))
+            .filter(point => Number.isFinite(point.duration) && point.duration > 0
+                && Number.isFinite(point.value) && point.value > 0)
+            .sort((left, right) => left.duration - right.duration);
+        const exact = normalized.find(point => point.duration === duration);
+        if (exact) {
+            return exact.value;
+        }
+        const rightIndex = normalized.findIndex(point => point.duration > duration);
+        if (rightIndex <= 0) {
+            return null;
+        }
+        const left = normalized[rightIndex - 1];
+        const right = normalized[rightIndex];
+        if ((right.duration / left.duration) > maximumRatio) {
+            return null;
+        }
+        const ratio = ((1 / duration) - (1 / left.duration)) / ((1 / right.duration) - (1 / left.duration));
+        return left.value + ((right.value - left.value) * ratio);
+    },
     RoutePreviewUtilities: {
         buildRouteFilePreview: (routeFile: any) => {
             const routes = Array.isArray(routeFile?.routes)
@@ -269,7 +303,8 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         toHeader: () => ({}),
         authorize: () => ({}),
     }),
-}));
+    });
+});
 
 // Mock firebase-functions/logger globally
 vi.mock('firebase-functions/logger', () => ({
