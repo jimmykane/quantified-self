@@ -217,6 +217,18 @@ describe('SideNavComponent', () => {
         expect(component.hasPaidAccess).toBe(false);
     });
 
+    it('does not expose Training in the staged navigation', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-1',
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        expect(fixture.debugElement.queryAll(By.css('mat-list-item'))
+            .some(item => item.nativeElement.textContent.includes('Training'))).toBe(false);
+    });
+
     it('should link My Tracks directly for logged-in free users', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',

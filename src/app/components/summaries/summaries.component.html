@@ -13,10 +13,6 @@
     </div>
     @if (showActions) {
     <div class="dashboard-section-actions">
-      <a mat-stroked-button class="dashboard-training-link" routerLink="/training">
-        <mat-icon>monitoring</mat-icon>
-        <span>Open Training</span>
-      </a>
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
         (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
         <mat-icon>add_chart</mat-icon>

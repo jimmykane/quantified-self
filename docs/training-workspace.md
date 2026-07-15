@@ -116,6 +116,9 @@ can continue showing the latest complete payload while a newer generation is bui
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
+During the staged rollout, Training is intentionally absent from the sidenav and Dashboard actions. The `/training` route
+remains registered and directly reachable for internal QA.
+
 Frontend transformation responsibilities are intentionally split into focused helpers:
 
 | Helper | Responsibility |

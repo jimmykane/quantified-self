@@ -178,6 +178,13 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('does not expose the Training action during staged rollout', () => {
+    component.showActions = true;
+
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link')).toBeNull();
+  });
+
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
     const kpiTile = {
       type: TileTypes.Chart,
