@@ -1216,6 +1216,98 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
     });
 
+    it('persistReparsedEvent should log persistence phase checkpoints', async () => {
+        const parsedEvent = {
+            setID: vi.fn(),
+            getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
+        } as any;
+
+        await persistReparsedEvent(
+            'u1',
+            'e1',
+            parsedEvent,
+            { isMerge: true, mergeType: 'multi' },
+            [
+                { id: 'a1', data: () => ({}) } as any,
+                { id: 'a2', data: () => ({}) } as any,
+            ],
+            TARGET_SPORTS_LIB_VERSION,
+        );
+
+        const startedPhases = hoisted.mockLoggerInfo.mock.calls
+            .filter(([message]) => message === '[sports-lib-reparse] Persistence phase started.')
+            .map(([, context]) => (context as Record<string, unknown>).phase);
+        const completedCalls = hoisted.mockLoggerInfo.mock.calls
+            .filter(([message]) => message === '[sports-lib-reparse] Persistence phase completed.');
+        const completedPhases = completedCalls
+            .map(([, context]) => (context as Record<string, unknown>).phase);
+
+        expect(startedPhases).toEqual([
+            'write_all_event_data',
+            'merge_metadata',
+            'delete_stale_activities',
+            'processing_metadata',
+        ]);
+        expect(completedPhases).toEqual(startedPhases);
+        expect(completedCalls.find(([, context]) => (context as Record<string, unknown>).phase === 'delete_stale_activities')?.[1])
+            .toEqual(expect.objectContaining({
+                staleActivitiesDeleted: 1,
+                durationMs: expect.any(Number),
+            }));
+    });
+
+    it('persistReparsedEvent should retry retryable stale activity delete transaction failures', async () => {
+        const invalidTransactionError = Object.assign(new Error('3 INVALID_ARGUMENT: Invalid transaction.'), {
+            code: 3,
+            details: 'Invalid transaction.',
+        });
+        hoisted.mockRunTransaction
+            .mockImplementationOnce(async () => {
+                throw invalidTransactionError;
+            })
+            .mockImplementation(async (callback: any) => callback({
+                set: hoisted.mockTransactionSet,
+                delete: hoisted.mockTransactionDelete,
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+            }));
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            set: vi.fn().mockResolvedValue(undefined),
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+
+        await persistReparsedEvent(
+            'u1',
+            'e1',
+            {
+                setID: vi.fn(),
+                getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
+            } as any,
+            {},
+            [
+                { id: 'a1', data: () => ({}) } as any,
+                { id: 'a2', data: () => ({}) } as any,
+            ],
+            TARGET_SPORTS_LIB_VERSION,
+        );
+
+        expect(hoisted.mockRunTransaction).toHaveBeenCalledTimes(3);
+        expect(hoisted.mockTransactionDelete).toHaveBeenCalledWith(expect.objectContaining({
+            path: 'users/u1/activities/a2',
+        }));
+        expect(hoisted.mockLoggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Retrying Firestore transaction after retryable failure.',
+            expect.objectContaining({
+                uid: 'u1',
+                phase: 'sports_lib_reparse_delete_stale_activities',
+                attempt: 1,
+                maxAttempts: 3,
+                code: 3,
+                error: '3 INVALID_ARGUMENT: Invalid transaction.',
+            }),
+        );
+    });
+
     it('persistReparsedEvent should not depend on admin.firestore.FieldValue', async () => {
         const firestoreFn = admin.firestore as typeof admin.firestore & { FieldValue?: unknown };
         const originalFieldValue = firestoreFn.FieldValue;
@@ -1534,6 +1626,110 @@ describe('sports-lib-reparse.service', () => {
             status: 'completed',
             targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
         }), { merge: true });
+    });
+
+    it('writeReparseStatus should retry retryable Firestore transaction failures', async () => {
+        const set = vi.fn().mockResolvedValue(undefined);
+        const invalidTransactionError = Object.assign(new Error('3 INVALID_ARGUMENT: Invalid transaction.'), {
+            code: 3,
+            details: 'Invalid transaction.',
+        });
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            set,
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+        hoisted.mockRunTransaction
+            .mockImplementationOnce(async () => {
+                throw invalidTransactionError;
+            })
+            .mockImplementationOnce(async (callback: any) => callback({
+                set: hoisted.mockTransactionSet,
+                delete: hoisted.mockTransactionDelete,
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+            }));
+
+        await writeReparseStatus('u1', 'e1', {
+            status: 'completed',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            checkedAt: 'ts' as any,
+        });
+
+        expect(hoisted.mockRunTransaction).toHaveBeenCalledTimes(2);
+        expect(set).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockLoggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Retrying Firestore transaction after retryable failure.',
+            expect.objectContaining({
+                uid: 'u1',
+                phase: 'sports_lib_reparse_status',
+                attempt: 1,
+                maxAttempts: 3,
+                code: 3,
+                error: '3 INVALID_ARGUMENT: Invalid transaction.',
+            }),
+        );
+    });
+
+    it('writeReparseStatus should retry retryable transaction failures wrapped by the deletion guard read', async () => {
+        const set = vi.fn().mockResolvedValue(undefined);
+        const invalidTransactionError = Object.assign(new Error('3 INVALID_ARGUMENT: Invalid transaction.'), {
+            code: 3,
+            details: 'Invalid transaction.',
+        });
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            set,
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+        hoisted.mockGetUserDeletionGuardStateInTransaction
+            .mockRejectedValueOnce(invalidTransactionError)
+            .mockResolvedValue({
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            });
+
+        await writeReparseStatus('u1', 'e1', {
+            status: 'completed',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            checkedAt: 'ts' as any,
+        });
+
+        expect(hoisted.mockRunTransaction).toHaveBeenCalledTimes(2);
+        expect(set).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockLoggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Retrying Firestore transaction after retryable failure.',
+            expect.objectContaining({
+                uid: 'u1',
+                phase: 'sports_lib_reparse_status',
+                attempt: 1,
+                maxAttempts: 3,
+                code: 3,
+                details: 'Invalid transaction.',
+            }),
+        );
+    });
+
+    it('writeReparseStatus should not retry non-retryable Firestore transaction failures', async () => {
+        const invalidDataError = Object.assign(new Error('3 INVALID_ARGUMENT: Bad document data.'), {
+            code: 3,
+            details: 'Bad document data.',
+        });
+        hoisted.mockRunTransaction.mockImplementationOnce(async () => {
+            throw invalidDataError;
+        });
+
+        await expect(writeReparseStatus('u1', 'e1', {
+            status: 'failed',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            checkedAt: 'ts' as any,
+        })).rejects.toThrow('Bad document data');
+
+        expect(hoisted.mockRunTransaction).toHaveBeenCalledTimes(1);
+        expect(hoisted.mockLoggerWarn).not.toHaveBeenCalledWith(
+            '[sports-lib-reparse] Retrying Firestore transaction after retryable failure.',
+            expect.anything(),
+        );
     });
 
     it('buildSportsLibReparseJobId should be deterministic and version-sensitive', () => {

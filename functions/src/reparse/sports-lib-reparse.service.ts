@@ -77,6 +77,104 @@ export function isReparsePersistenceSkippedForUserDeletionError(error: unknown):
     return error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError';
 }
 
+const REPARSE_TRANSACTION_MAX_ATTEMPTS = 3;
+const REPARSE_TRANSACTION_RETRY_BASE_DELAY_MS = 100;
+
+function getFirestoreErrorCode(error: unknown): unknown {
+    const firestoreError = getNestedFirestoreError(error);
+    return firestoreError && typeof firestoreError === 'object'
+        ? (firestoreError as { code?: unknown }).code
+        : undefined;
+}
+
+function getFirestoreErrorDetails(error: unknown): string | undefined {
+    const firestoreError = getNestedFirestoreError(error);
+    return firestoreError && typeof firestoreError === 'object'
+        ? `${(firestoreError as { details?: unknown }).details || ''}`.trim() || undefined
+        : undefined;
+}
+
+function isUserDeletionGuardReadError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'UserDeletionGuardReadError';
+}
+
+function getNestedFirestoreError(error: unknown): unknown {
+    if (!isUserDeletionGuardReadError(error) || !error || typeof error !== 'object') {
+        return error;
+    }
+
+    const errorRecord = error as { originalError?: unknown; cause?: unknown };
+    return errorRecord.originalError ?? errorRecord.cause ?? error;
+}
+
+function getErrorSearchText(error: unknown): string {
+    const nestedError = getNestedFirestoreError(error);
+    return [
+        toErrorMessage(error),
+        nestedError === error ? undefined : toErrorMessage(nestedError),
+        getFirestoreErrorDetails(nestedError),
+    ]
+        .filter(Boolean)
+        .join(' ');
+}
+
+function isRetryableReparseTransactionError(error: unknown): boolean {
+    if (isReparsePersistenceSkippedForUserDeletionError(error)) {
+        return false;
+    }
+
+    const code = getFirestoreErrorCode(error);
+    const normalizedCode = typeof code === 'string' ? code.toLowerCase() : code;
+    if (normalizedCode === 3 || normalizedCode === '3' || normalizedCode === 'invalid_argument') {
+        return /invalid transaction/i.test(getErrorSearchText(error));
+    }
+
+    return normalizedCode === 4
+        || normalizedCode === '4'
+        || normalizedCode === 'deadline_exceeded'
+        || normalizedCode === 10
+        || normalizedCode === '10'
+        || normalizedCode === 'aborted'
+        || normalizedCode === 14
+        || normalizedCode === '14'
+        || normalizedCode === 'unavailable';
+}
+
+async function waitForReparseTransactionRetry(attempt: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, REPARSE_TRANSACTION_RETRY_BASE_DELAY_MS * attempt));
+}
+
+async function runReparseFirestoreTransactionWithRetry<T>(
+    uid: string,
+    phase: string,
+    operation: () => Promise<T>,
+): Promise<T> {
+    for (let attempt = 1; attempt <= REPARSE_TRANSACTION_MAX_ATTEMPTS; attempt += 1) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (attempt >= REPARSE_TRANSACTION_MAX_ATTEMPTS || !isRetryableReparseTransactionError(error)) {
+                throw error;
+            }
+
+            const retryDelayMs = REPARSE_TRANSACTION_RETRY_BASE_DELAY_MS * attempt;
+            logger.warn('[sports-lib-reparse] Retrying Firestore transaction after retryable failure.', {
+                uid,
+                phase,
+                attempt,
+                maxAttempts: REPARSE_TRANSACTION_MAX_ATTEMPTS,
+                retryDelayMs,
+                code: getFirestoreErrorCode(error) ?? null,
+                details: getFirestoreErrorDetails(error) ?? null,
+                error: toErrorMessage(error),
+            });
+            await waitForReparseTransactionRetry(attempt);
+        }
+    }
+
+    throw new Error('[sports-lib-reparse] Firestore transaction retry loop exited unexpectedly.');
+}
+
 export interface SportsLibReparseCheckpoint {
     cursorEventPath?: string | null;
     cursorProcessingDocPath?: string | null;
@@ -1287,7 +1385,7 @@ async function setReparseDocIfUserActive(
     ) => admin.firestore.DocumentData,
 ): Promise<void> {
     const db = admin.firestore();
-    await db.runTransaction(async (transaction) => {
+    await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
         await assertReparsePersistenceUserActiveInTransaction(db, transaction, uid, phase);
         const incomingData = data as admin.firestore.DocumentData;
         let resolvedData = incomingData;
@@ -1299,7 +1397,7 @@ async function setReparseDocIfUserActive(
             );
         }
         transaction.set(docRef, resolvedData, options as admin.firestore.SetOptions);
-    });
+    }));
 }
 
 function getFirestoreAdapter(uid: string): FirestoreAdapter {
@@ -1340,21 +1438,60 @@ async function deleteStaleActivities(
 
     for (let i = 0; i < staleActivityIDs.length; i += BATCH_LIMIT) {
         const chunk = staleActivityIDs.slice(i, i + BATCH_LIMIT);
-        await db.runTransaction(async (transaction) => {
+        const phase = 'sports_lib_reparse_delete_stale_activities';
+        await runReparseFirestoreTransactionWithRetry(uid, phase, async () => db.runTransaction(async (transaction) => {
             await assertReparsePersistenceUserActiveInTransaction(
                 db,
                 transaction,
                 uid,
-                'sports_lib_reparse_delete_stale_activities',
+                phase,
             );
             chunk.forEach(activityID => {
                 transaction.delete(db.doc(`users/${uid}/activities/${activityID}`));
             });
-        });
+        }));
         deleted += chunk.length;
     }
 
     return deleted;
+}
+
+async function runReparsePersistencePhase<T>(
+    uid: string,
+    eventId: string,
+    phase: string,
+    startedContext: Record<string, unknown>,
+    operation: () => Promise<T>,
+    completedContext?: (result: T) => Record<string, unknown>,
+): Promise<T> {
+    const startedAt = Date.now();
+    logger.info('[sports-lib-reparse] Persistence phase started.', {
+        uid,
+        eventId,
+        phase,
+        ...startedContext,
+    });
+
+    try {
+        const result = await operation();
+        logger.info('[sports-lib-reparse] Persistence phase completed.', {
+            uid,
+            eventId,
+            phase,
+            durationMs: Date.now() - startedAt,
+            ...(completedContext ? completedContext(result) : {}),
+        });
+        return result;
+    } catch (error) {
+        logger.error('[sports-lib-reparse] Persistence phase failed.', {
+            uid,
+            eventId,
+            phase,
+            durationMs: Date.now() - startedAt,
+            error: toErrorMessage(error),
+        });
+        throw error;
+    }
 }
 
 function extractPreservedMergeMetadata(existingEventDoc: FirestoreEventJSON | Record<string, unknown>): {
@@ -1398,16 +1535,32 @@ export async function persistReparsedEvent(
     }
 
     const writer = new EventWriter(getFirestoreAdapter(uid), undefined, undefined, getWriterLogAdapter());
-    await writer.writeAllEventData(uid, parsedEvent as any);
+    await runReparsePersistencePhase(
+        uid,
+        eventId,
+        'write_all_event_data',
+        {
+            existingActivityCount: existingActivityDocs.length,
+        },
+        () => writer.writeAllEventData(uid, parsedEvent as any),
+    );
 
     const mergeMetadata = extractPreservedMergeMetadata(existingEventDoc);
     if (Object.keys(mergeMetadata).length > 0) {
-        await setReparseDocIfUserActive(
+        await runReparsePersistencePhase(
             uid,
-            'sports_lib_reparse_merge_metadata',
-            admin.firestore().doc(`users/${uid}/events/${eventId}`),
-            mergeMetadata,
-            { merge: true },
+            eventId,
+            'merge_metadata',
+            {
+                fields: Object.keys(mergeMetadata),
+            },
+            () => setReparseDocIfUserActive(
+                uid,
+                'sports_lib_reparse_merge_metadata',
+                admin.firestore().doc(`users/${uid}/events/${eventId}`),
+                mergeMetadata,
+                { merge: true },
+            ),
         );
     }
 
@@ -1418,7 +1571,21 @@ export async function persistReparsedEvent(
         }
     });
 
-    const staleActivitiesDeleted = await deleteStaleActivities(uid, existingActivityDocs, newActivityIDs);
+    const staleActivityCandidateCount = existingActivityDocs
+        .filter(activityDoc => !newActivityIDs.has(activityDoc.id))
+        .length;
+    const staleActivitiesDeleted = await runReparsePersistencePhase(
+        uid,
+        eventId,
+        'delete_stale_activities',
+        {
+            existingActivityCount: existingActivityDocs.length,
+            newActivityCount: newActivityIDs.size,
+            staleActivityCandidateCount,
+        },
+        () => deleteStaleActivities(uid, existingActivityDocs, newActivityIDs),
+        deletedCount => ({ staleActivitiesDeleted: deletedCount }),
+    );
 
     const processingMetaData: ProcessingMetaData = {
         processingEntity: EVENT_PROCESSING_ENTITY,
@@ -1426,12 +1593,20 @@ export async function persistReparsedEvent(
         sportsLibVersionCode: sportsLibVersionToCode(targetSportsLibVersion),
         processedAt: FieldValue.serverTimestamp(),
     };
-    await setReparseDocIfUserActive(
+    await runReparsePersistencePhase(
         uid,
-        'sports_lib_reparse_processing_metadata',
-        admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/processing`),
-        processingMetaData,
-        { merge: true },
+        eventId,
+        'processing_metadata',
+        {
+            targetSportsLibVersion,
+        },
+        () => setReparseDocIfUserActive(
+            uid,
+            'sports_lib_reparse_processing_metadata',
+            admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/processing`),
+            processingMetaData,
+            { merge: true },
+        ),
     );
 
     return { staleActivitiesDeleted };

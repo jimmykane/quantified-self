@@ -819,6 +819,12 @@ Coverage distinguishes:
 Older activities parsed before the durability stat existed can remain `missingEvidenceActivityCount` until a sports-lib
 reparse processes them. If the original source is unavailable, missing evidence remains honest and permanent.
 
+Sports-lib reparse persistence keeps event, activity, and metadata writes behind the account-deletion guard. Its Firestore
+transaction writes use a bounded retry for transient transaction failures, including Firestore's retryable
+`INVALID_ARGUMENT: Invalid transaction` response, and emit phase logs for `write_all_event_data`, `merge_metadata`,
+`delete_stale_activities`, and `processing_metadata`. Use those phase logs to identify which persistence step failed in
+long-running heavy reparse jobs before changing queue retry policy.
+
 ### Event detail reuse
 
 Event detail uses the same sports-lib analyzer and may request a transient timeline for visualization. This does not alter
