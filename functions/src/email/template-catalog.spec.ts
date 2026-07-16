@@ -98,6 +98,8 @@ describe('refreshed email template catalog', () => {
         expect(registrationWelcome).toContain('make it useful on your own terms');
         expect(registrationWelcome).toContain('have a feature request');
         expect(registrationWelcome).toContain('I read every reply personally');
+        expect(registrationWelcome).toContain('>quantified-self.io</a>');
+        expect(registrationWelcome).not.toContain('Open Quantified Self');
         expect(registrationWelcome).not.toMatch(/\btrack(?:ing)?\b/i);
         expect(render('subscription_downgrade', 'pro-to-basic')).toContain('Device sync is not included');
         expect(render('subscription_downgrade', 'basic-to-free')).not.toContain('Device sync is not included');
