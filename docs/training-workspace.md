@@ -166,7 +166,12 @@ Normalized child activity documents provide sport-specific stats and activity ty
 - its effective date is missing.
 
 The join deliberately uses activity-level stats. Parent stats and `endDate` must not leak into a child leg. Provider and
-device provenance may fall back to the parent when the child does not carry it.
+device provenance may fall back to the parent when the child does not carry it. Functions creates one canonical joined
+activity source per valid parent/child relationship. When Training Explanation is dirty, unsupported activity types
+remain in that source with no curated discipline so it can report them as Other or Unclassified. Other metric-only
+batches discard those unsupported wrappers during the join. Discipline-specific builders ignore unclassified sources
+when they share an Explanation build. The join retains references to the selected child and parent data instead of
+cloning a second activity metric object.
 
 ### Sleep sessions
 
@@ -303,8 +308,11 @@ snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
 
-`processDerivedMetricsTask` runs with 2 GiB of memory because full-history Training builds can hold large event,
-activity, and derived payload sets while producing all dirty snapshots for a generation.
+`processDerivedMetricsTask` runs with 2 GiB of memory and per-instance concurrency `1` because a single full-history
+Training build can hold large event and activity source sets. Cloud Run must scale separate instances for concurrent
+builds instead of placing multiple full-history generations in one JavaScript heap. The worker creates one canonical
+parent/activity join and shares that same array across sleep-range resolution, curated builders, and explanation
+builders; do not restore separate joined copies or per-activity spread clones.
 
 The derived worker:
 

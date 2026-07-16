@@ -2,7 +2,7 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
 import {
     abandonDerivedMetricsProcessingAfterWriteBlock,
     areOnlyProjectionSensitiveMetricKinds,
@@ -16,6 +16,7 @@ import {
     fetchTrainingBuildSleepDocs,
     getDerivedRecoveryLookbackWindowSeconds,
     isDerivedMetricsUserWriteBlocked,
+    joinTrainingActivitySources,
     markDerivedMetricSnapshotsBuilding,
     markDerivedMetricSnapshotsFailed,
     resolveDerivedMetricSourceRequirements,
@@ -30,6 +31,7 @@ interface DerivedMetricsTaskPayload {
 
 export const processDerivedMetricsTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    concurrency: 1,
     memory: '2GiB',
     timeoutSeconds: 540,
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
@@ -118,14 +120,18 @@ export const processDerivedMetricsTask = onTaskDispatched({
                 includeSwimLengths: sourceRequirements.needsTrainingSwimLengths,
             })
             : [];
+        const trainingActivities = sourceRequirements.needsTrainingActivityDocs
+            ? joinTrainingActivitySources(trainingActivityDocs, formDocs, {
+                includeUnclassified: dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingExplanation),
+            })
+            : [];
         const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
             ? await fetchTrainingBuildBenchmarkSettings(uid)
             : {};
         const trainingBuildSleepDocs = sourceRequirements.needsTrainingBuildSleepDocs
             ? await fetchTrainingBuildSleepDocs(
                 uid,
-                formDocs,
-                trainingActivityDocs,
+                trainingActivities,
                 trainingBuildBenchmarkSettings,
                 buildAtMs,
             )
@@ -139,6 +145,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             formDocs,
             recoveryNowDocs,
             trainingActivityDocs,
+            ...(sourceRequirements.needsTrainingActivityDocs ? { trainingActivities } : {}),
             ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
             ...(sourceRequirements.needsTrainingBuildSleepDocs ? { trainingBuildSleepDocs } : {}),
         }, {

@@ -54,7 +54,6 @@ function buildTrainingActivitySources(docs: readonly any[]): any[] {
             discipline,
             activityData,
             eventData,
-            metricData: activityData,
             startMs,
             startDayMs: Date.UTC(new Date(startMs).getUTCFullYear(), new Date(startMs).getUTCMonth(), new Date(startMs).getUTCDate()),
             eventStartMs: startMs,
@@ -316,7 +315,6 @@ describe('fetchTrainingBuildSleepDocs', () => {
         const docs = await fetchTrainingBuildSleepDocs(
             'user-1',
             [],
-            [],
             {
                 trainingSettings: {
                     buildBenchmarks: {
@@ -349,14 +347,9 @@ describe('fetchTrainingBuildSleepDocs', () => {
     });
 
     it('resolves event-anchored sleep ranges from the selected sport activity without a full metric prebuild', async () => {
-        const { fetchTrainingBuildSleepDocs } = await import('./derived-metrics.service');
+        const { fetchTrainingBuildSleepDocs, joinTrainingActivitySources } = await import('./derived-metrics.service');
         const raceStartMs = Date.UTC(2026, 0, 1, 8);
-        await fetchTrainingBuildSleepDocs(
-            'user-1',
-            [{
-                id: 'winter-event',
-                data: () => ({ startDate: raceStartMs, name: 'Winter event' }),
-            }] as any,
+        const activities = joinTrainingActivitySources(
             [{
                 id: 'winter-bike',
                 data: () => ({
@@ -366,6 +359,14 @@ describe('fetchTrainingBuildSleepDocs', () => {
                     stats: {},
                 }),
             }] as any,
+            [{
+                id: 'winter-event',
+                data: () => ({ startDate: raceStartMs, name: 'Winter event' }),
+            }] as any,
+        );
+        await fetchTrainingBuildSleepDocs(
+            'user-1',
+            activities,
             {
                 trainingSettings: {
                     buildBenchmarks: {
@@ -1650,7 +1651,7 @@ describe('training explanation and durability metrics', () => {
     it('explains current load against prior-block medians with sport coverage and discipline rhythm', async () => {
         const {
             buildTrainingExplanationMetricPayload,
-            joinTrainingExplanationActivitySources,
+            joinTrainingActivitySources,
         } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 14, 12);
         const currentDayMs = Date.UTC(2026, 6, 12, 8);
@@ -1679,7 +1680,7 @@ describe('training explanation and durability metrics', () => {
             activityDoc('future-child', 'future', { startDate: nowMs + DAY_MS, type: ActivityTypes.Running, stats: {} }),
             activityDoc('merged-child', 'merged', { startDate: currentDayMs, type: ActivityTypes.Running, stats: {} }),
         ];
-        const activities = joinTrainingExplanationActivitySources(activityDocs as never, eventDocs as never);
+        const activities = joinTrainingActivitySources(activityDocs as never, eventDocs as never);
         const result = buildTrainingExplanationMetricPayload(eventDocs as never, activities, nowMs);
 
         expect(result.sourceEventCount).toBe(4);
@@ -1888,7 +1889,13 @@ describe('activity-level Training sources and swimming performance', () => {
     const eventDoc = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
 
     it('splits multisport activity legs, includes MTB in Cycling, and excludes missing or merged parents', async () => {
-        const { buildTrainingSummaryMetricPayload, joinTrainingActivitySources } = await import('./derived-metrics.service');
+        const {
+            aggregatePersistedTrainingDurability,
+            buildTrainingBuildComparisonMetricPayload,
+            buildTrainingDurabilityMetricPayload,
+            buildTrainingSummaryMetricPayload,
+            joinTrainingActivitySources,
+        } = await import('./derived-metrics.service');
         const startDate = Date.UTC(2026, 6, 8, 8);
         const eventDocs = [
             eventDoc('triathlon', { startDate, name: 'A race' }),
@@ -1904,10 +1911,29 @@ describe('activity-level Training sources and swimming performance', () => {
         ];
 
         const activities = joinTrainingActivitySources(activityDocs as never, eventDocs as never);
+        const classifiedActivities = joinTrainingActivitySources(
+            activityDocs as never,
+            eventDocs as never,
+            { includeUnclassified: false },
+        );
         const summary = buildTrainingSummaryMetricPayload(activities, Date.UTC(2026, 6, 10, 12));
+        const durability = aggregatePersistedTrainingDurability(activities);
+        const durabilityMetric = buildTrainingDurabilityMetricPayload(activities, Date.UTC(2026, 6, 10, 12));
+        const buildComparison = buildTrainingBuildComparisonMetricPayload(
+            activities,
+            {},
+            Date.UTC(2026, 6, 10, 12),
+        );
 
-        expect(activities.map(activity => activity.discipline)).toEqual(['swimming', 'cycling', 'running']);
+        expect(activities.map(activity => activity.discipline)).toEqual(['swimming', 'cycling', 'running', null]);
+        expect(classifiedActivities.map(activity => activity.discipline)).toEqual(['swimming', 'cycling', 'running']);
         expect(summary.sourceEventCount).toBe(3);
+        expect(durabilityMetric.sourceEventCount).toBe(3);
+        expect(buildComparison.sourceEventCount).toBe(3);
+        expect(durability.coverage).toMatchObject({
+            candidateActivityCount: 3,
+            missingEvidenceActivityCount: 3,
+        });
         expect(summary.payload.disciplines.map(item => [item.discipline, item.current28d.activityCount])).toEqual([
             ['running', 1],
             ['cycling', 1],
@@ -1920,7 +1946,6 @@ describe('activity-level Training sources and swimming performance', () => {
             buildTrainingExplanationMetricPayload,
             buildTrainingSummaryMetricPayload,
             joinTrainingActivitySources,
-            joinTrainingExplanationActivitySources,
         } = await import('./derived-metrics.service');
         const startDate = Date.UTC(2026, 6, 10, 8);
         const eventDocs = [eventDoc('parent', {
@@ -1933,20 +1958,48 @@ describe('activity-level Training sources and swimming performance', () => {
             stats: {},
         })];
         const sources = joinTrainingActivitySources(activityDocs as never, eventDocs as never);
-        const explanationSources = joinTrainingExplanationActivitySources(activityDocs as never, eventDocs as never);
 
         expect(sources[0].startMs).toBe(startDate);
-        expect(sources[0].metricData).not.toHaveProperty('endDate');
+        expect(sources[0]).not.toHaveProperty('metricData');
+        expect(sources[0].activityData).not.toHaveProperty('endDate');
         expect(buildTrainingSummaryMetricPayload(sources, Date.UTC(2026, 6, 14)).payload.disciplines[0].current28d)
             .toMatchObject({ activityCount: 1, durationSeconds: 0 });
         expect(buildTrainingExplanationMetricPayload(
             eventDocs as never,
-            explanationSources,
+            sources,
             Date.UTC(2026, 6, 14),
         ).payload.current).toMatchObject({
             parentTrainingStressScore: 500,
             childTrainingStressScore: null,
         });
+    });
+
+    it('falls back to parent provenance without copying parent fields into activity metrics', async () => {
+        const {
+            buildPowerCurveMetricPayload,
+            buildTrainingCapacityMetricPayload,
+            joinTrainingActivitySources,
+        } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const startDate = Date.UTC(2026, 6, 10, 8);
+        const eventDocs = [eventDoc('parent', {
+            startDate,
+            sourceServiceName: 'GarminAPI',
+            creator: { name: 'Edge MTB' },
+        })];
+        const activityDocs = [activityDoc('leg', 'parent', {
+            startDate,
+            type: ActivityTypes.Cycling,
+            stats: { [DataFTP.type]: 222 },
+        })];
+        const sources = joinTrainingActivitySources(activityDocs as never, eventDocs as never);
+        const powerCurve = buildPowerCurveMetricPayload(sources, nowMs);
+        const capacity = buildTrainingCapacityMetricPayload(sources, powerCurve.payload, nowMs);
+
+        expect(sources[0].activityData).not.toHaveProperty('sourceServiceName');
+        expect(sources[0].activityData).not.toHaveProperty('creator');
+        expect(capacity.payload.disciplines.find(item => item.discipline === 'cycling')?.ftpSetting)
+            .toMatchObject({ value: 222, sourceKey: 'garminapi / edge mtb' });
     });
 
     it('builds fixed pool/open-water pace series and compares SWOLF only in the dominant context', async () => {
@@ -2785,6 +2838,44 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         const call = hoisted.batchSet.mock.calls.find((setCall) => setCall?.[1]?.metricKind === metricKind);
         return (call?.[1] || {}) as Record<string, unknown>;
     }
+
+    it('reuses prejoined Training activities supplied by the worker', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        vi.useFakeTimers();
+        vi.setSystemTime(nowMs);
+        const trainingActivities = buildTrainingActivitySources([{
+            id: 'run-1',
+            data: () => ({
+                startDate: Date.UTC(2026, 6, 10, 8),
+                stats: {
+                    [DataActivityTypes.type]: [ActivityTypes.Running],
+                    [DataDuration.type]: 3_600,
+                },
+            }),
+        }]);
+
+        await writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.TrainingSummary],
+            {
+                formDocs: [],
+                trainingActivityDocs: [],
+                trainingActivities,
+            },
+            { buildAtMs: nowMs },
+        );
+
+        const persisted = findPersistedPayload(DERIVED_METRIC_KINDS.TrainingSummary);
+        expect(persisted.sourceEventCount).toBe(1);
+        expect(persisted.payload).toMatchObject({
+            disciplines: [
+                { discipline: 'running', current28d: { activityCount: 1, durationSeconds: 3_600 } },
+                { discipline: 'cycling', current28d: { activityCount: 0 } },
+                { discipline: 'swimming', current28d: { activityCount: 0 } },
+            ],
+        });
+    });
 
     it('builds all v1 derived metric payloads from source docs', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');

@@ -42,6 +42,7 @@ const hoisted = vi.hoisted(() => ({
     fetchTrainingBuildSleepDocs: vi.fn(),
     getDerivedRecoveryLookbackWindowSeconds: vi.fn(() => 0),
     isDerivedMetricsUserWriteBlocked: vi.fn(),
+    joinTrainingActivitySources: vi.fn(),
     markDerivedMetricSnapshotsBuilding: vi.fn(),
     markDerivedMetricSnapshotsFailed: vi.fn(),
     startDerivedMetricsProcessing: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         fetchTrainingBuildSleepDocs: hoisted.fetchTrainingBuildSleepDocs,
         getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
         isDerivedMetricsUserWriteBlocked: hoisted.isDerivedMetricsUserWriteBlocked,
+        joinTrainingActivitySources: hoisted.joinTrainingActivitySources,
         markDerivedMetricSnapshotsBuilding: hoisted.markDerivedMetricSnapshotsBuilding,
         markDerivedMetricSnapshotsFailed: hoisted.markDerivedMetricSnapshotsFailed,
         startDerivedMetricsProcessing: hoisted.startDerivedMetricsProcessing,
@@ -96,6 +98,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValue([{ id: 'recovery-doc' }] as any);
         hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValue({ trainingSettings: {} });
         hoisted.fetchTrainingBuildSleepDocs.mockResolvedValue([{ id: 'sleep-doc' }] as any);
+        hoisted.joinTrainingActivitySources.mockReturnValue([{ activityId: 'joined-activity' }]);
         hoisted.writeDerivedMetricSnapshotsReady.mockResolvedValue(undefined);
         hoisted.completeDerivedMetricsProcessing.mockResolvedValue({
             requeued: false,
@@ -103,8 +106,9 @@ describe('processDerivedMetricsTask', () => {
         });
     });
 
-    it('registers with enough memory for full-history Training builds', () => {
+    it('isolates full-history Training builds while retaining memory headroom', () => {
         expect(taskDispatchRegistration.options).toContainEqual(expect.objectContaining({
+            concurrency: 1,
             memory: '2GiB',
             timeoutSeconds: 540,
         }));
@@ -275,10 +279,15 @@ describe('processDerivedMetricsTask', () => {
         expect(hoisted.fetchDerivedFormSnapshotSeed).not.toHaveBeenCalled();
         expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-training-build');
         expect(hoisted.fetchTrainingBuildBenchmarkSettings).toHaveBeenCalledWith('user-training-build');
+        expect(hoisted.joinTrainingActivitySources).toHaveBeenCalledOnce();
+        expect(hoisted.joinTrainingActivitySources).toHaveBeenCalledWith(
+            [{ id: 'activity-doc' }],
+            [{ id: 'training-doc' }],
+            { includeUnclassified: false },
+        );
         expect(hoisted.fetchTrainingBuildSleepDocs).toHaveBeenCalledWith(
             'user-training-build',
-            [{ id: 'training-doc' }],
-            [{ id: 'activity-doc' }],
+            [{ activityId: 'joined-activity' }],
             settings,
             expect.any(Number),
         );
@@ -288,9 +297,35 @@ describe('processDerivedMetricsTask', () => {
             formDocs: [{ id: 'training-doc' }],
             recoveryNowDocs: [],
             trainingActivityDocs: [{ id: 'activity-doc' }],
+            trainingActivities: [{ activityId: 'joined-activity' }],
             trainingBuildBenchmarkSettings: settings,
             trainingBuildSleepDocs: [{ id: 'sleep-doc' }],
         }, expect.objectContaining({ builtFromEventMutationVersion: 13 }));
+        expect(hoisted.fetchTrainingBuildSleepDocs.mock.calls[0][1]).toBe(
+            hoisted.writeDerivedMetricSnapshotsReady.mock.calls[0][2].trainingActivities,
+        );
+    });
+
+    it('retains unclassified activities only when Training Explanation needs them', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingExplanation],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 13,
+        });
+        hoisted.fetchDerivedMetricsEventDocs.mockResolvedValueOnce([{ id: 'training-doc' }]);
+
+        await (processDerivedMetricsTask as unknown as (
+            request: { data: { uid: string; generation: number } },
+        ) => Promise<void>)({
+            data: { uid: 'user-training-explanation', generation: 93 },
+        });
+
+        expect(hoisted.joinTrainingActivitySources).toHaveBeenCalledOnce();
+        expect(hoisted.joinTrainingActivitySources).toHaveBeenCalledWith(
+            [{ id: 'activity-doc' }],
+            [{ id: 'training-doc' }],
+            { includeUnclassified: true },
+        );
     });
 
     it('exits before snapshot writes when user deletion becomes active after claiming work', async () => {

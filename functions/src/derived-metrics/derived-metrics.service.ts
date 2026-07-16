@@ -222,24 +222,27 @@ type DerivedMetricBuildSourceDependency = 'formDocs' | 'recoveryNowDocs' | 'trai
 export interface DerivedTrainingActivitySource {
     activityId: string;
     eventId: string;
-    discipline: DerivedTrainingDiscipline;
+    discipline: DerivedTrainingDiscipline | null;
     activityData: Record<string, unknown>;
     eventData: Record<string, unknown>;
-    metricData: Record<string, unknown>;
     startMs: number;
     startDayMs: number;
     eventStartMs: number;
     eventStartDayMs: number;
 }
 
-export interface DerivedTrainingExplanationActivitySource {
-    activityId: string;
-    eventId: string;
-    activityData: Record<string, unknown>;
-    eventData: Record<string, unknown>;
-    metricData: Record<string, unknown>;
-    startMs: number;
-    startDayMs: number;
+interface JoinTrainingActivitySourceOptions {
+    includeUnclassified?: boolean;
+}
+
+type ClassifiedTrainingActivitySource = DerivedTrainingActivitySource & {
+    discipline: DerivedTrainingDiscipline;
+};
+
+function isClassifiedTrainingActivitySource(
+    activity: DerivedTrainingActivitySource,
+): activity is ClassifiedTrainingActivitySource {
+    return activity.discipline !== null;
 }
 
 interface DerivedLoadPoint {
@@ -276,7 +279,6 @@ interface DerivedMetricBuildExecutionContext {
     recoveryNowDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingBuildSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingActivities: readonly DerivedTrainingActivitySource[];
-    trainingExplanationActivities: readonly DerivedTrainingExplanationActivitySource[];
     getDailyLoadContext: () => ReturnType<typeof buildDailyLoadContext>;
     getDerivedLoadPoints: () => DerivedLoadPoint[];
     getKpiDerivedLoadPoints: () => DerivedLoadPoint[];
@@ -289,6 +291,15 @@ interface DerivedMetricBuildExecutionContext {
     getTrainingDurabilityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload>;
     getTrainingBuildComparisonBuildResult: () => DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload>;
     getTrainingSwimPerformanceBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload>;
+}
+
+interface DerivedMetricBuildSourceDocs {
+    formDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    trainingActivityDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    trainingActivities?: readonly DerivedTrainingActivitySource[];
+    trainingBuildBenchmarkSettings?: unknown;
+    trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
 }
 
 interface DerivedMetricBuildDefinition {
@@ -1111,6 +1122,7 @@ function createTrainingSummaryDisciplineAccumulator(): TrainingSummaryDiscipline
 export function joinTrainingActivitySources(
     activityDocs: readonly FirestoreQueryDocumentSnapshot[],
     eventDocs: readonly FirestoreQueryDocumentSnapshot[],
+    options: JoinTrainingActivitySourceOptions = {},
 ): DerivedTrainingActivitySource[] {
     const eventById = new Map<string, Record<string, unknown>>();
     eventDocs.forEach((doc) => {
@@ -1126,7 +1138,7 @@ export function joinTrainingActivitySources(
         const eventId = toSafeString(activityData.eventID).trim();
         const eventData = eventById.get(eventId);
         const discipline = resolveTrainingDisciplineFromActivityType(activityData.type);
-        if (!eventId || !eventData || !discipline) {
+        if (!eventId || !eventData || (!discipline && options.includeUnclassified === false)) {
             return [];
         }
         const startMs = toMillis(activityData.startDate) ?? toMillis(eventData.startDate);
@@ -1140,65 +1152,10 @@ export function joinTrainingActivitySources(
             discipline,
             activityData,
             eventData,
-            metricData: {
-                ...activityData,
-                creator: activityData.creator || eventData.creator,
-                serviceName: activityData.serviceName || eventData.serviceName,
-                sourceServiceName: activityData.sourceServiceName || eventData.sourceServiceName,
-                stats: activityData.stats && typeof activityData.stats === 'object'
-                    ? activityData.stats
-                    : {},
-            },
             startMs,
             startDayMs: resolveUtcDayStartMs(startMs),
             eventStartMs,
             eventStartDayMs: resolveUtcDayStartMs(eventStartMs),
-        }];
-    });
-}
-
-/**
- * Joins every child activity to a trustworthy parent event. Unlike the curated
- * Training join above, this retains unsupported and missing activity types so
- * explanation coverage can report Other and unclassified work explicitly.
- */
-export function joinTrainingExplanationActivitySources(
-    activityDocs: readonly FirestoreQueryDocumentSnapshot[],
-    eventDocs: readonly FirestoreQueryDocumentSnapshot[],
-): DerivedTrainingExplanationActivitySource[] {
-    const eventById = new Map<string, Record<string, unknown>>();
-    eventDocs.forEach((doc) => {
-        const eventId = `${doc.id || ''}`.trim();
-        const eventData = (doc.data() || {}) as Record<string, unknown>;
-        if (eventId && !isMergedEvent(eventData)) {
-            eventById.set(eventId, eventData);
-        }
-    });
-
-    return activityDocs.flatMap((doc): DerivedTrainingExplanationActivitySource[] => {
-        const activityData = (doc.data() || {}) as Record<string, unknown>;
-        const eventId = toSafeString(activityData.eventID).trim();
-        const eventData = eventById.get(eventId);
-        if (!eventId || !eventData) {
-            return [];
-        }
-        const startMs = toMillis(activityData.startDate) ?? toMillis(eventData.startDate);
-        if (startMs === null) {
-            return [];
-        }
-        return [{
-            activityId: `${doc.id || ''}`.trim(),
-            eventId,
-            activityData,
-            eventData,
-            metricData: {
-                ...activityData,
-                stats: activityData.stats && typeof activityData.stats === 'object'
-                    ? activityData.stats
-                    : {},
-            },
-            startMs,
-            startDayMs: resolveUtcDayStartMs(startMs),
         }];
     });
 }
@@ -1225,15 +1182,15 @@ function resolvePowerCurveDurationSeconds(eventData: Record<string, unknown>): n
 function resolvePowerCurveEvent(
     activity: DerivedTrainingActivitySource,
 ): { discipline: DerivedPowerCurveScope; source: ResolvedPowerCurveEvent | null; startMs: number } | null {
-    const { discipline, metricData, startMs } = activity;
+    const { discipline, activityData, startMs } = activity;
     if (!POWER_CAPACITY_DISCIPLINES.includes(discipline as DerivedPowerCurveScope)) {
         return null;
     }
     const powerDiscipline = discipline as DerivedPowerCurveScope;
 
     const points = filterPowerCurvePointsByMaxDuration(
-        normalizePowerCurvePoints(resolveRawStatValue(metricData, POWER_CURVE_STAT_TYPE)).points,
-        resolvePowerCurveDurationSeconds(metricData),
+        normalizePowerCurvePoints(resolveRawStatValue(activityData, POWER_CURVE_STAT_TYPE)).points,
+        resolvePowerCurveDurationSeconds(activityData),
     );
     if (!points.length) {
         return { discipline: powerDiscipline, source: null, startMs };
@@ -1710,12 +1667,12 @@ export function buildTrainingCapacityMetricPayload(
     let sourceEventCount = 0;
 
     activities.forEach((activity) => {
-        const { discipline, metricData: eventData, startMs: timeMs } = activity;
+        const { discipline, activityData: eventData, startMs: timeMs } = activity;
         if (timeMs > nowMs || !POWER_CAPACITY_DISCIPLINES.includes(discipline as DerivedPowerCurveScope)) {
             return;
         }
         const powerDiscipline = discipline as DerivedPowerCurveScope;
-        const sourceKey = resolveTrainingSourceKey(eventData);
+        const sourceKey = resolveTrainingSourceKey(eventData, activity.eventData);
         const ftp = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataFTP.type));
         const vo2Max = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataVO2Max.type));
         const eventId = activity.eventId;
@@ -1748,17 +1705,21 @@ export function buildTrainingCapacityMetricPayload(
     };
 }
 
-function resolveTrainingSourceKey(eventData: Record<string, unknown>): string | null {
-  const creator = eventData.creator && typeof eventData.creator === 'object' && !Array.isArray(eventData.creator)
-    ? eventData.creator as Record<string, unknown>
+function resolveTrainingSourceKey(
+  activityData: Record<string, unknown>,
+  parentEventData: Record<string, unknown> = {},
+): string | null {
+  const creatorValue = activityData.creator || parentEventData.creator;
+  const creator = creatorValue && typeof creatorValue === 'object' && !Array.isArray(creatorValue)
+    ? creatorValue as Record<string, unknown>
     : {};
   const normalize = (value: unknown): string => toSafeString(value)
     .trim()
     .replace(/\s+/g, ' ')
     .toLowerCase();
   const provider = [
-    eventData.sourceServiceName,
-    eventData.serviceName,
+    activityData.sourceServiceName || parentEventData.sourceServiceName,
+    activityData.serviceName || parentEventData.serviceName,
     creator.serviceName,
     creator.manufacturer,
   ]
@@ -1814,8 +1775,11 @@ export function buildTrainingSummaryMetricPayload(
     let sourceEventCount = 0;
 
     activities.forEach((activity) => {
-        const eventData = activity.metricData;
+        const eventData = activity.activityData;
         const discipline = activity.discipline;
+        if (!discipline) {
+            return;
+        }
         const eventDayMs = activity.startDayMs;
         if (activity.startMs > nowMs || eventDayMs < baselineStartDayMs || eventDayMs > asOfDayMs) {
             return;
@@ -1955,8 +1919,8 @@ function medianNullable(values: readonly (number | null)[], precision = 2): numb
     return value === null ? null : toRoundedNumber(value, precision);
 }
 
-function resolveTrainingExplanationDurationSeconds(activity: DerivedTrainingExplanationActivitySource): number | null {
-    const statDuration = toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataDuration.type));
+function resolveTrainingExplanationDurationSeconds(activity: DerivedTrainingActivitySource): number | null {
+    const statDuration = toFinitePositiveNumber(resolveRawStatNumericValue(activity.activityData, DataDuration.type));
     if (statDuration !== null) {
         return statDuration;
     }
@@ -1965,7 +1929,7 @@ function resolveTrainingExplanationDurationSeconds(activity: DerivedTrainingExpl
 }
 
 function buildTrainingExplanationRhythm(
-    activities: readonly DerivedTrainingExplanationActivitySource[],
+    activities: readonly DerivedTrainingActivitySource[],
     discipline: DerivedTrainingDiscipline,
     windowStartDayMs: number,
     windowEndDayMs: number,
@@ -2004,7 +1968,7 @@ function buildTrainingExplanationRhythm(
 }
 
 function buildTrainingExplanationSportLoads(
-    activities: readonly DerivedTrainingExplanationActivitySource[],
+    activities: readonly DerivedTrainingActivitySource[],
 ): DerivedTrainingExplanationSportLoad[] {
     const accumulators = new Map<DerivedTrainingExplanationSportBucket, {
         activityCount: number;
@@ -2020,7 +1984,7 @@ function buildTrainingExplanationSportLoads(
         const bucket = resolveTrainingExplanationSportBucket(activity.activityData.type);
         const accumulator = accumulators.get(bucket)!;
         accumulator.activityCount += 1;
-        const load = resolveTrainingStressScore(activity.metricData);
+        const load = resolveTrainingStressScore(activity.activityData);
         if (load !== null) {
             accumulator.loadActivityCount += 1;
             accumulator.trainingStressScore += load;
@@ -2049,7 +2013,7 @@ function buildTrainingExplanationSportLoads(
 
 function buildTrainingExplanationWindow(
     parentEvents: readonly TrainingExplanationParentEvent[],
-    activities: readonly DerivedTrainingExplanationActivitySource[],
+    activities: readonly DerivedTrainingActivitySource[],
     windowStartDayMs: number,
     windowEndDayMs: number,
 ): DerivedTrainingExplanationWindow {
@@ -2064,7 +2028,7 @@ function buildTrainingExplanationWindow(
         return load === null ? [] : [load];
     });
     const childLoads = windowActivities.flatMap((activity) => {
-        const load = resolveTrainingStressScore(activity.metricData);
+        const load = resolveTrainingStressScore(activity.activityData);
         return load === null ? [] : [load];
     });
     const classifiedActivityCount = windowActivities.filter(
@@ -2147,7 +2111,7 @@ function buildMedianTrainingExplanationWindowMetrics(
 
 function buildTrainingExplanationContributorComposition(
     eventId: string,
-    activities: readonly DerivedTrainingExplanationActivitySource[],
+    activities: readonly DerivedTrainingActivitySource[],
 ): DerivedTrainingExplanationSportLoad[] {
     return buildTrainingExplanationSportLoads(activities.filter(activity => activity.eventId === eventId))
         .filter(item => item.activityCount > 0);
@@ -2155,7 +2119,7 @@ function buildTrainingExplanationContributorComposition(
 
 export function buildTrainingExplanationMetricPayload(
     eventDocs: readonly FirestoreQueryDocumentSnapshot[],
-    activities: readonly DerivedTrainingExplanationActivitySource[],
+    activities: readonly DerivedTrainingActivitySource[],
     nowMs = Date.now(),
 ): DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload> {
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
@@ -2240,13 +2204,16 @@ interface ParsedDurabilityEvidence {
 
 function resolveTrainingDurabilityScope(
     activity: DerivedTrainingActivitySource,
-): DerivedTrainingDurabilityScope {
+): DerivedTrainingDurabilityScope | null {
     if (activity.discipline === 'running' || activity.discipline === 'cycling') {
         return activity.discipline;
     }
-    return resolveTrainingSwimEnvironment(activity.activityData.type) === 'open-water'
-        ? 'open-water-swimming'
-        : 'pool-swimming';
+    if (activity.discipline === 'swimming') {
+        return resolveTrainingSwimEnvironment(activity.activityData.type) === 'open-water'
+            ? 'open-water-swimming'
+            : 'pool-swimming';
+    }
+    return null;
 }
 
 function resolveDurabilityContext(
@@ -2287,7 +2254,7 @@ function resolveDurabilityContext(
 function parsePersistedDurabilityEvidence(
     activity: DerivedTrainingActivitySource,
 ): ParsedDurabilityEvidence | null {
-    const rawValue = resolveRawStatValue(activity.metricData, DataDurabilityEvidence.type);
+    const rawValue = resolveRawStatValue(activity.activityData, DataDurabilityEvidence.type);
     const raw = normalizeDurabilityEvidenceValue(rawValue);
     if (!raw) {
         return null;
@@ -2296,7 +2263,7 @@ function parsePersistedDurabilityEvidence(
         ? raw.evidence as unknown as Record<string, unknown>
         : {};
     const scope = resolveTrainingDurabilityScope(activity);
-    if (raw.discipline !== scope) {
+    if (!scope || raw.discipline !== scope) {
         return null;
     }
     const context = resolveDurabilityContext(raw as unknown as Record<string, unknown>, evidence, scope);
@@ -2346,7 +2313,8 @@ function summarizeDurabilityContext(
 export function aggregatePersistedTrainingDurability(
     activities: readonly DerivedTrainingActivitySource[],
 ): DerivedTrainingDurabilityWindowMetrics {
-    const parsedByActivity = activities.map(activity => ({
+    const candidateActivities = activities.filter(isClassifiedTrainingActivitySource);
+    const parsedByActivity = candidateActivities.map(activity => ({
         activity,
         parsed: parsePersistedDurabilityEvidence(activity),
     }));
@@ -2365,13 +2333,13 @@ export function aggregatePersistedTrainingDurability(
     });
     return {
         coverage: {
-            candidateActivityCount: activities.length,
+            candidateActivityCount: candidateActivities.length,
             evidenceActivityCount: parsed.length,
             eligibleActivityCount: eligible.length,
-            missingEvidenceActivityCount: activities.length - parsed.length,
+            missingEvidenceActivityCount: candidateActivities.length - parsed.length,
             excludedActivityCount: parsed.length - eligible.length,
-            eligibilityRatio: activities.length > 0
-                ? toRoundedNumber(eligible.length / activities.length, 4)
+            eligibilityRatio: candidateActivities.length > 0
+                ? toRoundedNumber(eligible.length / candidateActivities.length, 4)
                 : null,
             exclusions: [...exclusions.entries()]
                 .sort(([left], [right]) => left.localeCompare(right))
@@ -2543,7 +2511,9 @@ export function buildTrainingDurabilityMetricPayload(
         - (((TRAINING_DURABILITY_BASELINE_BLOCK_COUNT + 1) * TRAINING_DURABILITY_WINDOW_DAYS - 1) * DAY_MS);
     return {
         sourceEventCount: activities.filter(
-            activity => activity.startMs <= nowMs && activity.startDayMs >= earliestBaselineDayMs,
+            activity => isClassifiedTrainingActivitySource(activity)
+                && activity.startMs <= nowMs
+                && activity.startDayMs >= earliestBaselineDayMs,
         ).length,
         payload: {
             dayBoundary: 'UTC',
@@ -2580,7 +2550,7 @@ interface TrainingBuildWindowAccumulator {
     openWaterPaceActivityCount: number;
 }
 
-type ResolvedTrainingBuildEvent = DerivedTrainingActivitySource;
+type ResolvedTrainingBuildEvent = ClassifiedTrainingActivitySource;
 
 const TRAINING_BUILD_RACE_SUGGESTION_LIMIT = 20;
 const TRAINING_BUILD_EVENT_SUGGESTION_LIMIT = 100;
@@ -2688,7 +2658,7 @@ function addTrainingBuildEventToWindow(
     event: ResolvedTrainingBuildEvent,
     windowStartDayMs: number,
 ): void {
-    const { metricData: eventData, startDayMs } = event;
+    const { activityData: eventData, startDayMs } = event;
     accumulator.activityCount += 1;
     accumulator.activeWeekBuckets.add(Math.floor((startDayMs - windowStartDayMs) / (7 * DAY_MS)));
 
@@ -2840,14 +2810,14 @@ function buildTrainingBuildEventSuggestion(
     };
     const distanceMeters = sumOptional(events.map(item => (
         toFiniteNumber(resolveRawStatNumericValue(
-            item.metricData,
+            item.activityData,
             item.discipline === 'swimming' ? DataSwimDistance.type : DataDistance.type,
         )) ?? (item.discipline === 'swimming'
-            ? toFiniteNumber(resolveRawStatNumericValue(item.metricData, DataDistance.type))
+            ? toFiniteNumber(resolveRawStatNumericValue(item.activityData, DataDistance.type))
             : null)
     )));
-    const trainingStressScore = sumOptional(events.map(item => resolveTrainingStressScore(item.metricData)));
-    const durationSeconds = sumOptional(events.map(item => resolveTrainingBuildActivityDurationSeconds(item.metricData)));
+    const trainingStressScore = sumOptional(events.map(item => resolveTrainingStressScore(item.activityData)));
+    const durationSeconds = sumOptional(events.map(item => resolveTrainingBuildActivityDurationSeconds(item.activityData)));
     return {
         eventId: event.eventId,
         startDayMs: event.eventStartDayMs,
@@ -3200,7 +3170,11 @@ function groupTrainingBuildActivitiesByDiscipline(
         cycling: [],
         swimming: [],
     };
-    activities.forEach((activity) => grouped[activity.discipline].push(activity));
+    activities.forEach((activity) => {
+        if (isClassifiedTrainingActivitySource(activity)) {
+            grouped[activity.discipline].push(activity);
+        }
+    });
     return grouped;
 }
 
@@ -3322,7 +3296,7 @@ export function buildTrainingBuildComparisonMetricPayload(
     });
 
     return {
-        sourceEventCount: activities.length,
+        sourceEventCount: activities.filter(isClassifiedTrainingActivitySource).length,
         payload: {
             dayBoundary: 'UTC',
             asOfDayMs,
@@ -3448,11 +3422,11 @@ export function buildTrainingSwimPerformanceMetricPayload(
         const weekStartMs = resolveUtcWeekStartMs(activity.startDayMs);
         const bucket = getBucket(weekStartMs, environment);
         bucket.activityCount += 1;
-        const distanceMeters = toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataSwimDistance.type))
-            ?? toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataDistance.type));
+        const distanceMeters = toFinitePositiveNumber(resolveRawStatNumericValue(activity.activityData, DataSwimDistance.type))
+            ?? toFinitePositiveNumber(resolveRawStatNumericValue(activity.activityData, DataDistance.type));
         if (distanceMeters !== null) {
             bucket.distanceMeters += distanceMeters;
-            const paceSecondsPer100m = toFinitePositiveNumber(resolveRawStatNumericValue(activity.metricData, DataSwimPaceAvg.type));
+            const paceSecondsPer100m = toFinitePositiveNumber(resolveRawStatNumericValue(activity.activityData, DataSwimPaceAvg.type));
             if (paceSecondsPer100m !== null) {
                 bucket.weightedPaceSeconds += paceSecondsPer100m * distanceMeters;
                 bucket.paceDistanceMeters += distanceMeters;
@@ -3961,13 +3935,7 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
 };
 
 function createDerivedMetricBuildExecutionContext(
-    sourceDocs: {
-        formDocs?: readonly FirestoreQueryDocumentSnapshot[];
-        recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
-        trainingActivityDocs?: readonly FirestoreQueryDocumentSnapshot[];
-        trainingBuildBenchmarkSettings?: unknown;
-        trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
-    },
+    sourceDocs: DerivedMetricBuildSourceDocs,
     nowMs: number,
     options?: {
         dailyLoadContextOverride?: ReturnType<typeof buildDailyLoadContext> | null;
@@ -3976,11 +3944,8 @@ function createDerivedMetricBuildExecutionContext(
     const formDocs = sourceDocs.formDocs || [];
     const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
     const trainingBuildSleepDocs = sourceDocs.trainingBuildSleepDocs || [];
-    const trainingActivities = joinTrainingActivitySources(sourceDocs.trainingActivityDocs || [], formDocs);
-    const trainingExplanationActivities = joinTrainingExplanationActivitySources(
-        sourceDocs.trainingActivityDocs || [],
-        formDocs,
-    );
+    const trainingActivities = sourceDocs.trainingActivities
+        ?? joinTrainingActivitySources(sourceDocs.trainingActivityDocs || [], formDocs);
     const trainingBuildBenchmarkSettings = sourceDocs.trainingBuildBenchmarkSettings || {};
 
     let dailyLoadContextCache: ReturnType<typeof buildDailyLoadContext> | null = null;
@@ -4080,7 +4045,7 @@ function createDerivedMetricBuildExecutionContext(
         }
         trainingExplanationBuildResultCache = buildTrainingExplanationMetricPayload(
             formDocs,
-            trainingExplanationActivities,
+            trainingActivities,
             nowMs,
         );
         return trainingExplanationBuildResultCache;
@@ -4121,7 +4086,6 @@ function createDerivedMetricBuildExecutionContext(
         recoveryNowDocs,
         trainingBuildSleepDocs,
         trainingActivities,
-        trainingExplanationActivities,
         getDailyLoadContext,
         getDerivedLoadPoints,
         getKpiDerivedLoadPoints,
@@ -4386,12 +4350,10 @@ function mergeTrainingSleepFetchRanges(
 
 export async function fetchTrainingBuildSleepDocs(
     uid: string,
-    eventDocs: readonly FirestoreQueryDocumentSnapshot[],
-    activityDocs: readonly FirestoreQueryDocumentSnapshot[],
+    activities: readonly DerivedTrainingActivitySource[],
     benchmarkSettings: unknown,
     nowMs = Date.now(),
 ): Promise<FirestoreQueryDocumentSnapshot[]> {
-    const activities = joinTrainingActivitySources(activityDocs, eventDocs);
     const eventsByDiscipline = groupTrainingBuildActivitiesByDiscipline(activities);
     const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
@@ -5095,13 +5057,7 @@ export async function markDerivedMetricSnapshotsFailed(
 export async function writeDerivedMetricSnapshotsReady(
     uid: string,
     metricKinds: readonly DerivedMetricKind[],
-    sourceDocs: {
-        formDocs?: readonly FirestoreQueryDocumentSnapshot[];
-        recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
-        trainingActivityDocs?: readonly FirestoreQueryDocumentSnapshot[];
-        trainingBuildBenchmarkSettings?: unknown;
-        trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
-    },
+    sourceDocs: DerivedMetricBuildSourceDocs,
     options?: {
         buildAtMs?: number | null;
         builtFromEventMutationVersion?: number | null;
