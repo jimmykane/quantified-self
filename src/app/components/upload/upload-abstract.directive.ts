@@ -8,6 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppUserService } from '../../services/app.user.service';
+import { shouldReportUploadError } from '../../services/upload-error';
 
 export interface UploadBatchSummary {
   totalFiles: number;
@@ -123,9 +124,12 @@ export abstract class UploadAbstractDirective implements OnInit {
           } else {
             successfulUploads++;
           }
-        } catch (e: any) {
-          this.logger.error(e);
-          this.processingService.failJob(fileItem.jobId, e.message || 'Upload failed');
+        } catch (error: unknown) {
+          if (shouldReportUploadError(error)) {
+            this.logger.error(error);
+          }
+          const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+          this.processingService.failJob(fileItem.jobId, errorMessage);
           failedUploads++;
         }
       }

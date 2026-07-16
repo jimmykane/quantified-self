@@ -8,6 +8,7 @@ import { UploadAbstractDirective, UploadBatchSummary } from '../upload-abstract.
 import { FileInterface } from '../file.interface';
 import { USAGE_LIMITS } from '@shared/limits';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+import { UploadError } from '../../../services/upload-error';
 
 const SUPPORTED_UPLOAD_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
@@ -128,7 +129,11 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     this.analyticsService.logEvent('upload_file', { method: extension });
     return new Promise((resolve, reject) => {
       if (!SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) {
-        reject(new Error('Only FIT, GPX, TCX, JSON, and SML files are supported.'));
+        reject(new UploadError(
+          'Only FIT, GPX, TCX, JSON, and SML files are supported.',
+          415,
+          'unsupported_format',
+        ));
         return;
       }
 

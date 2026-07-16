@@ -16,6 +16,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import { USAGE_LIMITS } from '@shared/limits';
+import { UploadError } from '../../../services/upload-error';
 
 describe('UploadActivitiesComponent', () => {
   let component: UploadActivitiesComponent;
@@ -269,6 +270,41 @@ describe('UploadActivitiesComponent', () => {
     await component.getFiles(fileInputEvent);
 
     expect(uploadCompleteSpy).toHaveBeenCalled();
+  });
+
+  it('should not report expected client upload failures', async () => {
+    component.user = { uid: 'u1' } as any;
+    const uploadError = new UploadError('Could not parse uploaded payload.', 400, 'invalid_payload');
+    vi.spyOn(component, 'processAndUploadFile').mockRejectedValueOnce(uploadError);
+
+    await component.getFiles({
+      stopPropagation: vi.fn(),
+      preventDefault: vi.fn(),
+      target: {
+        files: [new File(['invalid'], 'invalid.fit')],
+        value: 'invalid.fit',
+      },
+    });
+
+    expect(loggerMock.error).not.toHaveBeenCalled();
+    expect(processingServiceMock.failJob).toHaveBeenCalledWith('job-id', uploadError.message);
+  });
+
+  it('should report server upload failures', async () => {
+    component.user = { uid: 'u1' } as any;
+    const uploadError = new UploadError('Upload service is unavailable.', 500, 'server_error');
+    vi.spyOn(component, 'processAndUploadFile').mockRejectedValueOnce(uploadError);
+
+    await component.getFiles({
+      stopPropagation: vi.fn(),
+      preventDefault: vi.fn(),
+      target: {
+        files: [new File(['valid'], 'run.fit')],
+        value: 'run.fit',
+      },
+    });
+
+    expect(loggerMock.error).toHaveBeenCalledWith(uploadError);
   });
 
   it('should gzip text files and upload with .gz extension', async () => {

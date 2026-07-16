@@ -4,6 +4,7 @@ import { Auth } from 'app/firebase/auth';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { environment } from '../../environments/environment';
+import { createHttpUploadError, UploadError } from './upload-error';
 
 export interface UploadActivityFromFitResponse {
     eventId: string;
@@ -56,7 +57,7 @@ export class AppFitUploadService {
         originalFilename?: string,
     ): Promise<UploadActivityFromFitResponse> {
         if (!this.auth.currentUser) {
-            throw new Error('User must be authenticated to upload activities.');
+            throw new UploadError('User must be authenticated to upload activities.', 401, 'unauthenticated');
         }
 
         const idToken = await this.auth.currentUser.getIdToken(true);
@@ -69,7 +70,7 @@ export class AppFitUploadService {
 
         const normalizedExtension = fileExtension.trim().toLowerCase();
         if (!normalizedExtension) {
-            throw new Error('File extension is required.');
+            throw new UploadError('File extension is required.', 400, 'invalid_extension');
         }
 
         const config = FUNCTIONS_MANIFEST.uploadActivity;
@@ -105,7 +106,11 @@ export class AppFitUploadService {
 
         if (!response.ok) {
             const backendMessage = payload?.error ? `${payload.error}` : '';
-            throw new Error(backendMessage || mapFallbackUploadErrorMessage(response.status));
+            throw createHttpUploadError(
+                backendMessage || mapFallbackUploadErrorMessage(response.status),
+                response.status,
+                payload,
+            );
         }
 
         return payload as UploadActivityFromFitResponse;

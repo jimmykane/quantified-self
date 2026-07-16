@@ -5,6 +5,7 @@ import { Auth } from 'app/firebase/auth';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppRouteUploadService } from './app.route-upload.service';
 import { environment } from '../../environments/environment';
+import { UploadError } from './upload-error';
 
 describe('AppRouteUploadService', () => {
   let service: AppRouteUploadService;
@@ -153,5 +154,19 @@ describe('AppRouteUploadService', () => {
     await expect(service.uploadFitRouteFile(new Uint8Array([1]).buffer)).rejects.toThrow(
       'Could not read this route file. Upload a FIT course/route or GPX route/track file and try again.',
     );
+  });
+
+  it('throws a typed error with HTTP metadata for rejected route uploads', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: vi.fn().mockResolvedValue({ error: 'This FIT file looks like an activity, not a route/course.' }),
+    });
+
+    await expect(service.uploadFitRouteFile(new Uint8Array([1]).buffer)).rejects.toMatchObject({
+      message: 'This FIT file looks like an activity, not a route/course.',
+      status: 400,
+      code: 'invalid_upload',
+    } satisfies Partial<UploadError>);
   });
 });

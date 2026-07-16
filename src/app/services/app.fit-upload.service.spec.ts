@@ -6,6 +6,7 @@ import { FirebaseApp } from 'app/firebase/app';
 import { Auth } from 'app/firebase/auth';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { environment } from '../../environments/environment';
+import { UploadError } from './upload-error';
 
 describe('AppFitUploadService', () => {
   let service: AppFitUploadService;
@@ -149,7 +150,28 @@ describe('AppFitUploadService', () => {
       json: vi.fn().mockResolvedValue({ error: 'Upload limit reached.' }),
     });
 
-    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('Upload limit reached.');
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toMatchObject({
+      message: 'Upload limit reached.',
+      status: 429,
+      code: 'quota_exceeded',
+    } satisfies Partial<UploadError>);
+  });
+
+  it('should preserve backend upload error codes', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: vi.fn().mockResolvedValue({
+        error: 'Could not parse uploaded payload.',
+        code: 'invalid_payload',
+      }),
+    });
+
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toMatchObject({
+      message: 'Could not parse uploaded payload.',
+      status: 400,
+      code: 'invalid_payload',
+    } satisfies Partial<UploadError>);
   });
 
   it('should provide a friendly message when backend returns non-JSON 500 response', async () => {
