@@ -296,6 +296,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Use **Visible charts** to show or hide individual charts, or **Show all charts** to display every available chart.
 - Each event chart panel can use the **Overlay** button to compare one other available metric on a shared y-axis when metrics are compatible, otherwise on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
 - Right-clicking an event chart copies a themed image of the full chart panel, including the chart title, legend, and range statistics.
+- On phones, the **Durability** performance chart keeps its activity eligibility details collapsed by default; use the disclosure button beside the chart title to inspect them.
 - Swim activities with per-length pool data show a **Show Swim Lengths** chart option that overlays swim length end boundaries on the chart; active and idle/rest lengths are both included.
 - When an overlay is active, the primary metric keeps its normal line and fill, while the overlay renders as a plain solid no-fill line using the overlay metric's series color. On merged and benchmark events, overlay legend and tooltip rows include both metric and activity labels.
 - When Grade Smooth or Grade streams are available, **Altitude** charts can color the altitude line by grade; the chart option **Color Altitude by Grade** is on by default and can be turned off from Chart options.

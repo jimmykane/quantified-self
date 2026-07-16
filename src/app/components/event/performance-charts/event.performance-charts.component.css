@@ -1,7 +1,7 @@
 :host {
   display: block;
   width: 100%;
-  --performance-chart-height: 22vh;
+  --performance-chart-height: 23.1vh;
   --performance-chart-min-height: 0px;
 }
 

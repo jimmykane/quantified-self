@@ -12,8 +12,16 @@
 }
 
 .chart-intro {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   flex: 0 0 auto;
   padding: 0 2px 2px 0;
+}
+
+.chart-intro-copy {
+  min-width: 0;
   text-align: right;
 }
 
@@ -41,6 +49,10 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
   gap: 6px;
   padding: 4px 2px 6px;
+}
+
+.durability-summary-toggle {
+  flex: 0 0 auto;
 }
 
 .durability-summary {
@@ -85,4 +97,15 @@
 
 .durability-curve-chart-empty {
   min-height: 12px;
+}
+
+@media (max-width: 599.98px) {
+  .durability-summary-list {
+    max-height: 96px;
+    overflow-y: auto;
+  }
+
+  .durability-curve-chart {
+    min-height: 72px;
+  }
 }

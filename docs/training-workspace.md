@@ -830,6 +830,11 @@ long-running heavy reparse jobs before changing queue retry policy.
 Event detail uses the same sports-lib analyzer and may request a transient timeline for visualization. This does not alter
 the Training rule: aggregate Training snapshots use only persisted compact activity evidence.
 
+The event performance-chart region uses a shared `23.1vh` height. On extra-small viewports, the durability eligibility
+summary starts collapsed behind an accessible disclosure button so the plot retains useful vertical space. Expanding the
+summary keeps its list height bounded and scrollable instead of allowing evidence rows to squeeze out the chart. Desktop
+viewports continue to show the summary by default.
+
 ## Status and Empty-State Semantics
 
 Snapshot status and payload validity are separate concerns. A `ready` document with the wrong schema or an invalid payload

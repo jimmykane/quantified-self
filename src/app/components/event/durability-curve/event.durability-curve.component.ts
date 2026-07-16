@@ -80,9 +80,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
 
   public chartDescription = 'Aerobic efficiency over time. Downward drift can indicate fatigue.';
   public summaryViewModels: EventDurabilitySummaryViewModel[] = [];
+  public isMobile = false;
+  public summaryDetailsExpanded = true;
 
   private chartHost: EChartsHostController;
-  private isMobile = false;
   private breakpointSubscription: Subscription;
 
   constructor(
@@ -108,8 +109,12 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         const wasMobile = this.isMobile;
         this.isMobile = result.matches;
 
-        if (this.chartDiv?.nativeElement && wasMobile !== this.isMobile) {
-          void this.refreshChart();
+        if (wasMobile !== this.isMobile) {
+          this.summaryDetailsExpanded = !this.isMobile;
+          this.changeDetector.markForCheck();
+          if (this.chartDiv?.nativeElement) {
+            void this.refreshChart();
+          }
         }
       });
   }
@@ -133,6 +138,12 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       this.breakpointSubscription.unsubscribe();
     }
     this.chartHost.dispose();
+  }
+
+  toggleSummaryDetails(): void {
+    this.summaryDetailsExpanded = !this.summaryDetailsExpanded;
+    this.changeDetector.markForCheck();
+    requestAnimationFrame(() => this.chartHost.scheduleResize());
   }
 
   private async refreshChart(): Promise<void> {

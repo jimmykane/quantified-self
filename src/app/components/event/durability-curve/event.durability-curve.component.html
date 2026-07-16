@@ -1,9 +1,19 @@
 <div class="durability-curve-container">
   <div class="chart-intro">
-    <div class="chart-title">Durability</div>
-    <div class="chart-description">{{ chartDescription }}</div>
+    @if (isMobile && summaryViewModels.length) {
+      <button type="button" mat-icon-button class="durability-summary-toggle"
+        [attr.aria-expanded]="summaryDetailsExpanded"
+        [attr.aria-label]="summaryDetailsExpanded ? 'Hide durability details' : 'Show durability details'"
+        (click)="toggleSummaryDetails()">
+        <mat-icon aria-hidden="true">{{ summaryDetailsExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+      </button>
+    }
+    <div class="chart-intro-copy">
+      <div class="chart-title">Durability</div>
+      <div class="chart-description">{{ chartDescription }}</div>
+    </div>
   </div>
-  @if (summaryViewModels.length) {
+  @if (summaryViewModels.length && (!isMobile || summaryDetailsExpanded)) {
     <div class="durability-summary-list" aria-label="Durability eligibility summary">
       @for (summary of summaryViewModels; track summary.activityId) {
         <article class="durability-summary" [class.durability-summary-eligible]="summary.isEligible">
