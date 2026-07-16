@@ -368,13 +368,16 @@ describe('getQueueStats Cloud Function', () => {
         });
         expect(result.reparse).toEqual(expect.objectContaining({
             queuePending: 10,
-            targetSportsLibVersion: '9.1.4',
+            targetSportsLibVersion: '17.1.2',
             jobs: {
                 total: 5,
                 pending: 5,
                 processing: 5,
                 completed: 5,
                 failed: 5,
+                currentTargetFailed: 5,
+                historicalFailed: 0,
+                superseded: 5,
             },
             checkpoint: expect.objectContaining({
                 lastScanCount: 200,
@@ -455,6 +458,79 @@ describe('getQueueStats Cloud Function', () => {
         );
         expect(result.reparse.queuePending).toBe(10);
         expect(result.routeReparse.queuePending).toBe(1);
+    });
+
+    it('classifies current, historical, and superseded reparse outcomes', async () => {
+        const defaultCollectionImplementation = mockCollection.getMockImplementation();
+        expect(defaultCollectionImplementation).toBeDefined();
+        const currentTargetFailureDocs = [{
+            id: 'current-job',
+            data: () => ({
+                status: 'failed',
+                uid: 'uid-current',
+                eventId: 'event-current',
+                targetSportsLibVersion: '17.1.2',
+                lastError: 'Current parser failure',
+                updatedAt: 300,
+            }),
+        }];
+        const recentOutcomeDocs = [
+            {
+                id: 'historical-job',
+                data: () => ({
+                    status: 'failed',
+                    uid: 'uid-historical',
+                    eventId: 'event-historical',
+                    targetSportsLibVersion: '17.1.1',
+                    lastError: 'Old rollout mismatch',
+                    updatedAt: 200,
+                }),
+            },
+            {
+                id: 'superseded-job',
+                data: () => ({
+                    status: 'superseded',
+                    uid: 'uid-superseded',
+                    eventId: 'event-superseded',
+                    targetSportsLibVersion: '17.1.1',
+                    supersededBySportsLibVersion: '17.1.2',
+                    updatedAt: 100,
+                }),
+            },
+        ];
+
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName !== 'sportsLibReparseJobs') {
+                return defaultCollectionImplementation!(collectionName);
+            }
+            const makeQuery = (filters: Array<[string, unknown]> = []): any => ({
+                where: vi.fn((field: string, _operator: unknown, value: unknown) =>
+                    makeQuery([...filters, [field, value]])),
+                orderBy: vi.fn(() => makeQuery(filters)),
+                limit: vi.fn(() => makeQuery(filters)),
+                count: vi.fn().mockReturnValue({
+                    get: vi.fn().mockResolvedValue({ data: () => ({ count: 3 }) }),
+                }),
+                get: vi.fn().mockImplementation(async () => ({
+                    docs: filters.some(([field]) => field === 'targetSportsLibVersion')
+                        ? currentTargetFailureDocs
+                        : recentOutcomeDocs,
+                })),
+            });
+            return makeQuery();
+        });
+
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.reparse.recentFailures).toEqual([
+            expect.objectContaining({ jobId: 'current-job', outcome: 'active_failure' }),
+            expect.objectContaining({ jobId: 'historical-job', outcome: 'historical_failure' }),
+            expect.objectContaining({
+                jobId: 'superseded-job',
+                outcome: 'superseded',
+                supersededBySportsLibVersion: '17.1.2',
+            }),
+        ]);
     });
 
     it('excludes stale queued and processing coordinators from active counts', async () => {
@@ -1403,6 +1479,34 @@ describe('getQueueStats Cloud Function', () => {
 
         expect(jobSet).toHaveBeenCalledTimes(1);
         expect(mockEnqueueSportsLibReparseHeavyTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject heavy retry for a historical target job', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({
+                                status: 'failed',
+                                uid: 'uid-1',
+                                targetSportsLibVersion: '17.1.1',
+                            }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-old' })))
+            .rejects.toThrow('targets historical sports-lib version 17.1.1');
+
+        expect(jobSet).not.toHaveBeenCalled();
+        expect(mockEnqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
     });
 
     it('should delete claimed heavy retry job when deletion starts before enqueue', async () => {

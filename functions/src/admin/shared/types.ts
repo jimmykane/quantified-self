@@ -4,6 +4,7 @@ export type {
     DerivedMetricsCoordinatorStats,
     DerivedMetricsFailurePreview,
     EventReparseFailurePreview,
+    EventReparseJobsStats,
     EventReparseStats,
     GetQueueStatsRequest,
     ReparseJobsStats,
@@ -154,6 +155,7 @@ export interface SportsLibReparseJobDocDataBase {
     terminalFailureAt?: unknown;
     updatedAt?: unknown;
     targetSportsLibVersion?: string;
+    supersededBySportsLibVersion?: string;
 }
 
 export interface SportsLibReparseJobDocData extends SportsLibReparseJobDocDataBase {

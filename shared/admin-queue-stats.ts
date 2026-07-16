@@ -72,6 +72,12 @@ export interface ReparseJobsStats {
     failed: number;
 }
 
+export interface EventReparseJobsStats extends ReparseJobsStats {
+    currentTargetFailed?: number;
+    historicalFailed?: number;
+    superseded?: number;
+}
+
 export interface RouteReparseJobsStats extends ReparseJobsStats {
     skipped: number;
 }
@@ -84,6 +90,8 @@ export interface EventReparseFailurePreview {
     lastError: string;
     updatedAt: unknown;
     targetSportsLibVersion: string;
+    outcome?: 'active_failure' | 'historical_failure' | 'superseded';
+    supersededBySportsLibVersion?: string;
     processingTier?: string;
     heavyReason?: string;
     eventDurationMs?: number | null;
@@ -111,7 +119,11 @@ export interface ReparseQueueStats<
     recentFailures: TFailure[];
 }
 
-export type EventReparseStats = ReparseQueueStats<EventReparseCheckpointStats, EventReparseFailurePreview>;
+export type EventReparseStats = ReparseQueueStats<
+    EventReparseCheckpointStats,
+    EventReparseFailurePreview,
+    EventReparseJobsStats
+>;
 
 export type RouteReparseStats = ReparseQueueStats<RouteReparseCheckpointStats, RouteReparseFailurePreview, RouteReparseJobsStats>;
 

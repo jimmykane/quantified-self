@@ -23,11 +23,15 @@ import { buildOfficialEChartsThemeTokens, ECHARTS_GLOBAL_FONT_FAMILY, resolveECh
 export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
 type ReparseFailureRowView = ReparseFailurePreview & {
+    outcome: 'active_failure' | 'historical_failure' | 'superseded';
+    outcomeLabel: string;
     tierLabel: string;
     reasonLabel: string;
     durationLabel: string;
     updatedAtLabel: string;
     retryHeavyDisabled: boolean;
+    retryHeavyTooltip: string;
+    retryHeavyAriaLabel: string;
     retryingHeavy: boolean;
 };
 
@@ -68,7 +72,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     @Input() queueView: AdminQueueStatsView = 'all';
     @Output() retryHeavyCompleted = new EventEmitter<void>();
     hasRetryData = false;
-    readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'processingTier', 'heavyReason', 'eventDurationMs', 'updatedAt', 'lastError', 'actions'];
+    readonly reparseFailureColumns = ['outcome', 'uid', 'eventId', 'attemptCount', 'processingTier', 'heavyReason', 'eventDurationMs', 'updatedAt', 'lastError', 'actions'];
     readonly routeReparseFailureColumns = ['uid', 'routeId', 'attemptCount', 'updatedAt', 'lastError'];
     readonly derivedFailureColumns = ['uid', 'generation', 'dirtyMetricKinds', 'updatedAtMs', 'lastError'];
     readonly retryingHeavyJobIds = new Set<string>();
@@ -302,13 +306,22 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this.reparseFailureRows = (this.stats?.reparse?.recentFailures || []).map(row => {
             const jobId = `${row.jobId || ''}`.trim();
             const retryingHeavy = !!jobId && this.retryingHeavyJobIds.has(jobId);
+            const outcome = this.resolveReparseOutcome(row);
             return {
                 ...row,
+                outcome,
+                outcomeLabel: this.getReparseOutcomeLabel(row, outcome),
                 tierLabel: this.getReparseTierLabel(row),
                 reasonLabel: this.getReparseReasonLabel(row),
                 durationLabel: this.formatOptionalDuration(row.eventDurationMs),
                 updatedAtLabel: this.formatTimestamp(row.updatedAt),
-                retryHeavyDisabled: !jobId || retryingHeavy,
+                retryHeavyDisabled: !jobId || retryingHeavy || outcome !== 'active_failure',
+                retryHeavyTooltip: outcome === 'active_failure'
+                    ? 'Retry this failed reparse job on the heavy queue'
+                    : 'Old-target outcomes are resolved records and cannot be retried',
+                retryHeavyAriaLabel: outcome === 'active_failure'
+                    ? 'Retry failed reparse job on heavy queue'
+                    : 'Resolved reparse outcome cannot be retried',
                 retryingHeavy,
             };
         });
@@ -320,6 +333,36 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     private getReparseTierLabel(row: ReparseFailurePreview): string {
         return row.processingTier === 'heavy' ? 'Heavy' : 'Normal';
+    }
+
+    private resolveReparseOutcome(
+        row: ReparseFailurePreview,
+    ): 'active_failure' | 'historical_failure' | 'superseded' {
+        if (row.outcome) {
+            return row.outcome;
+        }
+        const targetVersion = `${row.targetSportsLibVersion || ''}`.trim();
+        const currentTargetVersion = `${this.stats?.reparse?.targetSportsLibVersion || ''}`.trim();
+        return targetVersion && currentTargetVersion && targetVersion !== currentTargetVersion
+            ? 'historical_failure'
+            : 'active_failure';
+    }
+
+    private getReparseOutcomeLabel(
+        row: ReparseFailurePreview,
+        outcome: 'active_failure' | 'historical_failure' | 'superseded',
+    ): string {
+        if (outcome === 'superseded') {
+            return row.supersededBySportsLibVersion
+                ? `Superseded by ${row.supersededBySportsLibVersion}`
+                : 'Superseded';
+        }
+        if (outcome === 'historical_failure') {
+            return row.targetSportsLibVersion
+                ? `Historical (${row.targetSportsLibVersion})`
+                : 'Historical';
+        }
+        return 'Active failure';
     }
 
     private getReparseReasonLabel(row: ReparseFailurePreview): string {
@@ -343,7 +386,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
 
     retryHeavy(row: ReparseFailurePreview): void {
         const jobId = `${row.jobId || ''}`.trim();
-        if (!jobId || this.retryingHeavyJobIds.has(jobId)) {
+        if (!jobId || this.retryingHeavyJobIds.has(jobId) || this.resolveReparseOutcome(row) !== 'active_failure') {
             return;
         }
 

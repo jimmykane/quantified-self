@@ -809,7 +809,15 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Reparse Jobs (Pending)');
             expect(host.textContent).toContain('Reparse Jobs (Processing)');
             expect(host.textContent).toContain('Reparse Jobs (Completed)');
-            expect(host.textContent).toContain('Reparse Jobs (Failed)');
+            expect(host.textContent).toContain('Current Target Failures');
+            expect(host.textContent).toContain('Historical Failures');
+            expect(host.textContent).toContain('Superseded Jobs');
+            const historicalCard = Array.from(host.querySelectorAll<HTMLElement>('mat-card'))
+                .find(card => card.textContent?.includes('Historical Failures'));
+            const supersededCard = Array.from(host.querySelectorAll<HTMLElement>('mat-card'))
+                .find(card => card.textContent?.includes('Superseded Jobs'));
+            expect(historicalCard?.textContent).toContain('N/A');
+            expect(supersededCard?.textContent).toContain('N/A');
             expect(host.textContent).toContain('9.1.4');
             expect(host.textContent).toContain('200');
             expect(host.textContent).toContain('100');
@@ -868,13 +876,88 @@ describe('AdminQueueStatsComponent', () => {
 
             fixture.detectChanges();
             const host: HTMLElement = fixture.nativeElement;
-            expect(host.textContent).toContain('Recent Event Reparse Failures');
+            expect(host.textContent).toContain('Event Reparse Attention & History');
+            expect(host.textContent).toContain('Active failure');
             expect(host.textContent).toContain('uid-1');
             expect(host.textContent).toContain('event-1');
             expect(host.textContent).toContain('Heavy');
             expect(host.textContent).toContain('Duration > 32h');
             expect(host.textContent).toContain('33h 0m');
             expect(host.textContent).toContain('Parse failed');
+        });
+
+        it('should label resolved old-target outcomes and prevent retrying them', () => {
+            component.loading = false;
+            component.stats = {
+                pending: 0,
+                succeeded: 0,
+                stuck: 0,
+                providers: [],
+                cloudTasks: { pending: 0 },
+                reparse: {
+                    queuePending: 0,
+                    targetSportsLibVersion: '17.1.2',
+                    jobs: {
+                        total: 2,
+                        pending: 0,
+                        processing: 0,
+                        completed: 0,
+                        failed: 1,
+                        currentTargetFailed: 0,
+                        historicalFailed: 1,
+                        superseded: 1,
+                    },
+                    checkpoint: {
+                        cursorEventPath: null,
+                        lastScanAt: null,
+                        lastPassStartedAt: null,
+                        lastPassCompletedAt: null,
+                        lastScanCount: 0,
+                        lastEnqueuedCount: 0,
+                        overrideUsersInProgress: 0,
+                    },
+                    recentFailures: [
+                        {
+                            jobId: 'historical-job',
+                            uid: 'uid-old',
+                            eventId: 'event-old',
+                            attemptCount: 1,
+                            lastError: 'Old rollout mismatch',
+                            updatedAt: null,
+                            targetSportsLibVersion: '17.1.1',
+                            outcome: 'historical_failure',
+                            processingTier: 'normal',
+                            eventDurationMs: null,
+                        },
+                        {
+                            jobId: 'superseded-job',
+                            uid: 'uid-superseded',
+                            eventId: 'event-superseded',
+                            attemptCount: 0,
+                            lastError: '',
+                            updatedAt: null,
+                            targetSportsLibVersion: '17.1.1',
+                            outcome: 'superseded',
+                            supersededBySportsLibVersion: '17.1.2',
+                            processingTier: 'normal',
+                            eventDurationMs: null,
+                        },
+                    ],
+                },
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Historical (17.1.1)');
+            expect(host.textContent).toContain('Superseded by 17.1.2');
+            const resolvedButtons = Array.from(
+                host.querySelectorAll<HTMLButtonElement>('button[aria-label="Resolved reparse outcome cannot be retried"]'),
+            );
+            expect(resolvedButtons).toHaveLength(2);
+            expect(resolvedButtons.every(button => button.disabled)).toBe(true);
+
+            component.retryHeavy(component.stats.reparse!.recentFailures[0]);
+            expect(mockAdminService.retrySportsLibReparseHeavyJob).not.toHaveBeenCalled();
         });
 
         it('should retry a failed reparse job on the heavy queue', () => {

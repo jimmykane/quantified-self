@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
+import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 
 const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
 const LOWER_SPORTS_LIB_VERSION = '0.0.0';
@@ -202,8 +203,10 @@ import {
     persistReparsedEvent,
     parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
+    resolveRuntimeSportsLibVersion,
     resolveTargetSportsLibVersion,
     resolveTargetSportsLibVersionCode,
+    classifySportsLibReparseVersionDisposition,
     assertSportsLibRuntimeVersionMatchesTarget,
     sportsLibVersionToCode,
     shouldEventBeReparsed,
@@ -335,6 +338,10 @@ describe('sports-lib-reparse.service', () => {
         expect(resolveTargetSportsLibVersion()).toBe(TARGET_SPORTS_LIB_VERSION);
     });
 
+    it('resolveRuntimeSportsLibVersion should return the installed runtime version', () => {
+        expect(resolveRuntimeSportsLibVersion()).toBe(SPORTS_LIB_VERSION);
+    });
+
     it('resolveTargetSportsLibVersionCode should return encoded hardcoded target version', () => {
         expect(resolveTargetSportsLibVersionCode()).toBe(sportsLibVersionToCode(TARGET_SPORTS_LIB_VERSION));
     });
@@ -346,6 +353,16 @@ describe('sports-lib-reparse.service', () => {
         expect(() => assertSportsLibRuntimeVersionMatchesTarget('not-semver', '11.0.2'))
             .toThrow('Invalid target sports-lib version');
         expect(() => assertSportsLibRuntimeVersionMatchesTarget('11.0.2', 'not-semver'))
+            .toThrow('Invalid runtime sports-lib version');
+    });
+
+    it('classifySportsLibReparseVersionDisposition should distinguish rollout directions', () => {
+        expect(classifySportsLibReparseVersionDisposition('17.1.2', '17.1.2')).toBe('match');
+        expect(classifySportsLibReparseVersionDisposition('17.1.1', '17.1.2')).toBe('target_superseded');
+        expect(classifySportsLibReparseVersionDisposition('17.1.3', '17.1.2')).toBe('runtime_behind');
+        expect(() => classifySportsLibReparseVersionDisposition('not-semver', '17.1.2'))
+            .toThrow('Invalid target sports-lib version');
+        expect(() => classifySportsLibReparseVersionDisposition('17.1.2', 'not-semver'))
             .toThrow('Invalid runtime sports-lib version');
     });
 

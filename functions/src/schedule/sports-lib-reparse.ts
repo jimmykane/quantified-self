@@ -359,7 +359,12 @@ export const scheduleSportsLibReparseScan = onSchedule({
             const existingJobData = existingJob.data() as Record<string, unknown> | undefined;
             const existingStatus = toSafeString(existingJobData?.status);
 
-            if (existingJob.exists && (existingStatus === 'pending' || existingStatus === 'processing' || existingStatus === 'completed')) {
+            if (existingJob.exists && (
+                existingStatus === 'pending'
+                || existingStatus === 'processing'
+                || existingStatus === 'completed'
+                || existingStatus === 'superseded'
+            )) {
                 return;
             }
             if (existingJob.exists && isTerminalFailedReparseJob(existingJobData)) {

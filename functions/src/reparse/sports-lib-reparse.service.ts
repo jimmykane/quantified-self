@@ -49,7 +49,9 @@ export {
     SPORTS_LIB_REPARSE_TARGET_VERSION,
 } from './sports-lib-reparse.config';
 
-export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'superseded';
+
+export type SportsLibReparseVersionDisposition = 'match' | 'target_superseded' | 'runtime_behind';
 
 const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
@@ -205,6 +207,8 @@ export interface SportsLibReparseJob {
     lastError?: string;
     terminalFailure?: boolean;
     terminalFailureAt?: unknown;
+    supersededAt?: unknown;
+    supersededBySportsLibVersion?: string;
     createdAt: unknown;
     updatedAt: unknown;
     enqueuedAt?: unknown;
@@ -461,6 +465,33 @@ export function resolveTargetSportsLibVersion(): string {
     return SPORTS_LIB_REPARSE_TARGET_VERSION;
 }
 
+export function resolveRuntimeSportsLibVersion(): string {
+    return SPORTS_LIB_VERSION;
+}
+
+export function classifySportsLibReparseVersionDisposition(
+    targetSportsLibVersion: string,
+    runtimeSportsLibVersion: string = SPORTS_LIB_VERSION,
+): SportsLibReparseVersionDisposition {
+    const normalizedTargetVersion = semver.valid(targetSportsLibVersion);
+    if (!normalizedTargetVersion) {
+        throw new Error(`[sports-lib-reparse] Invalid target sports-lib version "${targetSportsLibVersion}"`);
+    }
+
+    const normalizedRuntimeVersion = semver.valid(runtimeSportsLibVersion);
+    if (!normalizedRuntimeVersion) {
+        throw new Error(`[sports-lib-reparse] Invalid runtime sports-lib version "${runtimeSportsLibVersion}"`);
+    }
+
+    if (normalizedTargetVersion === normalizedRuntimeVersion) {
+        return 'match';
+    }
+
+    return semver.lt(normalizedTargetVersion, normalizedRuntimeVersion)
+        ? 'target_superseded'
+        : 'runtime_behind';
+}
+
 export function assertSportsLibRuntimeVersionMatchesTarget(
     targetSportsLibVersion: string,
     runtimeSportsLibVersion: string = SPORTS_LIB_VERSION,
@@ -475,7 +506,7 @@ export function assertSportsLibRuntimeVersionMatchesTarget(
         throw new Error(`[sports-lib-reparse] Invalid runtime sports-lib version "${runtimeSportsLibVersion}"`);
     }
 
-    if (normalizedTargetVersion !== normalizedRuntimeVersion) {
+    if (classifySportsLibReparseVersionDisposition(normalizedTargetVersion, normalizedRuntimeVersion) !== 'match') {
         throw new Error(
             `[sports-lib-reparse] Reparse target sports-lib version "${normalizedTargetVersion}" `
             + `does not match runtime sports-lib version "${normalizedRuntimeVersion}"`,
