@@ -4478,7 +4478,7 @@ export async function fetchRecoveryLookbackEventDocs(
         .select(...DERIVED_METRICS_EVENT_FIELDS)
         .get();
     if (!snapshot.docs.length) {
-        logger.warn('[derived-metrics] Recovery lookback query returned no event docs.', {
+        logger.info('[derived-metrics] Recovery lookback query returned no event docs.', {
             uid,
             lookbackStartMs,
             lookbackWindowSeconds: DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,

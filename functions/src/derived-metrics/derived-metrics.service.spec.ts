@@ -142,6 +142,7 @@ const hoisted = vi.hoisted(() => {
         recursiveDelete,
         runTransaction,
     };
+    const loggerInfo = vi.fn();
     const loggerWarn = vi.fn();
     const enqueueDerivedMetricsTask = vi.fn();
 
@@ -168,6 +169,7 @@ const hoisted = vi.hoisted(() => {
         tombstonesCollection,
         getAll,
         firestoreInstance,
+        loggerInfo,
         loggerWarn,
         enqueueDerivedMetricsTask,
     };
@@ -178,7 +180,7 @@ vi.mock('firebase-admin', () => ({
 }));
 
 vi.mock('firebase-functions/logger', () => ({
-    info: vi.fn(),
+    info: hoisted.loggerInfo,
     warn: hoisted.loggerWarn,
     error: vi.fn(),
 }));
@@ -219,7 +221,7 @@ describe('fetchRecoveryLookbackEventDocs', () => {
         expect(docs).toEqual([{ id: 'doc-1' }]);
     });
 
-    it('logs a warning when lookback query returns no events', async () => {
+    it('logs expected empty lookback results at info level', async () => {
         const { fetchRecoveryLookbackEventDocs } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 3, 7, 10, 0, 0);
         const expectedLookbackStartMs = nowMs - (DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS * 1000);
@@ -227,7 +229,7 @@ describe('fetchRecoveryLookbackEventDocs', () => {
 
         await fetchRecoveryLookbackEventDocs('user-1', nowMs);
 
-        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith(
             '[derived-metrics] Recovery lookback query returned no event docs.',
             {
                 uid: 'user-1',
@@ -235,6 +237,7 @@ describe('fetchRecoveryLookbackEventDocs', () => {
                 lookbackWindowSeconds: DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
             },
         );
+        expect(hoisted.loggerWarn).not.toHaveBeenCalled();
     });
 });
 

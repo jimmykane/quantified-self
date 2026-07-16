@@ -393,7 +393,9 @@ If all state inputs are missing, the page shows an awaiting-data state rather th
 #### Recovery remaining
 
 `recovery_now` combines supported imported post-workout recovery estimates. The card counts down using the stored end
-time. It is explicitly labeled as an imported estimate, not readiness, and does not change the Training state.
+time. It is explicitly labeled as an imported estimate, not readiness, and does not change the Training state. The
+worker scans a bounded 16-day event window; no events in that window is a valid empty result for new or inactive users
+and is logged as informational rather than a warning.
 
 #### Recorded sleep alongside training
 
@@ -729,6 +731,10 @@ It never stores the display timeline or a second copy of long streams.
 The source fingerprint includes the protocol, effective activity type and duration, relevant output/HR/grade streams,
 zone durations, and pool-length context. When any effective input changes, sports-lib recalculates the stat. An unchanged,
 canonical stat is reused. A valid summary-only stat is preserved when raw inputs are no longer available.
+
+Compact aerobic evidence rounds its persisted base output and heart-rate values before calculating efficiency, retention,
+decoupling, and drift. This keeps the serialized summary arithmetically self-consistent at its stored precision, including
+low-speed open-water evidence, so constructor validation cannot reject evidence produced by the analyzer itself.
 
 Merged parent event summaries explicitly exclude child durability evidence because multiple contexts cannot be reduced to
 one trustworthy event-level value.
