@@ -20,16 +20,30 @@ export interface TrainingDurabilityTrajectoryPointViewModel {
   weekStartDayMs: number;
   weekEndDayMs: number;
   value: number | null;
+  candidateActivityCount: number;
+  sourceActivityCount: number;
   eligibleSampleCount: number;
-  isEmpty: boolean;
+  exclusionReasons: TrainingDurabilityExclusionViewModel[];
+  hasEligibleSamples: boolean;
+}
+export interface TrainingDurabilityExclusionViewModel {
+  reason: string;
+  label: string;
+  activityCount: number;
 }
 export interface TrainingDurabilityTrajectoryViewModel {
   contextKey: string;
   contextLabel: string;
+  title: string;
   metricLabel: string;
   metricDescription: string;
+  eligibilityDescription: string;
+  sourceActivityLabel: string;
+  barExplanation: string;
+  activityCountSummary: string;
+  exclusionSummary: string | null;
   unitLabel: '%';
-  emptyWeekCount: number;
+  noEligibleWeekCount: number;
   unavailableMetricWeekCount: number;
   points: TrainingDurabilityTrajectoryPointViewModel[];
 }
@@ -76,19 +90,26 @@ export function buildTrainingDurabilityScopeViewModels(
       ));
     const eligibleWeeks = item.weeks.filter(week => week.coverage.eligibleActivityCount > 0).length;
     const supportingLabels = item.recentSupportingEvents.slice(0, 3).map(event => event.label || 'Unlabelled activity');
-    const exclusions = item.current.coverage.exclusions.filter(exclusion => exclusion.activityCount > 0);
+    const exclusions = item.current.coverage.exclusions
+      .filter(exclusion => exclusion.activityCount > 0)
+      .sort((left, right) => right.activityCount - left.activityCount || left.reason.localeCompare(right.reason));
+    const currentPowerActivityCount = item.scope === 'cycling'
+      ? resolvePowerActivityCount(item.current.coverage)
+      : null;
     return {
       scope: item.scope,
       label: formatScopeLabel(item.scope),
-      evidenceText: `${item.current.coverage.eligibleActivityCount} eligible of ${item.current.coverage.candidateActivityCount} candidate activities`,
+      evidenceText: currentPowerActivityCount === null
+        ? `${item.current.coverage.eligibleActivityCount} eligible of ${item.current.coverage.candidateActivityCount} candidate activities`
+        : `${item.current.coverage.eligibleActivityCount} eligible · ${currentPowerActivityCount} with power · ${item.current.coverage.candidateActivityCount} candidates`,
       coverageText: item.current.coverage.eligibilityRatio === null
         ? 'Eligibility ratio unavailable'
-        : `${formatPercent(item.current.coverage.eligibilityRatio * 100)} eligibility`,
+        : `${formatPercent(item.current.coverage.eligibilityRatio * 100)} eligible`,
       exclusionText: exclusions.length
-        ? exclusions.map(exclusion => `${formatExclusionReason(exclusion.reason)}: ${exclusion.activityCount}`).join(' · ')
+        ? `Primary exclusions: ${exclusions.map(exclusion => `${formatExclusionReason(exclusion.reason, item.scope === 'cycling')} ${exclusion.activityCount}`).join(' · ')}`
         : null,
       contexts,
-      trendText: `${eligibleWeeks} of 12 recent weeks include eligible evidence`,
+      trendText: `${eligibleWeeks} of 12 recent weeks produced comparable evidence`,
       supportingEventsText: supportingLabels.length ? `Recent support: ${supportingLabels.join(' · ')}` : null,
     };
   });
@@ -151,32 +172,97 @@ function buildTrajectoryViewModel(
   weeks: DerivedTrainingDurabilityMetricPayload['scopes'][number]['weeks'],
 ): TrainingDurabilityTrajectoryViewModel {
   const isPool = context.scope === 'pool-swimming';
+  const isPower = context.outputSource === 'power';
+  const sourceActivityLabel = isPower ? 'Power recorded' : 'Candidates';
   const points = [...weeks]
     .sort((left, right) => left.windowStartDayMs - right.windowStartDayMs)
     .map((week) => {
       const summary = week.summaries.find(item => item.context.contextKey === context.contextKey) || null;
+      const exclusionReasons = week.coverage.exclusions
+        .filter(exclusion => exclusion.activityCount > 0)
+        .map(exclusion => ({
+          reason: exclusion.reason,
+          label: formatExclusionReason(exclusion.reason, isPower),
+          activityCount: exclusion.activityCount,
+        }));
       return {
         weekStartDayMs: week.windowStartDayMs,
         weekEndDayMs: week.windowEndDayMs,
         value: isPool
           ? summary?.medianPaceRetentionPercent ?? null
           : summary?.medianDecouplingPercent ?? null,
+        candidateActivityCount: week.coverage.candidateActivityCount,
+        sourceActivityCount: isPower
+          ? resolvePowerActivityCount(week.coverage)
+          : week.coverage.candidateActivityCount,
         eligibleSampleCount: summary?.sampleCount ?? 0,
-        isEmpty: !summary || summary.sampleCount === 0,
+        exclusionReasons,
+        hasEligibleSamples: !!summary && summary.sampleCount > 0,
       };
     });
+  const totalCandidates = sumPointCount(points, point => point.candidateActivityCount);
+  const totalSourceActivities = sumPointCount(points, point => point.sourceActivityCount);
+  const totalEligible = sumPointCount(points, point => point.eligibleSampleCount);
+  const exclusionSummary = summarizeTrajectoryExclusions(points);
   return {
     contextKey: context.contextKey,
     contextLabel: formatContextLabel(context),
+    title: `${formatScopeLabel(context.scope)} durability trend`,
     metricLabel: isPool ? 'Pace retained' : 'Aerobic decoupling',
     metricDescription: isPool
-      ? 'Median final-versus-early comparable-length pace retention by week.'
-      : 'Median first-versus-second-half aerobic-efficiency drift by week.',
+      ? 'Weekly median final-versus-early comparable-length pace retention.'
+      : 'Weekly median first-versus-second-half aerobic-efficiency drift.',
+    eligibilityDescription: isPower
+      ? 'Only comparable steady power-and-heart-rate sessions produce a trend point.'
+      : 'Only sessions that pass the comparability checks produce a trend point.',
+    sourceActivityLabel,
+    barExplanation: isPower
+      ? 'Bar height shows power-recorded activities; labels show eligible / power-recorded.'
+      : 'Bar height shows candidate activities; labels show eligible / candidates.',
+    activityCountSummary: isPower
+      ? `Across 12 weeks: ${totalCandidates} candidates · ${totalSourceActivities} with power · ${totalEligible} eligible`
+      : `Across 12 weeks: ${totalCandidates} candidates · ${totalEligible} eligible`,
+    exclusionSummary,
     unitLabel: '%',
-    emptyWeekCount: points.filter(point => point.isEmpty).length,
-    unavailableMetricWeekCount: points.filter(point => !point.isEmpty && point.value === null).length,
+    noEligibleWeekCount: points.filter(point => !point.hasEligibleSamples).length,
+    unavailableMetricWeekCount: points.filter(point => point.hasEligibleSamples && point.value === null).length,
     points,
   };
+}
+
+function resolvePowerActivityCount(
+  coverage: DerivedTrainingDurabilityMetricPayload['scopes'][number]['current']['coverage'],
+): number {
+  const missingPowerCount = coverage.exclusions
+    .filter(exclusion => exclusion.reason === 'missing-output')
+    .reduce((sum, exclusion) => sum + exclusion.activityCount, 0);
+  return Math.max(0, coverage.evidenceActivityCount - missingPowerCount);
+}
+
+function sumPointCount(
+  points: readonly TrainingDurabilityTrajectoryPointViewModel[],
+  selector: (point: TrainingDurabilityTrajectoryPointViewModel) => number,
+): number {
+  return points.reduce((sum, point) => sum + selector(point), 0);
+}
+
+function summarizeTrajectoryExclusions(
+  points: readonly TrainingDurabilityTrajectoryPointViewModel[],
+): string | null {
+  const counts = new Map<string, TrainingDurabilityExclusionViewModel>();
+  points.forEach(point => point.exclusionReasons.forEach((exclusion) => {
+    const current = counts.get(exclusion.reason);
+    counts.set(exclusion.reason, {
+      ...exclusion,
+      activityCount: (current?.activityCount || 0) + exclusion.activityCount,
+    });
+  }));
+  const exclusions = [...counts.values()]
+    .filter(exclusion => exclusion.activityCount > 0)
+    .sort((left, right) => right.activityCount - left.activityCount || left.label.localeCompare(right.label));
+  return exclusions.length
+    ? `Primary exclusions: ${exclusions.map(exclusion => `${exclusion.label} ${exclusion.activityCount}`).join(' · ')}`
+    : null;
 }
 
 function resolveVisibleScopes(disciplines: readonly TrainingVisibleDiscipline[]): Set<DerivedTrainingDurabilityScope> {
@@ -198,4 +284,16 @@ function formatContextLabel(context: DerivedTrainingDurabilityContext): string {
 }
 function formatMetric(value: number | null, suffix: string): string { return value === null ? '—' : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)}${suffix}`; }
 function formatPercent(value: number): string { return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)}%`; }
-function formatExclusionReason(reason: string): string { return reason.split('-').map(part => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' '); }
+function formatExclusionReason(reason: string, powerContext = false): string {
+  const labels: Record<string, string> = {
+    'missing-output': powerContext ? 'No recorded power' : 'Missing required output',
+    'missing-heart-rate': 'Missing heart rate',
+    'insufficient-duration': 'Too short',
+    'insufficient-coverage': 'Not enough paired data',
+    'insufficient-halves': 'Uneven comparison coverage',
+    'too-variable': 'Too variable',
+    'too-intense': 'Too intense',
+    'unsupported-context': 'Unsupported context',
+  };
+  return labels[reason] || reason.split('-').map(part => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ');
+}

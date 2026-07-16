@@ -118,12 +118,12 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       this.chartAriaLabel = 'Twelve-week durability trajectory';
       return;
     }
-    const evidenceWeekCount = trajectory.points.length - trajectory.emptyWeekCount;
+    const evidenceWeekCount = trajectory.points.length - trajectory.noEligibleWeekCount;
     const unavailableMetricText = trajectory.unavailableMetricWeekCount
       ? ` · ${trajectory.unavailableMetricWeekCount} with eligible samples but no ${trajectory.metricLabel.toLowerCase()}`
       : '';
-    this.availabilityText = `${evidenceWeekCount} of ${trajectory.points.length} weeks with eligible samples · ${trajectory.emptyWeekCount} empty${unavailableMetricText}`;
-    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week ${trajectory.metricLabel.toLowerCase()} trajectory with eligible activity counts`;
+    this.availabilityText = `${evidenceWeekCount} of ${trajectory.points.length} weeks produced comparable evidence · ${trajectory.noEligibleWeekCount} without an eligible sample${unavailableMetricText}`;
+    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible activity counts, and ${trajectory.metricLabel.toLowerCase()}`;
   }
 
   private buildOption(): ChartOption {
@@ -137,7 +137,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       day: 'numeric',
       timeZone: 'UTC',
     });
-    const maximumSampleCount = Math.max(0, ...trajectory.points.map(point => point.eligibleSampleCount));
+    const maximumSampleCount = Math.max(0, ...trajectory.points.map(point => point.sourceActivityCount));
     return {
       animation: false,
       backgroundColor: 'transparent',
@@ -146,7 +146,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       legend: {
         top: 0,
         right: 4,
-        data: [trajectory.metricLabel, 'Eligible samples'],
+        data: [trajectory.metricLabel, trajectory.sourceActivityLabel],
         textStyle: { color: style.textColor },
       },
       tooltip: {
@@ -161,19 +161,28 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
             return '';
           }
           const metricValue = point.value === null
-            ? point.isEmpty ? 'No eligible evidence' : 'Unavailable'
+            ? point.hasEligibleSamples ? 'Unavailable' : 'No comparable sample'
             : `${formatNumber(point.value)}${trajectory.unitLabel}`;
+          const activityRows = [
+            { label: 'Candidates', value: formatActivityCount(point.candidateActivityCount) },
+            ...(trajectory.sourceActivityLabel === 'Candidates'
+              ? []
+              : [{
+                label: trajectory.sourceActivityLabel,
+                value: formatActivityCount(point.sourceActivityCount),
+                markerColor: style.axisColor,
+              }]),
+            { label: 'Eligible', value: formatActivityCount(point.eligibleSampleCount) },
+          ];
           return renderDashboardEChartsTooltipCard(style, {
             title: formatDashboardWeekRangeLabel(point.weekStartDayMs, undefined, 'UTC'),
             rows: [
               { label: trajectory.metricLabel, value: metricValue, markerColor: style.trendLineColor },
-              {
-                label: 'Eligible samples',
-                value: point.eligibleSampleCount
-                  ? `${formatNumber(point.eligibleSampleCount)} activit${point.eligibleSampleCount === 1 ? 'y' : 'ies'}`
-                  : 'Empty week',
-                markerColor: style.axisColor,
-              },
+              ...activityRows,
+              ...point.exclusionReasons.map(exclusion => ({
+                label: exclusion.label,
+                value: formatActivityCount(exclusion.activityCount),
+              })),
             ],
           });
         },
@@ -201,30 +210,42 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
         axisLabel: { color: style.textColor, formatter: (value: number) => `${formatNumber(value)}%` },
       }, {
         type: 'value',
-        name: 'Eligible',
         min: 0,
         max: Math.max(2, maximumSampleCount + 1),
         minInterval: 1,
-        nameTextStyle: { color: style.secondaryTextColor },
         axisLine: { show: false },
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: { color: style.secondaryTextColor, formatter: (value: number) => formatNumber(value) },
       }],
       series: [{
-        name: 'Eligible samples',
+        name: trajectory.sourceActivityLabel,
         type: 'bar',
         yAxisIndex: 1,
         barMaxWidth: 20,
         barMinHeight: 3,
-        data: trajectory.points.map(point => point.eligibleSampleCount),
+        data: trajectory.points.map(point => point.sourceActivityCount),
         itemStyle: { color: style.axisColor, opacity: 0.24 },
         label: {
           show: true,
           position: 'top',
           color: style.secondaryTextColor,
           fontSize: 10,
-          formatter: (params: { value?: number }) => Number(params.value) > 0 ? `${params.value}` : 'Empty',
+          formatter: (params: { dataIndex?: number }) => {
+            const point = Number.isInteger(params.dataIndex)
+              ? trajectory.points[params.dataIndex as number]
+              : null;
+            if (!point) {
+              return '';
+            }
+            if (point.sourceActivityCount > 0) {
+              return `${point.eligibleSampleCount}/${point.sourceActivityCount}`;
+            }
+            if (point.candidateActivityCount > 0) {
+              return trajectory.sourceActivityLabel === 'Power recorded' ? 'No power' : '0 eligible';
+            }
+            return 'No activity';
+          },
         },
         z: 1,
       }, {
@@ -245,4 +266,8 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatActivityCount(value: number): string {
+  return `${formatNumber(value)} activit${value === 1 ? 'y' : 'ies'}`;
 }

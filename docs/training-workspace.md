@@ -881,6 +881,15 @@ and SWOLF change. Training compares:
 - Twelve fixed UTC weeks for the trajectory.
 - Up to five recent supporting eligible activities.
 
+The 12-week chart is a durability trend, not a general power-availability chart. For cycling power contexts, the
+frontend reports candidates, activities whose processed durability evidence confirms recorded power, eligible samples,
+and the primary ineligibility reasons already present in the snapshot. The power-confirmed count is the evidence count
+minus `missing-output` exclusions; it does not query activity history. Bar height shows power-recorded activities, the
+compact bar label shows `eligible / power-recorded`, and the line appears only for eligible aerobic-decoupling evidence.
+A stored Power Curve alone therefore does not guarantee a durability point. Sports-lib records one primary eligibility
+reason per activity, so aggregate exclusion copy must call these **primary exclusions** rather than implying an
+exhaustive list of every threshold that activity missed.
+
 The trajectory chart host is conditionally mounted only after its view model exists. Its Angular view query must remain
 dynamic and initialize through the shared ECharts host controller when that element appears; a static query resolves
 before the conditional view and leaves the chart blank. The component lifecycle spec must exercise that delayed host
@@ -930,6 +939,8 @@ UI principles:
 - A chart with no previous payload is not mounted while its snapshot builds. Training shows a compact, bounded status card
   instead, so chart minimum heights and overlays cannot stretch or bleed during the initial load.
 - A valid payload with zero eligible data shows a domain-specific empty state, not a spinner.
+- A durability week without an eligible sample must expose candidate/input counts and primary exclusion reasons rather
+  than using an unexplained `Empty` label.
 - Null optional metrics render as an em dash or unavailable copy, never zero.
 - Compact loading cards remain readable without reserving the full chart canvas. Ready empty states keep the full chart card
   height so their domain-specific explanation is not compressed.

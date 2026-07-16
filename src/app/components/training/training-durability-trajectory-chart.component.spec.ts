@@ -11,17 +11,30 @@ function trajectory(): TrainingDurabilityTrajectoryViewModel {
   return {
     contextKey: 'running|power|W|-|-',
     contextLabel: 'Running · Power',
+    title: 'Running durability trend',
     metricLabel: 'Aerobic decoupling',
-    metricDescription: 'Median first-versus-second-half aerobic-efficiency drift by week.',
+    metricDescription: 'Weekly median first-versus-second-half aerobic-efficiency drift.',
+    eligibilityDescription: 'Only comparable steady power-and-heart-rate sessions produce a trend point.',
+    sourceActivityLabel: 'Power recorded',
+    barExplanation: 'Bar height shows power-recorded activities; labels show eligible / power-recorded.',
+    activityCountSummary: 'Across 12 weeks: 36 candidates · 32 with power · 32 eligible',
+    exclusionSummary: 'Primary exclusions: No recorded power 1 · Too variable 1',
     unitLabel: '%',
-    emptyWeekCount: 1,
+    noEligibleWeekCount: 1,
     unavailableMetricWeekCount: 1,
     points: Array.from({ length: 12 }, (_, index) => ({
       weekStartDayMs: Date.UTC(2026, 3, 20) + (index * weekMs),
       weekEndDayMs: Date.UTC(2026, 3, 26) + (index * weekMs),
       value: index === 1 || index === 2 ? null : 4 - (index * 0.1),
+      candidateActivityCount: 3,
+      sourceActivityCount: index === 1 ? 0 : index === 2 ? 2 : 3,
       eligibleSampleCount: index === 1 ? 0 : index === 2 ? 2 : 3,
-      isEmpty: index === 1,
+      exclusionReasons: index === 1
+        ? [{ reason: 'missing-output', label: 'No recorded power', activityCount: 1 }]
+        : index === 2
+          ? [{ reason: 'too-variable', label: 'Too variable', activityCount: 1 }]
+          : [],
+      hasEligibleSamples: index !== 1,
     })),
   };
 }
@@ -80,7 +93,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     fixture.destroy();
   });
 
-  it('plots a readable 12-week primary metric with eligible-sample bars and empty weeks', () => {
+  it('plots a readable 12-week primary metric with power-data bars and explained ineligible weeks', () => {
     const component = createComponent();
     component.trajectory = trajectory();
     component.status = 'ready';
@@ -93,17 +106,20 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     const option = (component as any).buildOption();
     expect(option.xAxis.data).toHaveLength(12);
     expect(option.yAxis).toHaveLength(2);
-    expect(option.series.map((series: any) => series.name)).toEqual(['Eligible samples', 'Aerobic decoupling']);
+    expect(option.series.map((series: any) => series.name)).toEqual(['Power recorded', 'Aerobic decoupling']);
     expect(option.series[0].data[1]).toBe(0);
-    expect(option.series[0].label.formatter({ value: 0 })).toBe('Empty');
+    expect(option.series[0].label.formatter({ dataIndex: 1 })).toBe('No power');
+    expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/2');
     expect(option.series[1].data[1]).toBeNull();
     expect(option.series[1].connectNulls).toBe(false);
-    expect(component.availabilityText).toContain('11 of 12 weeks with eligible samples');
+    expect(component.availabilityText).toContain('11 of 12 weeks produced comparable evidence');
     expect(component.availabilityText).toContain('1 with eligible samples but no aerobic decoupling');
 
     const emptyTooltip = option.tooltip.formatter([{ dataIndex: 1 }]);
-    expect(emptyTooltip).toContain('No eligible evidence');
-    expect(emptyTooltip).toContain('Empty week');
+    expect(emptyTooltip).toContain('No comparable sample');
+    expect(emptyTooltip).toContain('Power recorded');
+    expect(emptyTooltip).toContain('0 activities');
+    expect(emptyTooltip).toContain('No recorded power');
   });
 
   it('surfaces pending status without replacing available trajectory data', async () => {

@@ -2,8 +2,9 @@
   <section class="durability-trajectory">
     <header>
       <div>
-        <h4>{{ view.contextLabel }} trajectory</h4>
+        <h4>{{ view.title }}</h4>
         <p>{{ view.metricDescription }}</p>
+        <small>{{ view.eligibilityDescription }}</small>
       </div>
       <div class="durability-trajectory-status" [attr.aria-live]="isUpdating ? 'polite' : null">
         @if (isUpdating) {
@@ -14,6 +15,12 @@
         }
       </div>
     </header>
+    <div class="durability-trajectory-summary">
+      <strong>{{ view.activityCountSummary }}</strong>
+      @if (view.exclusionSummary) {
+        <span>{{ view.exclusionSummary }}</span>
+      }
+    </div>
     <div class="durability-trajectory-scroll">
       <div
         #chartDiv
@@ -24,7 +31,7 @@
     </div>
     <footer>
       <span>{{ availabilityText }}</span>
-      <span>Bars show eligible activity samples; the line does not bridge empty weeks.</span>
+      <span>{{ view.barExplanation }} The line does not bridge weeks without comparable evidence.</span>
     </footer>
   </section>
 }

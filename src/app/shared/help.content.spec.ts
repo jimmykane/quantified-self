@@ -101,8 +101,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Readiness Signals**');
     expect(gettingStartedSection?.content).toContain('What drove this');
     expect(gettingStartedSection?.content).toContain('neutral higher/lower language');
-    expect(gettingStartedSection?.content).toContain('plots a readable 12-week trajectory');
-    expect(gettingStartedSection?.content).toContain('empty weeks stay explicit');
+    expect(gettingStartedSection?.content).toContain('plots a readable 12-week durability trend');
+    expect(gettingStartedSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
+    expect(gettingStartedSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
     expect(gettingStartedSection?.content).toContain('**Sports shown**');
     expect(gettingStartedSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
     expect(gettingStartedSection?.content).toContain('**Use automatic selection**');

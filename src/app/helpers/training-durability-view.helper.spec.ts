@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DerivedTrainingDurabilityMetricPayload } from '@shared/derived-metrics';
 import { buildTrainingDurabilityScopeViewModels } from './training-durability-view.helper';
 
-const context = { contextKey: 'running:power', scope: 'running' as const, outputSource: 'power', outputUnit: 'W', poolLengthMeters: null, stroke: null };
+const context = { contextKey: 'running:speed', scope: 'running' as const, outputSource: 'speed', outputUnit: 'm/s', poolLengthMeters: null, stroke: null };
 const currentSummary = {
   context, sampleCount: 3, medianDurationSeconds: 3600, medianCoverageRatio: 0.8,
   medianDecouplingPercent: 4, medianOutputRetentionPercent: 96, medianHeartRateDriftBpm: 5,
@@ -32,8 +32,8 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
   it('compares current durability with the prior-block median', () => {
     const views = buildTrainingDurabilityScopeViewModels(payload, ['running']);
     expect(views[0]).toEqual(expect.objectContaining({
-      label: 'Running', evidenceText: '3 eligible of 5 candidate activities', coverageText: '60% eligibility',
-      exclusionText: 'Too Variable: 1', trendText: '12 of 12 recent weeks include eligible evidence',
+      label: 'Running', evidenceText: '3 eligible of 5 candidate activities', coverageText: '60% eligible',
+      exclusionText: 'Primary exclusions: Too variable 1', trendText: '12 of 12 recent weeks produced comparable evidence',
       supportingEventsText: 'Recent support: Long run',
     }));
     expect(views[0].contexts[0].metrics).toEqual(expect.arrayContaining([
@@ -41,16 +41,23 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
       expect.objectContaining({ label: 'Output retained', deltaText: '+1%', deltaTone: 'positive' }),
     ]));
     expect(views[0].contexts[0].trajectory).toEqual(expect.objectContaining({
-      contextLabel: 'Running · Power',
+      contextLabel: 'Running · Speed',
+      title: 'Running durability trend',
       metricLabel: 'Aerobic decoupling',
-      emptyWeekCount: 0,
+      sourceActivityLabel: 'Candidates',
+      activityCountSummary: 'Across 12 weeks: 60 candidates · 36 eligible',
+      exclusionSummary: 'Primary exclusions: Too variable 12',
+      noEligibleWeekCount: 0,
       unavailableMetricWeekCount: 0,
     }));
     expect(views[0].contexts[0].trajectory.points).toHaveLength(12);
     expect(views[0].contexts[0].trajectory.points[0]).toEqual(expect.objectContaining({
       value: 4,
+      candidateActivityCount: 5,
+      sourceActivityCount: 5,
       eligibleSampleCount: 3,
-      isEmpty: false,
+      hasEligibleSamples: true,
+      exclusionReasons: [{ reason: 'too-variable', label: 'Too variable', activityCount: 1 }],
     }));
   });
 
@@ -70,7 +77,7 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
     ]));
   });
 
-  it('plots pool pace retention and preserves empty weeks', () => {
+  it('plots pool pace retention and preserves weeks without eligible samples', () => {
     const poolContext = { ...context, contextKey: 'pool:25:freestyle', scope: 'pool-swimming' as const, outputSource: 'pool-length-speed', outputUnit: 'm/s', poolLengthMeters: 25, stroke: 'freestyle' };
     const poolSummary = {
       ...currentSummary,
@@ -97,11 +104,61 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
     const trajectory = buildTrainingDurabilityScopeViewModels(poolPayload, ['swimming'])[0].contexts[0].trajectory;
     expect(trajectory).toEqual(expect.objectContaining({
       contextLabel: '25 m · freestyle',
+      title: 'Pool durability trend',
       metricLabel: 'Pace retained',
-      emptyWeekCount: 11,
+      sourceActivityLabel: 'Candidates',
+      activityCountSummary: 'Across 12 weeks: 5 candidates · 3 eligible',
+      noEligibleWeekCount: 11,
     }));
-    expect(trajectory.points[0]).toEqual(expect.objectContaining({ value: 98, eligibleSampleCount: 3, isEmpty: false }));
-    expect(trajectory.points[1]).toEqual(expect.objectContaining({ value: null, eligibleSampleCount: 0, isEmpty: true }));
+    expect(trajectory.points[0]).toEqual(expect.objectContaining({ value: 98, eligibleSampleCount: 3, hasEligibleSamples: true }));
+    expect(trajectory.points[1]).toEqual(expect.objectContaining({ value: null, eligibleSampleCount: 0, hasEligibleSamples: false }));
+  });
+
+  it('explains cycling power availability separately from durability eligibility', () => {
+    const cyclingContext = {
+      ...context,
+      contextKey: 'cycling|power|W|-|-',
+      scope: 'cycling' as const,
+      outputSource: 'power',
+      outputUnit: 'W',
+    };
+    const poweredSummary = { ...currentSummary, context: cyclingContext, sampleCount: 1 };
+    const cyclingCoverage = {
+      ...coverage,
+      candidateActivityCount: 6,
+      evidenceActivityCount: 6,
+      eligibleActivityCount: 1,
+      missingEvidenceActivityCount: 0,
+      excludedActivityCount: 5,
+      eligibilityRatio: 1 / 6,
+      exclusions: [
+        { reason: 'missing-output', activityCount: 4 },
+        { reason: 'too-intense', activityCount: 1 },
+      ],
+    };
+    const cyclingWeek = { ...makeWindow(7, [poweredSummary]), coverage: cyclingCoverage };
+    const cyclingPayload: DerivedTrainingDurabilityMetricPayload = {
+      ...payload,
+      scopes: [{
+        scope: 'cycling',
+        current: { ...makeWindow(28, [poweredSummary]), coverage: cyclingCoverage },
+        baselineBlocks: Array.from({ length: 3 }, () => ({ ...makeWindow(28, [poweredSummary]), coverage: cyclingCoverage })),
+        usual: { coverage: cyclingCoverage, summaries: [poweredSummary] },
+        weeks: Array.from({ length: 12 }, () => cyclingWeek),
+        recentSupportingEvents: [],
+      }],
+    };
+
+    const view = buildTrainingDurabilityScopeViewModels(cyclingPayload, ['cycling'])[0];
+    expect(view).toEqual(expect.objectContaining({
+      evidenceText: '1 eligible · 2 with power · 6 candidates',
+      coverageText: '17% eligible',
+      exclusionText: 'Primary exclusions: No recorded power 4 · Too intense 1',
+    }));
+    expect(view.contexts[0].trajectory).toEqual(expect.objectContaining({
+      activityCountSummary: 'Across 12 weeks: 72 candidates · 24 with power · 12 eligible',
+      exclusionSummary: 'Primary exclusions: No recorded power 48 · Too intense 12',
+    }));
   });
 
   it('respects selected sport visibility', () => {
