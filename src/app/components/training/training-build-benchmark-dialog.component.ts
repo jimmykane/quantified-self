@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { DataDistance, DataSwimDistance, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   DerivedTrainingBuildEventSuggestion,
@@ -80,6 +81,7 @@ export class TrainingBuildBenchmarkDialogComponent {
     @Inject(MAT_DIALOG_DATA) public readonly data: TrainingBuildBenchmarkDialogData,
     private readonly dialogRef: MatDialogRef<TrainingBuildBenchmarkDialogComponent>,
     private readonly functionsService: AppFunctionsService,
+    private readonly snackBar: MatSnackBar,
     private readonly changeDetector: ChangeDetectorRef,
   ) {
     this.disciplineLabel = data.discipline === 'running'
@@ -227,7 +229,12 @@ export class TrainingBuildBenchmarkDialogComponent {
 
       this.dialogRef.close({ saved: true, selection });
     } catch (error) {
-      this.errorMessage = this.resolveErrorMessage(error);
+      const errorMessage = this.resolveErrorMessage(error);
+      this.errorMessage = errorMessage;
+      this.snackBar.open(errorMessage, 'Dismiss', {
+        duration: 6000,
+        politeness: 'assertive',
+      });
     } finally {
       this.isSaving = false;
       this.changeDetector.markForCheck();
@@ -408,7 +415,11 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   private resolveErrorMessage(error: unknown): string {
+    const code = `${(error as { code?: unknown } | null)?.code || ''}`.trim();
     const message = `${(error as { message?: unknown } | null)?.message || ''}`.trim();
+    if (/app[ -]?check/i.test(code) || /app[ -]?check/i.test(message)) {
+      return 'Could not verify your secure session. Refresh the app and try again.';
+    }
     return message || 'Could not save this benchmark. Please try again.';
   }
 }

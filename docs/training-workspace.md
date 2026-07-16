@@ -580,6 +580,10 @@ available distance, duration, and TSS provide identity.
 The callable writes only `trainingSettings.buildBenchmarks.{discipline}`. Clearing uses field deletion. It then dirties
 only `training_build_comparison` without incrementing the event mutation version.
 
+Save failures remain visible in the dialog and are also announced through the shared Material snackbar, because the
+inline error can sit below the viewport in the long mobile event picker. Known App Check failures use actionable
+secure-session copy instead of exposing raw Firebase transport details.
+
 #### Compared workload
 
 Each current and benchmark window contains:
