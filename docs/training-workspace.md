@@ -30,7 +30,8 @@ The following rules are architectural constraints:
 - The frontend must not download or reparse source files to calculate Training insights.
 - Training-specific calculations belong in derived-metric builders or sports-lib, not Angular components.
 - Dashboard remains the user's modular surface. Training does not remove, relocate, or reconfigure Dashboard tiles, and
-  curated Training-only insights do not become hidden Dashboard dependencies.
+  curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard
+  Aerobic Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
 - Missing TSS, zones, pace, sleep, power, heart rate, or durability evidence remains unavailable. Missing values are not
   converted to zero.
 - Merged benchmark events are excluded from Training. Multisport parent events are retained, but their normalized child
@@ -273,7 +274,38 @@ The workspace also requests registered Easy/Hard and efficiency metrics because 
 scope. They are not standalone Training cards. Do not assume every requested snapshot maps one-to-one to visible markup.
 
 Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which is all registered derived kinds. Training-only
-kinds are deliberately excluded from default Dashboard subscriptions and freshness probes.
+kinds are excluded from the default Dashboard subscription and freshness scope. Dashboard adds `training_capacity` or
+`training_durability` to that scope only while a matching explicitly configured tile exists. Opening a normal Dashboard
+therefore does not create a hidden Training dependency or freshness probe for those kinds.
+
+### Dashboard insight reuse
+
+The configurable Dashboard can present a narrow, read-only view of selected Training evidence:
+
+- **Aerobic Capacity** selects the most recent imported running or cycling VO2 max, displays its provider/source
+  provenance, and compares only observations from the same source. FTP settings and modeled critical power never become
+  VO2 values.
+- **Aerobic Durability** uses the persisted `training_durability` payload and the existing sports-lib evidence protocol.
+  The card selects the current context with the most eligible samples, then uses eligibility ratio and discipline priority
+  as deterministic tie-breakers, followed by the lexical context key when every meaningful signal is equal. Running,
+  Cycling, and Open water show aerobic decoupling; Pool shows pace retention. Missing weeks remain gaps.
+- **Readiness Signals** is a Dashboard-only frontend heuristic. It combines available current Form/ramp, sleep score or
+  duration, HRV versus the user's recent recorded baseline, and overnight minimum heart rate versus that baseline. Its
+  sleep evidence comes from a dedicated live query lower-bounded to the current 30-day lookback, independent of the
+  pageable Sleep chart. The open upper bound lets a dashboard left open receive newly imported nights. The latest
+  aggregated non-nap night must be no more than 48 hours old. Future-dated records are ignored and cannot suppress the
+  latest valid night; HRV and minimum-heart-rate baselines use up to 14 prior nights from the same provider. An expiry
+  timer rebuilds the card when that 48-hour boundary is crossed even if no new data arrives. A historical composite
+  readiness series is not shown because historical Form/ramp and sleep signals are not currently aligned into one series.
+  The score and evidence confidence are separate, missing inputs remain missing, and the result is not a medical score, a
+  VO2 estimate, or a change to the curated Training state.
+  Training continues to treat sleep as non-causal context.
+
+Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
+useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
+its default 14-day window, Readiness accepts sleep-only evidence only when its latest aggregated non-nap night is no more
+than 48 hours old, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild merely
+because the manager dialog was opened.
 
 ### Writes and ingress
 

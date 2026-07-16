@@ -92,9 +92,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('does not automatically add sleep, KPI, curated training, or power-curve tiles');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
-    expect(gettingStartedSection?.content).toContain('add every available preset tile');
+    expect(gettingStartedSection?.content).toContain('**Add recommended**');
+    expect(gettingStartedSection?.content).toContain('**Add everything**');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
-    expect(gettingStartedSection?.content).toContain('Load and recovery interpretation lives in **Training**');
+    expect(gettingStartedSection?.content).toContain('**Training** remains the fixed analytical workspace');
+    expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
+    expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
+    expect(gettingStartedSection?.content).toContain('**Readiness Signals**');
     expect(gettingStartedSection?.content).toContain('What drove this');
     expect(gettingStartedSection?.content).toContain('neutral higher/lower language');
     expect(gettingStartedSection?.content).toContain('plots a readable 12-week trajectory');

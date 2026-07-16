@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { BehaviorSubject, of } from 'rxjs';
+import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -21,6 +22,8 @@ import {
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -40,6 +43,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
@@ -59,6 +63,12 @@ import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppSleepService } from '../../../services/app.sleep.service';
+import { AppEventService } from '../../../services/app.event.service';
+import { AppRouteService } from '../../../services/app.route.service';
+import {
+  createDashboardDerivedMetricsMissingState,
+  DashboardDerivedMetricsService,
+} from '../../../services/dashboard-derived-metrics.service';
 import {
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
@@ -165,8 +175,11 @@ describe('DashboardManagerDialogComponent', () => {
   let userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> };
   let dialogRefMock: { close: ReturnType<typeof vi.fn> };
   let dialogMock: { open: ReturnType<typeof vi.fn> };
-  let sleepEligibilitySubject: BehaviorSubject<boolean>;
-  let sleepServiceMock: { watchHasAnySleepSession: ReturnType<typeof vi.fn> };
+  let sleepEligibilitySubject: BehaviorSubject<any[]>;
+  let sleepServiceMock: { watchForDashboard: ReturnType<typeof vi.fn> };
+  let eventServiceMock: { getEventsBy: ReturnType<typeof vi.fn> };
+  let routeServiceMock: { watchHasAnyRoutePreview: ReturnType<typeof vi.fn> };
+  let derivedMetricsServiceMock: { watch: ReturnType<typeof vi.fn> };
   let hapticsMock: {
     selection: ReturnType<typeof vi.fn>;
     success: ReturnType<typeof vi.fn>;
@@ -201,9 +214,18 @@ describe('DashboardManagerDialogComponent', () => {
         afterClosed: () => of(false),
       }),
     };
-    sleepEligibilitySubject = new BehaviorSubject<boolean>(false);
+    sleepEligibilitySubject = new BehaviorSubject<any[]>([]);
     sleepServiceMock = {
-      watchHasAnySleepSession: vi.fn().mockReturnValue(sleepEligibilitySubject.asObservable()),
+      watchForDashboard: vi.fn().mockReturnValue(sleepEligibilitySubject.asObservable()),
+    };
+    eventServiceMock = {
+      getEventsBy: vi.fn().mockReturnValue(of([])),
+    };
+    routeServiceMock = {
+      watchHasAnyRoutePreview: vi.fn().mockReturnValue(of(false)),
+    };
+    derivedMetricsServiceMock = {
+      watch: vi.fn().mockReturnValue(of(createDashboardDerivedMetricsMissingState())),
     };
     hapticsMock = {
       selection: vi.fn(),
@@ -217,6 +239,9 @@ describe('DashboardManagerDialogComponent', () => {
         { provide: AppUserService, useValue: userServiceMock },
         { provide: AppHapticsService, useValue: hapticsMock },
         { provide: AppSleepService, useValue: sleepServiceMock },
+        { provide: AppEventService, useValue: eventServiceMock },
+        { provide: AppRouteService, useValue: routeServiceMock },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetricsServiceMock },
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatDialog, useValue: dialogMock },
         { provide: MAT_DIALOG_DATA, useValue: dialogData },
@@ -257,6 +282,9 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
       DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
       DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+      DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+      DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+      DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
     ]);
   });
 
@@ -905,6 +933,7 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
       DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
       DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+      DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
     ]);
 
     component.onKpiGroupChange('execution');
@@ -913,6 +942,8 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
       DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
       DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+      DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+      DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
     ]);
   });
 
@@ -928,6 +959,7 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FATIGUE_ATL,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_RECOVERY_DEBT,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_PLUS_7D,
+      DASHBOARD_MANAGER_PRESET_IDS.KPI_READINESS_CONFIDENCE,
     ]);
   });
 
@@ -938,7 +970,8 @@ describe('DashboardManagerDialogComponent', () => {
     const styles = readFileSync(stylesPath, 'utf8');
 
     expect(template).not.toContain('Simplify dashboard');
-    expect(template).toContain('Add all');
+    expect(template).toContain('Add recommended');
+    expect(template).toContain('Add everything');
     expect(template).toContain('Remove all');
     expect(template).toContain('Preset category');
     expect(template).toContain('Presets');
@@ -970,7 +1003,6 @@ describe('DashboardManagerDialogComponent', () => {
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     const presetTiles = getDashboardManagerPresetDefinitions()
-      .filter(definition => definition.id !== DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP)
       .map((definition, index) => buildDashboardManagerPresetTile({
         presetId: definition.id,
         order: index,
@@ -990,7 +1022,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles.filter((tile: any) => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE)).toHaveLength(2);
     expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(true);
     expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(true);
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(false);
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
     expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
       state: 'added',
       source: 'default-kpi',
@@ -1032,15 +1064,100 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.savingAction).toBeNull();
   });
 
-  it('refreshes sleep eligibility when adding all tiles', async () => {
+  it('refreshes sleep eligibility when adding recommended tiles', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
-    sleepServiceMock.watchHasAnySleepSession.mockReturnValueOnce(of(true));
+    sleepServiceMock.watchForDashboard.mockReturnValueOnce(of([{ id: 'recent-sleep' }]));
 
-    await component.addAllTiles();
+    await component.addRecommendedTiles();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
-    expect(sleepServiceMock.watchHasAnySleepSession).toHaveBeenCalledWith('user-1');
+    expect(sleepServiceMock.watchForDashboard).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(Number),
+      expect.any(Number),
+    );
+  });
+
+  it('does not recommend Readiness Signals from stale sleep alone', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    const staleEndTimeMs = Date.now() - (72 * 60 * 60 * 1000);
+    sleepServiceMock.watchForDashboard.mockReturnValue(of([{
+      id: 'stale-sleep',
+      sleepDate: '2026-01-01',
+      startTimeMs: staleEndTimeMs - (8 * 60 * 60 * 1000),
+      endTimeMs: staleEndTimeMs,
+      durationSeconds: 8 * 60 * 60,
+      isNap: false,
+      source: { provider: 'GarminAPI', sourceSessionKey: 'stale-sleep' },
+    }]));
+
+    await component.addRecommendedTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => (
+      tile.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE
+    ))).toBe(false);
+  });
+
+  it('checks recommendation evidence inside the default activity and sleep windows', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const activityCall = eventServiceMock.getEventsBy.mock.calls[0];
+    const sleepCall = sleepServiceMock.watchForDashboard.mock.calls[0];
+
+    expect(activityCall?.[0]).toBe(dialogData.user);
+    expect(activityCall?.[2]).toBe('startDate');
+    expect(activityCall?.[3]).toBe(false);
+    expect(activityCall?.[4]).toBe(1);
+    expect(activityCall?.[1]?.[1]?.value - activityCall?.[1]?.[0]?.value).toBe(90 * dayMs);
+    expect(sleepCall?.[0]).toBe('user-1');
+    expect(sleepCall?.[2] - sleepCall?.[1]).toBe(14 * dayMs);
+  });
+
+  it('recommends only power disciplines with evidence in the prepared 1-year snapshot', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = [];
+    const activePowerRange = {
+      sourceEventCount: 2,
+      matchedEventCount: 2,
+      latestActivity: null,
+      bestPoints: [60, 400, 0],
+      best30dPoints: [],
+      best30dEventCount: 0,
+      best90dPoints: [],
+      best90dEventCount: 0,
+    };
+    const emptyPowerRange = {
+      ...activePowerRange,
+      sourceEventCount: 0,
+      matchedEventCount: 0,
+      bestPoints: [],
+    };
+    derivedMetricsServiceMock.watch.mockReturnValue(of({
+      ...createDashboardDerivedMetricsMissingState(),
+      powerCurve: {
+        scopes: {
+          cycling: { ranges: { '1y': activePowerRange }, thisWeekByStartDay: {} },
+          running: { ranges: { '1y': emptyPowerRange }, thisWeekByStartDay: {} },
+        },
+      },
+    }));
+
+    await component.addRecommendedTiles();
+
+    const tiles = dialogData.user.settings.dashboardSettings.tiles;
+    expect(tiles.some((tile: any) => (
+      tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
+      && tile.eventFilters?.activityTypes?.includes(ActivityTypes.Cycling)
+    ))).toBe(true);
+    expect(tiles.some((tile: any) => (
+      tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
+      && tile.eventFilters?.activityTypes?.includes(ActivityTypes.Running)
+    ))).toBe(false);
+    expect(derivedMetricsServiceMock.watch).toHaveBeenLastCalledWith(
+      dialogData.user,
+      expect.objectContaining({ metricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.PowerCurve]) }),
+    );
   });
 
   it('restores dashboard settings when adding all fails', async () => {

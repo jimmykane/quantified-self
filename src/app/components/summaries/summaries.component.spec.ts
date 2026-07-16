@@ -34,9 +34,11 @@ import {
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
 import { getDashboardPowerCurveActivityTypes } from '../../helpers/dashboard-power-curve-scope.helper';
+import { DASHBOARD_READINESS_SLEEP_MAX_AGE_MS } from '../../helpers/dashboard-training-insights.helper';
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
@@ -93,6 +95,8 @@ describe('SummariesComponent', () => {
         freshnessForecast: null,
         intensityDistribution: null,
         efficiencyTrend: null,
+        trainingCapacity: null,
+        trainingDurability: null,
         formStatus: 'missing',
         recoveryNowStatus: 'missing',
         acwrStatus: 'missing',
@@ -106,6 +110,8 @@ describe('SummariesComponent', () => {
         freshnessForecastStatus: 'missing',
         intensityDistributionStatus: 'missing',
         efficiencyTrendStatus: 'missing',
+        trainingCapacityStatus: 'missing',
+        trainingDurabilityStatus: 'missing',
       })),
       ensureForDashboard: vi.fn(),
     };
@@ -627,6 +633,7 @@ describe('SummariesComponent', () => {
         removeDescentForEventTypes: [ActivityTypes.Cycling],
       },
       sleepSessions: [],
+      readinessSleepSessions: [],
       sleepTrendWindow: expect.objectContaining({
         range: '14d',
         startMs: expect.any(Number),
@@ -649,6 +656,8 @@ describe('SummariesComponent', () => {
         intensityDistribution: null,
         efficiencyTrend: null,
         powerCurve: null,
+        trainingCapacity: null,
+        trainingDurability: null,
       },
     });
     expect(component.tiles).toBe(builtTiles);
@@ -1669,6 +1678,143 @@ describe('SummariesComponent', () => {
     }));
   });
 
+  it('keeps readiness sleep evidence on the current window while the Sleep tile pages backward', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const sleepStreams: Array<{ startMs: number; endMs: number; stream: Subject<any[]> }> = [];
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    mockSleepService.watchForDashboard.mockImplementation((_uid, startMs, endMs) => {
+      const stream = new Subject<any[]>();
+      sleepStreams.push({ startMs, endMs, stream });
+      return stream.asObservable();
+    });
+    component.user = {
+      uid: 'user-1',
+      settings: {
+        dashboardSettings: {
+          sleepTrend: { range: '14d' },
+          tiles: [
+            {
+              type: TileTypes.Chart,
+              order: 0,
+              chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+              dataType: 'SleepDuration',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 2, rows: 1 },
+            },
+            {
+              type: TileTypes.Chart,
+              order: 1,
+              chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+              dataType: 'Training Stress Score',
+              dataValueType: ChartDataValueTypes.Total,
+              dataCategoryType: ChartDataCategoryTypes.DateType,
+              size: { columns: 1, rows: 1 },
+            },
+          ],
+        },
+      },
+    } as any;
+
+    await component.ngOnChanges({
+      user: {
+        currentValue: component.user,
+        previousValue: null,
+        firstChange: true,
+        isFirstChange: () => true,
+      } as any,
+    });
+
+    const readinessStream = sleepStreams.find(({ startMs, endMs }) => (
+      endMs === Number.MAX_SAFE_INTEGER
+      && startMs === nowMs - (30 * dayMs)
+    ));
+    expect(readinessStream).toBeTruthy();
+    readinessStream?.stream.next([{ id: 'current-sleep' }]);
+    buildDashboardTileViewModelsSpy.mockClear();
+
+    component.onSleepTrendNavigate('older');
+    const historicalStream = sleepStreams.at(-1);
+    historicalStream?.stream.next([{ id: 'historical-sleep' }]);
+    await Promise.resolve();
+
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(3);
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      sleepSessions: [{ id: 'historical-sleep' }],
+      readinessSleepSessions: [{ id: 'current-sleep' }],
+    }));
+  });
+
+  it('does not surface a derived pending state when readiness already has usable signals', () => {
+    (component as any).derivedFormNowStatus = 'missing';
+    (component as any).derivedRampRateStatus = 'building';
+    const tile = {
+      type: TileTypes.Chart,
+      order: 0,
+      chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+      readinessSignals: {
+        score: 80,
+        label: 'Ready',
+        confidence: 'medium',
+        availableSignalCount: 2,
+        totalSignalCount: 4,
+        form: null,
+        sleepScore: 85,
+        hrvRatio: 1.05,
+        minimumHeartRateRatio: null,
+        trend: [],
+      },
+    } as any;
+
+    expect(component.getReadinessSignalsStatusForTile(tile)).toBeNull();
+    (component as any).derivedRampRateContext = { rampRate: 1 };
+    expect((component as any).resolveDerivedStatusForChartType(
+      DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+    )).toBeNull();
+
+    (component as any).derivedRampRateContext = null;
+    tile.readinessSignals = null;
+    expect(component.getReadinessSignalsStatusForTile(tile)).toBe('building');
+  });
+
+  it('rebuilds readiness when the latest sleep evidence crosses its freshness limit', async () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    (component as any).readinessSleepSessions = [
+      {
+        id: 'current-sleep',
+        sleepDate: '2026-04-30',
+        startTimeMs: nowMs - (8 * 60 * 60 * 1000),
+        endTimeMs: nowMs,
+        durationSeconds: 8 * 60 * 60,
+        isNap: false,
+        source: { provider: 'GarminAPI', sourceSessionKey: 'current-sleep' },
+      },
+      {
+        id: 'future-sleep',
+        sleepDate: '2026-05-01',
+        startTimeMs: nowMs + (16 * 60 * 60 * 1000),
+        endTimeMs: nowMs + (24 * 60 * 60 * 1000),
+        durationSeconds: 8 * 60 * 60,
+        isNap: false,
+        source: { provider: 'GarminAPI', sourceSessionKey: 'future-sleep' },
+      },
+    ];
+    const rebuildSpy = vi.spyOn(component as any, 'rebuildTilesFromCurrentState').mockResolvedValue(undefined);
+
+    (component as any).updateReadinessSleepExpiryTimer();
+    expect((component as any).readinessSleepExpiryTimeoutHandle).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
+
+    expect(rebuildSpy).toHaveBeenCalledTimes(1);
+    expect((component as any).readinessSleepExpiryTimeoutHandle).toBeNull();
+  });
+
   it('should treat the 1y sleep range as a bounded pageable window', async () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     const yearMs = 365 * 24 * 60 * 60 * 1000;
@@ -1872,7 +2018,10 @@ describe('SummariesComponent', () => {
         formStatus: 'failed',
         recoveryNowStatus: 'ready',
       }),
-      { force: true },
+      expect.objectContaining({
+        force: true,
+        metricKinds: expect.arrayContaining(['form']),
+      }),
     );
   });
 
@@ -2067,7 +2216,7 @@ describe('SummariesComponent', () => {
     expect(component.desktopTileDragEnabled).toBe(false);
   });
 
-  it('should open dashboard manager dialog and rebuild tiles when dialog saves changes', async () => {
+  it('should resynchronize dashboard subscriptions when the manager saves changes', async () => {
     component.user = {
       settings: {
         dashboardSettings: {
@@ -2087,7 +2236,7 @@ describe('SummariesComponent', () => {
     mockDialog.open.mockReturnValue({
       afterClosed: () => of({ saved: true }),
     });
-    const rebuildSpy = vi.spyOn(component as any, 'rebuildTilesFromCurrentState').mockResolvedValue(undefined);
+    const refreshSpy = vi.spyOn(component as any, 'unsubscribeAndCreateCharts').mockResolvedValue(undefined);
 
     await component.openDashboardManagerDialog();
 
@@ -2099,7 +2248,7 @@ describe('SummariesComponent', () => {
         initialEditTileOrder: null,
       }),
     }));
-    expect(rebuildSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(component.isDashboardManagerOpen).toBe(false);
   });
 

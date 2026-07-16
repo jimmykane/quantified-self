@@ -13,6 +13,7 @@ import {
   DASHBOARD_MANAGER_PRESET_IDS,
   getDashboardManagerPresetDefinition,
   getDashboardManagerPresetDefinitions,
+  getDashboardManagerRecommendedPresetDefinitions,
 } from './dashboard-manager-presets.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
@@ -28,18 +29,60 @@ import {
 import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 32 unique definitions', () => {
+  it('exposes the expanded preset catalog with 36 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(32);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(32);
+    expect(definitions).toHaveLength(36);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(36);
     expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(8);
-    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(15);
-    expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(7);
+    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(18);
+    expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(2);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE);
+  });
+
+  it('returns only recommended presets with evidence in their default data windows', () => {
+    const recommended = getDashboardManagerRecommendedPresetDefinitions({
+      'activity-history': true,
+      sleep: false,
+      'cycling-power': true,
+      'running-power': false,
+      'aerobic-capacity': true,
+      'aerobic-durability': false,
+      'readiness-signals': false,
+      'event-map': true,
+      routes: false,
+    });
+    const ids = recommended.map(definition => definition.id);
+
+    expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR);
+    expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_WEEKLY_TRAINING_TIME);
+    expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE);
+    expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.KPI_AEROBIC_CAPACITY);
+    expect(ids).toContain(DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED);
+    expect(ids).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
+    expect(ids).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE);
+    expect(ids).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.KPI_AEROBIC_DURABILITY);
+    expect(ids).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.MAP_ROUTES_PREVIEW);
+    expect(ids).not.toContain(DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_NOW);
+  });
+
+  it('does not recommend empty presets when no eligibility evidence is available', () => {
+    const recommended = getDashboardManagerRecommendedPresetDefinitions({
+      'activity-history': false,
+      sleep: false,
+      'cycling-power': false,
+      'running-power': false,
+      'aerobic-capacity': false,
+      'aerobic-durability': false,
+      'readiness-signals': false,
+      'event-map': false,
+      routes: false,
+    });
+
+    expect(recommended).toEqual([]);
   });
 
   it('returns null for unknown preset ids', () => {

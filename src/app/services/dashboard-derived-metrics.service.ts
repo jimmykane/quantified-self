@@ -216,6 +216,10 @@ const DASHBOARD_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
     && kind !== DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 );
 
+export function getDefaultDashboardDerivedMetricKinds(): DerivedMetricKind[] {
+  return [...DASHBOARD_DERIVED_METRIC_KINDS];
+}
+
 export const TRAINING_WORKSPACE_DERIVED_METRIC_KINDS = [...ALL_DERIVED_METRIC_KINDS];
 
 export interface DashboardDerivedMetricsScopeOptions {

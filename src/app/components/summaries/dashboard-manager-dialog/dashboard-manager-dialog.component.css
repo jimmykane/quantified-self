@@ -25,7 +25,7 @@
 }
 
 .dashboard-manager-bulk-actions button {
-  min-width: 8rem;
+  min-width: 9.75rem;
 }
 
 :host ::ng-deep .dashboard-manager-bulk-actions .mdc-button__label {
@@ -42,6 +42,7 @@
   min-height: 1.125rem;
   min-width: 0;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .dashboard-manager-button-content mat-icon {

@@ -54,6 +54,8 @@ import type {
 } from '../../../models/app-user.interface';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -73,6 +75,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardCuratedChartType,
@@ -94,12 +97,20 @@ import {
   DASHBOARD_MANAGER_PRESET_IDS,
   getDashboardManagerPresetDefinition,
   getDashboardManagerPresetDefinitions,
+  getDashboardManagerRecommendedPresetDefinitions,
+  type DashboardManagerPresetEligibility,
   type DashboardManagerPresetCategory,
   type DashboardManagerPresetDefinition,
   type DashboardManagerPresetId,
 } from '../../../helpers/dashboard-manager-presets.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppSleepService } from '../../../services/app.sleep.service';
+import { AppEventService } from '../../../services/app.event.service';
+import { AppRouteService } from '../../../services/app.route.service';
+import {
+  createDashboardDerivedMetricsMissingState,
+  DashboardDerivedMetricsService,
+} from '../../../services/dashboard-derived-metrics.service';
 import {
   cloneDashboardTileEventFilters,
   DASHBOARD_TILE_EVENT_RANGE_OPTIONS,
@@ -147,6 +158,15 @@ import {
   resolveDashboardPowerCurveTileScope,
   type DashboardPowerCurveScope,
 } from '../../../helpers/dashboard-power-curve-scope.helper';
+import {
+  buildDashboardAerobicCapacityContext,
+  buildDashboardAerobicDurabilityContext,
+  buildDashboardReadinessSignalsContext,
+} from '../../../helpers/dashboard-training-insights.helper';
+import { buildDashboardPowerCurveContextFromSnapshot } from '../../../helpers/dashboard-power-curve.helper';
+import { buildDashboardSleepTrendContext } from '../../../helpers/dashboard-sleep-chart.helper';
+import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
+import type { SleepSession } from '@shared/sleep';
 
 export interface DashboardManagerDialogData {
   user: AppUserInterface;
@@ -181,7 +201,7 @@ interface DashboardManagerSettingsSnapshot {
   autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
-type DashboardManagerSavingAction = 'save' | 'addAll' | 'removeAll' | null;
+type DashboardManagerSavingAction = 'save' | 'addRecommended' | 'addAll' | 'removeAll' | null;
 
 @Component({
   selector: 'app-dashboard-manager-dialog',
@@ -190,6 +210,8 @@ type DashboardManagerSavingAction = 'save' | 'addAll' | 'removeAll' | null;
   standalone: false,
 })
 export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly recommendedActivityLookbackMs = 90 * 24 * 60 * 60 * 1000;
+  private static readonly recommendedSleepLookbackMs = 14 * 24 * 60 * 60 * 1000;
   private static readonly excludedChartTypePatterns = [
     /^bri.*dev/i,
     /^spiral$/i,
@@ -338,6 +360,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'wb_sunny',
     [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'flash_on',
     [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'query_stats',
+    [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'air',
+    [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'timeline',
+    [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'fact_check',
   };
   public readonly kpiChartDescriptionByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week sparkline.',
@@ -355,6 +380,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Easy (Z1-2) intensity share.',
     [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Latest weekly Hard (Z5-7) intensity share.',
     [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Current efficiency vs prior 4-week baseline.',
+    [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'Latest imported VO2 max with same-source history.',
+    [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'Long-session decoupling or pool pace retention from persisted evidence.',
+    [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'Load, sleep, HRV, and overnight heart-rate signals with explicit confidence.',
   };
   public readonly mapStyleOptions: Array<{ value: MapStyleName; label: string }> = [
     { value: 'default', label: 'Default' },
@@ -405,9 +433,21 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public isSaving = false;
   public savingAction: DashboardManagerSavingAction = null;
   public saveError = '';
+  public recommendedEligibility: DashboardManagerPresetEligibility = {
+    'activity-history': false,
+    sleep: false,
+    'cycling-power': false,
+    'running-power': false,
+    'aerobic-capacity': false,
+    'aerobic-durability': false,
+    'readiness-signals': false,
+    'event-map': false,
+    routes: false,
+  };
   private hasSavedChanges = false;
-  private hasSleepDataForAddAll = false;
-  private sleepEligibilitySubscription = new Subscription();
+  private hasCurrentReadinessSleep = false;
+  private hasDerivedReadinessLoad = false;
+  private bulkEligibilitySubscription = new Subscription();
   private shouldAutoFocusEditSection = false;
 
   @ViewChild('customSection') private customSectionRef?: ElementRef<HTMLElement>;
@@ -425,6 +465,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     private userService: AppUserService,
     private hapticsService: AppHapticsService,
     private sleepService: AppSleepService,
+    private eventService: AppEventService,
+    private routeService: AppRouteService,
+    private derivedMetricsService: DashboardDerivedMetricsService,
   ) { }
 
   ngOnInit(): void {
@@ -446,7 +489,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
     this.dataGroups = this.buildDataGroups();
     this.ensurePresetSelection();
-    this.watchSleepEligibilityForAddAll();
+    this.watchBulkPresetEligibility();
 
     if (this.dashboardTiles.length > 0) {
       this.editTileOrder = this.dashboardTiles[0].order;
@@ -472,7 +515,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   ngOnDestroy(): void {
-    this.sleepEligibilitySubscription.unsubscribe();
+    this.bulkEligibilitySubscription.unsubscribe();
   }
 
   get dashboardTiles(): TileSettingsInterface[] {
@@ -546,6 +589,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return false;
   }
 
+  get isAddRecommendedDisabled(): boolean {
+    return this.isSaving || this.getMissingRecommendedDashboardTiles().length === 0;
+  }
+
   get isAddAllDisabled(): boolean {
     return this.isSaving || this.getMissingAllDashboardTiles().length === 0;
   }
@@ -560,6 +607,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
   get isAddAllSaving(): boolean {
     return this.savingAction === 'addAll';
+  }
+
+  get isAddRecommendedSaving(): boolean {
+    return this.savingAction === 'addRecommended';
   }
 
   get isRemoveAllSaving(): boolean {
@@ -905,11 +956,52 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
 
     try {
-      await this.refreshSleepEligibilityForAddAll();
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
       const missingTiles = this.getMissingAllDashboardTiles(clonedTiles);
       if (!missingTiles.length) {
         this.saveError = 'All available dashboard tiles are already on your dashboard.';
+        this.stopSaving();
+        return;
+      }
+
+      const bulkAppendError = this.appendBulkTiles(clonedTiles, missingTiles);
+      if (bulkAppendError) {
+        this.saveError = bulkAppendError;
+        this.stopSaving();
+        return;
+      }
+
+      dashboardSettings.tiles = clonedTiles;
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
+      await this.persistDashboardSettings(dashboardSettings);
+      this.hasSavedChanges = true;
+      this.hapticsService.success();
+      this.dialogRef.close({ saved: true });
+    } catch (error) {
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
+    } finally {
+      this.stopSaving();
+    }
+  }
+
+  async addRecommendedTiles(): Promise<void> {
+    if (this.isSaving) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    this.startSaving('addRecommended');
+    this.saveError = '';
+    const dashboardSettings = this.data.user.settings.dashboardSettings;
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
+
+    try {
+      await this.refreshRecommendedEligibility();
+      const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
+      const missingTiles = this.getMissingRecommendedDashboardTiles(clonedTiles);
+      if (!missingTiles.length) {
+        this.saveError = 'All recommended dashboard tiles for your available data are already present.';
         this.stopSaving();
         return;
       }
@@ -1446,14 +1538,21 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return allTiles.filter(candidateTile => !tiles.some(tile => this.isTileForBulkDashboardTile(tile, candidateTile)));
   }
 
-  private getAllDashboardManagerPresetTiles(): TileSettingsInterface[] {
-    return getDashboardManagerPresetDefinitions()
-      .filter(definition => (
-        definition.category !== 'curated'
-        || definition.curatedChartType !== DASHBOARD_SLEEP_TREND_CHART_TYPE
-        || this.hasSleepDataForAddAll
-      ))
-      .map((definition, index) => buildDashboardManagerPresetTile({
+  private getMissingRecommendedDashboardTiles(
+    tiles: TileSettingsInterface[] = this.dashboardTiles,
+  ): TileSettingsInterface[] {
+    const recommendedTiles = this.getAllDashboardManagerPresetTiles(
+      getDashboardManagerRecommendedPresetDefinitions(this.recommendedEligibility),
+    );
+    return recommendedTiles.filter(candidateTile => (
+      !tiles.some(tile => this.isTileForBulkDashboardTile(tile, candidateTile))
+    ));
+  }
+
+  private getAllDashboardManagerPresetTiles(
+    definitions: DashboardManagerPresetDefinition[] = getDashboardManagerPresetDefinitions(),
+  ): TileSettingsInterface[] {
+    return definitions.map((definition, index) => buildDashboardManagerPresetTile({
         presetId: definition.id,
         order: index,
         size: this.resolveDefaultAddTileSize(definition),
@@ -1529,39 +1628,137 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return Math.max(...tiles.map(tile => Number(tile?.order || 0))) + 1;
   }
 
-  private watchSleepEligibilityForAddAll(): void {
-    this.sleepEligibilitySubscription.unsubscribe();
-    this.sleepEligibilitySubscription = new Subscription();
-    this.hasSleepDataForAddAll = false;
+  private watchBulkPresetEligibility(): void {
+    this.bulkEligibilitySubscription.unsubscribe();
+    this.bulkEligibilitySubscription = new Subscription();
+    this.resetRecommendedEligibility();
     const uid = `${this.data?.user?.uid || ''}`.trim();
     if (!uid) {
       return;
     }
 
-    this.sleepEligibilitySubscription = this.sleepService.watchHasAnySleepSession(uid).subscribe({
-      next: (hasSleepData) => {
-        this.hasSleepDataForAddAll = hasSleepData === true;
+    this.bulkEligibilitySubscription.add(this.watchRecommendedActivityEvents().subscribe({
+      next: events => this.updateActivityEligibility(events.length > 0),
+      error: () => this.updateActivityEligibility(false),
+    }));
+    this.bulkEligibilitySubscription.add(this.watchRecommendedSleepSessions(uid).subscribe({
+      next: (sessions) => {
+        this.updateSleepEligibility(sessions);
       },
       error: () => {
-        this.hasSleepDataForAddAll = false;
+        this.updateSleepEligibility([]);
       },
-    });
+    }));
+    this.bulkEligibilitySubscription.add(this.routeService.watchHasAnyRoutePreview(uid).subscribe({
+      next: hasRoutes => this.recommendedEligibility.routes = hasRoutes === true,
+      error: () => this.recommendedEligibility.routes = false,
+    }));
+    this.bulkEligibilitySubscription.add(this.derivedMetricsService.watch(this.data.user, {
+      metricKinds: this.getBulkEligibilityMetricKinds(),
+    }).subscribe({
+      next: state => this.updateDerivedEligibility(state),
+      error: () => this.updateDerivedEligibility(createDashboardDerivedMetricsMissingState()),
+    }));
   }
 
-  private async refreshSleepEligibilityForAddAll(): Promise<void> {
+  private async refreshRecommendedEligibility(): Promise<void> {
     const uid = `${this.data?.user?.uid || ''}`.trim();
     if (!uid) {
-      this.hasSleepDataForAddAll = false;
+      this.resetRecommendedEligibility();
       return;
     }
 
-    try {
-      this.hasSleepDataForAddAll = await firstValueFrom(
-        this.sleepService.watchHasAnySleepSession(uid).pipe(take(1)),
-      ) === true;
-    } catch {
-      this.hasSleepDataForAddAll = false;
-    }
+    const [events, sleepSessions, hasRoutes, derivedState] = await Promise.all([
+      firstValueFrom(this.watchRecommendedActivityEvents().pipe(take(1))).catch(() => []),
+      firstValueFrom(this.watchRecommendedSleepSessions(uid).pipe(take(1))).catch(() => []),
+      firstValueFrom(this.routeService.watchHasAnyRoutePreview(uid).pipe(take(1))).catch(() => false),
+      firstValueFrom(this.derivedMetricsService.watch(this.data.user, {
+        metricKinds: this.getBulkEligibilityMetricKinds(),
+      }).pipe(take(1))).catch(() => createDashboardDerivedMetricsMissingState()),
+    ]);
+
+    this.updateActivityEligibility(events.length > 0);
+    this.updateSleepEligibility(sleepSessions);
+    this.recommendedEligibility.routes = hasRoutes === true;
+    this.updateDerivedEligibility(derivedState);
+  }
+
+  private watchRecommendedActivityEvents(nowMs = Date.now()) {
+    return this.eventService.getEventsBy(this.data.user, [
+      {
+        fieldPath: 'startDate',
+        opStr: '>=',
+        value: Math.max(0, nowMs - DashboardManagerDialogComponent.recommendedActivityLookbackMs),
+      },
+      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
+    ], 'startDate', false, 1);
+  }
+
+  private watchRecommendedSleepSessions(uid: string, nowMs = Date.now()) {
+    return this.sleepService.watchForDashboard(
+      uid,
+      Math.max(0, nowMs - DashboardManagerDialogComponent.recommendedSleepLookbackMs),
+      nowMs,
+    );
+  }
+
+  private updateActivityEligibility(hasEvents: boolean): void {
+    this.recommendedEligibility['activity-history'] = hasEvents;
+    this.recommendedEligibility['event-map'] = hasEvents;
+  }
+
+  private updateSleepEligibility(sessions: readonly SleepSession[], nowMs = Date.now()): void {
+    this.recommendedEligibility.sleep = sessions.length > 0;
+    this.hasCurrentReadinessSleep = buildDashboardReadinessSignalsContext({
+      sleepTrend: buildDashboardSleepTrendContext(sessions, { nowMs }),
+      nowMs,
+    }) !== null;
+    this.recommendedEligibility['readiness-signals'] = (
+      this.hasCurrentReadinessSleep || this.hasDerivedReadinessLoad
+    );
+  }
+
+  private updateDerivedEligibility(
+    state: ReturnType<typeof createDashboardDerivedMetricsMissingState>,
+  ): void {
+    this.recommendedEligibility['aerobic-capacity'] = buildDashboardAerobicCapacityContext(
+      state.trainingCapacity,
+    ) !== null;
+    this.recommendedEligibility['aerobic-durability'] = buildDashboardAerobicDurabilityContext(
+      state.trainingDurability,
+    ) !== null;
+    const cyclingPower = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
+      scope: 'cycling',
+      range: '1y',
+    });
+    const runningPower = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
+      scope: 'running',
+      range: '1y',
+    });
+    this.recommendedEligibility['cycling-power'] = !!cyclingPower?.matchedEventCount && cyclingPower.series.length > 0;
+    this.recommendedEligibility['running-power'] = !!runningPower?.matchedEventCount && runningPower.series.length > 0;
+    this.hasDerivedReadinessLoad = state.formNow !== null || state.rampRate !== null;
+    this.recommendedEligibility['readiness-signals'] = (
+      this.hasCurrentReadinessSleep || this.hasDerivedReadinessLoad
+    );
+  }
+
+  private getBulkEligibilityMetricKinds() {
+    return [
+      DERIVED_METRIC_KINDS.FormNow,
+      DERIVED_METRIC_KINDS.RampRate,
+      DERIVED_METRIC_KINDS.TrainingCapacity,
+      DERIVED_METRIC_KINDS.TrainingDurability,
+      DERIVED_METRIC_KINDS.PowerCurve,
+    ];
+  }
+
+  private resetRecommendedEligibility(): void {
+    Object.keys(this.recommendedEligibility).forEach((key) => {
+      this.recommendedEligibility[key as keyof DashboardManagerPresetEligibility] = false;
+    });
+    this.hasCurrentReadinessSleep = false;
+    this.hasDerivedReadinessLoad = false;
   }
 
   private markAllDashboardAutoTilesDismissed(

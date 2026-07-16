@@ -55,6 +55,8 @@ import type {
 } from '../../../helpers/dashboard-derived-metrics.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
@@ -68,9 +70,15 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from '../../../helpers/dashboard-special-chart-types';
+import type {
+  DashboardAerobicCapacityContext,
+  DashboardAerobicDurabilityContext,
+  DashboardReadinessSignalsContext,
+} from '../../../helpers/dashboard-training-insights.helper';
 import {
   buildDashboardKpiExplanation,
   type DashboardKpiExplanationRow,
@@ -91,6 +99,7 @@ interface KpiPresentation {
   primarySuffix?: string;
   primarySigned?: boolean;
   secondaryValueText?: string;
+  missingLabel?: string;
   trend: Array<{ time: number; value: number | null }>;
 }
 
@@ -134,6 +143,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() efficiencyDelta4w?: DashboardEfficiencyDelta4wContext | null;
   @Input() freshnessForecast?: DashboardFreshnessForecastContext | null;
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
+  @Input() aerobicCapacity?: DashboardAerobicCapacityContext | null;
+  @Input() aerobicDurability?: DashboardAerobicDurabilityContext | null;
+  @Input() readinessSignals?: DashboardReadinessSignalsContext | null;
   @Input() acwrStatus?: DashboardDerivedMetricStatus | null;
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
@@ -146,6 +158,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() efficiencyDelta4wStatus?: DashboardDerivedMetricStatus | null;
   @Input() freshnessForecastStatus?: DashboardDerivedMetricStatus | null;
   @Input() intensityDistributionStatus?: DashboardDerivedMetricStatus | null;
+  @Input() aerobicCapacityStatus?: DashboardDerivedMetricStatus | null;
+  @Input() aerobicDurabilityStatus?: DashboardDerivedMetricStatus | null;
+  @Input() readinessSignalsStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
   @ViewChild('kpiDetailsDialogTemplate') kpiDetailsDialogTemplate?: TemplateRef<unknown>;
@@ -173,6 +188,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   public kpiDetailsRows: DashboardKpiExplanationRow[] = [];
   public kpiDetailsMissingHint = '';
   public hasKpiDetails = false;
+  public hasTrendData = false;
 
   constructor(
     private eChartsLoader: EChartsLoaderService,
@@ -217,6 +233,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.efficiencyDelta4w
       || changes.freshnessForecast
       || changes.intensityDistribution
+      || changes.aerobicCapacity
+      || changes.aerobicDurability
+      || changes.readinessSignals
       || changes.acwrStatus
       || changes.rampRateStatus
       || changes.monotonyStrainStatus
@@ -229,6 +248,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.efficiencyDelta4wStatus
       || changes.freshnessForecastStatus
       || changes.intensityDistributionStatus
+      || changes.aerobicCapacityStatus
+      || changes.aerobicDurabilityStatus
+      || changes.readinessSignalsStatus
       || changes.compactRow
     );
 
@@ -280,6 +302,10 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   private async refreshChart(): Promise<void> {
     const presentation = this.updatePresentationAndOverlay();
+    if (!this.hasTrendData) {
+      this.chartHost.dispose();
+      return;
+    }
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
       resolveEChartsThemeName(this.darkTheme),
@@ -308,6 +334,12 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       && typeof presentation.primaryValueText === 'string'
       && presentation.primaryValueText.trim().length > 0;
     this.secondaryValueText = presentation.secondaryValueText || '';
+    this.hasTrendData = presentation.trend.some(point => (
+      Number.isFinite(point.time)
+      && point.value !== null
+      && point.value !== undefined
+      && Number.isFinite(Number(point.value))
+    ));
     const activeStatus = this.resolveActiveStatus();
     const details = buildDashboardKpiExplanation({
       chartType: this.chartType,
@@ -327,6 +359,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       efficiencyDelta4w: this.efficiencyDelta4w,
       freshnessForecast: this.freshnessForecast,
       intensityDistribution: this.intensityDistribution,
+      aerobicCapacity: this.aerobicCapacity,
+      aerobicDurability: this.aerobicDurability,
+      readinessSignals: this.readinessSignals,
     }, (value, options) => this.formatPrimaryValue(value, options));
     this.kpiDetailsDescription = details.description;
     this.kpiDetailsRows = details.rows;
@@ -345,7 +380,9 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.kpiNoDataState = isPending ? 'pending' : 'missing';
       this.primaryValueText = '--';
       this.primaryValueIsText = false;
-      this.primaryLabel = isPending ? 'Updating metrics' : 'Needs training load';
+      this.primaryLabel = isPending
+        ? 'Updating metrics'
+        : presentation.missingLabel || 'Needs training load';
       this.secondaryLabel = '';
       this.secondaryValueText = '';
       this.noDataErrorHint = this.kpiDetailsMissingHint || this.noDataErrorHint;
@@ -361,6 +398,52 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private resolvePresentation(): KpiPresentation {
+    if (this.chartType === DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE) {
+      const context = this.aerobicCapacity || null;
+      return {
+        title: 'Aerobic Capacity',
+        primaryValue: context?.value ?? null,
+        primaryLabel: 'VO2 max (ml/kg/min)',
+        secondaryLabel: context
+          ? `${this.formatDiscipline(context.discipline)} · ${context.sourceLabel || 'Imported'}`
+          : 'Imported VO2 max evidence',
+        secondaryValueText: context?.changePct === null || context?.changePct === undefined
+          ? ''
+          : `${context.changePct >= 0 ? '+' : ''}${this.formatPrimaryValue(context.changePct)}%`,
+        missingLabel: 'No imported VO2 max',
+        trend: context?.trend || [],
+      };
+    }
+
+    if (this.chartType === DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE) {
+      const context = this.aerobicDurability || null;
+      const isPaceRetention = context?.metric === 'pace-retention';
+      return {
+        title: 'Aerobic Durability',
+        primaryValue: context?.value ?? null,
+        primaryLabel: isPaceRetention ? 'Pace retained' : 'Aerobic decoupling',
+        secondaryLabel: context ? `${context.scopeLabel} · ${context.contextLabel}` : 'Long-session durability evidence',
+        secondaryValueText: context ? `${context.sampleCount} samples` : '',
+        primarySuffix: '%',
+        missingLabel: 'No eligible durability evidence',
+        trend: context?.trend || [],
+      };
+    }
+
+    if (this.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE) {
+      const context = this.readinessSignals || null;
+      return {
+        title: 'Readiness Signals',
+        primaryValue: null,
+        primaryValueText: context?.label,
+        primaryLabel: context ? `${context.score}/100 signal score` : 'Load and recorded recovery signals',
+        secondaryLabel: context ? `${this.capitalize(context.confidence)} confidence` : 'Confidence shown separately',
+        secondaryValueText: context ? `${context.availableSignalCount}/${context.totalSignalCount} signals` : '',
+        missingLabel: 'No current readiness signals',
+        trend: context?.trend || [],
+      };
+    }
+
     if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
       return this.resolveLoadStatusPresentation();
     }
@@ -712,6 +795,15 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private resolveActiveStatus(): DashboardDerivedMetricStatus | null {
+    if (this.chartType === DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE) {
+      return this.aerobicCapacityStatus || null;
+    }
+    if (this.chartType === DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE) {
+      return this.aerobicDurabilityStatus || null;
+    }
+    if (this.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE) {
+      return this.readinessSignalsStatus || null;
+    }
     if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
       return this.resolveCombinedStatus([
         this.formNowStatus,
@@ -807,7 +899,24 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
       return 'Balance';
     }
+    if (this.chartType === DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE) {
+      return 'Capacity';
+    }
+    if (this.chartType === DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE) {
+      return 'Durability';
+    }
+    if (this.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE) {
+      return 'Readiness';
+    }
     return this.title;
+  }
+
+  private formatDiscipline(discipline: 'running' | 'cycling'): string {
+    return discipline === 'running' ? 'Running' : 'Cycling';
+  }
+
+  private capitalize(value: string): string {
+    return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
   }
 
   private buildOption(presentation: KpiPresentation): ChartOption {

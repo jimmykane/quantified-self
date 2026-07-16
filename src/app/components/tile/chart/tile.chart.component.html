@@ -106,6 +106,9 @@
   || chartType === easyPercentKpiChartType
   || chartType === hardPercentKpiChartType
   || chartType === efficiencyDelta4wKpiChartType
+  || chartType === aerobicCapacityKpiChartType
+  || chartType === aerobicDurabilityKpiChartType
+  || chartType === readinessConfidenceKpiChartType
   ) {
   <app-kpi-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme" [chartType]="chartType"
     [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showActions"
@@ -114,12 +117,16 @@
     [formNow]="formNow" [fitnessCtl]="fitnessCtl" [fatigueAtl]="fatigueAtl"
     [formPlus7d]="formPlus7d" [easyPercent]="easyPercent" [hardPercent]="hardPercent"
     [efficiencyDelta4w]="efficiencyDelta4w"
+    [aerobicCapacity]="aerobicCapacity" [aerobicDurability]="aerobicDurability"
+    [readinessSignals]="readinessSignals"
     [freshnessForecast]="freshnessForecast" [intensityDistribution]="intensityDistribution"
     [acwrStatus]="acwrStatus" [rampRateStatus]="rampRateStatus" [monotonyStrainStatus]="monotonyStrainStatus"
     [formNowStatus]="formNowStatus" [fitnessCtlStatus]="fitnessCtlStatus" [fatigueAtlStatus]="fatigueAtlStatus"
     [formPlus7dStatus]="formPlus7dStatus"
     [easyPercentStatus]="easyPercentStatus" [hardPercentStatus]="hardPercentStatus"
     [efficiencyDelta4wStatus]="efficiencyDelta4wStatus"
+    [aerobicCapacityStatus]="aerobicCapacityStatus" [aerobicDurabilityStatus]="aerobicDurabilityStatus"
+    [readinessSignalsStatus]="readinessSignalsStatus"
     [freshnessForecastStatus]="freshnessForecastStatus" [intensityDistributionStatus]="intensityDistributionStatus">
   </app-kpi-chart>
   }

@@ -3,8 +3,11 @@ import {
   buildDashboardKpiExplanation,
 } from './dashboard-kpi-explanation.helper';
 import {
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
@@ -100,5 +103,67 @@ describe('dashboard-kpi-explanation.helper', () => {
     expect(explanation.missingHint).toContain('average heart rate');
     expect(explanation.rows).toContainEqual({ label: 'Baseline weeks', value: '4 weeks' });
     expect(explanation.rows).toContainEqual({ label: 'Percent delta', value: '+6.67%' });
+  });
+
+  it('shows aerobic-capacity source provenance', () => {
+    const explanation = buildDashboardKpiExplanation({
+      chartType: DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+      aerobicCapacity: {
+        value: 54,
+        discipline: 'running',
+        sourceKey: 'garmin:watch',
+        sourceLabel: 'Garmin · Watch',
+        observationCount: 4,
+        changePct: 3.85,
+        lastSeenAtMs: Date.UTC(2026, 0, 1),
+        trend: [],
+      },
+      locale: 'en-US',
+    });
+
+    expect(explanation.rows).toContainEqual({ label: 'Source', value: 'Garmin · Watch' });
+  });
+
+  it('uses pace-retention semantics for pool durability', () => {
+    const explanation = buildDashboardKpiExplanation({
+      chartType: DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+      aerobicDurability: {
+        value: 98,
+        metric: 'pace-retention',
+        scopeLabel: 'Pool',
+        contextLabel: '25 m · Freestyle',
+        sampleCount: 3,
+        eligibilityRatio: 0.75,
+        trend: [],
+      },
+    });
+
+    expect(explanation.description).toContain('higher pace retention is steadier');
+    expect(explanation.rows).toContainEqual({ label: 'Pace retained', value: '98%' });
+  });
+
+  it('shows every input used by readiness load scoring', () => {
+    const latestSleepAtMs = Date.UTC(2026, 0, 3, 6);
+    const explanation = buildDashboardKpiExplanation({
+      chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+      readinessSignals: {
+        score: 82,
+        label: 'Ready',
+        confidence: 'high',
+        availableSignalCount: 4,
+        totalSignalCount: 4,
+        form: 10,
+        rampRate: 1.5,
+        sleepScore: 90,
+        latestSleepAtMs,
+        hrvRatio: 1.1,
+        minimumHeartRateRatio: 0.96,
+        trend: [],
+      },
+      locale: 'en-US',
+    });
+
+    expect(explanation.rows).toContainEqual({ label: 'Ramp rate', value: '+1.5' });
+    expect(explanation.rows).toContainEqual({ label: 'Latest sleep', value: 'Jan 3, 2026' });
   });
 });

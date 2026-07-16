@@ -7,6 +7,16 @@
   <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Bulk actions</div>
     <div class="dashboard-manager-bulk-actions">
+      <button mat-flat-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-recommended-button" (click)="addRecommendedTiles()" [disabled]="isAddRecommendedDisabled" [attr.aria-busy]="isAddRecommendedSaving">
+        <span class="dashboard-manager-button-content">
+          @if (isAddRecommendedSaving) {
+          <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
+          } @else {
+          <mat-icon>auto_awesome</mat-icon>
+          }
+          <span>{{ isAddRecommendedSaving ? 'Adding...' : 'Add recommended' }}</span>
+        </span>
+      </button>
       <button mat-stroked-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-add-all-button" (click)="addAllTiles()" [disabled]="isAddAllDisabled" [attr.aria-busy]="isAddAllSaving">
         <span class="dashboard-manager-button-content">
           @if (isAddAllSaving) {
@@ -14,7 +24,7 @@
           } @else {
           <mat-icon>library_add</mat-icon>
           }
-          <span>{{ isAddAllSaving ? 'Adding...' : 'Add all' }}</span>
+          <span>{{ isAddAllSaving ? 'Adding...' : 'Add everything' }}</span>
         </span>
       </button>
       <button mat-stroked-button type="button" class="qs-mat-warn" data-testid="dashboard-manager-remove-all-button" (click)="removeAllTiles()" [disabled]="isRemoveAllDisabled" [attr.aria-busy]="isRemoveAllSaving">
@@ -29,7 +39,7 @@
       </button>
     </div>
     <p class="dashboard-manager-hint">
-      Add all inserts every available curated, KPI, map, and preset tile. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
+      Recommended adds a useful data-aware set. Everything adds every available preset, including overlapping metrics. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
     </p>
   </section>
 

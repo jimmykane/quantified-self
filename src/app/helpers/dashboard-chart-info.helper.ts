@@ -1,5 +1,7 @@
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -19,6 +21,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   isDashboardSpecialChartType,
@@ -49,6 +52,9 @@ const DASHBOARD_CHART_INFO_COPY: Record<DashboardSpecialChartType, string> = {
   [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Easy % is the share of your latest weekly load spent in easy intensity (Z1-2). Higher values indicate more low-intensity base work.',
   [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Hard % is the share of your latest weekly load spent in hard intensity (Z5-7). Higher values indicate more high-intensity stress in that week.',
   [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Efficiency Δ (4w) compares the latest weekly efficiency to the prior up-to-4-week baseline. Positive delta means better efficiency versus baseline; negative means lower efficiency.',
+  [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'Aerobic Capacity shows the latest imported running or cycling VO2 max and compares only observations from the same provider source. It never substitutes FTP or critical power for VO2 max.',
+  [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'Aerobic Durability shows persisted long-session evidence. Running, cycling, and open-water scopes use aerobic decoupling; pool swimming uses pace retention. Lower decoupling or higher pace retention generally indicates better durability.',
+  [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'Readiness Signals combines current load, sleep score or duration, HRV versus your recent baseline, and overnight minimum heart rate versus baseline. Confidence reports how much evidence is available; this is a transparent training aid, not a medical score or VO2 estimate.',
 };
 
 export function resolveDashboardChartInfoTooltip(chartType: DashboardChartType | null | undefined): string | null {
