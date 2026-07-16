@@ -333,7 +333,7 @@
           @for (card of explanation.cards; track card.key) {
             <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
               <span class="training-metric-label">{{ card.title }}</span>
-              <strong>{{ card.valueText }}</strong>
+              <strong [class.training-numeric-stat]="card.usesNumericTypography">{{ card.valueText }}</strong>
               <p>{{ card.description }}</p>
             </article>
           }

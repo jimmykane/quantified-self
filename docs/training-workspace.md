@@ -933,6 +933,9 @@ is treated as stale and re-requested.
 
 UI principles:
 
+- Primary numeric and stat values use the app's locally bundled Barlow Condensed family with tabular numerals. Headings,
+  labels, status words, and narrative explanations remain in Inter. ECharts continues to use its shared Barlow Condensed
+  font token so chart typography matches the surrounding Training metrics.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.

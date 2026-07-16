@@ -1,4 +1,4 @@
-:host { display: block; }
+:host { --training-numeric-font-family: 'Barlow Condensed', sans-serif; display: block; }
 
 .training-workspace { max-width: 1500px; margin: 0 auto; padding: 28px clamp(16px, 3vw, 44px) 64px; color: var(--mat-sys-on-surface); }
 .training-page-header, .training-section-heading, .training-mix-panel header, .training-capacity-panel header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -22,6 +22,24 @@ h3 { margin-bottom: 0; }
 .training-comparison-status-panel { grid-column: span 2; }
 .training-state-panel strong, .training-comparison-panel strong { font-size: 24px; line-height: 1.1; overflow-wrap: anywhere; }
 .training-comparison-status-panel strong { font-size: 20px; }
+.training-comparison-panel:not(.training-comparison-status-panel) > strong,
+.training-readiness-summary strong,
+.training-readiness-metrics dd,
+.training-recovery-table > div:not(.training-recovery-table-heading) dd,
+.training-build-table > div:not(.training-build-table-heading) dd,
+.training-insight-panel > strong.training-numeric-stat,
+.training-metric-panel dd,
+.training-mix-summary strong,
+.training-mix-panel dl dd,
+.training-capacity-marker > strong,
+.training-durability-evidence > strong,
+.training-durability-evidence > span,
+.training-durability-table > div:not(.training-durability-table-heading) dd,
+.training-power-profile-summary > span,
+.training-power-profile-anchors span {
+  font-family: var(--training-numeric-font-family);
+  font-variant-numeric: tabular-nums;
+}
 .training-recovery-estimate-panel small { color: var(--mat-sys-primary); font-size: 11px; }
 .training-state-panel > span:last-child, .training-comparison-panel > span:last-child, .training-mix-panel header span, .training-mix-panel dd span { color: var(--mat-sys-on-surface-variant); font-size: 14px; line-height: 1.3; }
 .training-readiness-panel { min-width: 0; padding: 20px; }
@@ -29,7 +47,7 @@ h3 { margin-bottom: 0; }
 .training-readiness-header h3 { margin-top: 4px; font-size: 19px; line-height: 1.25; }
 .training-readiness-summary { flex: 0 0 auto; text-align: right; }
 .training-readiness-summary strong, .training-readiness-summary span { display: block; }
-.training-readiness-summary strong { font-family: 'Barlow Condensed', sans-serif; font-size: 25px; line-height: 1; font-variant-numeric: tabular-nums; }
+.training-readiness-summary strong { font-size: 25px; line-height: 1; }
 .training-readiness-summary span { margin-top: 4px; color: var(--mat-sys-on-surface-variant); font-size: 12px; }
 .training-readiness-summary small { display: block; margin-top: 5px; color: var(--mat-sys-on-surface-variant); font-size: 10px; font-weight: 400; }
 .training-readiness-overview { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(360px, 1.2fr); gap: 18px; align-items: stretch; margin-top: 16px; }
@@ -64,7 +82,7 @@ h3 { margin-bottom: 0; }
 .training-readiness-metrics > div:not(:first-child) { padding-left: 10px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-readiness-metrics > div:last-child { padding-right: 0; }
 .training-readiness-metrics dt, .training-readiness-metrics dd, .training-readiness-metrics small { display: block; min-width: 0; }
-.training-readiness-metrics dd { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-variant-numeric: tabular-nums; }
+.training-readiness-metrics dd { font-size: 16px; }
 .training-readiness-metrics small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: 10px; line-height: 1.35; }
 .training-readiness-source { margin: 12px 0 0; color: var(--mat-sys-on-surface-variant); font-size: 11px; line-height: 1.4; }
 .training-recovery-history { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
@@ -81,7 +99,6 @@ h3 { margin-bottom: 0; }
 .training-recovery-table dt, .training-recovery-table dd { margin: 0; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
 .training-recovery-table dt { color: var(--mat-sys-on-surface-variant); }
 .training-recovery-table dd { font-weight: 650; text-align: right; }
-.training-recovery-table > div:not(.training-recovery-table-heading) dd { font-family: 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
 .training-comparison-delta[data-tone='positive'] { color: var(--mat-sys-primary); }
 .training-comparison-delta[data-tone='negative'] { color: var(--mat-sys-error); }
 .training-recovery-table-heading dt, .training-recovery-table-heading dd { color: var(--mat-sys-on-surface-variant); font-size: 11px; font-weight: 650; text-transform: uppercase; }
@@ -178,7 +195,7 @@ dd { margin: 5px 0 0; font-size: 19px; font-weight: 700; overflow-wrap: anywhere
 .training-durability-table dt, .training-durability-table dd { min-width: 0; margin: 0; }
 .training-durability-table dt strong, .training-durability-table dt small { display: block; }
 .training-durability-table dt small { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: 10px; font-weight: 400; }
-.training-durability-table dd { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; text-align: right; }
+.training-durability-table dd { font-size: 14px; text-align: right; }
 .training-durability-table-heading dt, .training-durability-table-heading dd { color: var(--mat-sys-on-surface-variant); font-family: inherit; font-size: 10px; font-weight: 650; text-transform: uppercase; }
 .training-durability-support { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: 12px; }
 .training-chart-panel > .training-power-profile-summary { box-sizing: border-box; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 12px; padding: 16px 10px 10px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
@@ -186,7 +203,7 @@ dd { margin: 5px 0 0; font-size: 19px; font-weight: 700; overflow-wrap: anywhere
 .training-power-profile-summary p { grid-column: 1 / -1; margin: 0; font-size: 12px; }
 .training-power-profile-summary small { grid-column: 1 / -1; color: var(--mat-sys-on-surface-variant); }
 .training-power-profile-anchors { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.training-power-profile-anchors span { padding: 4px 8px; border-radius: 999px; background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface-variant); font-family: 'Barlow Condensed', sans-serif; font-size: 12px; }
+.training-power-profile-anchors span { padding: 4px 8px; border-radius: 999px; background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface-variant); font-size: 12px; }
 .training-power-profile-anchors span[data-tone='positive'] { background: var(--mat-sys-primary-container); color: var(--mat-sys-on-primary-container); }
 .training-power-profile-anchors span[data-tone='negative'] { background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
 .training-power-profile-panel app-power-curve-chart { min-height: 300px; }

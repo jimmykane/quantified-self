@@ -9,6 +9,7 @@ export interface TrainingExplanationCardViewModel {
   key: 'load' | 'contributors' | 'mix' | 'rhythm';
   title: string;
   valueText: string;
+  usesNumericTypography: boolean;
   description: string;
   tone: TrainingExplanationTone;
 }
@@ -26,7 +27,7 @@ export function buildTrainingExplanationViewModel(
   const { current, baselineMedian } = payload;
   const currentLoad = current.parentTrainingStressScore;
   const usualLoad = baselineMedian.parentTrainingStressScore;
-  const cards: TrainingExplanationCardViewModel[] = [{
+  const cards: Omit<TrainingExplanationCardViewModel, 'usesNumericTypography'>[] = [{
     key: 'load',
     title: 'Overall load',
     valueText: formatLoadDelta(currentLoad, usualLoad),
@@ -84,7 +85,10 @@ export function buildTrainingExplanationViewModel(
   }
 
   return {
-    cards,
+    cards: cards.map(card => ({
+      ...card,
+      usesNumericTypography: /\d/.test(card.valueText),
+    })),
     coverageText: `Load coverage: ${formatCoverage(current.parentLoadCoverage.loadedCount, current.parentLoadCoverage.totalCount)} current parent events and ${formatCoverage(baselineMedian.parentLoadCoverage.loadedCount, baselineMedian.parentLoadCoverage.totalCount)} in the usual median. Activity classification: ${current.childLoadCoverage.classifiedCount} classified, ${current.childLoadCoverage.unclassifiedCount} unclassified.`,
   };
 }

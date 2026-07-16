@@ -27,7 +27,7 @@
     <div #chartDiv class="swim-performance-chart" role="img" aria-label="Twelve-week pool and open-water average swimming pace chart"></div>
     <footer>
       @if (view.swolfContextText && view.latestSwolfText) {
-        <strong>Comparable pool SWOLF {{ view.latestSwolfText }}</strong>
+        <strong class="swim-performance-numeric-summary">Comparable pool SWOLF {{ view.latestSwolfText }}</strong>
         <span>{{ view.swolfContextText }} · latest matching week</span>
       } @else {
         <strong>No comparable pool SWOLF</strong>
