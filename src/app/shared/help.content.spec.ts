@@ -410,7 +410,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
     expect(serviceConnectionsSection?.content).toContain('overlays available vitals');
-    expect(serviceConnectionsSection?.content).toContain('sleep heart rate');
+    expect(serviceConnectionsSection?.content).toContain('average sleep heart rate');
+    expect(serviceConnectionsSection?.content).toContain('minimum sleep heart rate');
+    expect(serviceConnectionsSection?.content).toContain('range-average reference lines');
     expect(serviceConnectionsSection?.content).toContain('max SpO2');
     expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');

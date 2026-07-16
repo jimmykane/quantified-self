@@ -256,6 +256,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     const hasSpo2Series = spo2Data.some(value => value !== null);
     const hasVitalsSeries = hasHrvSeries || hasAverageHeartRateSeries || hasMinimumHeartRateSeries || hasSpo2Series;
     const averageHrvMs = this.averageMetric(hrvData);
+    const averageHeartRateBpm = this.averageMetric(averageHeartRateData);
+    const averageMinimumHeartRateBpm = this.averageMetric(minimumHeartRateData);
     const napData = points.map(point => this.secondsToHours(point.napSeconds));
     const hasNapSeries = napData.some(value => value > 0);
     this.sleepStackSeriesNames = [
@@ -313,41 +315,38 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       data: this.buildStackedBarData(points, 'napSeconds', stackKeys),
     }] : [];
     const hrvSeries = hasHrvSeries ? [this.buildVitalsLineSeries(HRV_SERIES, hrvData, {
-      markLine: averageHrvMs === null ? undefined : {
-        silent: true,
-        symbol: 'none',
-        lineStyle: {
-          color: HRV_SERIES.color,
-          type: 'dashed',
-          width: 1.5,
-          opacity: 0.72,
-        },
-        label: {
-          show: true,
-          position: 'middle',
-          distance: 8,
-          color: HRV_SERIES.color,
-          backgroundColor: style.tooltipBackgroundColor,
-          borderColor: HRV_SERIES.color,
-          borderWidth: 1,
-          borderRadius: 4,
-          padding: [2, 6],
-          fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-          fontSize: style.axisFontSize,
-          fontWeight: 600,
-          formatter: `Avg HRV ${Math.round(averageHrvMs)}ms`,
-        },
-        data: [{
-          name: 'Avg HRV',
-          yAxis: averageHrvMs,
-        }],
-      },
+      markLine: this.buildAverageVitalsMarkLine({
+        color: HRV_SERIES.color,
+        average: averageHrvMs,
+        label: 'Avg HRV',
+        suffix: 'ms',
+        position: 'middle',
+        style,
+      }),
     })] : [];
     const averageHeartRateSeries = hasAverageHeartRateSeries
-      ? [this.buildVitalsLineSeries(AVERAGE_HEART_RATE_SERIES, averageHeartRateData)]
+      ? [this.buildVitalsLineSeries(AVERAGE_HEART_RATE_SERIES, averageHeartRateData, {
+        markLine: this.buildAverageVitalsMarkLine({
+          color: AVERAGE_HEART_RATE_SERIES.color,
+          average: averageHeartRateBpm,
+          label: 'Avg HR',
+          suffix: 'bpm',
+          position: 'end',
+          style,
+        }),
+      })]
       : [];
     const minimumHeartRateSeries = hasMinimumHeartRateSeries
-      ? [this.buildVitalsLineSeries(MINIMUM_HEART_RATE_SERIES, minimumHeartRateData)]
+      ? [this.buildVitalsLineSeries(MINIMUM_HEART_RATE_SERIES, minimumHeartRateData, {
+        markLine: this.buildAverageVitalsMarkLine({
+          color: MINIMUM_HEART_RATE_SERIES.color,
+          average: averageMinimumHeartRateBpm,
+          label: 'Avg Min HR',
+          suffix: 'bpm',
+          position: 'start',
+          style,
+        }),
+      })]
       : [];
     const spo2Series = hasSpo2Series
       ? [this.buildVitalsLineSeries(SPO2_SERIES, spo2Data)]
@@ -673,6 +672,49 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       emphasis: { focus: 'series' },
       data,
       ...extras,
+    };
+  }
+
+  private buildAverageVitalsMarkLine(input: {
+    color: string;
+    average: number | null;
+    label: string;
+    suffix: string;
+    position: 'start' | 'middle' | 'end';
+    style: ReturnType<typeof buildDashboardEChartsStyleTokens>;
+  }): Record<string, unknown> | undefined {
+    if (input.average === null) {
+      return undefined;
+    }
+
+    return {
+      silent: true,
+      symbol: 'none',
+      lineStyle: {
+        color: input.color,
+        type: 'dashed',
+        width: 1.5,
+        opacity: 0.72,
+      },
+      label: {
+        show: true,
+        position: input.position,
+        distance: 8,
+        color: input.color,
+        backgroundColor: input.style.tooltipBackgroundColor,
+        borderColor: input.color,
+        borderWidth: 1,
+        borderRadius: 4,
+        padding: [2, 6],
+        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
+        fontSize: input.style.axisFontSize,
+        fontWeight: 600,
+        formatter: `${input.label} ${Math.round(input.average)}${input.suffix}`,
+      },
+      data: [{
+        name: input.label,
+        yAxis: input.average,
+      }],
     };
   }
 

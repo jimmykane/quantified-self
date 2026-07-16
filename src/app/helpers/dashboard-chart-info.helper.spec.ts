@@ -2,6 +2,8 @@ import { ChartTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -16,6 +18,7 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from './dashboard-special-chart-types';
@@ -39,6 +42,9 @@ const SUPPORTED_CHART_TYPES = [
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
 ] as const;
 
 describe('dashboard-chart-info.helper', () => {
@@ -69,5 +75,13 @@ describe('dashboard-chart-info.helper', () => {
     expect(acwrInfo).toContain('28 days');
     expect(fitnessInfo).toContain('42-day');
     expect(fatigueInfo).toContain('7-day');
+  });
+
+  it('documents the sleep vitals range averages', () => {
+    const sleepInfo = resolveDashboardChartInfoTooltip(DASHBOARD_SLEEP_TREND_CHART_TYPE);
+
+    expect(sleepInfo).toContain('average heart rate');
+    expect(sleepInfo).toContain('minimum heart rate');
+    expect(sleepInfo).toContain('selected range average');
   });
 });
