@@ -64,7 +64,10 @@ async function handleDerivedMetricsSourceWrite(
     const sleepIngressOptions = source === 'sleep'
         ? {
             taskScope: 'sleep',
-            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            metricKinds: [
+                DERIVED_METRIC_KINDS.TrainingBuildComparison,
+                DERIVED_METRIC_KINDS.TrainingReadiness,
+            ],
             incrementEventMutationVersion: false,
         } as const
         : undefined;

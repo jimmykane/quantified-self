@@ -1,4 +1,5 @@
 import {
+  normalizeSleepProvider,
   SleepProvider,
   SleepSession,
   SleepStageDurationsSeconds,
@@ -55,6 +56,7 @@ export interface DashboardSleepTrendContext {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
 
 function providerLabel(provider: SleepProvider): string {
   switch (provider) {
@@ -81,6 +83,11 @@ function stageSeconds(stageDurations: SleepStageDurationsSeconds | null | undefi
 function toMetric(value: unknown): number | null {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function toPositiveMetric(value: unknown): number | null {
+  const metric = toMetric(value);
+  return metric !== null && metric > 0 ? metric : null;
 }
 
 function toSpo2Percent(value: unknown): number | null {
@@ -136,8 +143,14 @@ function parseDateTimeOffsetSeconds(value: unknown): number | null {
     return null;
   }
   const [, sign, hours, minutes] = match;
-  const totalSeconds = ((Number(hours) * 60) + Number(minutes)) * 60;
-  return Number.isFinite(totalSeconds) ? (sign === '-' ? -totalSeconds : totalSeconds) : null;
+  const numericHours = Number(hours);
+  const numericMinutes = Number(minutes);
+  const totalSeconds = ((numericHours * 60) + numericMinutes) * 60;
+  return Number.isFinite(totalSeconds)
+    && numericMinutes < 60
+    && totalSeconds <= MAX_TIMEZONE_OFFSET_SECONDS
+    ? (sign === '-' ? -totalSeconds : totalSeconds)
+    : null;
 }
 
 function localDateKeyFromMs(timestampMs: number, offsetSeconds: number | null): string | null {
@@ -145,12 +158,20 @@ function localDateKeyFromMs(timestampMs: number, offsetSeconds: number | null): 
     return null;
   }
   const localMs = offsetSeconds === null ? timestampMs : timestampMs + (offsetSeconds * 1000);
-  return new Date(localMs).toISOString().slice(0, 10);
+  const localDate = new Date(localMs);
+  return Number.isFinite(localDate.getTime()) ? localDate.toISOString().slice(0, 10) : null;
 }
 
 function resolveSessionTimezoneOffsetSeconds(session: SleepSession): number | null {
-  const explicitOffsetSeconds = Number(session.timezoneOffsetSeconds);
-  if (Number.isFinite(explicitOffsetSeconds)) {
+  const explicitOffsetSeconds = session.timezoneOffsetSeconds === null
+    || session.timezoneOffsetSeconds === undefined
+    ? null
+    : Number(session.timezoneOffsetSeconds);
+  if (
+    explicitOffsetSeconds !== null
+    && Number.isFinite(explicitOffsetSeconds)
+    && Math.abs(explicitOffsetSeconds) <= MAX_TIMEZONE_OFFSET_SECONDS
+  ) {
     return explicitOffsetSeconds;
   }
   const suuntoFields = asRecord(session.providerFields?.suunto);
@@ -259,13 +280,19 @@ function buildPlaceholderPoint(sleepDate: string): DashboardSleepTrendPoint {
 }
 
 function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
-  const provider = session.source?.provider;
+  const provider = normalizeSleepProvider(session.source?.provider);
   if (!provider) {
     return null;
   }
   const startTimeMs = Number(session.startTimeMs);
   const endTimeMs = Number(session.endTimeMs);
-  if (!Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs) || endTimeMs <= startTimeMs) {
+  if (
+    !Number.isFinite(startTimeMs)
+    || !Number.isFinite(endTimeMs)
+    || !Number.isFinite(new Date(startTimeMs).getTime())
+    || !Number.isFinite(new Date(endTimeMs).getTime())
+    || endTimeMs <= startTimeMs
+  ) {
     return null;
   }
 
@@ -296,9 +323,9 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     awakeSeconds,
     unknownSeconds,
     score: toMetric(session.score?.value),
-    averageHeartRateBpm: toMetric(session.vitals?.averageHeartRateBpm),
-    minimumHeartRateBpm: toMetric(session.vitals?.minimumHeartRateBpm),
-    averageHrvMs: toMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs),
+    averageHeartRateBpm: toPositiveMetric(session.vitals?.averageHeartRateBpm),
+    minimumHeartRateBpm: toPositiveMetric(session.vitals?.minimumHeartRateBpm),
+    averageHrvMs: toPositiveMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs),
     maxSpo2Percent: resolveMaxSpo2Percent(session),
     isNap: session.isNap === true,
     napSeconds: 0,
@@ -332,7 +359,7 @@ function resolveCategoryLabels(points: DashboardSleepTrendPoint[]): DashboardSle
 }
 
 function aggregateFiniteMetrics(values: ReadonlyArray<number | null>): number | null {
-  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
   if (!finiteValues.length) {
     return null;
   }
@@ -340,7 +367,7 @@ function aggregateFiniteMetrics(values: ReadonlyArray<number | null>): number | 
 }
 
 function minFiniteMetric(values: ReadonlyArray<number | null>): number | null {
-  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
   return finiteValues.length ? Math.min(...finiteValues) : null;
 }
 
@@ -360,7 +387,7 @@ function compareSleepRecency(left: DashboardSleepTrendPoint, right: DashboardSle
   if (left.endTimeMs !== right.endTimeMs) {
     return left.endTimeMs - right.endTimeMs;
   }
-  return left.startTimeMs - right.startTimeMs;
+  return left.startTimeMs - right.startTimeMs || left.id.localeCompare(right.id);
 }
 
 function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): DashboardSleepTrendPoint {
@@ -377,7 +404,7 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
 
   return {
     ...latestPrimaryPoint,
-    id: points.map(point => point.id).join('|'),
+    id: [...points].sort(compareSleepRecency).map(point => point.id).join('|'),
     startTimeMs: sortedPrimaryPoints[0]?.startTimeMs ?? latestPrimaryPoint.startTimeMs,
     endTimeMs: Math.max(...primaryPoints.map(point => point.endTimeMs)),
     totalSeconds: sumPointSeconds(primaryPoints, 'totalSeconds'),

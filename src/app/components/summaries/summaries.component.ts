@@ -42,8 +42,9 @@ import {
   type DashboardSleepTrendWindow,
 } from '../../helpers/dashboard-sleep-chart.helper';
 import {
+  buildDashboardReadinessSleepQueryWindow,
   buildDashboardReadinessSignalsContext,
-  DASHBOARD_READINESS_SLEEP_MAX_AGE_MS,
+  resolveDashboardReadinessSleepRefreshAtMs,
 } from '../../helpers/dashboard-training-insights.helper';
 import { AppUserService } from '../../services/app.user.service';
 import {
@@ -225,9 +226,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private static readonly finePointerMediaQuery = '(pointer: fine)';
   private static readonly hoverMediaQuery = '(hover: hover)';
   private static readonly derivedPendingBannerDebounceMs = 250;
-  private static readonly readinessSleepLookbackMs = 30 * 24 * 60 * 60 * 1000;
-  private static readonly readinessSleepQueryEndMs = Number.MAX_SAFE_INTEGER;
-
   @Input() user: User;
   @Input() eventUser: User;
   @Input() showActions: boolean;
@@ -257,7 +255,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private sleepListenerKey: string | null = null;
   private readinessSleepSubscription: Subscription | null = null;
   private readinessSleepListenerKey: string | null = null;
-  private readinessSleepExpiryTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private readinessSleepRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private dashboardAutoTileSubscription: Subscription | null = null;
   private dashboardAutoTileListenerKey: string | null = null;
   private dashboardAutoTileUser: AppUserInterface | null = null;
@@ -845,19 +843,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     this.unsubscribeReadinessSleepSubscription();
-    const startMs = Math.max(0, Date.now() - SummariesComponent.readinessSleepLookbackMs);
+    const window = buildDashboardReadinessSleepQueryWindow();
     this.readinessSleepListenerKey = listenerKey;
     this.readinessSleepSubscription = this.sleepService.watchForDashboard(
       uid,
-      startMs,
-      SummariesComponent.readinessSleepQueryEndMs,
+      window.startMs,
+      window.endMs,
     ).subscribe({
       next: (sessions) => {
         if (equal(this.readinessSleepSessions, sessions)) {
           return;
         }
         this.readinessSleepSessions = sessions;
-        this.updateReadinessSleepExpiryTimer();
+        this.updateReadinessSleepRefreshTimer();
         void this.rebuildTilesFromCurrentState();
       },
       error: () => {
@@ -865,7 +863,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           return;
         }
         this.readinessSleepSessions = [];
-        this.updateReadinessSleepExpiryTimer();
+        this.updateReadinessSleepRefreshTimer();
         void this.rebuildTilesFromCurrentState();
       },
     });
@@ -878,40 +876,36 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     this.readinessSleepListenerKey = null;
     this.readinessSleepSessions = [];
-    this.clearReadinessSleepExpiryTimer();
+    this.clearReadinessSleepRefreshTimer();
   }
 
-  private updateReadinessSleepExpiryTimer(): void {
-    this.clearReadinessSleepExpiryTimer();
+  private updateReadinessSleepRefreshTimer(): void {
+    this.clearReadinessSleepRefreshTimer();
     const nowMs = Date.now();
-    const latestSleepEndMs = buildDashboardSleepTrendContext(this.readinessSleepSessions).points
-      .filter(point => point.isPlaceholder !== true && point.isNap !== true)
-      .reduce((latest, point) => {
-        const endTimeMs = Number(point.endTimeMs);
-        return Number.isFinite(endTimeMs) && endTimeMs > 0 && endTimeMs <= nowMs
-          ? Math.max(latest, endTimeMs)
-          : latest;
-      }, 0);
-    if (!latestSleepEndMs) {
+    const refreshAtMs = resolveDashboardReadinessSleepRefreshAtMs(
+      buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      nowMs,
+    );
+    if (refreshAtMs === null) {
       return;
     }
-    const expiresAtMs = latestSleepEndMs + DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1;
-    const delayMs = expiresAtMs - nowMs;
+    const delayMs = refreshAtMs - nowMs;
     if (delayMs <= 0) {
       return;
     }
-    this.readinessSleepExpiryTimeoutHandle = setTimeout(() => {
-      this.readinessSleepExpiryTimeoutHandle = null;
+    this.readinessSleepRefreshTimeoutHandle = setTimeout(() => {
+      this.readinessSleepRefreshTimeoutHandle = null;
+      this.updateReadinessSleepRefreshTimer();
       void this.rebuildTilesFromCurrentState();
     }, delayMs);
   }
 
-  private clearReadinessSleepExpiryTimer(): void {
-    if (this.readinessSleepExpiryTimeoutHandle === null) {
+  private clearReadinessSleepRefreshTimer(): void {
+    if (this.readinessSleepRefreshTimeoutHandle === null) {
       return;
     }
-    clearTimeout(this.readinessSleepExpiryTimeoutHandle);
-    this.readinessSleepExpiryTimeoutHandle = null;
+    clearTimeout(this.readinessSleepRefreshTimeoutHandle);
+    this.readinessSleepRefreshTimeoutHandle = null;
   }
 
   private syncDashboardAutoTileSubscription(): void {
@@ -2194,6 +2188,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingCapacity: this.derivedTrainingCapacityContext,
       trainingExplanation: null,
       trainingDurability: this.derivedTrainingDurabilityPayload,
+      trainingReadiness: null,
       trainingSwimPerformance: null,
       powerCurve: this.derivedPowerCurvePayload,
       formStatus: this.derivedFormStatus,
@@ -2214,6 +2209,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingCapacityStatus: this.derivedTrainingCapacityStatus,
       trainingExplanationStatus: 'missing',
       trainingDurabilityStatus: this.derivedTrainingDurabilityStatus,
+      trainingReadinessStatus: 'missing',
       trainingSwimPerformanceStatus: 'missing',
       powerCurveStatus: this.derivedPowerCurveStatus,
     }, { force: true, metricKinds: this.resolveDashboardDerivedMetricKinds() });

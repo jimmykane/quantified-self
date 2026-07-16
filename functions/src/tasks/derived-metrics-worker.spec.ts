@@ -40,6 +40,7 @@ const hoisted = vi.hoisted(() => ({
     fetchRecoveryLookbackEventDocs: vi.fn(),
     fetchTrainingBuildBenchmarkSettings: vi.fn(),
     fetchTrainingBuildSleepDocs: vi.fn(),
+    fetchTrainingReadinessSleepDocs: vi.fn(),
     getDerivedRecoveryLookbackWindowSeconds: vi.fn(() => 0),
     isDerivedMetricsUserWriteBlocked: vi.fn(),
     joinTrainingActivitySources: vi.fn(),
@@ -64,6 +65,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
         fetchTrainingBuildBenchmarkSettings: hoisted.fetchTrainingBuildBenchmarkSettings,
         fetchTrainingBuildSleepDocs: hoisted.fetchTrainingBuildSleepDocs,
+        fetchTrainingReadinessSleepDocs: hoisted.fetchTrainingReadinessSleepDocs,
         getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
         isDerivedMetricsUserWriteBlocked: hoisted.isDerivedMetricsUserWriteBlocked,
         joinTrainingActivitySources: hoisted.joinTrainingActivitySources,
@@ -98,6 +100,7 @@ describe('processDerivedMetricsTask', () => {
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValue([{ id: 'recovery-doc' }] as any);
         hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValue({ trainingSettings: {} });
         hoisted.fetchTrainingBuildSleepDocs.mockResolvedValue([{ id: 'sleep-doc' }] as any);
+        hoisted.fetchTrainingReadinessSleepDocs.mockResolvedValue([{ id: 'readiness-sleep-doc' }] as any);
         hoisted.joinTrainingActivitySources.mockReturnValue([{ activityId: 'joined-activity' }]);
         hoisted.writeDerivedMetricSnapshotsReady.mockResolvedValue(undefined);
         hoisted.completeDerivedMetricsProcessing.mockResolvedValue({
@@ -216,6 +219,49 @@ describe('processDerivedMetricsTask', () => {
             formSourceEventCount: 5,
             formSourceDocCount: 7,
         });
+    });
+
+    it('builds readiness history from a Form seed and bounded sleep docs without scanning events', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 12,
+        });
+        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            builtFromEventMutationVersion: 12,
+            sourceEventCount: 5,
+            sourceDocCount: 7,
+            dailyLoads: [{ dayMs: Date.UTC(2026, 6, 15), load: 30 }],
+        });
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-readiness', generation: 91 },
+        });
+
+        expect(hoisted.fetchDerivedMetricsEventDocs).not.toHaveBeenCalled();
+        expect(hoisted.fetchDerivedMetricsActivityDocs).not.toHaveBeenCalled();
+        expect(hoisted.fetchTrainingReadinessSleepDocs).toHaveBeenCalledWith(
+            'user-readiness',
+            expect.any(Number),
+        );
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith(
+            'user-readiness',
+            [DERIVED_METRIC_KINDS.TrainingReadiness],
+            {
+                formDocs: [],
+                recoveryNowDocs: [],
+                trainingActivityDocs: [],
+                trainingReadinessSleepDocs: [{ id: 'readiness-sleep-doc' }],
+            },
+            expect.objectContaining({
+                builtFromEventMutationVersion: 12,
+                formDailyLoads: [{ dayMs: Date.UTC(2026, 6, 15), load: 30 }],
+                formSourceEventCount: 5,
+                formSourceDocCount: 7,
+            }),
+        );
     });
 
     it('reads parent events and activities for activity-backed metrics instead of using a Form projection seed', async () => {

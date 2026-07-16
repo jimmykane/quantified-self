@@ -6,6 +6,7 @@ import {
   type TrainingDiscipline,
 } from './training-disciplines';
 import type { SleepProvider } from './sleep';
+import type { ReadinessConfidence, ReadinessLabel } from './readiness';
 
 export const DERIVED_METRIC_KINDS = {
   Form: 'form',
@@ -27,6 +28,7 @@ export const DERIVED_METRIC_KINDS = {
   TrainingExplanation: 'training_explanation',
   TrainingDurability: 'training_durability',
   TrainingBuildComparison: 'training_build_comparison',
+  TrainingReadiness: 'training_readiness',
   TrainingSwimPerformance: 'training_swim_performance',
 } as const;
 
@@ -52,6 +54,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingDurability,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  DERIVED_METRIC_KINDS.TrainingReadiness,
   DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
@@ -63,6 +66,7 @@ export const PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.FormPlus7d,
   DERIVED_METRIC_KINDS.FreshnessForecast,
   DERIVED_METRIC_KINDS.PowerCurve,
+  DERIVED_METRIC_KINDS.TrainingReadiness,
 ];
 
 // These metrics change as the UTC day changes, even if no event is written.
@@ -785,6 +789,30 @@ export interface DerivedTrainingBuildComparisonMetricPayload {
   disciplines: DerivedTrainingBuildComparisonDiscipline[];
 }
 
+export interface DerivedTrainingReadinessHistoryPoint {
+  dayMs: number;
+  score: number | null;
+  label: ReadinessLabel | null;
+  confidence: ReadinessConfidence | null;
+  availableSignalCount: number;
+  baselineEvidenceCount: number;
+  totalSignalCount: 4;
+  form: number | null;
+  rampRate: number | null;
+  sleepScore: number | null;
+  latestSleepAtMs: number | null;
+  hrvRatio: number | null;
+  minimumHeartRateRatio: number | null;
+}
+
+export interface DerivedTrainingReadinessMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  generatedAtMs: number;
+  historyDays: 14;
+  points: DerivedTrainingReadinessHistoryPoint[];
+}
+
 export type DerivedPowerCurveScope = DerivedPowerCapacityDiscipline;
 
 export type DerivedTrainingSwimEnvironment = 'pool' | 'open-water';
@@ -878,6 +906,7 @@ export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedP
 export type DerivedTrainingExplanationMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingExplanationMetricPayload>;
 export type DerivedTrainingDurabilityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingDurabilityMetricPayload>;
 export type DerivedTrainingBuildComparisonMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingBuildComparisonMetricPayload>;
+export type DerivedTrainingReadinessMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingReadinessMetricPayload>;
 export type DerivedTrainingSwimPerformanceMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSwimPerformanceMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
@@ -899,6 +928,7 @@ export type DerivedMetricSnapshot =
   | DerivedTrainingExplanationMetricSnapshot
   | DerivedTrainingDurabilityMetricSnapshot
   | DerivedTrainingBuildComparisonMetricSnapshot
+  | DerivedTrainingReadinessMetricSnapshot
   | DerivedTrainingSwimPerformanceMetricSnapshot;
 
 export { POWER_CAPACITY_DISCIPLINES };

@@ -2,10 +2,52 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDashboardAerobicCapacityContext,
   buildDashboardAerobicDurabilityContext,
+  buildDashboardReadinessSleepQueryWindow,
   buildDashboardReadinessSignalsContext,
+  DASHBOARD_READINESS_SLEEP_LOOKBACK_MS,
+  DASHBOARD_READINESS_SLEEP_QUERY_END_MS,
+  resolveDashboardReadinessSleepRefreshAtMs,
 } from './dashboard-training-insights.helper';
 
 describe('dashboard-training-insights.helper', () => {
+  it('uses one shared bounded readiness sleep window with an open upper bound', () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12);
+
+    expect(buildDashboardReadinessSleepQueryWindow(nowMs)).toEqual({
+      startMs: nowMs - DASHBOARD_READINESS_SLEEP_LOOKBACK_MS,
+      endMs: DASHBOARD_READINESS_SLEEP_QUERY_END_MS,
+    });
+  });
+
+  it('refreshes when future sleep becomes eligible before the latest completed night expires', () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12);
+    const latestSleepAtMs = nowMs - (2 * 60 * 60 * 1000);
+    const sleepTrend = {
+      points: [
+        { id: 'latest', endTimeMs: latestSleepAtMs, isNap: false, isPlaceholder: false },
+        { id: 'nap', endTimeMs: nowMs - 1_000, isNap: true, isPlaceholder: false },
+        { id: 'future', endTimeMs: nowMs + 1_000, isNap: false, isPlaceholder: false },
+      ],
+      latestPoint: null,
+    } as never;
+
+    expect(resolveDashboardReadinessSleepRefreshAtMs(sleepTrend, nowMs)).toBe(nowMs + 1_000);
+  });
+
+  it('refreshes when a baseline night leaves the canonical 30-day window', () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12);
+    const oldestBaselineAtMs = nowMs - DASHBOARD_READINESS_SLEEP_LOOKBACK_MS + 5_000;
+    const latestSleepAtMs = nowMs - (2 * 60 * 60 * 1000);
+
+    expect(resolveDashboardReadinessSleepRefreshAtMs({
+      points: [
+        { id: 'baseline', endTimeMs: oldestBaselineAtMs, isNap: false, isPlaceholder: false },
+        { id: 'latest', endTimeMs: latestSleepAtMs, isNap: false, isPlaceholder: false },
+      ],
+      latestPoint: null,
+    } as never, nowMs)).toBe(oldestBaselineAtMs + DASHBOARD_READINESS_SLEEP_LOOKBACK_MS + 1);
+  });
+
   it('selects the most recent imported VO2 max without mixing it with FTP or critical power', () => {
     const context = buildDashboardAerobicCapacityContext({
       asOfDayMs: 1_000,
@@ -400,6 +442,74 @@ describe('dashboard-training-insights.helper', () => {
     });
   });
 
+  it('resolves equal-time cross-provider evidence deterministically', () => {
+    const nowMs = Date.UTC(2026, 0, 10, 12);
+    const buildPoint = (id: string, provider: 'GarminAPI' | 'SuuntoApp', score: number) => ({
+      id,
+      sleepDate: '2026-01-10',
+      provider,
+      startTimeMs: nowMs - (9 * 60 * 60 * 1000),
+      endTimeMs: nowMs - (60 * 60 * 1000),
+      totalSeconds: 8 * 3600,
+      score,
+      averageHrvMs: null,
+      minimumHeartRateBpm: null,
+      isNap: false,
+      isPlaceholder: false,
+    });
+    const garmin = buildPoint('garmin', 'GarminAPI', 60);
+    const suunto = buildPoint('suunto', 'SuuntoApp', 90);
+
+    const forward = buildDashboardReadinessSignalsContext({
+      sleepTrend: { points: [garmin, suunto] as never, latestPoint: null },
+      nowMs,
+    });
+    const reverse = buildDashboardReadinessSignalsContext({
+      sleepTrend: { points: [suunto, garmin] as never, latestPoint: null },
+      nowMs,
+    });
+
+    expect(forward?.sleepScore).toBe(90);
+    expect(reverse?.sleepScore).toBe(90);
+  });
+
+  it('does not use sleep outside the canonical 30-day evidence window as baseline', () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const buildPoint = (id: string, ageDays: number, hrv: number) => ({
+      id,
+      sleepDate: new Date(nowMs - (ageDays * dayMs)).toISOString().slice(0, 10),
+      provider: 'GarminAPI',
+      startTimeMs: nowMs - (ageDays * dayMs) - (8 * 60 * 60 * 1000),
+      endTimeMs: nowMs - (ageDays * dayMs),
+      totalSeconds: 8 * 3600,
+      score: 80,
+      averageHrvMs: hrv,
+      minimumHeartRateBpm: 50,
+      isNap: false,
+      isPlaceholder: false,
+    });
+    const context = buildDashboardReadinessSignalsContext({
+      sleepTrend: {
+        points: [
+          buildPoint('outside-window', 31, 10),
+          buildPoint('baseline-1', 3, 50),
+          buildPoint('baseline-2', 2, 50),
+          buildPoint('latest', 1, 55),
+        ] as never,
+        latestPoint: null,
+      },
+      nowMs,
+    });
+
+    expect(context).toMatchObject({
+      sleepScore: 80,
+      hrvRatio: null,
+      minimumHeartRateRatio: null,
+      availableSignalCount: 1,
+    });
+  });
+
   it('keeps a load-only readiness result low confidence instead of inventing missing recovery data', () => {
     const context = buildDashboardReadinessSignalsContext({
       formNow: { value: -24 } as never,
@@ -415,6 +525,75 @@ describe('dashboard-training-insights.helper', () => {
       sleepScore: null,
       hrvRatio: null,
       minimumHeartRateRatio: null,
+    });
+  });
+
+  it('does not count non-positive baseline vitals as confidence evidence', () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const buildPoint = (id: string, ageDays: number, averageHrvMs: number) => ({
+      id,
+      sleepDate: new Date(nowMs - (ageDays * dayMs)).toISOString().slice(0, 10),
+      provider: 'GarminAPI',
+      startTimeMs: nowMs - (ageDays * dayMs) - (8 * 60 * 60 * 1000),
+      endTimeMs: nowMs - (ageDays * dayMs),
+      totalSeconds: 8 * 3600,
+      score: 80,
+      averageHrvMs,
+      minimumHeartRateBpm: null,
+      isNap: false,
+      isPlaceholder: false,
+    });
+    const context = buildDashboardReadinessSignalsContext({
+      formNow: { value: 10 } as never,
+      sleepTrend: {
+        points: [
+          buildPoint('invalid-5', 6, -50),
+          buildPoint('invalid-4', 5, 0),
+          buildPoint('valid-3', 4, 50),
+          buildPoint('valid-2', 3, 50),
+          buildPoint('valid-1', 2, 50),
+          buildPoint('latest', 1, 60),
+        ] as never,
+        latestPoint: null,
+      },
+      nowMs,
+    });
+
+    expect(context).toMatchObject({
+      availableSignalCount: 3,
+      baselineEvidenceCount: 3,
+      confidence: 'medium',
+    });
+  });
+
+  it('uses the oldest available load timestamp and rejects malformed sleep provenance', () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12);
+    const context = buildDashboardReadinessSignalsContext({
+      formNow: { value: 10, latestDayMs: nowMs } as never,
+      rampRate: { rampRate: 1, latestDayMs: nowMs - (24 * 60 * 60 * 1000) } as never,
+      sleepTrend: {
+        points: [
+          {
+            id: 'unknown-provider', sleepDate: '2026-07-16', provider: 'UnknownProvider',
+            startTimeMs: nowMs - 10_000, endTimeMs: nowMs - 5_000, totalSeconds: 8 * 3600,
+            score: 100, averageHrvMs: 60, minimumHeartRateBpm: 45, isNap: false, isPlaceholder: false,
+          },
+          {
+            id: 'invalid-date', sleepDate: '2026-02-31', provider: 'GarminAPI',
+            startTimeMs: nowMs - 20_000, endTimeMs: nowMs - 15_000, totalSeconds: 8 * 3600,
+            score: 100, averageHrvMs: 60, minimumHeartRateBpm: 45, isNap: false, isPlaceholder: false,
+          },
+        ] as never,
+        latestPoint: null,
+      },
+      nowMs,
+    });
+
+    expect(context).toMatchObject({
+      loadAtMs: nowMs - (24 * 60 * 60 * 1000),
+      availableSignalCount: 1,
+      sleepScore: null,
     });
   });
 });

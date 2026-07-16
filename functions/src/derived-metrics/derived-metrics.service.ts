@@ -85,6 +85,7 @@ import {
     type DerivedTrainingBuildComparisonDiscipline,
     type DerivedTrainingBuildEventSuggestion,
     type DerivedTrainingBuildComparisonMetricPayload,
+    type DerivedTrainingReadinessMetricPayload,
     type DerivedTrainingBuildRaceSuggestion,
     type DerivedTrainingRecoveryComparison,
     type DerivedTrainingRecoveryCoverage,
@@ -121,6 +122,11 @@ import {
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
 import {
+    buildReadinessSignals,
+    READINESS_SLEEP_LOOKBACK_MS,
+    type ReadinessSleepEvidencePoint,
+} from '../../../shared/readiness';
+import {
     normalizeSleepProvider,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
@@ -156,6 +162,20 @@ const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
     'vitals.overnightHrvMs',
     'vitals.averageHrvMs',
 ] as const;
+const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
+    'source.provider',
+    'sleepDate',
+    'startTimeMs',
+    'endTimeMs',
+    'timezoneOffsetSeconds',
+    'durationSeconds',
+    'isNap',
+    'score.value',
+    'providerFields.suunto.timestamp',
+    'vitals.overnightHrvMs',
+    'vitals.averageHrvMs',
+    'vitals.minimumHeartRateBpm',
+] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CTL_TIME_CONSTANT_DAYS = 42;
 const ATL_TIME_CONSTANT_DAYS = 7;
@@ -170,6 +190,7 @@ const TRAINING_DURABILITY_BASELINE_BLOCK_COUNT = 3 as const;
 const TRAINING_DURABILITY_WEEKLY_POINT_COUNT = 12 as const;
 const TRAINING_RECOVERY_CURRENT_WINDOW_DAYS = 28;
 const TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS = 84;
+const TRAINING_READINESS_HISTORY_DAYS = 14 as const;
 const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
 const TRAINING_CAPACITY_MODEL_WINDOW_DAYS = 90 as const;
 const TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS = [180, 300, 600, 900, 1200] as const;
@@ -217,7 +238,12 @@ interface DerivedMetricBuildResult<TPayload> {
     payload: TPayload;
 }
 
-type DerivedMetricBuildSourceDependency = 'formDocs' | 'recoveryNowDocs' | 'trainingActivityDocs' | 'trainingBuildBenchmarkSettings' | 'trainingBuildSleepDocs';
+type DerivedMetricBuildSourceDependency = 'formDocs'
+    | 'recoveryNowDocs'
+    | 'trainingActivityDocs'
+    | 'trainingBuildBenchmarkSettings'
+    | 'trainingBuildSleepDocs'
+    | 'trainingReadinessSleepDocs';
 
 export interface DerivedTrainingActivitySource {
     activityId: string;
@@ -278,6 +304,7 @@ interface DerivedMetricBuildExecutionContext {
     formDocs: readonly FirestoreQueryDocumentSnapshot[];
     recoveryNowDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingBuildSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
+    trainingReadinessSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingActivities: readonly DerivedTrainingActivitySource[];
     getDailyLoadContext: () => ReturnType<typeof buildDailyLoadContext>;
     getDerivedLoadPoints: () => DerivedLoadPoint[];
@@ -290,6 +317,7 @@ interface DerivedMetricBuildExecutionContext {
     getTrainingExplanationBuildResult: () => DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload>;
     getTrainingDurabilityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload>;
     getTrainingBuildComparisonBuildResult: () => DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload>;
+    getTrainingReadinessBuildResult: () => DerivedMetricBuildResult<DerivedTrainingReadinessMetricPayload>;
     getTrainingSwimPerformanceBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload>;
 }
 
@@ -300,6 +328,7 @@ interface DerivedMetricBuildSourceDocs {
     trainingActivities?: readonly DerivedTrainingActivitySource[];
     trainingBuildBenchmarkSettings?: unknown;
     trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    trainingReadinessSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
 }
 
 interface DerivedMetricBuildDefinition {
@@ -3014,6 +3043,203 @@ function resolveTrainingSleepNights(
     }));
 }
 
+function resolveTrainingReadinessSleepEvidence(
+    sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
+): ReadinessSleepEvidencePoint[] {
+    const groups = new Map<string, ReadinessSleepEvidencePoint[]>();
+    sleepDocs.forEach((doc) => {
+        const data = (doc.data() || {}) as Record<string, unknown>;
+        if (data.isNap === true) {
+            return;
+        }
+        const source = data.source && typeof data.source === 'object' && !Array.isArray(data.source)
+            ? data.source as Record<string, unknown>
+            : {};
+        const provider = normalizeSleepProvider(source.provider);
+        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const endTimeMs = toFiniteNumber(data.endTimeMs);
+        const sleepDayMs = endTimeMs === null
+            ? null
+            : resolveTrainingReadinessSleepDayMs(data, provider, endTimeMs);
+        if (!provider || sleepDayMs === null || startTimeMs === null || endTimeMs === null || endTimeMs <= startTimeMs) {
+            return;
+        }
+        const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
+        const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
+            ? Math.floor(storedDurationSeconds)
+            : Math.max(0, Math.round((endTimeMs - startTimeMs) / 1000));
+        const score = data.score && typeof data.score === 'object' && !Array.isArray(data.score)
+            ? data.score as Record<string, unknown>
+            : {};
+        const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
+            ? data.vitals as Record<string, unknown>
+            : {};
+        const point: ReadinessSleepEvidencePoint = {
+            id: doc.id,
+            sleepDate: formatUtcDayKey(sleepDayMs),
+            provider,
+            startTimeMs,
+            endTimeMs,
+            totalSeconds: durationSeconds,
+            score: toFiniteNumber(score.value),
+            averageHrvMs: toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs),
+            minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
+        };
+        const key = `${point.sleepDate}:${provider}`;
+        groups.set(key, [...(groups.get(key) || []), point]);
+    });
+
+    return [...groups.values()].map((points): ReadinessSleepEvidencePoint => {
+        const sortedPoints = [...points].sort((left, right) => (
+            (left.endTimeMs || 0) - (right.endTimeMs || 0)
+            || (left.startTimeMs || 0) - (right.startTimeMs || 0)
+            || left.id.localeCompare(right.id)
+        ));
+        const latest = sortedPoints[sortedPoints.length - 1];
+        const averageHrvValues = points
+            .map(point => point.averageHrvMs)
+            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+        const minimumHeartRateValues = points
+            .map(point => point.minimumHeartRateBpm)
+            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+        return {
+            ...latest,
+            id: sortedPoints.map(point => point.id).join('|'),
+            startTimeMs: Math.min(...points.map(point => point.startTimeMs as number)),
+            endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
+            totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
+            averageHrvMs: averageHrvValues.length
+                ? averageHrvValues.reduce((total, value) => total + value, 0) / averageHrvValues.length
+                : null,
+            minimumHeartRateBpm: minimumHeartRateValues.length
+                ? Math.min(...minimumHeartRateValues)
+                : null,
+        };
+    });
+}
+
+function resolveTrainingReadinessSleepDayMs(
+    data: Record<string, unknown>,
+    provider: SleepProvider | null,
+    endTimeMs: number,
+): number | null {
+    const storedSleepDate = toSafeString(data.sleepDate);
+    const fallbackDayMs = resolveSleepDateDayMs(storedSleepDate);
+    if (provider !== SLEEP_PROVIDERS.SuuntoApp) {
+        if (storedSleepDate) {
+            return fallbackDayMs;
+        }
+        const endDate = new Date(endTimeMs);
+        return Number.isFinite(endDate.getTime())
+            ? resolveSleepDateDayMs(endDate.toISOString().slice(0, 10))
+            : null;
+    }
+    const explicitOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
+    const providerFields = data.providerFields && typeof data.providerFields === 'object' && !Array.isArray(data.providerFields)
+        ? data.providerFields as Record<string, unknown>
+        : {};
+    const suuntoFields = providerFields.suunto && typeof providerFields.suunto === 'object' && !Array.isArray(providerFields.suunto)
+        ? providerFields.suunto as Record<string, unknown>
+        : {};
+    const offsetSeconds = explicitOffsetSeconds !== null
+        && Math.abs(explicitOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
+        ? explicitOffsetSeconds
+        : parseDateTimeOffsetSeconds(suuntoFields.timestamp);
+    const localEndTimeMs = offsetSeconds === null
+        ? endTimeMs
+        : endTimeMs + (offsetSeconds * 1000);
+    const localEndDate = new Date(localEndTimeMs);
+    const displayDayMs = Number.isFinite(localEndDate.getTime())
+        ? resolveSleepDateDayMs(localEndDate.toISOString().slice(0, 10))
+        : null;
+    return displayDayMs ?? fallbackDayMs;
+}
+
+function parseDateTimeOffsetSeconds(value: unknown): number | null {
+    const stringValue = typeof value === 'string' ? value.trim() : '';
+    if (!stringValue) {
+        return null;
+    }
+    if (/z$/i.test(stringValue)) {
+        return 0;
+    }
+    const match = /([+-])(\d{2}):?(\d{2})$/.exec(stringValue);
+    if (!match) {
+        return null;
+    }
+    const hours = Number(match[2]);
+    const minutes = Number(match[3]);
+    const totalSeconds = ((hours * 60) + minutes) * 60;
+    if (
+        !Number.isFinite(totalSeconds)
+        || minutes >= 60
+        || totalSeconds > TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
+    ) {
+        return null;
+    }
+    return match[1] === '-' ? -totalSeconds : totalSeconds;
+}
+
+export function buildTrainingReadinessMetricPayload(
+    loadPoints: readonly DerivedLoadPoint[],
+    sourceEventCount: number,
+    sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedTrainingReadinessMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const firstDayMs = asOfDayMs - ((TRAINING_READINESS_HISTORY_DAYS - 1) * DAY_MS);
+    const loadPointsByDay = new Map(loadPoints.map(point => [point.dayMs, point]));
+    const sleepPoints = resolveTrainingReadinessSleepEvidence(sleepDocs);
+    const points: DerivedTrainingReadinessMetricPayload['points'] = [];
+
+    for (let dayMs = firstDayMs; dayMs <= asOfDayMs; dayMs += DAY_MS) {
+        const loadPoint = loadPointsByDay.get(dayMs) || null;
+        const priorLoadPoint = loadPointsByDay.get(dayMs - (7 * DAY_MS)) || null;
+        const form = loadPoint ? toRoundedNumber(loadPoint.formSameDay, 4) : null;
+        const rampRate = loadPoint && priorLoadPoint
+            ? toRoundedNumber(loadPoint.ctl - priorLoadPoint.ctl, 4)
+            : null;
+        const evaluatedAtMs = dayMs === asOfDayMs
+            ? nowMs
+            : dayMs + DAY_MS - 1;
+        const context = buildReadinessSignals({
+            form,
+            rampRate,
+            sleepPoints,
+            nowMs: evaluatedAtMs,
+        });
+        points.push(context ? {
+            dayMs,
+            ...context,
+        } : {
+            dayMs,
+            score: null,
+            label: null,
+            confidence: null,
+            availableSignalCount: 0,
+            baselineEvidenceCount: 0,
+            totalSignalCount: 4,
+            form,
+            rampRate,
+            sleepScore: null,
+            latestSleepAtMs: null,
+            hrvRatio: null,
+            minimumHeartRateRatio: null,
+        });
+    }
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            generatedAtMs: nowMs,
+            historyDays: TRAINING_READINESS_HISTORY_DAYS,
+            points,
+        },
+    };
+}
+
 function resolveMedian(values: readonly number[]): number | null {
     if (!values.length) {
         return null;
@@ -3927,6 +4153,10 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs', 'trainingActivityDocs', 'trainingBuildBenchmarkSettings', 'trainingBuildSleepDocs'],
         build: (context) => context.getTrainingBuildComparisonBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.TrainingReadiness]: {
+        sourceDependencies: ['formDocs', 'trainingReadinessSleepDocs'],
+        build: (context) => context.getTrainingReadinessBuildResult(),
+    },
     [DERIVED_METRIC_KINDS.TrainingSwimPerformance]: {
         sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         includeTrainingSwimLengths: true,
@@ -3944,6 +4174,7 @@ function createDerivedMetricBuildExecutionContext(
     const formDocs = sourceDocs.formDocs || [];
     const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
     const trainingBuildSleepDocs = sourceDocs.trainingBuildSleepDocs || [];
+    const trainingReadinessSleepDocs = sourceDocs.trainingReadinessSleepDocs || [];
     const trainingActivities = sourceDocs.trainingActivities
         ?? joinTrainingActivitySources(sourceDocs.trainingActivityDocs || [], formDocs);
     const trainingBuildBenchmarkSettings = sourceDocs.trainingBuildBenchmarkSettings || {};
@@ -3959,6 +4190,7 @@ function createDerivedMetricBuildExecutionContext(
     let trainingExplanationBuildResultCache: DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload> | null = null;
     let trainingDurabilityBuildResultCache: DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload> | null = null;
     let trainingBuildComparisonBuildResultCache: DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> | null = null;
+    let trainingReadinessBuildResultCache: DerivedMetricBuildResult<DerivedTrainingReadinessMetricPayload> | null = null;
     let trainingSwimPerformanceBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload> | null = null;
 
     const getDailyLoadContext = (): ReturnType<typeof buildDailyLoadContext> => {
@@ -4072,6 +4304,20 @@ function createDerivedMetricBuildExecutionContext(
         return trainingBuildComparisonBuildResultCache;
     };
 
+    const getTrainingReadinessBuildResult = (): DerivedMetricBuildResult<DerivedTrainingReadinessMetricPayload> => {
+        if (trainingReadinessBuildResultCache) {
+            return trainingReadinessBuildResultCache;
+        }
+        const dailyLoadContext = getDailyLoadContext();
+        trainingReadinessBuildResultCache = buildTrainingReadinessMetricPayload(
+            getKpiDerivedLoadPoints(),
+            dailyLoadContext.sourceEventCount,
+            trainingReadinessSleepDocs,
+            nowMs,
+        );
+        return trainingReadinessBuildResultCache;
+    };
+
     const getTrainingSwimPerformanceBuildResult = (): DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload> => {
         if (trainingSwimPerformanceBuildResultCache) {
             return trainingSwimPerformanceBuildResultCache;
@@ -4085,6 +4331,7 @@ function createDerivedMetricBuildExecutionContext(
         formDocs,
         recoveryNowDocs,
         trainingBuildSleepDocs,
+        trainingReadinessSleepDocs,
         trainingActivities,
         getDailyLoadContext,
         getDerivedLoadPoints,
@@ -4097,6 +4344,7 @@ function createDerivedMetricBuildExecutionContext(
         getTrainingExplanationBuildResult,
         getTrainingDurabilityBuildResult,
         getTrainingBuildComparisonBuildResult,
+        getTrainingReadinessBuildResult,
         getTrainingSwimPerformanceBuildResult,
     };
 }
@@ -4110,6 +4358,7 @@ export function resolveDerivedMetricSourceRequirements(
     needsTrainingSwimLengths: boolean;
     needsTrainingBuildBenchmarkSettings: boolean;
     needsTrainingBuildSleepDocs: boolean;
+    needsTrainingReadinessSleepDocs: boolean;
 } {
     let needsFormDocs = false;
     let needsRecoveryNowDocs = false;
@@ -4117,6 +4366,7 @@ export function resolveDerivedMetricSourceRequirements(
     let needsTrainingSwimLengths = false;
     let needsTrainingBuildBenchmarkSettings = false;
     let needsTrainingBuildSleepDocs = false;
+    let needsTrainingReadinessSleepDocs = false;
 
     metricKinds.forEach((metricKind) => {
         const definition = DERIVED_METRIC_BUILD_REGISTRY[metricKind];
@@ -4141,6 +4391,9 @@ export function resolveDerivedMetricSourceRequirements(
         if (definition.sourceDependencies.includes('trainingBuildSleepDocs')) {
             needsTrainingBuildSleepDocs = true;
         }
+        if (definition.sourceDependencies.includes('trainingReadinessSleepDocs')) {
+            needsTrainingReadinessSleepDocs = true;
+        }
     });
 
     return {
@@ -4150,6 +4403,7 @@ export function resolveDerivedMetricSourceRequirements(
         needsTrainingSwimLengths,
         needsTrainingBuildBenchmarkSettings,
         needsTrainingBuildSleepDocs,
+        needsTrainingReadinessSleepDocs,
     };
 }
 
@@ -4396,6 +4650,25 @@ export async function fetchTrainingBuildSleepDocs(
         docsById.set(doc.id, doc);
     }));
     return [...docsById.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+export async function fetchTrainingReadinessSleepDocs(
+    uid: string,
+    nowMs = Date.now(),
+): Promise<FirestoreQueryDocumentSnapshot[]> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const firstHistoryDayMs = asOfDayMs - ((TRAINING_READINESS_HISTORY_DAYS - 1) * DAY_MS);
+    const firstHistoryCutoffMs = firstHistoryDayMs + DAY_MS - 1;
+    const earliestSleepEndMs = Math.max(0, firstHistoryCutoffMs - READINESS_SLEEP_LOOKBACK_MS);
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection(SLEEP_SESSIONS_COLLECTION_ID)
+        .where('endTimeMs', '>=', earliestSleepEndMs)
+        .where('endTimeMs', '<=', nowMs)
+        .select(...DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS)
+        .get();
+    return snapshot.docs;
 }
 
 export interface DerivedFormSnapshotSeed {
@@ -5090,6 +5363,7 @@ export async function writeDerivedMetricSnapshotsReady(
     const recoveryNowSourceDocCount = sourceDocs.recoveryNowDocs?.length || 0;
     const trainingActivitySourceDocCount = sourceDocs.trainingActivityDocs?.length || 0;
     const trainingBuildSleepSourceDocCount = sourceDocs.trainingBuildSleepDocs?.length || 0;
+    const trainingReadinessSleepSourceDocCount = sourceDocs.trainingReadinessSleepDocs?.length || 0;
     const buildContext = createDerivedMetricBuildExecutionContext(sourceDocs, nowMs, {
         dailyLoadContextOverride,
     });
@@ -5115,6 +5389,9 @@ export async function writeDerivedMetricSnapshotsReady(
         }
         if (sourceDependencies.includes('trainingBuildSleepDocs')) {
             sourceDocCount += trainingBuildSleepSourceDocCount;
+        }
+        if (sourceDependencies.includes('trainingReadinessSleepDocs')) {
+            sourceDocCount += trainingReadinessSleepSourceDocCount;
         }
         return sourceDocCount;
     };

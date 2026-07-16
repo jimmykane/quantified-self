@@ -128,7 +128,10 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
 
         const expectedOptions = {
             taskScope: 'sleep',
-            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison],
+            metricKinds: [
+                DERIVED_METRIC_KINDS.TrainingBuildComparison,
+                DERIVED_METRIC_KINDS.TrainingReadiness,
+            ],
             incrementEventMutationVersion: false,
         };
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(2);

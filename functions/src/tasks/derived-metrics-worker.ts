@@ -14,6 +14,7 @@ import {
     fetchRecoveryLookbackEventDocs,
     fetchTrainingBuildBenchmarkSettings,
     fetchTrainingBuildSleepDocs,
+    fetchTrainingReadinessSleepDocs,
     getDerivedRecoveryLookbackWindowSeconds,
     isDerivedMetricsUserWriteBlocked,
     joinTrainingActivitySources,
@@ -136,6 +137,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
                 buildAtMs,
             )
             : [];
+        const trainingReadinessSleepDocs = sourceRequirements.needsTrainingReadinessSleepDocs
+            ? await fetchTrainingReadinessSleepDocs(uid, buildAtMs)
+            : [];
 
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
             await abandonAfterWriteBlock('task before snapshot ready write');
@@ -148,6 +152,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             ...(sourceRequirements.needsTrainingActivityDocs ? { trainingActivities } : {}),
             ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
             ...(sourceRequirements.needsTrainingBuildSleepDocs ? { trainingBuildSleepDocs } : {}),
+            ...(sourceRequirements.needsTrainingReadinessSleepDocs ? { trainingReadinessSleepDocs } : {}),
         }, {
             buildAtMs,
             builtFromEventMutationVersion: startResult.eventMutationVersion,
@@ -172,6 +177,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
             trainingSwimLengthsFetched: sourceRequirements.needsTrainingSwimLengths,
             trainingBuildBenchmarkSettingsFetched: sourceRequirements.needsTrainingBuildBenchmarkSettings,
             trainingBuildSleepDocsScanned: trainingBuildSleepDocs.length,
+            trainingReadinessSleepDocsScanned: trainingReadinessSleepDocs.length,
             usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
             projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),

@@ -220,6 +220,118 @@ describe('dashboard-sleep-chart.helper', () => {
     expect(context.latestPoint?.id).toBe('garmin-later-sleep');
   });
 
+  it('selects and identifies tied same-night records deterministically', () => {
+    const buildSession = (id: string, score: number) => ({
+      id,
+      startTimeMs: Date.UTC(2026, 0, 5, 22),
+      endTimeMs: Date.UTC(2026, 0, 6, 6),
+      sleepDate: '2026-01-06',
+      durationSeconds: 8 * 3600,
+      score: { value: score },
+      source: { provider: 'GarminAPI', sourceSessionKey: id },
+    });
+
+    const forward = buildDashboardSleepTrendContext([
+      buildSession('alpha', 70),
+      buildSession('zulu', 90),
+    ] as any[]);
+    const reverse = buildDashboardSleepTrendContext([
+      buildSession('zulu', 90),
+      buildSession('alpha', 70),
+    ] as any[]);
+
+    expect(forward.points[0]).toMatchObject({ id: 'alpha|zulu', score: 90 });
+    expect(reverse.points[0]).toMatchObject({ id: 'alpha|zulu', score: 90 });
+  });
+
+  it('ignores invalid physiological fragments and bounds Suunto timezone offsets', () => {
+    const startTimeMs = Date.UTC(2026, 0, 5, 22);
+    const endTimeMs = Date.UTC(2026, 0, 6, 6);
+    const context = buildDashboardSleepTrendContext([
+      {
+        id: 'invalid-fragment',
+        startTimeMs,
+        endTimeMs,
+        sleepDate: '2026-01-06',
+        durationSeconds: 4 * 3600,
+        timezoneOffsetSeconds: Number.MAX_SAFE_INTEGER,
+        vitals: { averageHeartRateBpm: -40, minimumHeartRateBpm: -30, averageHrvMs: -50 },
+        providerFields: { suunto: { timestamp: '2026-01-06T00:00:00+02:00' } },
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'invalid-fragment' },
+      },
+      {
+        id: 'valid-fragment',
+        startTimeMs,
+        endTimeMs,
+        sleepDate: '2026-01-06',
+        durationSeconds: 4 * 3600,
+        timezoneOffsetSeconds: 2 * 60 * 60,
+        vitals: { averageHeartRateBpm: 48, minimumHeartRateBpm: 44, averageHrvMs: 60 },
+        source: { provider: 'SuuntoApp', sourceSessionKey: 'valid-fragment' },
+      },
+    ] as any[]);
+
+    expect(context.points).toHaveLength(1);
+    expect(context.points[0]).toMatchObject({
+      sleepDate: '2026-01-06',
+      averageHeartRateBpm: 48,
+      minimumHeartRateBpm: 44,
+      averageHrvMs: 60,
+    });
+  });
+
+  it('normalizes non-positive vitals when a night has only one stored fragment', () => {
+    const context = buildDashboardSleepTrendContext([{
+      id: 'invalid-vitals',
+      startTimeMs: Date.UTC(2026, 0, 5, 22),
+      endTimeMs: Date.UTC(2026, 0, 6, 6),
+      sleepDate: '2026-01-06',
+      durationSeconds: 8 * 3600,
+      vitals: { averageHeartRateBpm: 0, minimumHeartRateBpm: -30, averageHrvMs: -50 },
+      source: { provider: 'GarminAPI', sourceSessionKey: 'invalid-vitals' },
+    }] as any[]);
+
+    expect(context.points[0]).toMatchObject({
+      averageHeartRateBpm: null,
+      minimumHeartRateBpm: null,
+      averageHrvMs: null,
+    });
+  });
+
+  it('falls back from a missing sleep date and rejects timestamps outside the Date range', () => {
+    const context = buildDashboardSleepTrendContext([{
+      id: 'missing-date',
+      startTimeMs: Date.UTC(2026, 0, 5, 22),
+      endTimeMs: Date.UTC(2026, 0, 6, 6),
+      sleepDate: '',
+      durationSeconds: 8 * 3600,
+      source: { provider: 'GarminAPI', sourceSessionKey: 'missing-date' },
+    }, {
+      id: 'invalid-time',
+      startTimeMs: Number.MAX_SAFE_INTEGER - 1,
+      endTimeMs: Number.MAX_SAFE_INTEGER,
+      sleepDate: '',
+      durationSeconds: 1,
+      source: { provider: 'GarminAPI', sourceSessionKey: 'invalid-time' },
+    }] as any[]);
+
+    expect(context.points).toHaveLength(1);
+    expect(context.points[0]).toMatchObject({ id: 'missing-date', sleepDate: '2026-01-06' });
+  });
+
+  it('rejects sleep records from unknown providers', () => {
+    const context = buildDashboardSleepTrendContext([{
+      id: 'unknown-provider',
+      startTimeMs: Date.UTC(2026, 0, 5, 22),
+      endTimeMs: Date.UTC(2026, 0, 6, 6),
+      sleepDate: '2026-01-06',
+      durationSeconds: 8 * 3600,
+      source: { provider: 'UnknownProvider', sourceSessionKey: 'unknown-provider' },
+    }] as any[]);
+
+    expect(context.points).toEqual([]);
+  });
+
   it('fills missing sleep dates inside the selected sleep window with empty points', () => {
     const endMs = Date.UTC(2026, 0, 5, 12);
     const context = buildDashboardSleepTrendContext([

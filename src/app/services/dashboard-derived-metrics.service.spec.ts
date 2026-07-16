@@ -57,6 +57,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingCapacity: null,
     trainingExplanation: null,
     trainingDurability: null,
+    trainingReadiness: null,
     powerCurve: null,
     trainingSwimPerformance: null,
     formStatus: 'missing',
@@ -77,6 +78,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingCapacityStatus: 'missing',
     trainingExplanationStatus: 'missing',
     trainingDurabilityStatus: 'missing',
+    trainingReadinessStatus: 'missing',
     powerCurveStatus: 'missing',
     trainingSwimPerformanceStatus: 'missing',
   });
@@ -155,6 +157,7 @@ describe('DashboardDerivedMetricsService', () => {
     expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', uid, DERIVED_METRICS_COLLECTION_ID, getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow));
     expect(doc).toHaveBeenCalledTimes(15);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(false);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(false);
     expect(state.formStatus).toBe('ready');
     expect(state.recoveryNowStatus).toBe('ready');
     expect(state.acwrStatus).toBe('missing');
@@ -634,6 +637,7 @@ describe('DashboardDerivedMetricsService', () => {
     }));
 
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(true);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingExplanation))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingDurability))).toBe(true);
     service.ensureForDashboard({ uid }, state, {
@@ -642,6 +646,62 @@ describe('DashboardDerivedMetricsService', () => {
     expect(mockFunctionsService.call).toHaveBeenCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
       metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
     });
+  });
+
+  it('maps a formula-consistent readiness snapshot and marks a mismatched score stale', async () => {
+    const uid = 'user-1';
+    const nowMs = Date.now();
+    const now = new Date(nowMs);
+    const asOfDayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const points = Array.from({ length: 14 }, (_, index) => ({
+      dayMs: asOfDayMs - ((13 - index) * 24 * 60 * 60 * 1000),
+      score: 65,
+      label: 'Mixed',
+      confidence: 'low',
+      availableSignalCount: 1,
+      baselineEvidenceCount: 0,
+      totalSignalCount: 4,
+      form: 4,
+      rampRate: 1,
+      sleepScore: null,
+      latestSleepAtMs: null,
+      hrvRatio: null,
+      minimumHeartRateRatio: null,
+    }));
+    const payload = {
+      dayBoundary: 'UTC',
+      asOfDayMs,
+      generatedAtMs: nowMs,
+      historyDays: 14,
+      points,
+    };
+    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
+    hoisted.docDataMock
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload,
+      }))
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: {
+          ...payload,
+          points: points.map((point, index) => index === 13 ? { ...point, score: 66 } : point),
+        },
+      }));
+
+    const validState = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+    }));
+    const invalidState = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+    }));
+
+    expect(validState.trainingReadiness).toEqual(payload);
+    expect(validState.trainingReadinessStatus).toBe('ready');
+    expect(invalidState.trainingReadiness).toBeNull();
+    expect(invalidState.trainingReadinessStatus).toBe('stale');
   });
 
   it('does not let an in-flight dashboard probe suppress a Training workspace request', () => {
@@ -674,6 +734,7 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.TrainingExplanation,
         DERIVED_METRIC_KINDS.TrainingDurability,
         DERIVED_METRIC_KINDS.TrainingBuildComparison,
+        DERIVED_METRIC_KINDS.TrainingReadiness,
         DERIVED_METRIC_KINDS.TrainingSwimPerformance,
       ],
     });

@@ -71,28 +71,147 @@
           </article>
         }
       </div>
-      <article class="training-recovery-panel qs-glass-card-panel" aria-labelledby="training-recovery-title">
-        <header class="training-recovery-header">
-          <div>
-            <span class="training-metric-label">Recovery context</span>
-            <h3 id="training-recovery-title">Recorded sleep alongside training</h3>
-          </div>
-          <span>Current 28 days / previous 84 days</span>
-        </header>
-        @if (trainingRecovery.isUpdating) {
-          <p class="training-recovery-update" role="status">Updating recovery context…</p>
-        }
-        <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
-        @if (trainingRecovery.metricRows.length) {
-          <dl class="training-recovery-table">
-            <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
-            @for (row of trainingRecovery.metricRows; track row.label) {
-              <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+      <div class="training-current-context-grid">
+        <article class="training-readiness-panel qs-glass-card-panel" aria-labelledby="training-readiness-title">
+          <header class="training-readiness-header">
+            <div>
+              <span class="training-metric-label">Current context</span>
+              <h3 id="training-readiness-title">Readiness today</h3>
+            </div>
+            @if (trainingReadiness.state === 'ready') {
+              <div class="training-readiness-summary" aria-label="Current readiness signal summary">
+                <strong>{{ trainingReadiness.scoreText }}</strong>
+                <span>{{ trainingReadiness.label }}</span>
+                <small>{{ trainingReadiness.updatedText }}</small>
+              </div>
             }
-          </dl>
-        }
-        <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
-      </article>
+          </header>
+
+          <div class="training-readiness-overview">
+            <section class="training-readiness-current" aria-label="Current readiness evidence">
+              @if (trainingReadiness.state === 'preparing') {
+                <div class="training-readiness-status" role="status">
+                  <mat-spinner diameter="24"></mat-spinner>
+                  <div><strong>Preparing readiness signals</strong><p>{{ trainingReadiness.detailText }}</p></div>
+                </div>
+              } @else if (trainingReadiness.state === 'empty') {
+                <div class="training-readiness-status">
+                  <strong>No current readiness signals</strong>
+                  <p>{{ trainingReadiness.detailText }}</p>
+                </div>
+              } @else if (trainingReadiness.state === 'unavailable') {
+                <div class="training-readiness-status" role="status">
+                  <strong>Readiness unavailable</strong>
+                  <p>{{ trainingReadiness.detailText }}</p>
+                </div>
+              } @else {
+                @if (trainingReadiness.isUpdating) {
+                  <span class="training-recovery-update" role="status">Updating available evidence…</span>
+                }
+                <p class="training-readiness-detail">{{ trainingReadiness.detailText }}</p>
+                <div class="training-readiness-evidence">
+                  <span>{{ trainingReadiness.confidenceText }}</span>
+                  <span>{{ trainingReadiness.evidenceText }}</span>
+                </div>
+                <div class="training-readiness-implication">
+                  <strong>{{ trainingReadiness.implicationTitle }}</strong>
+                  <p>{{ trainingReadiness.implicationText }}</p>
+                </div>
+              }
+            </section>
+
+            <section class="training-readiness-history" aria-labelledby="training-readiness-history-title">
+              <header>
+                <div>
+                  <strong id="training-readiness-history-title">14-day trend</strong>
+                  <span>{{ trainingReadiness.historyEvidenceText }}</span>
+                </div>
+                @if (trainingReadiness.historyState === 'updating') {
+                  <span class="training-readiness-history-updating" role="status">Updating…</span>
+                }
+              </header>
+              @if (trainingReadiness.historyPoints.length) {
+                <svg class="training-readiness-trend" viewBox="0 0 280 90" role="img" [attr.aria-label]="trainingReadiness.historyAriaLabel">
+                  <line class="training-readiness-trend-threshold" x1="10" x2="270" y1="26.5" y2="26.5"></line>
+                  <line class="training-readiness-trend-threshold" x1="10" x2="270" y1="41.3" y2="41.3"></line>
+                  @for (segment of trainingReadiness.historySegments; track segment) {
+                    <polyline class="training-readiness-trend-line" [attr.points]="segment"></polyline>
+                  }
+                  @for (point of trainingReadiness.historyPoints; track point.dayMs) {
+                    @if (point.y !== null) {
+                      <circle class="training-readiness-trend-point" [attr.cx]="point.x" [attr.cy]="point.y" r="3">
+                        <title>{{ point.label }}</title>
+                      </circle>
+                    }
+                  }
+                </svg>
+                <div class="training-readiness-trend-dates">
+                  <span>{{ trainingReadiness.historyStartLabel }}</span>
+                  <span>{{ trainingReadiness.historyEndLabel }}</span>
+                </div>
+                <div class="training-readiness-trend-legend" aria-hidden="true">
+                  <span>Ready ≥75</span><span>Mixed 55–74</span><span>Recover &lt;55</span>
+                </div>
+              } @else if (trainingReadiness.historyState === 'preparing') {
+                <div class="training-readiness-history-state" role="status">
+                  <mat-spinner diameter="22"></mat-spinner>
+                  <span>{{ trainingReadiness.historyStatusText }}</span>
+                </div>
+              } @else {
+                <p class="training-readiness-history-state">{{ trainingReadiness.historyStatusText }}</p>
+              }
+              @if (trainingReadiness.historyPoints.length) {
+                <p class="training-readiness-history-caption">{{ trainingReadiness.historyStatusText }}</p>
+              }
+            </section>
+          </div>
+
+          @if (trainingReadiness.metricRows.length) {
+            <dl class="training-readiness-metrics">
+              @for (row of trainingReadiness.metricRows; track row.label) {
+                <div>
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.valueText }}</dd>
+                  <small>{{ row.detailText }}</small>
+                </div>
+              }
+            </dl>
+          }
+          <p class="training-readiness-source">{{ trainingReadiness.sourceText }}</p>
+
+          <section class="training-recovery-history" aria-labelledby="training-recovery-history-title">
+            <div class="training-recovery-history-summary">
+              <div>
+                <strong id="training-recovery-history-title">Recovery history</strong>
+                <span>Recorded sleep: current 28 days vs previous 84 days</span>
+              </div>
+              <button mat-button type="button"
+                [attr.aria-expanded]="trainingRecoveryHistoryExpanded"
+                aria-controls="training-recovery-history-details"
+                (click)="toggleTrainingRecoveryHistory()">
+                <span>{{ trainingRecoveryHistoryExpanded ? 'Hide' : 'Details' }}</span>
+                <mat-icon aria-hidden="true">{{ trainingRecoveryHistoryExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+              </button>
+            </div>
+            <p class="training-recovery-history-compact">{{ trainingRecovery.compactText }}</p>
+            <div id="training-recovery-history-details" [hidden]="!trainingRecoveryHistoryExpanded">
+              @if (trainingRecovery.isUpdating) {
+                <p class="training-recovery-update" role="status">Updating recovery history…</p>
+              }
+              <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
+              @if (trainingRecovery.metricRows.length) {
+                <dl class="training-recovery-table">
+                  <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
+                  @for (row of trainingRecovery.metricRows; track row.label) {
+                    <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+                  }
+                </dl>
+              }
+              <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
+            </div>
+          </section>
+        </article>
+      </div>
     </section>
 
     <section class="training-section" aria-labelledby="training-build-title">

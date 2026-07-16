@@ -1835,7 +1835,7 @@ describe('SummariesComponent', () => {
     expect(component.getReadinessSignalsStatusForTile(tile)).toBe('building');
   });
 
-  it('rebuilds readiness when the latest sleep evidence crosses its freshness limit', async () => {
+  it('rebuilds readiness at time-only boundaries and keeps scheduling remaining transitions', async () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
@@ -1861,13 +1861,13 @@ describe('SummariesComponent', () => {
     ];
     const rebuildSpy = vi.spyOn(component as any, 'rebuildTilesFromCurrentState').mockResolvedValue(undefined);
 
-    (component as any).updateReadinessSleepExpiryTimer();
-    expect((component as any).readinessSleepExpiryTimeoutHandle).not.toBeNull();
+    (component as any).updateReadinessSleepRefreshTimer();
+    expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();
 
     await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
 
     expect(rebuildSpy).toHaveBeenCalledTimes(1);
-    expect((component as any).readinessSleepExpiryTimeoutHandle).toBeNull();
+    expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();
   });
 
   it('should treat the 1y sleep range as a bounded pageable window', async () => {

@@ -386,6 +386,43 @@ describe('fetchTrainingBuildSleepDocs', () => {
     });
 });
 
+describe('fetchTrainingReadinessSleepDocs', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        const query = { where: hoisted.where, select: hoisted.select };
+        hoisted.where.mockReturnValue(query);
+        hoisted.select.mockReturnValue({ get: hoisted.get });
+        hoisted.get.mockResolvedValue({ docs: [{ id: 'readiness-sleep' }] });
+    });
+
+    it('queries the bounded sleep envelope required by every historical cutoff without loading events or activities', async () => {
+        const { fetchTrainingReadinessSleepDocs } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const firstHistoryCutoffMs = Date.UTC(2026, 6, 3) + (24 * 60 * 60 * 1000) - 1;
+        const docs = await fetchTrainingReadinessSleepDocs('user-1', nowMs);
+
+        expect(hoisted.where.mock.calls).toEqual([
+            ['endTimeMs', '>=', firstHistoryCutoffMs - (30 * 24 * 60 * 60 * 1000)],
+            ['endTimeMs', '<=', nowMs],
+        ]);
+        expect(hoisted.select).toHaveBeenCalledWith(
+            'source.provider',
+            'sleepDate',
+            'startTimeMs',
+            'endTimeMs',
+            'timezoneOffsetSeconds',
+            'durationSeconds',
+            'isNap',
+            'score.value',
+            'providerFields.suunto.timestamp',
+            'vitals.overnightHrvMs',
+            'vitals.averageHrvMs',
+            'vitals.minimumHeartRateBpm',
+        );
+        expect(docs.map(doc => doc.id)).toEqual(['readiness-sleep']);
+    });
+});
+
 describe('resolveDerivedMetricSourceRequirements', () => {
     it('marks form docs required for load-backed and KPI metric kinds', async () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
@@ -402,6 +439,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
         });
     });
 
@@ -420,6 +458,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
         });
     });
 
@@ -433,6 +472,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
         });
     });
 
@@ -446,6 +486,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
         });
     });
 
@@ -459,6 +500,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
         });
     });
 
@@ -476,6 +518,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
                 needsTrainingSwimLengths: false,
                 needsTrainingBuildBenchmarkSettings: false,
                 needsTrainingBuildSleepDocs: false,
+                needsTrainingReadinessSleepDocs: false,
             });
         }
     });
@@ -490,6 +533,7 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: true,
             needsTrainingBuildSleepDocs: true,
+            needsTrainingReadinessSleepDocs: false,
         });
     });
 
@@ -503,6 +547,205 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingSwimLengths: true,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
+        });
+    });
+
+    it('uses only form state and a bounded sleep source for readiness history', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingReadiness])).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+            needsTrainingActivityDocs: false,
+            needsTrainingSwimLengths: false,
+            needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: true,
+        });
+    });
+});
+
+describe('buildTrainingReadinessMetricPayload', () => {
+    it('builds a true 14-day series with per-day evidence cutoffs and the shared readiness formula', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const sleepDoc = (
+            id: string,
+            dayMs: number,
+            values: { score: number; hrv: number; minimumHeartRate: number; isNap?: boolean },
+        ) => ({
+            id,
+            data: () => ({
+                source: { provider: 'GarminAPI' },
+                sleepDate: new Date(dayMs).toISOString().slice(0, 10),
+                startTimeMs: dayMs - (2 * 60 * 60 * 1000),
+                endTimeMs: dayMs + (6 * 60 * 60 * 1000),
+                durationSeconds: 8 * 60 * 60,
+                isNap: values.isNap === true,
+                score: { value: values.score },
+                vitals: {
+                    averageHrvMs: values.hrv,
+                    minimumHeartRateBpm: values.minimumHeartRate,
+                },
+            }),
+        });
+        const baselineDocs = Array.from({ length: 5 }, (_, index) => sleepDoc(
+            `baseline-${index}`,
+            Date.UTC(2026, 6, 1 + index),
+            { score: 80, hrv: 50, minimumHeartRate: 50 },
+        ));
+        const docs = [
+            ...baselineDocs,
+            sleepDoc('latest', Date.UTC(2026, 6, 16), { score: 90, hrv: 55, minimumHeartRate: 48 }),
+            sleepDoc('future', Date.UTC(2026, 6, 17), { score: 100, hrv: 80, minimumHeartRate: 40 }),
+            sleepDoc('nap', Date.UTC(2026, 6, 16), {
+                score: 100,
+                hrv: 100,
+                minimumHeartRate: 35,
+                isNap: true,
+            }),
+        ];
+
+        const result = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs);
+        const today = result.payload.points[result.payload.points.length - 1];
+        const staleDay = result.payload.points.find(point => point.dayMs === Date.UTC(2026, 6, 13));
+
+        expect(result.payload).toMatchObject({
+            dayBoundary: 'UTC',
+            asOfDayMs: Date.UTC(2026, 6, 16),
+            generatedAtMs: nowMs,
+            historyDays: 14,
+        });
+        expect(result.payload.points).toHaveLength(14);
+        expect(staleDay).toMatchObject({ score: null, availableSignalCount: 0 });
+        expect(today).toMatchObject({
+            score: 71,
+            label: 'Mixed',
+            confidence: 'medium',
+            availableSignalCount: 3,
+            baselineEvidenceCount: 5,
+            latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+            sleepScore: 90,
+            hrvRatio: 1.1,
+            minimumHeartRateRatio: 0.96,
+        });
+    });
+
+    it('matches live Suunto local-date grouping before choosing readiness baselines', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const docs = Array.from({ length: 3 }, (_, index) => ({
+            id: `suunto-part-${index}`,
+            data: () => ({
+                source: { provider: 'SuuntoApp' },
+                sleepDate: `2026-07-${13 + index}`,
+                startTimeMs: Date.UTC(2026, 6, 16, 0 + index),
+                endTimeMs: Date.UTC(2026, 6, 16, 1 + index),
+                timezoneOffsetSeconds: 2 * 60 * 60,
+                durationSeconds: 60 * 60,
+                isNap: false,
+                score: { value: 80 + index },
+                vitals: { averageHrvMs: 50 + index, minimumHeartRateBpm: 48 - index },
+            }),
+        }));
+
+        const result = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs);
+        const today = result.payload.points.at(-1);
+
+        expect(today).toMatchObject({
+            sleepScore: 82,
+            availableSignalCount: 1,
+            confidence: 'low',
+            hrvRatio: null,
+            minimumHeartRateRatio: null,
+        });
+    });
+
+    it('selects tied same-night records deterministically', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const sleepDoc = (id: string, score: number) => ({
+            id,
+            data: () => ({
+                source: { provider: 'GarminAPI' },
+                sleepDate: '2026-07-16',
+                startTimeMs: Date.UTC(2026, 6, 15, 22),
+                endTimeMs: Date.UTC(2026, 6, 16, 6),
+                durationSeconds: 8 * 60 * 60,
+                isNap: false,
+                score: { value: score },
+                vitals: {},
+            }),
+        });
+
+        const forward = buildTrainingReadinessMetricPayload(
+            [], 0, [sleepDoc('alpha', 70), sleepDoc('zulu', 90)] as any, nowMs,
+        );
+        const reverse = buildTrainingReadinessMetricPayload(
+            [], 0, [sleepDoc('zulu', 90), sleepDoc('alpha', 70)] as any, nowMs,
+        );
+
+        expect(forward.payload.points.at(-1)?.sleepScore).toBe(90);
+        expect(reverse.payload.points.at(-1)?.sleepScore).toBe(90);
+    });
+
+    it('matches the live missing-date fallback without accepting an invalid stored date', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const buildDoc = (id: string, sleepDate: string | undefined, score: number, endHour: number) => ({
+            id,
+            data: () => ({
+                source: { provider: 'GarminAPI' },
+                sleepDate,
+                startTimeMs: Date.UTC(2026, 6, 15, 22),
+                endTimeMs: Date.UTC(2026, 6, 16, endHour),
+                durationSeconds: 8 * 60 * 60,
+                isNap: false,
+                score: { value: score },
+                vitals: {},
+            }),
+        });
+
+        const result = buildTrainingReadinessMetricPayload([], 0, [
+            buildDoc('missing-date', undefined, 84, 6),
+            buildDoc('invalid-date', '2026-02-31', 99, 7),
+        ] as any, nowMs);
+
+        expect(result.payload.points.at(-1)).toMatchObject({
+            sleepScore: 84,
+            latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+        });
+    });
+
+    it('ignores invalid vitals and bounds malformed Suunto timezone offsets', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const buildDoc = (id: string, offset: number, hrv: number, minimumHeartRate: number) => ({
+            id,
+            data: () => ({
+                source: { provider: 'SuuntoApp' },
+                sleepDate: '2026-07-16',
+                startTimeMs: Date.UTC(2026, 6, 15, 22),
+                endTimeMs: Date.UTC(2026, 6, 16, 6),
+                timezoneOffsetSeconds: offset,
+                durationSeconds: 4 * 60 * 60,
+                isNap: false,
+                score: { value: 80 },
+                providerFields: { suunto: { timestamp: '2026-07-16T00:00:00+02:00' } },
+                vitals: { averageHrvMs: hrv, minimumHeartRateBpm: minimumHeartRate },
+            }),
+        });
+
+        const result = buildTrainingReadinessMetricPayload([], 0, [
+            buildDoc('invalid', Number.MAX_SAFE_INTEGER, -100, -20),
+            buildDoc('valid', 2 * 60 * 60, 60, 44),
+        ] as any, nowMs);
+
+        expect(result.payload.points.at(-1)).toMatchObject({
+            sleepScore: 80,
+            hrvRatio: null,
+            minimumHeartRateRatio: null,
         });
     });
 });

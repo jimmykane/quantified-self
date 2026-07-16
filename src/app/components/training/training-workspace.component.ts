@@ -16,6 +16,7 @@ import {
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { resolveMetricSemantics, type MetricSemanticsDirection } from '@shared/metric-semantics';
 import {
+  DERIVED_METRIC_KINDS,
   DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
   DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
   getDerivedTrainingRecoveryMinimumComparableNights,
@@ -32,7 +33,20 @@ import {
   buildDashboardPowerCurveContextFromSnapshot,
   type DashboardPowerCurveContext,
 } from '../../helpers/dashboard-power-curve.helper';
-import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
+import {
+  buildDashboardSleepTrendContext,
+  formatSleepDuration,
+} from '../../helpers/dashboard-sleep-chart.helper';
+import {
+  buildDashboardReadinessSleepQueryWindow,
+  buildDashboardReadinessSignalsContext,
+  resolveDashboardReadinessSleepRefreshAtMs,
+} from '../../helpers/dashboard-training-insights.helper';
+import {
+  buildTrainingReadinessViewModel,
+  type TrainingReadinessViewModel,
+} from '../../helpers/training-readiness.helper';
+import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import {
   buildTrainingAnalysis,
   type TrainingAnalysis,
@@ -60,6 +74,8 @@ import {
   type TrainingPowerProfileViewModel,
 } from '../../helpers/training-power-profile.helper';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppSleepService } from '../../services/app.sleep.service';
+import type { SleepSession } from '@shared/sleep';
 import {
   TrainingBuildBenchmarkDialogComponent,
   type TrainingBuildEventSuggestionsState,
@@ -215,6 +231,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public isLoading = true;
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
   public trainingRecovery = createEmptyTrainingRecoveryViewModel();
+  public trainingReadiness: TrainingReadinessViewModel = buildTrainingReadinessViewModel(null, { isPreparing: true });
   public trainingRecoveryEstimate: TrainingRecoveryEstimateViewModel | null = null;
   public trainingExplanationView: TrainingExplanationViewModel | null = null;
   public trainingDurabilityScopes: TrainingDurabilityScopeViewModel[] = [];
@@ -242,11 +259,18 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     cycling: false,
     swimming: false,
   };
+  public trainingRecoveryHistoryExpanded = false;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
   private currentUserUID: string | null = null;
+  private hasReceivedDerivedState = false;
+  private readinessSleepSessions: SleepSession[] = [];
+  private readinessSleepLoading = true;
+  private readinessSleepFailed = false;
+  private readinessSleepRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private readinessDayRolloverTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private trainingSettings: TrainingSettings = {};
   public unitSettings: UserUnitSettingsInterface | null = null;
   private pendingTrainingBuildSelections = new Map<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection | null>();
@@ -259,6 +283,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   constructor(
     private readonly authService: AppAuthService,
     private readonly derivedMetricsService: DashboardDerivedMetricsService,
+    private readonly sleepService: AppSleepService,
     private readonly themeService: AppThemeService,
     private readonly dialog: MatDialog,
     private readonly changeDetector: ChangeDetectorRef,
@@ -303,6 +328,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       const metricScope = { metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS };
       this.dataSubscriptions.add(this.derivedMetricsService.watch(user, metricScope).subscribe((state) => {
         hasReceivedDerivedState = true;
+        this.hasReceivedDerivedState = true;
         this.applyDerivedState(state);
         this.isLoading = false;
         this.derivedMetricsService.ensureForDashboard(user, state, metricScope);
@@ -317,10 +343,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
       }
 
+      this.syncTrainingReadinessSleepSubscription(uid);
+      this.scheduleTrainingReadinessDayRollover();
+
     }));
   }
 
   ngOnDestroy(): void {
+    this.clearTrainingReadinessSleepRefreshTimer();
+    this.clearTrainingReadinessDayRolloverTimer();
     this.dataSubscriptions.unsubscribe();
     this.subscriptions.unsubscribe();
   }
@@ -330,6 +361,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       ...this.trainingBuildRecoveryExpanded,
       [discipline]: !this.trainingBuildRecoveryExpanded[discipline],
     };
+  }
+
+  public toggleTrainingRecoveryHistory(): void {
+    this.trainingRecoveryHistoryExpanded = !this.trainingRecoveryHistoryExpanded;
   }
 
   private formatNumber(value: number | null | undefined, fractionDigits = 1, signed = false): string {
@@ -351,6 +386,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private resetWorkspace(): void {
+    this.clearTrainingReadinessSleepRefreshTimer();
+    this.clearTrainingReadinessDayRolloverTimer();
     const activeDialogRef = this.trainingBuildBenchmarkDialogRef;
     const activeVisibilityDialogRef = this.trainingSportVisibilityDialogRef;
     this.trainingBuildBenchmarkDialogRef = null;
@@ -361,6 +398,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
+    this.trainingReadiness = buildTrainingReadinessViewModel(null, { isPreparing: true });
     this.trainingRecoveryEstimate = null;
     this.trainingExplanationView = null;
     this.trainingDurabilityScopes = [];
@@ -373,6 +411,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
     this.trainingMixDisciplines = [];
     this.capacityDisciplines = [];
+    this.hasReceivedDerivedState = false;
+    this.readinessSleepSessions = [];
+    this.readinessSleepLoading = true;
+    this.readinessSleepFailed = false;
     this.trainingSettings = {};
     this.unitSettings = null;
     this.pendingTrainingBuildSelections.clear();
@@ -388,6 +430,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.isSwimmingVisible = true;
     this.hasPowerCapacityVisible = true;
     this.trainingBuildRecoveryExpanded = { running: false, cycling: false, swimming: false };
+    this.trainingRecoveryHistoryExpanded = false;
     this.trainingBuildCards = this.buildTrainingBuildCards();
   }
 
@@ -763,10 +806,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const analysis = buildTrainingAnalysis({
       disciplines: this.derivedState.trainingSummary?.disciplines || [],
       stateSignals: {
-      form: this.derivedState.formNow?.value ?? latestFormPoint?.formSameDay ?? null,
-      rampRate: this.derivedState.rampRate?.rampRate ?? null,
-      fitness: latestFormPoint?.ctl ?? null,
-      fatigue: latestFormPoint?.atl ?? null,
+        form: this.derivedState.formNow?.value ?? latestFormPoint?.formSameDay ?? null,
+        rampRate: this.derivedState.rampRate?.rampRate ?? null,
+        fitness: latestFormPoint?.ctl ?? null,
+        fatigue: latestFormPoint?.atl ?? null,
       },
     });
     const forecastPoints = this.derivedState.freshnessForecast?.points || [];
@@ -788,6 +831,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       'Usual',
       analysis,
     );
+    this.refreshTrainingReadiness();
     this.loadMetrics = {
       ctlText: this.formatNumber(latestFormPoint?.ctl),
       atlText: this.formatNumber(latestFormPoint?.atl),
@@ -805,6 +849,123 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.derivedState.recoveryNow,
       this.derivedState.recoveryNowStatus,
     );
+  }
+
+  private syncTrainingReadinessSleepSubscription(uid: string): void {
+    const window = buildDashboardReadinessSleepQueryWindow();
+    this.readinessSleepLoading = true;
+    this.readinessSleepFailed = false;
+    this.dataSubscriptions.add(this.sleepService.watchForDashboard(uid, window.startMs, window.endMs).subscribe({
+      next: (sessions) => {
+        this.readinessSleepSessions = sessions;
+        this.readinessSleepLoading = false;
+        this.readinessSleepFailed = false;
+        this.updateTrainingReadinessSleepRefreshTimer();
+        this.refreshTrainingReadiness();
+        this.changeDetector.markForCheck();
+      },
+      error: () => {
+        this.readinessSleepLoading = false;
+        this.readinessSleepFailed = true;
+        this.updateTrainingReadinessSleepRefreshTimer();
+        this.refreshTrainingReadiness();
+        this.changeDetector.markForCheck();
+      },
+    }));
+  }
+
+  private refreshTrainingReadiness(): void {
+    const isUpdating = this.readinessSleepLoading
+      || !this.hasReceivedDerivedState
+      || [this.derivedState.formNowStatus, this.derivedState.rampRateStatus]
+        .some(status => isDerivedMetricPendingStatus(status));
+    const context = buildDashboardReadinessSignalsContext({
+      formNow: this.derivedState.formNow,
+      rampRate: this.derivedState.rampRate,
+      sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+    });
+    this.trainingReadiness = buildTrainingReadinessViewModel(context, {
+      isPreparing: !context && isUpdating,
+      isUpdating,
+      calculatedAtMs: Date.now(),
+      sleepEvidenceFailed: this.readinessSleepFailed,
+      loadEvidenceFailed: [this.derivedState.formNowStatus, this.derivedState.rampRateStatus]
+        .some(status => status === 'failed'),
+      history: this.derivedState.trainingReadiness,
+      historyStatus: this.derivedState.trainingReadinessStatus,
+    });
+  }
+
+  private updateTrainingReadinessSleepRefreshTimer(): void {
+    this.clearTrainingReadinessSleepRefreshTimer();
+    const nowMs = Date.now();
+    const refreshAtMs = resolveDashboardReadinessSleepRefreshAtMs(
+      buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      nowMs,
+    );
+    if (refreshAtMs === null || refreshAtMs <= nowMs) {
+      return;
+    }
+    this.readinessSleepRefreshTimeoutHandle = globalThis.setTimeout(() => {
+      this.readinessSleepRefreshTimeoutHandle = null;
+      this.refreshTrainingReadiness();
+      this.updateTrainingReadinessSleepRefreshTimer();
+      this.changeDetector.markForCheck();
+    }, refreshAtMs - nowMs);
+  }
+
+  private clearTrainingReadinessSleepRefreshTimer(): void {
+    if (this.readinessSleepRefreshTimeoutHandle === null) {
+      return;
+    }
+    globalThis.clearTimeout(this.readinessSleepRefreshTimeoutHandle);
+    this.readinessSleepRefreshTimeoutHandle = null;
+  }
+
+  private scheduleTrainingReadinessDayRollover(): void {
+    this.clearTrainingReadinessDayRolloverTimer();
+    const nowMs = Date.now();
+    const now = new Date(nowMs);
+    const nextUtcDayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    const handleRollover = (): void => {
+      this.readinessDayRolloverTimeoutHandle = null;
+      const refresh = (): void => {
+        this.refreshTrainingReadiness();
+        const uid = this.currentUserUID;
+        if (uid) {
+          this.derivedMetricsService.ensureForDashboard({ uid }, this.derivedState, {
+            force: true,
+            metricKinds: [
+              DERIVED_METRIC_KINDS.FormNow,
+              DERIVED_METRIC_KINDS.RampRate,
+              DERIVED_METRIC_KINDS.TrainingReadiness,
+            ],
+          });
+        }
+        this.scheduleTrainingReadinessDayRollover();
+        this.changeDetector.markForCheck();
+      };
+      if (this.ngZone) {
+        this.ngZone.run(refresh);
+      } else {
+        refresh();
+      }
+    };
+    const schedule = (): ReturnType<typeof setTimeout> => globalThis.setTimeout(
+      handleRollover,
+      Math.max(1, nextUtcDayMs - nowMs + 1),
+    );
+    this.readinessDayRolloverTimeoutHandle = this.ngZone
+      ? this.ngZone.runOutsideAngular(schedule)
+      : schedule();
+  }
+
+  private clearTrainingReadinessDayRolloverTimer(): void {
+    if (this.readinessDayRolloverTimeoutHandle === null) {
+      return;
+    }
+    globalThis.clearTimeout(this.readinessDayRolloverTimeoutHandle);
+    this.readinessDayRolloverTimeoutHandle = null;
   }
 
   private refreshTrainingBuildCards(): void {
