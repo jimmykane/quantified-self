@@ -8,11 +8,13 @@ import {
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     ReparseStatusWrite,
     SportsLibReparseJob,
+    classifySportsLibReparseVersionDisposition,
     getSportsLibReparseEventDurationMs,
     isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseDurationHeavy,
     isSportsLibReparseTerminalFailureMessage,
     reparseEventFromOriginalFiles,
+    resolveRuntimeSportsLibVersion,
     resolveTargetSportsLibVersion,
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
@@ -80,6 +82,22 @@ async function markJobFailed(
             ? admin.firestore.FieldValue.serverTimestamp()
             : admin.firestore.FieldValue.delete(),
         ...(options?.clearEnqueuedAt ? { enqueuedAt: admin.firestore.FieldValue.delete() } : {}),
+    }, { merge: true });
+}
+
+async function markJobSuperseded(
+    jobRef: admin.firestore.DocumentReference,
+    runtimeSportsLibVersion: string,
+): Promise<void> {
+    await jobRef.set({
+        status: 'superseded',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        supersededAt: admin.firestore.FieldValue.serverTimestamp(),
+        supersededBySportsLibVersion: runtimeSportsLibVersion,
+        lastError: admin.firestore.FieldValue.delete(),
+        terminalFailure: admin.firestore.FieldValue.delete(),
+        terminalFailureAt: admin.firestore.FieldValue.delete(),
     }, { merge: true });
 }
 
@@ -269,8 +287,8 @@ async function processSportsLibReparseTaskRequest(
 
     const job = snapshot.data() as SportsLibReparseJob;
     const deleteForUserDeletion = (phase: string) => deleteJobForUserDeletion(jobRef, jobId, job, phase);
-    if (job.status === 'completed') {
-        logger.info(`[sports-lib-reparse-worker] Job ${jobId} already completed. Skipping.`);
+    if (job.status === 'completed' || job.status === 'superseded') {
+        logger.info(`[sports-lib-reparse-worker] Job ${jobId} already ${job.status}. Skipping.`);
         return;
     }
     if (job.status === 'failed'
@@ -296,6 +314,53 @@ async function processSportsLibReparseTaskRequest(
         throw error;
     }
 
+    const runtimeSportsLibVersion = resolveRuntimeSportsLibVersion();
+    const targetSportsLibVersion = job.targetSportsLibVersion || resolveTargetSportsLibVersion();
+    let versionDisposition: ReturnType<typeof classifySportsLibReparseVersionDisposition>;
+    try {
+        versionDisposition = classifySportsLibReparseVersionDisposition(
+            targetSportsLibVersion,
+            runtimeSportsLibVersion,
+        );
+    } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        await markJobFailed(jobRef, errorMessage, { terminalFailure: true });
+        logger.error('[sports-lib-reparse-worker] Invalid sports-lib version metadata.', {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            targetSportsLibVersion,
+            runtimeSportsLibVersion,
+            error: errorMessage,
+        });
+        return;
+    }
+
+    if (versionDisposition === 'target_superseded') {
+        await markJobSuperseded(jobRef, runtimeSportsLibVersion);
+        logger.info('[sports-lib-reparse-worker] Job superseded by newer sports-lib runtime.', {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            targetSportsLibVersion,
+            supersededBySportsLibVersion: runtimeSportsLibVersion,
+        });
+        return;
+    }
+
+    if (versionDisposition === 'runtime_behind') {
+        const errorMessage = `[sports-lib-reparse-worker] Runtime sports-lib version "${runtimeSportsLibVersion}" `
+            + `is behind job target "${targetSportsLibVersion}". Retrying after rollout.`;
+        logger.warn(errorMessage, {
+            jobId,
+            uid: job.uid,
+            eventId: job.eventId,
+            targetSportsLibVersion,
+            runtimeSportsLibVersion,
+        });
+        throw new Error(errorMessage);
+    }
+
     if (workerTier === 'normal') {
         if (job.processingTier === SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy) {
             logger.info('[sports-lib-reparse-worker] Normal worker skipping job already marked for heavy processing.', {
@@ -314,7 +379,6 @@ async function processSportsLibReparseTaskRequest(
         }
     }
 
-    const targetSportsLibVersion = job.targetSportsLibVersion || resolveTargetSportsLibVersion();
     const nextAttemptCount = (job.attemptCount || 0) + 1;
     await jobRef.set({
         status: 'processing',

@@ -25,6 +25,7 @@ import {
     DerivedMetricsCoordinatorDocData,
     DerivedMetricsCoordinatorStats,
     DerivedMetricsFailurePreview,
+    EventReparseFailurePreview,
     GetQueueStatsRequest,
     CloudTaskQueueStats,
     QueueStatsResponse,
@@ -84,6 +85,33 @@ function toFiniteEpochMs(value: unknown): number | null {
 function toFiniteNumberOrNull(value: unknown): number | null {
     const numericValue = Number(value);
     return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function mapEventReparseOutcome(
+    doc: admin.firestore.QueryDocumentSnapshot,
+): EventReparseFailurePreview {
+    const data = doc.data() as SportsLibReparseJobDocData;
+    const targetSportsLibVersion = `${data.targetSportsLibVersion || ''}`;
+    const status = `${data.status || ''}`;
+    const outcome = status === 'superseded'
+        ? 'superseded'
+        : (targetSportsLibVersion && targetSportsLibVersion !== SPORTS_LIB_REPARSE_TARGET_VERSION
+            ? 'historical_failure'
+            : 'active_failure');
+    return {
+        jobId: doc.id,
+        uid: `${data.uid || ''}`,
+        eventId: `${data.eventId || ''}`,
+        attemptCount: toSafeNumber(data.attemptCount),
+        lastError: `${data.lastError || ''}`,
+        updatedAt: data.updatedAt || null,
+        targetSportsLibVersion,
+        outcome,
+        supersededBySportsLibVersion: `${data.supersededBySportsLibVersion || ''}` || undefined,
+        processingTier: `${data.processingTier || ''}`,
+        heavyReason: `${data.heavyReason || ''}`,
+        eventDurationMs: toFiniteNumberOrNull(data.eventDurationMs),
+    };
 }
 
 async function getAdminCloudTaskQueueStats(queueId: string): Promise<CloudTaskQueueStats> {
@@ -174,6 +202,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             reparseProcessingJobs,
             reparseCompletedJobs,
             reparseFailedJobs,
+            reparseCurrentTargetFailedJobs,
+            reparseSupersededJobs,
             routeReparseTotalJobs,
             routeReparsePendingJobs,
             routeReparseProcessingJobs,
@@ -199,6 +229,19 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             }),
             reparseJobsCollection.where('status', '==', 'failed').count().get().catch(e => {
                 logger.error(`[admin/getQueueStats] Failed to count failed reparse jobs:`, e);
+                return null;
+            }),
+            reparseJobsCollection
+                .where('status', '==', 'failed')
+                .where('targetSportsLibVersion', '==', SPORTS_LIB_REPARSE_TARGET_VERSION)
+                .count()
+                .get()
+                .catch(e => {
+                    logger.error(`[admin/getQueueStats] Failed to count current-target failed reparse jobs:`, e);
+                    return null;
+                }),
+            reparseJobsCollection.where('status', '==', 'superseded').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count superseded reparse jobs:`, e);
                 return null;
             }),
             routeReparseJobsCollection.count().get().catch(e => {
@@ -330,41 +373,38 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             : {};
         const routeOverrideUsersInProgress = Object.values(routeOverrideCursorByUid).filter(cursor => !!cursor).length;
 
-        const recentReparseJobsSnapshot = await reparseJobsCollection
-            .where('status', '==', 'failed')
-            .orderBy('updatedAt', 'desc')
-            .limit(SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT)
-            .get()
-            .catch(e => {
-                logger.error('[admin/getQueueStats] Failed to load recent reparse jobs:', e);
-                return null;
-            });
-        const recentReparseFailures = (recentReparseJobsSnapshot?.docs || [])
-            .map(doc => ({
-                data: doc.data() as SportsLibReparseJobDocData,
-                jobId: doc.id,
-                uid: '',
-                eventId: '',
-                attemptCount: 0,
-                lastError: '',
-                updatedAt: null as unknown,
-                targetSportsLibVersion: '',
-                processingTier: '',
-                heavyReason: '',
-                eventDurationMs: null as number | null,
-            }))
-            .map(entry => ({
-                jobId: entry.jobId,
-                uid: `${entry.data.uid || ''}`,
-                eventId: `${entry.data.eventId || ''}`,
-                attemptCount: toSafeNumber(entry.data.attemptCount),
-                lastError: `${entry.data.lastError || ''}`,
-                updatedAt: entry.data.updatedAt || null,
-                targetSportsLibVersion: `${entry.data.targetSportsLibVersion || ''}`,
-                processingTier: `${entry.data.processingTier || ''}`,
-                heavyReason: `${entry.data.heavyReason || ''}`,
-                eventDurationMs: toFiniteNumberOrNull(entry.data.eventDurationMs),
-            }));
+        const [currentTargetReparseFailuresSnapshot, recentReparseJobsSnapshot] = await Promise.all([
+            reparseJobsCollection
+                .where('status', '==', 'failed')
+                .where('targetSportsLibVersion', '==', SPORTS_LIB_REPARSE_TARGET_VERSION)
+                .limit(SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT)
+                .get()
+                .catch(e => {
+                    logger.error('[admin/getQueueStats] Failed to load current-target reparse failures:', e);
+                    return null;
+                }),
+            reparseJobsCollection
+                .where('status', 'in', ['failed', 'superseded'])
+                .orderBy('updatedAt', 'desc')
+                .limit(SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT)
+                .get()
+                .catch(e => {
+                    logger.error('[admin/getQueueStats] Failed to load recent reparse jobs:', e);
+                    return null;
+                }),
+        ]);
+        const recentReparseFailures: EventReparseFailurePreview[] = [];
+        const includedReparseJobIds = new Set<string>();
+        for (const doc of [
+            ...(currentTargetReparseFailuresSnapshot?.docs || []),
+            ...(recentReparseJobsSnapshot?.docs || []),
+        ]) {
+            if (includedReparseJobIds.has(doc.id)) {
+                continue;
+            }
+            includedReparseJobIds.add(doc.id);
+            recentReparseFailures.push(mapEventReparseOutcome(doc));
+        }
         const recentRouteReparseJobsSnapshot = await routeReparseJobsCollection
             .where('status', '==', 'failed')
             .orderBy('updatedAt', 'desc')
@@ -998,6 +1038,10 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 .map(([error, count]) => ({ error, count }));
         }
 
+        const reparseFailedCount = reparseFailedJobs?.data().count || 0;
+        const reparseCurrentTargetFailedCount = reparseCurrentTargetFailedJobs?.data().count;
+        const reparseSupersededCount = reparseSupersededJobs?.data().count;
+
         return {
             pending: totalPending,
             succeeded: totalSucceeded,
@@ -1019,13 +1063,22 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             },
             reparse: {
                 queuePending: reparseCloudTaskDepth,
-                targetSportsLibVersion: `${checkpointData?.targetSportsLibVersion || SPORTS_LIB_REPARSE_TARGET_VERSION}`,
+                targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
                 jobs: {
                     total: reparseTotalJobs?.data().count || 0,
                     pending: reparsePendingJobs?.data().count || 0,
                     processing: reparseProcessingJobs?.data().count || 0,
                     completed: reparseCompletedJobs?.data().count || 0,
-                    failed: reparseFailedJobs?.data().count || 0,
+                    failed: reparseFailedCount,
+                    ...(typeof reparseCurrentTargetFailedCount === 'number' ? {
+                        currentTargetFailed: reparseCurrentTargetFailedCount,
+                    } : {}),
+                    ...(reparseFailedJobs && typeof reparseCurrentTargetFailedCount === 'number' ? {
+                        historicalFailed: Math.max(0, reparseFailedCount - reparseCurrentTargetFailedCount),
+                    } : {}),
+                    ...(typeof reparseSupersededCount === 'number' ? {
+                        superseded: reparseSupersededCount,
+                    } : {}),
                 },
                 checkpoint: {
                     cursorEventPath: (checkpointData?.cursorEventPath as string | null) || null,
@@ -1161,6 +1214,15 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         const jobData = snapshot.data() as SportsLibReparseJobDocData;
         if (jobData.status !== 'failed') {
             throw new HttpsError('failed-precondition', `Reparse job ${jobId} must be failed before heavy retry.`);
+        }
+
+        const targetSportsLibVersion = `${jobData.targetSportsLibVersion || ''}`.trim();
+        if (targetSportsLibVersion && targetSportsLibVersion !== SPORTS_LIB_REPARSE_TARGET_VERSION) {
+            throw new HttpsError(
+                'failed-precondition',
+                `Reparse job ${jobId} targets historical sports-lib version ${targetSportsLibVersion}; `
+                + `the current target is ${SPORTS_LIB_REPARSE_TARGET_VERSION}.`,
+            );
         }
 
         const uid = `${jobData.uid || ''}`.trim();

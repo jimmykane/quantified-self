@@ -99,9 +99,10 @@ Fields used:
 - `jobId` is deterministic from `uid + eventId + targetSportsLibVersion`
 
 Key fields:
-- `status` (`pending|processing|completed|failed`)
+- `status` (`pending|processing|completed|failed|superseded`)
 - `attemptCount`, `lastError`
 - `enqueuedAt`, `processedAt`, `expireAt`
+- `supersededAt`, `supersededBySportsLibVersion` for jobs from an older rollout target
 
 TTL:
 - `TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS` (currently `30`)
@@ -248,6 +249,17 @@ Use `backfill-event-processing-entity` when only legacy event processing docs ne
 4. Enable scheduler with conservative limits and optional UID allowlist.
 5. Expand scope by removing allowlist and increasing limits.
 
+### Version overlap during a functions rollout
+
+Cloud Tasks can briefly deliver jobs created by one functions revision to another revision while a rollout is moving traffic. The worker compares the job target with the installed sports-lib package version reported by `resolveRuntimeSportsLibVersion()`—not a checkpoint value—and classifies that relationship before activity-duration routing or parsing:
+
+- Job target equals the worker runtime target: process normally.
+- Job target is older than the worker runtime target: mark only the job `superseded`, record the newer version, and log at INFO. Do not parse the source files or overwrite the event's current `reparseStatus`.
+- Job target is newer than the worker runtime target: throw for Cloud Tasks retry and log at WARN. Do not change the job or event status, because a newer revision should receive the retry after rollout.
+- Invalid version metadata is a terminal job failure because retry cannot repair it.
+
+The scheduler treats `superseded` as settled. A later candidate scan can create the version-specific job ID for the current target if the event still needs reparsing.
+
 ## Observability
 Check:
 - scheduler checkpoint: `systemJobs/sportsLibReparse`
@@ -258,7 +270,14 @@ Check:
 Admin dashboard queue cards:
 - `Cloud Tasks` (total)
 - `Cloud Tasks (Workout)`
-- `Cloud Tasks (Reparse)`
+- `Cloud Tasks (Reparse Normal)`
+- `Cloud Tasks (Reparse Heavy)`
+- `Current Target Failures`: failed jobs for the running target version; these are actionable
+- `Historical Failures`: failed jobs from older target versions; these are retained context, not current incidents
+- `Superseded Jobs`: older rollout jobs safely settled by a newer runtime
+
+The attention/history table always includes up to ten current-target failures before adding non-duplicate entries from the ten most recent failure or superseded outcomes. It labels active, historical, and superseded rows separately. Only active failures can be manually retried on the heavy queue. If a differentiated count query is unavailable, the admin UI shows that count as unavailable instead of reporting a false zero.
+
 - Shared dispatch semantics and `ALREADY_EXISTS` behavior:
   `functions/src/shared/CLOUD_TASKS_DISPATCH_NOTES.md`
 

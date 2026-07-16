@@ -10,6 +10,11 @@ const hoisted = vi.hoisted(() => {
         errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
         || /^Event .* was not found for user .*$/.test(errorMessage));
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
+    const resolveRuntimeSportsLibVersion = vi.fn(() => '9.0.99');
+    const classifySportsLibReparseVersionDisposition = vi.fn((targetVersion: string, runtimeVersion: string) => {
+        if (targetVersion === runtimeVersion) return 'match';
+        return targetVersion < runtimeVersion ? 'target_superseded' : 'runtime_behind';
+    });
     const getSportsLibReparseEventDurationMs = vi.fn(() => null);
     const isSportsLibReparseDurationHeavy = vi.fn((durationMs: number | null | undefined) =>
         typeof durationMs === 'number' && durationMs >= 24 * 60 * 60 * 1000);
@@ -49,6 +54,8 @@ const hoisted = vi.hoisted(() => {
         isReparsePersistenceSkippedForUserDeletionError,
         isSportsLibReparseTerminalFailureMessage,
         resolveTargetSportsLibVersion,
+        resolveRuntimeSportsLibVersion,
+        classifySportsLibReparseVersionDisposition,
         getSportsLibReparseEventDurationMs,
         isSportsLibReparseDurationHeavy,
         enqueueSportsLibReparseHeavyTask,
@@ -85,6 +92,8 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
     writeReparseStatus: hoisted.writeReparseStatus,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
+    resolveRuntimeSportsLibVersion: hoisted.resolveRuntimeSportsLibVersion,
+    classifySportsLibReparseVersionDisposition: hoisted.classifySportsLibReparseVersionDisposition,
 }));
 
 vi.mock('../shared/cloud-tasks', () => ({
@@ -145,6 +154,12 @@ describe('processSportsLibReparseTask', () => {
             parsedActivitiesCount: 1,
             staleActivitiesDeleted: 0,
         });
+        hoisted.resolveTargetSportsLibVersion.mockReturnValue('9.0.99');
+        hoisted.resolveRuntimeSportsLibVersion.mockReturnValue('9.0.99');
+        hoisted.classifySportsLibReparseVersionDisposition.mockImplementation((targetVersion: string, runtimeVersion: string) => {
+            if (targetVersion === runtimeVersion) return 'match';
+            return targetVersion < runtimeVersion ? 'target_superseded' : 'runtime_behind';
+        });
     });
 
     it('should register with reparse runtime limits', () => {
@@ -182,6 +197,24 @@ describe('processSportsLibReparseTask', () => {
                 eventId: 'e1',
                 status: 'completed',
                 attemptCount: 1,
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
+    it('should skip when job is already superseded', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'superseded',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.98',
             }),
         });
 
@@ -678,6 +711,7 @@ describe('processSportsLibReparseTask', () => {
 
     it('should fallback to resolved target version when job targetSportsLibVersion is missing', async () => {
         hoisted.resolveTargetSportsLibVersion.mockReturnValue('9.1.4');
+        hoisted.resolveRuntimeSportsLibVersion.mockReturnValue('9.1.4');
         hoisted.jobGet.mockResolvedValue({
             exists: true,
             data: () => ({
@@ -850,7 +884,7 @@ describe('processSportsLibReparseTask', () => {
         }));
     });
 
-    it('should mark failed and suppress retry on target/runtime version mismatch', async () => {
+    it('should terminalize invalid version metadata without parsing or writing event status', async () => {
         hoisted.jobGet.mockResolvedValue({
             exists: true,
             data: () => ({
@@ -858,27 +892,71 @@ describe('processSportsLibReparseTask', () => {
                 eventId: 'e1',
                 status: 'pending',
                 attemptCount: 0,
-                targetSportsLibVersion: '11.0.2',
+                targetSportsLibVersion: 'invalid-version',
             }),
         });
-        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error(
-            '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
-        ));
+        hoisted.classifySportsLibReparseVersionDisposition.mockImplementationOnce(() => {
+            throw new Error('[sports-lib-reparse] Invalid target sports-lib version "invalid-version"');
+        });
 
-        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } })).resolves.toBeUndefined();
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
 
-        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
-            status: 'failed',
-            lastError: '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
-            terminalFailure: true,
-            terminalFailureAt: 'SERVER_TIMESTAMP',
-        }));
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'failed',
-            lastError: '[sports-lib-reparse] Reparse target sports-lib version "11.0.2" does not match runtime sports-lib version "11.0.3"',
+            lastError: '[sports-lib-reparse] Invalid target sports-lib version "invalid-version"',
             terminalFailure: true,
             terminalFailureAt: 'SERVER_TIMESTAMP',
         }), { merge: true });
+    });
+
+    it('should supersede an older target without parsing or writing event status', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.98',
+                eventDurationMs: 25 * 60 * 60 * 1000,
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).toHaveBeenCalledTimes(1);
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'superseded',
+            supersededBySportsLibVersion: '9.0.99',
+            lastError: 'DELETE_FIELD',
+            terminalFailure: 'DELETE_FIELD',
+        }), { merge: true });
+    });
+
+    it('should retry without touching Firestore when the runtime is behind a newer target', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.1.0',
+            }),
+        });
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } }))
+            .rejects.toThrow('Retrying after rollout');
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
     });
 
     it('should mark failed and suppress retry when event is missing', async () => {
@@ -889,7 +967,7 @@ describe('processSportsLibReparseTask', () => {
                 eventId: 'e1',
                 status: 'pending',
                 attemptCount: 0,
-                targetSportsLibVersion: '11.0.3',
+                targetSportsLibVersion: '9.0.99',
             }),
         });
         hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error(

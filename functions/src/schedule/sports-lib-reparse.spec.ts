@@ -952,6 +952,21 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
+    it('should treat a superseded existing job as settled', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.existingJobsById.set('job-1', { status: 'superseded' });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+    });
+
     it('should enqueue candidates without entitlement filtering', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {

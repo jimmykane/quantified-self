@@ -28,6 +28,7 @@ import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.ser
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
@@ -283,6 +284,60 @@ describe('SummariesComponent', () => {
 
     expect(styles).toContain('.dashboard-kpi-lane {');
     expect(styles).toContain('--loading-shade-border-radius: 0;');
+  });
+
+  it('passes training insight contexts through the compact KPI lane', () => {
+    const aerobicCapacity = {
+      value: 55.9,
+      discipline: 'cycling',
+      sourceKey: 'garmin edge mtb',
+      sourceLabel: 'Garmin Edge MTB',
+      observationCount: 7,
+      changePct: 1.2,
+      lastSeenAtMs: Date.UTC(2026, 6, 11),
+      trend: [],
+    };
+    const readinessSignals = {
+      score: 82,
+      label: 'Ready',
+      confidence: 'high',
+      availableSignalCount: 4,
+      totalSignalCount: 4,
+      form: 17.6,
+      rampRate: -2.4,
+      sleepScore: 69,
+      latestSleepAtMs: Date.UTC(2026, 6, 16),
+      hrvRatio: 1.04,
+      minimumHeartRateRatio: 0.97,
+      trend: [],
+    };
+    const tiles = [
+      {
+        type: TileTypes.Chart,
+        order: 0,
+        chartType: DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+        aerobicCapacity,
+        size: { columns: 1, rows: 1 },
+      },
+      {
+        type: TileTypes.Chart,
+        order: 1,
+        chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+        readinessSignals,
+        size: { columns: 1, rows: 1 },
+      },
+    ] as any[];
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.tiles = tiles;
+    component.kpiLaneTiles = tiles;
+
+    fixture.detectChanges();
+
+    const charts = (fixture.nativeElement as HTMLElement).querySelectorAll('app-tile-chart');
+    expect(charts).toHaveLength(2);
+    expect((charts[0] as any).aerobicCapacity).toBe(aerobicCapacity);
+    expect((charts[1] as any).readinessSignals).toBe(readinessSignals);
   });
 
   it('keeps intent section headings compact against the shared dashboard header style', () => {

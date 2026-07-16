@@ -136,6 +136,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('inconsistent body weights');
     expect(gettingStartedSection?.content).toContain('does not by itself mean fitness declined');
     expect(gettingStartedSection?.content).toContain('never a readiness score');
+    expect(gettingStartedSection?.content).toContain('**Durability** performance chart keeps its activity eligibility details collapsed');
   });
 
   it('should document that distance values follow unit preferences across the app', () => {

@@ -895,9 +895,29 @@
             <mat-card class="app-stat-card status-error">
                 <div class="app-stat-header">
                     <mat-icon>error</mat-icon>
-                    <span>Reparse Jobs (Failed)</span>
+                    <span>Current Target Failures</span>
                 </div>
-                <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.jobs?.failed ?? 0 }}</div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.jobs?.currentTargetFailed ?? stats?.reparse?.jobs?.failed ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>history</mat-icon>
+                    <span>Historical Failures</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.jobs?.historicalFailed ?? 'N/A' }}</div>
+                <div class="app-spinner-mini" *ngIf="loading">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </mat-card>
+            <mat-card class="app-stat-card status-info">
+                <div class="app-stat-header">
+                    <mat-icon>upgrade</mat-icon>
+                    <span>Superseded Jobs</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!loading">{{ stats?.reparse?.jobs?.superseded ?? 'N/A' }}</div>
                 <div class="app-spinner-mini" *ngIf="loading">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
@@ -965,9 +985,14 @@
         </div>
 
         <mat-card class="table-container" style="margin-bottom: 0;">
-            <h3 class="card-title">Recent Event Reparse Failures</h3>
+            <h3 class="card-title">Event Reparse Attention &amp; History</h3>
             <div class="table-wrapper" *ngIf="reparseFailureRows.length > 0; else noReparseFailuresTemplate">
                 <table mat-table [dataSource]="reparseFailureRows">
+                    <ng-container matColumnDef="outcome">
+                        <th mat-header-cell *matHeaderCellDef> State </th>
+                        <td mat-cell *matCellDef="let row">{{ row.outcomeLabel }}</td>
+                    </ng-container>
+
                     <ng-container matColumnDef="uid">
                         <th mat-header-cell *matHeaderCellDef> UID </th>
                         <td mat-cell *matCellDef="let row"><span class="mono-cell">{{ row.uid }}</span></td>
@@ -1016,8 +1041,8 @@
                             <button mat-stroked-button
                                 class="qs-mat-primary retry-heavy-button"
                                 type="button"
-                                aria-label="Retry failed reparse job on heavy queue"
-                                matTooltip="Retry this failed reparse job on the heavy queue"
+                                [attr.aria-label]="row.retryHeavyAriaLabel"
+                                [matTooltip]="row.retryHeavyTooltip"
                                 [disabled]="row.retryHeavyDisabled"
                                 (click)="retryHeavy(row)">
                                 <mat-spinner *ngIf="row.retryingHeavy" diameter="16"></mat-spinner>
@@ -1032,7 +1057,7 @@
                 </table>
             </div>
             <ng-template #noReparseFailuresTemplate>
-                <div class="empty-table-state">No recent reparse failures.</div>
+                <div class="empty-table-state">No reparse failures or superseded jobs.</div>
             </ng-template>
         </mat-card>
 
