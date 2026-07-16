@@ -124,6 +124,7 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Workspace template: `src/app/components/training/training-workspace.component.html`
 - Workspace styles: `src/app/components/training/training-workspace.component.scss`
 - Shared readiness formula: `shared/readiness.ts`
+- Shared readiness snapshot validator: `shared/training-readiness-metric.ts`
 - Historical readiness builder: `functions/src/derived-metrics/derived-metrics.service.ts`
 - Benchmark dialog: `src/app/components/training/training-build-benchmark-dialog.component.*`
 - Sport visibility dialog: `src/app/components/training/training-sport-visibility-dialog.component.*`
@@ -369,6 +370,14 @@ On `/training`, the frontend:
 Missing, failed, or stale kinds have a 30-second request cooldown. Healthy scopes still receive a lightweight freshness
 probe with a five-minute cooldown. The callable compares coordinator/snapshot state, the calendar day, mutation versions,
 and the latest event update before deciding whether to queue work.
+
+Readiness payload validity is also checked in the callable with the same environment-neutral runtime validator used by
+the frontend. A `ready` document that predates a required history field or otherwise fails that contract is therefore
+treated as stale by both layers. Snapshot-specific freshness failures enqueue only the affected kinds even when the
+initial page probe contains the complete Training scope, so this case queues only `training_readiness`. That targeted
+repair reuses a compatible Form snapshot seed and the bounded sleep envelope; it does not trigger an event or activity
+history scan. Keep the validator shared when the readiness payload evolves so backend freshness cannot call an invalid
+document fresh while the frontend remains indefinitely on Preparing.
 
 This probe is important in local development and recovery scenarios: opening Training can repair missing or stale
 snapshots even when no new Firestore write arrives.
@@ -871,6 +880,11 @@ and SWOLF change. Training compares:
 - Median of the three prior 28-day blocks.
 - Twelve fixed UTC weeks for the trajectory.
 - Up to five recent supporting eligible activities.
+
+The trajectory chart host is conditionally mounted only after its view model exists. Its Angular view query must remain
+dynamic and initialize through the shared ECharts host controller when that element appears; a static query resolves
+before the conditional view and leaves the chart blank. The component lifecycle spec must exercise that delayed host
+insertion rather than only assigning a synthetic element before testing chart options.
 
 The usual value is withheld unless evidence exists in at least two baseline blocks with at least two samples in total.
 Best Build requires at least two samples on both sides of the exact context.

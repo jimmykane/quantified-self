@@ -96,6 +96,10 @@ describe('training derived metric normalizers', () => {
     })).toBeNull();
     expect(resolveTrainingReadinessMetricPayload({
       ...payload,
+      points: points.map(({ baselineEvidenceCount: _baselineEvidenceCount, ...point }) => point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
       points: points.map((point, index) => index === 4
         ? { ...point, confidence: 'high', baselineEvidenceCount: 3 }
         : point),

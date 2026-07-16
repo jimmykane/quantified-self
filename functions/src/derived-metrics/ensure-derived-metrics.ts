@@ -4,6 +4,7 @@ import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import {
     DERIVED_METRIC_SCHEMA_VERSION,
+    DERIVED_METRIC_KINDS,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
@@ -13,6 +14,7 @@ import {
     type EnsureDerivedMetricsResponse,
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
+import { normalizeDerivedTrainingReadinessMetricPayload } from '../../../shared/training-readiness-metric';
 import { markDerivedMetricsDirtyAndMaybeQueue } from './derived-metrics.service';
 
 const DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
@@ -34,6 +36,7 @@ interface DerivedMetricsFreshnessInput {
         schemaVersion: number | null;
         builtFromEventMutationVersion: number | null;
         asOfDayMs: number | null;
+        payloadValid: boolean;
     }>;
     latestEventUpdatedAtMs: number | null;
 }
@@ -47,6 +50,7 @@ interface DerivedMetricsFreshnessDecision {
     | 'processing_stuck'
     | 'missing_metric_snapshot'
     | 'metric_snapshot_not_ready'
+    | 'invalid_metric_payload'
     | 'schema_version_mismatch'
     | 'missing_event_mutation_version'
     | 'missing_snapshot_event_mutation_version'
@@ -187,6 +191,10 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
             hardStaleKinds.push(metricKind);
             continue;
         }
+        if (!snapshot.payloadValid) {
+            hardStaleKinds.push(metricKind);
+            continue;
+        }
         if (!Number.isFinite(snapshot.schemaVersion) || (snapshot.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION) {
             hardStaleKinds.push(metricKind);
             continue;
@@ -210,30 +218,36 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
 
     if (hardStaleKinds.length > 0) {
         const hasMissingSnapshot = hardStaleKinds.some((metricKind) => !input.metricSnapshotsByKind[metricKind]?.status);
+        const hasNotReadySnapshot = hardStaleKinds.some((kind) => {
+            const snapshot = input.metricSnapshotsByKind[kind];
+            return snapshot?.status !== 'ready';
+        });
+        const hasInvalidPayload = hardStaleKinds.some(
+            kind => input.metricSnapshotsByKind[kind]?.payloadValid === false,
+        );
+        const hasSchemaVersionMismatch = hardStaleKinds.some((kind) => {
+            const snapshot = input.metricSnapshotsByKind[kind];
+            return !Number.isFinite(snapshot?.schemaVersion)
+                || (snapshot?.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION;
+        });
+        const hasMissingSnapshotMutationVersion = hardStaleKinds.some(
+            kind => !Number.isFinite(input.metricSnapshotsByKind[kind]?.builtFromEventMutationVersion),
+        );
+        const reason: DerivedMetricsFreshnessDecision['reason'] = hasMissingSnapshot
+            ? 'missing_metric_snapshot'
+            : hasNotReadySnapshot
+                ? 'metric_snapshot_not_ready'
+                : hasInvalidPayload
+                    ? 'invalid_metric_payload'
+                    : hasSchemaVersionMismatch
+                        ? 'schema_version_mismatch'
+                        : hasMissingSnapshotMutationVersion
+                            ? 'missing_snapshot_event_mutation_version'
+                            : 'event_mutation_version_behind';
         return {
             shouldQueue: true,
-            metricKindsToQueue: [...input.metricKinds],
-            reason: hasMissingSnapshot
-                ? 'missing_metric_snapshot'
-                : (
-                    input.metricKinds.some((kind) => {
-                        const snapshot = input.metricSnapshotsByKind[kind];
-                        return snapshot?.status !== 'ready';
-                    })
-                        ? 'metric_snapshot_not_ready'
-                        : (
-                            input.metricKinds.some((kind) => {
-                                const snapshot = input.metricSnapshotsByKind[kind];
-                                return !Number.isFinite(snapshot?.schemaVersion) || (snapshot?.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION;
-                            })
-                                ? 'schema_version_mismatch'
-                                : (
-                                    input.metricKinds.some((kind) => !Number.isFinite(input.metricSnapshotsByKind[kind]?.builtFromEventMutationVersion))
-                                        ? 'missing_snapshot_event_mutation_version'
-                                        : 'event_mutation_version_behind'
-                                )
-                        )
-                ),
+            metricKindsToQueue: hardStaleKinds,
+            reason,
         };
     }
 
@@ -315,6 +329,7 @@ export const ensureDerivedMetrics = onCall({
             schemaVersion: toFiniteNumber(snapshotData.schemaVersion),
             builtFromEventMutationVersion: toFiniteNumber(snapshotData.builtFromEventMutationVersion),
             asOfDayMs: toFiniteNumber(payload.asOfDayMs),
+            payloadValid: resolveDerivedMetricSnapshotPayloadValidity(metricKind, snapshotData.payload),
         };
         return result;
     }, {} as Record<DerivedMetricKind, {
@@ -322,6 +337,7 @@ export const ensureDerivedMetrics = onCall({
         schemaVersion: number | null;
         builtFromEventMutationVersion: number | null;
         asOfDayMs: number | null;
+        payloadValid: boolean;
     }>);
     const latestEventDoc = latestEventSnapshot.docs[0];
     const latestEventUpdatedAtMs = toMillis(latestEventDoc?.updateTime);
@@ -353,3 +369,13 @@ export const ensureDerivedMetrics = onCall({
             : metricKinds,
     );
 });
+
+export function resolveDerivedMetricSnapshotPayloadValidity(
+    metricKind: DerivedMetricKind,
+    payload: unknown,
+): boolean {
+    if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
+        return normalizeDerivedTrainingReadinessMetricPayload(payload) !== null;
+    }
+    return true;
+}

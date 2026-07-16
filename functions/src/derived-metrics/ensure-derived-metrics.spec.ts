@@ -4,13 +4,17 @@ import {
     DERIVED_METRIC_SCHEMA_VERSION,
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
-import { decideDerivedMetricsFreshness } from './ensure-derived-metrics';
+import {
+    decideDerivedMetricsFreshness,
+    resolveDerivedMetricSnapshotPayloadValidity,
+} from './ensure-derived-metrics';
 
 type SnapshotShape = {
     status: string | null;
     schemaVersion: number | null;
     builtFromEventMutationVersion: number | null;
     asOfDayMs: number | null;
+    payloadValid: boolean;
 };
 
 function buildMetricSnapshots(
@@ -24,6 +28,7 @@ function buildMetricSnapshots(
             schemaVersion: override.schemaVersion ?? DERIVED_METRIC_SCHEMA_VERSION,
             builtFromEventMutationVersion: override.builtFromEventMutationVersion ?? 10,
             asOfDayMs: override.asOfDayMs ?? Date.UTC(2026, 3, 15),
+            payloadValid: override.payloadValid ?? true,
         };
         return result;
     }, {} as Record<DerivedMetricKind, SnapshotShape>);
@@ -89,7 +94,7 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('queues all requested kinds when schema version is behind', () => {
+    it('queues only the requested snapshot whose schema version is behind', () => {
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
             metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
@@ -100,7 +105,7 @@ describe('decideDerivedMetricsFreshness', () => {
         });
         expect(decision).toEqual({
             shouldQueue: true,
-            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
             reason: 'schema_version_mismatch',
         });
     });
@@ -112,6 +117,7 @@ describe('decideDerivedMetricsFreshness', () => {
             schemaVersion: null,
             builtFromEventMutationVersion: null,
             asOfDayMs: null,
+            payloadValid: false,
         };
         const decision = decideDerivedMetricsFreshness({
             ...baseInput,
@@ -174,5 +180,54 @@ describe('decideDerivedMetricsFreshness', () => {
             metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
             reason: 'latest_event_update_after_completion',
         });
+    });
+
+    it('queues a ready snapshot whose shared payload contract is invalid', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.TrainingReadiness],
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.TrainingReadiness]: { payloadValid: false },
+            }),
+        });
+
+        expect(decision).toEqual({
+            shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.TrainingReadiness],
+            reason: 'invalid_metric_payload',
+        });
+    });
+
+    it('uses the shared readiness contract to reject legacy history without baseline evidence counts', () => {
+        const asOfDayMs = Date.UTC(2026, 3, 15);
+        const legacyPayload = {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            generatedAtMs: asOfDayMs + (12 * 60 * 60 * 1000),
+            historyDays: 14,
+            points: Array.from({ length: 14 }, (_, index) => ({
+                dayMs: asOfDayMs - ((13 - index) * 24 * 60 * 60 * 1000),
+                score: 65,
+                label: 'Mixed',
+                confidence: 'low',
+                availableSignalCount: 1,
+                totalSignalCount: 4,
+                form: 4,
+                rampRate: 1,
+                sleepScore: null,
+                latestSleepAtMs: null,
+                hrvRatio: null,
+                minimumHeartRateRatio: null,
+            })),
+        };
+
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.TrainingReadiness,
+            legacyPayload,
+        )).toBe(false);
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.Form,
+            legacyPayload,
+        )).toBe(true);
     });
 });

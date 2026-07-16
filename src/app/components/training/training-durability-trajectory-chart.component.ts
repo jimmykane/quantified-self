@@ -44,13 +44,30 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   @Input() trajectory: TrainingDurabilityTrajectoryViewModel | null = null;
   @Input() status: DashboardDerivedMetricStatus = 'missing';
   @Input() darkTheme = false;
-  @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+  public chartDiv: ElementRef<HTMLDivElement> | null = null;
+
+  @ViewChild('chartDiv')
+  private set chartDivQuery(value: ElementRef<HTMLDivElement> | undefined) {
+    const nextChartDiv = value || null;
+    if (this.chartDiv?.nativeElement === nextChartDiv?.nativeElement) {
+      return;
+    }
+    this.chartDiv = nextChartDiv;
+    if (!nextChartDiv) {
+      this.chartHost.dispose();
+      return;
+    }
+    if (this.viewInitialized) {
+      void this.refresh();
+    }
+  }
 
   public isUpdating = true;
   public availabilityText = 'Preparing weekly durability evidence.';
   public chartAriaLabel = 'Twelve-week durability trajectory';
 
   private readonly chartHost: EChartsHostController;
+  private viewInitialized = false;
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
@@ -61,6 +78,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   async ngAfterViewInit(): Promise<void> {
+    this.viewInitialized = true;
     await this.refresh();
   }
 
@@ -71,6 +89,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   ngOnDestroy(): void {
+    this.viewInitialized = false;
     this.chartHost.dispose();
   }
 
