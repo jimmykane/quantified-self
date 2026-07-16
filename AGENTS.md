@@ -10,6 +10,7 @@ Shared library path (keep stable for antigravity and other apps/agents): `.agent
 Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
+- Never patch or directly modify files under `node_modules/`.
 - Use prefixed commit subjects: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
