@@ -1686,11 +1686,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     sectionId: DashboardTileSectionId,
   ): DashboardTileSectionCellViewModel[] {
     const balancedRoutesMapLayout = this.getBalancedRoutesMapSectionLayout(tiles, sectionColumns, sectionId);
-    return tiles.map(tile => ({
+    const cells = tiles.map(tile => ({
       tile,
       columns: balancedRoutesMapLayout?.itemColumns
         || Math.min(this.getTilePersistedColumns(tile), sectionColumns),
     }));
+    return this.stretchSingleTileRows(cells, sectionColumns);
   }
 
   private buildMainGridTrailingPlaceholders(
@@ -1732,8 +1733,106 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return this.getBalancedOneColumnSectionColumnCount(tiles.length, maxColumns);
     }
 
+    if (tiles.every(tile => this.getTilePersistedRows(tile) === 1)) {
+      return this.getBalancedMixedSectionColumnCount(tileColumns, maxColumns);
+    }
+
     const totalColumns = tileColumns.reduce((total, columns) => total + columns, 0);
     return Math.min(maxColumns, Math.max(1, totalColumns));
+  }
+
+  private getBalancedMixedSectionColumnCount(tileColumns: number[], maxColumns: number): number {
+    const minColumns = Math.max(...tileColumns);
+    const candidateColumns = Array.from(
+      { length: (maxColumns - minColumns) + 1 },
+      (_, index) => minColumns + index,
+    );
+    return candidateColumns.reduce((bestColumns, columns) => {
+      const bestScore = this.getMixedSectionLayoutScore(tileColumns, bestColumns, maxColumns);
+      const candidateScore = this.getMixedSectionLayoutScore(tileColumns, columns, maxColumns);
+      if (candidateScore < bestScore) {
+        return columns;
+      }
+
+      if (candidateScore === bestScore && columns > bestColumns) {
+        return columns;
+      }
+
+      return bestColumns;
+    }, minColumns);
+  }
+
+  private getMixedSectionLayoutScore(
+    tileColumns: number[],
+    columns: number,
+    maxColumns: number,
+  ): number {
+    const rows = this.packSingleRowTileColumns(tileColumns, columns);
+    const emptyColumns = rows.reduce((total, row) => {
+      if (row.itemIndexes.length === 1) {
+        return total;
+      }
+
+      return total + (columns - row.usedColumns);
+    }, 0);
+    const columnPenalty = maxColumns - columns;
+    return (emptyColumns * 4) + rows.length + columnPenalty;
+  }
+
+  private stretchSingleTileRows(
+    cells: DashboardTileSectionCellViewModel[],
+    sectionColumns: number,
+  ): DashboardTileSectionCellViewModel[] {
+    if (
+      cells.length < 2
+      || sectionColumns <= 1
+      || cells.some(cell => this.getTilePersistedRows(cell.tile) > 1)
+    ) {
+      return cells;
+    }
+
+    const rows = this.packSingleRowTileColumns(cells.map(cell => cell.columns), sectionColumns);
+    const stretchedIndexes = new Set(
+      rows
+        .filter(row => row.itemIndexes.length === 1)
+        .map(row => row.itemIndexes[0]),
+    );
+    if (!stretchedIndexes.size) {
+      return cells;
+    }
+
+    return cells.map((cell, index) => stretchedIndexes.has(index)
+      ? { ...cell, columns: sectionColumns }
+      : cell);
+  }
+
+  private packSingleRowTileColumns(
+    tileColumns: number[],
+    columns: number,
+  ): Array<{ itemIndexes: number[]; usedColumns: number }> {
+    const rows: Array<{ itemIndexes: number[]; usedColumns: number }> = [];
+    let currentRow = { itemIndexes: [] as number[], usedColumns: 0 };
+
+    tileColumns.forEach((persistedColumns, index) => {
+      const itemColumns = Math.min(Math.max(1, persistedColumns), columns);
+      if (currentRow.itemIndexes.length && currentRow.usedColumns + itemColumns > columns) {
+        rows.push(currentRow);
+        currentRow = { itemIndexes: [], usedColumns: 0 };
+      }
+
+      currentRow.itemIndexes.push(index);
+      currentRow.usedColumns += itemColumns;
+      if (currentRow.usedColumns === columns) {
+        rows.push(currentRow);
+        currentRow = { itemIndexes: [], usedColumns: 0 };
+      }
+    });
+
+    if (currentRow.itemIndexes.length) {
+      rows.push(currentRow);
+    }
+
+    return rows;
   }
 
   private getBalancedRoutesMapSectionLayout(
@@ -1784,6 +1883,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     return Math.floor(columns);
+  }
+
+  private getTilePersistedRows(tile: DashboardTileViewModel): number {
+    const rows = Number(tile.size?.rows);
+    if (!Number.isFinite(rows) || rows < 1) {
+      return 1;
+    }
+
+    return Math.floor(rows);
   }
 
   private normalizeGridColumnCount(columns: number | string | null | undefined): number {

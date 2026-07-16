@@ -328,6 +328,57 @@ describe('SummariesComponent', () => {
     expect(board?.querySelector('app-dashboard-tile-cell.dashboard-grid-placeholder')).toBeNull();
   });
 
+  it('packs mixed-width charts without leaving empty grid columns', () => {
+    const mainGridTiles = [
+      {
+        type: TileTypes.Chart,
+        order: 0,
+        name: 'Efficiency Trend',
+        chartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+        data: [],
+        size: { columns: 1, rows: 1 },
+      },
+      {
+        type: TileTypes.Chart,
+        order: 1,
+        name: 'Cycling Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+        data: [],
+        size: { columns: 2, rows: 1 },
+      },
+      {
+        type: TileTypes.Chart,
+        order: 2,
+        name: 'Running Power Curve',
+        chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+        data: [],
+        size: { columns: 2, rows: 1 },
+      },
+    ] as any[];
+
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.numberOfCols = 4;
+    component.tiles = mainGridTiles;
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = mainGridTiles;
+    (component as any).refreshTileLanes();
+
+    fixture.detectChanges();
+
+    const performanceSection = component.mainGridSections.find(section => section.id === 'performancePower');
+    expect(performanceSection?.columns).toBe(3);
+    expect(performanceSection?.cells.map(cell => cell.columns)).toEqual([1, 2, 3]);
+    expect(performanceSection?.trailingPlaceholders).toEqual([]);
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const board = nativeElement.querySelector('app-dashboard-tile-board') as HTMLElement | null;
+    const cells = Array.from(
+      board?.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)') || [],
+    ) as HTMLElement[];
+    expect(board?.style.getPropertyValue('--dashboard-tile-board-cols')).toBe('3');
+    expect(cells.map(cell => cell.style.gridColumn)).toEqual(['span 1', 'span 2', 'span 3']);
+  });
+
   it('balances sparse map sections so one route map does not consume all leftover columns', () => {
     const mainGridTiles = [
       {
