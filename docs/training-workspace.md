@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `11`
-- `@sports-alliance/sports-lib`: `17.1.1`
+- `@sports-alliance/sports-lib`: `17.1.2`
 - Training disciplines: Running, Cycling, and Swimming
 - Power/capacity disciplines: Running and Cycling only
 - Calendar boundaries: UTC unless a section explicitly says otherwise
@@ -736,6 +736,12 @@ The activity stat is `DataDurabilityEvidence`, serialized as `Durability Evidenc
 
 It never stores the display timeline or a second copy of long streams.
 
+Frontend event sanitization relies on sports-lib's `DynamicDataLoader` registry to retain serialized stats. The
+`event-json-sanitizer.spec.ts` regression test therefore checks the literal persisted `Durability Evidence` key against
+the real sports-lib registry without importing `DataDurabilityEvidence`; importing the class in that test could register
+it as a side effect and mask a bundling or tree-shaking regression. Add an explicit runtime registration import only if a
+deployed bundle reproduces the missing-registration warning.
+
 The source fingerprint includes the protocol, effective activity type and duration, relevant output/HR/grade streams,
 zone durations, and pool-length context. When any effective input changes, sports-lib recalculates the stat. An unchanged,
 canonical stat is reused. A valid summary-only stat is preserved when raw inputs are no longer available.
@@ -933,6 +939,7 @@ training-power-profile.helper.spec.ts
 training-recovery-estimate.helper.spec.ts
 training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
+event-json-sanitizer.spec.ts
 ```
 
 Then verify:

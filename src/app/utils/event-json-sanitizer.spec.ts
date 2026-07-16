@@ -131,6 +131,49 @@ describe('EventJSONSanitizer', () => {
         expect(u2).toEqual([]);
     });
 
+    it('should retain Durability Evidence stats registered by the real sports-lib bundle', () => {
+        // Keep the persisted type literal here and avoid importing DataDurabilityEvidence.
+        // Importing the class could register it as a side effect and hide a bundle regression.
+        const durabilityEvidenceType = 'Durability Evidence';
+        const durabilityEvidence = {
+            protocolVersion: 1,
+            sourceFingerprint: 'durability-source-fingerprint',
+            discipline: 'cycling',
+            outputSource: 'power',
+            outputUnit: 'W',
+            durationSeconds: 3600,
+            coverageRatio: 0.9,
+            eligibility: {
+                eligible: false,
+                reason: 'insufficient-duration'
+            }
+        };
+        const json = {
+            stats: {
+                [durabilityEvidenceType]: durabilityEvidence
+            },
+            activities: [{
+                stats: {
+                    [durabilityEvidenceType]: durabilityEvidence
+                }
+            }]
+        };
+
+        const registeredClass = DynamicDataLoader.getDataClassFromDataType(durabilityEvidenceType);
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(registeredClass?.type).toBe(durabilityEvidenceType);
+        expect(sanitizedJson.stats[durabilityEvidenceType]).toEqual(durabilityEvidence);
+        expect(sanitizedJson.activities[0].stats[durabilityEvidenceType]).toEqual(durabilityEvidence);
+        expect(unknownTypes).not.toContain(durabilityEvidenceType);
+        expect(issues).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                type: durabilityEvidenceType
+            })
+        ]));
+    });
+
     it('should normalize generic type/data shape in Activity events', () => {
         setupMock();
         const json = {
