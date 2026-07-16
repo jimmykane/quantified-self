@@ -208,6 +208,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(hrvSeries.markLine.label.formatter).toBe('Avg HRV 52ms');
     expect(hrvSeries.markLine.label).toMatchObject({
       position: 'middle',
+      offset: [0, 0],
       distance: 8,
       color: AppColors.Green,
       borderColor: AppColors.Green,
@@ -265,7 +266,8 @@ describe('ChartsSleepTrendComponent', () => {
       markLine: {
         label: {
           formatter: 'Avg HR 48bpm',
-          position: 'end',
+          position: 'middle',
+          offset: [0, -14],
         },
         lineStyle: {
           color: AppColors.Blue,
@@ -285,7 +287,8 @@ describe('ChartsSleepTrendComponent', () => {
       markLine: {
         label: {
           formatter: 'Avg Min HR 43bpm',
-          position: 'start',
+          position: 'middle',
+          offset: [0, 14],
         },
         lineStyle: {
           color: AppColors.Pink,

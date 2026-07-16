@@ -320,7 +320,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         average: averageHrvMs,
         label: 'Avg HRV',
         suffix: 'ms',
-        position: 'middle',
+        labelOffsetY: 0,
         style,
       }),
     })] : [];
@@ -331,7 +331,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           average: averageHeartRateBpm,
           label: 'Avg HR',
           suffix: 'bpm',
-          position: 'end',
+          labelOffsetY: -14,
           style,
         }),
       })]
@@ -343,7 +343,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           average: averageMinimumHeartRateBpm,
           label: 'Avg Min HR',
           suffix: 'bpm',
-          position: 'start',
+          labelOffsetY: 14,
           style,
         }),
       })]
@@ -680,7 +680,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     average: number | null;
     label: string;
     suffix: string;
-    position: 'start' | 'middle' | 'end';
+    labelOffsetY: number;
     style: ReturnType<typeof buildDashboardEChartsStyleTokens>;
   }): Record<string, unknown> | undefined {
     if (input.average === null) {
@@ -698,7 +698,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       label: {
         show: true,
-        position: input.position,
+        position: 'middle',
+        offset: [0, input.labelOffsetY],
         distance: 8,
         color: input.color,
         backgroundColor: input.style.tooltipBackgroundColor,
