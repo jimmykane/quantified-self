@@ -10,6 +10,7 @@ Shared library path (keep stable for antigravity and other apps/agents): `.agent
 Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
+- Never patch or directly modify files under `node_modules/`.
 - Use prefixed commit subjects: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
@@ -18,6 +19,7 @@ Always-on rules:
   read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the
   single detailed Training source of truth instead of creating a competing Training architecture document.
 - When adding a new provider/service integration, add or update a focused public `/integrations/<provider>` page when it has a clear product or search purpose. Keep integration routes intentional, and update route metadata, sitemap/robots, internal links, help content, and tests alongside the page.
+- For read-only Sentry queries in this repository, source `$HOME/.config/sentry/personal.env` only for the Sentry API command. Infer the organization and project from the `sentry:upload-sourcemaps` script in `package.json`; never print the token or profile contents.
 - Never deploy, publish, push, or otherwise mutate production/cloud infrastructure as part of an implementation task. Prepare and verify changes locally, then report the exact manual command or ask for a separate explicit approval for that specific action.
 
 Layer entry points:

@@ -18,6 +18,8 @@ import {
 import type { MapStyleName } from '../services/map/map-style.types';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -37,6 +39,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardChartCategory,
@@ -79,6 +82,9 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   KPI_EASY_PERCENT: 'kpi-easy-percent',
   KPI_HARD_PERCENT: 'kpi-hard-percent',
   KPI_EFFICIENCY_DELTA_4W: 'kpi-efficiency-delta-4w',
+  KPI_AEROBIC_CAPACITY: 'kpi-aerobic-capacity',
+  KPI_AEROBIC_DURABILITY: 'kpi-aerobic-durability',
+  KPI_READINESS_CONFIDENCE: 'kpi-readiness-confidence',
   MAP_DEFAULT_CLUSTERED: 'map-default-clustered',
   MAP_ROUTES_PREVIEW: 'map-routes-preview',
   CUSTOM_DURATION_PIE: 'custom-duration-pie',
@@ -87,6 +93,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   CUSTOM_ENERGY_TREND: 'custom-energy-trend',
   CUSTOM_HEART_RATE_AVG_BY_ACTIVITY: 'custom-heart-rate-avg-by-activity',
   CUSTOM_WEEKLY_DISTANCE_TREND: 'custom-weekly-distance-trend',
+  CUSTOM_WEEKLY_TRAINING_TIME: 'custom-weekly-training-time',
   CUSTOM_ACTIVITY_MIX_DISTANCE_PIE: 'custom-activity-mix-distance-pie',
 } as const;
 
@@ -100,6 +107,19 @@ export interface DashboardManagerPresetTileSize {
   rows: number;
 }
 
+export type DashboardManagerPresetEligibilityKey =
+  | 'activity-history'
+  | 'sleep'
+  | 'cycling-power'
+  | 'running-power'
+  | 'aerobic-capacity'
+  | 'aerobic-durability'
+  | 'readiness-signals'
+  | 'event-map'
+  | 'routes';
+
+export type DashboardManagerPresetEligibility = Record<DashboardManagerPresetEligibilityKey, boolean>;
+
 interface DashboardManagerPresetBaseDefinition {
   id: DashboardManagerPresetId;
   label: string;
@@ -107,6 +127,8 @@ interface DashboardManagerPresetBaseDefinition {
   description: string;
   icon: string;
   category: DashboardManagerPresetCategory;
+  recommended?: boolean;
+  eligibility?: DashboardManagerPresetEligibilityKey;
 }
 
 export interface DashboardManagerCuratedPresetDefinition extends DashboardManagerPresetBaseDefinition {
@@ -170,6 +192,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'insights',
     category: 'curated',
     curatedChartType: DASHBOARD_FORM_CHART_TYPE,
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_FRESHNESS_FORECAST,
@@ -179,6 +203,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'trending_up',
     category: 'curated',
     curatedChartType: DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_INTENSITY_DISTRIBUTION,
@@ -188,6 +214,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'bar_chart',
     category: 'curated',
     curatedChartType: DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_EFFICIENCY_TREND,
@@ -197,6 +225,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'show_chart',
     category: 'curated',
     curatedChartType: DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP,
@@ -206,6 +236,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'hotel',
     category: 'curated',
     curatedChartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+    recommended: true,
+    eligibility: 'sleep',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE,
@@ -216,6 +248,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     category: 'curated',
     curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
     powerCurveScope: 'cycling',
+    recommended: true,
+    eligibility: 'cycling-power',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RUNNING_POWER_CURVE,
@@ -226,6 +260,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     category: 'curated',
     curatedChartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
     powerCurveScope: 'running',
+    recommended: true,
+    eligibility: 'running-power',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_ACWR,
@@ -236,6 +272,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     category: 'kpi',
     kpiChartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
     kpiGroup: 'load',
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_RAMP_RATE,
@@ -256,6 +294,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     category: 'kpi',
     kpiChartType: DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
     kpiGroup: 'load',
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_LOAD_STATUS,
@@ -346,6 +386,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     category: 'kpi',
     kpiChartType: DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
     kpiGroup: 'execution',
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.KPI_EASY_PERCENT,
@@ -378,6 +420,42 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     kpiGroup: 'execution',
   },
   {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_AEROBIC_CAPACITY,
+    label: 'KPI: Aerobic Capacity',
+    tileName: 'Aerobic Capacity',
+    description: 'Latest imported VO2 max with same-source history.',
+    icon: 'air',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+    kpiGroup: 'execution',
+    recommended: true,
+    eligibility: 'aerobic-capacity',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_AEROBIC_DURABILITY,
+    label: 'KPI: Aerobic Durability',
+    tileName: 'Aerobic Durability',
+    description: 'Long-session decoupling or pool pace retention from persisted evidence.',
+    icon: 'timeline',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+    kpiGroup: 'execution',
+    recommended: true,
+    eligibility: 'aerobic-durability',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_READINESS_CONFIDENCE,
+    label: 'KPI: Readiness Signals',
+    tileName: 'Readiness Signals',
+    description: 'Transparent load, sleep, HRV, and overnight heart-rate composite with confidence.',
+    icon: 'fact_check',
+    category: 'kpi',
+    kpiChartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+    kpiGroup: 'readiness',
+    recommended: true,
+    eligibility: 'readiness-signals',
+  },
+  {
     id: DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED,
     label: 'Map (Default)',
     tileName: 'Clustered HeatMap',
@@ -387,6 +465,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     mapSource: 'events',
     mapStyle: 'default',
     clusterMarkers: true,
+    recommended: true,
+    eligibility: 'event-map',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.MAP_ROUTES_PREVIEW,
@@ -399,6 +479,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     mapStyle: 'default',
     clusterMarkers: false,
     showRouteEndpointMarkers: true,
+    recommended: true,
+    eligibility: 'routes',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE,
@@ -412,6 +494,8 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     dataValueType: ChartDataValueTypes.Total,
     dataCategoryType: ChartDataCategoryTypes.ActivityType,
     dataTimeInterval: TimeIntervals.Auto,
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DISTANCE_COLUMNS,
@@ -479,6 +563,21 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     dataTimeInterval: TimeIntervals.Weekly,
   },
   {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_WEEKLY_TRAINING_TIME,
+    label: 'Weekly Training Time',
+    tileName: 'Weekly Training Time',
+    description: 'Training duration totals aggregated weekly.',
+    icon: 'schedule',
+    category: 'custom',
+    chartType: ChartTypes.LinesVertical,
+    dataType: DataDuration.type,
+    dataValueType: ChartDataValueTypes.Total,
+    dataCategoryType: ChartDataCategoryTypes.DateType,
+    dataTimeInterval: TimeIntervals.Weekly,
+    recommended: true,
+    eligibility: 'activity-history',
+  },
+  {
     id: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_ACTIVITY_MIX_DISTANCE_PIE,
     label: 'Activity Mix (Distance)',
     tileName: 'Activity Mix',
@@ -495,6 +594,15 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
 
 export function getDashboardManagerPresetDefinitions(): DashboardManagerPresetDefinition[] {
   return [...DASHBOARD_MANAGER_PRESET_DEFINITIONS];
+}
+
+export function getDashboardManagerRecommendedPresetDefinitions(
+  eligibility: DashboardManagerPresetEligibility,
+): DashboardManagerPresetDefinition[] {
+  return DASHBOARD_MANAGER_PRESET_DEFINITIONS.filter(definition => (
+    definition.recommended === true
+    && (!definition.eligibility || eligibility[definition.eligibility] === true)
+  ));
 }
 
 export function getDashboardManagerPresetDefinition(

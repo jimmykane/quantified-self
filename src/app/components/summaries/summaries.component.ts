@@ -37,11 +37,19 @@ import {
   isDashboardChartTileViewModel,
 } from '../../helpers/dashboard-tile-view-model.helper';
 import {
+  buildDashboardSleepTrendContext,
   formatSleepDuration,
   type DashboardSleepTrendWindow,
 } from '../../helpers/dashboard-sleep-chart.helper';
+import {
+  buildDashboardReadinessSignalsContext,
+  DASHBOARD_READINESS_SLEEP_MAX_AGE_MS,
+} from '../../helpers/dashboard-training-insights.helper';
 import { AppUserService } from '../../services/app.user.service';
-import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
+import {
+  DashboardDerivedMetricsService,
+  getDefaultDashboardDerivedMetricKinds,
+} from '../../services/dashboard-derived-metrics.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import {
@@ -61,6 +69,7 @@ import type {
   DashboardIntensityDistributionContext,
   DashboardMonotonyStrainContext,
   DashboardRampRateContext,
+  DashboardTrainingCapacityContext,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
   type DashboardDerivedMetricStatus,
@@ -68,6 +77,8 @@ import {
 } from '../../helpers/derived-metric-status.helper';
 import {
   isDashboardAcwrKpiChartType,
+  isDashboardAerobicCapacityKpiChartType,
+  isDashboardAerobicDurabilityKpiChartType,
   isDashboardEasyPercentKpiChartType,
   isDashboardEfficiencyDelta4wKpiChartType,
   isDashboardEfficiencyTrendChartType,
@@ -84,6 +95,7 @@ import {
   isDashboardPowerCurveChartType,
   isDashboardRampRateKpiChartType,
   isDashboardRecoveryNowChartType,
+  isDashboardReadinessConfidenceKpiChartType,
   isDashboardEventBackedSpecialChartType,
   isDashboardSpecialChartType,
 } from '../../helpers/dashboard-special-chart-types';
@@ -91,7 +103,12 @@ import { MatDialog } from '@angular/material/dialog';
 import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import type { SleepSession } from '@shared/sleep';
-import type { DerivedPowerCurveMetricPayload } from '@shared/derived-metrics';
+import {
+  DERIVED_METRIC_KINDS,
+  type DerivedMetricKind,
+  type DerivedPowerCurveMetricPayload,
+  type DerivedTrainingDurabilityMetricPayload,
+} from '@shared/derived-metrics';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import type {
   AppDashboardChartTileDisplaySettingsInterface,
@@ -208,6 +225,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private static readonly finePointerMediaQuery = '(pointer: fine)';
   private static readonly hoverMediaQuery = '(hover: hover)';
   private static readonly derivedPendingBannerDebounceMs = 250;
+  private static readonly readinessSleepLookbackMs = 30 * 24 * 60 * 60 * 1000;
+  private static readonly readinessSleepQueryEndMs = Number.MAX_SAFE_INTEGER;
 
   @Input() user: User;
   @Input() eventUser: User;
@@ -236,6 +255,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsUserUID: string | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
+  private readinessSleepSubscription: Subscription | null = null;
+  private readinessSleepListenerKey: string | null = null;
+  private readinessSleepExpiryTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private dashboardAutoTileSubscription: Subscription | null = null;
   private dashboardAutoTileListenerKey: string | null = null;
   private dashboardAutoTileUser: AppUserInterface | null = null;
@@ -254,6 +276,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
   private sleepSessions: SleepSession[] = [];
+  private readinessSleepSessions: SleepSession[] = [];
   private sleepTrendWindow: DashboardSleepTrendWindow | null = null;
   private derivedFormPoints: DashboardFormPoint[] | null = null;
   private derivedRecoveryNowContext: DashboardRecoveryNowContext | null = null;
@@ -269,6 +292,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedIntensityDistributionContext: DashboardIntensityDistributionContext | null = null;
   private derivedEfficiencyTrendContext: DashboardEfficiencyTrendContext | null = null;
   private derivedPowerCurvePayload: DerivedPowerCurveMetricPayload | null = null;
+  private derivedTrainingCapacityContext: DashboardTrainingCapacityContext | null = null;
+  private derivedTrainingDurabilityPayload: DerivedTrainingDurabilityMetricPayload | null = null;
   private derivedFormStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedRecoveryNowStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedAcwrStatus: DashboardDerivedMetricStatus = 'missing';
@@ -283,6 +308,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedIntensityDistributionStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedEfficiencyTrendStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedPowerCurveStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedTrainingCapacityStatus: DashboardDerivedMetricStatus = 'missing';
+  private derivedTrainingDurabilityStatus: DashboardDerivedMetricStatus = 'missing';
   private derivedMetricsHydrated = false;
   private derivedPendingBannerTimeout: ReturnType<typeof setTimeout> | null = null;
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -468,7 +495,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       });
       const result = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
       if (result?.saved === true) {
-        await this.rebuildTilesFromCurrentState();
+        await this.unsubscribeAndCreateCharts();
       }
     } finally {
       this.setDashboardManagerOpenState(false);
@@ -497,6 +524,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     this.syncDerivedMetricsSubscription();
     this.syncSleepSubscription();
+    this.syncReadinessSleepSubscription();
     this.syncDashboardAutoTileSubscription();
     this.syncTileEventSubscriptions();
     this.syncRoutePreviewSubscription();
@@ -512,6 +540,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       tileEventsByOrder: this.tileEventsByOrder,
       routePreviews: this.routePreviewRoutes,
       sleepSessions: this.sleepSessions,
+      readinessSleepSessions: this.readinessSleepSessions,
       sleepTrendWindow: this.sleepTrendWindow,
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
@@ -531,6 +560,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         intensityDistribution: this.derivedIntensityDistributionContext,
         efficiencyTrend: this.derivedEfficiencyTrendContext,
         powerCurve: this.derivedPowerCurvePayload,
+        trainingCapacity: this.derivedTrainingCapacityContext,
+        trainingDurability: this.derivedTrainingDurabilityPayload,
       },
     });
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
@@ -584,7 +615,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
-    if (this.derivedMetricsUserUID === uid && this.derivedMetricsSubscription) {
+    const metricKinds = this.resolveDashboardDerivedMetricKinds();
+    const subscriptionKey = `${uid}:${[...metricKinds].sort().join(',')}`;
+
+    if (this.derivedMetricsUserUID === subscriptionKey && this.derivedMetricsSubscription) {
       return;
     }
 
@@ -593,11 +627,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedMetricsSubscription = null;
     }
 
-    this.derivedMetricsUserUID = uid;
+    this.derivedMetricsUserUID = subscriptionKey;
     this.resetDerivedMetricsState();
 
-    this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user).subscribe((state) => {
-      this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state);
+    this.derivedMetricsSubscription = this.dashboardDerivedMetricsService.watch(this.user, { metricKinds }).subscribe((state) => {
+      this.dashboardDerivedMetricsService.ensureForDashboard(this.user, state, { metricKinds });
       const wasHydrated = this.derivedMetricsHydrated;
       if (!wasHydrated) {
         this.derivedMetricsHydrated = true;
@@ -617,6 +651,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const hasIntensityDistributionChanged = !equal(this.derivedIntensityDistributionContext, state.intensityDistribution);
       const hasEfficiencyTrendChanged = !equal(this.derivedEfficiencyTrendContext, state.efficiencyTrend);
       const hasPowerCurveChanged = !equal(this.derivedPowerCurvePayload, state.powerCurve);
+      const hasTrainingCapacityChanged = !equal(this.derivedTrainingCapacityContext, state.trainingCapacity);
+      const hasTrainingDurabilityChanged = !equal(this.derivedTrainingDurabilityPayload, state.trainingDurability);
       const hasFormStatusChanged = this.derivedFormStatus !== state.formStatus;
       const hasRecoveryStatusChanged = this.derivedRecoveryNowStatus !== state.recoveryNowStatus;
       const hasAcwrStatusChanged = this.derivedAcwrStatus !== state.acwrStatus;
@@ -631,6 +667,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const hasIntensityDistributionStatusChanged = this.derivedIntensityDistributionStatus !== state.intensityDistributionStatus;
       const hasEfficiencyTrendStatusChanged = this.derivedEfficiencyTrendStatus !== state.efficiencyTrendStatus;
       const hasPowerCurveStatusChanged = this.derivedPowerCurveStatus !== state.powerCurveStatus;
+      const hasTrainingCapacityStatusChanged = this.derivedTrainingCapacityStatus !== state.trainingCapacityStatus;
+      const hasTrainingDurabilityStatusChanged = this.derivedTrainingDurabilityStatus !== state.trainingDurabilityStatus;
       const hasBannerStateChanged = hasFormStatusChanged
         || hasRecoveryStatusChanged
         || hasAcwrStatusChanged
@@ -644,7 +682,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasFreshnessForecastStatusChanged
         || hasIntensityDistributionStatusChanged
         || hasEfficiencyTrendStatusChanged
-        || hasPowerCurveStatusChanged;
+        || hasPowerCurveStatusChanged
+        || hasTrainingCapacityStatusChanged
+        || hasTrainingDurabilityStatusChanged;
       const hasTileDataChanged = hasFormPointsChanged
         || hasRecoveryContextChanged
         || hasAcwrChanged
@@ -658,7 +698,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || hasFreshnessForecastChanged
         || hasIntensityDistributionChanged
         || hasEfficiencyTrendChanged
-        || hasPowerCurveChanged;
+        || hasPowerCurveChanged
+        || hasTrainingCapacityChanged
+        || hasTrainingDurabilityChanged;
       if (!hasTileDataChanged && !hasBannerStateChanged && wasHydrated) {
         return;
       }
@@ -683,6 +725,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedIntensityDistributionContext = state.intensityDistribution;
       this.derivedEfficiencyTrendContext = state.efficiencyTrend;
       this.derivedPowerCurvePayload = state.powerCurve;
+      this.derivedTrainingCapacityContext = state.trainingCapacity;
+      this.derivedTrainingDurabilityPayload = state.trainingDurability;
       this.derivedFormStatus = state.formStatus;
       this.derivedRecoveryNowStatus = state.recoveryNowStatus;
       this.derivedAcwrStatus = state.acwrStatus;
@@ -697,6 +741,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedIntensityDistributionStatus = state.intensityDistributionStatus;
       this.derivedEfficiencyTrendStatus = state.efficiencyTrendStatus;
       this.derivedPowerCurveStatus = state.powerCurveStatus;
+      this.derivedTrainingCapacityStatus = state.trainingCapacityStatus;
+      this.derivedTrainingDurabilityStatus = state.trainingDurabilityStatus;
       this.dashboardCurrentState = this.buildDashboardCurrentState();
       this.updateRecoveryRefreshTimer();
       this.refreshDerivedMetricsBannerState();
@@ -708,6 +754,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
       this.changeDetector.markForCheck();
     });
+  }
+
+  private resolveDashboardDerivedMetricKinds(): DerivedMetricKind[] {
+    const metricKinds = getDefaultDashboardDerivedMetricKinds();
+    const chartTypes = (this.user?.settings?.dashboardSettings?.tiles || [])
+      .filter(tile => tile.type === TileTypes.Chart)
+      .map(tile => (tile as TileChartSettingsInterface).chartType);
+    if (chartTypes.some(isDashboardAerobicCapacityKpiChartType)) {
+      metricKinds.push(DERIVED_METRIC_KINDS.TrainingCapacity);
+    }
+    if (chartTypes.some(isDashboardAerobicDurabilityKpiChartType)) {
+      metricKinds.push(DERIVED_METRIC_KINDS.TrainingDurability);
+    }
+    return [...new Set(metricKinds)];
   }
 
   private unsubscribeThemeSubscription(): void {
@@ -766,6 +826,92 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         shouldRebuildForWindowChange = false;
         void this.rebuildTilesFromCurrentState();
       });
+  }
+
+  private syncReadinessSleepSubscription(): void {
+    const uid = `${this.user?.uid || ''}`.trim();
+    const hasReadinessTile = (this.user?.settings?.dashboardSettings?.tiles || []).some(tile => (
+      tile.type === TileTypes.Chart
+      && isDashboardReadinessConfidenceKpiChartType((tile as TileChartSettingsInterface).chartType)
+    ));
+    if (!uid || !hasReadinessTile) {
+      this.unsubscribeReadinessSleepSubscription();
+      return;
+    }
+
+    const listenerKey = `${uid}:current-readiness`;
+    if (this.readinessSleepListenerKey === listenerKey && this.readinessSleepSubscription) {
+      return;
+    }
+
+    this.unsubscribeReadinessSleepSubscription();
+    const startMs = Math.max(0, Date.now() - SummariesComponent.readinessSleepLookbackMs);
+    this.readinessSleepListenerKey = listenerKey;
+    this.readinessSleepSubscription = this.sleepService.watchForDashboard(
+      uid,
+      startMs,
+      SummariesComponent.readinessSleepQueryEndMs,
+    ).subscribe({
+      next: (sessions) => {
+        if (equal(this.readinessSleepSessions, sessions)) {
+          return;
+        }
+        this.readinessSleepSessions = sessions;
+        this.updateReadinessSleepExpiryTimer();
+        void this.rebuildTilesFromCurrentState();
+      },
+      error: () => {
+        if (!this.readinessSleepSessions.length) {
+          return;
+        }
+        this.readinessSleepSessions = [];
+        this.updateReadinessSleepExpiryTimer();
+        void this.rebuildTilesFromCurrentState();
+      },
+    });
+  }
+
+  private unsubscribeReadinessSleepSubscription(): void {
+    if (this.readinessSleepSubscription) {
+      this.readinessSleepSubscription.unsubscribe();
+      this.readinessSleepSubscription = null;
+    }
+    this.readinessSleepListenerKey = null;
+    this.readinessSleepSessions = [];
+    this.clearReadinessSleepExpiryTimer();
+  }
+
+  private updateReadinessSleepExpiryTimer(): void {
+    this.clearReadinessSleepExpiryTimer();
+    const nowMs = Date.now();
+    const latestSleepEndMs = buildDashboardSleepTrendContext(this.readinessSleepSessions).points
+      .filter(point => point.isPlaceholder !== true && point.isNap !== true)
+      .reduce((latest, point) => {
+        const endTimeMs = Number(point.endTimeMs);
+        return Number.isFinite(endTimeMs) && endTimeMs > 0 && endTimeMs <= nowMs
+          ? Math.max(latest, endTimeMs)
+          : latest;
+      }, 0);
+    if (!latestSleepEndMs) {
+      return;
+    }
+    const expiresAtMs = latestSleepEndMs + DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1;
+    const delayMs = expiresAtMs - nowMs;
+    if (delayMs <= 0) {
+      return;
+    }
+    this.readinessSleepExpiryTimeoutHandle = setTimeout(() => {
+      this.readinessSleepExpiryTimeoutHandle = null;
+      void this.rebuildTilesFromCurrentState();
+    }, delayMs);
+  }
+
+  private clearReadinessSleepExpiryTimer(): void {
+    if (this.readinessSleepExpiryTimeoutHandle === null) {
+      return;
+    }
+    clearTimeout(this.readinessSleepExpiryTimeoutHandle);
+    this.readinessSleepExpiryTimeoutHandle = null;
   }
 
   private syncDashboardAutoTileSubscription(): void {
@@ -1429,6 +1575,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedIntensityDistributionContext = null;
     this.derivedEfficiencyTrendContext = null;
     this.derivedPowerCurvePayload = null;
+    this.derivedTrainingCapacityContext = null;
+    this.derivedTrainingDurabilityPayload = null;
     this.derivedFormStatus = 'missing';
     this.derivedRecoveryNowStatus = 'missing';
     this.derivedAcwrStatus = 'missing';
@@ -1443,6 +1591,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedIntensityDistributionStatus = 'missing';
     this.derivedEfficiencyTrendStatus = 'missing';
     this.derivedPowerCurveStatus = 'missing';
+    this.derivedTrainingCapacityStatus = 'missing';
+    this.derivedTrainingDurabilityStatus = 'missing';
     this.dashboardCurrentState = createEmptyDashboardCurrentStateViewModel();
     this.refreshDerivedMetricsBannerState();
   }
@@ -1686,11 +1836,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     sectionId: DashboardTileSectionId,
   ): DashboardTileSectionCellViewModel[] {
     const balancedRoutesMapLayout = this.getBalancedRoutesMapSectionLayout(tiles, sectionColumns, sectionId);
-    return tiles.map(tile => ({
+    const cells = tiles.map(tile => ({
       tile,
       columns: balancedRoutesMapLayout?.itemColumns
         || Math.min(this.getTilePersistedColumns(tile), sectionColumns),
     }));
+    return this.stretchSingleTileRows(cells, sectionColumns);
   }
 
   private buildMainGridTrailingPlaceholders(
@@ -1732,8 +1883,106 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return this.getBalancedOneColumnSectionColumnCount(tiles.length, maxColumns);
     }
 
+    if (tiles.every(tile => this.getTilePersistedRows(tile) === 1)) {
+      return this.getBalancedMixedSectionColumnCount(tileColumns, maxColumns);
+    }
+
     const totalColumns = tileColumns.reduce((total, columns) => total + columns, 0);
     return Math.min(maxColumns, Math.max(1, totalColumns));
+  }
+
+  private getBalancedMixedSectionColumnCount(tileColumns: number[], maxColumns: number): number {
+    const minColumns = Math.max(...tileColumns);
+    const candidateColumns = Array.from(
+      { length: (maxColumns - minColumns) + 1 },
+      (_, index) => minColumns + index,
+    );
+    return candidateColumns.reduce((bestColumns, columns) => {
+      const bestScore = this.getMixedSectionLayoutScore(tileColumns, bestColumns, maxColumns);
+      const candidateScore = this.getMixedSectionLayoutScore(tileColumns, columns, maxColumns);
+      if (candidateScore < bestScore) {
+        return columns;
+      }
+
+      if (candidateScore === bestScore && columns > bestColumns) {
+        return columns;
+      }
+
+      return bestColumns;
+    }, minColumns);
+  }
+
+  private getMixedSectionLayoutScore(
+    tileColumns: number[],
+    columns: number,
+    maxColumns: number,
+  ): number {
+    const rows = this.packSingleRowTileColumns(tileColumns, columns);
+    const emptyColumns = rows.reduce((total, row) => {
+      if (row.itemIndexes.length === 1) {
+        return total;
+      }
+
+      return total + (columns - row.usedColumns);
+    }, 0);
+    const columnPenalty = maxColumns - columns;
+    return (emptyColumns * 4) + rows.length + columnPenalty;
+  }
+
+  private stretchSingleTileRows(
+    cells: DashboardTileSectionCellViewModel[],
+    sectionColumns: number,
+  ): DashboardTileSectionCellViewModel[] {
+    if (
+      cells.length < 2
+      || sectionColumns <= 1
+      || cells.some(cell => this.getTilePersistedRows(cell.tile) > 1)
+    ) {
+      return cells;
+    }
+
+    const rows = this.packSingleRowTileColumns(cells.map(cell => cell.columns), sectionColumns);
+    const stretchedIndexes = new Set(
+      rows
+        .filter(row => row.itemIndexes.length === 1)
+        .map(row => row.itemIndexes[0]),
+    );
+    if (!stretchedIndexes.size) {
+      return cells;
+    }
+
+    return cells.map((cell, index) => stretchedIndexes.has(index)
+      ? { ...cell, columns: sectionColumns }
+      : cell);
+  }
+
+  private packSingleRowTileColumns(
+    tileColumns: number[],
+    columns: number,
+  ): Array<{ itemIndexes: number[]; usedColumns: number }> {
+    const rows: Array<{ itemIndexes: number[]; usedColumns: number }> = [];
+    let currentRow = { itemIndexes: [] as number[], usedColumns: 0 };
+
+    tileColumns.forEach((persistedColumns, index) => {
+      const itemColumns = Math.min(Math.max(1, persistedColumns), columns);
+      if (currentRow.itemIndexes.length && currentRow.usedColumns + itemColumns > columns) {
+        rows.push(currentRow);
+        currentRow = { itemIndexes: [], usedColumns: 0 };
+      }
+
+      currentRow.itemIndexes.push(index);
+      currentRow.usedColumns += itemColumns;
+      if (currentRow.usedColumns === columns) {
+        rows.push(currentRow);
+        currentRow = { itemIndexes: [], usedColumns: 0 };
+      }
+    });
+
+    if (currentRow.itemIndexes.length) {
+      rows.push(currentRow);
+    }
+
+    return rows;
   }
 
   private getBalancedRoutesMapSectionLayout(
@@ -1784,6 +2033,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     return Math.floor(columns);
+  }
+
+  private getTilePersistedRows(tile: DashboardTileViewModel): number {
+    const rows = Number(tile.size?.rows);
+    if (!Number.isFinite(rows) || rows < 1) {
+      return 1;
+    }
+
+    return Math.floor(rows);
   }
 
   private normalizeGridColumnCount(columns: number | string | null | undefined): number {
@@ -1896,6 +2154,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.sleepSubscription = null;
       this.sleepListenerKey = null;
     }
+    this.unsubscribeReadinessSleepSubscription();
     this.unsubscribeDashboardAutoTileSubscription();
     this.unsubscribeTileEventSubscriptions();
     this.unsubscribeRoutePreviewSubscription();
@@ -1932,9 +2191,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       efficiencyTrend: this.derivedEfficiencyTrendContext,
       trainingSummary: null,
       trainingBuildComparison: null,
-      trainingCapacity: null,
+      trainingCapacity: this.derivedTrainingCapacityContext,
       trainingExplanation: null,
-      trainingDurability: null,
+      trainingDurability: this.derivedTrainingDurabilityPayload,
       trainingSwimPerformance: null,
       powerCurve: this.derivedPowerCurvePayload,
       formStatus: this.derivedFormStatus,
@@ -1952,12 +2211,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       efficiencyTrendStatus: this.derivedEfficiencyTrendStatus,
       trainingSummaryStatus: 'missing',
       trainingBuildComparisonStatus: 'missing',
-      trainingCapacityStatus: 'missing',
+      trainingCapacityStatus: this.derivedTrainingCapacityStatus,
       trainingExplanationStatus: 'missing',
-      trainingDurabilityStatus: 'missing',
+      trainingDurabilityStatus: this.derivedTrainingDurabilityStatus,
       trainingSwimPerformanceStatus: 'missing',
       powerCurveStatus: this.derivedPowerCurveStatus,
-    }, { force: true });
+    }, { force: true, metricKinds: this.resolveDashboardDerivedMetricKinds() });
   }
 
   private refreshDerivedMetricsBannerState(): void {
@@ -2231,6 +2490,44 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return this.derivedEfficiencyTrendStatus;
   }
 
+  getAerobicCapacityStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    return isDashboardChartTileViewModel(tile) && isDashboardAerobicCapacityKpiChartType(tile.chartType)
+      ? this.derivedTrainingCapacityStatus
+      : null;
+  }
+
+  getAerobicDurabilityStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    return isDashboardChartTileViewModel(tile) && isDashboardAerobicDurabilityKpiChartType(tile.chartType)
+      ? this.derivedTrainingDurabilityStatus
+      : null;
+  }
+
+  getReadinessSignalsStatusForTile(tile: DashboardTileViewModel | TileSettingsInterface): DashboardDerivedMetricStatus | null {
+    if (!isDashboardChartTileViewModel(tile) || !isDashboardReadinessConfidenceKpiChartType(tile.chartType)) {
+      return null;
+    }
+    if (tile.readinessSignals) {
+      return null;
+    }
+    return this.resolveReadinessSignalsDerivedStatus();
+  }
+
+  private resolveReadinessSignalsDerivedStatus(): DashboardDerivedMetricStatus | null {
+    const readinessSignals = buildDashboardReadinessSignalsContext({
+      formNow: this.derivedFormNowContext,
+      rampRate: this.derivedRampRateContext,
+      sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+    });
+    if (readinessSignals) {
+      return null;
+    }
+    const statuses = [this.derivedFormNowStatus, this.derivedRampRateStatus];
+    return statuses.find(status => status === 'failed')
+      || statuses.find(status => isDerivedMetricPendingStatus(status))
+      || statuses.find(status => status === 'ready')
+      || 'missing';
+  }
+
   private resolveDerivedStatusForChartType(chartType: unknown): DashboardDerivedMetricStatus | null {
     if (isDashboardFormChartType(chartType)) {
       return this.derivedFormStatus;
@@ -2276,6 +2573,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     if (isDashboardPowerCurveChartType(chartType)) {
       return this.derivedPowerCurveStatus;
+    }
+    if (isDashboardAerobicCapacityKpiChartType(chartType)) {
+      return this.derivedTrainingCapacityStatus;
+    }
+    if (isDashboardAerobicDurabilityKpiChartType(chartType)) {
+      return this.derivedTrainingDurabilityStatus;
+    }
+    if (isDashboardReadinessConfidenceKpiChartType(chartType)) {
+      return this.resolveReadinessSignalsDerivedStatus();
     }
     return null;
   }

@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `11`
-- `@sports-alliance/sports-lib`: `17.1.1`
+- `@sports-alliance/sports-lib`: `17.1.2`
 - Training disciplines: Running, Cycling, and Swimming
 - Power/capacity disciplines: Running and Cycling only
 - Calendar boundaries: UTC unless a section explicitly says otherwise
@@ -30,7 +30,8 @@ The following rules are architectural constraints:
 - The frontend must not download or reparse source files to calculate Training insights.
 - Training-specific calculations belong in derived-metric builders or sports-lib, not Angular components.
 - Dashboard remains the user's modular surface. Training does not remove, relocate, or reconfigure Dashboard tiles, and
-  curated Training-only insights do not become hidden Dashboard dependencies.
+  curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard
+  Aerobic Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
 - Missing TSS, zones, pace, sleep, power, heart rate, or durability evidence remains unavailable. Missing values are not
   converted to zero.
 - Merged benchmark events are excluded from Training. Multisport parent events are retained, but their normalized child
@@ -166,7 +167,12 @@ Normalized child activity documents provide sport-specific stats and activity ty
 - its effective date is missing.
 
 The join deliberately uses activity-level stats. Parent stats and `endDate` must not leak into a child leg. Provider and
-device provenance may fall back to the parent when the child does not carry it.
+device provenance may fall back to the parent when the child does not carry it. Functions creates one canonical joined
+activity source per valid parent/child relationship. When Training Explanation is dirty, unsupported activity types
+remain in that source with no curated discipline so it can report them as Other or Unclassified. Other metric-only
+batches discard those unsupported wrappers during the join. Discipline-specific builders ignore unclassified sources
+when they share an Explanation build. The join retains references to the selected child and parent data instead of
+cloning a second activity metric object.
 
 ### Sleep sessions
 
@@ -268,7 +274,38 @@ The workspace also requests registered Easy/Hard and efficiency metrics because 
 scope. They are not standalone Training cards. Do not assume every requested snapshot maps one-to-one to visible markup.
 
 Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which is all registered derived kinds. Training-only
-kinds are deliberately excluded from default Dashboard subscriptions and freshness probes.
+kinds are excluded from the default Dashboard subscription and freshness scope. Dashboard adds `training_capacity` or
+`training_durability` to that scope only while a matching explicitly configured tile exists. Opening a normal Dashboard
+therefore does not create a hidden Training dependency or freshness probe for those kinds.
+
+### Dashboard insight reuse
+
+The configurable Dashboard can present a narrow, read-only view of selected Training evidence:
+
+- **Aerobic Capacity** selects the most recent imported running or cycling VO2 max, displays its provider/source
+  provenance, and compares only observations from the same source. FTP settings and modeled critical power never become
+  VO2 values.
+- **Aerobic Durability** uses the persisted `training_durability` payload and the existing sports-lib evidence protocol.
+  The card selects the current context with the most eligible samples, then uses eligibility ratio and discipline priority
+  as deterministic tie-breakers, followed by the lexical context key when every meaningful signal is equal. Running,
+  Cycling, and Open water show aerobic decoupling; Pool shows pace retention. Missing weeks remain gaps.
+- **Readiness Signals** is a Dashboard-only frontend heuristic. It combines available current Form/ramp, sleep score or
+  duration, HRV versus the user's recent recorded baseline, and overnight minimum heart rate versus that baseline. Its
+  sleep evidence comes from a dedicated live query lower-bounded to the current 30-day lookback, independent of the
+  pageable Sleep chart. The open upper bound lets a dashboard left open receive newly imported nights. The latest
+  aggregated non-nap night must be no more than 48 hours old. Future-dated records are ignored and cannot suppress the
+  latest valid night; HRV and minimum-heart-rate baselines use up to 14 prior nights from the same provider. An expiry
+  timer rebuilds the card when that 48-hour boundary is crossed even if no new data arrives. A historical composite
+  readiness series is not shown because historical Form/ramp and sleep signals are not currently aligned into one series.
+  The score and evidence confidence are separate, missing inputs remain missing, and the result is not a medical score, a
+  VO2 estimate, or a change to the curated Training state.
+  Training continues to treat sleep as non-causal context.
+
+Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
+useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
+its default 14-day window, Readiness accepts sleep-only evidence only when its latest aggregated non-nap night is no more
+than 48 hours old, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild merely
+because the manager dialog was opened.
 
 ### Writes and ingress
 
@@ -302,6 +339,12 @@ This probe is important in local development and recovery scenarios: opening Tra
 snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
+
+`processDerivedMetricsTask` runs with 2 GiB of memory and per-instance concurrency `1` because a single full-history
+Training build can hold large event and activity source sets. Cloud Run must scale separate instances for concurrent
+builds instead of placing multiple full-history generations in one JavaScript heap. The worker creates one canonical
+parent/activity join and shares that same array across sleep-range resolution, curated builders, and explanation
+builders; do not restore separate joined copies or per-activity spread clones.
 
 The derived worker:
 
@@ -390,7 +433,9 @@ If all state inputs are missing, the page shows an awaiting-data state rather th
 #### Recovery remaining
 
 `recovery_now` combines supported imported post-workout recovery estimates. The card counts down using the stored end
-time. It is explicitly labeled as an imported estimate, not readiness, and does not change the Training state.
+time. It is explicitly labeled as an imported estimate, not readiness, and does not change the Training state. The
+worker scans a bounded 16-day event window; no events in that window is a valid empty result for new or inactive users
+and is logged as informational rather than a warning.
 
 #### Recorded sleep alongside training
 
@@ -723,9 +768,19 @@ The activity stat is `DataDurabilityEvidence`, serialized as `Durability Evidenc
 
 It never stores the display timeline or a second copy of long streams.
 
+Frontend event sanitization relies on sports-lib's `DynamicDataLoader` registry to retain serialized stats. The
+`event-json-sanitizer.spec.ts` regression test therefore checks the literal persisted `Durability Evidence` key against
+the real sports-lib registry without importing `DataDurabilityEvidence`; importing the class in that test could register
+it as a side effect and mask a bundling or tree-shaking regression. Add an explicit runtime registration import only if a
+deployed bundle reproduces the missing-registration warning.
+
 The source fingerprint includes the protocol, effective activity type and duration, relevant output/HR/grade streams,
 zone durations, and pool-length context. When any effective input changes, sports-lib recalculates the stat. An unchanged,
 canonical stat is reused. A valid summary-only stat is preserved when raw inputs are no longer available.
+
+Compact aerobic evidence rounds its persisted base output and heart-rate values before calculating efficiency, retention,
+decoupling, and drift. This keeps the serialized summary arithmetically self-consistent at its stored precision, including
+low-speed open-water evidence, so constructor validation cannot reject evidence produced by the analyzer itself.
 
 Merged parent event summaries explicitly exclude child durability evidence because multiple contexts cannot be reduced to
 one trustworthy event-level value.
@@ -763,6 +818,12 @@ Coverage distinguishes:
 
 Older activities parsed before the durability stat existed can remain `missingEvidenceActivityCount` until a sports-lib
 reparse processes them. If the original source is unavailable, missing evidence remains honest and permanent.
+
+Sports-lib reparse persistence keeps event, activity, and metadata writes behind the account-deletion guard. Its Firestore
+transaction writes use a bounded retry for transient transaction failures, including Firestore's retryable
+`INVALID_ARGUMENT: Invalid transaction` response, and emit phase logs for `write_all_event_data`, `merge_metadata`,
+`delete_stale_activities`, and `processing_metadata`. Use those phase logs to identify which persistence step failed in
+long-running heavy reparse jobs before changing queue retry policy.
 
 ### Event detail reuse
 
@@ -916,6 +977,7 @@ training-power-profile.helper.spec.ts
 training-recovery-estimate.helper.spec.ts
 training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
+event-json-sanitizer.spec.ts
 ```
 
 Then verify:

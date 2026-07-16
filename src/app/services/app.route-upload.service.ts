@@ -4,6 +4,7 @@ import { Auth } from 'app/firebase/auth';
 import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { environment } from '../../environments/environment';
+import { createHttpUploadError, UploadError } from './upload-error';
 
 export interface UploadRouteResponse {
     routeId: string;
@@ -78,7 +79,7 @@ export class AppRouteUploadService {
         originalFilename?: string,
     ): Promise<UploadRouteResponse> {
         if (!this.auth.currentUser) {
-            throw new Error('User must be authenticated to upload routes.');
+            throw new UploadError('User must be authenticated to upload routes.', 401, 'unauthenticated');
         }
 
         const idToken = await this.auth.currentUser.getIdToken(true);
@@ -91,7 +92,7 @@ export class AppRouteUploadService {
 
         const normalizedExtension = fileExtension.trim().toLowerCase().replace(/^\./, '');
         if (!normalizedExtension) {
-            throw new Error('Route file extension is required.');
+            throw new UploadError('Route file extension is required.', 400, 'invalid_extension');
         }
 
         const config = FUNCTIONS_MANIFEST.uploadRoute;
@@ -127,7 +128,11 @@ export class AppRouteUploadService {
 
         if (!response.ok) {
             const backendMessage = getRouteUploadBackendErrorMessage(payload);
-            throw new Error(backendMessage || mapFallbackRouteUploadErrorMessage(response.status));
+            throw createHttpUploadError(
+                backendMessage || mapFallbackRouteUploadErrorMessage(response.status),
+                response.status,
+                payload,
+            );
         }
 
         return payload as UploadRouteResponse;

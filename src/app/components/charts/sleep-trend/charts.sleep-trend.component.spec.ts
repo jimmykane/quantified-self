@@ -208,6 +208,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(hrvSeries.markLine.label.formatter).toBe('Avg HRV 52ms');
     expect(hrvSeries.markLine.label).toMatchObject({
       position: 'middle',
+      offset: [0, 0],
       distance: 8,
       color: AppColors.Green,
       borderColor: AppColors.Green,
@@ -262,6 +263,18 @@ describe('ChartsSleepTrendComponent', () => {
       lineStyle: { color: AppColors.Blue },
       itemStyle: { color: AppColors.Blue },
       data: [48, null],
+      markLine: {
+        label: {
+          formatter: 'Avg HR 48bpm',
+          position: 'middle',
+          offset: [0, -14],
+        },
+        lineStyle: {
+          color: AppColors.Blue,
+          type: 'dashed',
+        },
+        data: [{ name: 'Avg HR', yAxis: 48 }],
+      },
     });
     expect(minimumHeartRateSeries).toMatchObject({
       name: 'Min HR',
@@ -271,6 +284,18 @@ describe('ChartsSleepTrendComponent', () => {
       lineStyle: { color: AppColors.Pink },
       itemStyle: { color: AppColors.Pink },
       data: [42, 44],
+      markLine: {
+        label: {
+          formatter: 'Avg Min HR 43bpm',
+          position: 'middle',
+          offset: [0, 14],
+        },
+        lineStyle: {
+          color: AppColors.Pink,
+          type: 'dashed',
+        },
+        data: [{ name: 'Avg Min HR', yAxis: 43 }],
+      },
     });
     expect(spo2Series).toMatchObject({
       name: 'SpO2 max',

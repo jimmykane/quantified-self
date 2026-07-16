@@ -1,34 +1,25 @@
-<p>Hi there,</p>
+{{> email_transactional_header}}
+<h1 style="margin:0 0 20px; color:#172033; font-size:26px; line-height:34px;">Your {{role}} membership will end on {{expiration_date}}</h1>
 
-<p>We received your request to cancel your <strong>{{role}}</strong> subscription.</p>
+<p style="margin:0 0 18px;">Your {{role}} access remains active through <strong>{{expiration_date}}</strong>.</p>
+<p style="margin:0 0 18px;">A 30-day grace period follows and ends on <strong>{{grace_period_end}}</strong>. Your existing activity and route history remains in your account.</p>
 
-<p>Your access will continue until the end of your billing period on <strong>{{expiration_date}}</strong>.</p>
-
-<hr>
-<p><strong>⚠️ Important: What happens next?</strong></p>
-<ul>
-    <p>After your subscription ends on <strong>{{expiration_date}}</strong>, you will enter a 30-day grace period.</p>
-
-    <p><strong>Once the grace period ends, your account will revert to the Free tier. This means:</strong></p>
-    <ul>
-        <li>Your account will revert to the <strong>Free</strong> tier.</li>
-        <li><strong>Device Sync (Garmin, Suunto, COROS) will be disconnected.</strong></li>
-        <li>Existing activities remain in your account. New uploads follow the Free plan limit.</li>
-    </ul>
+<p style="margin:0 0 10px; font-weight:700; color:#172033;">After the grace period, Free limits apply to future uploads:</p>
+<ul style="margin:0 0 22px; padding-left:22px;">
+  <li style="margin:0 0 7px;">{{free_activity_description}}</li>
+  <li style="margin:0 0 7px;">{{free_route_description}}</li>
+  <li style="margin:0 0 7px;">{{free_ai_insights_description}}</li>
 </ul>
-<hr>
 
-<p>If you changed your mind, you can resume your subscription at any time before it expires.</p>
+{{#if device_sync_will_end}}
+<p style="margin:0 0 22px; padding:14px 16px; background-color:#fff5d6; border-left:4px solid #9a6700; color:#513c06;">Because device sync is a Pro feature, Garmin, Suunto, and COROS connections will be disconnected after the grace period.</p>
+{{/if}}
 
-<br>
-<p>
-    <a href="https://quantified-self.io/settings"
-        style="background-color: #03a9f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Resubscribe</a>
-</p>
-
-<br>
-<p>Best regards,<br>The Quantified Self Team<br>quantified-self.io</p>
-<div style="margin-top: 10px;">
-    <img src="https://quantified-self.io/assets/logos/app/logo-100x100.png" alt="Quantified Self" width="100"
-        height="100">
-</div>
+<table role="presentation" class="email-button" cellspacing="0" cellpadding="0" border="0">
+  <tr>
+    <td style="border-radius:6px; background-color:#174ea6;">
+      <a href="{{membership_url}}" style="display:inline-block; min-height:44px; padding:12px 22px; box-sizing:border-box; color:#ffffff; font-weight:700; text-decoration:none;">Manage membership</a>
+    </td>
+  </tr>
+</table>
+{{> email_transactional_footer}}

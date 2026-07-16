@@ -116,8 +116,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
 - New dashboards start clean. The Dashboard **Today** header has a flat current-state row and an **Open Training** action.
-- Load and recovery interpretation lives in **Training**: Form/TSS, freshness forecast, ACWR, ramp rate, monotony and strain, CTL/ATL, intensity distribution, efficiency, sleep context, and discipline-specific power curves.
-- Existing curated and KPI tiles are preserved. Use **Simplify dashboard** in Dashboard manager to preview and explicitly remove legacy training tiles without affecting activity, map, or custom tiles.
+- **Training** remains the fixed analytical workspace. Dashboard tiles can reuse selected derived evidence without changing Training calculations or layout.
+- Existing curated and KPI tiles are preserved until you edit or remove them in Dashboard manager.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - The main dashboard groups chart and map tiles by intent, such as **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
@@ -125,6 +125,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - New dashboard tiles use chart-aware default sizes: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
+- **Aerobic Capacity** shows the latest imported running or cycling VO2 max and compares only observations from the same source. It does not substitute FTP or modeled critical power for VO2 max.
+- **Aerobic Durability** shows the current persisted long-session context with the strongest sample evidence: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. Missing and ineligible activity evidence stays unavailable.
+- **Readiness Signals** combines available current Form/ramp with the latest aggregated non-nap night from the last 48 hours, plus HRV and overnight minimum heart rate versus prior nights from the same sleep provider. Its current sleep evidence is independent of the Sleep chart's selected range or historical page. The score and evidence confidence are shown separately; it is a transparent training aid, not a medical score or VO2 estimate.
 - Curated and KPI tiles include an **info** icon beside the title with formulas, interpretation guidance, and KPI detail rows such as metric state, freshness date, source, and the signals behind the current label.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
@@ -146,7 +149,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
-- Dashboard manager bulk actions can add every available preset tile, simplify selected legacy training tiles, or remove every dashboard chart/map tile and keep automatic suggestions dismissed.
+- Dashboard manager bulk actions include **Add recommended**, which selects a useful set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, no more than 48 hours for sleep-only Readiness, and the prepared 1-year Power Curve snapshots), plus route, capacity, durability, and current readiness evidence; **Add everything**, which inserts every available preset including overlapping metrics; and **Remove all**, which clears every dashboard chart/map tile and keeps automatic suggestions dismissed.
 
 ### Training workspace
 
@@ -184,7 +187,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Recovery tile summary
 
-- The curated **Recovery** pie tile is optional and can be added from Dashboard manager or **Add all**.
+- The curated **Recovery** pie tile is optional and can be added from Dashboard manager presets or **Add everything**.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
 - The summary shows **Recovery left**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.
@@ -559,7 +562,7 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV with an average HRV reference line, sleep heart rate, and max SpO2 when the provider includes those values. Suunto and Garmin Pro users can queue **Backfill Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto queues sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin requests sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Suunto and Garmin Pro users can queue **Backfill Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto queues sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin requests sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
 
 ## Suunto
 

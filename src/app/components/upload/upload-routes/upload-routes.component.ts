@@ -10,6 +10,7 @@ import { SharedModule } from '../../../modules/shared.module';
 import { FileInterface } from '../file.interface';
 import { UploadAbstractDirective, UploadBatchSummary } from '../upload-abstract.directive';
 import { getRouteUsageLimitForRole } from '@shared/limits';
+import { UploadError } from '../../../services/upload-error';
 
 const SUPPORTED_ROUTE_UPLOAD_EXTENSIONS = new Set(['fit', 'gpx']);
 const TEXT_COMPRESSIBLE_ROUTE_EXTENSIONS = new Set(['gpx']);
@@ -140,7 +141,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective implements On
           fileType,
           errorCategory: 'unsupported_format',
         });
-        reject(new Error('Only FIT and GPX route files are supported.'));
+        reject(new UploadError('Only FIT and GPX route files are supported.', 415, 'unsupported_format'));
         return;
       }
 

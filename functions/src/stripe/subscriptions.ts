@@ -28,6 +28,7 @@
  * Grace period data is stored in `users/{uid}/system/status`:
  * - `gracePeriodUntil`: Timestamp when grace period expires
  * - `lastDowngradedAt`: Timestamp of when the downgrade was detected
+ * - `scheduledGracePeriodUntil`: Exact future grace deadline promised when cancellation is scheduled
  *
  * ## Orphan Prevention
  * The trigger checks if the user document exists before processing. This prevents
@@ -42,11 +43,19 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { reconcileClaims } from './claims';
 import { checkAndSendSubscriptionEmails } from './email-triggers';
-import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
+import {
+    GRACE_PERIOD_DAYS,
+} from '../../../shared/limits';
 import {
     clearServiceDisconnectPending,
     isServiceDisconnectPendingForUser,
 } from '../service-disconnect-pending';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import {
+    getCanonicalEndingSubscription,
+    getGracePeriodUntilFromSubscriptionPeriodEnd,
+    getTimestampMillis,
+} from './subscription-state';
 
 const USER_DELETION_TOMBSTONES_COLLECTION = 'userDeletionTombstones';
 const SUBSCRIPTION_ENFORCED_SERVICE_NAMES: ReadonlyArray<ServiceNames> = [
@@ -54,18 +63,6 @@ const SUBSCRIPTION_ENFORCED_SERVICE_NAMES: ReadonlyArray<ServiceNames> = [
     ServiceNames.COROSAPI,
     ServiceNames.GarminAPI,
 ];
-
-const getTimestampMillis = (value: unknown): number | null => {
-    if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
-        return (value as { toMillis: () => number }).toMillis();
-    }
-
-    if (value instanceof Date) {
-        return value.getTime();
-    }
-
-    return null;
-};
 
 const clearPendingServiceDisconnectsForRestoredEntitlement = async (
     uid: string,
@@ -88,12 +85,6 @@ const clearPendingServiceDisconnectsForRestoredEntitlement = async (
         }
     }));
 };
-
-async function isCurrentGracePeriodActive(systemStatusRef: admin.firestore.DocumentReference): Promise<boolean> {
-    const systemDoc = await systemStatusRef.get();
-    const gracePeriodUntilMs = getTimestampMillis(systemDoc.data()?.gracePeriodUntil);
-    return gracePeriodUntilMs !== null && gracePeriodUntilMs > Date.now();
-}
 
 const hasActiveDeletionMarker = async (
     deletionMarkerRef: admin.firestore.DocumentReference,
@@ -162,7 +153,7 @@ const hasActiveDeletionMarker = async (
  * ## Error Handling
  * - **User Not Found**: Logs warning and exits gracefully
  * - **No Active Subscription**: Sets grace period and role to 'free'
- * - **Other Errors**: Logged but don't crash the function
+ * - **State Write Errors**: Propagated so processing cannot continue from a partial grace-state update
  *
  * ## Configuration
  * - **Region**: europe-west3
@@ -174,13 +165,16 @@ const hasActiveDeletionMarker = async (
  */
 export const onSubscriptionUpdated = onDocumentWritten({
     document: 'customers/{uid}/subscriptions/{subscriptionId}',
-    region: 'europe-west3'
+    region: 'europe-west3',
+    retry: true,
 }, async (event) => {
     const uid = event.params.uid;
     const firestore = admin.firestore();
     const userDocRef = firestore.collection('users').doc(uid);
     const deletionMarkerRef = firestore.collection(USER_DELETION_TOMBSTONES_COLLECTION).doc(uid);
     const systemStatusRef = firestore.doc(`users/${uid}/system/status`);
+    const beforeSubscription = event.data?.before.data();
+    const afterSubscription = event.data?.after.data();
 
     logger.info(`[onSubscriptionUpdated] Change detected for user ${uid}. Reconciling claims...`);
 
@@ -206,92 +200,111 @@ export const onSubscriptionUpdated = onDocumentWritten({
         if (error.code === 'auth/user-not-found' || error.code === 'not-found' || error.message?.includes('No active subscription found')) {
             logger.info(`[onSubscriptionUpdated] reconcileClaims skipped or failed gracefully for ${uid}: ${error.message || 'not found'}`);
         } else {
-            logger.warn(`[onSubscriptionUpdated] Non-critical error during initial reconcileClaims for ${uid}:`, error);
+            logger.error(`[onSubscriptionUpdated] Initial reconcileClaims failed for ${uid}; retrying the subscription event.`, error);
+            throw error;
         }
     }
 
     const subscriptionsRef = firestore.collection(`customers/${uid}/subscriptions`);
-    const activeSnapshot = await subscriptionsRef
-        .where('status', 'in', ['active', 'trialing'])
-        .limit(1)
-        .get();
+    const activeSubscriptionsQuery = subscriptionsRef
+        .where('status', 'in', ['active', 'trialing']);
+    const eventCancellationSubscription = [afterSubscription, beforeSubscription]
+        .find(subscription => subscription?.cancel_at_period_end === true);
+    const fallbackGracePeriodUntil = getGracePeriodUntilFromSubscriptionPeriodEnd(
+        eventCancellationSubscription,
+    ) || admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
+    );
 
-    if (activeSnapshot.empty) {
-        logger.info(`[onSubscriptionUpdated] No active subscriptions for ${uid}. Checking for previous paid state...`);
-
-        const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
-            new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
+    const gracePeriodResult = await firestore.runTransaction(async (transaction) => {
+        const deletionGuardPromise = getUserDeletionGuardStateInTransaction(
+            firestore,
+            transaction,
+            uid,
         );
-        const gracePeriodResult = await firestore.runTransaction(async (transaction) => {
-            const [latestDeletionMarkerDoc, latestUserDoc, systemDoc] = await Promise.all([
-                transaction.get(deletionMarkerRef),
-                transaction.get(userDocRef),
-                transaction.get(systemStatusRef)
-            ]);
+        const [deletionGuard, latestActiveSnapshot, systemDoc] = await Promise.all([
+            deletionGuardPromise,
+            transaction.get(activeSubscriptionsQuery),
+            transaction.get(systemStatusRef),
+        ]);
 
-            if (latestDeletionMarkerDoc.exists) {
-                const expireAtMs = getTimestampMillis(latestDeletionMarkerDoc.data()?.expireAt);
-                if (expireAtMs !== null && expireAtMs <= Date.now()) {
-                    transaction.delete(deletionMarkerRef);
-                } else {
-                    return 'skip-deleted-user' as const;
-                }
-            }
+        if (deletionGuard.shouldSkip) {
+            return deletionGuard.deletionInProgress
+                ? { status: 'skip-deleted-user' as const }
+                : { status: 'skip-missing-user' as const };
+        }
 
-            if (!latestUserDoc.exists) {
-                return 'skip-missing-user' as const;
-            }
-
-            if (systemDoc.data()?.gracePeriodUntil) {
-                return 'already-set' as const;
-            }
-
+        if (!latestActiveSnapshot.empty) {
+            const scheduledGracePeriodUntil = getCanonicalEndingSubscription(
+                latestActiveSnapshot.docs,
+            )?.scheduledGracePeriodUntil || null;
             transaction.set(systemStatusRef, {
-                gracePeriodUntil,
-                lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
+                gracePeriodUntil: admin.firestore.FieldValue.delete(),
+                scheduledGracePeriodUntil: scheduledGracePeriodUntil
+                    || admin.firestore.FieldValue.delete(),
+                lastDowngradedAt: admin.firestore.FieldValue.delete(),
             }, { merge: true });
 
-            return 'set' as const;
-        });
-
-        if (gracePeriodResult === 'skip-deleted-user') {
-            logger.warn(`[onSubscriptionUpdated] User ${uid} was marked for deletion before setting grace period. Skipping follow-up processing.`);
-            return;
+            return {
+                status: 'active' as const,
+                scheduledGracePeriodUntil,
+            };
         }
 
-        if (gracePeriodResult === 'skip-missing-user') {
-            logger.warn(`[onSubscriptionUpdated] User ${uid} no longer exists before setting grace period. Skipping to prevent orphaned subcollections.`);
-            return;
+        const existingGracePeriodUntil = systemDoc.data()?.gracePeriodUntil;
+        if (existingGracePeriodUntil) {
+            return {
+                status: 'already-set' as const,
+                gracePeriodUntil: existingGracePeriodUntil,
+            };
         }
 
-        if (gracePeriodResult === 'set') {
-            logger.info(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
+        const scheduledGracePeriodUntilMs = getTimestampMillis(systemDoc.data()?.scheduledGracePeriodUntil);
+        const gracePeriodUntil = scheduledGracePeriodUntilMs === null
+            ? fallbackGracePeriodUntil
+            : admin.firestore.Timestamp.fromDate(new Date(scheduledGracePeriodUntilMs));
 
-            // Re-reconcile to ensure the new grace period is in the Auth claims
-            const claimsResult = await reconcileClaims(uid);
-            latestReconciledRole = typeof claimsResult?.role === 'string' ? claimsResult.role : latestReconciledRole;
-            await clearPendingServiceDisconnectsForRestoredEntitlement(uid, 'active_grace_period');
-        } else if (gracePeriodResult === 'already-set' && await isCurrentGracePeriodActive(systemStatusRef)) {
-            await clearPendingServiceDisconnectsForRestoredEntitlement(uid, 'active_grace_period');
+        transaction.set(systemStatusRef, {
+            gracePeriodUntil,
+            scheduledGracePeriodUntil: admin.firestore.FieldValue.delete(),
+            lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        return { status: 'set' as const, gracePeriodUntil };
+    });
+
+    if (gracePeriodResult.status === 'skip-deleted-user') {
+        logger.warn(`[onSubscriptionUpdated] User ${uid} was marked for deletion before updating grace state. Skipping follow-up processing.`);
+        return;
+    }
+
+    if (gracePeriodResult.status === 'skip-missing-user') {
+        logger.warn(`[onSubscriptionUpdated] User ${uid} no longer exists before updating grace state. Skipping to prevent orphaned subcollections.`);
+        return;
+    }
+
+    if (gracePeriodResult.status === 'active') {
+        if (gracePeriodResult.scheduledGracePeriodUntil) {
+            logger.info(`[onSubscriptionUpdated] All active subscriptions for ${uid} are scheduled to end. Preserving canonical grace deadline ${gracePeriodResult.scheduledGracePeriodUntil.toDate().toISOString()}.`);
+        } else {
+            logger.info(`[onSubscriptionUpdated] Continuing active subscription found. Clearing grace state for ${uid}.`);
         }
-    } else {
-        // User has an active sub. Clear grace period if it exists.
-        if (await hasActiveDeletionMarker(deletionMarkerRef, uid, 'onSubscriptionUpdated')) {
-            logger.warn(`[onSubscriptionUpdated] User ${uid} was marked for deletion before clearing grace period. Skipping follow-up processing.`);
-            return;
-        }
 
-        logger.info(`[onSubscriptionUpdated] Active subscription found. Clearing grace period for ${uid}.`);
-        await systemStatusRef.update({
-            gracePeriodUntil: admin.firestore.FieldValue.delete(),
-            lastDowngradedAt: admin.firestore.FieldValue.delete()
-        }).catch(() => { }); // Ignore error if field doesn't exist
-
-        // Re-reconcile to ensure the cleared grace period is reflected in Auth claims
         const claimsResult = await reconcileClaims(uid);
         latestReconciledRole = typeof claimsResult?.role === 'string' ? claimsResult.role : latestReconciledRole;
         if (latestReconciledRole === 'pro') {
             await clearPendingServiceDisconnectsForRestoredEntitlement(uid, 'active_pro_subscription');
+        }
+    } else {
+        if (gracePeriodResult.status === 'set') {
+            logger.info(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodResult.gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
+            const claimsResult = await reconcileClaims(uid);
+            latestReconciledRole = typeof claimsResult?.role === 'string' ? claimsResult.role : latestReconciledRole;
+        }
+
+        const gracePeriodUntilMs = getTimestampMillis(gracePeriodResult.gracePeriodUntil);
+        if (gracePeriodUntilMs !== null && gracePeriodUntilMs > Date.now()) {
+            await clearPendingServiceDisconnectsForRestoredEntitlement(uid, 'active_grace_period');
         }
     }
 
@@ -306,8 +319,8 @@ export const onSubscriptionUpdated = onDocumentWritten({
         await checkAndSendSubscriptionEmails(
             uid,
             event.params.subscriptionId,
-            event.data.before.data(),
-            event.data.after.data(),
+            beforeSubscription,
+            afterSubscription,
             event.id
         );
     }

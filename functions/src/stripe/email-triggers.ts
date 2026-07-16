@@ -34,32 +34,53 @@
 
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { getUsageLimitForRole, USAGE_LIMITS } from '../../../shared/limits';
 import { ROLE_HIERARCHY, ROLE_DISPLAY_NAMES } from '../shared/pricing';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { DocumentData } from 'firebase-admin/firestore';
+import { isDeviceSyncEnabledForRole } from '../../../shared/limits';
+import {
+    buildEmailPlanDetails,
+    EMAIL_LINKS,
+    formatEmailDate,
+    formatGracePeriodEnd,
+    TRANSACTIONAL_EMAIL_FROM,
+    TRANSACTIONAL_EMAIL_REPLY_TO,
+} from '../email/config';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import {
+    getCanonicalEndingSubscription,
+    getTimestampMillis,
+    isActiveSubscription,
+} from './subscription-state';
 
+interface PendingSubscriptionEmail {
+    id: string;
+    label: string;
+    payload: FirebaseFirestore.DocumentData;
+}
 
-/**
- * Formats a Firestore Timestamp to a human-readable date string.
- *
- * @param timestamp - Firestore Timestamp to format
- * @returns Formatted date string (e.g., "15 January 2025")
- *
- * @example
- * formatDate(admin.firestore.Timestamp.now()) // "3 January 2026"
- *
- * @internal
- */
-const formatDate = (timestamp: admin.firestore.Timestamp): string => {
-    return timestamp.toDate().toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-    });
-};
+function isAuthUserNotFound(error: unknown): boolean {
+    const authError = error as { code?: string; errorInfo?: { code?: string } };
+    return authError.code === 'auth/user-not-found'
+        || authError.errorInfo?.code === 'auth/user-not-found';
+}
 
-
+function buildMailPayload(
+    recipient: string,
+    templateName: string,
+    data: Record<string, unknown>,
+): FirebaseFirestore.DocumentData {
+    return {
+        to: recipient,
+        from: TRANSACTIONAL_EMAIL_FROM,
+        replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
+        template: {
+            name: templateName,
+            data,
+        },
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
+    };
+}
 
 /**
  * Analyzes subscription changes and queues appropriate transactional emails.
@@ -90,10 +111,11 @@ const formatDate = (timestamp: admin.firestore.Timestamp): string => {
  * - **Template**: `subscription_cancellation`
  * - **Data**: `{ role, expiration_date }`
  *
- * ## Idempotency
- * Each email type checks if a mail document with its unique ID already exists
- * before creating a new one. This ensures emails are not duplicated even if
- * the function is triggered multiple times for the same event.
+ * ## Idempotency and current-state validation
+ * Mail documents are created in a transaction that re-reads the current
+ * subscription, all active subscriptions, and the account-deletion guard.
+ * Existing deterministic mail IDs are preserved without resetting delivery
+ * state, and stale or non-terminal cancellation events are skipped.
  *
  * @param uid - Firebase user ID (owner of the subscription)
  * @param subscriptionId - Stripe subscription ID (sub_xxx)
@@ -123,139 +145,179 @@ export async function checkAndSendSubscriptionEmails(
 ): Promise<void> {
     const hierarchy = ROLE_HIERARCHY as Record<string, number>;
     const displayNames = ROLE_DISPLAY_NAMES as Record<string, string>;
+    const wasActive = isActiveSubscription(before);
+    const isEventNowActive = isActiveSubscription(after);
+    const shouldWelcome = !!after?.role && isEventNowActive && !wasActive;
+    const oldRole = before?.role;
+    const newRole = after?.role;
+    const oldLevel = oldRole ? hierarchy[oldRole] || 0 : 0;
+    const newLevel = newRole ? hierarchy[newRole] || 0 : 0;
+    const shouldUpgrade = !!oldRole && !!newRole && oldRole !== newRole && newLevel > oldLevel;
+    const shouldDowngrade = !!oldRole && !!newRole && oldRole !== newRole && newLevel < oldLevel;
+    const shouldCancel = !!before && !!after
+        && !before.cancel_at_period_end
+        && after.cancel_at_period_end === true
+        && getTimestampMillis(after.current_period_end) !== null;
 
+    if (!shouldWelcome && !shouldUpgrade && !shouldDowngrade && !shouldCancel) {
+        return;
+    }
 
-    // 1. Welcome Email
-    // Trigger: New active/trialing subscription.
-    // Condition: No 'before' state (creation) OR 'before' state was NOT active/trialing, AND 'after' IS active/trialing.
-    const isNowActive = after && ['active', 'trialing'].includes(after.status);
-    const wasActive = before && ['active', 'trialing'].includes(before.status);
+    let recipient: string | undefined;
+    try {
+        recipient = (await admin.auth().getUser(uid)).email;
+    } catch (error) {
+        if (isAuthUserNotFound(error)) {
+            logger.info('[checkAndSendSubscriptionEmails] Skipping subscription email because the Auth user no longer exists.', { uid });
+            return;
+        }
+        throw error;
+    }
 
-    if (isNowActive && !wasActive && after.role) {
-        // Welcome Email Logic
-        const mailDocId = `welcome_email_${subscriptionId}`;
-        const mailRef = admin.firestore().collection('mail').doc(mailDocId);
-        const mailDoc = await mailRef.get();
+    if (!recipient) {
+        logger.info('[checkAndSendSubscriptionEmails] Skipping subscription email because the Auth user has no email.', { uid });
+        return;
+    }
 
-        if (!mailDoc.exists) {
-            const userRecord = await admin.auth().getUser(uid);
-            if (userRecord.email) {
-                logger.info(`[checkAndSendSubscriptionEmails] Queuing welcome email for user ${uid}, subscription ${subscriptionId}`);
-                await mailRef.set({
-                    to: userRecord.email,
-                    from: 'Quantified Self <hello@quantified-self.io>',
-                    template: {
-                        name: 'welcome_email',
-                        data: {
-                            role: displayNames[after.role] || after.role,
-                        },
-                    },
-                    expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
+    const firestore = admin.firestore();
+    const currentSubscriptionRef = firestore.doc(`customers/${uid}/subscriptions/${subscriptionId}`);
+    const activeSubscriptionsQuery = firestore.collection(`customers/${uid}/subscriptions`)
+        .where('status', 'in', ['active', 'trialing'])
+        .orderBy('created', 'desc');
+
+    const result = await firestore.runTransaction(async transaction => {
+        const [deletionGuard, currentSubscriptionDoc, activeSubscriptionsSnapshot] = await Promise.all([
+            getUserDeletionGuardStateInTransaction(firestore, transaction, uid),
+            transaction.get(currentSubscriptionRef),
+            transaction.get(activeSubscriptionsQuery),
+        ]);
+
+        if (deletionGuard.shouldSkip) {
+            return { status: 'skip-deleted-user' as const, queuedLabels: [] as string[] };
+        }
+
+        const currentSubscription = currentSubscriptionDoc.data();
+        if (!currentSubscriptionDoc.exists || !currentSubscription || !isActiveSubscription(currentSubscription)) {
+            return { status: 'skip-stale-event' as const, queuedLabels: [] as string[] };
+        }
+
+        const pendingEmails: PendingSubscriptionEmail[] = [];
+        const effectiveSubscriptionId = activeSubscriptionsSnapshot.docs[0]?.id;
+        const triggeringSubscriptionDefinesMembership = effectiveSubscriptionId === subscriptionId;
+
+        if (shouldWelcome && currentSubscription.role) {
+            const currentRole = `${currentSubscription.role}`;
+            pendingEmails.push({
+                id: `welcome_email_${subscriptionId}`,
+                label: 'welcome',
+                payload: buildMailPayload(recipient, 'welcome_email', {
+                    role: displayNames[currentRole] || currentRole,
+                    is_trial: currentSubscription.status === 'trialing',
+                    ...buildEmailPlanDetails(currentRole),
+                    dashboard_url: EMAIL_LINKS.dashboard,
+                }),
+            });
+        }
+
+        if (shouldUpgrade
+            && wasActive
+            && isEventNowActive
+            && triggeringSubscriptionDefinesMembership
+            && currentSubscription.role === newRole) {
+            pendingEmails.push({
+                id: `upgrade_${eventId}`,
+                label: 'upgrade',
+                payload: buildMailPayload(recipient, 'subscription_upgrade', {
+                    new_role: displayNames[newRole] || newRole,
+                    old_role: displayNames[oldRole] || oldRole,
+                    ...buildEmailPlanDetails(newRole),
+                    dashboard_url: EMAIL_LINKS.dashboard,
+                }),
+            });
+        }
+
+        if (shouldDowngrade
+            && wasActive
+            && isEventNowActive
+            && triggeringSubscriptionDefinesMembership
+            && currentSubscription.role === newRole) {
+            pendingEmails.push({
+                id: `downgrade_${eventId}`,
+                label: 'downgrade',
+                payload: buildMailPayload(recipient, 'subscription_downgrade', {
+                    new_role: displayNames[newRole] || newRole,
+                    old_role: displayNames[oldRole] || oldRole,
+                    ...buildEmailPlanDetails(newRole),
+                    device_sync_will_end: isDeviceSyncEnabledForRole(oldRole)
+                        && !isDeviceSyncEnabledForRole(newRole),
+                    membership_url: EMAIL_LINKS.membership,
+                }),
+            });
+        }
+
+        const eventPeriodEndMs = getTimestampMillis(after?.current_period_end);
+        const currentPeriodEndMs = getTimestampMillis(currentSubscription.current_period_end);
+        if (shouldCancel
+            && currentSubscription.cancel_at_period_end === true
+            && eventPeriodEndMs !== null
+            && currentPeriodEndMs === eventPeriodEndMs) {
+            const canonicalEndingSubscription = getCanonicalEndingSubscription(activeSubscriptionsSnapshot.docs);
+            if (canonicalEndingSubscription) {
+                const canonicalRole = `${canonicalEndingSubscription.subscription.role || after?.role || ''}`;
+                const freePlanDetails = buildEmailPlanDetails('free');
+                const deviceSyncWillEnd = activeSubscriptionsSnapshot.docs.some(subscriptionDoc => (
+                    isDeviceSyncEnabledForRole(`${subscriptionDoc.data().role || ''}`)
+                ));
+                pendingEmails.push({
+                    id: `cancellation_${canonicalEndingSubscription.subscriptionId}_${Math.floor(canonicalEndingSubscription.currentPeriodEndMs / 1000)}`,
+                    label: 'cancellation',
+                    payload: buildMailPayload(recipient, 'subscription_cancellation', {
+                        role: displayNames[canonicalRole] || canonicalRole,
+                        expiration_date: formatEmailDate(canonicalEndingSubscription.subscription.current_period_end),
+                        grace_period_end: formatGracePeriodEnd(canonicalEndingSubscription.subscription.current_period_end),
+                        free_activity_description: freePlanDetails.activity_description,
+                        free_route_description: freePlanDetails.route_description,
+                        free_ai_insights_description: freePlanDetails.ai_insights_description,
+                        device_sync_will_end: deviceSyncWillEnd,
+                        membership_url: EMAIL_LINKS.membership,
+                    }),
                 });
             }
         }
+
+        if (pendingEmails.length === 0) {
+            return { status: 'skip-stale-event' as const, queuedLabels: [] as string[] };
+        }
+
+        const uniquePendingEmails = Array.from(new Map(
+            pendingEmails.map(email => [email.id, email]),
+        ).values());
+        const mailRefs = uniquePendingEmails.map(email => firestore.collection('mail').doc(email.id));
+        const existingMailDocs = await Promise.all(mailRefs.map(mailRef => transaction.get(mailRef)));
+        const queuedLabels: string[] = [];
+
+        uniquePendingEmails.forEach((email, index) => {
+            if (existingMailDocs[index].exists) {
+                return;
+            }
+            transaction.create(mailRefs[index], email.payload);
+            queuedLabels.push(email.label);
+        });
+
+        return { status: 'processed' as const, queuedLabels };
+    });
+
+    if (result.status === 'skip-deleted-user') {
+        logger.info('[checkAndSendSubscriptionEmails] Skipping subscription email because the user is missing or being deleted.', { uid });
+        return;
     }
 
-    // Ensure we have both before and after for comparison logic below
-    if (!before || !after) return;
-
-    // 2. Upgrade / Downgrade Logic
-    const oldRole = before.role;
-    const newRole = after.role;
-
-    if (oldRole && newRole && oldRole !== newRole) {
-
-        const oldLevel = hierarchy[oldRole] || 0;
-        const newLevel = hierarchy[newRole] || 0;
-
-        if (newLevel > oldLevel) {
-            // Upgrade
-            const mailId = `upgrade_${eventId}`;
-            const mailRef = admin.firestore().collection('mail').doc(mailId);
-            const exists = (await mailRef.get()).exists;
-
-            if (!exists) {
-                const userRecord = await admin.auth().getUser(uid);
-                if (userRecord.email) {
-                    logger.info(`[checkAndSendSubscriptionEmails] Queuing UPGRADE email for user ${uid}`);
-                    await mailRef.set({
-                        to: userRecord.email,
-                        from: 'Quantified Self <hello@quantified-self.io>',
-                        template: {
-                            name: 'subscription_upgrade',
-                            data: {
-                                new_role: displayNames[newRole] || newRole,
-                                old_role: displayNames[oldRole] || oldRole,
-                            }
-                        },
-                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-                    });
-                }
-            }
-        } else if (newLevel < oldLevel) {
-            // Downgrade
-            const mailId = `downgrade_${eventId}`;
-            const mailRef = admin.firestore().collection('mail').doc(mailId);
-            const exists = (await mailRef.get()).exists;
-            if (!exists) {
-                const userRecord = await admin.auth().getUser(uid);
-                if (userRecord.email) {
-                    let limit: number | null;
-                    try {
-                        limit = getUsageLimitForRole(newRole);
-                    } catch {
-                        limit = USAGE_LIMITS.free;
-                    }
-                    logger.info(`[checkAndSendSubscriptionEmails] Queuing DOWNGRADE email for user ${uid}`);
-                    await mailRef.set({
-                        to: userRecord.email,
-                        from: 'Quantified Self <hello@quantified-self.io>',
-                        template: {
-                            name: 'subscription_downgrade',
-                            data: {
-                                new_role: displayNames[newRole] || newRole,
-                                old_role: displayNames[oldRole] || oldRole,
-                                limit: limit === null ? 'Unlimited' : String(limit),
-                            }
-                        },
-                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-                    });
-                }
-            }
-        }
+    if (result.status === 'skip-stale-event') {
+        logger.info('[checkAndSendSubscriptionEmails] Skipping stale subscription email event.', { uid, subscriptionId, eventId });
+        return;
     }
-    // 3. Cancellation (Active -> Canceled/Non-renewing)
-    // Trigger: cancel_at_period_end goes from false -> true
-    if (before && after && !before.cancel_at_period_end && after.cancel_at_period_end) {
-        const currentPeriodEnd = after.current_period_end;
-        if (currentPeriodEnd) {
-            // We use subscriptionId + timestamp to allow for re-cancellation warnings if they renew
-            // and cancel again later (different period end)
-            // or just to avoid spamming if they toggle it quickly?
-            // Ideally triggering on the *change* is enough, but using period_end helps uniqueness if they renew/cancel multiple times.
-            const mailId = `cancellation_${subscriptionId}_${currentPeriodEnd.seconds}`;
 
-            const mailRef = admin.firestore().collection('mail').doc(mailId);
-            const exists = (await mailRef.get()).exists;
-
-            if (!exists) {
-                const userRecord = await admin.auth().getUser(uid);
-                if (userRecord.email) {
-                    logger.info(`[checkAndSendSubscriptionEmails] Queuing CANCELLATION email for user ${uid}`);
-                    await mailRef.set({
-                        to: userRecord.email,
-                        from: 'Quantified Self <hello@quantified-self.io>',
-                        template: {
-                            name: 'subscription_cancellation',
-                            data: {
-                                role: displayNames[after.role] || after.role,
-                                expiration_date: formatDate(currentPeriodEnd),
-                            }
-                        },
-                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-                    });
-                }
-            }
-        }
+    for (const label of result.queuedLabels) {
+        logger.info(`[checkAndSendSubscriptionEmails] Queued ${label} email for user ${uid}.`);
     }
 }

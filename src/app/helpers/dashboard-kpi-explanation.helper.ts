@@ -18,6 +18,8 @@ import {
 import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
@@ -31,9 +33,15 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
+import type {
+  DashboardAerobicCapacityContext,
+  DashboardAerobicDurabilityContext,
+  DashboardReadinessSignalsContext,
+} from './dashboard-training-insights.helper';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 
 export interface DashboardKpiExplanationRow {
@@ -65,6 +73,9 @@ export interface DashboardKpiExplanationInputs {
   efficiencyDelta4w?: DashboardEfficiencyDelta4wContext | null;
   freshnessForecast?: DashboardFreshnessForecastContext | null;
   intensityDistribution?: DashboardIntensityDistributionContext | null;
+  aerobicCapacity?: DashboardAerobicCapacityContext | null;
+  aerobicDurability?: DashboardAerobicDurabilityContext | null;
+  readinessSignals?: DashboardReadinessSignalsContext | null;
   locale?: string;
 }
 
@@ -76,7 +87,7 @@ export function buildDashboardKpiExplanation(
 ): DashboardKpiExplanationViewModel {
   const rows: DashboardKpiExplanationRow[] = [];
   const locale = inputs.locale || getBrowserLocale();
-  const description = resolveDescription(inputs.chartType);
+  const description = resolveDescription(inputs);
   const missingHint = resolveMissingHint(inputs.chartType);
 
   const statusLabel = formatStatus(inputs.status);
@@ -98,8 +109,16 @@ export function buildDashboardKpiExplanation(
   };
 }
 
-function resolveDescription(chartType: DashboardKpiChartType): string {
-  switch (chartType) {
+function resolveDescription(inputs: DashboardKpiExplanationInputs): string {
+  switch (inputs.chartType) {
+    case DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE:
+      return 'Shows the latest stable imported VO2 max observation. It is not inferred from FTP or critical power.';
+    case DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE:
+      return inputs.aerobicDurability?.metric === 'pace-retention'
+        ? 'Shows pool durability from persisted eligible activity evidence; higher pace retention is steadier.'
+        : 'Shows long-session durability from persisted eligible activity evidence; lower aerobic decoupling is steadier.';
+    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
+      return 'Combines available load, sleep, HRV, and overnight minimum heart-rate signals. Confidence reports evidence coverage separately.';
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
       return 'Combines current Form, ramp rate, CTL, and ATL into one current-state label.';
     case DASHBOARD_FORM_NOW_KPI_CHART_TYPE:
@@ -136,6 +155,12 @@ function resolveDescription(chartType: DashboardKpiChartType): string {
 
 function resolveMissingHint(chartType: DashboardKpiChartType): string {
   switch (chartType) {
+    case DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE:
+      return 'Needs a stable imported VO2 max observation from a running or cycling activity.';
+    case DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE:
+      return 'Needs eligible persisted durability evidence from comparable long aerobic activities.';
+    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
+      return 'Needs derived load or recorded overnight sleep; more personal baseline signals increase confidence.';
     case DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE:
     case DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE:
     case DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE:
@@ -158,6 +183,48 @@ function resolveMetricRows(
   locale: string,
 ): DashboardKpiExplanationRow[] {
   switch (inputs.chartType) {
+    case DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE:
+      return [
+        metricRow('Imported VO2 max', inputs.aerobicCapacity?.value, formatMetricValue, { suffix: ' ml/kg/min' }),
+        textRow('Discipline', inputs.aerobicCapacity?.discipline),
+        textRow('Source', inputs.aerobicCapacity?.sourceLabel),
+        textRow('Observations', inputs.aerobicCapacity?.observationCount),
+        metricRow('Same-source change', inputs.aerobicCapacity?.changePct, formatMetricValue, { signed: true, suffix: '%' }),
+      ].filter(isExplanationRow);
+    case DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE:
+      return [
+        textRow('Scope', inputs.aerobicDurability?.scopeLabel),
+        textRow('Output context', inputs.aerobicDurability?.contextLabel),
+        metricRow(
+          inputs.aerobicDurability?.metric === 'pace-retention' ? 'Pace retained' : 'Aerobic decoupling',
+          inputs.aerobicDurability?.value,
+          formatMetricValue,
+          { suffix: '%' },
+        ),
+        textRow('Eligible samples', inputs.aerobicDurability?.sampleCount),
+        metricRow('Eligibility', inputs.aerobicDurability?.eligibilityRatio === null || inputs.aerobicDurability?.eligibilityRatio === undefined
+          ? null
+          : inputs.aerobicDurability.eligibilityRatio * 100, formatMetricValue, { suffix: '%' }),
+      ].filter(isExplanationRow);
+    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
+      return [
+        textRow('Current label', inputs.readinessSignals?.label),
+        metricRow('Signal score', inputs.readinessSignals?.score, formatMetricValue, { suffix: '/100' }),
+        textRow('Confidence', inputs.readinessSignals?.confidence),
+        textRow('Available signals', inputs.readinessSignals
+          ? `${inputs.readinessSignals.availableSignalCount}/${inputs.readinessSignals.totalSignalCount}`
+          : ''),
+        metricRow('Form (TSB)', inputs.readinessSignals?.form, formatMetricValue, { signed: true }),
+        metricRow('Ramp rate', inputs.readinessSignals?.rampRate, formatMetricValue, { signed: true }),
+        metricRow('Sleep score', inputs.readinessSignals?.sleepScore, formatMetricValue),
+        dateRow('Latest sleep', inputs.readinessSignals?.latestSleepAtMs, locale),
+        metricRow('HRV vs baseline', inputs.readinessSignals?.hrvRatio === null || inputs.readinessSignals?.hrvRatio === undefined
+          ? null
+          : (inputs.readinessSignals.hrvRatio - 1) * 100, formatMetricValue, { signed: true, suffix: '%' }),
+        metricRow('Min HR vs baseline', inputs.readinessSignals?.minimumHeartRateRatio === null || inputs.readinessSignals?.minimumHeartRateRatio === undefined
+          ? null
+          : (inputs.readinessSignals.minimumHeartRateRatio - 1) * 100, formatMetricValue, { signed: true, suffix: '%' }),
+      ].filter(isExplanationRow);
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
       return [
         textRow('Current label', inputs.primaryValueText),
@@ -282,6 +349,14 @@ function resolveLatestWeekStartMs(inputs: DashboardKpiExplanationInputs): number
 
 function resolveLatestDayMs(inputs: DashboardKpiExplanationInputs): number | null {
   switch (inputs.chartType) {
+    case DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE:
+      return toFiniteNumber(inputs.aerobicCapacity?.lastSeenAtMs);
+    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
+      return maxFiniteNumber([
+        inputs.formNow?.latestDayMs,
+        inputs.rampRate?.latestDayMs,
+        inputs.readinessSignals?.latestSleepAtMs,
+      ]);
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
       return maxFiniteNumber([
         inputs.formNow?.latestDayMs,

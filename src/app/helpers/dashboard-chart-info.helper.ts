@@ -1,5 +1,7 @@
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -19,6 +21,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   isDashboardSpecialChartType,
@@ -32,7 +35,7 @@ const DASHBOARD_CHART_INFO_COPY: Record<DashboardSpecialChartType, string> = {
   [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'Freshness Forecast projects Form (TSB) for the next 7 days with zero new load. Rising values suggest recovery and freshness; lower values indicate accumulated fatigue.',
   [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Intensity Distribution groups weekly training into Easy (Z1-2), Moderate (Z3-4), and Hard (Z5-7). Power zones are used first; heart-rate zones are the fallback when power is missing.',
   [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Efficiency Trend is weekly duration-weighted avgPower/avgHeartRate for sessions that have both metrics. Higher values usually mean more power per beat at similar conditions.',
-  [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep Trend shows synced Garmin, Suunto, and COROS sessions separately by source. Stage stacks appear when the provider supplies them; otherwise total sleep is shown as unknown stage. Vitals lines appear for recorded HRV, heart rate, and SpO2 when available.',
+  [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep Trend shows synced Garmin, Suunto, and COROS sessions separately by source. Stage stacks appear when the provider supplies them; otherwise total sleep is shown as unknown stage. Vitals lines appear for recorded HRV, average heart rate, minimum heart rate, and SpO2 when available. Dashed reference lines show the selected range average for HRV and both heart-rate series.',
   [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Power Curve compares your prepared best power per duration inside this tile range with either the latest activity or a recent-best window. Cycling and running Power Curve tiles use separate curated snapshots, so their envelopes are not mixed.',
   [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'ACWR is acute-to-chronic load: last 7 days divided by (last 28 days / 4). Values near your normal range indicate stable load; sustained spikes can indicate overload risk.',
   [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'Ramp Rate is CTL(today) minus CTL(7 days ago). Positive values mean fitness load is ramping up, and negative values mean load is easing down.',
@@ -49,6 +52,9 @@ const DASHBOARD_CHART_INFO_COPY: Record<DashboardSpecialChartType, string> = {
   [DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'Easy % is the share of your latest weekly load spent in easy intensity (Z1-2). Higher values indicate more low-intensity base work.',
   [DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'Hard % is the share of your latest weekly load spent in hard intensity (Z5-7). Higher values indicate more high-intensity stress in that week.',
   [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Efficiency Δ (4w) compares the latest weekly efficiency to the prior up-to-4-week baseline. Positive delta means better efficiency versus baseline; negative means lower efficiency.',
+  [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'Aerobic Capacity shows the latest imported running or cycling VO2 max and compares only observations from the same provider source. It never substitutes FTP or critical power for VO2 max.',
+  [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'Aerobic Durability shows persisted long-session evidence. Running, cycling, and open-water scopes use aerobic decoupling; pool swimming uses pace retention. Lower decoupling or higher pace retention generally indicates better durability.',
+  [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'Readiness Signals combines current load, sleep score or duration, HRV versus your recent baseline, and overnight minimum heart rate versus baseline. Confidence reports how much evidence is available; this is a transparent training aid, not a medical score or VO2 estimate.',
 };
 
 export function resolveDashboardChartInfoTooltip(chartType: DashboardChartType | null | undefined): string | null {

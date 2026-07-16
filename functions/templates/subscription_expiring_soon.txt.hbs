@@ -1,0 +1,14 @@
+{{> email_transactional_header}}
+Reminder: your {{role}} membership ends on {{expiration_date}}
+
+Your {{role}} access is scheduled to end on {{expiration_date}}.
+
+Your 30-day grace period ends on {{grace_period_end}}. Your history stays in your account, while Free limits then apply to future uploads:
+- {{free_activity_description}}
+- {{free_route_description}}
+- {{free_ai_insights_description}}
+
+{{#if device_sync_will_end}}Garmin, Suunto, and COROS connections will be disconnected after the grace period.
+
+{{/if}}Keep my membership: {{membership_url}}
+{{> email_transactional_footer}}

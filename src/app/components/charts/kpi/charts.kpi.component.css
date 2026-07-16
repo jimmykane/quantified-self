@@ -35,6 +35,14 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.kpi-layout.kpi-layout-no-trend {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.kpi-layout.kpi-layout-row.kpi-layout-no-trend {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .kpi-header {
   display: grid;
   gap: 4px;
@@ -43,6 +51,10 @@
 }
 
 .kpi-layout-empty .kpi-header {
+  align-content: center;
+}
+
+.kpi-layout-no-trend .kpi-header {
   align-content: center;
 }
 
@@ -247,6 +259,10 @@
 }
 
 .kpi-layout-empty .kpi-sparkline-shell {
+  display: none;
+}
+
+.kpi-layout-no-trend .kpi-sparkline-shell {
   display: none;
 }
 

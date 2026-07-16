@@ -1,6 +1,7 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="!isLoading && showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="kpi-layout" [class.kpi-layout-dark]="darkTheme" [class.kpi-layout-row]="compactRow"
+    [class.kpi-layout-no-trend]="!hasTrendData"
     [class.kpi-layout-reserve-actions]="reserveTitleActionSpace" [class.kpi-layout-empty]="kpiNoDataState !== null">
     <header class="kpi-header" [class.kpi-header-reserve-actions]="reserveTitleActionSpace">
       @if (compactRow) {

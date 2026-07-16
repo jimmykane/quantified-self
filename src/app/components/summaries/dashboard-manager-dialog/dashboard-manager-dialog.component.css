@@ -25,37 +25,12 @@
 }
 
 .dashboard-manager-bulk-actions button {
-  min-width: 8rem;
+  min-width: 9.75rem;
 }
 
-.dashboard-manager-simplify-preview {
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 8px;
-  padding: 0.85rem;
-}
-
-.dashboard-manager-simplify-list {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0.65rem 0 0.85rem;
-}
-
-.dashboard-manager-simplify-list mat-checkbox {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.dashboard-manager-simplify-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
-.dashboard-manager-simplify-actions button {
+:host ::ng-deep .dashboard-manager-bulk-actions .mdc-button__label {
   align-items: center;
   display: inline-flex;
-  gap: 0.35rem;
 }
 
 .dashboard-manager-button-content {
@@ -67,6 +42,7 @@
   min-height: 1.125rem;
   min-width: 0;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .dashboard-manager-button-content mat-icon {

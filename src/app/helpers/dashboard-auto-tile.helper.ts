@@ -85,7 +85,7 @@ export const DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE: Record<DashboardDefau
 };
 export const DASHBOARD_AUTO_TILE_RECOVERY_NOW_ID = DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE[DASHBOARD_RECOVERY_NOW_CHART_TYPE];
 
-export const DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE: Record<DashboardKpiChartType, AppDashboardAutoTileId> = {
+export const DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE: Partial<Record<DashboardKpiChartType, AppDashboardAutoTileId>> = {
   [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'kpiAcwr',
   [DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'kpiRampRate',
   [DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'kpiMonotonyStrain',

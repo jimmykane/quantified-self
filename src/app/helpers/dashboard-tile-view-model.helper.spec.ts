@@ -18,6 +18,8 @@ import {
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -37,6 +39,7 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
@@ -1444,6 +1447,95 @@ describe('dashboard-tile-view-model.helper', () => {
     expect((viewModels[1] as any).chartType).toBe(DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE);
     expect((viewModels[1] as any).fatigueAtl?.latestDayMs).toBe(Date.UTC(2026, 0, 8));
     expect((viewModels[1] as any).fatigueAtl?.value).toBeCloseTo(14.6939, 4);
+
+    vi.useRealTimers();
+  });
+
+  it('should attach capacity, durability, and current readiness evidence to insight KPI tiles', () => {
+    const nowMs = Date.UTC(2026, 0, 8, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+
+    const viewModels = buildDashboardTileViewModels({
+      tiles: [
+        DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+        DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+        DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+      ].map((chartType, order) => ({
+        type: TileTypes.Chart,
+        order,
+        chartType,
+        dataType: DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        dataTimeInterval: TimeIntervals.Weekly,
+        size: { columns: 1, rows: 1 },
+      })) as any,
+      events: [],
+      readinessSleepSessions: [{
+        id: 'sleep-1',
+        sleepDate: '2026-01-08',
+        startTimeMs: nowMs - (9 * 60 * 60 * 1000),
+        endTimeMs: nowMs - (60 * 60 * 1000),
+        durationSeconds: 8 * 60 * 60,
+        score: { value: 88 },
+        source: { provider: 'GarminAPI', sourceSessionKey: 'sleep-1' },
+      } as any],
+      derivedMetrics: {
+        formNow: { value: 10, latestDayMs: nowMs, trend8Weeks: [] } as any,
+        rampRate: { rampRate: 1.5, latestDayMs: nowMs, trend8Weeks: [] } as any,
+        trainingCapacity: {
+          asOfDayMs: nowMs,
+          disciplines: [{
+            discipline: 'running',
+            ftpSetting: null,
+            modeledCriticalPower: null,
+            importedVo2Max: {
+              value: 54,
+              sourceKey: 'garmin / watch',
+              observationCount: 4,
+              previousValue: null,
+              previousAtMs: null,
+              previousSourceKey: null,
+              changePct: null,
+              lastSeenAtMs: nowMs,
+            },
+          }],
+        } as any,
+        trainingDurability: {
+          scopes: [{
+            scope: 'running',
+            current: {
+              coverage: { eligibilityRatio: 0.75 },
+              summaries: [{
+                context: {
+                  contextKey: 'running|grade-adjusted-speed',
+                  scope: 'running',
+                  outputSource: 'grade-adjusted-speed',
+                },
+                sampleCount: 3,
+                medianDecouplingPercent: 3.2,
+              }],
+            },
+            weeks: [],
+          }],
+        } as any,
+      },
+    });
+
+    expect((viewModels[0] as any).aerobicCapacity).toMatchObject({
+      value: 54,
+      sourceLabel: 'Garmin · Watch',
+    });
+    expect((viewModels[1] as any).aerobicDurability).toMatchObject({
+      value: 3.2,
+      contextLabel: 'Grade-adjusted speed',
+    });
+    expect((viewModels[2] as any).readinessSignals).toMatchObject({
+      rampRate: 1.5,
+      sleepScore: 88,
+      latestSleepAtMs: nowMs - (60 * 60 * 1000),
+    });
 
     vi.useRealTimers();
   });

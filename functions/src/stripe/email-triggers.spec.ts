@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as admin from 'firebase-admin';
-import { checkAndSendSubscriptionEmails } from './email-triggers';
-import { USAGE_LIMITS } from '../../../shared/limits';
+import { checkAndSendSubscriptionEmails as checkAndSendSubscriptionEmailsImpl } from './email-triggers';
 
 // Mock pricing
 vi.mock('../shared/pricing', () => ({
@@ -27,10 +26,19 @@ const docSpy = vi.fn();
 const getSpy = vi.fn();
 const setSpy = vi.fn();
 const getUserSpy = vi.fn();
+const firestoreDocSpy = vi.fn();
+const runTransactionSpy = vi.fn();
+const getUserDeletionGuardStateInTransaction = vi.hoisted(() => vi.fn());
+
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardStateInTransaction,
+}));
 
 // Firestore Mock Implementation
 const mockFirestore = {
-    collection: collectionSpy
+    collection: collectionSpy,
+    doc: firestoreDocSpy,
+    runTransaction: runTransactionSpy,
 };
 
 vi.mock('firebase-admin', () => ({
@@ -51,20 +59,84 @@ vi.mock('firebase-admin', () => ({
 }));
 
 describe('checkAndSendSubscriptionEmails', () => {
+    let currentSubscriptionData: Record<string, unknown> | undefined;
+    let activeSubscriptionData: Array<{ id: string; data: Record<string, unknown> }>;
+
+    const checkAndSendSubscriptionEmails = async (
+        uid: string,
+        subscriptionId: string,
+        before: Record<string, unknown> | undefined,
+        after: Record<string, unknown> | undefined,
+        eventId: string,
+        current = after,
+        active = current && ['active', 'trialing'].includes(`${current.status || ''}`)
+            ? [{ id: subscriptionId, data: current }]
+            : [],
+    ) => {
+        currentSubscriptionData = current;
+        activeSubscriptionData = active;
+        await checkAndSendSubscriptionEmailsImpl(uid, subscriptionId, before, after, eventId);
+    };
+
     beforeEach(() => {
         vi.clearAllMocks();
 
         setSpy.mockResolvedValue({} as any);
         getSpy.mockResolvedValue({ exists: false }); // Default: doc does not exist
+        currentSubscriptionData = undefined;
+        activeSubscriptionData = [];
+        getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            shouldSkip: false,
+            userExists: true,
+            deletionInProgress: false,
+        });
 
         docSpy.mockReturnValue({
             get: getSpy,
             set: setSpy
         });
 
-        collectionSpy.mockReturnValue({
-            doc: docSpy
+        const activeQuery = {
+            kind: 'active-query',
+            where: vi.fn().mockReturnThis(),
+            orderBy: vi.fn().mockReturnThis(),
+        };
+        collectionSpy.mockImplementation((path: string) => {
+            if (path === 'mail') {
+                return { doc: docSpy };
+            }
+            if (path.includes('/subscriptions')) {
+                return activeQuery;
+            }
+            return { doc: vi.fn() };
         });
+        firestoreDocSpy.mockImplementation((path: string) => ({ kind: 'current-subscription', path }));
+        runTransactionSpy.mockImplementation(async (handler: (transaction: {
+            get: (ref: { kind?: string; get?: () => Promise<unknown> }) => Promise<unknown>;
+            create: (ref: unknown, data: unknown) => void;
+        }) => Promise<unknown>) => handler({
+            get: async ref => {
+                if (ref.kind === 'current-subscription') {
+                    return {
+                        exists: currentSubscriptionData !== undefined,
+                        data: () => currentSubscriptionData,
+                    };
+                }
+                if (ref.kind === 'active-query') {
+                    return {
+                        empty: activeSubscriptionData.length === 0,
+                        docs: activeSubscriptionData.map(subscription => ({
+                            id: subscription.id,
+                            data: () => subscription.data,
+                        })),
+                    };
+                }
+                return ref.get!();
+            },
+            create: (_ref, data) => {
+                setSpy(data);
+            },
+        }));
 
         mockFirestore.collection = collectionSpy; // Ensure it's linked
 
@@ -93,11 +165,36 @@ describe('checkAndSendSubscriptionEmails', () => {
         expect(docSpy).toHaveBeenCalledWith(`welcome_email_${subId}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
             to: 'test@example.com',
+            from: 'Quantified Self <hello@quantified-self.io>',
+            replyTo: 'support@quantified-self.io',
             template: {
                 name: 'welcome_email',
-                data: { role: 'Pro' }
+                data: expect.objectContaining({
+                    role: 'Pro',
+                    is_trial: false,
+                    plan_details_available: true,
+                    activity_description: 'Unlimited activities',
+                    dashboard_url: 'https://quantified-self.io/dashboard'
+                })
             },
             expireAt: expect.any(Object)
+        }));
+    });
+
+    it('distinguishes a trial activation in the welcome template data', async () => {
+        await checkAndSendSubscriptionEmails(
+            'user1',
+            'sub-trial',
+            undefined,
+            { status: 'trialing', role: 'basic' },
+            'evt-trial'
+        );
+
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                name: 'welcome_email',
+                data: expect.objectContaining({ is_trial: true, role: 'Basic' })
+            })
         }));
     });
 
@@ -112,9 +209,17 @@ describe('checkAndSendSubscriptionEmails', () => {
 
         expect(docSpy).toHaveBeenCalledWith(`upgrade_${eventId}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            from: 'Quantified Self <hello@quantified-self.io>',
+            replyTo: 'support@quantified-self.io',
             template: {
                 name: 'subscription_upgrade',
-                data: { new_role: 'Pro', old_role: 'Basic' }
+                data: expect.objectContaining({
+                    new_role: 'Pro',
+                    old_role: 'Basic',
+                    plan_details_available: true,
+                    device_sync_description: 'Device sync with Garmin, Suunto, and COROS',
+                    dashboard_url: 'https://quantified-self.io/dashboard'
+                })
             },
             expireAt: expect.any(Object)
         }));
@@ -131,23 +236,66 @@ describe('checkAndSendSubscriptionEmails', () => {
 
         expect(docSpy).toHaveBeenCalledWith(`downgrade_${eventId}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            from: 'Quantified Self <hello@quantified-self.io>',
+            replyTo: 'support@quantified-self.io',
             template: {
                 name: 'subscription_downgrade',
-                data: {
+                data: expect.objectContaining({
                     new_role: 'Basic',
                     old_role: 'Pro',
-                    limit: String(USAGE_LIMITS.basic)
-                }
+                    activity_description: 'Up to 1,000 activities',
+                    route_description: 'Up to 100 saved routes',
+                    ai_insights_description: '50 AI Insights requests per billing period',
+                    device_sync_will_end: true,
+                    membership_url: 'https://quantified-self.io/pricing'
+                })
             },
             expireAt: expect.any(Object)
         }));
     });
 
+    it('should skip a role-change email when another subscription still defines the membership', async () => {
+        const before = { status: 'active', role: 'pro', created: 100 };
+        const after = { status: 'active', role: 'basic', created: 100 };
+        const continuingPro = { status: 'active', role: 'pro', created: 200 };
+
+        await checkAndSendSubscriptionEmails(
+            'user1',
+            'older-subscription',
+            before,
+            after,
+            'evt-shadowed-downgrade',
+            after,
+            [
+                { id: 'newer-pro-subscription', data: continuingPro },
+                { id: 'older-subscription', data: after },
+            ],
+        );
+
+        expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('should send only the activation email when an inactive subscription changes role on activation', async () => {
+        const before = { status: 'canceled', role: 'basic', created: 100 };
+        const after = { status: 'active', role: 'pro', created: 100 };
+
+        await checkAndSendSubscriptionEmails(
+            'user1',
+            'sub-reactivated',
+            before,
+            after,
+            'evt-reactivated-upgrade',
+        );
+
+        expect(docSpy).toHaveBeenCalledWith('welcome_email_sub-reactivated');
+        expect(docSpy).not.toHaveBeenCalledWith('upgrade_evt-reactivated-upgrade');
+        expect(setSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('should queue CANCELLATION email when cancel_at_period_end becomes true', async () => {
         const uid = 'user1';
         const subId = 'sub1';
-        const now = new Date();
-        const futureDate = new Date(now.getTime() + 86400000); // +1 day
+        const futureDate = new Date('2026-01-15T12:00:00.000Z');
         const timestamp = { seconds: Math.floor(futureDate.getTime() / 1000), toDate: () => futureDate };
 
         const before = { status: 'active', role: 'pro', cancel_at_period_end: false };
@@ -163,14 +311,114 @@ describe('checkAndSendSubscriptionEmails', () => {
 
         expect(docSpy).toHaveBeenCalledWith(`cancellation_${subId}_${timestamp.seconds}`);
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            from: 'Quantified Self <hello@quantified-self.io>',
+            replyTo: 'support@quantified-self.io',
             template: {
                 name: 'subscription_cancellation',
                 data: expect.objectContaining({
                     role: 'Pro',
-                    expiration_date: expect.any(String)
+                    expiration_date: '15 January 2026',
+                    grace_period_end: '14 February 2026',
+                    free_activity_description: 'Up to 100 activities',
+                    device_sync_will_end: true,
+                    membership_url: 'https://quantified-self.io/pricing'
                 })
             },
             expireAt: expect.any(Object)
+        }));
+    });
+
+    it('should skip a stale cancellation event after renewal', async () => {
+        const periodEnd = new Date('2026-01-15T12:00:00.000Z');
+        const timestamp = { seconds: Math.floor(periodEnd.getTime() / 1000), toDate: () => periodEnd };
+        const before = { status: 'active', role: 'pro', cancel_at_period_end: false };
+        const after = { status: 'active', role: 'pro', cancel_at_period_end: true, current_period_end: timestamp };
+        const current = { ...after, cancel_at_period_end: false };
+
+        await checkAndSendSubscriptionEmails(
+            'user1',
+            'sub1',
+            before,
+            after,
+            'evt-stale-cancellation',
+            current,
+            [{ id: 'sub1', data: current }],
+        );
+
+        expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('should skip cancellation mail while another active subscription continues', async () => {
+        const periodEnd = new Date('2026-01-15T12:00:00.000Z');
+        const timestamp = { seconds: Math.floor(periodEnd.getTime() / 1000), toDate: () => periodEnd };
+        const before = { status: 'active', role: 'pro', cancel_at_period_end: false };
+        const after = { status: 'active', role: 'pro', cancel_at_period_end: true, current_period_end: timestamp };
+        const continuing = {
+            status: 'active',
+            role: 'basic',
+            cancel_at_period_end: false,
+            current_period_end: timestamp,
+        };
+
+        await checkAndSendSubscriptionEmails(
+            'user1',
+            'sub1',
+            before,
+            after,
+            'evt-continuing-entitlement',
+            after,
+            [
+                { id: 'sub1', data: after },
+                { id: 'sub2', data: continuing },
+            ],
+        );
+
+        expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('should queue one cancellation mail for the latest ending subscription', async () => {
+        const earlierEnd = new Date('2026-01-15T12:00:00.000Z');
+        const laterEnd = new Date('2026-02-01T12:00:00.000Z');
+        const earlierTimestamp = { seconds: Math.floor(earlierEnd.getTime() / 1000), toDate: () => earlierEnd };
+        const laterTimestamp = { seconds: Math.floor(laterEnd.getTime() / 1000), toDate: () => laterEnd };
+        const before = { status: 'active', role: 'pro', cancel_at_period_end: false };
+        const after = {
+            status: 'active',
+            role: 'pro',
+            cancel_at_period_end: true,
+            current_period_end: earlierTimestamp,
+        };
+        const laterSubscription = {
+            status: 'active',
+            role: 'basic',
+            cancel_at_period_end: true,
+            current_period_end: laterTimestamp,
+        };
+
+        await checkAndSendSubscriptionEmails(
+            'user1',
+            'sub1',
+            before,
+            after,
+            'evt-all-ending',
+            after,
+            [
+                { id: 'sub1', data: after },
+                { id: 'sub2', data: laterSubscription },
+            ],
+        );
+
+        expect(docSpy).toHaveBeenCalledWith(`cancellation_sub2_${laterTimestamp.seconds}`);
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                name: 'subscription_cancellation',
+                data: expect.objectContaining({
+                    role: 'Basic',
+                    expiration_date: '1 February 2026',
+                    grace_period_end: '3 March 2026',
+                    device_sync_will_end: true,
+                }),
+            }),
         }));
     });
 
@@ -187,6 +435,26 @@ describe('checkAndSendSubscriptionEmails', () => {
         await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
 
         expect(docSpy).toHaveBeenCalledWith(`upgrade_${eventId}`);
+        expect(setSpy).not.toHaveBeenCalled();
+        expect(runTransactionSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should atomically skip mail creation when deletion starts before queueing', async () => {
+        getUserDeletionGuardStateInTransaction.mockResolvedValue({
+            shouldSkip: true,
+            userExists: true,
+            deletionInProgress: true,
+        });
+
+        await checkAndSendSubscriptionEmails(
+            'user1',
+            'sub1',
+            { status: 'active', role: 'basic' },
+            { status: 'active', role: 'pro' },
+            'evt-delete-race',
+        );
+
+        expect(getUserDeletionGuardStateInTransaction).toHaveBeenCalled();
         expect(setSpy).not.toHaveBeenCalled();
     });
 
@@ -286,10 +554,10 @@ describe('checkAndSendSubscriptionEmails', () => {
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
             template: {
                 name: 'subscription_upgrade',
-                data: {
+                data: expect.objectContaining({
                     new_role: 'Pro',
                     old_role: 'Basic'
-                }
+                })
             },
             expireAt: expect.any(Object)
         }));
@@ -343,7 +611,9 @@ describe('checkAndSendSubscriptionEmails', () => {
                 name: 'subscription_downgrade',
                 data: expect.objectContaining({
                     new_role: 'unknown-role',
-                    limit: String(USAGE_LIMITS.free)
+                    plan_details_available: false,
+                    activity_description: '',
+                    route_description: ''
                 })
             })
         }));
@@ -370,8 +640,8 @@ describe('checkAndSendSubscriptionEmails', () => {
     it('should use raw string for old_role if high-tier role has no display name (Fallback)', async () => {
         const uid = 'user_vip';
         const subId = 'sub_vip';
-        const before = { role: 'hidden_vip' };
-        const after = { role: 'basic' };
+        const before = { status: 'active', role: 'hidden_vip' };
+        const after = { status: 'active', role: 'basic' };
         const eventId = 'evt_fallback_1';
 
         await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
@@ -399,7 +669,11 @@ describe('checkAndSendSubscriptionEmails', () => {
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
             template: expect.objectContaining({
                 name: 'welcome_email',
-                data: { role: 'mystery-tier' }
+                data: expect.objectContaining({
+                    role: 'mystery-tier',
+                    plan_details_available: false,
+                    activity_description: ''
+                })
             })
         }));
     });

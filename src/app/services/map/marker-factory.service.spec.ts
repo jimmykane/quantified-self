@@ -81,6 +81,35 @@ describe('MarkerFactoryService', () => {
         expect(marker.textContent).not.toContain('turn_sharp_right');
     });
 
+    it('should create compact start and end dot markers', () => {
+        const start = service.createEndpointDotMarker({
+            color: '#0277bd',
+            endpoint: 'start',
+            title: 'Morning route start',
+            ariaLabel: 'Morning route start',
+        });
+        const end = service.createEndpointDotMarker({
+            color: '#0277bd',
+            endpoint: 'end',
+            title: 'Morning route end',
+            ariaLabel: 'Morning route end',
+        });
+
+        expect(start.dataset.endpoint).toBe('start');
+        expect(start.style.position).toBe('absolute');
+        expect(start.style.width).toBe('14px');
+        expect(start.style.height).toBe('14px');
+        expect(start.style.borderRadius).toBe('50%');
+        expect(start.style.backgroundColor).toBe('rgb(2, 119, 189)');
+        expect(start.getAttribute('aria-label')).toBe('Morning route start');
+        expect(start.children).toHaveLength(0);
+
+        expect(end.dataset.endpoint).toBe('end');
+        expect(end.getAttribute('role')).toBe('img');
+        expect(end.children).toHaveLength(1);
+        expect((end.firstElementChild as HTMLElement)?.style.backgroundColor).toBe('rgb(255, 255, 255)');
+    });
+
     it('should create home marker', () => {
         const marker = service.createHomeMarker('#00ff00');
         expect(marker.innerHTML).toContain('<svg');
