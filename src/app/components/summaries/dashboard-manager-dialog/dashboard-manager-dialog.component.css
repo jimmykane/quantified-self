@@ -28,6 +28,11 @@
   min-width: 8rem;
 }
 
+:host ::ng-deep .dashboard-manager-bulk-actions .mdc-button__label {
+  align-items: center;
+  display: inline-flex;
+}
+
 .dashboard-manager-button-content {
   align-items: center;
   display: inline-flex;

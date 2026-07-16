@@ -949,6 +949,9 @@ describe('DashboardManagerDialogComponent', () => {
     expect(styles).toContain('line-height: 1;');
     expect(styles).toContain('.dashboard-manager-button-content mat-icon');
     expect(styles).toContain('.dashboard-manager-button-content mat-spinner');
+    expect(styles).toMatch(
+      /:host ::ng-deep \.dashboard-manager-bulk-actions \.mdc-button__label\s*{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;/,
+    );
   });
 
   it('starts a new dashboard clean rather than adding default training tiles', () => {
