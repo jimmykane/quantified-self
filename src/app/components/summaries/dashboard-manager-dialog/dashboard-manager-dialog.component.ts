@@ -172,6 +172,7 @@ export interface DashboardManagerDialogData {
   user: AppUserInterface;
   initialMode?: 'add' | 'edit';
   initialEditTileOrder?: number | null;
+  previewTodaySummaryVisibility?: (showTodaySummary: boolean) => void;
 }
 
 export interface DashboardManagerDialogResult {
@@ -197,11 +198,12 @@ interface IconOption<TValue> {
 
 interface DashboardManagerSettingsSnapshot {
   tiles: TileSettingsInterface[];
+  showTodaySummary?: boolean;
   dismissedCuratedRecoveryNowTile?: boolean;
   autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
-type DashboardManagerSavingAction = 'save' | 'addRecommended' | 'addAll' | 'removeAll' | null;
+type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'addRecommended' | 'addAll' | 'removeAll' | null;
 
 @Component({
   selector: 'app-dashboard-manager-dialog',
@@ -433,6 +435,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public isSaving = false;
   public savingAction: DashboardManagerSavingAction = null;
   public saveError = '';
+  public showTodaySummary = true;
   public recommendedEligibility: DashboardManagerPresetEligibility = {
     'activity-history': false,
     sleep: false,
@@ -486,6 +489,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     if (!Array.isArray(this.data.user.settings.dashboardSettings.tiles)) {
       this.data.user.settings.dashboardSettings.tiles = [];
     }
+    this.showTodaySummary = this.data.user.settings.dashboardSettings.showTodaySummary !== false;
 
     this.dataGroups = this.buildDataGroups();
     this.ensurePresetSelection();
@@ -590,15 +594,15 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   get isAddRecommendedDisabled(): boolean {
-    return this.isSaving || this.getMissingRecommendedDashboardTiles().length === 0;
+    return this.isSaving || (this.showTodaySummary && this.getMissingRecommendedDashboardTiles().length === 0);
   }
 
   get isAddAllDisabled(): boolean {
-    return this.isSaving || this.getMissingAllDashboardTiles().length === 0;
+    return this.isSaving || (this.showTodaySummary && this.getMissingAllDashboardTiles().length === 0);
   }
 
   get isRemoveAllDisabled(): boolean {
-    return this.isSaving || this.dashboardTiles.length === 0;
+    return this.isSaving || (this.dashboardTiles.length === 0 && !this.showTodaySummary);
   }
 
   get isSaveSaving(): boolean {
@@ -615,6 +619,34 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
   get isRemoveAllSaving(): boolean {
     return this.savingAction === 'removeAll';
+  }
+
+  get isTodaySummarySaving(): boolean {
+    return this.savingAction === 'todaySummary';
+  }
+
+  async onTodaySummaryVisibilityChange(showTodaySummary: boolean): Promise<void> {
+    if (this.isSaving || this.showTodaySummary === showTodaySummary) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    this.startSaving('todaySummary');
+    this.saveError = '';
+    const dashboardSettings = this.data.user.settings.dashboardSettings;
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
+
+    try {
+      this.setTodaySummaryVisibility(dashboardSettings, showTodaySummary);
+      await this.persistDashboardSettings(dashboardSettings);
+      this.hasSavedChanges = true;
+      this.hapticsService.success();
+    } catch (error) {
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
+    } finally {
+      this.stopSaving();
+    }
   }
 
   onModeChange(nextMode: 'add' | 'edit'): void {
@@ -958,7 +990,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     try {
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
       const missingTiles = this.getMissingAllDashboardTiles(clonedTiles);
-      if (!missingTiles.length) {
+      if (!missingTiles.length && this.showTodaySummary) {
         this.saveError = 'All available dashboard tiles are already on your dashboard.';
         this.stopSaving();
         return;
@@ -972,6 +1004,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }
 
       dashboardSettings.tiles = clonedTiles;
+      this.setTodaySummaryVisibility(dashboardSettings, true);
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
@@ -1000,7 +1033,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       await this.refreshRecommendedEligibility();
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
       const missingTiles = this.getMissingRecommendedDashboardTiles(clonedTiles);
-      if (!missingTiles.length) {
+      if (!missingTiles.length && this.showTodaySummary) {
         this.saveError = 'All recommended dashboard tiles for your available data are already present.';
         this.stopSaving();
         return;
@@ -1014,6 +1047,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }
 
       dashboardSettings.tiles = clonedTiles;
+      this.setTodaySummaryVisibility(dashboardSettings, true);
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
@@ -1045,6 +1079,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
     try {
       dashboardSettings.tiles = [];
+      this.setTodaySummaryVisibility(dashboardSettings, false);
       this.markAllDashboardAutoTilesDismissed(dashboardSettings, Date.now());
       dashboardSettings.dismissedCuratedRecoveryNowTile = true;
       await this.persistDashboardSettings(dashboardSettings);
@@ -1170,6 +1205,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   ): DashboardManagerSettingsSnapshot {
     return {
       tiles: this.cloneTiles(dashboardSettings.tiles || []),
+      showTodaySummary: dashboardSettings.showTodaySummary,
       dismissedCuratedRecoveryNowTile: dashboardSettings.dismissedCuratedRecoveryNowTile,
       autoTiles: this.cloneAutoTiles(dashboardSettings.autoTiles || {}),
     };
@@ -1180,19 +1216,36 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     previousSettings: DashboardManagerSettingsSnapshot,
   ): void {
     dashboardSettings.tiles = this.cloneTiles(previousSettings.tiles);
+    if (previousSettings.showTodaySummary === undefined) {
+      delete dashboardSettings.showTodaySummary;
+    } else {
+      dashboardSettings.showTodaySummary = previousSettings.showTodaySummary;
+    }
+    this.showTodaySummary = previousSettings.showTodaySummary !== false;
+    this.data.previewTodaySummaryVisibility?.(this.showTodaySummary);
     dashboardSettings.dismissedCuratedRecoveryNowTile = previousSettings.dismissedCuratedRecoveryNowTile;
     dashboardSettings.autoTiles = previousSettings.autoTiles as AppDashboardSettingsInterface['autoTiles'];
   }
 
   private handleDashboardSettingsSaveError(error: unknown): void {
-    this.saveError = 'Could not save dashboard tile settings.';
+    this.saveError = 'Could not save dashboard settings.';
     this.hapticsService.error();
-    console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
+    console.error('[DashboardManagerDialogComponent] Failed to save dashboard settings', error);
+  }
+
+  private setTodaySummaryVisibility(
+    dashboardSettings: AppDashboardSettingsInterface,
+    showTodaySummary: boolean,
+  ): void {
+    dashboardSettings.showTodaySummary = showTodaySummary;
+    this.showTodaySummary = showTodaySummary;
+    this.data.previewTodaySummaryVisibility?.(showTodaySummary);
   }
 
   private async persistDashboardSettings(dashboardSettings: AppDashboardSettingsInterface): Promise<void> {
     const dashboardSettingsPatch: Partial<AppDashboardSettingsInterface> = {
       tiles: dashboardSettings.tiles || [],
+      showTodaySummary: dashboardSettings.showTodaySummary !== false,
     };
     if (dashboardSettings.autoTiles !== undefined) {
       dashboardSettingsPatch.autoTiles = dashboardSettings.autoTiles;
@@ -1520,8 +1573,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   private async confirmRemoveAllTiles(): Promise<boolean> {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Remove all dashboard tiles?',
-        message: 'This clears every chart and map tile from your dashboard. Automatic dashboard suggestions will also stay dismissed until you add them again.',
+        title: 'Clear dashboard?',
+        message: 'This hides the Today summary and clears every chart and map tile. Automatic dashboard suggestions will also stay dismissed until you add them again.',
         confirmLabel: 'Remove all',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',

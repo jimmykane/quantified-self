@@ -39,8 +39,26 @@
       </button>
     </div>
     <p class="dashboard-manager-hint">
-      Recommended adds a useful data-aware set. Everything adds every available preset, including overlapping metrics. Remove all clears the dashboard and prevents automatic suggestions from reappearing.
+      Recommended adds a useful data-aware set. Everything adds every available preset, including overlapping metrics. Remove all hides the Today summary, clears the dashboard, and prevents automatic suggestions from reappearing.
     </p>
+  </section>
+
+  <section class="dashboard-manager-section">
+    <div class="dashboard-manager-section-title">Dashboard content</div>
+    <div class="dashboard-manager-display-setting">
+      <mat-slide-toggle
+        data-testid="dashboard-manager-today-summary-toggle"
+        [checked]="showTodaySummary"
+        [disabled]="isSaving"
+        [attr.aria-busy]="isTodaySummarySaving"
+        (change)="onTodaySummaryVisibilityChange($event.checked)">
+        Show Today summary
+      </mat-slide-toggle>
+      @if (isTodaySummarySaving) {
+      <mat-spinner class="qs-spinner-primary" diameter="18" aria-label="Saving Today summary setting"></mat-spinner>
+      }
+    </div>
+    <p class="dashboard-manager-hint">Controls the dated current-state row above dashboard tiles.</p>
   </section>
 
   <section class="dashboard-manager-section">

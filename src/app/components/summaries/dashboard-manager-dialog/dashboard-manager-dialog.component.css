@@ -28,6 +28,17 @@
   min-width: 9.75rem;
 }
 
+.dashboard-manager-display-setting {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  min-height: 2rem;
+}
+
+.dashboard-manager-display-setting mat-spinner {
+  flex: 0 0 1.125rem;
+}
+
 :host ::ng-deep .dashboard-manager-bulk-actions .mdc-button__label {
   align-items: center;
   display: inline-flex;

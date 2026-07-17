@@ -299,6 +299,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('Dashboard **Today** header');
+    expect(gettingStartedSection?.content).toContain('**Show Today summary**');
+    expect(gettingStartedSection?.content).toContain('hides the Today summary');
     expect(gettingStartedSection?.content).toContain('Today rows stay compact');
     expect(gettingStartedSection?.content).toContain('KPI detail rows');
     expect(gettingStartedSection?.content).toContain('freshness date');

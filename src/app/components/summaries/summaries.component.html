@@ -1,7 +1,10 @@
 @if (tiles.length || showActions) {
 <section class="pie">
-  @if (showActions || kpiLaneTiles.length) {
-  <div class="dashboard-section-header dashboard-summary-header" aria-labelledby="dashboard-today-title">
+  @if (showTodaySummary || showActions) {
+  <div class="dashboard-section-header dashboard-summary-header" [class.dashboard-summary-header-actions-only]="!showTodaySummary"
+    [attr.aria-labelledby]="showTodaySummary ? 'dashboard-today-title' : null"
+    [attr.aria-label]="showTodaySummary ? null : 'Dashboard controls'">
+    @if (showTodaySummary) {
     <div class="dashboard-section-title-block">
       <mat-icon aria-hidden="true">today</mat-icon>
       <div class="dashboard-section-title-copy">
@@ -11,6 +14,7 @@
         </div>
       </div>
     </div>
+    }
     @if (showActions) {
     <div class="dashboard-section-actions">
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
@@ -26,6 +30,7 @@
     }
   </div>
   }
+  @if (showTodaySummary) {
   <section class="dashboard-current-state-row" aria-label="Current training state">
     <div class="dashboard-current-state-primary">
       <span>Current state</span>
@@ -39,6 +44,7 @@
       <div><dt>CTL / ATL</dt><dd>{{ dashboardCurrentState.ctlAtlText }}</dd></div>
     </dl>
   </section>
+  }
   @if (derivedMetricsBanner) {
   <div class="derived-metrics-banner" [class.pending]="derivedMetricsBanner.type === 'pending'"
     [class.warning]="derivedMetricsBanner.type === 'warning'">

@@ -218,6 +218,7 @@ describe('AppUserUtilities', () => {
             expect(settings.deviceDisplaySettings?.deviceColorByName).toEqual({});
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
+            expect(settings.dashboardSettings?.showTodaySummary).toBe(true);
             expect(settings.dashboardSettings?.eventTableFilters).toEqual({
                 searchTerm: null,
                 dateRange: DateRanges.thisWeek,
@@ -779,7 +780,7 @@ describe('AppUserUtilities', () => {
             const user = {
                 settings: {
                     appSettings: { theme: AppThemes.Dark, unitSetupCompleted: false } as any,
-                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false, sleepTrend: { range: '90d' } },
+                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false, showTodaySummary: false, sleepTrend: { range: '90d' } },
                     deviceDisplaySettings: {
                         deviceColorByName: {
                             ' Garmin   Edge ': '#00ffAA',
@@ -793,6 +794,7 @@ describe('AppUserUtilities', () => {
             expect((settings.appSettings as any)?.unitSetupCompleted).toBe(false);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
+            expect(settings.dashboardSettings?.showTodaySummary).toBe(false);
             expect(settings.dashboardSettings?.sleepTrend?.range).toBe('90d');
             expect(settings.deviceDisplaySettings?.deviceColorByName).toEqual({
                 'garmin edge': '#00FFAA',

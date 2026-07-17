@@ -115,7 +115,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
-- New dashboards start clean. The Dashboard **Today** header has a flat current-state row and an **Open Training** action.
+- New dashboards start clean. The optional Dashboard **Today** header has a flat current-state row and an **Open Training** action. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
 - **Training** remains the fixed analytical workspace. Dashboard tiles can reuse selected derived evidence without changing Training calculations or layout.
 - Existing curated and KPI tiles are preserved until you edit or remove them in Dashboard manager.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
@@ -149,7 +149,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
-- Dashboard manager bulk actions include **Add recommended**, which selects a useful set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, no more than 48 hours for sleep-only Readiness, and the prepared 1-year Power Curve snapshots), plus route, capacity, durability, and current readiness evidence; **Add everything**, which inserts every available preset including overlapping metrics; and **Remove all**, which clears every dashboard chart/map tile and keeps automatic suggestions dismissed.
+- Dashboard manager bulk actions include **Add recommended**, which selects a useful set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, no more than 48 hours for sleep-only Readiness, and the prepared 1-year Power Curve snapshots), plus route, capacity, durability, and current readiness evidence; **Add everything**, which inserts every available preset including overlapping metrics; and **Remove all**, which hides the Today summary, clears every dashboard chart/map tile, and keeps automatic suggestions dismissed. Add recommended and Add everything restore the Today summary.
 
 ### Training workspace
 

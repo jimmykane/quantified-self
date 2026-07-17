@@ -135,6 +135,7 @@ function expectDashboardSettingsOnlyWrite(
   const dashboardSettings = dialogData.user.settings.dashboardSettings;
   const dashboardSettingsPatch: Record<string, unknown> = {
     tiles: dashboardSettings.tiles || [],
+    showTodaySummary: dashboardSettings.showTodaySummary !== false,
   };
   if (dashboardSettings.autoTiles !== undefined) {
     dashboardSettingsPatch.autoTiles = dashboardSettings.autoTiles;
@@ -185,7 +186,12 @@ describe('DashboardManagerDialogComponent', () => {
     success: ReturnType<typeof vi.fn>;
     error: ReturnType<typeof vi.fn>;
   };
-  let dialogData: { user: any; initialMode?: 'add' | 'edit'; initialEditTileOrder?: number | null };
+  let dialogData: {
+    user: any;
+    initialMode?: 'add' | 'edit';
+    initialEditTileOrder?: number | null;
+    previewTodaySummaryVisibility?: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     dialogData = {
@@ -973,6 +979,8 @@ describe('DashboardManagerDialogComponent', () => {
     expect(template).toContain('Add recommended');
     expect(template).toContain('Add everything');
     expect(template).toContain('Remove all');
+    expect(template).toContain('Show Today summary');
+    expect(template).toContain('dashboard-manager-today-summary-toggle');
     expect(template).toContain('Preset category');
     expect(template).toContain('Presets');
     expect(template).toContain('Apply preset');
@@ -993,7 +1001,39 @@ describe('DashboardManagerDialogComponent', () => {
     expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
     expect(component.dashboardTiles).toEqual([]);
     expect(component.isAddAllDisabled).toBe(false);
-    expect(component.isRemoveAllDisabled).toBe(true);
+    expect(component.isRemoveAllDisabled).toBe(false);
+  });
+
+  it('persists Today summary visibility independently from dashboard tiles', async () => {
+    dialogData.previewTodaySummaryVisibility = vi.fn();
+
+    await component.onTodaySummaryVisibilityChange(false);
+
+    expect(component.showTodaySummary).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(false);
+    expect(dialogData.previewTodaySummaryVisibility).toHaveBeenCalledWith(false);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
+    expect(hapticsMock.success).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalled();
+
+    component.close();
+
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores Today summary visibility when its save fails', async () => {
+    dialogData.user.settings.dashboardSettings.showTodaySummary = true;
+    dialogData.previewTodaySummaryVisibility = vi.fn();
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.onTodaySummaryVisibilityChange(false);
+
+    expect(component.saveError).toBe('Could not save dashboard settings.');
+    expect(component.showTodaySummary).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
+    expect(dialogData.previewTodaySummaryVisibility.mock.calls).toEqual([[false], [true]]);
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalled();
   });
 
   it('adds every available dashboard manager preset tile when adding all', async () => {
@@ -1023,6 +1063,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(tiles.some((tile: any) => tile.dataType === DataEnergy.type)).toBe(true);
     expect(tiles.some((tile: any) => tile.dataType === DataHeartRateAvg.type)).toBe(true);
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
     expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toMatchObject({
       state: 'added',
       source: 'default-kpi',
@@ -1036,6 +1077,26 @@ describe('DashboardManagerDialogComponent', () => {
       source: DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
     });
     expect(userServiceMock.updateUserProperties).toHaveBeenCalledTimes(1);
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores the Today summary from Add everything when all tiles already exist', async () => {
+    dialogData.user.settings.dashboardSettings.tiles = getDashboardManagerPresetDefinitions()
+      .map((definition, index) => buildDashboardManagerPresetTile({
+        presetId: definition.id,
+        order: index,
+        size: getExpectedPresetDefaultSize(definition),
+      }));
+    dialogData.user.settings.dashboardSettings.showTodaySummary = false;
+    component.showTodaySummary = false;
+
+    expect(component.isAddAllDisabled).toBe(false);
+
+    await component.addAllTiles();
+
+    expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
+    expect(component.showTodaySummary).toBe(true);
     expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
@@ -1176,7 +1237,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.addAllTiles();
 
-    expect(component.saveError).toBe('Could not save dashboard tile settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings.');
     expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
     expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toEqual({
       state: 'dismissed',
@@ -1214,6 +1275,7 @@ describe('DashboardManagerDialogComponent', () => {
     await component.removeAllTiles();
 
     expect(dialogData.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(false);
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
     expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
       state: 'dismissed',
@@ -1279,8 +1341,10 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.removeAllTiles();
 
-    expect(component.saveError).toBe('Could not save dashboard tile settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings.');
     expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBeUndefined();
+    expect(component.showTodaySummary).toBe(true);
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(false);
     expect(dialogData.user.settings.dashboardSettings.autoTiles.curatedRecoveryNow).toEqual({
       state: 'added',
@@ -1744,7 +1808,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.save();
 
-    expect(component.saveError).toBe('Could not save dashboard tile settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings.');
     expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
     expect(dialogData.user.settings.dashboardSettings.tiles[0]).not.toHaveProperty('eventFilters');
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);

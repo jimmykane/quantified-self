@@ -242,6 +242,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
   public isDashboardManagerOpen = false;
+  public showTodaySummary = true;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public sleepTrendWindowLabel = 'Last 14 days';
   public sleepTrendCanNavigateOlder = true;
@@ -348,6 +349,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
+    this.syncTodaySummaryVisibility();
     this.updateDesktopTileDragCapability();
     if (
       simpleChanges.user
@@ -378,6 +380,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngDoCheck(): void {
+    this.syncTodaySummaryVisibility();
     const nextTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     if (equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)) {
       return;
@@ -484,6 +487,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           user: this.user,
           initialMode: initialState?.initialMode,
           initialEditTileOrder: initialState?.initialEditTileOrder ?? null,
+          previewTodaySummaryVisibility: (showTodaySummary: boolean) => {
+            this.previewTodaySummaryVisibility(showTodaySummary);
+          },
         },
         width: '680px',
         maxWidth: '95vw',
@@ -508,7 +514,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.changeDetector.markForCheck();
   }
 
+  private previewTodaySummaryVisibility(showTodaySummary: boolean): void {
+    this.showTodaySummary = showTodaySummary;
+    this.changeDetector.markForCheck();
+  }
+
   private async unsubscribeAndCreateCharts() {
+    this.syncTodaySummaryVisibility();
     this.unsubscribeThemeSubscription();
     this.appThemeSubscription = this.themeService.getAppTheme().subscribe((theme) => {
       const nextDarkTheme = theme === AppThemes.Dark;
@@ -1656,6 +1668,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
   }
 
+  private syncTodaySummaryVisibility(): void {
+    const appUser = this.user as AppUserInterface | null | undefined;
+    this.showTodaySummary = appUser?.settings?.dashboardSettings?.showTodaySummary !== false;
+  }
+
   private cloneDashboardTile(tile: TileSettingsInterface): TileSettingsInterface {
     const clonedTile = {
       ...tile,
@@ -2306,6 +2323,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       eventUserUID: `${eventUser?.uid || user?.uid || ''}`.trim(),
       startOfTheWeek: appUser?.settings?.unitSettings?.startOfTheWeek ?? null,
       sleepTrendRange: normalizeDashboardSleepTrendRange(appUser?.settings?.dashboardSettings?.sleepTrend?.range),
+      showTodaySummary: appUser?.settings?.dashboardSettings?.showTodaySummary !== false,
       removeAscentForEventTypes: summariesSettings?.removeAscentForEventTypes ?? null,
       removeDescentForEventTypes: summariesSettings?.removeDescentForEventTypes ?? null,
     };

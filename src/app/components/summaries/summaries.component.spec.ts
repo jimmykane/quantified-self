@@ -621,6 +621,33 @@ describe('SummariesComponent', () => {
     expect(emptyGuidance?.textContent).not.toContain('Performance & Power');
   });
 
+  it('hides the Today summary while preserving manager access on an editable dashboard', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [],
+          showTodaySummary: false,
+        },
+      },
+    } as any;
+    component.showActions = true;
+    component.tiles = [];
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = [];
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
+    expect(component.showTodaySummary).toBe(false);
+    expect(dashboardHeader).not.toBeNull();
+    expect(dashboardHeader?.classList.contains('dashboard-summary-header-actions-only')).toBe(true);
+    expect(dashboardHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
+    expect(nativeElement.querySelector('#dashboard-today-title')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-current-state-row')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+  });
+
   it('does not render an empty read-only dashboard shell', () => {
     component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = false;
@@ -2301,10 +2328,53 @@ describe('SummariesComponent', () => {
         user: component.user,
         initialMode: undefined,
         initialEditTileOrder: null,
+        previewTodaySummaryVisibility: expect.any(Function),
       }),
     }));
     expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(component.isDashboardManagerOpen).toBe(false);
+  });
+
+  it('previews Today summary visibility while the manager remains open', async () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [],
+          showTodaySummary: true,
+        },
+      },
+    } as any;
+    component.showActions = true;
+    const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
+    mockDialog.open.mockReturnValueOnce({
+      afterClosed: () => afterClosedSubject.asObservable(),
+    });
+
+    const openPromise = component.openDashboardManagerDialog();
+    const dialogConfig = mockDialog.open.mock.calls[0]?.[1];
+    const previewTodaySummaryVisibility = dialogConfig?.data?.previewTodaySummaryVisibility;
+
+    expect(previewTodaySummaryVisibility).toEqual(expect.any(Function));
+
+    (component.user as any).settings.dashboardSettings.showTodaySummary = false;
+    previewTodaySummaryVisibility(false);
+    fixture.detectChanges();
+
+    expect(component.showTodaySummary).toBe(false);
+    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(false);
+    expect(fixture.nativeElement.querySelector('#dashboard-today-title')).toBeNull();
+
+    (component.user as any).settings.dashboardSettings.showTodaySummary = true;
+    previewTodaySummaryVisibility(true);
+    fixture.detectChanges();
+
+    expect(component.showTodaySummary).toBe(true);
+    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(true);
+    expect(fixture.nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
+
+    afterClosedSubject.next(undefined);
+    afterClosedSubject.complete();
+    await openPromise;
   });
 
   it('should re-enable dashboard manager button as soon as the dialog starts closing', async () => {

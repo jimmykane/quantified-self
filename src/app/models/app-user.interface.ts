@@ -155,6 +155,7 @@ export interface AppDashboardMapTileSettingsInterface extends TileMapSettingsInt
 
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
     includeMergedEvents?: boolean;
+    showTodaySummary?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
     autoTiles?: AppDashboardAutoTiles;

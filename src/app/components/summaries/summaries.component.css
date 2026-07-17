@@ -107,6 +107,10 @@
   flex-wrap: wrap;
 }
 
+.dashboard-summary-header-actions-only {
+  justify-content: flex-end;
+}
+
 .dashboard-section-title-block {
   align-items: center;
   display: flex;
