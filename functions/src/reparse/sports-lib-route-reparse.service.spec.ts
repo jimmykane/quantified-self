@@ -20,8 +20,8 @@ function makeRouteRef(processingSnapshot: { exists: boolean; data?: () => Record
 }
 
 describe('sports-lib-route-reparse.service', () => {
-    it('enables the route reparse scanner by default', () => {
-        expect(SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(true);
+    it('disables the route reparse scanner by default', () => {
+        expect(SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(false);
         expect(SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS.uidAllowlist).toEqual([]);
     });
 

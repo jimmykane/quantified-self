@@ -18,7 +18,7 @@ export const SPORTS_LIB_REPARSE_HEAVY_REASONS = {
 export type SportsLibReparseHeavyReason = typeof SPORTS_LIB_REPARSE_HEAVY_REASONS[keyof typeof SPORTS_LIB_REPARSE_HEAVY_REASONS];
 
 export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
-    enabled: true,
+    enabled: false,
     // Higher defaults improve migration throughput while still allowing bounded scans.
     scanLimit: 1200,
     enqueueLimit: 1200,
