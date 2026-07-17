@@ -356,6 +356,18 @@ describe('sports-lib-reparse.service', () => {
             .toThrow('Invalid runtime sports-lib version');
     });
 
+    it('isSportsLibReparseTerminalFailureMessage should treat size and runtime budget failures as terminal', () => {
+        expect(isSportsLibReparseTerminalFailureMessage(
+            'Strict original-file reparse failed. users/u1/events/e1/original.fit: Original file exceeds reparse size limit. Maximum raw source size is 20MB; users/u1/events/e1/original.fit is 20971521 bytes.',
+        )).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage(
+            '[sports-lib-reparse] Reparse exceeded safe runtime budget before before_persist for user u1 event e1.',
+        )).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage(
+            'Strict original-file reparse failed. users/u1/events/e1/original.fit: [sports-lib-reparse] Reparse exceeded safe runtime budget before download_source_file:users/u1/events/e1/original.fit for user u1 event e1.',
+        )).toBe(true);
+    });
+
     it('classifySportsLibReparseVersionDisposition should distinguish rollout directions', () => {
         expect(classifySportsLibReparseVersionDisposition('17.1.2', '17.1.2')).toBe('match');
         expect(classifySportsLibReparseVersionDisposition('17.1.1', '17.1.2')).toBe('target_superseded');
@@ -453,6 +465,28 @@ describe('sports-lib-reparse.service', () => {
             { path: 'users/u1/events/e1/original.fit.gz' },
         ])).rejects.toThrow('Original file is too large after decompression. Maximum decompressed size is 512MB.');
         expect(hoisted.fitImporter.getFromArrayBuffer).not.toHaveBeenCalled();
+    });
+
+    it('parseFromOriginalFilesStrict should fail before parsing raw source files above the upload limit', async () => {
+        hoisted.mockDownload.mockResolvedValue([Buffer.alloc((20 * 1024 * 1024) + 1)]);
+
+        await expect(parseFromOriginalFilesStrict([
+            { path: 'users/u1/events/e1/original.fit' },
+        ])).rejects.toThrow('Original file exceeds reparse size limit. Maximum raw source size is 20MB');
+
+        expect(hoisted.fitImporter.getFromArrayBuffer).not.toHaveBeenCalled();
+    });
+
+    it('parseFromOriginalFilesStrict should fail before downloading when runtime budget is exhausted', async () => {
+        await expect(parseFromOriginalFilesStrict([
+            { path: 'users/u1/events/e1/original.fit' },
+        ], {
+            deadlineMs: Date.now() - 1,
+            uid: 'u1',
+            eventId: 'e1',
+        })).rejects.toThrow('Reparse exceeded safe runtime budget');
+
+        expect(hoisted.mockDownload).not.toHaveBeenCalled();
     });
 
     it('parseFromOriginalFilesStrict should fallback to default bucket when metadata bucket object is missing', async () => {

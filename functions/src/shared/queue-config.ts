@@ -20,7 +20,7 @@ export const CLOUD_TASK_RETRY_CONFIG = {
 } as const;
 
 export const REPARSE_HEAVY_TASK_RETRY_CONFIG = {
-    maxAttempts: 2,
+    maxAttempts: CLOUD_TASK_RETRY_CONFIG.maxAttempts,
     minBackoffSeconds: 900,    // 15 minutes
     maxBackoffSeconds: 14400,  // 4 hours
     maxDoublings: 4,

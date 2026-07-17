@@ -25,6 +25,8 @@ import {
     SportsLibReparseProcessingTier,
 } from './sports-lib-reparse.config';
 import {
+    MAX_ACTIVITY_UPLOAD_BYTES,
+    MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
     MAX_ACTIVITY_DECOMPRESSED_BYTES,
     MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
 } from '../shared/activity-processing-config';
@@ -57,6 +59,9 @@ const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^\[sports-lib-reparse\] Reparse target sports-lib version ".*" does not match runtime sports-lib version ".*"$/,
     /^Event .* was not found for user .*$/,
     /^Strict original-file reparse failed\. .*: No activities found in GPX; use importRoutesFromGPX for routes$/,
+    /^Strict original-file reparse failed\. .*: Original file exceeds reparse size limit\./,
+    /^Strict original-file reparse failed\. .*: \[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
+    /^\[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
 ] as const;
 
 export function isSportsLibReparseTerminalFailureMessage(errorMessage: string): boolean {
@@ -255,6 +260,12 @@ interface DownloadSourceResult {
     usedFallbackBucket: boolean;
 }
 
+interface ReparseRuntimeBudget {
+    deadlineMs?: number;
+    uid?: string;
+    eventId?: string;
+}
+
 export interface ReparseExecutionResult {
     status: 'completed' | 'skipped';
     reason?: string;
@@ -309,6 +320,13 @@ function isGzip(path: string): boolean {
 }
 
 function maybeDecompressOriginalFile(path: string, rawBytes: Buffer): Buffer {
+    if (rawBytes.byteLength > MAX_ACTIVITY_UPLOAD_BYTES) {
+        throw new Error(
+            `Original file exceeds reparse size limit. Maximum raw source size is ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL}; `
+            + `${path} is ${rawBytes.byteLength} bytes.`,
+        );
+    }
+
     if (!isGzip(path)) {
         return rawBytes;
     }
@@ -609,7 +627,23 @@ export function extractSourceFiles(eventDoc: FirestoreEventJSON | Record<string,
         }));
 }
 
-export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]): Promise<ParseFromSourceResult> {
+function assertReparseRuntimeBudget(budget: ReparseRuntimeBudget | undefined, stage: string): void {
+    const deadlineMs = budget?.deadlineMs;
+    if (!deadlineMs || Date.now() < deadlineMs) {
+        return;
+    }
+
+    throw new Error(
+        `[sports-lib-reparse] Reparse exceeded safe runtime budget before ${stage}`
+        + `${budget?.uid ? ` for user ${budget.uid}` : ''}`
+        + `${budget?.eventId ? ` event ${budget.eventId}` : ''}.`,
+    );
+}
+
+export async function parseFromOriginalFilesStrict(
+    sourceFiles: SourceFileMeta[],
+    runtimeBudget?: ReparseRuntimeBudget,
+): Promise<ParseFromSourceResult> {
     const parsedEvents: EventInterface[] = [];
     const failedFiles: { path: string; reason: string }[] = [];
     const resolvedSourceBuckets: ResolvedSourceBucketInfo[] = [];
@@ -617,6 +651,7 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
 
     for (const sourceFile of sourceFiles) {
         try {
+            assertReparseRuntimeBudget(runtimeBudget, `download_source_file:${sourceFile.path}`);
             const downloadResult = await downloadSourceBytesWithBucketFallback(sourceFile);
             if (downloadResult.resolvedBucket) {
                 resolvedSourceBuckets.push({
@@ -630,7 +665,9 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
             const fileBytes = maybeDecompressOriginalFile(sourceFile.path, rawBytes);
             const sourceContentHash = createHash('sha256').update(fileBytes).digest('hex');
             sourceContentHashes.push(sourceContentHash);
+            assertReparseRuntimeBudget(runtimeBudget, `parse_source_file:${sourceFile.path}`);
             const parsedEvent = await parseActivityFilePayload(fileBytes, sourceFile.path);
+            assertReparseRuntimeBudget(runtimeBudget, `finish_parse_source_file:${sourceFile.path}`);
 
             parsedEvents.push(parsedEvent);
         } catch (error) {
@@ -1746,6 +1783,7 @@ export async function reparseEventFromOriginalFiles(
         eventData?: FirestoreEventJSON | Record<string, unknown>;
         activityDocs?: admin.firestore.QueryDocumentSnapshot[];
         beforePersist?: () => Promise<void>;
+        deadlineMs?: number;
     },
 ): Promise<ReparseExecutionResult> {
     const startedAtMs = Date.now();
@@ -1764,6 +1802,7 @@ export async function reparseEventFromOriginalFiles(
             }
             : await getEventAndActivitiesForReparse(uid, eventId);
         const loadEventAndActivitiesDurationMs = Date.now() - loadEventAndActivitiesStartedAtMs;
+        assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'extract_source_files');
 
         stage = 'extract_source_files';
         const sourceFiles = extractSourceFiles(eventAndActivities.eventData);
@@ -1796,8 +1835,13 @@ export async function reparseEventFromOriginalFiles(
 
         stage = 'parse_source_files';
         const parseFromSourcesStartedAtMs = Date.now();
-        const parseResult = await parseFromOriginalFilesStrict(sourceFiles);
+        const parseResult = await parseFromOriginalFilesStrict(sourceFiles, {
+            deadlineMs: options?.deadlineMs,
+            uid,
+            eventId,
+        });
         const parseFromSourcesDurationMs = Date.now() - parseFromSourcesStartedAtMs;
+        assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'transform_event');
 
         const autoHealResult = applyAutoHealedSourceBucketMetadata(
             eventAndActivities.eventData,
@@ -1862,11 +1906,13 @@ export async function reparseEventFromOriginalFiles(
         }
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);
         const transformDurationMs = Date.now() - transformStartedAtMs;
+        assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'before_persist');
 
         if (options?.beforePersist) {
             stage = 'before_persist_guard';
             await options.beforePersist();
         }
+        assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'persist_reparsed_event');
         stage = 'persist_reparsed_event';
         const persistStartedAtMs = Date.now();
         const persistResult = await persistReparsedEvent(

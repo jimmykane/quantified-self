@@ -34,6 +34,8 @@ interface SportsLibReparseTaskPayload {
 
 type SportsLibReparseWorkerTier = 'normal' | 'heavy';
 
+const REPARSE_TASK_SAFE_RUNTIME_BUDGET_MS = 25 * 60 * 1000;
+
 class SportsLibReparseSkippedForUserDeletionError extends Error {
     readonly name = 'SportsLibReparseSkippedForUserDeletionError';
 
@@ -395,6 +397,7 @@ async function processSportsLibReparseTaskRequest(
         const reparseResult = await reparseEventFromOriginalFiles(job.uid, job.eventId, {
             mode: 'reimport',
             targetSportsLibVersion,
+            deadlineMs: startedAtMs + REPARSE_TASK_SAFE_RUNTIME_BUDGET_MS,
             beforePersist: () => assertUserDeletionAllowed(job, jobId, 'before_persist'),
         });
 

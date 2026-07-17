@@ -62,6 +62,7 @@ const SLEEP_PROVIDER_LABELS: Record<SleepProvider, string> = {
     [SLEEP_PROVIDERS.COROSAPI]: 'COROS',
 };
 const SPORTS_LIB_REPARSE_MANUAL_HEAVY_RETRY_TASK_SUFFIX_PREFIX = 'manual';
+const SPORTS_LIB_REPARSE_STALE_PENDING_HEAVY_RETRY_THRESHOLD_MS = 30 * 60 * 1000;
 
 const DERIVED_METRICS_COORDINATOR_STATUSES = ['idle', 'queued', 'processing', 'failed'] as const;
 type DerivedMetricsCoordinatorStatus = typeof DERIVED_METRICS_COORDINATOR_STATUSES[number];
@@ -1205,6 +1206,8 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
 
     const db = admin.firestore();
     const jobRef = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION).doc(jobId);
+    const allowPendingStale = request.data?.allowPendingStale === true;
+    const nowMs = Date.now();
     const claimedRetry = await db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(jobRef);
         if (!snapshot.exists) {
@@ -1212,8 +1215,18 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         }
 
         const jobData = snapshot.data() as SportsLibReparseJobDocData;
-        if (jobData.status !== 'failed') {
-            throw new HttpsError('failed-precondition', `Reparse job ${jobId} must be failed before heavy retry.`);
+        const status = `${jobData.status || ''}`;
+        const enqueuedAtMs = toFiniteEpochMs(jobData.enqueuedAt);
+        const isStalePendingHeavy = allowPendingStale
+            && status === 'pending'
+            && jobData.processingTier === SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy
+            && enqueuedAtMs !== null
+            && nowMs - enqueuedAtMs >= SPORTS_LIB_REPARSE_STALE_PENDING_HEAVY_RETRY_THRESHOLD_MS;
+        if (status !== 'failed' && !isStalePendingHeavy) {
+            throw new HttpsError(
+                'failed-precondition',
+                `Reparse job ${jobId} must be failed before heavy retry, or stale pending heavy with allowPendingStale=true.`,
+            );
         }
 
         const targetSportsLibVersion = `${jobData.targetSportsLibVersion || ''}`.trim();
@@ -1267,6 +1280,7 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
             uid,
             terminalFailure: jobData.terminalFailure === true,
             terminalFailureAt: jobData.terminalFailureAt,
+            recoveredStalePending: isStalePendingHeavy,
         };
     });
 
@@ -1317,6 +1331,7 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         logger.info('[admin/retrySportsLibReparseHeavyJob] Enqueued heavy reparse retry.', {
             jobId,
             taskCreated,
+            recoveredStalePending: claimedRetry.recoveredStalePending,
         });
         return {
             success: true,
