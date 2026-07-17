@@ -1,155 +1,207 @@
 # Quantified Self
 
-[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/jimmykane/quantified-self)
-![Testing](https://github.com/jimmykane/quantified-self/workflows/Testing/badge.svg)
+![Testing](https://github.com/jimmykane/quantified-self/actions/workflows/testing.yaml/badge.svg)
 
-**Quantified Self** is a powerful platform for aggregating, analyzing, and visualizing your fitness data. It supports importing activity files (TCX, FIT, JSON) and synchronizing directly with major fitness services like Garmin, Suunto, Polar, and COROS.
+**Quantified Self** is an open-source platform for collecting, analyzing, and visualizing fitness and health data. It combines activity imports and connected fitness services with dashboards, training insights, route tools, sleep trends, and detailed workout analysis.
 
-Built on **Firebase** and **Angular**, it aims to provide real-time dashboards and deep activity analysis.
+Try the hosted app at [quantified-self.io](https://www.quantified-self.io/).
 
-Check it out live at [quantified-self.io](https://www.quantified-self.io/).
+## Highlights
 
----
+- Import activity files in FIT, GPX, TCX, JSON, and SML formats.
+- Connect Garmin, Suunto, and COROS for supported activity, route, and sleep workflows.
+- Explore configurable dashboards, training readiness, load trends, power curves, intensity zones, laps, and durability metrics.
+- View activities and saved routes with Mapbox-powered maps and route tools.
+- Compare recordings from multiple devices, share selected activities, and export your data.
+- Generate optional AI-assisted activity insights.
 
-## 🚀 Features
+## Technology and repository layout
 
-- **Multi-Source Import**: Import `.fit`, `.tcx`, and `.gpx` files manually.
-- **Auto-Sync**: Seamless integration with Garmin Connect, Suunto App, and COROS.
-- **Advanced Analysis**: Deep dive into heart rate zones, power curves, and intensity distribution.
-- **Interactive Maps**: Visualize routes using Leaflet.
-- **Financial & Usage Tracking**: Monitor cloud function usage and costs (Admin only).
+| Area | Technology |
+| --- | --- |
+| Frontend | Angular 20, Angular Material, RxJS |
+| Backend | Firebase Auth, Firestore, Functions, Storage, Hosting, App Check, and Remote Config |
+| Visualization | ECharts and Mapbox GL JS |
+| Activity parsing | [`@sports-alliance/sports-lib`](https://github.com/sports-alliance/sports-lib) |
+| Testing | Vitest and Firebase Rules Unit Testing |
 
-## 🛠 Tech Stack
+The main repository areas are:
 
-- **Frontend**: Angular v20+, Angular Material, RxJS.
-- **Backend**: Firebase (Functions, Firestore, Hosting, Storage, Auth).
-- **Visualization**: AmCharts 4, Chart.js, Leaflet.
-- **Parsing**: [Quantified Self Lib](https://github.com/jimmykane/quantified-self-lib) (Custom parser for FIT/TCX/GPX).
-- **Testing**: Vitest.
+| Path | Purpose |
+| --- | --- |
+| `src/app/` | Angular application, routes, components, and browser services |
+| `functions/src/` | Firebase Functions, queues, integrations, and scheduled jobs |
+| `shared/` | Contracts and helpers shared by the browser and Functions runtimes |
+| `extensions/` | Firebase Extension configuration |
+| `docs/` | Architecture, product rules, and operational documentation |
+| Repository root | Firebase rules, indexes, Hosting configuration, and build tooling |
 
-## 📋 Prerequisites
+## Prerequisites
 
-Ensure you have the following installed:
+For the frontend and the repository's CI-compatible workflow, install:
 
-1.  **Node.js**: v20 or higher.
-2.  **npm**: Comes with Node.js.
-3.  **Firebase CLI**: `npm install -g firebase-tools`
-4.  **Java**: Required for running Firebase Emulators locally.
+- Git.
+- Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` is the easiest way to match CI.
+- npm, which is included with Node.js.
+- A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for maps and geocoding.
 
-## ⚡️ Quick Start
+For Firebase emulators and Rules tests, also install:
 
-### 1. Clone the Repository
+- [Firebase CLI](https://firebase.google.com/docs/cli).
+- Java 21, matching the CI environment.
+
+> [!NOTE]
+> `functions/package.json` declares Node.js 22 as the Cloud Functions runtime. Installing Functions dependencies under Node 20 may show an engine warning. Use Node 22 when developing or deploying Functions runtime behavior; the root `.nvmrc` remains the frontend and CI default.
+
+## Quick start
+
+### 1. Clone and install
+
 ```bash
 git clone https://github.com/jimmykane/quantified-self.git
 cd quantified-self
+nvm use
+npm ci
+npm --prefix functions ci
 ```
 
-### 2. Install Dependencies
-**Root (Frontend):**
+The root application and Functions use separate lockfiles, so both installs are required for the full development workflow.
+
+### 2. Add a local Mapbox token
+
+The local Angular build expects a file that is intentionally excluded from Git. Create `src/environments/mapbox-token.local.ts` with your own public token:
+
+```ts
+export const mapboxAccessToken = 'YOUR_PUBLIC_MAPBOX_TOKEN';
+```
+
+Do not copy a maintainer token or commit this file. A valid token is required for map and geocoding features.
+
+### 3. Understand the local Firebase boundary
+
+> [!WARNING]
+> The current development configuration is **hybrid, not fully isolated**. Callable Functions are routed to the Functions emulator, but browser Auth, Firestore, Storage, Analytics, App Check, and Remote Config still use the configured hosted Firebase project. Starting additional emulators does not connect those browser SDKs automatically.
+
+Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Credentials placed in `functions/.env` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
+
+### 4. Build Functions and start the emulators
+
+In the first terminal:
+
 ```bash
-npm install
+npm --prefix functions run build
+firebase emulators:start --only auth,functions,firestore,storage
 ```
 
-**Functions (Backend):**
+The Functions emulator loads compiled output from `functions/lib`, so the build must finish before the emulators start.
+
+### 5. Start Angular
+
+In a second terminal:
+
 ```bash
-cd functions
-npm install
-cd ..
+npm run start:functions:emu -- --ssl=false
 ```
 
-### 3. Run Locally (Frontend)
-Starts the Angular development server.
-```bash
-npm start
-# Access at http://localhost:4200/
-```
+Open:
 
-Functions target toggle on localhost:
-```bash
-# Localhost app + Functions emulator (default)
-npm run start:functions:emu
+- Application: [http://localhost:4200](http://localhost:4200)
+- Firebase Emulator UI: [http://localhost:4000](http://localhost:4000)
 
-# Localhost app + production Cloud Functions
-npm run start:functions:prod
-```
+The `--ssl=false` override provides a predictable fresh-clone path without relying on a local trusted certificate. If you need HTTPS for an integration flow, generate and trust your own localhost certificate rather than reusing or sharing private key material.
 
-Note: In emulator mode, callable requests target the local Functions emulator, but backend code can still reach real external APIs depending on `functions/.env` or bound secrets.
+Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are useful first smoke tests. Authenticated flows additionally require correctly configured Firebase Auth providers, authorized domains, and App Check settings.
 
-### 4. Run Locally (Backend Environment)
-To run Cloud Functions and other Firebase services locally:
-```bash
-firebase emulators:start
-```
+`npm start` and `npm run start:functions:emu` start Angular only; neither command starts Firebase emulators. Avoid `npm run start:functions:prod` during normal contributor work because it routes callable requests to the configured hosted Functions.
 
-## 🧪 Testing
+## Optional backend and provider configuration
 
-We use **Vitest** for unit testing.
+`functions/.env` is ignored and is not required to install dependencies, build the code, or run unit tests. Add only the credentials needed for the integration you are developing.
 
-**Run all tests:**
-```bash
-npm test
-```
+| Feature | Configuration names |
+| --- | --- |
+| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET`, `GARMINHEALTHAPI_CONSUMER_KEY`, `GARMINHEALTHAPI_CONSUMER_SECRET` |
+| Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
+| COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
+| Stripe | `STRIPE_SECRET_KEY` or `STRIPE_API_KEY` |
+| AI Insights | `GEMINI_API_KEY` |
+| Backend Mapbox access | `MAPBOX_ACCESS_TOKEN` |
+| Optional task emulator | `CLOUD_TASKS_EMULATOR_HOST` |
+| Release source maps | `SENTRY_AUTH_TOKEN` |
 
-**Run tests with coverage:**
-```bash
-npm run test-coverage
-```
+Never commit environment files, service-account JSON, API tokens, private keys, decrypted credentials, personal data, or production exports. Emulator code can still reach external services when real credentials are configured.
 
-**Run specific Firestore Rules tests:**
-```bash
-npm run test:rules
-```
+## Development commands
 
-## 📚 Architecture Documentation
+| Purpose | Command | Notes |
+| --- | --- | --- |
+| Frontend tests once | `npm test -- --run` | Deterministic command used by CI |
+| Frontend tests in watch mode | `npm test` | Keeps Vitest running |
+| Frontend coverage | `npm run test-coverage` | Writes the coverage report locally |
+| Frontend lint | `npm run lint` | Angular ESLint |
+| Firestore and Storage Rules tests | `npm run test:rules` | Uses the isolated `demo-test` emulator project |
+| Frontend build | `npm run build` | Development build |
+| Production build | `npm run build-production` | Builds locally; does not deploy |
+| Functions tests | `npm --prefix functions test` | One-shot Vitest suite |
+| Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
+| Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
+| Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 
-- [Training workspace architecture and maintenance guide](docs/training-workspace.md)
+## Deployment and self-hosting
+
+The deployment scripts and Firebase aliases in this repository target maintainer-managed environments. Do not run deployment commands against them as part of ordinary contributor setup.
+
+Self-hosting is an advanced workflow rather than a turnkey installation. A fork must provide and review its own:
+
+- Firebase project, client configuration, CLI aliases, Hosting and Storage targets, and indexes.
+- Auth providers, authorized domains, redirect URIs, App Check, and Remote Config.
+- Function regions, Cloud Tasks queues, buckets, allowed origins, and email URLs.
+- Firebase Extension instances and Secret Manager bindings.
+- Garmin, Suunto, COROS, Stripe, Gemini, Mapbox, email, and observability credentials used by enabled features.
+
+Audit all project-specific identifiers and domains before deploying a fork. Deployment, publishing, and cloud configuration changes should always be deliberate, separate operations.
+
+## Data retention and policies
+
+The hosted project uses Firestore TTL policies for short-lived operational data:
+
+| Collection | Retention | TTL field | Purpose |
+| --- | --- | --- | --- |
+| `mail` | About 90 days | `expireAt` | Transactional email records |
+| `aiInsightsPromptRepairs` | About 90 days | `expireAt` | AI prompt-repair backlog |
+| `failed_jobs` | 7 days | `expireAt` | Failed background-job records |
+| `*Queue` | 7 days | `expireAt` | Temporary queue items |
+| `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |
+| `userDeletionTombstones` | Account-deletion retention window | `expireAt` | Deletion guards with TTL fallback cleanup |
+
+These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
+
+## Architecture documentation
+
+- [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)
+- [Email lifecycle](docs/email-lifecycle.md)
+- [Firebase Auth link-domain routing](docs/firebase-auth-link-domain-routing.md)
+- [Connected-provider attribution audit](docs/connected-provider-attribution-audit.md)
+- [Pricing and usage limits](docs/PRICING_AND_LIMITS.md)
+- [User deletion workflow](docs/user-deletion-workflow.html)
 
-## 📦 Deployment
+## Contributing
 
-Deployment is handled via Firebase CLI. Common scripts:
+Contributions are welcome. Before opening a pull request:
 
-- **Deploy Beta (Hosting only):**
-  ```bash
-  npm run firebase-hosting-beta
-  ```
-- **Deploy Production (Build & Deploy):**
-  ```bash
-  npm run build-and-deploy-prod
-  ```
+1. Keep changes focused and add or update the narrowest relevant tests.
+2. Run the applicable checks from the table above.
+3. Use a prefixed commit subject: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, or `docs:`.
+4. Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## 🔐 Data Retention & policies
+Security-related guidance is available in [SECURITY.md](SECURITY.md).
 
-To ensure data hygiene and compliance, we enforce Time-To-Live (TTL) policies on specific Firestore collections:
+## License
 
-| Collection | TTL Duration | Field | Description |
-| :--- | :--- | :--- | :--- |
-| `mail` | ~90 days | `expireAt` | Transactional emails logs |
-| `aiInsightsPromptRepairs` | ~90 days | `expireAt` | Server-owned backlog of AI-repaired prompts for deterministic parser improvements |
-| `failed_jobs` | 7 days | `expireAt` | Logs for failed background jobs |
-| `*Queue` | 7 days | `expireAt` | Temporary queue items for processing |
-| `adminStats` | ~1 hour | `expireAt` | Short-lived admin aggregate cache documents |
-| `userDeletionTombstones` | Account-deletion retention window | `expireAt` | Durable deletion guard tombstones with TTL fallback cleanup |
-
-## 🤝 Contribution
-
-Contributions are welcome! Please follow the code of conduct and submitting PRs.
-This project uses `eslint` and `prettier` for code formatting.
-
-**Core Libraries:**
-This project relies heavily on [Quantified Self Lib](https://github.com/jimmykane/quantified-self-lib) for file parsing logics.
-
-## Architecture Documentation
-
-- [Email lifecycle and rollout](docs/email-lifecycle.md)
-- [Pricing and limits](docs/PRICING_AND_LIMITS.md)
-- [Queue processing](docs/queue-processing.md)
-- [Sleep sync operations](docs/sleep-sync-operations.md)
-
-## 📄 License
-
-See [LICENSE](LICENSE) for more details.
+Quantified Self is licensed under the [GNU Affero General Public License v3.0](LICENSE).
 
 ---
-*Icons by Alessandro*
+
+*Icons by Alessandro.*
