@@ -13,6 +13,7 @@ describe('loggedInGuard', () => {
 
     beforeEach(() => {
         authServiceSpy = {
+            authState$: of(null),
             user$: of(null)
         };
 
@@ -34,7 +35,8 @@ describe('loggedInGuard', () => {
     });
 
     it('should allow access if user is logged out (user is null)', async () => {
-        authServiceSpy.user$ = of(null);
+        authServiceSpy.authState$ = of(null);
+        authServiceSpy.user$ = of({ uid: 'stale-user' });
 
         const result = TestBed.runInInjectionContext(() => loggedInGuard({} as any, []) as Observable<boolean>);
         const canMatch = await firstValueFrom(result);
@@ -43,7 +45,8 @@ describe('loggedInGuard', () => {
     });
 
     it('should redirect to dashboard and block access if user is logged in', async () => {
-        authServiceSpy.user$ = of({ uid: '123', email: 'test@example.com' });
+        authServiceSpy.authState$ = of({ uid: '123', email: 'test@example.com' });
+        authServiceSpy.user$ = of(null);
 
         const result = TestBed.runInInjectionContext(() => loggedInGuard({} as any, []) as Observable<boolean>);
         const canMatch = await firstValueFrom(result);

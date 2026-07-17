@@ -9,10 +9,12 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { Auth } from 'app/firebase/auth';
 import { Analytics } from 'app/firebase/analytics';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { of, throwError, BehaviorSubject } from 'rxjs';
+import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { of, throwError, BehaviorSubject, map, NEVER } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from '../../authentication/auth-redirect-url';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // Mock Firebase Auth functions
 vi.mock('app/firebase/auth', async () => {
@@ -35,8 +37,14 @@ describe('LoginComponent', () => {
     let mockAuthService: any;
     let activatedRouteSnapshot: { queryParamMap: ReturnType<typeof convertToParamMap> };
 
+    const profileReadStateSubject = new BehaviorSubject<any>({ status: 'signed-out' });
     const mockUserService = {
-        getUserByID: vi.fn().mockReturnValue(of({ displayName: 'Test User' }))
+        getUserByID: vi.fn().mockReturnValue(of({ displayName: 'Test User' })),
+        hasIncompleteProfileReads: vi.fn().mockReturnValue(false),
+        isProfileReadBlocking: signal(false),
+        hasActionableProfileReadFailure: signal(false),
+        profileReadState: signal<any>({ status: 'signed-out' }),
+        profileReadState$: profileReadStateSubject.asObservable(),
     };
 
     const mockRouter = {
@@ -66,13 +74,19 @@ describe('LoginComponent', () => {
 
     beforeEach(() => {
         vi.clearAllMocks(); // Clear spies to prevent accumulation
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
+        mockUserService.isProfileReadBlocking.set(false);
+        mockUserService.hasActionableProfileReadFailure.set(false);
+        mockUserService.profileReadState.set({ status: 'signed-out' });
+        profileReadStateSubject.next({ status: 'signed-out' });
         (mockRouter.navigate as any).mockResolvedValue(true);
         (mockRouter.navigateByUrl as any).mockResolvedValue(true);
         activatedRouteSnapshot = { queryParamMap: convertToParamMap({}) };
 
+        const userSubject = new BehaviorSubject<any>(null);
         mockAuthService = {
-            user$: new BehaviorSubject(null),
-            authState$: of(null),
+            user$: userSubject,
+            authState$: userSubject.pipe(map((appUser) => appUser ? { uid: appUser.uid } : null)),
             redirectUrl: null,
             isSignInWithEmailLink: () => false,
             googleLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
@@ -84,6 +98,7 @@ describe('LoginComponent', () => {
             linkWithPopup: vi.fn().mockResolvedValue({}),
             signInWithPopup: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
             getRedirectResult: vi.fn().mockResolvedValue(null),
+            signOut: vi.fn().mockResolvedValue(undefined),
             localStorageService: {
                 getItem: vi.fn().mockReturnValue(null),
                 setItem: vi.fn(),
@@ -114,6 +129,104 @@ describe('LoginComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should render a recovery action instead of an endless loading state for terminal profile errors', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/login/login.component.html'),
+            'utf8'
+        );
+
+        expect(template).toContain('!userService.hasActionableProfileReadFailure()');
+        expect(template).toContain('data-testid="profile-read-error"');
+        expect(template).toContain('Sign out and try again');
+        expect(template).toContain('(click)="recoverFromProfileReadError()"');
+        expect(template).toContain('[disabled]="isProfileRecoveryInProgress"');
+        expect(template).not.toContain('(click)="recoverFromProfileReadError()" [disabled]="isLoading"');
+        expect(template).toContain("We can't reach your account data");
+    });
+
+    it('should sign out to recover from a terminal profile read error', async () => {
+        await component.recoverFromProfileReadError();
+
+        expect(mockAuthService.signOut).toHaveBeenCalledTimes(1);
+        expect(component.isLoading).toBe(true);
+        expect(component.isProfileRecoveryInProgress).toBe(true);
+    });
+
+    it('should keep the recovery action available when profile loading fails during login', async () => {
+        mockAuthService.authState$ = of({ uid: '123' });
+        mockAuthService.user$ = NEVER;
+
+        const loginCompletion = (component as any).redirectOrShowDataPrivacyDialog({
+            user: { uid: '123' },
+            credential: { signInMethod: 'google.com' },
+        });
+        await Promise.resolve();
+
+        expect(component.isLoading).toBe(true);
+        profileReadStateSubject.next({
+            status: 'recovering',
+            uid: '123',
+            attempt: 4,
+            code: 'permission-denied',
+        });
+
+        await loginCompletion;
+
+        expect(component.isLoading).toBe(false);
+        expect(component.isProfileRecoveryInProgress).toBe(false);
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('should re-enable profile recovery when sign-out fails', async () => {
+        mockAuthService.signOut.mockRejectedValueOnce(new Error('sign-out failed'));
+
+        await component.recoverFromProfileReadError();
+
+        expect(component.isLoading).toBe(false);
+        expect(component.isProfileRecoveryInProgress).toBe(false);
+        expect(mockSnackBar.open).toHaveBeenCalled();
+    });
+
+    it('should stop waiting when Firebase signs out during post-login profile loading', async () => {
+        const firebaseAuthState$ = new BehaviorSubject<any>({ uid: '123' });
+        mockAuthService.authState$ = firebaseAuthState$;
+        mockAuthService.user$ = NEVER;
+        profileReadStateSubject.next({ status: 'loading', uid: '123' });
+
+        const loginCompletion = (component as any).redirectOrShowDataPrivacyDialog({
+            user: { uid: '123' },
+        });
+        firebaseAuthState$.next(null);
+
+        await loginCompletion;
+
+        expect(component.isLoading).toBe(false);
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('should stop waiting when the authenticated account changes during post-login profile loading', async () => {
+        const firebaseAuthState$ = new BehaviorSubject<any>({ uid: '123' });
+        mockAuthService.authState$ = firebaseAuthState$;
+        mockAuthService.user$ = NEVER;
+        profileReadStateSubject.next({ status: 'loading', uid: '123' });
+
+        const loginCompletion = (component as any).redirectOrShowDataPrivacyDialog({
+            user: { uid: '123' },
+        });
+        firebaseAuthState$.next({ uid: 'different-user' });
+
+        await loginCompletion;
+
+        expect(component.isLoading).toBe(false);
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('should consume the service recovery signal instead of a template method', () => {
+        mockUserService.hasActionableProfileReadFailure.set(true);
+
+        expect(mockUserService.hasActionableProfileReadFailure()).toBe(true);
     });
 
     it('should call githubLogin when github provider is selected', () => {
@@ -400,6 +513,52 @@ describe('LoginComponent', () => {
 
         expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
         expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not navigate for a truthy user until profile reads are authoritative', async () => {
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(true);
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'returning-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
+
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'returning-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('should not navigate from a replayed app user after Firebase has signed out', async () => {
+        mockAuthService.authState$ = of(null);
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'stale-user' });
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('should wait for the app user matching the current Firebase account', async () => {
+        const firebaseUsers$ = new BehaviorSubject<any>({ uid: 'current-user' });
+        const appUsers$ = new BehaviorSubject<any>({ uid: 'previous-user' });
+        mockAuthService.authState$ = firebaseUsers$;
+        mockAuthService.user$ = appUsers$;
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
+
+        appUsers$.next({ uid: 'current-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigateByUrl).toHaveBeenCalledWith('/dashboard');
     });
 
     it('should avoid duplicate dashboard navigation when user subscription and redirect flow resolve together', async () => {

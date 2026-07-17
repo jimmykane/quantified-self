@@ -51,6 +51,21 @@
     gap: 12px;
 }
 
+.profile-read-error {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+}
+
+.profile-read-error mat-icon {
+    color: var(--mat-sys-error);
+    height: 32px;
+    width: 32px;
+    font-size: 32px;
+}
+
 .title {
     margin: 0;
     text-align: center;

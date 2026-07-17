@@ -3,7 +3,7 @@ import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
 import { Analytics } from 'app/firebase/analytics';
 import { Router } from '@angular/router';
@@ -12,6 +12,7 @@ import { By } from '@angular/platform-browser';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
+import { LoggerService } from '../../services/logger.service';
 
 class MockAppPaymentService {
     getProducts() {
@@ -126,6 +127,158 @@ describe('PricingComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should not attach a subscription listener after destruction during initialization', async () => {
+        await fixture.whenStable();
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        let resolveRole!: (role: 'basic') => void;
+        let resolveHistory!: (hasHistory: boolean) => void;
+        const rolePromise = new Promise<'basic'>((resolve) => {
+            resolveRole = resolve;
+        });
+        const historyPromise = new Promise<boolean>((resolve) => {
+            resolveHistory = resolve;
+        });
+        vi.spyOn(userService, 'getSubscriptionRole').mockReturnValue(rolePromise);
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockReturnValue(historyPromise);
+        const subscriptionsSpy = vi.spyOn(paymentService, 'getUserSubscriptions');
+
+        const initialization = component.ngOnInit();
+        component.ngOnDestroy();
+        resolveRole('basic');
+        resolveHistory(true);
+        await initialization;
+
+        expect(subscriptionsSpy).not.toHaveBeenCalled();
+        expect(component.currentRole).toBe('free');
+        expect(component.hasPaidSubscriptionHistory).toBe(false);
+    });
+
+    it('should ignore an older initialization that resolves after a newer one', async () => {
+        await fixture.whenStable();
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        let resolveFirstRole!: (role: 'basic') => void;
+        let resolveSecondRole!: (role: 'pro') => void;
+        let resolveFirstHistory!: (hasHistory: boolean) => void;
+        let resolveSecondHistory!: (hasHistory: boolean) => void;
+        const firstRole = new Promise<'basic'>((resolve) => {
+            resolveFirstRole = resolve;
+        });
+        const secondRole = new Promise<'pro'>((resolve) => {
+            resolveSecondRole = resolve;
+        });
+        const firstHistory = new Promise<boolean>((resolve) => {
+            resolveFirstHistory = resolve;
+        });
+        const secondHistory = new Promise<boolean>((resolve) => {
+            resolveSecondHistory = resolve;
+        });
+        vi.spyOn(userService, 'getSubscriptionRole')
+            .mockReturnValueOnce(firstRole)
+            .mockReturnValueOnce(secondRole);
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory')
+            .mockReturnValueOnce(firstHistory)
+            .mockReturnValueOnce(secondHistory);
+        const subscriptions$ = new Subject<StripeSubscription[]>();
+        const subscriptionsSpy = vi.spyOn(paymentService, 'getUserSubscriptions')
+            .mockReturnValue(subscriptions$.asObservable());
+
+        const firstInitialization = component.ngOnInit();
+        const secondInitialization = component.ngOnInit();
+        resolveSecondRole('pro');
+        resolveSecondHistory(true);
+        await secondInitialization;
+
+        expect(component.currentRole).toBe('pro');
+        expect(component.hasPaidSubscriptionHistory).toBe(true);
+        expect(subscriptionsSpy).toHaveBeenCalledTimes(1);
+
+        resolveFirstRole('basic');
+        resolveFirstHistory(false);
+        await firstInitialization;
+
+        expect(component.currentRole).toBe('pro');
+        expect(component.hasPaidSubscriptionHistory).toBe(true);
+        expect(subscriptionsSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should unsubscribe old subscription work and invalidate its pending renewal on reinitialization', async () => {
+        await fixture.whenStable();
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const firstSubscriptions$ = new Subject<StripeSubscription[]>();
+        const secondSubscriptions$ = new Subject<StripeSubscription[]>();
+        let resolveOldRenewal!: (result: UpcomingRenewalAmountResult) => void;
+        let resolveSecondRole!: (role: 'basic') => void;
+        let resolveSecondHistory!: (hasHistory: boolean) => void;
+        const oldRenewal = new Promise<UpcomingRenewalAmountResult>((resolve) => {
+            resolveOldRenewal = resolve;
+        });
+        const secondRole = new Promise<'basic'>((resolve) => {
+            resolveSecondRole = resolve;
+        });
+        const secondHistory = new Promise<boolean>((resolve) => {
+            resolveSecondHistory = resolve;
+        });
+        const roleSpy = vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        const historySpy = vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+        vi.spyOn(paymentService, 'getUserSubscriptions')
+            .mockReturnValueOnce(firstSubscriptions$.asObservable())
+            .mockReturnValueOnce(secondSubscriptions$.asObservable());
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockReturnValue(oldRenewal);
+        const summaries: Array<any> = [];
+        const summarySubscription = component.subscriptionSummary$.subscribe((summary) => summaries.push(summary));
+
+        await component.ngOnInit();
+        firstSubscriptions$.next([{
+            id: 'sub_old',
+            status: 'active',
+            current_period_end: new Date('2026-08-01T00:00:00Z'),
+            current_period_start: new Date('2026-07-01T00:00:00Z'),
+            cancel_at_period_end: false,
+        }]);
+        await Promise.resolve();
+        expect(summaries.at(-1)?.renewalAmountDisplay).toBe('Calculating…');
+
+        roleSpy.mockReturnValue(secondRole);
+        historySpy.mockReturnValue(secondHistory);
+        const secondInitialization = component.ngOnInit();
+
+        expect(summaries.at(-1)).toBeNull();
+        expect(firstSubscriptions$.observed).toBe(false);
+
+        resolveOldRenewal({ status: 'ready', amountMinor: 9999, currency: 'USD' });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(summaries.at(-1)).toBeNull();
+
+        resolveSecondRole('basic');
+        resolveSecondHistory(false);
+        await secondInitialization;
+        summarySubscription.unsubscribe();
+    });
+
+    it('should handle an exhausted subscription listener without throwing globally', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const logger = TestBed.inject(LoggerService);
+        const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        });
+        const warningSpy = vi.spyOn(logger, 'warn');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(
+            throwError(() => permissionDeniedError)
+        );
+
+        await expect(component.ngOnInit()).resolves.toBeUndefined();
+
+        expect(warningSpy).toHaveBeenCalledWith(
+            '[PricingComponent] Subscription listener unavailable; preserving the claim-derived role.',
+            { code: 'permission-denied' }
+        );
+        expect(component.currentRole).toBe('free');
     });
 
     it('should derive activity limit labels from the shared limits map', () => {
@@ -1403,6 +1556,49 @@ describe('PricingComponent', () => {
         subscriptions$.next([]);
         fixture.detectChanges();
         await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent as string).toContain('Subscription details are syncing. Refresh in a moment.');
+
+        resolveRenewalAmount?.({
+            status: 'ready',
+            amountMinor: 2500,
+            currency: 'USD'
+        });
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Subscription details are syncing. Refresh in a moment.');
+        expect(content).not.toContain('$25');
+    });
+
+    it('should ignore a pending renewal result after the subscription listener errors', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        let resolveRenewalAmount: ((value: UpcomingRenewalAmountResult) => void) | null = null;
+        const renewalPromise = new Promise<UpcomingRenewalAmountResult>((resolve) => {
+            resolveRenewalAmount = resolve;
+        });
+        const subscriptions$ = new Subject<StripeSubscription[]>();
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(subscriptions$.asObservable());
+        vi.spyOn(paymentService, 'getUpcomingRenewalAmount').mockReturnValue(renewalPromise);
+
+        await component.ngOnInit();
+        subscriptions$.next([{
+            id: 'sub_pending_error',
+            status: 'active',
+            current_period_end: new Date('2026-06-15T12:00:00Z'),
+            current_period_start: new Date('2026-05-15T12:00:00Z'),
+            cancel_at_period_end: false
+        }]);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent as string).toContain('Calculating…');
+
+        subscriptions$.error(Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        }));
         fixture.detectChanges();
         expect(fixture.nativeElement.textContent as string).toContain('Subscription details are syncing. Refresh in a moment.');
 

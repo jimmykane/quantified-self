@@ -29,12 +29,14 @@ interface QueryDocSnapshot<T> {
 
 interface QuerySnapshot<T> {
   docs: Array<QueryDocSnapshot<T>>;
+  metadata?: { fromCache: boolean; hasPendingWrites: boolean };
 }
 
 interface DocumentSnapshot<T> {
   id: string;
   exists: () => boolean;
   data: () => T;
+  metadata?: { fromCache: boolean; hasPendingWrites: boolean };
 }
 
 describe('Firebase firestore observables', () => {
@@ -113,6 +115,42 @@ describe('Firebase firestore observables', () => {
     subscription.unsubscribe();
   });
 
+  it('waits for a server-committed collectionData snapshot when requested', () => {
+    let nextListener: SnapshotListener<QuerySnapshot<{ name: string }>> | undefined;
+
+    firebaseFirestoreMocks.onSnapshot.mockImplementation(
+      (_source: unknown, options: unknown, next: SnapshotListener<QuerySnapshot<{ name: string }>>) => {
+        expect(options).toEqual({ includeMetadataChanges: true });
+        nextListener = next;
+        return vi.fn();
+      }
+    );
+
+    const emittedValues: Array<Array<{ name: string }>> = [];
+    const observable = TestBed.runInInjectionContext(() =>
+      collectionData<{ name: string }>({} as Query<{ name: string }>, { waitForServer: true })
+    );
+    const subscription = observable.subscribe((value) => emittedValues.push(value));
+
+    nextListener?.({
+      docs: [{ id: 'cached', data: () => ({ name: 'Cached' }) }],
+      metadata: { fromCache: true, hasPendingWrites: false }
+    });
+    nextListener?.({
+      docs: [{ id: 'pending', data: () => ({ name: 'Pending' }) }],
+      metadata: { fromCache: false, hasPendingWrites: true }
+    });
+    expect(emittedValues).toEqual([]);
+
+    nextListener?.({
+      docs: [{ id: 'committed', data: () => ({ name: 'Committed' }) }],
+      metadata: { fromCache: false, hasPendingWrites: false }
+    });
+    expect(emittedValues).toEqual([[{ name: 'Committed' }]]);
+
+    subscription.unsubscribe();
+  });
+
   it('emits docData values inside Angular zone', () => {
     let nextListener: SnapshotListener<DocumentSnapshot<{ name: string }>> | undefined;
 
@@ -179,6 +217,53 @@ describe('Firebase firestore observables', () => {
 
     expect(emittedValues).toEqual([undefined]);
     expect(zoneStates).toEqual([true]);
+    subscription.unsubscribe();
+  });
+
+  it('waits for a server-confirmed docData snapshot when requested', () => {
+    let nextListener: SnapshotListener<DocumentSnapshot<{ name: string }>> | undefined;
+
+    firebaseFirestoreMocks.onSnapshot.mockImplementation(
+      (_source: unknown, options: unknown, next: SnapshotListener<DocumentSnapshot<{ name: string }>>) => {
+        expect(options).toEqual({ includeMetadataChanges: true });
+        nextListener = next;
+        return vi.fn();
+      }
+    );
+
+    const emittedValues: Array<{ name: string } | undefined> = [];
+    const observable = TestBed.runInInjectionContext(() =>
+      docData<{ name: string }>(
+        {} as DocumentReference<{ name: string }>,
+        { waitForServer: true }
+      )
+    );
+    const subscription = observable.subscribe((value) => emittedValues.push(value));
+
+    nextListener?.({
+      id: 'doc-cached',
+      exists: () => false,
+      data: () => ({ name: 'Ignored cache value' }),
+      metadata: { fromCache: true, hasPendingWrites: false }
+    });
+    expect(emittedValues).toEqual([]);
+
+    nextListener?.({
+      id: 'doc-pending',
+      exists: () => true,
+      data: () => ({ name: 'Ignored pending value' }),
+      metadata: { fromCache: false, hasPendingWrites: true }
+    });
+    expect(emittedValues).toEqual([]);
+
+    nextListener?.({
+      id: 'doc-server',
+      exists: () => true,
+      data: () => ({ name: 'Authoritative value' }),
+      metadata: { fromCache: false, hasPendingWrites: false }
+    });
+    expect(emittedValues).toEqual([{ name: 'Authoritative value' }]);
+
     subscription.unsubscribe();
   });
 

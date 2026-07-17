@@ -86,6 +86,7 @@ import {
     GithubAuthProvider,
     GoogleAuthProvider,
     TwitterAuthProvider,
+    authState as fireAuthState,
     user as fireAuthUser
 } from 'app/firebase/auth';
 import { Firestore } from 'app/firebase/firestore';
@@ -109,9 +110,11 @@ const mockAnalytics = {};
 
 const mockUserService = {
     user$: new BehaviorSubject<any>(null),
+    profileReadState$: new BehaviorSubject<any>({ status: 'signed-out' }),
     fillMissingAppSettings: (settings: any) => settings,
     getUserByID: vi.fn(),
     isPro: vi.fn(),
+    hasIncompleteProfileReads: vi.fn().mockReturnValue(false),
     hasPaidAccessSignal: signal(true)
 };
 
@@ -130,13 +133,18 @@ const mockLocalStorageService = {
 describe('AppAuthService', () => {
     let service: AppAuthService;
     let userSubject: BehaviorSubject<any>;
+    let authStateSubject: BehaviorSubject<any>;
 
     beforeEach(() => {
         vi.clearAllMocks();
         mockAuth.currentUser = null;
         userSubject = new BehaviorSubject<any>(null);
+        authStateSubject = new BehaviorSubject<any>(null);
         mockUserFunction.mockReturnValue(userSubject);
+        (fireAuthState as Mock).mockReturnValue(authStateSubject);
         mockUserService.user$.next(null); // Reset
+        mockUserService.profileReadState$.next({ status: 'signed-out' });
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
         mockUserService.hasPaidAccessSignal.set(true); // Default to pro for these tests unless specified
 
         TestBed.configureTestingModule({
@@ -161,6 +169,46 @@ describe('AppAuthService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    it('getUser should return the matching authoritative profile', async () => {
+        const firebaseUser = { uid: 'current-user' };
+        const appUser = { uid: 'current-user', displayName: 'Current User' };
+        mockAuth.currentUser = firebaseUser;
+        mockUserService.profileReadState$.next({
+            status: 'ready',
+            uid: firebaseUser.uid,
+            profileExists: true,
+        });
+        mockUserService.user$.next(appUser);
+        authStateSubject.next(firebaseUser);
+
+        await expect(service.getUser()).resolves.toBe(appUser);
+    });
+
+    it('getUser should resolve null when profile recovery becomes actionable', async () => {
+        const firebaseUser = { uid: 'current-user' };
+        mockAuth.currentUser = firebaseUser;
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(true);
+        authStateSubject.next(firebaseUser);
+        mockUserService.profileReadState$.next({ status: 'loading', uid: firebaseUser.uid });
+
+        const userPromise = service.getUser();
+        mockUserService.profileReadState$.next({
+            status: 'recovering',
+            uid: firebaseUser.uid,
+            attempt: 4,
+            code: 'permission-denied',
+        });
+
+        await expect(userPromise).resolves.toBeNull();
+    });
+
+    it('getUser should ignore a replayed app profile after Firebase sign-out', async () => {
+        mockUserService.user$.next({ uid: 'stale-user' });
+        authStateSubject.next(null);
+
+        await expect(service.getUser()).resolves.toBeNull();
     });
 
     it('signOut should clear storage, purge Firestore persistence, and redirect', async () => {

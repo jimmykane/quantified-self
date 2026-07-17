@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppUserService } from './app.user.service';
+import { AppUserService, isActionableProfileReadState } from './app.user.service';
 import { Auth, authState, user } from 'app/firebase/auth';
 import { Firestore, collection, collectionData, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 
@@ -8,7 +8,7 @@ import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
-import { of, firstValueFrom, take, from, filter, throwError, defer } from 'rxjs';
+import { of, firstValueFrom, take, from, filter, Observable, Subject, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
@@ -103,6 +103,19 @@ describe('AppUserService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('should classify terminal, timed-out, and repeatedly failing profile reads as actionable', () => {
+        expect(isActionableProfileReadState({ status: 'error', uid: 'u1', code: 'permission-denied' })).toBe(true);
+        expect(isActionableProfileReadState({
+            status: 'recovering', uid: 'u1', attempt: 1, code: 'deadline-exceeded'
+        })).toBe(true);
+        expect(isActionableProfileReadState({
+            status: 'recovering', uid: 'u1', attempt: 3, code: 'permission-denied'
+        })).toBe(false);
+        expect(isActionableProfileReadState({
+            status: 'recovering', uid: 'u1', attempt: 4, code: 'permission-denied'
+        })).toBe(true);
+    });
+
     it('should surface impersonatedBy from auth claims on the merged user', async () => {
         mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
             claims: {
@@ -152,7 +165,7 @@ describe('AppUserService', () => {
         expect(mergedUser.lastSignInDate).toEqual(new Date(lastSignInTime));
     });
 
-    it('should fall back to a synthetic user when the profile read is permission-denied after retry', async () => {
+    it('should recover repeated permission-denied profile reads without emitting a synthetic user', async () => {
         const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
             code: 'permission-denied'
         });
@@ -164,20 +177,301 @@ describe('AppUserService', () => {
                 return throwError(() => permissionDeniedError);
             }
 
+            if (docDataCallCount === 9) {
+                return of({ uid: 'u1', email: 'authoritative@example.com' });
+            }
+            if (docDataCallCount === 10) {
+                return of({
+                    acceptedPrivacyPolicy: true,
+                    acceptedDataPolicy: true,
+                    acceptedTos: true,
+                });
+            }
+
             return of({});
         });
 
-        service = TestBed.inject(AppUserService);
-        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            const emittedUsers: AppUserInterface[] = [];
+            const recoveredUserPromise = firstValueFrom(service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser),
+                take(1)
+            ));
+            const subscription = service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser)
+            ).subscribe((profileUser) => emittedUsers.push(profileUser));
 
-        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
-        expect(mergedUser.uid).toBe('u1');
-        expect(mergedUser.emailVerified).toBe(true);
-        expect(mergedUser.email).toBe('test@example.com');
-        expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
-        expect((mergedUser as any).privacy).toBeUndefined();
-        expect(mergedUser.settings?.appSettings?.unitSetupCompleted).toBe(false);
+            await vi.runAllTimersAsync();
+            const recoveredUser = await recoveredUserPromise;
+
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(recoveredUser.email).toBe('authoritative@example.com');
+            expect(recoveredUser.acceptedPrivacyPolicy).toBe(true);
+            expect(recoveredUser.acceptedDataPolicy).toBe(true);
+            expect(recoveredUser.acceptedTos).toBe(true);
+            expect(emittedUsers).toEqual([recoveredUser]);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+            expect(service.profileReadState()).toEqual({
+                status: 'ready',
+                uid: 'u1',
+                profileExists: true,
+            });
+            expect(docData).toHaveBeenCalledWith(expect.anything(), { waitForServer: true });
+            subscription.unsubscribe();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should stop retrying and expose recovery after persistent permission-denied profile reads', async () => {
+        const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        });
+        const authStateSubject = new Subject<any>();
+        (authState as any).mockReturnValue(authStateSubject);
+
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            const profileReadSpy = vi.spyOn(service, 'getUserByID').mockReturnValue(
+                throwError(() => permissionDeniedError)
+            );
+            const subscription = service.user$.subscribe();
+            const rolePromise = service.getSubscriptionRole();
+            const proPromise = service.isPro();
+            const paidAccessPromise = service.hasPaidAccess();
+            const adminPromise = service.isAdmin();
+
+            authStateSubject.next(mockAuth.currentUser);
+            await vi.runAllTimersAsync();
+
+            expect(profileReadSpy).toHaveBeenCalledTimes(5);
+            expect(service.profileReadState()).toEqual({
+                status: 'error',
+                uid: 'u1',
+                code: 'permission-denied',
+            });
+            expect(service.hasActionableProfileReadFailure()).toBe(true);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+            await expect(rolePromise).resolves.toBeNull();
+            await expect(proPromise).resolves.toBe(false);
+            await expect(paidAccessPromise).resolves.toBe(false);
+            await expect(adminPromise).resolves.toBe(false);
+            subscription.unsubscribe();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should reset profile retry backoff after each successful listener emission', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        let profileSubscriptionCount = 0;
+        const authStateSubject = new Subject<any>();
+        (authState as any).mockReturnValue(authStateSubject);
+
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            vi.spyOn(service, 'getUserByID').mockImplementation(() => new Observable<AppUserInterface | null>((subscriber) => {
+                profileSubscriptionCount += 1;
+                const version = profileSubscriptionCount;
+                subscriber.next({ uid: 'u1', email: 'unchanged-profile@example.com' });
+
+                if (version >= 3) {
+                    return undefined;
+                }
+
+                const timeoutID = setTimeout(() => subscriber.error(unavailableError), 1);
+                return () => clearTimeout(timeoutID);
+            }));
+
+            const recoveryAttempts: number[] = [];
+            const emittedEmails: string[] = [];
+            const stateSubscription = service.profileReadState$.subscribe((state) => {
+                if (state.status === 'recovering') {
+                    recoveryAttempts.push(state.attempt);
+                }
+            });
+            const userSubscription = service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser)
+            ).subscribe((profileUser) => emittedEmails.push(profileUser.email || ''));
+
+            authStateSubject.next(mockAuth.currentUser);
+            await vi.runAllTimersAsync();
+
+            expect(profileSubscriptionCount).toBe(3);
+            expect(recoveryAttempts).toEqual([1, 1]);
+            expect(emittedEmails).toEqual([
+                'unchanged-profile@example.com',
+                'unchanged-profile@example.com',
+                'unchanged-profile@example.com',
+            ]);
+            stateSubscription.unsubscribe();
+            userSubscription.unsubscribe();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should keep the profile recovery gate closed until a transient claim read recovers', async () => {
+        const authStateSubject = new Subject<any>();
+        const claimReadError = Object.assign(new Error('Network unavailable'), {
+            code: 'auth/network-request-failed'
+        });
+        (authState as any).mockReturnValue(authStateSubject);
+        mockAuth.currentUser.getIdTokenResult
+            .mockResolvedValueOnce({ claims: {} })
+            .mockRejectedValueOnce(claimReadError)
+            .mockResolvedValue({ claims: {} });
+
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            const emittedUsers: AppUserInterface[] = [];
+            const emittedErrors: unknown[] = [];
+            const subscription = service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser)
+            ).subscribe({
+                next: (profileUser) => emittedUsers.push(profileUser),
+                error: (error) => emittedErrors.push(error),
+            });
+
+            authStateSubject.next(mockAuth.currentUser);
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(emittedUsers).toEqual([]);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+            expect(service.profileReadState()).toEqual(expect.objectContaining({
+                status: 'recovering',
+                uid: 'u1',
+                code: 'auth/network-request-failed',
+            }));
+
+            await vi.advanceTimersByTimeAsync(750);
+
+            expect(emittedUsers).toHaveLength(1);
+            expect(emittedErrors).toEqual([]);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+            expect(service.profileReadState()).toEqual({
+                status: 'ready',
+                uid: 'u1',
+                profileExists: true,
+            });
+            subscription.unsubscribe();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should contain a non-recoverable claim read error without poisoning the user stream', async () => {
+        const authStateSubject = new Subject<any>();
+        (authState as any).mockReturnValue(authStateSubject);
+        mockAuth.currentUser.getIdTokenResult.mockRejectedValue(new Error('Malformed token result'));
+
+        service = TestBed.inject(AppUserService);
+        const emittedErrors: unknown[] = [];
+        const subscription = service.user$.subscribe({
+            error: (error) => emittedErrors.push(error),
+        });
+
+        authStateSubject.next(mockAuth.currentUser);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(emittedErrors).toEqual([]);
         expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        expect(service.profileReadState()).toEqual({
+            status: 'error',
+            uid: 'u1',
+            code: null,
+        });
+        expect(() => service.user()).not.toThrow();
+        expect(service.user()).toBeNull();
+        subscription.unsubscribe();
+    });
+
+    it('should not republish a stale profile when auth refresh emits during profile recovery', async () => {
+        const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        });
+        const authStateSubject = new Subject<any>();
+        const tokenUserSubject = new Subject<any>();
+        let recoveredProfileSubscriber: any;
+        let profileSubscriptionCount = 0;
+        (authState as any).mockReturnValue(authStateSubject);
+        (user as any).mockReturnValue(tokenUserSubject);
+        mockAuth.currentUser.getIdToken.mockImplementation(async (forceRefresh?: boolean) => {
+            if (forceRefresh) {
+                tokenUserSubject.next(mockAuth.currentUser);
+            }
+            return 'test-token';
+        });
+
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            vi.spyOn(service, 'getUserByID').mockImplementation(() => new Observable<AppUserInterface | null>((subscriber) => {
+                profileSubscriptionCount += 1;
+                if (profileSubscriptionCount === 1) {
+                    subscriber.next({
+                        uid: 'u1',
+                        email: 'stale-profile@example.com',
+                        acceptedPrivacyPolicy: true,
+                    });
+                    const timeoutID = setTimeout(() => subscriber.error(permissionDeniedError), 1);
+                    return () => clearTimeout(timeoutID);
+                }
+
+                recoveredProfileSubscriber = subscriber;
+                return undefined;
+            }));
+            const emittedEmails: string[] = [];
+            const subscription = service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser)
+            ).subscribe((profileUser) => emittedEmails.push(profileUser.email || ''));
+
+            authStateSubject.next(mockAuth.currentUser);
+            tokenUserSubject.next(mockAuth.currentUser);
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(emittedEmails).toEqual(['stale-profile@example.com']);
+
+            await vi.advanceTimersByTimeAsync(1);
+
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(emittedEmails).toEqual(['stale-profile@example.com']);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+            expect(service.profileReadState()).toEqual(expect.objectContaining({
+                status: 'recovering',
+                uid: 'u1',
+            }));
+
+            await vi.advanceTimersByTimeAsync(750);
+            recoveredProfileSubscriber.next({
+                uid: 'u1',
+                email: 'recovered-profile@example.com',
+                acceptedPrivacyPolicy: true,
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(emittedEmails).toEqual([
+                'stale-profile@example.com',
+                'recovered-profile@example.com',
+            ]);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+            expect(service.profileReadState()).toEqual({
+                status: 'ready',
+                uid: 'u1',
+                profileExists: true,
+            });
+            subscription.unsubscribe();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('should recover from sub-document read failures without leaving incomplete flag set', async () => {
@@ -200,33 +494,63 @@ describe('AppUserService', () => {
         expect(service.hasIncompleteProfileReads('u1')).toBe(false);
     });
 
-    it('should recover transient profile reads without requiring a new auth emission', async () => {
+    it('should not let a non-authoritative profile lookup clear the current-user recovery gate', async () => {
+        (authState as any).mockReturnValue(of(null));
+        (user as any).mockReturnValue(of(null));
+        (docData as any).mockReturnValue(of({ uid: 'u1' }));
+
+        service = TestBed.inject(AppUserService);
+        (service as any).markIncompleteProfileRead('u1');
+
+        await firstValueFrom(service.getUserByID('u1').pipe(take(1)));
+
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+    });
+
+    it('should retry a transient legal-document failure without treating consent as missing', async () => {
         const unavailableError = Object.assign(new Error('Service unavailable'), {
             code: 'unavailable'
         });
-        let userDocSubscriptions = 0;
         let docDataCallCount = 0;
 
         (docData as any).mockImplementation(() => {
             docDataCallCount += 1;
-            if (docDataCallCount === 1) {
-                return defer(() => {
-                    userDocSubscriptions += 1;
-                    if (userDocSubscriptions === 1) {
-                        return throwError(() => unavailableError);
-                    }
-                    return of({ uid: 'u1', email: 'transient-recovered@example.com', acceptedPrivacyPolicy: true });
+            if (docDataCallCount === 1 || docDataCallCount === 5) {
+                return of({ uid: 'u1', email: 'transient-recovered@example.com' });
+            }
+            if (docDataCallCount === 2) {
+                return throwError(() => unavailableError);
+            }
+            if (docDataCallCount === 6) {
+                return of({
+                    acceptedPrivacyPolicy: true,
+                    acceptedDataPolicy: true,
+                    acceptedTos: true,
                 });
             }
             return of({});
         });
 
-        service = TestBed.inject(AppUserService);
-        const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+        vi.useFakeTimers();
+        try {
+            service = TestBed.inject(AppUserService);
+            const mergedUserPromise = firstValueFrom(service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser),
+                take(1)
+            ));
 
-        expect(mergedUser.email).toBe('transient-recovered@example.com');
-        expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
-        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+            await vi.runAllTimersAsync();
+            const mergedUser = await mergedUserPromise;
+
+            expect(mergedUser.email).toBe('transient-recovered@example.com');
+            expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
+            expect(mergedUser.acceptedDataPolicy).toBe(true);
+            expect(mergedUser.acceptedTos).toBe(true);
+            expect(mockAuth.currentUser.getIdToken).not.toHaveBeenCalledWith(true);
+            expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('should refresh the auth token and retry when a legal sub-document read is permission-denied during current-user loading', async () => {
@@ -273,21 +597,16 @@ describe('AppUserService', () => {
         );
     });
 
-    it('should cap transient profile-read retries and fall back to a synthetic user', async () => {
+    it('should remain in recovery instead of emitting a synthetic user while transient failures persist', async () => {
         const unavailableError = Object.assign(new Error('Service unavailable'), {
             code: 'unavailable'
         });
-        const transientReadRetryCount = (AppUserService as any).transientReadRetryCount as number;
         let docDataCallCount = 0;
-        let userDocSubscriptions = 0;
 
         (docData as any).mockImplementation(() => {
             docDataCallCount += 1;
-            if (docDataCallCount === 1) {
-                return defer(() => {
-                    userDocSubscriptions += 1;
-                    return throwError(() => unavailableError);
-                });
+            if ((docDataCallCount - 1) % 4 === 0) {
+                return throwError(() => unavailableError);
             }
 
             return of({});
@@ -296,18 +615,101 @@ describe('AppUserService', () => {
         vi.useFakeTimers();
         try {
             service = TestBed.inject(AppUserService);
-            const mergedUserPromise = firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
+            const emittedUsers: AppUserInterface[] = [];
+            const subscription = service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser)
+            ).subscribe((profileUser) => emittedUsers.push(profileUser));
 
-            await vi.runAllTimersAsync();
-            const mergedUser = await mergedUserPromise;
+            await vi.advanceTimersByTimeAsync(2400);
 
-            expect(userDocSubscriptions).toBe(transientReadRetryCount + 1);
-            expect(mergedUser.uid).toBe('u1');
-            expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+            expect(docDataCallCount).toBeGreaterThanOrEqual(12);
+            expect(emittedUsers).toEqual([]);
             expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+            expect(service.profileReadState()).toEqual(expect.objectContaining({
+                status: 'recovering',
+                uid: 'u1',
+                code: 'unavailable',
+            }));
+            subscription.unsubscribe();
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('should create a synthetic onboarding user only after a confirmed missing profile', async () => {
+        (docData as any)
+            .mockReturnValueOnce(of(undefined))
+            .mockReturnValueOnce(of(undefined))
+            .mockReturnValueOnce(of(undefined))
+            .mockReturnValueOnce(of(undefined));
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(
+            filter((profileUser): profileUser is AppUserInterface => !!profileUser),
+            take(1)
+        ));
+
+        expect(mergedUser.uid).toBe('u1');
+        expect(mergedUser.email).toBe('test@example.com');
+        expect(mergedUser.acceptedPrivacyPolicy).toBe(false);
+        expect(mergedUser.acceptedDataPolicy).toBe(false);
+        expect(service.profileReadState()).toEqual({
+            status: 'ready',
+            uid: 'u1',
+            profileExists: false,
+        });
+        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+    });
+
+    it('should preserve legal and system data when the legacy main profile document is missing', async () => {
+        (docData as any)
+            .mockReturnValueOnce(of(undefined))
+            .mockReturnValueOnce(of({
+                acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: true,
+                acceptedTos: true,
+            }))
+            .mockReturnValueOnce(of({ stripeRole: 'basic' }))
+            .mockReturnValueOnce(of({}));
+
+        service = TestBed.inject(AppUserService);
+        const mergedUser = await firstValueFrom(service.user$.pipe(
+            filter((profileUser): profileUser is AppUserInterface => !!profileUser),
+            take(1)
+        ));
+
+        expect(mergedUser).toEqual(expect.objectContaining({
+            uid: 'u1',
+            email: 'test@example.com',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            stripeRole: 'basic',
+        }));
+        expect(service.profileReadState()).toEqual({
+            status: 'ready',
+            uid: 'u1',
+            profileExists: true,
+        });
+        expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+    });
+
+    it('should retain the requested uid when only profile sub-documents exist', async () => {
+        (authState as any).mockReturnValue(of(null));
+        (user as any).mockReturnValue(of(null));
+        (docData as any)
+            .mockReturnValueOnce(of(undefined))
+            .mockReturnValueOnce(of({ acceptedPrivacyPolicy: true }))
+            .mockReturnValueOnce(of({}))
+            .mockReturnValueOnce(of({}));
+
+        service = TestBed.inject(AppUserService);
+        const profile = await firstValueFrom(service.getUserByID('partial-user').pipe(take(1)));
+
+        expect(profile).toEqual(expect.objectContaining({
+            uid: 'partial-user',
+            acceptedPrivacyPolicy: true,
+        }));
     });
 
     it('should log permission-denied diagnostics as error events for legal sub-document reads', async () => {
@@ -703,8 +1105,12 @@ describe('AppUserService', () => {
     });
 
     describe('createOrUpdateUser policy flow', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser),
+                take(1)
+            ));
         });
 
         it('should reject when required legal policies are not accepted', async () => {
@@ -718,6 +1124,36 @@ describe('AppUserService', () => {
             await expect(service.createOrUpdateUser(user)).rejects.toThrow('User has not accepted privacy or data policy');
 
             expect(updateUserSpy).not.toHaveBeenCalled();
+            expect(setDoc).not.toHaveBeenCalled();
+        });
+
+        it('should reject onboarding profile writes while the authoritative profile is recovering', async () => {
+            const user = {
+                uid: 'u1',
+                acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: true,
+            } as AppUserInterface;
+            (service as any).markIncompleteProfileRead('u1');
+
+            await expect(service.createOrUpdateUser(user)).rejects.toThrow(
+                'Cannot create or update user while the authoritative profile read is incomplete.'
+            );
+
+            expect(setDoc).not.toHaveBeenCalled();
+        });
+
+        it('should reject direct legal writes while the authoritative profile is recovering', async () => {
+            const policies = {
+                uid: 'u1',
+                acceptedPrivacyPolicy: true,
+                acceptedDataPolicy: true,
+            } as AppUserInterface;
+            (service as any).markIncompleteProfileRead('u1');
+
+            await expect(service.acceptPolicies(policies)).rejects.toThrow(
+                'Cannot update legal consent while the authoritative profile read is incomplete.'
+            );
+
             expect(setDoc).not.toHaveBeenCalled();
         });
 
@@ -1257,16 +1693,21 @@ describe('AppUserService', () => {
         });
     });
     describe('updateUserProperties', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(
+                filter((profileUser): profileUser is AppUserInterface => !!profileUser),
+                take(1)
+            ));
         });
 
-        it('should skip settings writes when profile reads are incomplete', async () => {
+        it('should reject settings writes when profile reads are incomplete', async () => {
             const user = { uid: 'u1' } as any;
             const settings = { theme: 'dark' };
 
             (service as any).usersWithIncompleteProfileReads.add('u1');
-            await service.updateUserProperties(user, { settings });
+            await expect(service.updateUserProperties(user, { settings }))
+                .rejects.toThrow('Cannot update user settings until user profile finishes loading.');
 
             expect(setDoc).not.toHaveBeenCalled();
             expect(updateDoc).not.toHaveBeenCalled();
@@ -1274,16 +1715,23 @@ describe('AppUserService', () => {
 
         it('should reject optional legal writes when profile reads are incomplete', async () => {
             const user = { uid: 'u1' } as AppUserInterface;
-
-            (service as any).usersWithIncompleteProfileReads.add('u1');
-            await expect(service.updateUserProperties(user, {
+            const updates = {
                 displayName: 'New Name',
                 acceptedTrackingPolicy: false,
                 acceptedMarketingPolicy: false
-            })).rejects.toThrow('Cannot update legal consent until user profile finishes loading.');
+            };
+
+            (service as any).usersWithIncompleteProfileReads.add('u1');
+            await expect(service.updateUserProperties(user, updates))
+                .rejects.toThrow('Cannot update legal consent until user profile finishes loading.');
 
             expect(setDoc).not.toHaveBeenCalled();
             expect(updateDoc).not.toHaveBeenCalled();
+            expect(updates).toEqual({
+                displayName: 'New Name',
+                acceptedTrackingPolicy: false,
+                acceptedMarketingPolicy: false,
+            });
         });
 
         it('should split settings and other properties', async () => {

@@ -4,11 +4,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
-import { take, filter } from 'rxjs/operators';
-import { AppUserService } from '../../services/app.user.service';
+import { take, filter, startWith } from 'rxjs/operators';
+import { AppUserService, isActionableProfileReadState } from '../../services/app.user.service';
 import { OAuthProvider } from 'app/firebase/auth';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
-import { Subscription } from 'rxjs';
+import { combineLatest, firstValueFrom, Subscription } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
 import { AccountLinkingDialogComponent } from './account-linking-dialog/account-linking-dialog.component';
 import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
@@ -26,6 +26,7 @@ import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from 
 export class LoginComponent implements OnInit, OnDestroy {
 
   isLoading: boolean = false;
+  isProfileRecoveryInProgress = false;
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
@@ -114,23 +115,13 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.userSubscription = this.authService.user$.subscribe((user) => {
-      if (user) {
-        void this.navigateAfterLoginOnce();
-      }
-    });
-
-    // Check if user is already authenticated with Firebase but has no DB profile
-    this.authService.authState$.pipe(take(1)).subscribe(async (firebaseUser) => {
-      if (firebaseUser) {
-        setTimeout(async () => {
-          const dbUser = await this.authService.getUser();
-          if (!dbUser) {
-            this.logger.warn('Login: Firebase authenticated, but no DB profile. Triggering registration flow.');
-            this.redirectOrShowDataPrivacyDialog({ user: firebaseUser });
-          }
-        }, 500);
-      }
+    this.userSubscription = combineLatest([this.authService.authState$, this.authService.user$]).pipe(
+      filter(([firebaseUser, appUser]) => !!firebaseUser
+        && !!appUser
+        && firebaseUser.uid === appUser.uid
+        && !this.userService.hasIncompleteProfileReads(firebaseUser.uid))
+    ).subscribe(() => {
+      void this.navigateAfterLoginOnce();
     });
 
     // Check for redirect result
@@ -344,17 +335,76 @@ export class LoginComponent implements OnInit, OnDestroy {
       // Wait for the global auth state to acknowledge the user.
       // This prevents the auth guard from seeing 'null' and kicking us back to login
       // if we navigate too fast.
-      const databaseUser = await this.authService.user$
-        .pipe(
-          filter(u => !!u), // Wait for a non-null user
+      const expectedUID = typeof loginServiceUser?.user?.uid === 'string'
+        ? loginServiceUser.user.uid
+        : null;
+      const [firebaseUser, , profileReadState] = await firstValueFrom(
+        combineLatest([
+          this.authService.authState$,
+          this.authService.user$.pipe(startWith(null)),
+          this.userService.profileReadState$,
+        ]).pipe(
+          filter(([currentFirebaseUser, appUser, currentProfileReadState]) => {
+            if (!currentFirebaseUser) {
+              return true;
+            }
+
+            if (expectedUID && currentFirebaseUser.uid !== expectedUID) {
+              return true;
+            }
+
+            const hasActionableProfileFailure = 'uid' in currentProfileReadState
+              && currentProfileReadState.uid === currentFirebaseUser.uid
+              && isActionableProfileReadState(currentProfileReadState);
+            if (hasActionableProfileFailure) {
+              return true;
+            }
+
+            return !!appUser
+              && currentFirebaseUser.uid === appUser.uid
+              && !this.userService.hasIncompleteProfileReads(currentFirebaseUser.uid);
+          }),
           take(1)
-        ).toPromise();
+        )
+      );
+
+      if (!firebaseUser || (expectedUID && firebaseUser.uid !== expectedUID)) {
+        this.isLoading = false;
+        return;
+      }
+
+      const hasActionableProfileFailure = 'uid' in profileReadState
+        && profileReadState.uid === firebaseUser.uid
+        && isActionableProfileReadState(profileReadState);
+      if (hasActionableProfileFailure) {
+        this.isLoading = false;
+        return;
+      }
 
       this.analyticsService.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
       await this.navigateAfterLoginOnce();
     } catch (e) {
       this.logger.error(e);
       this.isLoading = false;
+    }
+  }
+
+  async recoverFromProfileReadError(): Promise<void> {
+    if (this.isProfileRecoveryInProgress) {
+      return;
+    }
+
+    this.isProfileRecoveryInProgress = true;
+    this.isLoading = true;
+    try {
+      await this.authService.signOut();
+    } catch (error) {
+      this.logger.error('Failed to reset the session after a profile read error', error);
+      this.snackBar.open('Could not reset your session. Please reload the page and try again.', 'Close', {
+        duration: 5000,
+      });
+      this.isLoading = false;
+      this.isProfileRecoveryInProgress = false;
     }
   }
 

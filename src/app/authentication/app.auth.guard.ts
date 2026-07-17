@@ -1,8 +1,10 @@
 import { inject } from '@angular/core';
 import { Router, CanMatchFn } from '@angular/router';
-import { map, take, tap } from 'rxjs/operators';
+import { combineLatest } from 'rxjs';
+import { filter, map, startWith, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from './app.auth.service';
+import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 
 /**
  * Functional auth guard using modern Angular patterns.
@@ -10,15 +12,47 @@ import { AppAuthService } from './app.auth.service';
  */
 export const authGuard: CanMatchFn = (route, segments) => {
   const authService = inject(AppAuthService);
+  const userService = inject(AppUserService);
   const router = inject(Router);
   const snackBar = inject(MatSnackBar);
   const url = '/' + segments.map(s => s.path).join('/');
 
-  return authService.user$.pipe(
+  return combineLatest([
+    authService.authState$,
+    authService.user$.pipe(startWith(null)),
+    userService.profileReadState$,
+  ]).pipe(
+    filter(([firebaseUser, appUser, profileReadState]) => {
+      if (!firebaseUser) {
+        return true;
+      }
+
+      const hasActionableProfileFailure = 'uid' in profileReadState
+        && profileReadState.uid === firebaseUser.uid
+        && isActionableProfileReadState(profileReadState);
+      if (hasActionableProfileFailure) {
+        return true;
+      }
+
+      return !!appUser
+        && appUser.uid === firebaseUser.uid
+        && !userService.hasIncompleteProfileReads(firebaseUser.uid);
+    }),
     take(1),
-    map(user => {
+    map(([firebaseUser, user, profileReadState]) => {
       authService.redirectUrl = null;
-      if (!user) {
+      const hasActionableProfileFailure = !!firebaseUser
+        && 'uid' in profileReadState
+        && profileReadState.uid === firebaseUser.uid
+        && isActionableProfileReadState(profileReadState);
+      if (hasActionableProfileFailure) {
+        authService.redirectUrl = url;
+        return router.createUrlTree(['/login'], {
+          queryParams: { returnUrl: url },
+        });
+      }
+
+      if (!firebaseUser || !user) {
         authService.redirectUrl = url;
         snackBar.open('You must login first', undefined, {
           duration: 2000,
