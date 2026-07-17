@@ -20,14 +20,14 @@
           <mat-spinner diameter="16"></mat-spinner>
           <span>Updating</span>
         } @else {
-          <span>{{ view.paceUnit }}</span>
+          <span><app-training-metric-text [text]="view.paceUnit"></app-training-metric-text></span>
         }
       </div>
     </header>
     <div #chartDiv class="swim-performance-chart" role="img" aria-label="Twelve-week pool and open-water average swimming pace chart"></div>
     <footer>
       @if (view.swolfContextText && view.latestSwolfText) {
-        <strong class="swim-performance-numeric-summary">Comparable pool SWOLF {{ view.latestSwolfText }}</strong>
+        <strong>Comparable pool SWOLF <app-training-metric-text [text]="view.latestSwolfText"></app-training-metric-text></strong>
         <span>{{ view.swolfContextText }} · latest matching week</span>
       } @else {
         <strong>No comparable pool SWOLF</strong>

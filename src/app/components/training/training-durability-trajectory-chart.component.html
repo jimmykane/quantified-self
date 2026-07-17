@@ -11,12 +11,12 @@
           <mat-spinner diameter="16"></mat-spinner>
           <span>Updating</span>
         } @else {
-          <span>12 weeks</span>
+          <span><app-training-metric-text text="12 weeks"></app-training-metric-text></span>
         }
       </div>
     </header>
     <div class="durability-trajectory-summary">
-      <strong>{{ view.activityCountSummary }}</strong>
+      <strong><app-training-metric-text [text]="view.activityCountSummary"></app-training-metric-text></strong>
       @if (view.exclusionSummary) {
         <span>{{ view.exclusionSummary }}</span>
       }

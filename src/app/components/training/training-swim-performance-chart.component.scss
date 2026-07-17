@@ -2,10 +2,9 @@
 .swim-performance-layout { box-sizing: border-box; display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; padding: 18px 20px; }
 header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 h3 { margin: 0; color: var(--mat-sys-on-surface); }
-header p, footer span { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: 12px; line-height: 1.4; }
-.swim-performance-status { display: inline-flex; align-items: center; gap: 6px; color: var(--mat-sys-on-surface-variant); font-size: 12px; white-space: nowrap; }
+header p, footer span { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size, 13px); line-height: 1.4; }
+.swim-performance-status { display: inline-flex; align-items: center; gap: 6px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size, 13px); white-space: nowrap; }
 .swim-performance-chart { flex: 1 1 auto; width: 100%; min-height: 230px; }
 footer { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
-footer strong { font-size: 13px; }
-.swim-performance-numeric-summary { font-family: var(--training-numeric-font-family, 'Barlow Condensed', sans-serif); font-variant-numeric: tabular-nums; }
+footer strong { font-size: var(--training-inter-body-font-size, 14px); }
 @media (max-width: 640px) { .swim-performance-layout { padding: 16px; } .swim-performance-chart { min-height: 260px; } }

@@ -53,19 +53,19 @@
         } @else {
           <article class="training-comparison-panel qs-glass-card-panel">
             <span class="training-metric-label">Training time</span>
-            <strong>{{ trainingStatus.volumeText }}</strong>
+            <strong><app-training-metric-text [text]="trainingStatus.volumeText"></app-training-metric-text></strong>
             <span>{{ trainingStatus.volumeCaption }}</span>
           </article>
           <article class="training-comparison-panel qs-glass-card-panel">
             <span class="training-metric-label">Sessions</span>
-            <strong>{{ trainingStatus.sessionsText }}</strong>
+            <strong><app-training-metric-text [text]="trainingStatus.sessionsText"></app-training-metric-text></strong>
             <span>{{ trainingStatus.sessionsCaption }}</span>
           </article>
         }
         @if (trainingRecoveryEstimate; as estimate) {
           <article class="training-comparison-panel training-recovery-estimate-panel qs-glass-card-panel">
             <span class="training-metric-label">Recovery remaining</span>
-            <strong>{{ estimate.valueText }}</strong>
+            <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
             <span>{{ estimate.detailText }}</span>
             @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
           </article>
@@ -80,7 +80,7 @@
             </div>
             @if (trainingReadiness.state === 'ready') {
               <div class="training-readiness-summary" aria-label="Current readiness signal summary">
-                <strong>{{ trainingReadiness.scoreText }}</strong>
+                <strong><app-training-metric-text [text]="trainingReadiness.scoreText"></app-training-metric-text></strong>
                 <span>{{ trainingReadiness.label }}</span>
                 <small>{{ trainingReadiness.updatedText }}</small>
               </div>
@@ -171,7 +171,7 @@
               @for (row of trainingReadiness.metricRows; track row.label) {
                 <div>
                   <dt>{{ row.label }}</dt>
-                  <dd>{{ row.valueText }}</dd>
+                  <dd><app-training-metric-text [text]="row.valueText"></app-training-metric-text></dd>
                   <small>{{ row.detailText }}</small>
                 </div>
               }
@@ -203,7 +203,12 @@
                 <dl class="training-recovery-table">
                   <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
                   @for (row of trainingRecovery.metricRows; track row.label) {
-                    <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+                    <div>
+                      <dt>{{ row.label }}</dt>
+                      <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
+                      <dd><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
+                      <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                    </div>
                   }
                 </dl>
               }
@@ -264,7 +269,12 @@
               <dl class="training-build-table">
                 <div class="training-build-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Benchmark</dd><dd>Change</dd></div>
                 @for (row of card.metricRows; track row.label) {
-                  <div [class.training-build-intensity-row]="row.isIntensity"><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.benchmarkText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+                  <div [class.training-build-intensity-row]="row.isIntensity">
+                    <dt>{{ row.label }}</dt>
+                    <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
+                    <dd><app-training-metric-text [text]="row.benchmarkText"></app-training-metric-text></dd>
+                    <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                  </div>
                 }
               </dl>
               @if (card.recovery; as recovery) {
@@ -296,7 +306,12 @@
                       <dl class="training-recovery-table training-build-recovery-table">
                         <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ recovery.currentLabel }}</dd><dd>{{ recovery.referenceLabel }}</dd><dd>Change</dd></div>
                         @for (row of recovery.metricRows; track row.label) {
-                          <div><dt>{{ row.label }}</dt><dd>{{ row.currentText }}</dd><dd>{{ row.referenceText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone">{{ row.deltaText }}</dd></div>
+                          <div>
+                            <dt>{{ row.label }}</dt>
+                            <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
+                            <dd><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
+                            <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                          </div>
                         }
                       </dl>
                       <small>{{ recovery.sourceText }}</small>
@@ -333,7 +348,7 @@
           @for (card of explanation.cards; track card.key) {
             <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
               <h3 class="training-insight-title">{{ card.title }}</h3>
-              <strong [class.training-numeric-stat]="card.usesNumericTypography">{{ card.valueText }}</strong>
+              <strong><app-training-metric-text [text]="card.valueText"></app-training-metric-text></strong>
               @if (card.descriptionItems?.length) {
                 <ul class="training-insight-list">
                   @for (item of card.descriptionItems; track $index) { <li>{{ item }}</li> }
@@ -391,14 +406,14 @@
           </article>
         }
         <dl class="training-metric-panel training-load-metrics qs-glass-card-panel">
-          <div><dt>CTL</dt><dd>{{ loadMetrics.ctlText }}</dd></div>
-          <div><dt>ATL</dt><dd>{{ loadMetrics.atlText }}</dd></div>
-          <div><dt>Ramp</dt><dd>{{ loadMetrics.rampText }}</dd></div>
-          <div><dt>ACWR</dt><dd>{{ loadMetrics.acwrText }}</dd></div>
-          <div><dt>Monotony</dt><dd>{{ loadMetrics.monotonyText }}</dd></div>
-          <div><dt>Strain</dt><dd>{{ loadMetrics.strainText }}</dd></div>
-          <div><dt>Now</dt><dd>{{ loadMetrics.freshnessNowText }}</dd></div>
-          <div><dt>+7 days</dt><dd>{{ loadMetrics.freshnessPlusSevenDaysText }}</dd></div>
+          <div><dt>CTL</dt><dd><app-training-metric-text [text]="loadMetrics.ctlText"></app-training-metric-text></dd></div>
+          <div><dt>ATL</dt><dd><app-training-metric-text [text]="loadMetrics.atlText"></app-training-metric-text></dd></div>
+          <div><dt>Ramp</dt><dd><app-training-metric-text [text]="loadMetrics.rampText"></app-training-metric-text></dd></div>
+          <div><dt>ACWR</dt><dd><app-training-metric-text [text]="loadMetrics.acwrText"></app-training-metric-text></dd></div>
+          <div><dt>Monotony</dt><dd><app-training-metric-text [text]="loadMetrics.monotonyText"></app-training-metric-text></dd></div>
+          <div><dt>Strain</dt><dd><app-training-metric-text [text]="loadMetrics.strainText"></app-training-metric-text></dd></div>
+          <div><dt>Now</dt><dd><app-training-metric-text [text]="loadMetrics.freshnessNowText"></app-training-metric-text></dd></div>
+          <div><dt>+7 days</dt><dd><app-training-metric-text [text]="loadMetrics.freshnessPlusSevenDaysText"></app-training-metric-text></dd></div>
         </dl>
       </div>
     </section>
@@ -418,11 +433,11 @@
           @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
             <article class="training-mix-panel qs-glass-card-panel">
               <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
-              <div class="training-mix-summary"><strong>{{ discipline.activityCountText }}</strong><span>activities</span><strong>{{ discipline.durationText }}</strong><span>time</span></div>
+              <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>activities</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time</span></div>
               <dl>
-                <div><dt>Easy</dt><dd>{{ discipline.easyText }} <span>/ {{ discipline.baselineEasyText }}</span></dd></div>
-                <div><dt>Moderate</dt><dd>{{ discipline.moderateText }} <span>/ {{ discipline.baselineModerateText }}</span></dd></div>
-                <div><dt>Hard</dt><dd>{{ discipline.hardText }} <span>/ {{ discipline.baselineHardText }}</span></dd></div>
+                <div><dt>Easy</dt><dd><app-training-metric-text [text]="discipline.easyText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="discipline.baselineEasyText"></app-training-metric-text></span></dd></div>
+                <div><dt>Moderate</dt><dd><app-training-metric-text [text]="discipline.moderateText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="discipline.baselineModerateText"></app-training-metric-text></span></dd></div>
+                <div><dt>Hard</dt><dd><app-training-metric-text [text]="discipline.hardText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="discipline.baselineHardText"></app-training-metric-text></span></dd></div>
               </dl>
             </article>
           } @empty {
@@ -472,19 +487,19 @@
                 @if (discipline.ftpSetting; as ftpSetting) {
                   <div class="training-capacity-marker">
                     <span>{{ ftpSetting.label }}</span>
-                    <strong>{{ ftpSetting.valueText }}</strong>
+                    <strong><app-training-metric-text [text]="ftpSetting.valueText"></app-training-metric-text></strong>
                     <small>{{ ftpSetting.detailText }}</small>
                   </div>
                 }
                 <div class="training-capacity-marker">
                   <span>{{ discipline.modeledCriticalPower.label }}</span>
-                  <strong>{{ discipline.modeledCriticalPower.valueText }}</strong>
+                  <strong><app-training-metric-text [text]="discipline.modeledCriticalPower.valueText"></app-training-metric-text></strong>
                   <small>{{ discipline.modeledCriticalPower.detailText }}</small>
                 </div>
                 @if (discipline.importedVo2Max; as importedVo2Max) {
                   <div class="training-capacity-marker training-capacity-aerobic-marker">
                     <span>{{ importedVo2Max.label }}</span>
-                    <strong>{{ importedVo2Max.valueText }}</strong>
+                    <strong><app-training-metric-text [text]="importedVo2Max.valueText"></app-training-metric-text></strong>
                     <small>{{ importedVo2Max.detailText }}</small>
                   </div>
                 }
@@ -548,8 +563,8 @@
                 <mat-tab [label]="scope.label">
                   <div class="training-durability-tab">
                     <div class="training-durability-evidence">
-                      <strong>{{ scope.evidenceText }}</strong>
-                      <span>{{ scope.coverageText }}</span>
+                      <strong><app-training-metric-text [text]="scope.evidenceText"></app-training-metric-text></strong>
+                      <span><app-training-metric-text [text]="scope.coverageText"></app-training-metric-text></span>
                       <small>{{ scope.trendText }}</small>
                       @if (scope.exclusionText) { <small>{{ scope.exclusionText }}</small> }
                     </div>
@@ -560,7 +575,12 @@
                           <dl class="training-durability-table">
                             <div class="training-durability-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Usual</dd><dd>Change</dd></div>
                             @for (metric of context.metrics; track metric.label) {
-                              <div><dt><strong>{{ metric.label }}</strong><small>{{ metric.detailText }}</small></dt><dd>{{ metric.currentText }}</dd><dd>{{ metric.usualText }}</dd><dd class="training-comparison-delta" [attr.data-tone]="metric.deltaTone">{{ metric.deltaText }}</dd></div>
+                              <div>
+                                <dt><strong>{{ metric.label }}</strong><small>{{ metric.detailText }}</small></dt>
+                                <dd><app-training-metric-text [text]="metric.currentText"></app-training-metric-text></dd>
+                                <dd><app-training-metric-text [text]="metric.usualText"></app-training-metric-text></dd>
+                                <dd class="training-comparison-delta" [attr.data-tone]="metric.deltaTone"><app-training-metric-text [text]="metric.deltaText"></app-training-metric-text></dd>
+                              </div>
                             }
                           </dl>
                         } @else {
@@ -593,12 +613,12 @@
               @if (cyclingPowerProfile; as profile) {
                 <div class="training-power-profile-summary">
                   <strong>90-day profile vs 1 year</strong>
-                  <span>{{ profile.activityCountText }}</span>
+                  <span><app-training-metric-text [text]="profile.activityCountText"></app-training-metric-text></span>
                   @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
                   @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
                   @if (profile.anchors.length) {
                     <div class="training-power-profile-anchors">
-                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone"><app-training-metric-text [text]="anchor.durationLabel + ' ' + anchor.retentionText"></app-training-metric-text></span> }
                     </div>
                   } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
                 </div>
@@ -622,12 +642,12 @@
               @if (runningPowerProfile; as profile) {
                 <div class="training-power-profile-summary">
                   <strong>90-day profile vs 1 year</strong>
-                  <span>{{ profile.activityCountText }}</span>
+                  <span><app-training-metric-text [text]="profile.activityCountText"></app-training-metric-text></span>
                   @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
                   @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
                   @if (profile.anchors.length) {
                     <div class="training-power-profile-anchors">
-                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone">{{ anchor.durationLabel }} {{ anchor.retentionText }}</span> }
+                      @for (anchor of profile.anchors; track anchor.durationSeconds) { <span [attr.data-tone]="anchor.deltaTone"><app-training-metric-text [text]="anchor.durationLabel + ' ' + anchor.retentionText"></app-training-metric-text></span> }
                     </div>
                   } @else { <small>No safely comparable 90-day and 1-year anchors.</small> }
                 </div>

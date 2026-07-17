@@ -1,0 +1,5 @@
+:host { display: inline; }
+.training-metric-token {
+  font-family: var(--training-numeric-font-family, 'Barlow Condensed', sans-serif);
+  font-variant-numeric: tabular-nums;
+}

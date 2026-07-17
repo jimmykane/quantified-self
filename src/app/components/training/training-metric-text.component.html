@@ -1,0 +1,3 @@
+@for (segment of segments(); track $index) {
+  <span [class.training-metric-token]="segment.isMetric">{{ segment.text }}</span>
+}

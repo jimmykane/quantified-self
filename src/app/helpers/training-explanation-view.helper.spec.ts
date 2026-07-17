@@ -34,7 +34,7 @@ describe('buildTrainingExplanationViewModel', () => {
   it('explains load, contributors, sport load, rhythm, and coverage', () => {
     const view = buildTrainingExplanationViewModel(payload());
     expect(view?.cards).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'load', valueText: '50% higher than usual', usesNumericTypography: true, tone: 'neutral' }),
+      expect.objectContaining({ key: 'load', valueText: '50% higher than usual', tone: 'neutral' }),
       expect.objectContaining({
         key: 'contributors',
         description: 'Long run (40%; mostly running)',
@@ -46,16 +46,13 @@ describe('buildTrainingExplanationViewModel', () => {
     expect(view?.coverageText).toContain('4/4 current parent events');
   });
 
-  it('keeps text-only comparison values in the narrative typeface', () => {
+  it('retains text-only comparison values for the metric renderer', () => {
     const input = payload();
     input.current.rhythms[0] = { ...input.current.rhythms[0], activeDayCount: input.baselineMedian.rhythms[0].activeDayCount };
 
     const view = buildTrainingExplanationViewModel(input);
 
-    expect(view?.cards.find(card => card.key === 'rhythm')).toEqual(expect.objectContaining({
-      valueText: 'Same active days',
-      usesNumericTypography: false,
-    }));
+    expect(view?.cards.find(card => card.key === 'rhythm')?.valueText).toBe('Same active days');
   });
 
   it('preserves each top contributor as a separate display item', () => {

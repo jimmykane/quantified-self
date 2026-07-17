@@ -942,13 +942,15 @@ is treated as stale and re-requested.
 
 UI principles:
 
-- Primary numeric and stat values use the app's locally bundled Barlow Condensed family with tabular numerals. Headings,
-  labels, status words, and narrative explanations remain in Inter. ECharts continues to use its shared Barlow Condensed
-  font token so chart typography matches the surrounding Training metrics.
-- Training uses one 14 px card-body scale, one 16 px card-title scale shared with embedded Dashboard charts, and one 20 px
-  secondary key-stat scale shared with their headline values. The four primary **What Drove This** comparison claims use
-  24 px to lead their cards. Hero summaries remain intentionally larger, while dense comparison tables, supporting chart
-  values, and evidence captions remain intentionally smaller.
+- Primary numeric and stat values use the app's locally bundled Barlow Condensed family with tabular numerals. In mixed
+  stat copy, only numeric expressions and their attached units use Barlow Condensed; comparison words and other context
+  inherit Inter. Headings, labels, status words, and narrative explanations remain in Inter. ECharts continues to use its
+  shared Barlow Condensed font token so chart typography matches the surrounding Training metrics.
+- On desktop, Training uses a 15 px route base with 14 px card-body copy, 13 px captions, 12 px microcopy, and 11 px fine
+  print. Mobile restores the compact 14/13/12/11/10 px scale. Card titles stay at 16 px and secondary key stats at 20 px,
+  matching embedded Dashboard charts. The four primary **What Drove This** comparison claims use 24 px to lead their cards.
+  Hero summaries remain intentionally larger, while dense comparison tables, supporting chart values, and evidence captions
+  remain intentionally smaller.
 - Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
   containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
