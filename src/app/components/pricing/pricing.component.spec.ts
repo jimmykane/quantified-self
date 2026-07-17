@@ -507,12 +507,22 @@ describe('PricingComponent', () => {
         expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             data: expect.objectContaining({
                 title: 'Manage Subscription',
-                message: expect.stringContaining('device sync will be disconnected')
+                htmlMessage: expect.stringContaining('device sync will be disconnected')
             })
         }));
         expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             data: expect.objectContaining({
-                message: expect.stringContaining('Existing activities are not automatically deleted')
+                htmlMessage: expect.stringContaining('<strong>Important:</strong>')
+            })
+        }));
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                htmlMessage: expect.stringContaining('Existing activities are not automatically deleted')
+            })
+        }));
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.not.objectContaining({
+                message: expect.anything()
             })
         }));
     });
@@ -527,12 +537,17 @@ describe('PricingComponent', () => {
         expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             data: expect.objectContaining({
                 title: 'Manage Subscription',
-                message: expect.stringContaining('secure billing portal')
+                htmlMessage: expect.stringContaining('secure billing portal')
             })
         }));
         expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             data: expect.not.objectContaining({
-                message: expect.stringContaining('device sync')
+                htmlMessage: expect.stringContaining('device sync')
+            })
+        }));
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.not.objectContaining({
+                message: expect.anything()
             })
         }));
     });

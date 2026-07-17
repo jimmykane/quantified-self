@@ -481,8 +481,8 @@ export class PricingComponent implements OnInit, OnDestroy {
     async manageSubscription() {
         if (this.currentRole === 'pro' || this.currentRole === 'basic') {
             const isPro = this.currentRole === 'pro';
-            const message = `You will be redirected to our secure billing portal where you can manage your plan and payment methods.<br><br>` +
-                `<span style="color: var(--mat-sys-error); font-weight: bold;">Important:</span> If you decide to downgrade your plan, you will keep your features for a 30-day grace period. ` +
+            const htmlMessage = `You will be redirected to our secure billing portal where you can manage your plan and payment methods.<br><br>` +
+                `<strong>Important:</strong> If you decide to downgrade your plan, you will keep your features for a 30-day grace period. ` +
                 (isPro ? `After that, your device sync will be disconnected, and your new plan limits will apply to future uploads. Existing activities are not automatically deleted.` :
                     `After that, your new plan limits will apply to future uploads. Existing activities are not automatically deleted.`);
 
@@ -490,7 +490,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 this.dialog.open(ConfirmationDialogComponent, {
                     data: {
                         title: 'Manage Subscription',
-                        message: message,
+                        htmlMessage,
                         confirmText: 'Manage Subscription',
                         cancelText: 'Cancel'
                     }
