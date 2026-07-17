@@ -940,6 +940,9 @@ UI principles:
 - Primary numeric and stat values use the app's locally bundled Barlow Condensed family with tabular numerals. Headings,
   labels, status words, and narrative explanations remain in Inter. ECharts continues to use its shared Barlow Condensed
   font token so chart typography matches the surrounding Training metrics.
+- Training uses one 14 px card-body scale, one 16 px card-title scale shared with embedded Dashboard charts, and one 20 px
+  secondary key-stat scale shared with their headline values. Hero summaries remain intentionally larger, while dense
+  comparison tables, supporting chart values, and evidence captions remain intentionally smaller.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.

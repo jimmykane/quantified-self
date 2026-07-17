@@ -89,7 +89,7 @@
 
 .intensity-stat-value {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.14rem;
+  font-size: var(--qs-dashboard-chart-stat-font-size, 1.14rem);
   line-height: 1;
   font-weight: 700;
   color: var(--mat-sys-on-surface);
