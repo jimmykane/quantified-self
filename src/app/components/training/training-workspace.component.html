@@ -315,7 +315,7 @@
       </div>
     </section>
 
-    <section class="training-section" aria-labelledby="training-insights-title">
+    <section class="training-section training-explanation-section" aria-labelledby="training-insights-title">
       <div class="training-section-heading">
         <div>
           <p>What drove this</p>
@@ -332,9 +332,15 @@
           }
           @for (card of explanation.cards; track card.key) {
             <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
-              <span class="training-metric-label">{{ card.title }}</span>
+              <h3 class="training-insight-title">{{ card.title }}</h3>
               <strong [class.training-numeric-stat]="card.usesNumericTypography">{{ card.valueText }}</strong>
-              <p>{{ card.description }}</p>
+              @if (card.descriptionItems?.length) {
+                <ul class="training-insight-list">
+                  @for (item of card.descriptionItems; track $index) { <li>{{ item }}</li> }
+                </ul>
+              } @else {
+                <p>{{ card.description }}</p>
+              }
             </article>
           }
           <p class="training-explanation-coverage">{{ explanation.coverageText }}</p>

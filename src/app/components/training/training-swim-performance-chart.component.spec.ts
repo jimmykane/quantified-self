@@ -2,6 +2,8 @@ import { ElementRef, SimpleChange } from '@angular/core';
 import { SwimPaceUnits } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
 import type { DashboardTrainingSwimPerformanceContext } from '../../helpers/dashboard-derived-metrics.helper';
+import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../helpers/echarts-tooltip-position.helper';
 import { TrainingSwimPerformanceChartComponent } from './training-swim-performance-chart.component';
 
 function performance(pace: number | null = 100): DashboardTrainingSwimPerformanceContext {
@@ -54,6 +56,12 @@ describe('TrainingSwimPerformanceChartComponent', () => {
     expect(option.yAxis.inverse).toBe(true);
     expect(option.series.map((series: any) => series.name)).toEqual(['Pool', 'Open water']);
     expect(option.series[1].lineStyle.type).toBe('dashed');
+    expect(option.tooltip).toEqual(expect.objectContaining({
+      appendTo: getOrCreateEChartsTooltipHost,
+      confine: false,
+      position: getViewportConstrainedTooltipPosition,
+      triggerOn: 'mousemove|click',
+    }));
     expect(component.view.latestSwolfText).toBe('42');
   });
 

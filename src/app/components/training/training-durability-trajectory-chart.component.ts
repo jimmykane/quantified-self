@@ -22,6 +22,11 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../helpers/echarts-host-controller';
+import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from '../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import type { TrainingDurabilityTrajectoryViewModel } from '../../helpers/training-durability-view.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -132,6 +137,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       return { animation: false, tooltip: { show: false }, xAxis: [], yAxis: [], series: [] };
     }
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, this.chartDiv.nativeElement.clientWidth || 0);
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const weekLabelFormatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
@@ -151,7 +157,11 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       },
       tooltip: {
         trigger: 'axis',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',
+        // This chart is wider than its mobile scroll viewport, so confining the
+        // tooltip to the chart canvas can leave it outside the visible card.
+        ...resolveEChartsTooltipSurfaceConfig(false),
         ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: TrajectoryTooltipParam | TrajectoryTooltipParam[]) => {
           const entries = Array.isArray(params) ? params : [params];

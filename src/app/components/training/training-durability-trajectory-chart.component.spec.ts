@@ -2,6 +2,8 @@ import { ElementRef, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import type { TrainingDurabilityTrajectoryViewModel } from '../../helpers/training-durability-view.helper';
+import { getOrCreateEChartsTooltipHost } from '../../helpers/echarts-tooltip-host.helper';
+import { getViewportConstrainedTooltipPosition } from '../../helpers/echarts-tooltip-position.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import { TrainingDurabilityTrajectoryChartComponent } from './training-durability-trajectory-chart.component';
@@ -112,6 +114,12 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(option.series[0].label.formatter({ dataIndex: 2 })).toBe('2/2');
     expect(option.series[1].data[1]).toBeNull();
     expect(option.series[1].connectNulls).toBe(false);
+    expect(option.tooltip).toEqual(expect.objectContaining({
+      appendTo: getOrCreateEChartsTooltipHost,
+      confine: false,
+      position: getViewportConstrainedTooltipPosition,
+      triggerOn: 'mousemove|click',
+    }));
     expect(component.availabilityText).toContain('11 of 12 weeks produced comparable evidence');
     expect(component.availabilityText).toContain('1 with eligible samples but no aerobic decoupling');
 
@@ -120,6 +128,38 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     expect(emptyTooltip).toContain('Power recorded');
     expect(emptyTooltip).toContain('0 activities');
     expect(emptyTooltip).toContain('No recorded power');
+  });
+
+  it('keeps mobile tooltips tap-triggered and visible outside the horizontal chart scroller', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }) as unknown as typeof window.matchMedia;
+
+    try {
+      const component = createComponent();
+      component.trajectory = trajectory();
+      component.status = 'ready';
+      component.chartDiv = new ElementRef(document.createElement('div'));
+
+      const option = (component as any).buildOption();
+
+      expect(option.tooltip).toEqual(expect.objectContaining({
+        appendTo: getOrCreateEChartsTooltipHost,
+        confine: false,
+        position: getViewportConstrainedTooltipPosition,
+        triggerOn: 'click',
+      }));
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 
   it('surfaces pending status without replacing available trajectory data', async () => {

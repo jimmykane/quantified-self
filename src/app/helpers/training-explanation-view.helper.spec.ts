@@ -35,7 +35,11 @@ describe('buildTrainingExplanationViewModel', () => {
     const view = buildTrainingExplanationViewModel(payload());
     expect(view?.cards).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'load', valueText: '50% higher than usual', usesNumericTypography: true, tone: 'neutral' }),
-      expect.objectContaining({ key: 'contributors', description: 'Long run (40%; mostly running)' }),
+      expect.objectContaining({
+        key: 'contributors',
+        description: 'Long run (40%; mostly running)',
+        descriptionItems: ['Long run (40%; mostly running)'],
+      }),
       expect.objectContaining({ key: 'mix', title: 'Running load', valueText: '100 TSS higher', tone: 'neutral' }),
       expect.objectContaining({ key: 'rhythm', valueText: '2 active days higher', tone: 'neutral' }),
     ]));
@@ -54,6 +58,33 @@ describe('buildTrainingExplanationViewModel', () => {
     }));
   });
 
+  it('preserves each top contributor as a separate display item', () => {
+    const input = payload();
+    input.topContributors.push({
+      eventId: 'event-2',
+      label: 'Tempo ride',
+      startDayMs: 2,
+      trainingStressScore: 60,
+      loadSharePercent: 20,
+      childComposition: [{
+        sport: 'cycling',
+        label: 'Cycling',
+        activityCount: 1,
+        loadActivityCount: 1,
+        trainingStressScore: 60,
+        loadSharePercent: 100,
+      }],
+    });
+
+    const contributorCard = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'contributors');
+
+    expect(contributorCard?.descriptionItems).toEqual([
+      'Long run (40%; mostly running)',
+      'Tempo ride (20%; mostly cycling)',
+    ]);
+    expect(contributorCard?.description).toBe('Long run (40%; mostly running) · Tempo ride (20%; mostly cycling)');
+  });
+
   it('returns null without a normalized payload', () => {
     expect(buildTrainingExplanationViewModel(null)).toBeNull();
   });
@@ -70,6 +101,9 @@ describe('buildTrainingExplanationViewModel', () => {
     const view = buildTrainingExplanationViewModel(input);
 
     expect(view?.cards.find(card => card.key === 'contributors')?.description).toMatch(/^Running · (Jul 10|10 Jul) \(40%\)$/);
+    expect(view?.cards.find(card => card.key === 'contributors')?.descriptionItems).toEqual([
+      expect.stringMatching(/^Running · (Jul 10|10 Jul) \(40%\)$/),
+    ]);
     expect(view?.cards.find(card => card.key === 'rhythm')?.description).toContain('Longest inactivity gap: 1 day;');
   });
 });

@@ -634,6 +634,11 @@ Rhythm includes session count, active days, active weeks, longest inactivity gap
 missing parent TSS and unclassified child activity types visible. A sparse one-off baseline must not be described as a
 confident usual pattern.
 
+The four driver cards use one balanced row on wide screens, a two-by-two tablet layout, and a single mobile column.
+Within each card, the card heading, primary comparison, supporting explanation, and coverage note use distinct type
+levels. Contributor events render as separate list items so an event label and its load share do not split into an
+ambiguous separator-delimited sentence.
+
 ### 4. Load Trajectory
 
 This section reuses global derived load metrics:
@@ -941,8 +946,12 @@ UI principles:
   labels, status words, and narrative explanations remain in Inter. ECharts continues to use its shared Barlow Condensed
   font token so chart typography matches the surrounding Training metrics.
 - Training uses one 14 px card-body scale, one 16 px card-title scale shared with embedded Dashboard charts, and one 20 px
-  secondary key-stat scale shared with their headline values. Hero summaries remain intentionally larger, while dense
-  comparison tables, supporting chart values, and evidence captions remain intentionally smaller.
+  secondary key-stat scale shared with their headline values. The four primary **What Drove This** comparison claims use
+  24 px to lead their cards. Hero summaries remain intentionally larger, while dense comparison tables, supporting chart
+  values, and evidence captions remain intentionally smaller.
+- Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
+  containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
+  confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.

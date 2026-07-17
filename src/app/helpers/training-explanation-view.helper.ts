@@ -11,6 +11,7 @@ export interface TrainingExplanationCardViewModel {
   valueText: string;
   usesNumericTypography: boolean;
   description: string;
+  descriptionItems?: readonly string[];
   tone: TrainingExplanationTone;
 }
 export interface TrainingExplanationViewModel {
@@ -39,20 +40,22 @@ export function buildTrainingExplanationViewModel(
 
   if (payload.topContributors.length) {
     const contributors = payload.topContributors.slice(0, 3);
+    const descriptionItems = contributors.map((item) => {
+      const leadingChild = [...item.childComposition]
+        .filter(child => child.loadSharePercent !== null)
+        .sort((left, right) => (right.loadSharePercent || 0) - (left.loadSharePercent || 0))[0];
+      const usesContextFallback = isGenericContributorLabel(item.label);
+      const label = usesContextFallback
+        ? `${leadingChild?.label || 'Activity'} · ${formatShortUtcDate(item.startDayMs)}`
+        : item.label!;
+      return `${label} (${formatNumber(item.loadSharePercent)}%${leadingChild && !usesContextFallback ? `; mostly ${leadingChild.label.toLowerCase()}` : ''})`;
+    });
     cards.push({
       key: 'contributors',
       title: 'Top contributors',
       valueText: `${formatNumber(contributors.reduce((sum, item) => sum + item.loadSharePercent, 0))}% of load`,
-      description: contributors.map((item) => {
-        const leadingChild = [...item.childComposition]
-          .filter(child => child.loadSharePercent !== null)
-          .sort((left, right) => (right.loadSharePercent || 0) - (left.loadSharePercent || 0))[0];
-        const usesContextFallback = isGenericContributorLabel(item.label);
-        const label = usesContextFallback
-          ? `${leadingChild?.label || 'Activity'} · ${formatShortUtcDate(item.startDayMs)}`
-          : item.label!;
-        return `${label} (${formatNumber(item.loadSharePercent)}%${leadingChild && !usesContextFallback ? `; mostly ${leadingChild.label.toLowerCase()}` : ''})`;
-      }).join(' · '),
+      description: descriptionItems.join(' · '),
+      descriptionItems,
       tone: 'neutral',
     });
   }
