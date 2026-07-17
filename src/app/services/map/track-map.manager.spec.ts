@@ -384,6 +384,89 @@ describe('TrackMapManager', () => {
     expect(startMarkerElement.style.cursor).toBe('');
   });
 
+  it('combines dense track collections into one source while preserving colors and clicks', () => {
+    const combinedManager = new TrackMapManager(markerFactory, {
+      log: vi.fn(),
+      warn: vi.fn(),
+    } as unknown as LoggerService, {
+      layerPrefix: 'route-preview',
+      logPrefix: 'RoutePreviewMapManager',
+      combineTrackLayers: true,
+    });
+    combinedManager.setMap(map, { Marker: MockMapboxMarker, LngLatBounds: MockLngLatBounds });
+    map.addSource.mockClear();
+    map.addLayer.mockClear();
+    const onTrackClick = vi.fn();
+
+    combinedManager.renderTrackData([
+      {
+        id: 'route-1',
+        strokeColor: '#1e88e5',
+        positions: [
+          { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+          { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+        ],
+      },
+      {
+        id: 'route-2',
+        strokeColor: '#43a047',
+        positions: [
+          { latitudeDegrees: 41.1, longitudeDegrees: 23.1 },
+          { latitudeDegrees: 41.2, longitudeDegrees: 23.2 },
+        ],
+      },
+    ], {
+      showArrows: false,
+      showEndpointMarkers: false,
+      strokeWidth: 3,
+      onTrackClick,
+    });
+
+    expect(map.addSource).toHaveBeenCalledTimes(1);
+    expect(map.addSource).toHaveBeenCalledWith('route-preview-combined-source', {
+      type: 'geojson',
+      data: expect.objectContaining({
+        type: 'FeatureCollection',
+        features: [
+          expect.objectContaining({ properties: expect.objectContaining({ trackId: 'route-1', strokeColor: '#1e88e5' }) }),
+          expect.objectContaining({ properties: expect.objectContaining({ trackId: 'route-2', strokeColor: '#43a047' }) }),
+        ],
+      }),
+    });
+    expect(map.addLayer).toHaveBeenCalledTimes(2);
+    expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'route-preview-combined-line',
+      paint: expect.objectContaining({ 'line-color': ['get', 'strokeColor'] }),
+    }));
+    expect((combinedManager as any).extraMarkers.size).toBe(0);
+
+    const clickBinding = map.on.mock.calls.find((call: any[]) => (
+      call[0] === 'click' && call[1] === 'route-preview-combined-hit'
+    ));
+    clickBinding?.[2]({
+      features: [{ properties: { trackId: 'route-2' } }],
+      lngLat: { lng: 23.15, lat: 41.15 },
+    });
+
+    expect(onTrackClick).toHaveBeenCalledWith(expect.objectContaining({
+      track: expect.objectContaining({ id: 'route-2' }),
+      longitudeDegrees: 23.15,
+      latitudeDegrees: 41.15,
+    }));
+
+    combinedManager.renderTrackData([], {
+      showArrows: false,
+      showEndpointMarkers: false,
+      strokeWidth: 3,
+      onTrackClick,
+    });
+
+    expect(map.off).toHaveBeenCalledWith('click', 'route-preview-combined-hit', clickBinding?.[2]);
+    expect(map.removeLayer).toHaveBeenCalledWith('route-preview-combined-hit');
+    expect(map.removeLayer).toHaveBeenCalledWith('route-preview-combined-line');
+    expect(map.removeSource).toHaveBeenCalledWith('route-preview-combined-source');
+  });
+
   it('fits bounds across selected track coordinates and markers', () => {
     manager.renderTrackData([{
       id: 'route-1',

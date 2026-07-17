@@ -49,10 +49,10 @@
     @if (routes$ | async; as routes) {
     <section class="routes-summary" aria-label="Route summary">
       <div class="summary-item">
-        <span class="summary-value">{{ routeCount() ?? routes.length }}</span>
+        <span class="summary-value">{{ loadedRouteCount() }}</span>
         <span class="summary-label">saved routes</span>
       </div>
-      @if ((routeCount() ?? routes.length) !== routes.length) {
+      @if (loadedRouteCount() !== routes.length) {
       <div class="summary-item">
         <span class="summary-value">{{ routes.length }}</span>
         <span class="summary-label">shown in table</span>
@@ -109,6 +109,24 @@
       </div>
       </div>
       @if (routes.length > 0) {
+      <section class="routes-map-panel" aria-labelledby="routes-map-title">
+        <header class="routes-map-header">
+          <div>
+            <h2 id="routes-map-title">Route map</h2>
+            <p>Showing preview-ready routes from the loaded and filtered table results.</p>
+          </div>
+          <span class="routes-map-result-count">{{ routes.length }} table {{ routes.length === 1 ? 'result' : 'results' }}</span>
+        </header>
+        <div class="routes-map-stage">
+          <app-route-preview-map
+            [routes]="routeMapRoutes()"
+            [user]="currentUser"
+            [mapStyle]="currentUser.settings?.mapSettings?.mapStyle || 'default'"
+            [isLoading]="false"
+            analyticsSource="routes_page_map">
+          </app-route-preview-map>
+        </div>
+      </section>
       <section class="route-table-shell qs-scrollbar" aria-label="Saved routes">
       @if (selectedRouteCount() > 0) {
       <div class="route-selection-toolbar" aria-live="polite">

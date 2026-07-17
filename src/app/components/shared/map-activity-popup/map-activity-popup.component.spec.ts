@@ -81,7 +81,7 @@ describe('MapActivityPopupComponent', () => {
 
   it('keeps map activity popup styling aligned with the route popup primitive', () => {
     const stylesPath = resolve(process.cwd(), 'src/app/components/shared/map-activity-popup/map-activity-popup.component.scss');
-    const routePopupStylesPath = resolve(process.cwd(), 'src/app/components/routes/dashboard-route-preview-map/dashboard-route-preview-map.component.css');
+    const routePopupStylesPath = resolve(process.cwd(), 'src/app/components/routes/route-preview-map/route-preview-map.component.css');
     const eventsMapStylesPath = resolve(process.cwd(), 'src/app/components/events-map/events-map.component.css');
     const tracksStylesPath = resolve(process.cwd(), 'src/app/components/tracks/tracks.component.scss');
     const styles = readFileSync(stylesPath, 'utf8');

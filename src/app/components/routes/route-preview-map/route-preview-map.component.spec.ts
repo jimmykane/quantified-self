@@ -3,7 +3,7 @@ import { signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { DashboardRoutePreviewMapComponent } from './dashboard-route-preview-map.component';
+import { RoutePreviewMapComponent } from './route-preview-map.component';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -12,8 +12,8 @@ import { MapboxAutoResizeService } from '../../../services/map/mapbox-auto-resiz
 import { MapStyleService } from '../../../services/map-style.service';
 import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
 
-describe('DashboardRoutePreviewMapComponent', () => {
-  let fixture: ComponentFixture<DashboardRoutePreviewMapComponent>;
+describe('RoutePreviewMapComponent', () => {
+  let fixture: ComponentFixture<RoutePreviewMapComponent>;
   let createMapResolve: (map: any) => void;
   let mapboxLoaderMock: { createMap: ReturnType<typeof vi.fn>; loadMapbox: ReturnType<typeof vi.fn> };
   let mapboxAutoResizeMock: { bind: ReturnType<typeof vi.fn>; unbind: ReturnType<typeof vi.fn> };
@@ -67,7 +67,7 @@ describe('DashboardRoutePreviewMapComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [DashboardRoutePreviewMapComponent],
+      imports: [RoutePreviewMapComponent],
       providers: [
         { provide: AppAnalyticsService, useValue: analyticsMock },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
@@ -89,7 +89,7 @@ describe('DashboardRoutePreviewMapComponent', () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(DashboardRoutePreviewMapComponent);
+    fixture = TestBed.createComponent(RoutePreviewMapComponent);
   });
 
   afterEach(() => {
@@ -144,6 +144,27 @@ describe('DashboardRoutePreviewMapComponent', () => {
     );
   });
 
+  it('reuses decoded route positions across filtered arrays while invalidating changed route documents', () => {
+    const component = fixture.componentInstance as any;
+    const route = buildPreviewRoute('route-1');
+    component.routes = [route];
+
+    const firstTracks = component.buildTracks();
+    const secondTracks = component.buildTracks();
+
+    expect(secondTracks[0].positions).toBe(firstTracks[0].positions);
+
+    component.routes = [route];
+    const filteredArrayTracks = component.buildTracks();
+
+    expect(filteredArrayTracks[0].positions).toBe(firstTracks[0].positions);
+
+    component.routes = [buildPreviewRoute('route-1')];
+    const refreshedTracks = component.buildTracks();
+
+    expect(refreshedTracks[0].positions).not.toBe(firstTracks[0].positions);
+  });
+
   it('selects clicked route previews and opens route details', () => {
     const component = fixture.componentInstance as any;
     const renderSpy = vi.spyOn(component.mapManager, 'renderTrackData').mockImplementation(() => undefined);
@@ -186,6 +207,41 @@ describe('DashboardRoutePreviewMapComponent', () => {
     expect(routerMock.navigate).toHaveBeenCalledWith(['/user', 'route-user', 'route', 'route-1']);
   });
 
+  it('refreshes an open route popup when the live route document changes', () => {
+    const component = fixture.componentInstance as any;
+    const originalRoute = buildPreviewRoute('route-1', { name: 'Original name' });
+    const updatedRoute = buildPreviewRoute('route-1', {
+      name: 'Updated name',
+      stats: { distance: 4321, ascent: 80, descent: 75 },
+    });
+    vi.spyOn(component.mapManager, 'renderTrackData').mockImplementation(() => undefined);
+    component.selectedRoute.set(originalRoute);
+    component.routes = [updatedRoute];
+    component.mapReady = true;
+    component.mapInstance.set({ isStyleLoaded: () => true });
+
+    component.renderRoutePreviews(false);
+
+    expect(component.selectedRoute()).toBe(updatedRoute);
+    expect(component.selectedRouteTitle()).toBe('Updated name');
+    expect(component.selectedRouteMetrics().map((metric: { label: string }) => metric.label))
+      .toEqual(['Distance', 'Ascent', 'Descent']);
+  });
+
+  it('uses the parent-provided analytics source when opening route details', () => {
+    const component = fixture.componentInstance;
+    component.analyticsSource = 'routes_page_map';
+    component.selectedRoute.set(buildPreviewRoute('route-1'));
+
+    component.openSelectedRoute();
+
+    expect(analyticsMock.logSavedRouteAction).toHaveBeenCalledWith('open_details', {
+      fileType: 'gpx',
+      source: 'routes_page_map',
+    });
+    expect(routerMock.navigate).toHaveBeenCalledWith(['/user', 'user-1', 'route', 'route-1']);
+  });
+
   it('debounces automatic route preview bounds fits without animating repeated previews', () => {
     vi.useFakeTimers();
     try {
@@ -212,6 +268,41 @@ describe('DashboardRoutePreviewMapComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('uses an order-independent geometry-bounds fingerprint for automatic camera fits', () => {
+    const component = fixture.componentInstance as any;
+    const firstTrack = {
+      id: 'route-1-segment-1',
+      strokeColor: '#000000',
+      positions: [
+        { latitudeDegrees: 39, longitudeDegrees: 20 },
+        { latitudeDegrees: 39.5, longitudeDegrees: 20.5 },
+        { latitudeDegrees: 40, longitudeDegrees: 21 },
+      ],
+    };
+    const secondTrack = {
+      id: 'route-2-segment-1',
+      strokeColor: '#ffffff',
+      positions: [
+        { latitudeDegrees: 41, longitudeDegrees: 22 },
+        { latitudeDegrees: 42, longitudeDegrees: 23 },
+      ],
+    };
+
+    const initialFingerprint = component.buildTrackBoundsFingerprint([firstTrack, secondTrack]);
+    const reorderedFingerprint = component.buildTrackBoundsFingerprint([secondTrack, firstTrack]);
+    const expandedFingerprint = component.buildTrackBoundsFingerprint([{
+      ...firstTrack,
+      positions: [
+        firstTrack.positions[0],
+        { latitudeDegrees: 50, longitudeDegrees: 30 },
+        firstTrack.positions[2],
+      ],
+    }, secondTrack]);
+
+    expect(reorderedFingerprint).toBe(initialFingerprint);
+    expect(expandedFingerprint).not.toBe(initialFingerprint);
   });
 
   it('detaches map lifecycle handlers when destroyed after initialization', async () => {

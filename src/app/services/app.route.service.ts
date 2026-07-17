@@ -123,6 +123,11 @@ export class AppRouteService {
         return defer(() => collectionData(routesQuery, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>);
     }
 
+    getAllRoutes(user: RouteOwner): Observable<FirestoreRouteJSON[]> {
+        const routesCollection = collection(this.firestore, 'users', user.uid, 'routes');
+        return defer(() => collectionData(routesCollection, { idField: 'id' }) as Observable<FirestoreRouteJSON[]>);
+    }
+
     watchHasAnyRoutePreview(userID: string | null | undefined): Observable<boolean> {
         const uid = `${userID || ''}`.trim();
         if (!uid) {

@@ -51,6 +51,47 @@ describe('route-preview-map.helper', () => {
     })]);
   });
 
+  it('keeps route colors stable when the table order changes', () => {
+    const encodedPolyline = encodeRoutePolyline5([
+      { latitudeDegrees: 39.1, longitudeDegrees: 20.1 },
+      { latitudeDegrees: 39.2, longitudeDegrees: 20.2 },
+    ]);
+    const firstRoute = buildMapPreviewRoute('route-1', encodedPolyline);
+    const secondRoute = buildMapPreviewRoute('route-2', encodedPolyline);
+
+    const initialColors = new Map(buildRoutePreviewMapTracks([firstRoute, secondRoute])
+      .map(track => [track.id, track.strokeColor]));
+    const reorderedColors = new Map(buildRoutePreviewMapTracks([secondRoute, firstRoute])
+      .map(track => [track.id, track.strokeColor]));
+
+    expect(reorderedColors).toEqual(initialColors);
+  });
+
+  it('invalidates cached segment geometry when an encoded polyline changes in place', () => {
+    const segmentCache = new WeakMap();
+    const route = buildMapPreviewRoute('route-1', encodeRoutePolyline5([
+      { latitudeDegrees: 39.1, longitudeDegrees: 20.1 },
+      { latitudeDegrees: 39.2, longitudeDegrees: 20.2 },
+    ]));
+
+    const initialPositions = buildRoutePreviewMapTracks([route], {
+      decodedSegmentCache: segmentCache,
+    })[0].positions;
+    route.preview.segments[0].encodedPolyline = encodeRoutePolyline5([
+      { latitudeDegrees: 41.1, longitudeDegrees: 22.1 },
+      { latitudeDegrees: 41.2, longitudeDegrees: 22.2 },
+    ]);
+    const updatedPositions = buildRoutePreviewMapTracks([route], {
+      decodedSegmentCache: segmentCache,
+    })[0].positions;
+
+    expect(updatedPositions).not.toBe(initialPositions);
+    expect(updatedPositions).toEqual([
+      { latitudeDegrees: 41.1, longitudeDegrees: 22.1 },
+      { latitudeDegrees: 41.2, longitudeDegrees: 22.2 },
+    ]);
+  });
+
   it('skips previews that are not renderable', () => {
     expect(isRenderableRoutePreview(null)).toBe(false);
     expect(buildRoutePreviewMapTracks([{
@@ -254,3 +295,32 @@ describe('route-preview-map.helper', () => {
     })).toBeNull();
   });
 });
+
+function buildMapPreviewRoute(id: string, encodedPolyline: string): any {
+  return {
+    id,
+    userID: 'user-1',
+    name: id,
+    srcFileType: 'gpx',
+    createdAt: null,
+    routes: [],
+    routeCount: 1,
+    waypointCount: 0,
+    pointCount: 2,
+    activityTypes: [],
+    streamTypes: [],
+    preview: {
+      version: 1,
+      encoding: 'polyline5',
+      precision: 5,
+      sourcePointCount: 2,
+      pointCount: 2,
+      segments: [{
+        id: 'segment-1',
+        sourcePointCount: 2,
+        pointCount: 2,
+        encodedPolyline,
+      }],
+    },
+  };
+}

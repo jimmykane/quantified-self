@@ -20,12 +20,14 @@ import { User } from '@sports-alliance/sports-lib';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import {
   buildRoutePreviewMapTracks,
+  type RoutePreviewMapBuildOptions,
   type RoutePreviewMapTrackMetadata,
 } from '../../../helpers/route-preview-map.helper';
 import { buildRouteSummaryMetrics } from '../../../helpers/route-detail.helper';
 import { AppMapStyleName } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import type { SavedRouteActionSource } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { MapboxAutoResizeService } from '../../../services/map/mapbox-auto-resize.service';
@@ -43,19 +45,20 @@ const ROUTE_PREVIEW_ENDPOINT_MARKER_TRACK_LIMIT = 24;
 const ROUTE_PREVIEW_FIT_BOUNDS_DEBOUNCE_MS = 500;
 
 @Component({
-  selector: 'app-dashboard-route-preview-map',
+  selector: 'app-route-preview-map',
   standalone: true,
   imports: [SharedModule],
-  templateUrl: './dashboard-route-preview-map.component.html',
-  styleUrls: ['./dashboard-route-preview-map.component.css'],
+  templateUrl: './route-preview-map.component.html',
+  styleUrls: ['./route-preview-map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class DashboardRoutePreviewMapComponent extends MapAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
+export class RoutePreviewMapComponent extends MapAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
   @ViewChild('mapDiv', { static: false }) mapDiv?: ElementRef<HTMLDivElement>;
 
   @Input() routes: FirestoreRouteJSON[] = [];
   @Input() user?: User | null;
   @Input() showEndpointMarkers = true;
+  @Input() analyticsSource: Extract<SavedRouteActionSource, 'dashboard_route_map' | 'routes_page_map'> = 'dashboard_route_map';
 
   @Input() set mapStyle(value: AppMapStyleName | MapStyleName | undefined) {
     this.mapStyleSignal.set(this.mapStyleService.normalizeStyle(value));
@@ -83,6 +86,10 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
   private pendingFitBoundsFingerprint: string | null = null;
   private lastAppliedFitBoundsFingerprint: string | null = null;
+  private cachedRoutesInput: FirestoreRouteJSON[] | null = null;
+  private cachedRouteTracks: TrackMapRenderData[] = [];
+  private readonly decodedRoutePreviewSegmentCache: NonNullable<RoutePreviewMapBuildOptions['decodedSegmentCache']>
+    = new WeakMap();
   private mapLifecycleHandlers: Array<{ eventName: string; handler: () => void }> = [];
   private destroyed = false;
 
@@ -99,8 +106,9 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   ) {
     super(changeDetectorRef, logger);
     this.mapManager = new TrackMapManager(this.markerFactory, this.logger, {
-      layerPrefix: 'dashboard-route-preview',
-      logPrefix: 'DashboardRoutePreviewMapManager',
+      layerPrefix: 'route-preview',
+      logPrefix: 'RoutePreviewMapManager',
+      combineTrackLayers: true,
     });
 
     effect(() => {
@@ -144,7 +152,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
 
     this.analyticsService.logSavedRouteAction('open_details', {
       fileType: this.resolvePrimaryRouteFileType(route),
-      source: 'dashboard_route_map',
+      source: this.analyticsSource,
     });
     void this.router.navigate(['/user', userID, 'route', routeID]);
   }
@@ -169,6 +177,8 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
     }
     this.mapInstance.set(null);
     this.mapStyleSynchronizer.set(undefined);
+    this.cachedRoutesInput = null;
+    this.cachedRouteTracks = [];
   }
 
   private async initializeMap(): Promise<void> {
@@ -257,7 +267,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
       applyReadyState();
     } catch (error) {
       this.cleanupFailedMapInitialization(createdMap || this.mapInstance());
-      this.logger.error('[DashboardRoutePreviewMapComponent] Failed to initialize Mapbox map.', error);
+      this.logger.error('[RoutePreviewMapComponent] Failed to initialize Mapbox map.', error);
       this.mapLoadFailed = true;
       this.apiLoaded.set(true);
       this.changeDetectorRef.markForCheck();
@@ -301,7 +311,7 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
       strokeWidth: 2.75,
       onTrackClick: (event) => this.zone.run(() => this.selectRouteFromTrackClick(event)),
     });
-    this.clearSelectedRouteIfMissing();
+    this.reconcileSelectedRoute();
     this.changeDetectorRef.markForCheck();
 
     if (shouldFitBounds && tracks.length) {
@@ -310,7 +320,14 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
   }
 
   private buildTracks(): TrackMapRenderData[] {
-    return buildRoutePreviewMapTracks(this.routes)
+    if (this.cachedRoutesInput !== this.routes) {
+      this.cachedRoutesInput = this.routes;
+      this.cachedRouteTracks = buildRoutePreviewMapTracks(this.routes, {
+        decodedSegmentCache: this.decodedRoutePreviewSegmentCache,
+      });
+    }
+
+    return this.cachedRouteTracks
       .map(track => ({
         ...track,
         strokeColor: this.mapStyleService.adjustColorForTheme(track.strokeColor, this.appTheme()),
@@ -332,14 +349,21 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
     this.changeDetectorRef.markForCheck();
   }
 
-  private clearSelectedRouteIfMissing(): void {
-    const selectedRouteID = `${this.selectedRoute()?.id || ''}`.trim();
+  private reconcileSelectedRoute(): void {
+    const selectedRoute = this.selectedRoute();
+    const selectedRouteID = `${selectedRoute?.id || ''}`.trim();
     if (!selectedRouteID) {
       return;
     }
-    const stillPresent = (this.routes || []).some(route => `${route?.id || ''}` === selectedRouteID);
-    if (!stillPresent) {
+
+    const currentRoute = (this.routes || []).find(route => `${route?.id || ''}` === selectedRouteID);
+    if (!currentRoute) {
       this.clearSelectedRoute();
+      return;
+    }
+    if (currentRoute !== selectedRoute) {
+      this.selectedRoute.set(currentRoute);
+      this.selectedRouteMetrics.set(this.buildPopupMetrics(currentRoute));
     }
   }
 
@@ -385,18 +409,34 @@ export class DashboardRoutePreviewMapComponent extends MapAbstractDirective impl
 
   private buildTrackBoundsFingerprint(tracks: readonly TrackMapRenderData[]): string {
     return (tracks || []).map(track => {
-      const positions = track.positions || [];
-      const firstPosition = positions[0];
-      const lastPosition = positions[positions.length - 1];
-      return [
-        track.id,
-        positions.length,
-        firstPosition?.latitudeDegrees ?? '',
-        firstPosition?.longitudeDegrees ?? '',
-        lastPosition?.latitudeDegrees ?? '',
-        lastPosition?.longitudeDegrees ?? '',
-      ].join(':');
-    }).join('|');
+      const bounds = (track.positions || []).reduce<{
+        minLatitude: number;
+        maxLatitude: number;
+        minLongitude: number;
+        maxLongitude: number;
+      } | null>((currentBounds, position) => {
+        if (!Number.isFinite(position?.latitudeDegrees) || !Number.isFinite(position?.longitudeDegrees)) {
+          return currentBounds;
+        }
+        if (!currentBounds) {
+          return {
+            minLatitude: position.latitudeDegrees,
+            maxLatitude: position.latitudeDegrees,
+            minLongitude: position.longitudeDegrees,
+            maxLongitude: position.longitudeDegrees,
+          };
+        }
+        return {
+          minLatitude: Math.min(currentBounds.minLatitude, position.latitudeDegrees),
+          maxLatitude: Math.max(currentBounds.maxLatitude, position.latitudeDegrees),
+          minLongitude: Math.min(currentBounds.minLongitude, position.longitudeDegrees),
+          maxLongitude: Math.max(currentBounds.maxLongitude, position.longitudeDegrees),
+        };
+      }, null);
+      return bounds
+        ? [track.id, bounds.minLatitude, bounds.maxLatitude, bounds.minLongitude, bounds.maxLongitude].join(':')
+        : `${track.id}:empty`;
+    }).sort().join('|');
   }
 
   private resolveInitialCamera(): { center: [number, number]; zoom: number } {

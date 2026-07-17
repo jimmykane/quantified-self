@@ -2,7 +2,7 @@ import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angula
 import { SelectionModel } from '@angular/cdk/collections';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { firstValueFrom, BehaviorSubject, combineLatest, distinctUntilChanged, map, Observable, shareReplay, switchMap } from 'rxjs';
+import { firstValueFrom, BehaviorSubject, combineLatest, map, Observable, shareReplay } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Sort, SortDirection } from '@angular/material/sort';
@@ -83,17 +83,13 @@ import {
     getRouteSendErrorMessage,
     getRouteSendResponseMessage,
 } from '../../services/app.route-send.service';
-import {
-    AppRouteService,
-    isRouteListServerSortColumn,
-    ROUTE_LIST_DEFAULT_SORT,
-    RouteListSort,
-} from '../../services/app.route.service';
+import { AppRouteService } from '../../services/app.route.service';
 import { AppUserService, GarminRouteSendContext } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
 import { RoutePreviewThumbnailComponent } from './route-preview-thumbnail/route-preview-thumbnail.component';
+import { RoutePreviewMapComponent } from './route-preview-map/route-preview-map.component';
 import { AppAppSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
 import { AppBreakpoints } from '../../constants/breakpoints';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
@@ -193,7 +189,7 @@ const PASSIVE_ROUTE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover:
 @Component({
     selector: 'app-routes-page',
     standalone: true,
-    imports: [SharedModule, UploadRoutesComponent, RoutePreviewThumbnailComponent],
+    imports: [SharedModule, UploadRoutesComponent, RoutePreviewThumbnailComponent, RoutePreviewMapComponent],
     templateUrl: './routes-page.component.html',
     styleUrls: ['./routes-page.component.scss'],
 })
@@ -297,6 +293,7 @@ export class RoutesPageComponent implements OnInit {
             && connectionView.missingPermissions.length === 0;
     });
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
+    readonly routeMapRoutes = computed(() => this.visibleRouteViewModels().map(item => item.route));
     readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
     readonly selectedRouteIDSet = computed(() => new Set(this.selectedRouteIDs()));
     readonly suuntoRouteCatchUpPrompt = computed<DashboardActionPromptViewModel | null>(() => {
@@ -429,21 +426,15 @@ export class RoutesPageComponent implements OnInit {
         this.selectedRouteCount() > 0 && !this.allVisibleRoutesSelected()
     ));
     readonly routeResultSummary = computed(() => {
-        const total = Math.max(this.routeCount() ?? 0, this.loadedRouteCount());
         const loaded = this.loadedRouteCount();
         const filtered = this.filteredRouteCount();
-        if (loaded === 0 && total === 0) {
+        if (loaded === 0) {
             return 'No routes';
         }
         if (this.isRouteFilterActive()) {
             return `${filtered} of ${loaded} loaded route${loaded === 1 ? '' : 's'}`;
         }
-        if (loaded >= total) {
-            return `${total} route${total === 1 ? '' : 's'}`;
-        }
-        const sortActive = this.routeSortActive() !== 'date' || this.routeSortDirection() !== 'desc';
-        const clientOnlySortActive = sortActive && !isRouteListServerSortColumn(this.routeSortActive());
-        return `${loaded} of ${total} loaded${clientOnlySortActive ? '; sorting loaded rows' : ''}`;
+        return `${loaded} route${loaded === 1 ? '' : 's'}`;
     });
     readonly routeColumns = [
         'select',
@@ -502,28 +493,30 @@ export class RoutesPageComponent implements OnInit {
                 this.garminRouteSendContextSubject.next(context);
             });
 
-            const routeDocuments$ = this.routeSortSubject.pipe(
-                map(routeSort => this.toRouteListSort(routeSort)),
-                distinctUntilChanged((first, second) => (
-                    first.active === second.active
-                    && first.direction === second.direction
-                )),
-                switchMap(routeSort => this.routeService.getRoutes(user, 50, routeSort)),
+            const routeDocuments$ = this.routeService.getAllRoutes(user).pipe(
                 shareReplay({ bufferSize: 1, refCount: true }),
             );
-            this.routes$ = combineLatest([
+            const routeViewModels$ = combineLatest([
                 routeDocuments$,
-                this.routeSortSubject,
-                this.routeFilterSubject,
                 this.connectedSuuntoProviderUserIdsSubject,
                 this.garminRouteSendContextSubject,
             ]).pipe(
-                map(([routes, routeSort, routeFilter]) => {
+                map(([routes]) => {
                     const routeViewModels = routes.map(route => this.toRouteViewModel(route));
                     this.loadedRouteViewModels.set(routeViewModels);
                     this.loadedRouteCount.set(routeViewModels.length);
                     this.routeFileTypeFilterOptions.set(this.buildRouteFileTypeFilterOptions(routeViewModels));
                     this.routeActivityTypeFilterOptions.set(this.buildRouteActivityTypeFilterOptions(routeViewModels));
+                    return routeViewModels;
+                }),
+                shareReplay({ bufferSize: 1, refCount: true }),
+            );
+            this.routes$ = combineLatest([
+                routeViewModels$,
+                this.routeSortSubject,
+                this.routeFilterSubject,
+            ]).pipe(
+                map(([routeViewModels, routeSort, routeFilter]) => {
                     const filteredRouteViewModels = this.filterRouteViewModels(routeViewModels, routeFilter);
                     this.filteredRouteCount.set(filteredRouteViewModels.length);
                     this.reconcileSelectionWithVisibleRoutes(filteredRouteViewModels);
@@ -2395,17 +2388,6 @@ export class RoutesPageComponent implements OnInit {
             'pointCount',
             'originalFilename',
         ].includes(value);
-    }
-
-    private toRouteListSort(routeSort: RouteSortState): RouteListSort {
-        if (!isRouteListServerSortColumn(routeSort.active)) {
-            return ROUTE_LIST_DEFAULT_SORT;
-        }
-
-        return {
-            active: routeSort.active,
-            direction: routeSort.direction === 'asc' ? 'asc' : 'desc',
-        };
     }
 
     private isRouteDeliverySyncRouteEnabled(user: AppUserInterface): boolean {
