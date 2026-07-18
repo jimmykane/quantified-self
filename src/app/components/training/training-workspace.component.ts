@@ -104,16 +104,17 @@ import { environment } from '../../../environments/environment';
 interface TrainingMixDisciplineViewModel {
   summary: DashboardTrainingDisciplineSummary;
   label: string;
-  currentZoneSeconds: number;
-  baselineZoneSeconds: number;
   activityCountText: string;
   durationText: string;
-  easyText: string;
-  moderateText: string;
-  hardText: string;
-  baselineEasyText: string;
-  baselineModerateText: string;
-  baselineHardText: string;
+  zones: TrainingMixZoneViewModel[];
+}
+
+interface TrainingMixZoneViewModel {
+  label: 'Easy' | 'Moderate' | 'Hard';
+  currentText: string;
+  baselineText: string;
+  currentPercent: number | null;
+  baselinePercent: number | null;
 }
 
 interface TrainingStatusViewModel {
@@ -387,6 +388,22 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     return `${this.formatNumber((numerator / denominator) * 100, 0)}%`;
   }
 
+  private createTrainingMixZoneView(
+    label: TrainingMixZoneViewModel['label'],
+    currentSeconds: number,
+    currentZoneSeconds: number,
+    baselineSeconds: number,
+    baselineZoneSeconds: number,
+  ): TrainingMixZoneViewModel {
+    return {
+      label,
+      currentText: this.formatPercent(currentSeconds, currentZoneSeconds),
+      baselineText: this.formatPercent(baselineSeconds, baselineZoneSeconds),
+      currentPercent: resolveTrainingZonePercentage(currentSeconds, currentZoneSeconds),
+      baselinePercent: resolveTrainingZonePercentage(baselineSeconds, baselineZoneSeconds),
+    };
+  }
+
   private resetWorkspace(): void {
     this.clearTrainingReadinessSleepRefreshTimer();
     this.clearTrainingReadinessDayRolloverTimer();
@@ -488,16 +505,13 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         return {
           summary,
           label: formatTrainingVisibleDisciplinesLabel([summary.discipline]),
-          currentZoneSeconds,
-          baselineZoneSeconds,
           activityCountText: this.formatNumber(summary.current28d.activityCount, 0),
           durationText: formatSleepDuration(summary.current28d.durationSeconds),
-          easyText: this.formatPercent(summary.current28d.easySeconds, currentZoneSeconds),
-          moderateText: this.formatPercent(summary.current28d.moderateSeconds, currentZoneSeconds),
-          hardText: this.formatPercent(summary.current28d.hardSeconds, currentZoneSeconds),
-          baselineEasyText: this.formatPercent(summary.baseline28d.easySeconds, baselineZoneSeconds),
-          baselineModerateText: this.formatPercent(summary.baseline28d.moderateSeconds, baselineZoneSeconds),
-          baselineHardText: this.formatPercent(summary.baseline28d.hardSeconds, baselineZoneSeconds),
+          zones: [
+            this.createTrainingMixZoneView('Easy', summary.current28d.easySeconds, currentZoneSeconds, summary.baseline28d.easySeconds, baselineZoneSeconds),
+            this.createTrainingMixZoneView('Moderate', summary.current28d.moderateSeconds, currentZoneSeconds, summary.baseline28d.moderateSeconds, baselineZoneSeconds),
+            this.createTrainingMixZoneView('Hard', summary.current28d.hardSeconds, currentZoneSeconds, summary.baseline28d.hardSeconds, baselineZoneSeconds),
+          ],
         };
       })
       .filter(view => this.visibleDisciplines.includes(view.summary.discipline))
@@ -1668,4 +1682,11 @@ function resolveTrainingZoneSeconds(
   summary: DashboardTrainingDisciplineSummary['current28d'],
 ): number {
   return summary.easySeconds + summary.moderateSeconds + summary.hardSeconds;
+}
+
+function resolveTrainingZonePercentage(seconds: number, totalSeconds: number): number | null {
+  if (!Number.isFinite(seconds) || !Number.isFinite(totalSeconds) || seconds < 0 || totalSeconds <= 0) {
+    return null;
+  }
+  return Math.min(100, Math.max(0, (seconds / totalSeconds) * 100));
 }

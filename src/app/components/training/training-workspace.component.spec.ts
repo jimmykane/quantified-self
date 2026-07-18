@@ -528,6 +528,9 @@ describe('TrainingWorkspaceComponent', () => {
       .toBe('Set benchmark');
     expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
     expect(element.querySelector('.training-mix-grid')?.classList.contains('training-mix-grid--single')).toBe(true);
+    expect(element.querySelector('.training-mix-panel')?.classList.contains('training-mix-panel--single')).toBe(true);
+    expect(element.querySelector('.training-mix-zone-comparison')?.textContent).toContain('Intensity balance');
+    expect(element.querySelectorAll('.training-mix-zone-track')).toHaveLength(3);
     expect(element.textContent).toContain('Cycling capacity evidence');
     expect(element.textContent).not.toContain('Running capacity evidence');
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();

@@ -456,14 +456,35 @@
           <p class="training-empty-state">Training mix comparison is unavailable right now.</p>
         } @else if (trainingComparisonState !== 'preparing') {
           @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
-            <article class="training-mix-panel qs-glass-card-panel">
+            <article class="training-mix-panel qs-glass-card-panel" [class.training-mix-panel--single]="trainingMixDisciplines.length === 1">
               <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
               <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>activities</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time</span></div>
-              <dl>
-                <div><dt>Easy</dt><dd><app-training-metric-text [text]="discipline.easyText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="discipline.baselineEasyText"></app-training-metric-text></span></dd></div>
-                <div><dt>Moderate</dt><dd><app-training-metric-text [text]="discipline.moderateText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="discipline.baselineModerateText"></app-training-metric-text></span></dd></div>
-                <div><dt>Hard</dt><dd><app-training-metric-text [text]="discipline.hardText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="discipline.baselineHardText"></app-training-metric-text></span></dd></div>
-              </dl>
+              @if (trainingMixDisciplines.length === 1) {
+                <div class="training-mix-zone-comparison">
+                  <div class="training-mix-zone-heading"><span>Intensity balance</span><span>Now / usual</span></div>
+                  <dl>
+                    @for (zone of discipline.zones; track zone.label) {
+                      <div class="training-mix-zone-row">
+                        <div class="training-mix-zone-row-heading"><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
+                        <div class="training-mix-zone-track" aria-hidden="true">
+                          @if (zone.currentPercent !== null) {
+                            <span class="training-mix-zone-current" [style.width.%]="zone.currentPercent"></span>
+                          }
+                          @if (zone.baselinePercent !== null) {
+                            <span class="training-mix-zone-baseline" [style.left.%]="zone.baselinePercent"></span>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </dl>
+                </div>
+              } @else {
+                <dl class="training-mix-compact-zones">
+                  @for (zone of discipline.zones; track zone.label) {
+                    <div><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
+                  }
+                </dl>
+              }
             </article>
           } @empty {
             <p class="training-empty-state">No eligible {{ visibleDisciplinesActivityLabel }} in the last 28 days.</p>
