@@ -92,6 +92,19 @@
   gap: 1rem;
 }
 
+.section-copy {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.section-copy > :first-child {
+  margin-top: 0;
+}
+
+.section-copy p {
+  margin: 0 0 1rem;
+}
+
 .support-card mat-nav-list {
   padding-top: 0;
 }
@@ -116,11 +129,24 @@
 .section-copy :is(h2, h3) {
   margin-top: 1.25rem;
   margin-bottom: 0.75rem;
+  line-height: 1.25;
 }
 
 .section-copy :is(ul, ol) {
   margin: 0.75rem 0 1rem;
   padding-left: 1.25rem;
+}
+
+.section-copy li {
+  padding-left: 0.25rem;
+}
+
+.section-copy li + li {
+  margin-top: 0.5rem;
+}
+
+.section-copy li :is(ul, ol) {
+  margin: 0.5rem 0 0;
 }
 
 @media (min-width: 64rem) {
@@ -155,6 +181,10 @@
 
   .section-copy :is(ul, ol) {
     margin: 0.5rem 0 0.75rem;
+  }
+
+  .section-copy li + li {
+    margin-top: 0.375rem;
   }
 }
 
