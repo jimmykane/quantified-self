@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoggerService } from '../logger.service';
 import { MarkerFactoryService } from './marker-factory.service';
-import { TrackMapManager } from './track-map.manager';
+import { isValidTrackMapPosition, TrackMapManager } from './track-map.manager';
 
 const createMarkerElement = () => document.createElement('div');
 
@@ -61,6 +61,7 @@ describe('TrackMapManager', () => {
       removeLayer: vi.fn((layerId: string) => layerState.delete(layerId)),
       setPaintProperty: vi.fn(),
       fitBounds: vi.fn(),
+      project: vi.fn(() => ({ x: 10, y: 20 })),
       on: vi.fn(),
       off: vi.fn(),
       isStyleLoaded: vi.fn(() => true),
@@ -89,14 +90,24 @@ describe('TrackMapManager', () => {
       positions: [
         { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
         { latitudeDegrees: Number.NaN, longitudeDegrees: 22.2 },
+        { latitudeDegrees: 120, longitudeDegrees: 22.2 },
+        { latitudeDegrees: 40.15, longitudeDegrees: 190 },
         { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
       ],
-      markers: [{
-        id: 'wp-1',
-        latitudeDegrees: 40.15,
-        longitudeDegrees: 22.15,
-        element: createMarkerElement(),
-      }],
+      markers: [
+        {
+          id: 'wp-1',
+          latitudeDegrees: 40.15,
+          longitudeDegrees: 22.15,
+          element: createMarkerElement(),
+        },
+        {
+          id: 'invalid-wp',
+          latitudeDegrees: -95,
+          longitudeDegrees: 22.16,
+          element: createMarkerElement(),
+        },
+      ],
     }], {
       showArrows: true,
       strokeWidth: 4,
@@ -104,7 +115,17 @@ describe('TrackMapManager', () => {
 
     expect(map.addSource).toHaveBeenCalledWith(
       expect.stringMatching(/^route-track-source-route-1-[a-z0-9]+$/),
-      expect.objectContaining({ type: 'geojson' }),
+      expect.objectContaining({
+        type: 'geojson',
+        data: expect.objectContaining({
+          geometry: expect.objectContaining({
+            coordinates: [
+              [22.1, 40.1],
+              [22.2, 40.2],
+            ],
+          }),
+        }),
+      }),
     );
     expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({
       id: expect.stringMatching(/^route-track-line-route-1-[a-z0-9]+$/),
@@ -114,6 +135,15 @@ describe('TrackMapManager', () => {
     }));
     expect(markerFactory.createHomeMarker).toHaveBeenCalledWith('#1e88e5');
     expect(markerFactory.createFlagMarker).toHaveBeenCalledWith('#1e88e5');
+    expect((manager as any).extraMarkers.get('route-1')).toHaveLength(1);
+  });
+
+  it('accepts only finite coordinates within geographic bounds', () => {
+    expect(isValidTrackMapPosition({ latitudeDegrees: -90, longitudeDegrees: -180 })).toBe(true);
+    expect(isValidTrackMapPosition({ latitudeDegrees: 90, longitudeDegrees: 180 })).toBe(true);
+    expect(isValidTrackMapPosition({ latitudeDegrees: 90.0001, longitudeDegrees: 22 })).toBe(false);
+    expect(isValidTrackMapPosition({ latitudeDegrees: 40, longitudeDegrees: -180.0001 })).toBe(false);
+    expect(isValidTrackMapPosition({ latitudeDegrees: Number.POSITIVE_INFINITY, longitudeDegrees: 22 })).toBe(false);
   });
 
   it('renders compact endpoint dots when requested', () => {
@@ -473,14 +503,23 @@ describe('TrackMapManager', () => {
       strokeColor: '#1e88e5',
       positions: [
         { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { latitudeDegrees: 120, longitudeDegrees: 22.15 },
         { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
       ],
-      markers: [{
-        id: 'wp-1',
-        latitudeDegrees: 40.3,
-        longitudeDegrees: 22.3,
-        element: createMarkerElement(),
-      }],
+      markers: [
+        {
+          id: 'wp-1',
+          latitudeDegrees: 40.3,
+          longitudeDegrees: 22.3,
+          element: createMarkerElement(),
+        },
+        {
+          id: 'invalid-wp',
+          latitudeDegrees: 40.4,
+          longitudeDegrees: 181,
+          element: createMarkerElement(),
+        },
+      ],
     }], {
       showArrows: false,
       strokeWidth: 3,
@@ -497,6 +536,23 @@ describe('TrackMapManager', () => {
       [22.2, 40.2],
       [22.3, 40.3],
     ]);
+  });
+
+  it('rejects invalid projection and cursor coordinates before calling Mapbox', () => {
+    expect(manager.project(95, 22)).toBeNull();
+    expect(map.project).not.toHaveBeenCalled();
+
+    expect(manager.project(40.1, 22.1)).toEqual({ x: 10, y: 20 });
+    expect(map.project).toHaveBeenCalledWith([22.1, 40.1]);
+
+    manager.setCursorMarkers([
+      { trackId: 'invalid', latitudeDegrees: -91, longitudeDegrees: 22, color: '#f44336' },
+      { trackId: 'valid', latitudeDegrees: 40.2, longitudeDegrees: 22.2, color: '#1e88e5' },
+    ]);
+
+    expect(markerFactory.createCursorMarker).toHaveBeenCalledTimes(1);
+    expect(markerFactory.createCursorMarker).toHaveBeenCalledWith('#1e88e5');
+    expect(Array.from((manager as any).cursorMarkers.keys())).toEqual(['valid']);
   });
 
   it('can suppress endpoint markers while keeping custom markers for dense route files', () => {

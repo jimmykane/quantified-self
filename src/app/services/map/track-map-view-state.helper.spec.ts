@@ -63,6 +63,8 @@ describe('track-map-view-state.helper', () => {
   it('resolves a first valid track camera with a global fallback', () => {
     expect(resolveTrackMapInitialCamera([
       { latitudeDegrees: Number.NaN, longitudeDegrees: 22 },
+      { latitudeDegrees: 120, longitudeDegrees: 22 },
+      { latitudeDegrees: 40, longitudeDegrees: 181 },
       { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
     ])).toEqual({
       center: [22.1, 40.1],
@@ -70,6 +72,14 @@ describe('track-map-view-state.helper', () => {
     });
 
     expect(resolveTrackMapInitialCamera([])).toEqual({
+      center: [0, 0],
+      zoom: 2,
+    });
+
+    expect(resolveTrackMapInitialCamera([
+      { latitudeDegrees: -91, longitudeDegrees: 22 },
+      { latitudeDegrees: 40, longitudeDegrees: -181 },
+    ])).toEqual({
       center: [0, 0],
       zoom: 2,
     });

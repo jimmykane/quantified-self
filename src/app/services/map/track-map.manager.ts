@@ -28,6 +28,23 @@ export interface TrackMapPosition {
   longitudeDegrees: number;
 }
 
+export function isValidTrackMapPosition(
+  position: Partial<TrackMapPosition> | null | undefined,
+): position is TrackMapPosition {
+  const latitudeDegrees = position?.latitudeDegrees;
+  const longitudeDegrees = position?.longitudeDegrees;
+  if (typeof latitudeDegrees !== 'number' || typeof longitudeDegrees !== 'number') {
+    return false;
+  }
+
+  return Number.isFinite(latitudeDegrees)
+    && Number.isFinite(longitudeDegrees)
+    && latitudeDegrees >= -90
+    && latitudeDegrees <= 90
+    && longitudeDegrees >= -180
+    && longitudeDegrees <= 180;
+}
+
 export interface TrackMapExtraMarkerRenderData extends TrackMapPosition {
   id: string;
   element: HTMLElement;
@@ -180,7 +197,9 @@ export class TrackMapManager {
   }
 
   public setCursorMarkers(cursors: TrackMapCursorRenderData[]): void {
-    this.cursorState = new Map((cursors || []).map(cursor => [cursor.trackId, cursor]));
+    this.cursorState = new Map((cursors || [])
+      .filter(cursor => isValidTrackMapPosition(cursor))
+      .map(cursor => [cursor.trackId, cursor]));
     this.renderCursorMarkers();
   }
 
@@ -270,14 +289,14 @@ export class TrackMapManager {
     let hasPoints = false;
     this.currentTracks.forEach(track => {
       (track.positions || []).forEach(position => {
-        if (!this.isFinitePosition(position)) {
+        if (!isValidTrackMapPosition(position)) {
           return;
         }
         bounds.extend([position.longitudeDegrees, position.latitudeDegrees]);
         hasPoints = true;
       });
       (track.markers || []).forEach(marker => {
-        if (!this.isFinitePosition(marker)) {
+        if (!isValidTrackMapPosition(marker)) {
           return;
         }
         bounds.extend([marker.longitudeDegrees, marker.latitudeDegrees]);
@@ -303,7 +322,7 @@ export class TrackMapManager {
   }
 
   public project(latitudeDegrees: number, longitudeDegrees: number): { x: number; y: number } | null {
-    if (!this.map?.project) {
+    if (!this.map?.project || !isValidTrackMapPosition({ latitudeDegrees, longitudeDegrees })) {
       return null;
     }
     const point = this.map.project([longitudeDegrees, latitudeDegrees]);
@@ -364,7 +383,7 @@ export class TrackMapManager {
     const renderableTracks = (this.currentTracks || []).map(track => ({
       track,
       coordinates: (track.positions || [])
-        .filter(position => this.isFinitePosition(position))
+        .filter(position => isValidTrackMapPosition(position))
         .map(position => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]),
     })).filter(item => item.track?.id && item.coordinates.length > 1);
 
@@ -549,7 +568,7 @@ export class TrackMapManager {
     }
 
     const coordinates = (track.positions || [])
-      .filter(position => this.isFinitePosition(position))
+      .filter(position => isValidTrackMapPosition(position))
       .map(position => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]);
 
     if (coordinates.length <= 1) {
@@ -699,7 +718,7 @@ export class TrackMapManager {
     }
 
     const customMarkers = (track.markers || [])
-      .filter(marker => marker?.id && marker.element && this.isFinitePosition(marker))
+      .filter(marker => marker?.id && marker.element && isValidTrackMapPosition(marker))
       .map(marker => this.createMarker(
         marker.element,
         marker.longitudeDegrees,
@@ -917,11 +936,6 @@ export class TrackMapManager {
       hash = Math.imul(hash, 16777619);
     }
     return (hash >>> 0).toString(36);
-  }
-
-  private isFinitePosition(position: TrackMapPosition | null | undefined): position is TrackMapPosition {
-    return Number.isFinite(position?.latitudeDegrees)
-      && Number.isFinite(position?.longitudeDegrees);
   }
 
   private nowMs(): number {
