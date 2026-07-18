@@ -12,6 +12,7 @@ const PUBLIC_STARTUP_PATHS = new Set([
   '/integrations/coros',
   '/features',
   '/features/workout-data-comparison',
+  '/features/training-analysis',
   '/features/ai-insights',
   '/features/workout-file-comparison',
   '/features/fit-gpx-tcx-file-analyzer',

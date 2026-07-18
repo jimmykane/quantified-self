@@ -66,6 +66,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://quantified-self.io/features/training-analysis</loc>
+    <lastmod>2026-07-18</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://quantified-self.io/features/ai-insights</loc>
     <lastmod>2026-05-29</lastmod>
     <priority>0.8</priority>

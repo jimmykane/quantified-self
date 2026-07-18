@@ -7,6 +7,7 @@ Allow: /tools/compare
 Allow: /integrations
 Allow: /features
 Allow: /features/workout-data-comparison
+Allow: /features/training-analysis
 Allow: /features/ai-insights
 Allow: /features/workout-file-comparison
 Allow: /features/fit-gpx-tcx-file-analyzer
@@ -22,6 +23,7 @@ Disallow: /user
 Disallow: /user/
 Disallow: /settings
 Disallow: /dashboard
+Disallow: /training
 Disallow: /routes
 Disallow: /tools/compare/saved
 Disallow: /admin

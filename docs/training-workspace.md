@@ -120,6 +120,7 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 ## Route and Frontend Entry Points
 
 - Route: `src/app/app.routing.module.ts`
+- Public SEO overview: `/features/training-analysis` via `src/app/components/public-seo/public-seo-pages.content.ts`
 - Lazy routing module: `src/app/training.routing.module.ts`
 - Angular module: `src/app/modules/training.module.ts`
 - Workspace controller: `src/app/components/training/training-workspace.component.ts`
@@ -140,6 +141,11 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 Training is available to signed-in users from the sidenav and is explicitly marked **Beta**. The route header includes a
 Feedback action that opens the configured support email with a Training-specific subject. Training remains absent from
 Dashboard actions, preserving the Dashboard as the user's modular workspace.
+
+The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
+overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
+non-prescriptive treatment of readiness and sleep without exposing account-specific data. Keep that public page, the
+Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when the Training product contract changes.
 
 Frontend transformation responsibilities are intentionally split into focused helpers:
 

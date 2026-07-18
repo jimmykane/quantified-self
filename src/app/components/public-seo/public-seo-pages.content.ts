@@ -2,6 +2,7 @@ import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@s
 
 export type PublicSeoPageKey =
   | 'featuresHub'
+  | 'trainingAnalysis'
   | 'aiInsights'
   | 'workoutFileComparison'
   | 'fitGpxTcxFileAnalyzer'
@@ -68,6 +69,7 @@ export interface PublicSeoRouteData {
 
 export const PUBLIC_FEATURE_PATHS = {
   hub: 'features',
+  trainingAnalysis: 'features/training-analysis',
   aiInsights: 'features/ai-insights',
   workoutFileComparison: 'features/workout-file-comparison',
   fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
@@ -108,12 +110,13 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore Quantified Self features for endurance training data: AI Insights, workout file comparison, FIT/GPX/TCX file analysis, FIT and GPX route files, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, and uploaded activity files.',
+    description: 'Explore Quantified Self features for endurance training data: Training analysis, AI Insights, workout file comparison, FIT/GPX/TCX file analysis, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, and uploaded activity files.',
     h1: 'Features for endurance training data',
-    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved route files, compare recordings, benchmark devices, and ask chart-backed questions about your training history.',
-    chips: ['AI Insights', 'Workout comparison', 'FIT/TCX/GPX', 'Route files', 'Benchmarks', 'Free tools'],
+    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved route files, analyze training context, compare recordings, benchmark devices, and ask chart-backed questions about your training history.',
+    chips: ['Training analysis', 'AI Insights', 'Workout comparison', 'FIT/TCX/GPX', 'Route files', 'Benchmarks'],
     actions: [
-      routeAction('AI Insights', '/features/ai-insights', 'flat', 'arrow_forward'),
+      routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('AI Insights', '/features/ai-insights'),
       routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
       routeAction('Compare Files', '/features/workout-file-comparison'),
       routeAction('Analyze Files', '/features/fit-gpx-tcx-file-analyzer'),
@@ -126,6 +129,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         title: 'Turn scattered training data into usable analysis',
         copy: 'The feature pages cover the workflows people search for after their data is spread across watches, services, and exported activity files.',
         items: [
+          {
+            icon: 'monitoring',
+            title: 'Training analysis',
+            copy: 'Compare current training with your usual workload, then inspect readiness, load, intensity, durability, sleep context, and selected historical builds.',
+          },
           {
             icon: 'query_stats',
             title: 'AI Insights',
@@ -178,6 +186,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     ],
     faqItems: [
       {
+        question: 'What is the Training workspace?',
+        answer: 'Training is a curated analysis workspace for current versus usual workload, readiness context, load trends, intensity, durability, swimming pace, and selected historical build comparisons. Dashboard remains the configurable workspace.',
+      },
+      {
         question: 'What Quantified Self features should I start with?',
         answer: 'Start with integrations when you need provider sync, workout file comparison when you have exported files, sports watch benchmarks when you need device evidence, and AI Insights when you want chart-backed answers from stored training data.',
       },
@@ -191,10 +203,118 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Choose the feature that matches the data problem',
-    closingCopy: 'Use the hub when you are deciding between AI analysis, file comparison, device benchmarks, provider sync, and centralized workout history.',
+    closingCopy: 'Use the hub when you are deciding between curated training analysis, AI analysis, file comparison, device benchmarks, provider sync, and centralized workout history.',
     closingActions: [
       routeAction('Explore Integrations', '/integrations', 'flat', 'arrow_forward'),
       routeAction('Training Guides', '/guides'),
+    ],
+  },
+  trainingAnalysis: {
+    key: 'trainingAnalysis',
+    path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
+    eyebrow: 'Training Analysis',
+    title: 'Training Analysis for Endurance Athletes',
+    description: 'Analyze running, cycling, mountain biking, and swimming training with readiness, load trends, intensity, durability, sleep context, and historical build comparisons.',
+    h1: 'Training analysis for endurance athletes',
+    intro: 'Training is a curated workspace for understanding your current workload in context: compare it with your usual training, see what changed, and inspect the evidence behind readiness, performance, and long-session durability.',
+    chips: ['Training readiness', 'Load trends', 'Running', 'Cycling & MTB', 'Swimming', 'Best build'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Open Training', '/training'),
+      routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Current Context',
+        title: 'See the training pattern, not just the latest workout',
+        copy: 'Training turns already imported or uploaded activity data into a readable current-versus-usual picture. It is context for your decisions, not a workout prescription or medical score.',
+        items: [
+          {
+            icon: 'compare_arrows',
+            title: '28-day training comparison',
+            copy: 'Compare current sessions and training time with a normalized preceding 84-day reference, with unavailable data kept explicit instead of shown as zero.',
+          },
+          {
+            icon: 'monitor_heart',
+            title: 'Readiness and recovery context',
+            copy: 'Review current load alongside recorded sleep, HRV, and overnight heart-rate evidence when those signals are available from connected providers.',
+          },
+          {
+            icon: 'account_tree',
+            title: 'What drove the change',
+            copy: 'See parent-event load, top contributors, sport-specific load changes, and training rhythm without hiding other eligible sports from the overall explanation.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Discipline Evidence',
+        title: 'Keep sport-specific evidence in the right context',
+        copy: 'Running, Cycling including mountain biking, and Swimming are handled as separate disciplines, including individual legs from multisport activities.',
+        items: [
+          {
+            icon: 'directions_run',
+            title: 'Running and cycling evidence',
+            copy: 'Inspect intensity mix, imported FTP and VO₂ max provenance, modeled critical power, and power-profile retention where the underlying data supports those views.',
+          },
+          {
+            icon: 'pool',
+            title: 'Pool and open-water swimming',
+            copy: 'Review twelve weeks of pool and open-water pace separately, with comparable SWOLF context when active swim lengths provide it.',
+          },
+          {
+            icon: 'show_chart',
+            title: 'Load and intensity trends',
+            copy: 'Follow CTL, ATL, Form, ramp rate, monotony, strain, and weekly Easy, Moderate, and Hard intensity distribution from derived training load.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Historical Evidence',
+        title: 'Compare a build deliberately, then keep limitations visible',
+        copy: 'The workspace favors comparable evidence over oversized charts or invented estimates, so a historical reference and long-session trend remain understandable.',
+        items: [
+          {
+            icon: 'history',
+            title: 'Best build vs now',
+            copy: 'Choose one 8-, 10-, or 12-week historical benchmark per sport and compare workload, intensity, available sleep context, and matching durability evidence.',
+          },
+          {
+            icon: 'trending_down',
+            title: 'Long-session durability',
+            copy: 'Track eligible steady aerobic sessions with matching output and heart-rate evidence. Weeks without comparable sessions explain why they are unavailable.',
+          },
+          {
+            icon: 'visibility_off',
+            title: 'Honest missing-data states',
+            copy: 'Missing TSS, zones, power, heart rate, pace, sleep, and durability evidence stays unavailable rather than becoming a misleading zero or generic score.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'What data does Training use?',
+        answer: 'Training uses derived snapshots built from activities already imported or uploaded to your private Quantified Self account. The browser does not reparse source files or query raw activity history to calculate the workspace.',
+      },
+      {
+        question: 'Which sports does Training support?',
+        answer: 'Training supports Running and Trail Running, Cycling including road, indoor, virtual, e-bike, and mountain biking, plus Pool and Open Water Swimming. Multisport files are split into their individual activity legs when available.',
+      },
+      {
+        question: 'Does Training tell me what workout to do?',
+        answer: 'No. Training presents load, readiness, sleep, and performance evidence as context. It does not prescribe workouts, diagnose health conditions, or turn missing data into a recommendation.',
+      },
+      {
+        question: 'How is Training different from the Dashboard?',
+        answer: 'Dashboard remains the configurable place for charts, maps, and tiles. Training is a fixed, curated analytical workspace that combines related evidence into a consistent current, historical, and discipline-specific view.',
+      },
+    ],
+    closingTitle: 'Start with the work you already recorded',
+    closingCopy: 'Connect the services you use or upload activity files, then open Training to see your current workload in context without changing your Dashboard layout.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Explore Integrations', '/integrations'),
+      routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
     ],
   },
   aiInsights: {
@@ -1103,7 +1223,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingTitle: 'Build the archive first, then choose the workflows you need',
     closingCopy: 'Start with the providers and files you already use, then add activity sync, uploads, benchmark reports, and AI Insights as your training archive grows.',
     closingActions: [
-      routeAction('All Integrations', '/integrations', 'flat', 'arrow_forward'),
+      routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('All Integrations', '/integrations', 'stroked', 'arrow_forward'),
       routeAction('Workout File Comparison', '/features/workout-file-comparison'),
     ],
     howToSteps: [
@@ -1192,6 +1313,7 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
 
 export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData> = {
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
+  trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
   aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
   fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),

@@ -15,7 +15,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, AI Insights, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -28,6 +28,7 @@ describe('AppRoutingModule routes', () => {
     });
     const helpJsonLd = helpRoute?.data?.['jsonLd'] as Record<string, unknown> | undefined;
     const helpAbout = helpJsonLd?.['about'] as string[] | undefined;
+    expect(helpAbout).toContain('Training analysis');
     expect(helpAbout).toContain('Garmin to Suunto activity sync');
     expect(helpAbout).toContain('COROS to Suunto activity sync');
     expect(helpAbout).toContain('Send Suunto routes to Garmin');
@@ -66,6 +67,8 @@ describe('AppRoutingModule routes', () => {
     expect(trainingRoute).toBeTruthy();
     expect(trainingRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(trainingRoute?.data?.['disableRouteAnimation']).toBe(true);
+    expect(trainingRoute?.data?.['description']).toContain('Private training analysis');
+    expect(trainingRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
   it('should keep the private routes library authenticated and noindexed', () => {
@@ -226,6 +229,12 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'sports watch benchmark reports',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
+        title: 'Training Analysis for Endurance Athletes',
+        h1: 'Training analysis for endurance athletes',
+        descriptionText: 'readiness, load trends, intensity, durability, sleep context, and historical build comparisons',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.aiInsights,
         title: 'AI Insights for Endurance Training Data',
         h1: 'AI insights for endurance training data',
@@ -342,13 +351,14 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.data).toMatchObject({
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard, with optional automatic Garmin-to-Suunto and COROS-to-Suunto activity sync.');
+    expect(homeRoute?.data?.['description']).toBe('Analyze Garmin, Suunto, and COROS training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync to Suunto.');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'SoftwareApplication',
       name: 'Quantified Self',
     });
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
   });
 
   it('should keep the dashboard as the authenticated app entry route', () => {

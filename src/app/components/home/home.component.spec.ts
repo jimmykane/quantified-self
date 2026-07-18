@@ -84,6 +84,7 @@ describe('HomeComponent', () => {
         expect(heroText).toContain('Quantify. Analyze. Improve.');
         expect(heroText).toContain('One Dashboard. Every Activity.');
         expect(heroText).toContain('Bring Garmin, Suunto, and COROS activity data into one private training dashboard.');
+        expect(heroText).toContain('Review readiness, load, intensity, durability, and sleep context');
         expect(heroText).toContain('keep Garmin or COROS activities syncing to Suunto');
         expect(heroText).not.toContain('AI Insights');
         expect(heroText).not.toContain('chart-backed answers');
@@ -101,6 +102,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('File Analyzer');
         expect(text).toContain('Guides');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features"], a[ng-reflect-router-link="/features"]')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/fit-gpx-tcx-file-analyzer"], a[ng-reflect-router-link="/features/fit-gpx-tcx-file-analyzer"]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('a[routerlink="/guides"], a[ng-reflect-router-link="/guides"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');

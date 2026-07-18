@@ -10,6 +10,7 @@ describe('public-seo-pages.content', () => {
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
+      trainingAnalysis: 'features/training-analysis',
       aiInsights: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
       fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
@@ -52,6 +53,10 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for endurance training data');
     expect(PUBLIC_SEO_PAGES.featuresHub.intro).toContain('compare recordings');
     expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('sports watch benchmark reports');
+
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('readiness, load trends, intensity, durability, sleep context, and historical build comparisons');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.faqItems.some(item => item.question === 'How is Training different from the Dashboard?')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.aiInsights.h1).toBe('AI insights for endurance training data');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('chart-backed AI insights');
@@ -110,6 +115,7 @@ describe('public-seo-pages.content', () => {
     ].map(action => action.routerLink);
 
     expect(featureHubLinks).toContain('/features/ai-insights');
+    expect(featureHubLinks).toContain('/features/training-analysis');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');
     expect(featureHubLinks).toContain('/features/workout-file-comparison');
     expect(featureHubLinks).toContain('/features/fit-gpx-tcx-file-analyzer');

@@ -194,13 +194,19 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
+  it('marks the Training analysis launch page as recently updated in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-07-18');
+  });
+
   it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/event/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
     expect(robotsTxt).toContain('Disallow: /routes');
+    expect(robotsTxt).toContain('Disallow: /training');
   });
 
   it('marks public share routes noindex at the hosting layer', () => {

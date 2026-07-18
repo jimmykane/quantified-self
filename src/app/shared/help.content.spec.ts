@@ -158,7 +158,14 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('**Training (Beta)**');
+    expect(gettingStartedSection?.content).toContain('[Training Analysis overview](/features/training-analysis)');
     expect(gettingStartedSection?.content).toContain('**Feedback** action to email support');
+    expect(gettingStartedSection?.links).toContainEqual({
+      label: 'Training Analysis Overview',
+      icon: 'monitoring',
+      kind: 'route',
+      target: '/features/training-analysis',
+    });
   });
 
   it('should document that distance values follow unit preferences across the app', () => {
