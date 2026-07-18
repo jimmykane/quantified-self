@@ -980,6 +980,9 @@ UI principles:
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
 - Responsive icon-only Training actions hide only their projected text label and reset Material's icon-and-text margins,
   keeping the visible icon centered without suppressing Material focus, ripple, or touch-target elements.
+- Readiness history uses its parent `qs-glass-card-panel` surface and the app's divider token rather than a nested neutral
+  container. On desktop, its 14 daily marks and connecting line remain deliberately compact so the recent trend supports
+  the current signal instead of overpowering it.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.

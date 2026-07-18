@@ -182,6 +182,8 @@ describe('training-readiness.helper', () => {
     expect(view.updatedText).toContain('Jul 16');
     expect(view.historyState).toBe('ready');
     expect(view.historyEvidenceText).toBe('13/14 days scored');
+    expect(view.historyPoints.at(0)?.x).toBe(10);
+    expect(view.historyPoints.at(-1)?.x).toBe(350);
     expect(view.historyPoints.at(-1)?.score).toBe(82);
     expect(view.historySegments).toHaveLength(2);
     expect(view.historyAriaLabel).toContain('missing days are gaps');

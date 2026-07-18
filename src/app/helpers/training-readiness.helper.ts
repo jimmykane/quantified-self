@@ -41,7 +41,7 @@ export interface TrainingReadinessViewModel {
   historySegments: string[];
 }
 
-const HISTORY_CHART_WIDTH = 280;
+const HISTORY_CHART_WIDTH = 360;
 const HISTORY_CHART_MIN_X = 10;
 const HISTORY_CHART_MAX_X = HISTORY_CHART_WIDTH - 10;
 const HISTORY_CHART_MIN_Y = 8;

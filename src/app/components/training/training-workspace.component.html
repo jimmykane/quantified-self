@@ -136,9 +136,9 @@
                 }
               </header>
               @if (trainingReadiness.historyPoints.length) {
-                <svg class="training-readiness-trend" viewBox="0 0 280 90" role="img" [attr.aria-label]="trainingReadiness.historyAriaLabel">
-                  <line class="training-readiness-trend-threshold" x1="10" x2="270" y1="26.5" y2="26.5"></line>
-                  <line class="training-readiness-trend-threshold" x1="10" x2="270" y1="41.3" y2="41.3"></line>
+                <svg class="training-readiness-trend" viewBox="0 0 360 90" role="img" [attr.aria-label]="trainingReadiness.historyAriaLabel">
+                  <line class="training-readiness-trend-threshold" x1="10" x2="350" y1="26.5" y2="26.5"></line>
+                  <line class="training-readiness-trend-threshold" x1="10" x2="350" y1="41.3" y2="41.3"></line>
                   @for (segment of trainingReadiness.historySegments; track segment) {
                     <polyline class="training-readiness-trend-line" [attr.points]="segment"></polyline>
                   }
