@@ -342,7 +342,7 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.data).toMatchObject({
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.');
+    expect(homeRoute?.data?.['description']).toBe('Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard, with optional automatic Garmin-to-Suunto and COROS-to-Suunto activity sync.');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',

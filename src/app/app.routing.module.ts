@@ -14,7 +14,7 @@ import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workou
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from './components/public-seo/public-seo-pages.content';
 import { routeResolver } from './resolvers/route.resolver';
 
-const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.';
+const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard, with optional automatic Garmin-to-Suunto and COROS-to-Suunto activity sync.';
 
 export const routes: Routes = [
   {
@@ -422,7 +422,6 @@ export const routes: Routes = [
         "operatingSystem": "Web",
         "description": HOME_SEO_DESCRIPTION,
         "featureList": [
-          "AI Insights with chart-backed answers",
           "Automatic Garmin to Suunto activity sync",
           "Automatic COROS to Suunto activity sync",
           "Sync past activities to Suunto by date"
