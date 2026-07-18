@@ -198,7 +198,7 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
-    it('uses the shared readiness contract to reject legacy history without baseline evidence counts', () => {
+    it('uses the shared readiness contract to reject history from an older formula', () => {
         const asOfDayMs = Date.UTC(2026, 3, 15);
         const legacyPayload = {
             dayBoundary: 'UTC',

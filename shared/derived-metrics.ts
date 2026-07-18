@@ -802,10 +802,13 @@ export interface DerivedTrainingReadinessHistoryPoint {
   sleepScore: number | null;
   latestSleepAtMs: number | null;
   hrvRatio: number | null;
+  averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
+  overnightHeartRateRatio: number | null;
 }
 
 export interface DerivedTrainingReadinessMetricPayload {
+  formulaVersion: number;
   dayBoundary: 'UTC';
   asOfDayMs: number;
   generatedAtMs: number;

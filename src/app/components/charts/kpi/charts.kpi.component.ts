@@ -70,14 +70,12 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from '../../../helpers/dashboard-special-chart-types';
 import type {
   DashboardAerobicCapacityContext,
   DashboardAerobicDurabilityContext,
-  DashboardReadinessSignalsContext,
 } from '../../../helpers/dashboard-training-insights.helper';
 import {
   buildDashboardKpiExplanation,
@@ -145,7 +143,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() aerobicCapacity?: DashboardAerobicCapacityContext | null;
   @Input() aerobicDurability?: DashboardAerobicDurabilityContext | null;
-  @Input() readinessSignals?: DashboardReadinessSignalsContext | null;
   @Input() acwrStatus?: DashboardDerivedMetricStatus | null;
   @Input() rampRateStatus?: DashboardDerivedMetricStatus | null;
   @Input() monotonyStrainStatus?: DashboardDerivedMetricStatus | null;
@@ -160,7 +157,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() intensityDistributionStatus?: DashboardDerivedMetricStatus | null;
   @Input() aerobicCapacityStatus?: DashboardDerivedMetricStatus | null;
   @Input() aerobicDurabilityStatus?: DashboardDerivedMetricStatus | null;
-  @Input() readinessSignalsStatus?: DashboardDerivedMetricStatus | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
   @ViewChild('kpiDetailsDialogTemplate') kpiDetailsDialogTemplate?: TemplateRef<unknown>;
@@ -235,7 +231,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.intensityDistribution
       || changes.aerobicCapacity
       || changes.aerobicDurability
-      || changes.readinessSignals
       || changes.acwrStatus
       || changes.rampRateStatus
       || changes.monotonyStrainStatus
@@ -250,7 +245,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       || changes.intensityDistributionStatus
       || changes.aerobicCapacityStatus
       || changes.aerobicDurabilityStatus
-      || changes.readinessSignalsStatus
       || changes.compactRow
     );
 
@@ -361,7 +355,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       intensityDistribution: this.intensityDistribution,
       aerobicCapacity: this.aerobicCapacity,
       aerobicDurability: this.aerobicDurability,
-      readinessSignals: this.readinessSignals,
     }, (value, options) => this.formatPrimaryValue(value, options));
     this.kpiDetailsDescription = details.description;
     this.kpiDetailsRows = details.rows;
@@ -426,20 +419,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         secondaryValueText: context ? `${context.sampleCount} samples` : '',
         primarySuffix: '%',
         missingLabel: 'No eligible durability evidence',
-        trend: context?.trend || [],
-      };
-    }
-
-    if (this.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE) {
-      const context = this.readinessSignals || null;
-      return {
-        title: 'Readiness Signals',
-        primaryValue: null,
-        primaryValueText: context?.label,
-        primaryLabel: context ? `${context.score}/100 signal score` : 'Load and recorded recovery signals',
-        secondaryLabel: context ? `${this.capitalize(context.confidence)} confidence` : 'Confidence shown separately',
-        secondaryValueText: context ? `${context.availableSignalCount}/${context.totalSignalCount} signals` : '',
-        missingLabel: 'No current readiness signals',
         trend: context?.trend || [],
       };
     }
@@ -801,9 +780,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE) {
       return this.aerobicDurabilityStatus || null;
     }
-    if (this.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE) {
-      return this.readinessSignalsStatus || null;
-    }
     if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
       return this.resolveCombinedStatus([
         this.formNowStatus,
@@ -905,18 +881,11 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.chartType === DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE) {
       return 'Durability';
     }
-    if (this.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE) {
-      return 'Readiness';
-    }
     return this.title;
   }
 
   private formatDiscipline(discipline: 'running' | 'cycling'): string {
     return discipline === 'running' ? 'Running' : 'Cycling';
-  }
-
-  private capitalize(value: string): string {
-    return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
   }
 
   private buildOption(presentation: KpiPresentation): ChartOption {

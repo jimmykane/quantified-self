@@ -1,4 +1,4 @@
-@if (tiles.length || showActions) {
+@if (tiles.length || showActions || showTodaySummary) {
 <section class="pie">
   @if (showTodaySummary || showActions) {
   <div class="dashboard-section-header dashboard-summary-header" [class.dashboard-summary-header-actions-only]="!showTodaySummary"
@@ -31,17 +31,23 @@
   </div>
   }
   @if (showTodaySummary) {
-  <section class="dashboard-current-state-row" aria-label="Current training state">
+  <section class="dashboard-current-state-row" aria-label="Current readiness signals">
     <div class="dashboard-current-state-primary">
-      <span>Current state</span>
-      <strong>{{ dashboardCurrentState.stateLabel }}</strong>
-      <small>{{ dashboardCurrentState.stateCaption }}</small>
+      <span>Readiness</span>
+      <div class="dashboard-readiness-primary-value">
+        <strong>{{ dashboardTodayReadiness.label }}</strong>
+        <b>{{ dashboardTodayReadiness.scoreText }}</b>
+      </div>
+      <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
+      @if (dashboardTodayReadiness.recoveryText !== '--') {
+      <small>Imported recovery · {{ dashboardTodayReadiness.recoveryText }}</small>
+      }
     </div>
     <dl>
-      <div><dt>Form</dt><dd>{{ dashboardCurrentState.formText }}</dd></div>
-      <div><dt>Recovery</dt><dd>{{ dashboardCurrentState.recoveryText }}</dd></div>
-      <div><dt>Ramp</dt><dd>{{ dashboardCurrentState.rampText }}</dd></div>
-      <div><dt>CTL / ATL</dt><dd>{{ dashboardCurrentState.ctlAtlText }}</dd></div>
+      <div><dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd><small>Form / ramp</small></div>
+      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><small>Latest eligible night</small></div>
+      <div><dt>HRV</dt><dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd><small>vs baseline</small></div>
+      <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><small>vs baseline · lower supports</small></div>
     </dl>
   </section>
   }
@@ -97,7 +103,6 @@
           [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
           [aerobicCapacity]="getChartTile(tile).aerobicCapacity" [aerobicCapacityStatus]="getAerobicCapacityStatusForTile(tile)"
           [aerobicDurability]="getChartTile(tile).aerobicDurability" [aerobicDurabilityStatus]="getAerobicDurabilityStatusForTile(tile)"
-          [readinessSignals]="getChartTile(tile).readinessSignals" [readinessSignalsStatus]="getReadinessSignalsStatusForTile(tile)"
           [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
           [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
           [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"
@@ -175,7 +180,6 @@
             [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
             [aerobicCapacity]="getChartTile(tile).aerobicCapacity" [aerobicCapacityStatus]="getAerobicCapacityStatusForTile(tile)"
             [aerobicDurability]="getChartTile(tile).aerobicDurability" [aerobicDurabilityStatus]="getAerobicDurabilityStatusForTile(tile)"
-            [readinessSignals]="getChartTile(tile).readinessSignals" [readinessSignalsStatus]="getReadinessSignalsStatusForTile(tile)"
             [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
             [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
             [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"

@@ -12,6 +12,7 @@ export interface ReadinessSleepEvidencePoint {
   totalSeconds: number | null;
   score: number | null;
   averageHrvMs: number | null;
+  averageHeartRateBpm: number | null;
   minimumHeartRateBpm: number | null;
 }
 
@@ -27,7 +28,9 @@ export interface ReadinessSignalsContext {
   sleepScore: number | null;
   latestSleepAtMs: number | null;
   hrvRatio: number | null;
+  averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
+  overnightHeartRateRatio: number | null;
 }
 
 export interface ReadinessScoreContext {
@@ -42,9 +45,14 @@ interface WeightedReadinessSignal {
 }
 
 export const READINESS_TOTAL_SIGNAL_COUNT = 4 as const;
+export const READINESS_FORMULA_VERSION = 2 as const;
 export const READINESS_SLEEP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 export const READINESS_SLEEP_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 export const READINESS_SLEEP_BASELINE_NIGHTS = 14;
+const READINESS_OVERNIGHT_HEART_RATE_AVERAGE_WEIGHT = 0.7;
+const READINESS_OVERNIGHT_HEART_RATE_MINIMUM_WEIGHT = 0.3;
+const READINESS_OVERNIGHT_HEART_RATE_MINIMUM_RATIO = 0.8;
+const READINESS_OVERNIGHT_HEART_RATE_MAXIMUM_RATIO = 1.2;
 
 /** Canonical readiness calculation shared by live views and derived history. */
 export function buildReadinessSignals(input: {
@@ -88,22 +96,31 @@ export function buildReadinessSignals(input: {
     latestSleep?.averageHrvMs,
     baselineSleep.map(point => point.averageHrvMs),
   );
+  const averageHeartRateRatio = resolveRatioToMedian(
+    latestSleep?.averageHeartRateBpm,
+    baselineSleep.map(point => point.averageHeartRateBpm),
+  );
   const minimumHeartRateRatio = resolveRatioToMedian(
     latestSleep?.minimumHeartRateBpm,
     baselineSleep.map(point => point.minimumHeartRateBpm),
+  );
+  const overnightHeartRateRatio = combineReadinessOvernightHeartRateRatios(
+    averageHeartRateRatio,
+    minimumHeartRateRatio,
   );
   const scoreContext = calculateReadinessScore({
     form,
     rampRate,
     sleepScore,
     hrvRatio,
-    minimumHeartRateRatio,
+    overnightHeartRateRatio,
   });
   if (!scoreContext) {
     return null;
   }
   const baselineEvidenceCount = baselineSleep.filter(point => (
     toPositiveFiniteNumber(point.averageHrvMs) !== null
+    || toPositiveFiniteNumber(point.averageHeartRateBpm) !== null
     || toPositiveFiniteNumber(point.minimumHeartRateBpm) !== null
   )).length;
 
@@ -119,7 +136,9 @@ export function buildReadinessSignals(input: {
     sleepScore,
     latestSleepAtMs: latestSleep ? resolveReadinessSleepPointTime(latestSleep) : null,
     hrvRatio,
+    averageHeartRateRatio,
     minimumHeartRateRatio,
+    overnightHeartRateRatio,
   };
 }
 
@@ -129,13 +148,13 @@ export function calculateReadinessScore(input: {
   rampRate?: unknown;
   sleepScore?: unknown;
   hrvRatio?: unknown;
-  minimumHeartRateRatio?: unknown;
+  overnightHeartRateRatio?: unknown;
 }): ReadinessScoreContext | null {
   const form = toFiniteNumber(input.form);
   const rampRate = toFiniteNumber(input.rampRate);
   const sleepScore = toFiniteNumber(input.sleepScore);
   const hrvRatio = toPositiveFiniteNumber(input.hrvRatio);
-  const minimumHeartRateRatio = toPositiveFiniteNumber(input.minimumHeartRateRatio);
+  const overnightHeartRateRatio = toPositiveFiniteNumber(input.overnightHeartRateRatio);
   const signals: WeightedReadinessSignal[] = [];
   const loadScore = resolveLoadReadinessScore(form, rampRate);
   if (loadScore !== null) {
@@ -147,8 +166,8 @@ export function calculateReadinessScore(input: {
   if (hrvRatio !== null) {
     signals.push({ score: clamp(50 + ((hrvRatio - 1) * 100), 0, 100), weight: 20 });
   }
-  if (minimumHeartRateRatio !== null) {
-    signals.push({ score: clamp(50 + ((1 - minimumHeartRateRatio) * 100), 0, 100), weight: 15 });
+  if (overnightHeartRateRatio !== null) {
+    signals.push({ score: clamp(50 + ((1 - overnightHeartRateRatio) * 100), 0, 100), weight: 15 });
   }
   if (!signals.length) {
     return null;
@@ -163,6 +182,32 @@ export function calculateReadinessScore(input: {
     availableSignalCount: signals.length,
     availableWeight,
   };
+}
+
+/** Combines average and minimum sleep-HR evidence into the single score driver. */
+export function combineReadinessOvernightHeartRateRatios(
+  averageHeartRateRatio: number | null,
+  minimumHeartRateRatio: number | null,
+): number | null {
+  const boundedAverageRatio = averageHeartRateRatio === null
+    ? null
+    : clamp(
+      averageHeartRateRatio,
+      READINESS_OVERNIGHT_HEART_RATE_MINIMUM_RATIO,
+      READINESS_OVERNIGHT_HEART_RATE_MAXIMUM_RATIO,
+    );
+  const boundedMinimumRatio = minimumHeartRateRatio === null
+    ? null
+    : clamp(
+      minimumHeartRateRatio,
+      READINESS_OVERNIGHT_HEART_RATE_MINIMUM_RATIO,
+      READINESS_OVERNIGHT_HEART_RATE_MAXIMUM_RATIO,
+    );
+  if (boundedAverageRatio !== null && boundedMinimumRatio !== null) {
+    return (boundedAverageRatio * READINESS_OVERNIGHT_HEART_RATE_AVERAGE_WEIGHT)
+      + (boundedMinimumRatio * READINESS_OVERNIGHT_HEART_RATE_MINIMUM_WEIGHT);
+  }
+  return boundedAverageRatio ?? boundedMinimumRatio;
 }
 
 export function resolveReadinessSleepPointTime(point: ReadinessSleepEvidencePoint): number {

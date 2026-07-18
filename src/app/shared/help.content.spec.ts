@@ -98,7 +98,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Training** remains the fixed analytical workspace');
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
-    expect(gettingStartedSection?.content).toContain('**Readiness Signals**');
+    expect(gettingStartedSection?.content).toContain('current **Readiness**');
     expect(gettingStartedSection?.content).toContain('What drove this');
     expect(gettingStartedSection?.content).toContain('neutral higher/lower language');
     expect(gettingStartedSection?.content).toContain('plots a readable 12-week durability trend');
@@ -114,7 +114,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('selecting an event never changes its tags');
     expect(gettingStartedSection?.content).toContain('**Recovery history**');
     expect(gettingStartedSection?.content).toContain('without changing the Training state');
-    expect(gettingStartedSection?.content).toContain('same current formula as the optional Dashboard Readiness Signals tile');
+    expect(gettingStartedSection?.content).toContain('same current formula as Dashboard Today');
+    expect(gettingStartedSection?.content).toContain('average sleep HR (70%) and minimum sleep HR (30%)');
+    expect(gettingStartedSection?.content).toContain('Lower average or minimum sleep HR supports the score only relative');
+    expect(gettingStartedSection?.content).toContain('Suunto records can provide average and minimum sleep HR');
+    expect(gettingStartedSection?.content).toContain('Garmin Health sleep summaries currently do not populate');
     expect(gettingStartedSection?.content).toContain('bounded 30-day sleep-only query');
     expect(gettingStartedSection?.content).toContain('does not load event or activity history');
     expect(gettingStartedSection?.content).toContain('Failed load or sleep reads are identified separately');

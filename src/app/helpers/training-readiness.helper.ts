@@ -164,9 +164,9 @@ export function buildTrainingReadinessViewModel(
         detailText: 'Same-provider median; at least 3 prior nights required.',
       },
       {
-        label: 'Min HR vs baseline',
-        valueText: formatRatio(context.minimumHeartRateRatio, locale),
-        detailText: 'Same-provider median; at least 3 prior nights required.',
+        label: 'Overnight HR vs baseline',
+        valueText: formatRatio(context.overnightHeartRateRatio, locale),
+        detailText: 'Average sleep HR leads the bounded driver; minimum HR supports it when both are available. Same-provider median; at least 3 prior nights required.',
       },
     ],
     ...history,

@@ -53,7 +53,9 @@ export interface DashboardReadinessSignalsContext {
   sleepScore: number | null;
   latestSleepAtMs: number | null;
   hrvRatio: number | null;
+  averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
+  overnightHeartRateRatio: number | null;
   loadAtMs?: number | null;
   trend: DashboardInsightTrendPoint[];
 }
@@ -228,6 +230,7 @@ export function buildDashboardReadinessSignalsContext(input: {
       totalSeconds: toFiniteNumber(point.totalSeconds),
       score: toFiniteNumber(point.score),
       averageHrvMs: toFiniteNumber(point.averageHrvMs),
+      averageHeartRateBpm: toFiniteNumber(point.averageHeartRateBpm),
       minimumHeartRateBpm: toFiniteNumber(point.minimumHeartRateBpm),
     }));
   const context = buildReadinessSignals({

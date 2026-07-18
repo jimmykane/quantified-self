@@ -15,7 +15,9 @@ describe('training-readiness.helper', () => {
       sleepScore: 90,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
       hrvRatio: 1.1,
+      averageHeartRateRatio: 0.95,
       minimumHeartRateRatio: 0.96,
+      overnightHeartRateRatio: 0.953,
       trend: [],
     }, { locale: 'en-US' });
 
@@ -31,7 +33,7 @@ describe('training-readiness.helper', () => {
       ['Load context', 'Form +10 · Ramp +1'],
       ['Sleep', '90/100'],
       ['HRV vs baseline', '+10%'],
-      ['Min HR vs baseline', '-4%'],
+      ['Overnight HR vs baseline', '-5%'],
     ]);
     expect(view.implicationTitle).toBe('Signals are broadly supportive');
     expect(view.implicationText).toContain('does not choose a workout');
@@ -66,7 +68,9 @@ describe('training-readiness.helper', () => {
       sleepScore: null,
       latestSleepAtMs: null,
       hrvRatio: null,
+      averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
       trend: [],
     }, { sleepEvidenceFailed: true });
     const unavailable = buildTrainingReadinessViewModel(null, { sleepEvidenceFailed: true });
@@ -82,7 +86,9 @@ describe('training-readiness.helper', () => {
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
       sleepScore: 85,
       hrvRatio: null,
+      averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
       trend: [],
     }, { sleepEvidenceFailed: true });
 
@@ -110,7 +116,9 @@ describe('training-readiness.helper', () => {
       sleepScore: 80,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
       hrvRatio: null,
+      averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
       trend: [],
     }, { loadEvidenceFailed: true });
 
@@ -137,7 +145,9 @@ describe('training-readiness.helper', () => {
       sleepScore: index === 5 ? null : 80,
       latestSleepAtMs: index === 5 ? null : asOfDayMs,
       hrvRatio: index === 5 ? null : 1,
+      averageHeartRateRatio: index === 5 ? null : 1,
       minimumHeartRateRatio: index === 5 ? null : 1,
+      overnightHeartRateRatio: index === 5 ? null : 1,
     }));
     const view = buildTrainingReadinessViewModel({
       score: 82,
@@ -151,13 +161,16 @@ describe('training-readiness.helper', () => {
       sleepScore: 90,
       latestSleepAtMs: asOfDayMs,
       hrvRatio: 1.1,
+      averageHeartRateRatio: 0.95,
       minimumHeartRateRatio: 0.96,
+      overnightHeartRateRatio: 0.953,
       trend: [],
     }, {
       locale: 'en-US',
       calculatedAtMs: Date.UTC(2026, 6, 16, 12),
       historyStatus: 'ready',
       history: {
+        formulaVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),
@@ -189,7 +202,9 @@ describe('training-readiness.helper', () => {
       sleepScore: 80,
       latestSleepAtMs: asOfDayMs,
       hrvRatio: null,
+      averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
     }));
     const view = buildTrainingReadinessViewModel({
       score: 92,
@@ -203,12 +218,15 @@ describe('training-readiness.helper', () => {
       sleepScore: 90,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
       hrvRatio: null,
+      averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
       trend: [],
     }, {
       calculatedAtMs: Date.UTC(2026, 6, 16, 12),
       historyStatus: 'ready',
       history: {
+        formulaVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 15, 12),
@@ -238,12 +256,15 @@ describe('training-readiness.helper', () => {
       sleepScore: null,
       latestSleepAtMs: null,
       hrvRatio: null,
+      averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
     }));
     const view = buildTrainingReadinessViewModel(null, {
       calculatedAtMs: Date.UTC(2026, 6, 16, 12),
       historyStatus: 'failed',
       history: {
+        formulaVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),

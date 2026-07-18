@@ -4,6 +4,8 @@ import type {
 } from './derived-metrics';
 import {
   calculateReadinessScore,
+  combineReadinessOvernightHeartRateRatios,
+  READINESS_FORMULA_VERSION,
   READINESS_SLEEP_MAX_AGE_MS,
   resolveReadinessConfidence,
 } from './readiness';
@@ -32,6 +34,7 @@ export function normalizeDerivedTrainingReadinessMetricPayload(
     : [];
   if (
     !source
+    || source.formulaVersion !== READINESS_FORMULA_VERSION
     || source.dayBoundary !== 'UTC'
     || source.historyDays !== 14
     || asOfDayMs === null
@@ -61,6 +64,7 @@ export function normalizeDerivedTrainingReadinessMetricPayload(
     return null;
   }
   return {
+    formulaVersion: READINESS_FORMULA_VERSION,
     dayBoundary: 'UTC',
     asOfDayMs,
     generatedAtMs,
@@ -90,7 +94,9 @@ function normalizeTrainingReadinessHistoryPoint(value: unknown): DerivedTraining
   const sleepScore = nullablePercentage(source?.sleepScore);
   const latestSleepAtMs = nullableNonNegativeNumber(source?.latestSleepAtMs);
   const hrvRatio = nullableNonNegativeNumber(source?.hrvRatio);
+  const averageHeartRateRatio = nullableNonNegativeNumber(source?.averageHeartRateRatio);
   const minimumHeartRateRatio = nullableNonNegativeNumber(source?.minimumHeartRateRatio);
+  const overnightHeartRateRatio = nullableNonNegativeNumber(source?.overnightHeartRateRatio);
   if (
     !source
     || dayMs === null
@@ -107,12 +113,16 @@ function normalizeTrainingReadinessHistoryPoint(value: unknown): DerivedTraining
     || sleepScore === undefined
     || latestSleepAtMs === undefined
     || hrvRatio === undefined
+    || averageHeartRateRatio === undefined
     || minimumHeartRateRatio === undefined
+    || overnightHeartRateRatio === undefined
     || !Number.isInteger(dayMs)
     || (score !== null && !Number.isInteger(score))
     || (latestSleepAtMs !== null && !Number.isInteger(latestSleepAtMs))
     || (hrvRatio !== null && hrvRatio <= 0)
+    || (averageHeartRateRatio !== null && averageHeartRateRatio <= 0)
     || (minimumHeartRateRatio !== null && minimumHeartRateRatio <= 0)
+    || (overnightHeartRateRatio !== null && overnightHeartRateRatio <= 0)
     || (score === null && (
       label !== null
       || confidence !== null
@@ -136,7 +146,9 @@ function normalizeTrainingReadinessHistoryPoint(value: unknown): DerivedTraining
     sleepScore,
     latestSleepAtMs,
     hrvRatio,
+    averageHeartRateRatio,
     minimumHeartRateRatio,
+    overnightHeartRateRatio,
   };
 }
 
@@ -145,18 +157,24 @@ function isValidTrainingReadinessHistoryPoint(
   evaluatedAtMs: number,
 ): boolean {
   const scoreContext = calculateReadinessScore(point);
+  const expectedOvernightHeartRateRatio = combineReadinessOvernightHeartRateRatios(
+    point.averageHeartRateRatio,
+    point.minimumHeartRateRatio,
+  );
   const hasSleepSignal = point.sleepScore !== null
     || point.hrvRatio !== null
-    || point.minimumHeartRateRatio !== null;
+    || point.overnightHeartRateRatio !== null;
   if (point.score === null) {
     return scoreContext === null
       && point.availableSignalCount === 0
-      && point.latestSleepAtMs === null;
+      && point.latestSleepAtMs === null
+      && nullableNumbersMatch(point.overnightHeartRateRatio, expectedOvernightHeartRateRatio);
   }
   if (
     !scoreContext
     || point.score !== scoreContext.score
     || point.availableSignalCount !== scoreContext.availableSignalCount
+    || !nullableNumbersMatch(point.overnightHeartRateRatio, expectedOvernightHeartRateRatio)
     || (point.latestSleepAtMs === null && point.baselineEvidenceCount !== 0)
   ) {
     return false;
@@ -178,6 +196,12 @@ function isValidTrainingReadinessHistoryPoint(
     point.latestSleepAtMs <= evaluatedAtMs
     && point.latestSleepAtMs >= evaluatedAtMs - READINESS_SLEEP_MAX_AGE_MS
   );
+}
+
+function nullableNumbersMatch(left: number | null, right: number | null): boolean {
+  return left === null || right === null
+    ? left === right
+    : Math.abs(left - right) <= Number.EPSILON * Math.max(1, Math.abs(left), Math.abs(right)) * 8;
 }
 
 function asRecord(value: unknown): UnknownRecord | null {

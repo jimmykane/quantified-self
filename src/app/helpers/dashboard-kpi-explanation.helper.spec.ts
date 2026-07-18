@@ -7,7 +7,6 @@ import {
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
@@ -142,28 +141,4 @@ describe('dashboard-kpi-explanation.helper', () => {
     expect(explanation.rows).toContainEqual({ label: 'Pace retained', value: '98%' });
   });
 
-  it('shows every input used by readiness load scoring', () => {
-    const latestSleepAtMs = Date.UTC(2026, 0, 3, 6);
-    const explanation = buildDashboardKpiExplanation({
-      chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-      readinessSignals: {
-        score: 82,
-        label: 'Ready',
-        confidence: 'high',
-        availableSignalCount: 4,
-        totalSignalCount: 4,
-        form: 10,
-        rampRate: 1.5,
-        sleepScore: 90,
-        latestSleepAtMs,
-        hrvRatio: 1.1,
-        minimumHeartRateRatio: 0.96,
-        trend: [],
-      },
-      locale: 'en-US',
-    });
-
-    expect(explanation.rows).toContainEqual({ label: 'Ramp rate', value: '+1.5' });
-    expect(explanation.rows).toContainEqual({ label: 'Latest sleep', value: 'Jan 3, 2026' });
-  });
 });

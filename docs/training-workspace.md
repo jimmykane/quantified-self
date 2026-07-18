@@ -32,9 +32,11 @@ The following rules are architectural constraints:
 - Historical and comparative Training calculations belong in derived-metric builders or sports-lib, not Angular
   components. Readiness uses one environment-neutral formula in `shared/readiness.ts`: the frontend applies it to live
   Form/ramp plus bounded sleep evidence, while Functions applies it at each daily cutoff for the historical series.
-- Dashboard remains the user's modular surface. Training does not remove, relocate, or reconfigure Dashboard tiles, and
-  curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard
-  Aerobic Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
+- Dashboard remains the user's modular chart and map surface. Current Readiness is a fixed part of the optional
+  Dashboard Today summary rather than a configurable tile, while Training owns its deeper current and historical
+  presentation.
+  Curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard Aerobic
+  Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
 - Missing TSS, zones, pace, sleep, power, heart rate, or durability evidence remains unavailable. Missing values are not
   converted to zero.
 - Merged benchmark events are excluded from Training. Multisport parent events are retained, but their normalized child
@@ -199,10 +201,11 @@ cloning a second activity metric object.
 Training uses main overnight sleep sessions for contextual comparisons. Naps are excluded. The backend has two narrow
 sleep sources: `training_build_comparison` fetches the 28/84-day and selected build ranges, while `training_readiness`
 fetches a bounded sleep-end envelope of about 43 days. That envelope lets each of the 14 daily cutoffs independently
-apply the canonical 30-day sleep lookback without querying event or activity history. Separately, the Training and
-Dashboard current-readiness surfaces share one bounded live sleep query: it is lower-bounded to the last 30 days, keeps
-an open upper bound for newly imported nights, and never loads event or activity history. A local refresh timer
-re-evaluates the shared result when a future-dated record becomes eligible, the latest night reaches its 48-hour limit,
+apply the canonical 30-day sleep lookback without querying event or activity history. Separately, Training Readiness and
+the fixed Dashboard Today Readiness summary each use the same bounded live-query contract: it is lower-bounded to the
+last 30 days, keeps an open upper bound for newly imported nights, and never loads event or activity history. A local
+refresh timer re-evaluates the shared result when a future-dated record becomes eligible, the latest night reaches its
+48-hour limit,
 or a night leaves the 30-day baseline window; it reschedules after every boundary and caps long browser timers. Both
 live and backend paths reject unknown providers or invalid sleep dates, ignore non-positive physiological samples, and
 discard unusable timezone offsets instead of letting malformed evidence change or break the result.
@@ -308,7 +311,8 @@ therefore does not create a hidden Training dependency or freshness probe for th
 
 ### Shared Dashboard and Training insight reuse
 
-The configurable Dashboard can present a narrow, read-only view of selected Training evidence:
+The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while current Readiness
+is fixed inside the optional Today summary:
 
 - **Aerobic Capacity** selects the most recent imported running or cycling VO2 max, displays its provider/source
   provenance, and compares only observations from the same source. FTP settings and modeled critical power never become
@@ -317,12 +321,16 @@ The configurable Dashboard can present a narrow, read-only view of selected Trai
   The card selects the current context with the most eligible samples, then uses eligibility ratio and discipline priority
   as deterministic tie-breakers, followed by the lexical context key when every meaningful signal is equal. Running,
   Cycling, and Open water show aerobic decoupling; Pool shows pace retention. Missing weeks remain gaps.
-- **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard applies it to
-  current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a backend-derived
+- **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
+  it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
+  backend-derived
   `training_readiness` snapshot containing 14 UTC-aligned daily cutoffs. Each historical day uses the Form state for that
   day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff; a night older than 48 hours is
-  ineligible. HRV and minimum-heart-rate baselines use up to 14 prior nights from the same provider and require at least
-  three prior values. The live sleep query is lower-bounded to 30 days and keeps an open upper bound so an open page can
+  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider
+  and require at least three prior values for the matching measure. Average and minimum HR are not independent score
+  drivers: their ratios are bounded to `0.8..1.2`, then combined into one Overnight HR ratio at 70% average and 30%
+  minimum, with fallback to whichever is available. Lower HR relative to personal baseline supports that driver. The
+  live sleep query is lower-bounded to 30 days and keeps an open upper bound so an open page can
   receive newly imported nights. The backend sleep query is bounded at both ends to the envelope required for all 14
   cutoffs, and the formula then applies its own 30-day lookback at each cutoff. Future records are ignored. Training
   replaces the final chart point with the live current result only when the retained snapshot is for the current UTC day,
@@ -332,14 +340,16 @@ The configurable Dashboard can present a narrow, read-only view of selected Trai
   a plausible range. The combined load freshness uses the oldest contributing Form/ramp timestamp so one fresh input
   cannot hide a stale one. The result is not a medical score, VO2 estimate, workout prescription, or change to the
   curated Training state; the implication text remains neutral and asks the user to inspect evidence rather than obey a
-  score. Equal-time sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
+  score. Dashboard Today shows the same four driver groups and stops its bounded listener when Today is hidden. The
+  retired pre-release raw value `KpiReadinessConfidence` has a narrow cleanup predicate for local preview settings; it
+  is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
+  sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
   cannot select different latest evidence because query order changed.
 
 Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
 useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
-its default 14-day window, Readiness accepts sleep-only evidence only when its latest aggregated non-nap night is no more
-than 48 hours old, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild merely
-because the manager dialog was opened.
+its default 14-day window, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild
+merely because the manager dialog was opened.
 
 ### Writes and ingress
 
@@ -378,6 +388,10 @@ initial page probe contains the complete Training scope, so this case queues onl
 repair reuses a compatible Form snapshot seed and the bounded sleep envelope; it does not trigger an event or activity
 history scan. Keep the validator shared when the readiness payload evolves so backend freshness cannot call an invalid
 document fresh while the frontend remains indefinitely on Preparing.
+
+The readiness payload also carries `formulaVersion: 2`. This is intentionally independent of the global derived schema:
+changing the current/historical readiness formula invalidates only `training_readiness`, preserving compatible snapshots
+for every unrelated kind.
 
 This probe is important in local development and recovery scenarios: opening Training can repair missing or stale
 snapshots even when no new Firestore write arrives.
@@ -477,13 +491,23 @@ If all state inputs are missing, the page shows an awaiting-data state rather th
 #### Readiness today
 
 Training renders one wide Readiness card instead of separate top-level readiness and sleep cards. The current result is
-contextual rather than causal or prescriptive. It calls the same shared formula as the optional Dashboard tile and
+contextual rather than causal or prescriptive. It calls the same shared formula as the fixed Dashboard Today summary and
 combines only:
 
-- the current derived Form/ramp snapshots;
-- sleep score when recorded, otherwise a duration-based score centered on eight hours;
-- latest-night HRV versus up to 14 prior nights from the same provider; and
-- latest-night minimum heart rate versus up to 14 prior nights from the same provider.
+- the current derived Form/ramp snapshots as one 40% Load driver;
+- sleep score when recorded, otherwise a duration-based score centered on eight hours, at 25%;
+- latest-night HRV versus up to 14 prior nights from the same provider, at 20%; and
+- one 15% Overnight HR driver that blends same-provider average sleep HR (70%) and minimum sleep HR (30%).
+
+Each available HR ratio is bounded to 80–120% of its own baseline before blending; if one HR measure is unavailable,
+the other supplies the driver. Lower HR supports the score only relative to the user's own provider-matched baseline
+and is not a universal medical claim. Missing drivers are excluded and available weights are renormalized rather than treating
+missing evidence as zero.
+
+Provider coverage follows the normalized sleep document rather than assumptions about a device. The current Suunto
+mapper persists average and minimum sleep HR, the COROS mapper persists average sleep HR, and the Garmin Health sleep
+summary mapper currently persists neither normalized sleep-HR measure. The score therefore uses only the measures that
+are actually present; provider-specific omissions remain missing and do not become neutral or zero-valued evidence.
 
 The sleep listener is lower-bounded to 30 days, excludes naps, ignores future-dated records, and accepts a latest night
 only through 48 hours after its end. The card also refreshes when a future record becomes eligible or baseline evidence
@@ -1121,6 +1145,8 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - limited and cross-provider sleep;
 - Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, and
   expandable Recovery history states;
+- Dashboard Today Readiness with full, partial, and missing evidence, plus Today hidden and retired local-preview tile
+  cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;
 - one and multiple capacity/power cards;
 - loading, stale, failed, and valid empty snapshots;

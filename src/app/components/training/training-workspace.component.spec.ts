@@ -124,6 +124,7 @@ describe('TrainingWorkspaceComponent', () => {
       rampRate: { rampRate: 1 } as any,
       trainingReadinessStatus: 'ready',
       trainingReadiness: {
+        formulaVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs: Date.UTC(2026, 6, 16),
         generatedAtMs: nowMs - 1000,
@@ -141,7 +142,9 @@ describe('TrainingWorkspaceComponent', () => {
           sleepScore: 80,
           latestSleepAtMs: Date.UTC(2026, 6, 3 + index, 6),
           hrvRatio: 1,
+          averageHeartRateRatio: 1,
           minimumHeartRateRatio: 1,
+          overnightHeartRateRatio: 1,
         })),
       },
       trainingSummaryStatus: 'ready',

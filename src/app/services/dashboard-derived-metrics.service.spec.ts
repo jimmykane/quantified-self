@@ -666,9 +666,12 @@ describe('DashboardDerivedMetricsService', () => {
       sleepScore: null,
       latestSleepAtMs: null,
       hrvRatio: null,
+      averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
     }));
     const payload = {
+      formulaVersion: 2,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: nowMs,

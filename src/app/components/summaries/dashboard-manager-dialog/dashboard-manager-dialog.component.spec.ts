@@ -43,9 +43,9 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
+  RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import {
   buildDashboardManagerPresetTile,
@@ -290,7 +290,6 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
       DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
       DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
-      DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
     ]);
   });
 
@@ -939,7 +938,6 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
       DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
       DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
-      DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
     ]);
 
     component.onKpiGroupChange('execution');
@@ -965,7 +963,6 @@ describe('DashboardManagerDialogComponent', () => {
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FATIGUE_ATL,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_RECOVERY_DEBT,
       DASHBOARD_MANAGER_PRESET_IDS.KPI_FORM_PLUS_7D,
-      DASHBOARD_MANAGER_PRESET_IDS.KPI_READINESS_CONFIDENCE,
     ]);
   });
 
@@ -1140,7 +1137,7 @@ describe('DashboardManagerDialogComponent', () => {
     );
   });
 
-  it('does not recommend Readiness Signals from stale sleep alone', async () => {
+  it('does not offer the retired Readiness Signals preview tile through recommendations', async () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
     const staleEndTimeMs = Date.now() - (72 * 60 * 60 * 1000);
     sleepServiceMock.watchForDashboard.mockReturnValue(of([{
@@ -1158,8 +1155,45 @@ describe('DashboardManagerDialogComponent', () => {
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
     expect(tiles.some((tile: any) => (
-      tile.chartType === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE
+      tile.chartType === RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE
     ))).toBe(false);
+  });
+
+  it('removes a retired Readiness Signals preview tile and compacts orders on the next settings save', async () => {
+    const dashboardSettings = dialogData.user.settings.dashboardSettings;
+    dashboardSettings.tiles = [
+      {
+        type: TileTypes.Chart,
+        order: 4,
+        chartType: RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+        size: { columns: 1, rows: 1 },
+      },
+      {
+        type: TileTypes.Chart,
+        order: 9,
+        chartType: ChartTypes.ColumnsVertical,
+        dataType: DataDistance.type,
+        dataValueType: ChartDataValueTypes.Total,
+        dataCategoryType: ChartDataCategoryTypes.DateType,
+        size: { columns: 1, rows: 1 },
+      },
+    ];
+
+    await (component as any).persistDashboardSettings(dashboardSettings);
+
+    expect(dashboardSettings.tiles).toHaveLength(1);
+    expect(dashboardSettings.tiles[0]).toMatchObject({
+      chartType: ChartTypes.ColumnsVertical,
+      order: 0,
+    });
+    expect(userServiceMock.updateUserProperties).toHaveBeenLastCalledWith(
+      dialogData.user,
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          dashboardSettings: expect.objectContaining({ tiles: dashboardSettings.tiles }),
+        }),
+      }),
+    );
   });
 
   it('checks recommendation evidence inside the default activity and sleep windows', () => {

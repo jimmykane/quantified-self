@@ -573,7 +573,13 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const sleepDoc = (
             id: string,
             dayMs: number,
-            values: { score: number; hrv: number; minimumHeartRate: number; isNap?: boolean },
+            values: {
+                score: number;
+                hrv: number;
+                averageHeartRate: number;
+                minimumHeartRate: number;
+                isNap?: boolean;
+            },
         ) => ({
             id,
             data: () => ({
@@ -586,6 +592,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
                 score: { value: values.score },
                 vitals: {
                     averageHrvMs: values.hrv,
+                    averageHeartRateBpm: values.averageHeartRate,
                     minimumHeartRateBpm: values.minimumHeartRate,
                 },
             }),
@@ -593,15 +600,20 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const baselineDocs = Array.from({ length: 5 }, (_, index) => sleepDoc(
             `baseline-${index}`,
             Date.UTC(2026, 6, 1 + index),
-            { score: 80, hrv: 50, minimumHeartRate: 50 },
+            { score: 80, hrv: 50, averageHeartRate: 60, minimumHeartRate: 50 },
         ));
         const docs = [
             ...baselineDocs,
-            sleepDoc('latest', Date.UTC(2026, 6, 16), { score: 90, hrv: 55, minimumHeartRate: 48 }),
-            sleepDoc('future', Date.UTC(2026, 6, 17), { score: 100, hrv: 80, minimumHeartRate: 40 }),
+            sleepDoc('latest', Date.UTC(2026, 6, 16), {
+                score: 90, hrv: 55, averageHeartRate: 54, minimumHeartRate: 48,
+            }),
+            sleepDoc('future', Date.UTC(2026, 6, 17), {
+                score: 100, hrv: 80, averageHeartRate: 45, minimumHeartRate: 40,
+            }),
             sleepDoc('nap', Date.UTC(2026, 6, 16), {
                 score: 100,
                 hrv: 100,
+                averageHeartRate: 40,
                 minimumHeartRate: 35,
                 isNap: true,
             }),
@@ -612,6 +624,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const staleDay = result.payload.points.find(point => point.dayMs === Date.UTC(2026, 6, 13));
 
         expect(result.payload).toMatchObject({
+            formulaVersion: 2,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,
@@ -620,7 +633,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(result.payload.points).toHaveLength(14);
         expect(staleDay).toMatchObject({ score: null, availableSignalCount: 0 });
         expect(today).toMatchObject({
-            score: 71,
+            score: 72,
             label: 'Mixed',
             confidence: 'medium',
             availableSignalCount: 3,
@@ -628,8 +641,10 @@ describe('buildTrainingReadinessMetricPayload', () => {
             latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
             sleepScore: 90,
             hrvRatio: 1.1,
+            averageHeartRateRatio: 0.9,
             minimumHeartRateRatio: 0.96,
         });
+        expect(today?.overnightHeartRateRatio).toBeCloseTo(0.918);
     });
 
     it('matches live Suunto local-date grouping before choosing readiness baselines', async () => {
@@ -658,7 +673,9 @@ describe('buildTrainingReadinessMetricPayload', () => {
             availableSignalCount: 1,
             confidence: 'low',
             hrvRatio: null,
+            averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
+            overnightHeartRateRatio: null,
         });
     });
 
@@ -721,7 +738,13 @@ describe('buildTrainingReadinessMetricPayload', () => {
     it('ignores invalid vitals and bounds malformed Suunto timezone offsets', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 16, 12);
-        const buildDoc = (id: string, offset: number, hrv: number, minimumHeartRate: number) => ({
+        const buildDoc = (
+            id: string,
+            offset: number,
+            hrv: number,
+            averageHeartRate: number,
+            minimumHeartRate: number,
+        ) => ({
             id,
             data: () => ({
                 source: { provider: 'SuuntoApp' },
@@ -733,19 +756,25 @@ describe('buildTrainingReadinessMetricPayload', () => {
                 isNap: false,
                 score: { value: 80 },
                 providerFields: { suunto: { timestamp: '2026-07-16T00:00:00+02:00' } },
-                vitals: { averageHrvMs: hrv, minimumHeartRateBpm: minimumHeartRate },
+                vitals: {
+                    averageHrvMs: hrv,
+                    averageHeartRateBpm: averageHeartRate,
+                    minimumHeartRateBpm: minimumHeartRate,
+                },
             }),
         });
 
         const result = buildTrainingReadinessMetricPayload([], 0, [
-            buildDoc('invalid', Number.MAX_SAFE_INTEGER, -100, -20),
-            buildDoc('valid', 2 * 60 * 60, 60, 44),
+            buildDoc('invalid', Number.MAX_SAFE_INTEGER, -100, -80, -20),
+            buildDoc('valid', 2 * 60 * 60, 60, 55, 44),
         ] as any, nowMs);
 
         expect(result.payload.points.at(-1)).toMatchObject({
             sleepScore: 80,
             hrvRatio: null,
+            averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
+            overnightHeartRateRatio: null,
         });
     });
 });

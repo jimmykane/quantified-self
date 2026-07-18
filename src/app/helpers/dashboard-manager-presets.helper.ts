@@ -39,7 +39,6 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardChartCategory,
@@ -84,7 +83,6 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   KPI_EFFICIENCY_DELTA_4W: 'kpi-efficiency-delta-4w',
   KPI_AEROBIC_CAPACITY: 'kpi-aerobic-capacity',
   KPI_AEROBIC_DURABILITY: 'kpi-aerobic-durability',
-  KPI_READINESS_CONFIDENCE: 'kpi-readiness-confidence',
   MAP_DEFAULT_CLUSTERED: 'map-default-clustered',
   MAP_ROUTES_PREVIEW: 'map-routes-preview',
   CUSTOM_DURATION_PIE: 'custom-duration-pie',
@@ -114,7 +112,6 @@ export type DashboardManagerPresetEligibilityKey =
   | 'running-power'
   | 'aerobic-capacity'
   | 'aerobic-durability'
-  | 'readiness-signals'
   | 'event-map'
   | 'routes';
 
@@ -442,18 +439,6 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     kpiGroup: 'execution',
     recommended: true,
     eligibility: 'aerobic-durability',
-  },
-  {
-    id: DASHBOARD_MANAGER_PRESET_IDS.KPI_READINESS_CONFIDENCE,
-    label: 'KPI: Readiness Signals',
-    tileName: 'Readiness Signals',
-    description: 'Transparent load, sleep, HRV, and overnight heart-rate composite with confidence.',
-    icon: 'fact_check',
-    category: 'kpi',
-    kpiChartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-    kpiGroup: 'readiness',
-    recommended: true,
-    eligibility: 'readiness-signals',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.MAP_DEFAULT_CLUSTERED,

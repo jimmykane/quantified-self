@@ -302,6 +302,7 @@ describe('dashboard-training-insights.helper', () => {
       totalSeconds: 8 * 3600,
       score: 80,
       averageHrvMs: 50,
+      averageHeartRateBpm: 60,
       minimumHeartRateBpm: 50,
       isNap: false,
       isPlaceholder: false,
@@ -315,6 +316,7 @@ describe('dashboard-training-insights.helper', () => {
       totalSeconds: 8 * 3600,
       score: 90,
       averageHrvMs: 55,
+      averageHeartRateBpm: 54,
       minimumHeartRateBpm: 48,
       isNap: false,
       isPlaceholder: false,
@@ -335,7 +337,9 @@ describe('dashboard-training-insights.helper', () => {
     expect(context?.availableSignalCount).toBe(4);
     expect(context?.score).toBeGreaterThanOrEqual(78);
     expect(context?.hrvRatio).toBeCloseTo(1.1);
+    expect(context?.averageHeartRateRatio).toBeCloseTo(0.9);
     expect(context?.minimumHeartRateRatio).toBeCloseTo(0.96);
+    expect(context?.overnightHeartRateRatio).toBeCloseTo(0.918);
     expect(context?.rampRate).toBe(1);
     expect(context?.latestSleepAtMs).toBe(750);
     expect(context?.trend).toEqual([]);
@@ -350,27 +354,32 @@ describe('dashboard-training-insights.helper', () => {
           {
             id: 'garmin-old-1', sleepDate: '2026-01-01', provider: 'GarminAPI',
             startTimeMs: 100, endTimeMs: 150, totalSeconds: 8 * 3600, score: 75,
-            averageHrvMs: 40, minimumHeartRateBpm: 50, isNap: false, isPlaceholder: false,
+            averageHrvMs: 40, averageHeartRateBpm: 60, minimumHeartRateBpm: 50,
+            isNap: false, isPlaceholder: false,
           },
           {
             id: 'garmin-old-2', sleepDate: '2026-01-02', provider: 'GarminAPI',
             startTimeMs: 200, endTimeMs: 250, totalSeconds: 8 * 3600, score: 76,
-            averageHrvMs: 40, minimumHeartRateBpm: 50, isNap: false, isPlaceholder: false,
+            averageHrvMs: 40, averageHeartRateBpm: 60, minimumHeartRateBpm: 50,
+            isNap: false, isPlaceholder: false,
           },
           {
             id: 'garmin-old-3', sleepDate: '2026-01-03', provider: 'GarminAPI',
             startTimeMs: 300, endTimeMs: 350, totalSeconds: 8 * 3600, score: 77,
-            averageHrvMs: 40, minimumHeartRateBpm: 50, isNap: false, isPlaceholder: false,
+            averageHrvMs: 40, averageHeartRateBpm: 60, minimumHeartRateBpm: 50,
+            isNap: false, isPlaceholder: false,
           },
           {
             id: 'suunto-old', sleepDate: '2026-01-04', provider: 'SuuntoApp',
             startTimeMs: 400, endTimeMs: 450, totalSeconds: 8 * 3600, score: 80,
-            averageHrvMs: 100, minimumHeartRateBpm: 30, isNap: false, isPlaceholder: false,
+            averageHrvMs: 100, averageHeartRateBpm: 40, minimumHeartRateBpm: 30,
+            isNap: false, isPlaceholder: false,
           },
           {
             id: 'garmin-latest', sleepDate: '2026-01-05', provider: 'GarminAPI',
             startTimeMs: 500, endTimeMs: 550, totalSeconds: 8 * 3600, score: 90,
-            averageHrvMs: 44, minimumHeartRateBpm: 48, isNap: false, isPlaceholder: false,
+            averageHrvMs: 44, averageHeartRateBpm: 54, minimumHeartRateBpm: 48,
+            isNap: false, isPlaceholder: false,
           },
         ] as never,
         latestPoint: {
@@ -383,9 +392,11 @@ describe('dashboard-training-insights.helper', () => {
     expect(context).toMatchObject({
       sleepScore: 90,
       hrvRatio: 1.1,
+      averageHeartRateRatio: 0.9,
       minimumHeartRateRatio: 0.96,
       availableSignalCount: 3,
     });
+    expect(context?.overnightHeartRateRatio).toBeCloseTo(0.918);
   });
 
   it('ignores stale sleep evidence in current readiness', () => {

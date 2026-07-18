@@ -123,6 +123,7 @@ import {
 } from '../../../shared/derived-metrics';
 import {
     buildReadinessSignals,
+    READINESS_FORMULA_VERSION,
     READINESS_SLEEP_LOOKBACK_MS,
     type ReadinessSleepEvidencePoint,
 } from '../../../shared/readiness';
@@ -3083,6 +3084,7 @@ function resolveTrainingReadinessSleepEvidence(
             totalSeconds: durationSeconds,
             score: toFiniteNumber(score.value),
             averageHrvMs: toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs),
+            averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
         };
         const key = `${point.sleepDate}:${provider}`;
@@ -3099,6 +3101,9 @@ function resolveTrainingReadinessSleepEvidence(
         const averageHrvValues = points
             .map(point => point.averageHrvMs)
             .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+        const averageHeartRateValues = points
+            .map(point => point.averageHeartRateBpm)
+            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
         const minimumHeartRateValues = points
             .map(point => point.minimumHeartRateBpm)
             .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
@@ -3110,6 +3115,9 @@ function resolveTrainingReadinessSleepEvidence(
             totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
             averageHrvMs: averageHrvValues.length
                 ? averageHrvValues.reduce((total, value) => total + value, 0) / averageHrvValues.length
+                : null,
+            averageHeartRateBpm: averageHeartRateValues.length
+                ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length
                 : null,
             minimumHeartRateBpm: minimumHeartRateValues.length
                 ? Math.min(...minimumHeartRateValues)
@@ -3224,13 +3232,16 @@ export function buildTrainingReadinessMetricPayload(
             sleepScore: null,
             latestSleepAtMs: null,
             hrvRatio: null,
+            averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
+            overnightHeartRateRatio: null,
         });
     }
 
     return {
         sourceEventCount,
         payload: {
+            formulaVersion: READINESS_FORMULA_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             generatedAtMs: nowMs,

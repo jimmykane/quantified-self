@@ -75,7 +75,6 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardCuratedChartType,
@@ -87,6 +86,7 @@ import {
   isDashboardCuratedChartType,
   isDashboardEventBackedSpecialChartType,
   isDashboardRecoveryNowChartType,
+  isRetiredDashboardReadinessConfidenceKpiChartType,
   isDashboardSpecialChartType,
   resolveDashboardChartCategory,
 } from '../../../helpers/dashboard-special-chart-types';
@@ -161,10 +161,8 @@ import {
 import {
   buildDashboardAerobicCapacityContext,
   buildDashboardAerobicDurabilityContext,
-  buildDashboardReadinessSignalsContext,
 } from '../../../helpers/dashboard-training-insights.helper';
 import { buildDashboardPowerCurveContextFromSnapshot } from '../../../helpers/dashboard-power-curve.helper';
-import { buildDashboardSleepTrendContext } from '../../../helpers/dashboard-sleep-chart.helper';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import type { SleepSession } from '@shared/sleep';
 
@@ -364,7 +362,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'query_stats',
     [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'air',
     [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'timeline',
-    [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'fact_check',
   };
   public readonly kpiChartDescriptionByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week sparkline.',
@@ -384,7 +381,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Current efficiency vs prior 4-week baseline.',
     [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'Latest imported VO2 max with same-source history.',
     [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'Long-session decoupling or pool pace retention from persisted evidence.',
-    [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'Load, sleep, HRV, and overnight heart-rate signals with explicit confidence.',
   };
   public readonly mapStyleOptions: Array<{ value: MapStyleName; label: string }> = [
     { value: 'default', label: 'Default' },
@@ -443,13 +439,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     'running-power': false,
     'aerobic-capacity': false,
     'aerobic-durability': false,
-    'readiness-signals': false,
     'event-map': false,
     routes: false,
   };
   private hasSavedChanges = false;
-  private hasCurrentReadinessSleep = false;
-  private hasDerivedReadinessLoad = false;
   private bulkEligibilitySubscription = new Subscription();
   private shouldAutoFocusEditSection = false;
 
@@ -524,6 +517,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
   get dashboardTiles(): TileSettingsInterface[] {
     return [...(this.data?.user?.settings?.dashboardSettings?.tiles || [])]
+      .filter(tile => !(
+        tile.type === TileTypes.Chart
+        && isRetiredDashboardReadinessConfidenceKpiChartType((tile as TileChartSettingsInterface).chartType)
+      ))
       .sort((left, right) => left.order - right.order);
   }
 
@@ -1243,8 +1240,16 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   private async persistDashboardSettings(dashboardSettings: AppDashboardSettingsInterface): Promise<void> {
+    const tiles = this.cloneTiles(dashboardSettings.tiles || [])
+      .filter(tile => !(
+        tile.type === TileTypes.Chart
+        && isRetiredDashboardReadinessConfidenceKpiChartType((tile as TileChartSettingsInterface).chartType)
+      ))
+      .sort((left, right) => left.order - right.order)
+      .map((tile, index) => ({ ...tile, order: index } as TileSettingsInterface));
+    dashboardSettings.tiles = tiles;
     const dashboardSettingsPatch: Partial<AppDashboardSettingsInterface> = {
-      tiles: dashboardSettings.tiles || [],
+      tiles,
       showTodaySummary: dashboardSettings.showTodaySummary !== false,
     };
     if (dashboardSettings.autoTiles !== undefined) {
@@ -1760,15 +1765,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     this.recommendedEligibility['event-map'] = hasEvents;
   }
 
-  private updateSleepEligibility(sessions: readonly SleepSession[], nowMs = Date.now()): void {
+  private updateSleepEligibility(sessions: readonly SleepSession[]): void {
     this.recommendedEligibility.sleep = sessions.length > 0;
-    this.hasCurrentReadinessSleep = buildDashboardReadinessSignalsContext({
-      sleepTrend: buildDashboardSleepTrendContext(sessions, { nowMs }),
-      nowMs,
-    }) !== null;
-    this.recommendedEligibility['readiness-signals'] = (
-      this.hasCurrentReadinessSleep || this.hasDerivedReadinessLoad
-    );
   }
 
   private updateDerivedEligibility(
@@ -1790,16 +1788,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     });
     this.recommendedEligibility['cycling-power'] = !!cyclingPower?.matchedEventCount && cyclingPower.series.length > 0;
     this.recommendedEligibility['running-power'] = !!runningPower?.matchedEventCount && runningPower.series.length > 0;
-    this.hasDerivedReadinessLoad = state.formNow !== null || state.rampRate !== null;
-    this.recommendedEligibility['readiness-signals'] = (
-      this.hasCurrentReadinessSleep || this.hasDerivedReadinessLoad
-    );
   }
 
   private getBulkEligibilityMetricKinds() {
     return [
-      DERIVED_METRIC_KINDS.FormNow,
-      DERIVED_METRIC_KINDS.RampRate,
       DERIVED_METRIC_KINDS.TrainingCapacity,
       DERIVED_METRIC_KINDS.TrainingDurability,
       DERIVED_METRIC_KINDS.PowerCurve,
@@ -1810,8 +1802,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     Object.keys(this.recommendedEligibility).forEach((key) => {
       this.recommendedEligibility[key as keyof DashboardManagerPresetEligibility] = false;
     });
-    this.hasCurrentReadinessSleep = false;
-    this.hasDerivedReadinessLoad = false;
   }
 
   private markAllDashboardAutoTilesDismissed(

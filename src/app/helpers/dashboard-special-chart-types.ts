@@ -24,7 +24,9 @@ export const DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE = 'KpiHardPercent' as const;
 export const DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE = 'KpiEfficiencyDelta4w' as const;
 export const DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE = 'KpiAerobicCapacity' as const;
 export const DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE = 'KpiAerobicDurability' as const;
-export const DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE = 'KpiReadinessConfidence' as const;
+// Retired before release. Keep the raw value narrowly recognizable so local
+// preview settings can be cleaned without treating it as an active KPI type.
+export const RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE = 'KpiReadinessConfidence' as const;
 
 export type DashboardRecoveryNowChartType = typeof DASHBOARD_RECOVERY_NOW_CHART_TYPE;
 export type DashboardFormChartType = typeof DASHBOARD_FORM_CHART_TYPE;
@@ -50,7 +52,6 @@ export type DashboardKpiHardPercentChartType = typeof DASHBOARD_HARD_PERCENT_KPI
 export type DashboardKpiEfficiencyDelta4wChartType = typeof DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE;
 export type DashboardKpiAerobicCapacityChartType = typeof DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE;
 export type DashboardKpiAerobicDurabilityChartType = typeof DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE;
-export type DashboardKpiReadinessConfidenceChartType = typeof DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE;
 
 export type DashboardCuratedChartType =
   | DashboardRecoveryNowChartType
@@ -82,8 +83,7 @@ export type DashboardKpiChartType =
   | DashboardKpiHardPercentChartType
   | DashboardKpiEfficiencyDelta4wChartType
   | DashboardKpiAerobicCapacityChartType
-  | DashboardKpiAerobicDurabilityChartType
-  | DashboardKpiReadinessConfidenceChartType;
+  | DashboardKpiAerobicDurabilityChartType;
 
 export type DashboardSpecialChartType = DashboardCuratedChartType | DashboardKpiChartType;
 export type DashboardChartType = ChartTypes | DashboardSpecialChartType;
@@ -227,11 +227,6 @@ const DASHBOARD_KPI_CHART_DEFINITIONS: DashboardKpiChartDefinition[] = [
     label: 'Aerobic Durability',
     group: 'execution',
   },
-  {
-    chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-    label: 'Readiness Signals',
-    group: 'readiness',
-  },
 ];
 
 const DASHBOARD_DEFAULT_KPI_CHART_TYPES: DashboardKpiChartType[] = [
@@ -279,8 +274,10 @@ export function isDashboardAerobicDurabilityKpiChartType(chartType: unknown): ch
   return `${chartType}` === DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE;
 }
 
-export function isDashboardReadinessConfidenceKpiChartType(chartType: unknown): chartType is DashboardKpiReadinessConfidenceChartType {
-  return `${chartType}` === DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE;
+export function isRetiredDashboardReadinessConfidenceKpiChartType(
+  chartType: unknown,
+): chartType is typeof RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE {
+  return `${chartType}` === RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE;
 }
 
 export function isDashboardCuratedChartType(chartType: unknown): chartType is DashboardCuratedChartType {
@@ -374,8 +371,7 @@ export function isDashboardKpiChartType(chartType: unknown): chartType is Dashbo
     || isDashboardHardPercentKpiChartType(chartType)
     || isDashboardEfficiencyDelta4wKpiChartType(chartType)
     || isDashboardAerobicCapacityKpiChartType(chartType)
-    || isDashboardAerobicDurabilityKpiChartType(chartType)
-    || isDashboardReadinessConfidenceKpiChartType(chartType);
+    || isDashboardAerobicDurabilityKpiChartType(chartType);
 }
 
 export function isDashboardSpecialChartType(chartType: unknown): chartType is DashboardSpecialChartType {

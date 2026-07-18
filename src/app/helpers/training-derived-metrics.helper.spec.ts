@@ -66,9 +66,12 @@ describe('training derived metric normalizers', () => {
       sleepScore: index === 0 ? null : 80,
       latestSleepAtMs: index === 0 ? null : asOfDayMs - ((13 - index) * 24 * 60 * 60 * 1000) + (6 * 60 * 60 * 1000),
       hrvRatio: index === 0 ? null : 1.05,
+      averageHeartRateRatio: index === 0 ? null : 0.98,
       minimumHeartRateRatio: index === 0 ? null : 0.98,
+      overnightHeartRateRatio: index === 0 ? null : 0.98,
     }));
     const payload = {
+      formulaVersion: 2,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: asOfDayMs + (12 * 60 * 60 * 1000),
@@ -119,8 +122,26 @@ describe('training derived metric normalizers', () => {
         sleepScore: null,
         latestSleepAtMs: null,
         hrvRatio: null,
+        averageHeartRateRatio: null,
         minimumHeartRateRatio: null,
+        overnightHeartRateRatio: null,
       } : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      formulaVersion: 1,
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4
+        ? { ...point, averageHeartRateRatio: 1.1 }
+        : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 0
+        ? { ...point, averageHeartRateRatio: 1 }
+        : point),
     })).toBeNull();
     expect(resolveTrainingReadinessMetricPayload({
       ...payload,
