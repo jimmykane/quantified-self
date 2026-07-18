@@ -49,19 +49,6 @@
         </nav>
 
         <mat-tab-nav-panel #providerPanel class="services-workspace-main">
-          @if (expandedServiceTools === activeSection) {
-          <div class="service-tools-header">
-            <div>
-              <h2>Advanced tools</h2>
-              <p>Imports, delivery, uploads, and automatic sync.</p>
-            </div>
-            <button mat-stroked-button type="button" (click)="hideServiceTools()">
-              <mat-icon>arrow_back</mat-icon>
-              Overview
-            </button>
-          </div>
-          }
-
           <section
             class="service-detail"
             [hidden]="activeSection !== 'garmin'"
@@ -70,7 +57,7 @@
               [user]="user"
               [hasProAccess]="hasProAccess"
               [isAdmin]="isAdmin"
-              [showAdvancedTools]="expandedServiceTools === 'garmin'"
+              [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
             </app-services-garmin>
           </section>
@@ -82,7 +69,7 @@
             <app-services-suunto
               [user]="user"
               [hasProAccess]="hasProAccess"
-              [showAdvancedTools]="expandedServiceTools === 'suunto'"
+              [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
             </app-services-suunto>
           </section>
@@ -94,12 +81,11 @@
             <app-services-coros
               [user]="user"
               [hasProAccess]="hasProAccess"
-              [showAdvancedTools]="expandedServiceTools === 'coros'"
+              [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('coros', $event)">
             </app-services-coros>
           </section>
 
-          @if (expandedServiceTools !== activeSection) {
           <section class="service-overview" aria-label="Connection features">
             @for (card of serviceOverviewCardsBySection[activeSection]; track card.title) {
             <article class="service-overview-card">
@@ -117,7 +103,8 @@
               <button
                 mat-stroked-button
                 type="button"
-                (click)="showServiceTools(activeSection)">
+                [attr.aria-label]="'Manage ' + serviceLabelBySection[activeSection] + ' tools'"
+                (click)="openServiceTools(activeSection)">
                 Manage
               </button>
             </article>
@@ -128,8 +115,54 @@
               <span>Connection permissions and provider tools are available from Manage.</span>
             </div>
           </section>
-          }
         </mat-tab-nav-panel>
     </main>
   </app-loading-overlay>
 </div>
+
+<ng-template #serviceToolsDialog>
+  @if (managedService; as service) {
+  <div class="service-tools-dialog__header">
+    <h2 mat-dialog-title>{{ serviceLabelBySection[service] }} tools</h2>
+    <button
+      mat-icon-button
+      mat-dialog-close
+      type="button"
+      aria-label="Close tools dialog">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+  <p class="service-tools-dialog__description">
+    Imports, uploads, delivery, and automatic sync controls.
+  </p>
+  <mat-dialog-content class="service-tools-dialog__content qs-scrollbar">
+    @switch (service) {
+      @case ('garmin') {
+      <app-services-garmin
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [isAdmin]="isAdmin"
+        [showAdvancedTools]="true"
+        (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
+      </app-services-garmin>
+      }
+      @case ('suunto') {
+      <app-services-suunto
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [showAdvancedTools]="true"
+        (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
+      </app-services-suunto>
+      }
+      @case ('coros') {
+      <app-services-coros
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [showAdvancedTools]="true"
+        (connectionStateChanged)="setServiceConnectionState('coros', $event)">
+      </app-services-coros>
+      }
+    }
+  </mat-dialog-content>
+  }
+</ng-template>

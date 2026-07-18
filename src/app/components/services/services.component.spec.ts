@@ -9,10 +9,11 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { AppFileService } from '../../services/app.file.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppWindowService } from '../../services/app.window.service';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { MaterialModule } from '../../modules/material.module';
@@ -28,6 +29,8 @@ describe('ServicesComponent', () => {
     let mockRouter: any;
     let mockActivatedRoute: any;
     let mockIconRegistry: any;
+    let mockDialog: any;
+    let dialogClosed$: Subject<void>;
 
     beforeEach(async () => {
         mockUserService = {
@@ -64,6 +67,13 @@ describe('ServicesComponent', () => {
                 return of(svg);
             }),
         };
+        dialogClosed$ = new Subject<void>();
+        mockDialog = {
+            open: vi.fn(() => ({
+                afterClosed: () => dialogClosed$,
+                close: vi.fn(),
+            })),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [ServicesComponent],
@@ -76,6 +86,7 @@ describe('ServicesComponent', () => {
                 { provide: AppFileService, useValue: {} },
                 { provide: AppEventService, useValue: {} },
                 { provide: AppWindowService, useValue: {} },
+                { provide: MatDialog, useValue: mockDialog },
                 { provide: MatIconRegistry, useValue: mockIconRegistry }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -183,7 +194,7 @@ describe('ServicesComponent', () => {
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(false);
     });
 
-    it('shows the compact provider overview before advanced tools are opened', () => {
+    it('opens advanced tools in a dialog without replacing the compact overview', () => {
         fixture.detectChanges();
 
         expect(fixture.nativeElement.querySelectorAll('.service-overview-card')).toHaveLength(2);
@@ -193,9 +204,31 @@ describe('ServicesComponent', () => {
         manageButton.click();
         fixture.detectChanges();
 
-        expect(component.expandedServiceTools).toBe('garmin');
-        expect(fixture.nativeElement.querySelector('.service-overview')).toBeNull();
-        expect(fixture.nativeElement.textContent).toContain('Advanced tools');
+        expect(component.managedService).toBe('garmin');
+        expect(fixture.nativeElement.querySelector('.service-overview')).toBeTruthy();
+        expect(mockDialog.open).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                ariaLabel: 'Garmin tools',
+                autoFocus: 'dialog',
+                maxHeight: 'calc(100dvh - 32px)',
+                maxWidth: 'calc(100vw - 32px)',
+                restoreFocus: true,
+                width: 'min(56rem, calc(100vw - 32px))',
+            })
+        );
+
+        dialogClosed$.next();
+        expect(component.managedService).toBeNull();
+    });
+
+    it('gives the service tools dialog an accessible close action', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.html'),
+            'utf8'
+        );
+
+        expect(template).toContain('aria-label="Close tools dialog"');
     });
 
     it('shows live connection state in the desktop provider selector', () => {

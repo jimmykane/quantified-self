@@ -1,5 +1,6 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { UntypedFormGroup } from '@angular/forms';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClient } from '@angular/common/http';
 import { AppFileService } from '../../services/app.file.service';
@@ -36,6 +37,8 @@ interface ServiceOverviewCard {
   standalone: false
 })
 export class ServicesComponent implements OnInit, OnDestroy {
+  @ViewChild('serviceToolsDialog') private serviceToolsDialog?: TemplateRef<unknown>;
+
   public suuntoAppLinkFormGroup!: UntypedFormGroup;
   public isLoading = false;
   public user!: User;
@@ -43,20 +46,25 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
   public activeSection: ServiceSectionId = 'garmin';
   public readonly sectionOrder: ServiceSectionId[] = ['garmin', 'suunto', 'coros'];
+  public readonly serviceLabelBySection: Record<ServiceSectionId, string> = {
+    garmin: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
+    suunto: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
+    coros: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
+  };
   public readonly serviceSectionOptions: ServiceSectionOption[] = [
     {
       id: 'garmin',
-      label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
+      label: this.serviceLabelBySection.garmin,
       serviceName: ServiceNames.GarminAPI,
     },
     {
       id: 'suunto',
-      label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
+      label: this.serviceLabelBySection.suunto,
       serviceName: ServiceNames.SuuntoApp,
     },
     {
       id: 'coros',
-      label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
+      label: this.serviceLabelBySection.coros,
       serviceName: ServiceNames.COROSAPI,
     },
   ];
@@ -107,7 +115,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public serviceNames = ServiceNames;
   public hasProAccess = false;
   public isAdmin = false;
-  public expandedServiceTools: ServiceSectionId | null = null;
+  public managedService: ServiceSectionId | null = null;
   public readonly serviceConnectionState: Record<ServiceSectionId, boolean> = {
     garmin: false,
     suunto: false,
@@ -117,6 +125,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   private userSubscription!: Subscription;
   private routeSubscription!: Subscription;
+  private serviceToolsDialogRef: MatDialogRef<unknown> | null = null;
+  private readonly dialog = inject(MatDialog);
   private readonly serviceNameBySection: Record<ServiceSectionId, ServiceNames> = {
     suunto: ServiceNames.SuuntoApp,
     garmin: ServiceNames.GarminAPI,
@@ -183,12 +193,28 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  public showServiceTools(section: ServiceSectionId): void {
-    this.expandedServiceTools = section;
-  }
+  public openServiceTools(section: ServiceSectionId): void {
+    if (!this.serviceToolsDialog || this.serviceToolsDialogRef) {
+      return;
+    }
 
-  public hideServiceTools(): void {
-    this.expandedServiceTools = null;
+    this.managedService = section;
+    const dialogRef = this.dialog.open(this.serviceToolsDialog, {
+      ariaLabel: `${this.serviceLabelBySection[section]} tools`,
+      autoFocus: 'dialog',
+      maxHeight: 'calc(100dvh - 32px)',
+      maxWidth: 'calc(100vw - 32px)',
+      restoreFocus: true,
+      width: 'min(56rem, calc(100vw - 32px))',
+    });
+    this.serviceToolsDialogRef = dialogRef;
+    dialogRef.afterClosed().subscribe(() => {
+      if (this.serviceToolsDialogRef !== dialogRef) {
+        return;
+      }
+      this.serviceToolsDialogRef = null;
+      this.managedService = null;
+    });
   }
 
   public setServiceConnectionState(section: ServiceSectionId, connected: boolean): void {
@@ -213,6 +239,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.serviceToolsDialogRef?.close();
     if (this.userSubscription) {
       this.userSubscription.unsubscribe();
     }

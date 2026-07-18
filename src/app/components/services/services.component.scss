@@ -99,15 +99,15 @@
     min-width: 0;
 }
 
-.service-tools-header {
+.service-tools-dialog__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 16px;
+    gap: 12px;
+    padding-right: 8px;
 }
 
-.service-tools-header h2,
+.service-tools-dialog__header h2,
 .service-overview-card h2 {
     margin: 0;
     color: var(--mat-sys-on-surface);
@@ -116,12 +116,28 @@
     line-height: 1.25;
 }
 
-.service-tools-header p,
 .service-overview-card p {
     margin: 4px 0 0;
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.85rem;
     line-height: 1.4;
+}
+
+.service-tools-dialog__header h2 {
+    flex: 1 1 auto;
+}
+
+.service-tools-dialog__description {
+    margin: -12px 24px 16px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.service-tools-dialog__content {
+    max-height: calc(100dvh - 128px);
+    min-width: 0;
+    padding-bottom: 24px;
 }
 
 .service-overview {
@@ -208,12 +224,13 @@
         margin-bottom: 16px;
     }
 
-    .service-tools-header {
-        align-items: flex-start;
+    .service-tools-dialog__description {
+        margin-bottom: 12px;
     }
 
-    .service-tools-header p {
-        display: none;
+    .service-tools-dialog__content {
+        max-height: calc(100dvh - 112px);
+        padding-inline: 16px;
     }
 
     .service-overview-card {
