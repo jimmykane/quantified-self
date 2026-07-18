@@ -75,6 +75,10 @@
     line-height: 1.35;
 }
 
+.service-connection-status--compact .service-connection-status__copy p {
+    display: none;
+}
+
 .service-connection-status__chips {
     flex: 0 0 auto;
 }

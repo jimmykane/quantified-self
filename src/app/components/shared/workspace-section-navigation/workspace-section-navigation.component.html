@@ -2,10 +2,26 @@
   class="workspace-navigation"
   [class.workspace-navigation--services]="variant === 'services'">
   @if (showMobileNavigation) {
+  <div
+    class="workspace-navigation__mobile-shell"
+    [class.workspace-navigation__mobile-shell--backward]="canScrollMobileBackward"
+    [class.workspace-navigation__mobile-shell--forward]="canScrollMobileForward">
+    @if (canScrollMobileBackward) {
+    <button
+      mat-icon-button
+      type="button"
+      class="workspace-navigation__scroll-control workspace-navigation__scroll-control--previous"
+      aria-label="Show previous sections"
+      (click)="scrollMobileNavigation(-1)">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    }
     <nav
+      #mobileNavigation
       class="workspace-navigation__mobile-tabs"
       role="tablist"
-      [attr.aria-label]="navigationAriaLabel">
+      [attr.aria-label]="navigationAriaLabel"
+      (scroll)="updateMobileNavigationScrollState()">
       @for (section of sections; track section.id) {
       <a
         #mobileSectionTab
@@ -30,6 +46,17 @@
       </a>
       }
     </nav>
+    @if (canScrollMobileForward) {
+    <button
+      mat-icon-button
+      type="button"
+      class="workspace-navigation__scroll-control workspace-navigation__scroll-control--next"
+      aria-label="Show more sections"
+      (click)="scrollMobileNavigation(1)">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+    }
+  </div>
   }
 
   <aside class="desktop-section-nav workspace-navigation__desktop-nav" [attr.aria-label]="navigationAriaLabel">

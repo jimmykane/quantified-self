@@ -30,6 +30,13 @@ interface ServiceWorkspaceSectionOption {
   icon: string;
 }
 
+interface ServiceOverviewCard {
+  title: string;
+  description: string;
+  detail: string;
+  icon: string;
+}
+
 @Component({
   selector: 'app-services',
   templateUrl: './services.component.html',
@@ -81,9 +88,59 @@ export class ServicesComponent implements OnInit, OnDestroy {
       serviceName: ServiceNames.COROSAPI,
     },
   ];
+  public readonly serviceOverviewCardsBySection: Record<ServiceSectionId, readonly ServiceOverviewCard[]> = {
+    garmin: [
+      {
+        title: 'Activity sync',
+        description: 'New Garmin activities import automatically while connected.',
+        detail: 'History import · Pro',
+        icon: 'sync',
+      },
+      {
+        title: 'Route delivery',
+        description: 'Send saved routes from Quantified Self to Garmin Connect.',
+        detail: 'Course delivery and auto-sync controls',
+        icon: 'route',
+      },
+    ],
+    suunto: [
+      {
+        title: 'Activity sync',
+        description: 'New Suunto activities import automatically while connected.',
+        detail: 'History import · Pro',
+        icon: 'sync',
+      },
+      {
+        title: 'Routes & uploads',
+        description: 'Import routes and send FIT or GPX files to Suunto.',
+        detail: 'Route sync and upload controls',
+        icon: 'route',
+      },
+    ],
+    coros: [
+      {
+        title: 'Activity sync',
+        description: 'New COROS activities import automatically while connected.',
+        detail: 'History import · Pro',
+        icon: 'sync',
+      },
+      {
+        title: 'Uploads & auto-sync',
+        description: 'Send FIT activities and manage COROS to Suunto sync.',
+        detail: 'Upload and automatic sync controls',
+        icon: 'cloud_upload',
+      },
+    ],
+  };
   public serviceNames = ServiceNames;
   public hasProAccess = false;
   public isAdmin = false;
+  public expandedServiceTools: ServiceSectionId | null = null;
+  public readonly serviceConnectionState: Record<ServiceSectionId, boolean> = {
+    garmin: false,
+    suunto: false,
+    coros: false,
+  };
 
 
   private userSubscription!: Subscription;
@@ -159,6 +216,18 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
+  public showServiceTools(section: ServiceSectionId): void {
+    this.expandedServiceTools = section;
+  }
+
+  public hideServiceTools(): void {
+    this.expandedServiceTools = null;
+  }
+
+  public setServiceConnectionState(section: ServiceSectionId, connected: boolean): void {
+    this.serviceConnectionState[section] = connected;
+  }
+
   async selectWorkspaceSection(section: string): Promise<void> {
     if (section === 'privacy') {
       await this.router.navigate(['/policies'], { fragment: this.privacyFragmentBySection[this.activeSection] });
@@ -199,6 +268,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private getSectionFromServiceName(serviceName: string | null): ServiceSectionId {
     if (serviceName === ServiceNames.GarminAPI) {
       return 'garmin';
+    }
+    if (serviceName === ServiceNames.SuuntoApp) {
+      return 'suunto';
     }
     if (serviceName === ServiceNames.COROSAPI) {
       return 'coros';

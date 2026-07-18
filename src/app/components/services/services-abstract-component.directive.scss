@@ -191,8 +191,13 @@ mat-icon {
     display: block;
     min-width: 0;
     max-width: 100%;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.service-container:not(.service-container--advanced) .connected-account-item:not(:first-child) {
+    display: none;
 }
 
 .connected-account-line {

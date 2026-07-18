@@ -16,6 +16,7 @@ describe('ShellNavigationEffectsService', () => {
   let service: ShellNavigationEffectsService;
 
   beforeEach(() => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     events$ = new Subject<unknown>();
     mockRouter = {
       events: events$,
@@ -115,7 +116,7 @@ describe('ShellNavigationEffectsService', () => {
     service.setShellScroller(drawerContent);
 
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
-    events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+    events$.next(new NavigationEnd(2, '/settings', '/settings'));
 
     expect(drawerContent.scrollTop).toBe(0);
     expect(drawerContent.scrollLeft).toBe(0);
@@ -130,8 +131,35 @@ describe('ShellNavigationEffectsService', () => {
     });
 
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
-    events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+    events$.next(new NavigationEnd(2, '/settings', '/settings'));
 
     expect(scrollSpy).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('resets immediately when navigation starts for a different route path', () => {
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const drawerContent = document.createElement('div');
+    drawerContent.scrollTop = 120;
+    service.setShellScroller(drawerContent);
+
+    events$.next(new NavigationEnd(1, '/services', '/services'));
+    events$.next(new NavigationStart(2, '/settings?section=app', 'imperative'));
+
+    expect(drawerContent.scrollTop).toBe(0);
+    expect(scrollSpy).toHaveBeenCalled();
+  });
+
+  it('preserves shell scroll for query-only section changes', () => {
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const drawerContent = document.createElement('div');
+    service.setShellScroller(drawerContent);
+
+    events$.next(new NavigationEnd(1, '/settings?section=app', '/settings?section=app'));
+    drawerContent.scrollTop = 120;
+    events$.next(new NavigationStart(2, '/settings?section=map', 'imperative'));
+    events$.next(new NavigationEnd(2, '/settings?section=map', '/settings?section=map'));
+
+    expect(drawerContent.scrollTop).toBe(120);
+    expect(scrollSpy).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ export class ServiceConnectionStatusComponent {
     @Input() description = '';
     @Input() connected = false;
     @Input() loading = false;
+    @Input() compact = false;
     @Input() locked = false;
     @Input() proRequired = false;
     @Input() showDetails = false;

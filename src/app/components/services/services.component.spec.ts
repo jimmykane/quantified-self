@@ -132,6 +132,10 @@ describe('ServicesComponent', () => {
         ]);
     });
 
+    it('maps the Suunto query parameter to the Suunto panel', () => {
+        expect((component as any).getSectionFromServiceName(ServiceNames.SuuntoApp)).toBe('suunto');
+    });
+
     it('renders the mobile provider selector as Material tab navigation', () => {
         fixture.detectChanges();
 
@@ -190,6 +194,30 @@ describe('ServicesComponent', () => {
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(false);
     });
 
+    it('shows the compact provider overview before advanced tools are opened', () => {
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelectorAll('.service-overview-card')).toHaveLength(2);
+        expect(fixture.nativeElement.textContent).toContain('Activity sync');
+
+        const manageButton = fixture.nativeElement.querySelector('.service-overview-card button') as HTMLButtonElement;
+        manageButton.click();
+        fixture.detectChanges();
+
+        expect(component.expandedServiceTools).toBe('garmin');
+        expect(fixture.nativeElement.querySelector('.service-overview')).toBeNull();
+        expect(fixture.nativeElement.textContent).toContain('Advanced tools');
+    });
+
+    it('shows live connection state in the desktop provider selector', () => {
+        component.setServiceConnectionState('garmin', true);
+        fixture.detectChanges();
+
+        const connectionStates = fixture.nativeElement.querySelectorAll('.provider-selector__connection-state');
+        expect(connectionStates).toHaveLength(1);
+        expect(connectionStates[0].textContent).toContain('Connected');
+    });
+
     it('lets the services route grow with content instead of forcing viewport height', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
@@ -223,6 +251,8 @@ describe('ServicesComponent', () => {
             expect(rule).not.toContain('overflow: auto');
         }
 
-        expect(styles.match(/\.connected-account-title\s*\{[^}]*\}/)?.[0]).toContain('overflow-wrap: anywhere');
+        const connectedAccountTitleRule = styles.match(/\.connected-account-title\s*\{[^}]*\}/)?.[0] ?? '';
+        expect(connectedAccountTitleRule).toContain('overflow: hidden');
+        expect(connectedAccountTitleRule).toContain('text-overflow: ellipsis');
     });
 });

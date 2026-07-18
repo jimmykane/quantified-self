@@ -331,6 +331,8 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('Garmin saved-route delivery to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
+    expect(serviceConnectionsSection?.content).toContain('Choose **Manage**');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**');
     expect(serviceConnectionsSection?.content).toContain('not a Garmin route import or catch-up feature');
     expect(serviceConnectionsSection?.content).toContain('**COURSE_IMPORT**');

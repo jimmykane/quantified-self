@@ -5,6 +5,8 @@ import {
   HostListener,
   inject,
   Input,
+  Output,
+  EventEmitter,
   OnChanges,
   OnDestroy,
   OnInit,
@@ -45,6 +47,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   @Input() hasProAccess!: boolean;
   @Input() isAdmin: boolean = false;
+  @Input() showAdvancedTools = true;
+  @Output() connectionStateChanged = new EventEmitter<boolean>();
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
   public serviceMeta: AppUserServiceMetaInterface | undefined;
@@ -98,11 +102,13 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
           this.serviceTokens = undefined;
           this.serviceMeta = undefined;
           this.onServiceDataChanged();
+          this.emitConnectionState();
           return;
         }
         this.serviceTokens = results[0];
         this.serviceMeta = results[1];
         this.onServiceDataChanged();
+        this.emitConnectionState();
       }),
     ).subscribe(async (results) => {
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
@@ -123,6 +129,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
+        this.emitConnectionState();
         this.snackBar.open(`Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
@@ -233,6 +240,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     }
     this.isDisconnecting = false;
     this.forceConnected = false;
+    this.emitConnectionState();
   }
 
   get hasActiveSyncRoutesUsingService(): boolean {
@@ -353,5 +361,9 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       processedActivitiesFromLastHistoryImportCount: stats?.stats?.successCount || 0
     };
     this.changeDetectorRef.detectChanges();
+  }
+
+  private emitConnectionState(): void {
+    this.connectionStateChanged.emit(this.isConnectedToService());
   }
 }

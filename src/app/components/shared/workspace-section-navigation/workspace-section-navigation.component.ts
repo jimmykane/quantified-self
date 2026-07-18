@@ -6,6 +6,7 @@ import {
   Input,
   Output,
   QueryList,
+  ViewChild,
   ViewChildren,
 } from '@angular/core';
 
@@ -33,10 +34,14 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
   @Input() public variant: WorkspaceSectionNavigationVariant = 'settings';
   @Input() public showMobileNavigation = true;
   @Output() public sectionSelected = new EventEmitter<string>();
+  @ViewChild('mobileNavigation', { read: ElementRef })
+  private mobileNavigation?: ElementRef<HTMLElement>;
   @ViewChildren('mobileSectionTab', { read: ElementRef })
   private mobileSectionTabs!: QueryList<ElementRef<HTMLAnchorElement>>;
 
   private lastVisibleActiveSection = '';
+  public canScrollMobileBackward = false;
+  public canScrollMobileForward = false;
 
   public ngAfterViewChecked(): void {
     if (!this.activeSection || this.activeSection === this.lastVisibleActiveSection) {
@@ -52,10 +57,37 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
 
     activeTab.scrollIntoView({ block: 'nearest', inline: 'center' });
     this.lastVisibleActiveSection = this.activeSection;
+    this.updateMobileNavigationScrollState();
   }
 
   public selectSection(event: Event, sectionId: string): void {
     event.preventDefault();
     this.sectionSelected.emit(sectionId);
+  }
+
+  public scrollMobileNavigation(direction: -1 | 1): void {
+    const navigation = this.mobileNavigation?.nativeElement;
+    if (!navigation) {
+      return;
+    }
+
+    navigation.scrollBy({
+      left: direction * Math.max(120, navigation.clientWidth * 0.7),
+      behavior: 'smooth',
+    });
+  }
+
+  public updateMobileNavigationScrollState(): void {
+    const navigation = this.mobileNavigation?.nativeElement;
+    if (!navigation) {
+      const activeIndex = this.sections.findIndex(section => section.id === this.activeSection);
+      this.canScrollMobileBackward = activeIndex > 0;
+      this.canScrollMobileForward = activeIndex >= 0 && activeIndex < this.sections.length - 1;
+      return;
+    }
+
+    const maximumScrollLeft = Math.max(0, navigation.scrollWidth - navigation.clientWidth);
+    this.canScrollMobileBackward = navigation.scrollLeft > 1;
+    this.canScrollMobileForward = navigation.scrollLeft < maximumScrollLeft - 1;
   }
 }

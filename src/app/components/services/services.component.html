@@ -28,6 +28,12 @@
                 [showTooltip]="false">
               </app-service-source-icon>
               <span class="provider-selector__name">{{ section.label }}</span>
+              @if (serviceConnectionState[section.id]) {
+              <span class="provider-selector__connection-state">
+                <span class="provider-selector__connection-dot"></span>
+                Connected
+              </span>
+              }
             </span>
           </mat-button-toggle>
           }
@@ -51,6 +57,19 @@
         </nav>
 
         <mat-tab-nav-panel #providerPanel class="services-workspace-main">
+          @if (expandedServiceTools === activeSection) {
+          <div class="service-tools-header">
+            <div>
+              <h2>Advanced tools</h2>
+              <p>Imports, delivery, uploads, and automatic sync.</p>
+            </div>
+            <button mat-stroked-button type="button" (click)="hideServiceTools()">
+              <mat-icon>arrow_back</mat-icon>
+              Overview
+            </button>
+          </div>
+          }
+
           <section
             class="service-detail"
             [hidden]="activeSection !== 'garmin'"
@@ -58,7 +77,9 @@
             <app-services-garmin
               [user]="user"
               [hasProAccess]="hasProAccess"
-              [isAdmin]="isAdmin">
+              [isAdmin]="isAdmin"
+              [showAdvancedTools]="expandedServiceTools === 'garmin'"
+              (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
             </app-services-garmin>
           </section>
 
@@ -66,15 +87,56 @@
             class="service-detail"
             [hidden]="activeSection !== 'suunto'"
             aria-label="Suunto App">
-            <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
+            <app-services-suunto
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [showAdvancedTools]="expandedServiceTools === 'suunto'"
+              (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
+            </app-services-suunto>
           </section>
 
           <section
             class="service-detail"
             [hidden]="activeSection !== 'coros'"
             aria-label="COROS">
-            <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
+            <app-services-coros
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [showAdvancedTools]="expandedServiceTools === 'coros'"
+              (connectionStateChanged)="setServiceConnectionState('coros', $event)">
+            </app-services-coros>
           </section>
+
+          @if (expandedServiceTools !== activeSection) {
+          <section class="service-overview" aria-label="Connection features">
+            @for (card of serviceOverviewCardsBySection[activeSection]; track card.title) {
+            <article class="service-overview-card">
+              <div class="service-overview-card__icon" aria-hidden="true">
+                <mat-icon>{{ card.icon }}</mat-icon>
+              </div>
+              <div class="service-overview-card__copy">
+                <h2>{{ card.title }}</h2>
+                <p>{{ card.description }}</p>
+                <span class="service-overview-card__detail">
+                  <mat-icon>check_circle</mat-icon>
+                  {{ card.detail }}
+                </span>
+              </div>
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="showServiceTools(activeSection)">
+                Manage
+              </button>
+            </article>
+            }
+
+            <div class="service-overview-status" role="status">
+              <mat-icon>info</mat-icon>
+              <span>Connection permissions and provider tools are available from Manage.</span>
+            </div>
+          </section>
+          }
         </mat-tab-nav-panel>
       </app-workspace-section-navigation>
     </main>

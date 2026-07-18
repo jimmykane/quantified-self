@@ -12,10 +12,36 @@
     align-items: start;
 }
 
+.workspace-navigation__mobile-shell,
 .workspace-navigation__mobile-tabs {
     display: none;
     width: 100%;
     min-width: 0;
+}
+
+.workspace-navigation__mobile-shell {
+    position: relative;
+}
+
+.workspace-navigation__scroll-control {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    width: 36px;
+    height: 36px;
+    transform: translateY(-50%);
+    border: 1px solid var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-lowest);
+    color: var(--mat-sys-on-surface);
+    box-shadow: var(--mat-sys-level1);
+}
+
+.workspace-navigation__scroll-control--previous {
+    left: 4px;
+}
+
+.workspace-navigation__scroll-control--next {
+    right: 4px;
 }
 
 .workspace-navigation__mobile-tab {
@@ -102,12 +128,52 @@
         display: none;
     }
 
+    .workspace-navigation__mobile-shell {
+        display: block;
+    }
+
     .workspace-navigation__mobile-tabs {
         display: flex;
+        width: auto;
         max-width: 100%;
         overflow-x: auto;
         overscroll-behavior-inline: contain;
         scrollbar-width: none;
+        scroll-behavior: smooth;
+        scroll-snap-type: inline proximity;
+    }
+
+    .workspace-navigation__mobile-shell--backward .workspace-navigation__mobile-tabs {
+        margin-inline-start: 60px;
+    }
+
+    .workspace-navigation__mobile-shell--forward .workspace-navigation__mobile-tabs {
+        margin-inline-end: 60px;
+    }
+
+    .workspace-navigation__mobile-tab {
+        scroll-snap-align: start;
+    }
+
+    .workspace-navigation__mobile-shell--backward::before,
+    .workspace-navigation__mobile-shell--forward::after {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        z-index: 1;
+        width: 52px;
+        pointer-events: none;
+        content: '';
+    }
+
+    .workspace-navigation__mobile-shell--backward::before {
+        left: 0;
+        background: linear-gradient(90deg, var(--mat-sys-surface) 12%, transparent);
+    }
+
+    .workspace-navigation__mobile-shell--forward::after {
+        right: 0;
+        background: linear-gradient(270deg, var(--mat-sys-surface) 12%, transparent);
     }
 
     .workspace-navigation__mobile-tabs::-webkit-scrollbar {

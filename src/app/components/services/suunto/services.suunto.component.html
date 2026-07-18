@@ -1,9 +1,10 @@
-<div class="service-container">
+<div class="service-container" [class.service-container--advanced]="showAdvancedTools">
   <app-service-connection-status
     serviceLabel="Suunto App"
     [description]="connectionDescription"
     [connected]="isServiceConnected"
     [loading]="isLoading"
+    [compact]="!showAdvancedTools"
     [locked]="!canConnectServiceWithCurrentAccess && !isServiceConnected"
     [proRequired]="!canConnectServiceWithCurrentAccess && !isServiceConnected"
     [showDetails]="connectionView.showDetails"
@@ -101,6 +102,7 @@
     </div>
   </app-service-connection-status>
 
+  @if (showAdvancedTools) {
   <mat-divider class="connection-tools-divider"></mat-divider>
 
   <nav
@@ -338,4 +340,5 @@
       </section>
     </section>
   </mat-tab-nav-panel>
+  }
 </div>

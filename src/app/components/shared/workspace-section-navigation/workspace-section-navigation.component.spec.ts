@@ -74,4 +74,23 @@ describe('WorkspaceSectionNavigationComponent', () => {
 
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'center' });
   });
+
+  it('shows mobile overflow affordances and scrolls the section strip', () => {
+    const scrollBy = vi.fn();
+    (component as any).mobileNavigation = {
+      nativeElement: {
+        clientWidth: 300,
+        scrollWidth: 700,
+        scrollLeft: 120,
+        scrollBy,
+      },
+    };
+
+    component.updateMobileNavigationScrollState();
+    component.scrollMobileNavigation(1);
+
+    expect(component.canScrollMobileBackward).toBe(true);
+    expect(component.canScrollMobileForward).toBe(true);
+    expect(scrollBy).toHaveBeenCalledWith({ left: 210, behavior: 'smooth' });
+  });
 });

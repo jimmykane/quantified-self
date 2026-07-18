@@ -551,6 +551,8 @@ From an activity action menu you can also:
 
 Garmin, Suunto, and COROS connections are part of **Pro**.
 
+Services opens each provider on a compact connection overview. Choose **Manage** on an activity, route, upload, or auto-sync card to open the provider's advanced tools, then choose **Overview** to return.
+
 ## Integration pages overview
 
 The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, Garmin saved-route delivery to Garmin Connect, Suunto -> Garmin course delivery, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.

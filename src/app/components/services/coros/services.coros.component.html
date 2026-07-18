@@ -1,9 +1,10 @@
-<div class="service-container">
+<div class="service-container" [class.service-container--advanced]="showAdvancedTools">
   <app-service-connection-status
     serviceLabel="COROS"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
+    [compact]="!showAdvancedTools"
     [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [showDetails]="isConnectedToService() || isDisconnectPending"
@@ -90,6 +91,7 @@
     </div>
   </app-service-connection-status>
 
+  @if (showAdvancedTools) {
   <mat-divider class="connection-tools-divider"></mat-divider>
 
   <nav
@@ -272,4 +274,5 @@
       </section>
     }
   </mat-tab-nav-panel>
+  }
 </div>
