@@ -237,6 +237,23 @@ describe('SideNavComponent', () => {
         expect(trainingItem?.nativeElement.textContent).toContain('Beta');
     });
 
+    it('places AI Insights after the signed-in activity navigation items', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-1',
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        const navigationItems = fixture.debugElement.queryAll(By.css('mat-list-item'));
+        const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
+        const aiInsightsItem = navigationItems.find(item => item.nativeElement.textContent.includes('AI Insights'));
+
+        expect(routesItem).toBeTruthy();
+        expect(aiInsightsItem).toBeTruthy();
+        expect(navigationItems.indexOf(aiInsightsItem!)).toBeGreaterThan(navigationItems.indexOf(routesItem!));
+    });
+
     it('should link My Tracks directly for logged-in free users', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
