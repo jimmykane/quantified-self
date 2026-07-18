@@ -400,7 +400,7 @@
       <div class="training-load-grid">
         @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
           <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
-            <app-form-chart [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" timelineWindow="m"></app-form-chart>
+            <app-form-chart [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="loadTrajectoryInfoTooltip" timelineWindow="m"></app-form-chart>
           </article>
         } @else {
           <article class="training-chart-state training-chart-state-form qs-glass-card-panel" role="status">

@@ -37,6 +37,7 @@ import {
   buildDashboardFormRenderPoints,
   DashboardFormPoint,
   extendDashboardFormPointsWithZeroLoadUntil,
+  resolveDashboardFormCurrentPoint,
   resolveDashboardFormLatestPoint,
   resolveDashboardFormStatus,
   resolveDashboardFormValue,
@@ -119,10 +120,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
   readonly hasData = computed(() => this.pointsSignal().length > 0);
   readonly latestRealWorkoutPoint = computed(() => this.absoluteLatestPointSignal() || resolveDashboardFormLatestPoint(this.pointsSignal()));
-  readonly latestCurrentDayPoint = computed(() => {
-    const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(this.pointsSignal(), Date.now());
-    return resolveDashboardFormLatestPoint(pointsUntilToday);
-  });
+  readonly latestCurrentDayPoint = computed(() => resolveDashboardFormCurrentPoint(this.pointsSignal()));
   readonly selectedFormValue = computed(() => resolveDashboardFormValue(this.latestCurrentDayPoint(), ChartsFormComponent.FORM_MODE));
   readonly status = computed(() => resolveDashboardFormStatus(this.selectedFormValue()));
   readonly selectedGranularity = computed(() => this.selectedTimelineWindowSignal());

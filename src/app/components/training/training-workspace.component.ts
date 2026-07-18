@@ -10,6 +10,14 @@ import type {
   DashboardTrainingRecoveryWindow,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
+  resolveDashboardFatigueAtlContext,
+  resolveDashboardFitnessCtlContext,
+  resolveDashboardFormNowContextFromPoints,
+  resolveDashboardRampRateContextFromPoints,
+} from '../../helpers/dashboard-derived-metrics.helper';
+import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
+import { DASHBOARD_FORM_CHART_TYPE } from '../../helpers/dashboard-special-chart-types';
+import {
   buildTrainingCapacityViewModels,
   type TrainingCapacityDisciplineViewModel,
 } from '../../helpers/training-capacity.helper';
@@ -245,6 +253,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
+  public readonly loadTrajectoryInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FORM_CHART_TYPE);
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
   public capacityDisciplines: TrainingCapacityDisciplineViewModel[] = [];
   public trainingBuildCards: TrainingBuildCardViewModel[] = [];
@@ -812,20 +821,22 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     return `${formatter.format(new Date(startDayMs as number))} – ${formatter.format(new Date(endDayMs as number))}`;
   }
 
-  private getLatestFormPoint() {
-    const points = this.derivedState.formPoints || [];
-    return points.length ? points[points.length - 1] : null;
-  }
-
   private refreshDerivedViewModels(): void {
-    const latestFormPoint = this.getLatestFormPoint();
+    const nowMs = Date.now();
+    const formPoints = this.derivedState.formPoints;
+    const currentFormNow = resolveDashboardFormNowContextFromPoints(formPoints, nowMs)
+      || this.derivedState.formNow;
+    const currentRampRate = resolveDashboardRampRateContextFromPoints(formPoints, nowMs)
+      || this.derivedState.rampRate;
+    const currentFitness = resolveDashboardFitnessCtlContext(formPoints, nowMs);
+    const currentFatigue = resolveDashboardFatigueAtlContext(formPoints, nowMs);
     const analysis = buildTrainingAnalysis({
       disciplines: this.derivedState.trainingSummary?.disciplines || [],
       stateSignals: {
-        form: this.derivedState.formNow?.value ?? latestFormPoint?.formSameDay ?? null,
-        rampRate: this.derivedState.rampRate?.rampRate ?? null,
-        fitness: latestFormPoint?.ctl ?? null,
-        fatigue: latestFormPoint?.atl ?? null,
+        form: currentFormNow?.value ?? null,
+        rampRate: currentRampRate?.rampRate ?? null,
+        fitness: currentFitness?.value ?? null,
+        fatigue: currentFatigue?.value ?? null,
       },
     });
     const forecastPoints = this.derivedState.freshnessForecast?.points || [];
@@ -849,13 +860,13 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     );
     this.refreshTrainingReadiness();
     this.loadMetrics = {
-      ctlText: this.formatNumber(latestFormPoint?.ctl),
-      atlText: this.formatNumber(latestFormPoint?.atl),
-      rampText: this.formatNumber(this.derivedState.rampRate?.rampRate, 2, true),
+      ctlText: this.formatNumber(currentFitness?.value, 0),
+      atlText: this.formatNumber(currentFatigue?.value, 0),
+      rampText: this.formatNumber(currentRampRate?.rampRate, 2, true),
       acwrText: this.formatNumber(this.derivedState.acwr?.ratio, 2),
       monotonyText: this.formatNumber(this.derivedState.monotonyStrain?.monotony, 2),
       strainText: this.formatNumber(this.derivedState.monotonyStrain?.strain, 0),
-      freshnessNowText: this.formatNumber(latestCurrentPoint?.formSameDay ?? this.derivedState.formNow?.value, 1, true),
+      freshnessNowText: this.formatNumber(currentFormNow?.value ?? latestCurrentPoint?.formSameDay, 0, true),
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
   }
@@ -891,21 +902,33 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private refreshTrainingReadiness(): void {
+    const nowMs = Date.now();
+    const formNowFromSeries = resolveDashboardFormNowContextFromPoints(this.derivedState.formPoints, nowMs);
+    const rampRateFromSeries = resolveDashboardRampRateContextFromPoints(this.derivedState.formPoints, nowMs);
+    const formNow = formNowFromSeries
+      || this.derivedState.formNow;
+    const rampRate = rampRateFromSeries
+      || this.derivedState.rampRate;
+    const loadStatuses = [
+      formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
+      rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
+    ];
     const isUpdating = this.readinessSleepLoading
       || !this.hasReceivedDerivedState
-      || [this.derivedState.formNowStatus, this.derivedState.rampRateStatus]
+      || loadStatuses
         .some(status => isDerivedMetricPendingStatus(status));
     const context = buildDashboardReadinessSignalsContext({
-      formNow: this.derivedState.formNow,
-      rampRate: this.derivedState.rampRate,
+      formNow,
+      rampRate,
       sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      nowMs,
     });
     this.trainingReadiness = buildTrainingReadinessViewModel(context, {
       isPreparing: !context && isUpdating,
       isUpdating,
-      calculatedAtMs: Date.now(),
+      calculatedAtMs: nowMs,
       sleepEvidenceFailed: this.readinessSleepFailed,
-      loadEvidenceFailed: [this.derivedState.formNowStatus, this.derivedState.rampRateStatus]
+      loadEvidenceFailed: loadStatuses
         .some(status => status === 'failed'),
       history: this.derivedState.trainingReadiness,
       historyStatus: this.derivedState.trainingReadinessStatus,
@@ -954,6 +977,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
             metricKinds: [
               DERIVED_METRIC_KINDS.FormNow,
               DERIVED_METRIC_KINDS.RampRate,
+              DERIVED_METRIC_KINDS.FormPlus7d,
+              DERIVED_METRIC_KINDS.FreshnessForecast,
               DERIVED_METRIC_KINDS.TrainingReadiness,
             ],
           });

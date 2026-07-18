@@ -683,6 +683,26 @@ describe('SummariesComponent', () => {
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
   });
 
+  it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    (component as any).derivedFormPoints = [{
+      time: Date.UTC(2026, 6, 11),
+      trainingStressScore: 84,
+      ctl: 42,
+      atl: 50,
+      formSameDay: -8,
+      formPriorDay: -4,
+    }];
+    (component as any).derivedFormNowContext = { value: -99, latestDayMs: Date.UTC(2026, 6, 11) };
+    (component as any).derivedRampRateContext = { rampRate: 99, latestDayMs: Date.UTC(2026, 6, 11) };
+
+    const readiness = (component as any).buildDashboardTodayReadiness();
+
+    expect(readiness.loadText).toBe('+18.5 / -6.5');
+  });
+
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
     const builtTiles = [{
       type: TileTypes.Chart,

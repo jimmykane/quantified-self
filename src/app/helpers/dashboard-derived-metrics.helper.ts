@@ -44,6 +44,7 @@ import {
 import { isTrainingDiscipline, TRAINING_DISCIPLINES } from '@shared/training-disciplines';
 import {
   extendDashboardFormPointsWithZeroLoadUntil,
+  resolveDashboardFormLatestPoint,
   type DashboardFormPoint,
 } from './dashboard-form.helper';
 import {
@@ -324,6 +325,89 @@ function resolveDashboardFormMetricKpiContext(
     latestDayMs: latestPoint?.time ?? null,
     value: latestPoint ? toRoundedMetricValue(valueSelector(latestPoint)) : null,
     trend8Weeks: buildDashboardFormMetricTrend8Weeks(pointsUntilToday, valueSelector),
+  };
+}
+
+function buildDashboardFormRampTrend8Weeks(
+  points: readonly DashboardFormPoint[],
+): DashboardDerivedTrendPoint[] {
+  const ctlByDay = new Map(points.map(point => [point.time, toFiniteNumber(point.ctl)]));
+  const trendByWeek = new Map<number, DashboardDerivedTrendPoint>();
+
+  points.forEach((point) => {
+    const ctlToday = toFiniteNumber(point.ctl);
+    const ctlSevenDaysAgo = ctlByDay.get(point.time - (7 * DAY_MS)) ?? null;
+    if (ctlToday === null || ctlSevenDaysAgo === null) {
+      return;
+    }
+    const weekStartMs = resolveUtcWeekStartMs(point.time);
+    trendByWeek.set(weekStartMs, {
+      time: weekStartMs,
+      value: toRoundedMetricValue(ctlToday - ctlSevenDaysAgo),
+    });
+  });
+
+  return [...trendByWeek.values()]
+    .sort((left, right) => left.time - right.time)
+    .slice(-8);
+}
+
+/**
+ * Uses the Form series as the single source of truth for the value currently
+ * shown to a user. This deliberately includes zero-load days through today so
+ * Form Now always agrees with the Form chart and CTL/ATL KPI cards.
+ */
+export function resolveDashboardFormNowContextFromPoints(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  nowMs = Date.now(),
+): DashboardFormNowContext | null {
+  if (!Array.isArray(points) || !points.length) {
+    return null;
+  }
+  const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(points, nowMs);
+  const latestPoint = resolveDashboardFormLatestPoint(pointsUntilToday);
+  return {
+    latestDayMs: latestPoint?.time ?? null,
+    value: latestPoint ? toRoundedMetricValue(latestPoint.formSameDay) : null,
+    trend8Weeks: buildDashboardFormMetricTrend8Weeks(
+      pointsUntilToday,
+      point => toFiniteNumber(point.formSameDay),
+    ),
+  };
+}
+
+/**
+ * Calculates Ramp Rate from the same current Form series as CTL, ATL, and
+ * TSB. A persisted Ramp Rate snapshot remains a fallback only when the Form
+ * series does not yet contain a seven-day comparison.
+ */
+export function resolveDashboardRampRateContextFromPoints(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  nowMs = Date.now(),
+): DashboardRampRateContext | null {
+  if (!Array.isArray(points) || !points.length) {
+    return null;
+  }
+  const pointsUntilToday = extendDashboardFormPointsWithZeroLoadUntil(points, nowMs);
+  const latestPoint = resolveDashboardFormLatestPoint(pointsUntilToday);
+  if (!latestPoint) {
+    return null;
+  }
+  const ctlSevenDaysAgo = pointsUntilToday.find(point => point.time === latestPoint.time - (7 * DAY_MS))?.ctl;
+  if (!Number.isFinite(ctlSevenDaysAgo)) {
+    return null;
+  }
+  const ctlToday = toFiniteNumber(latestPoint.ctl);
+  const normalizedCtlSevenDaysAgo = toFiniteNumber(ctlSevenDaysAgo);
+  if (ctlToday === null || normalizedCtlSevenDaysAgo === null) {
+    return null;
+  }
+  return {
+    latestDayMs: latestPoint.time,
+    ctlToday: toRoundedMetricValue(ctlToday),
+    ctl7DaysAgo: toRoundedMetricValue(normalizedCtlSevenDaysAgo),
+    rampRate: toRoundedMetricValue(ctlToday - normalizedCtlSevenDaysAgo),
+    trend8Weeks: buildDashboardFormRampTrend8Weeks(pointsUntilToday),
   };
 }
 

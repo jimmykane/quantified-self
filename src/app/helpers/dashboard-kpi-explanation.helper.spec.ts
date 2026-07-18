@@ -50,6 +50,19 @@ describe('dashboard-kpi-explanation.helper', () => {
     expect(explanation.rows).toContainEqual({ label: 'Ramp', value: '+0.83' });
     expect(explanation.rows).toContainEqual({ label: 'Fitness (CTL)', value: '97' });
     expect(explanation.rows).toContainEqual({ label: 'Fatigue (ATL)', value: '102' });
+    expect(explanation.rows).toContainEqual({ label: 'Model basis', value: 'UTC daily TSS; zero-load decay through today' });
+  });
+
+  it('shows the Form calculation and zero-load convention in KPI details', () => {
+    const explanation = buildDashboardKpiExplanation({
+      chartType: DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+      formNow: { latestDayMs: Date.UTC(2026, 4, 8), value: -4.91, trend8Weeks: [] },
+      rampRate: { latestDayMs: Date.UTC(2026, 4, 8), ctlToday: 97, ctl7DaysAgo: 88, rampRate: 0.83, trend8Weeks: [] },
+      fitnessCtl: { latestDayMs: Date.UTC(2026, 4, 8), value: 97, trend8Weeks: [] },
+      fatigueAtl: { latestDayMs: Date.UTC(2026, 4, 8), value: 102, trend8Weeks: [] },
+    });
+
+    expect(explanation.rows).toContainEqual({ label: 'Model basis', value: 'UTC daily TSS; zero-load decay through today' });
   });
 
   it('uses intensity source and weekly split details for Training Balance', () => {

@@ -46,6 +46,8 @@ import type {
 import {
   resolveDashboardFatigueAtlContext,
   resolveDashboardFitnessCtlContext,
+  resolveDashboardFormNowContextFromPoints,
+  resolveDashboardRampRateContextFromPoints,
 } from './dashboard-derived-metrics.helper';
 import {
   buildDashboardSleepTrendContext,
@@ -291,13 +293,18 @@ export function buildDashboardTileViewModels(
 ): DashboardTileViewModel[] {
   const normalizedEvents = normalizeDashboardTileEvents(input.events);
   const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
+  const nowMs = Date.now();
   const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
   const derivedAcwrContext = input.derivedMetrics?.acwr || null;
-  const derivedRampRateContext = input.derivedMetrics?.rampRate || null;
+  const derivedRampRateContext = resolveDashboardRampRateContextFromPoints(derivedFormPoints, nowMs)
+    || input.derivedMetrics?.rampRate
+    || null;
   const derivedMonotonyStrainContext = input.derivedMetrics?.monotonyStrain || null;
-  const derivedFormNowContext = input.derivedMetrics?.formNow || null;
-  const derivedFitnessCtlContext = resolveDashboardFitnessCtlContext(derivedFormPoints);
-  const derivedFatigueAtlContext = resolveDashboardFatigueAtlContext(derivedFormPoints);
+  const derivedFormNowContext = resolveDashboardFormNowContextFromPoints(derivedFormPoints, nowMs)
+    || input.derivedMetrics?.formNow
+    || null;
+  const derivedFitnessCtlContext = resolveDashboardFitnessCtlContext(derivedFormPoints, nowMs);
+  const derivedFatigueAtlContext = resolveDashboardFatigueAtlContext(derivedFormPoints, nowMs);
   const derivedFormPlus7dContext = input.derivedMetrics?.formPlus7d || null;
   const derivedEasyPercentContext = input.derivedMetrics?.easyPercent || null;
   const derivedHardPercentContext = input.derivedMetrics?.hardPercent || null;

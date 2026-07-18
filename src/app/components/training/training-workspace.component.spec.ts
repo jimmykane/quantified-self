@@ -357,6 +357,8 @@ describe('TrainingWorkspaceComponent', () => {
           metricKinds: [
             'form_now',
             'ramp_rate',
+            'form_plus_7d',
+            'freshness_forecast',
             'training_readiness',
           ],
         },

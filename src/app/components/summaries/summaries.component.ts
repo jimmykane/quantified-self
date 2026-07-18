@@ -73,6 +73,10 @@ import type {
   DashboardTrainingCapacityContext,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
+  resolveDashboardFormNowContextFromPoints,
+  resolveDashboardRampRateContextFromPoints,
+} from '../../helpers/dashboard-derived-metrics.helper';
+import {
   type DashboardDerivedMetricStatus,
   isDerivedMetricPendingStatus,
 } from '../../helpers/derived-metric-status.helper';
@@ -1612,10 +1616,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private buildDashboardTodayReadiness(): DashboardTodayReadinessViewModel {
+    const nowMs = Date.now();
+    const formNow = resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
+      || this.derivedFormNowContext;
+    const rampRate = resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
+      || this.derivedRampRateContext;
     const context = buildDashboardReadinessSignalsContext({
-      formNow: this.derivedFormNowContext,
-      rampRate: this.derivedRampRateContext,
+      formNow,
+      rampRate,
       sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      nowMs,
     });
     const recoveryText = formatSleepDuration(resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext));
     if (!context) {

@@ -495,7 +495,7 @@ Training renders one wide Readiness card instead of separate top-level readiness
 contextual rather than causal or prescriptive. It calls the same shared formula as the fixed Dashboard Today summary and
 combines only:
 
-- the current derived Form/ramp snapshots as one 40% Load driver;
+- the current UTC-day Form series as one 40% Load driver (with the Form Now/Ramp snapshots used only when the series cannot provide the needed value);
 - sleep score when recorded, otherwise a duration-based score centered on eight hours, at 25%;
 - latest-night HRV versus up to 14 prior nights from the same provider, at 20%; and
 - one 15% Overnight HR driver that blends same-provider average sleep HR (70%) and minimum sleep HR (30%).
@@ -529,7 +529,7 @@ baseline evidence counts. The latest complete series may remain visible while it
 refresh. The live current calculation replaces today's plotted score only when the snapshot's `asOfDayMs` is the current
 UTC day, so newly imported sleep can update the card without waiting for a historical snapshot and a stale series cannot
 mislabel a new score as yesterday's. An open Training route schedules a narrow UTC-day rollover refresh for `form_now`,
-`ramp_rate`, and `training_readiness`. Those projection-sensitive kinds can reuse a compatible Form seed and do not
+`ramp_rate`, `form_plus_7d`, `freshness_forecast`, and `training_readiness`. Those projection-sensitive kinds can reuse a compatible Form seed and do not
 require an event or activity scan.
 
 #### Recovery remaining
@@ -689,6 +689,12 @@ CTL_today = CTL_previous + (load_today - CTL_previous) / 42
 ATL_today = ATL_previous + (load_today - ATL_previous) / 7
 Form      = CTL - ATL
 ```
+
+Every Training and Dashboard “current” load surface resolves this same model through the current UTC day. If no TSS
+has been recorded on an intervening day, that day is explicitly zero load; CTL and ATL still decay at their respective
+rates, so TSB and Ramp Rate can change without a new workout. CTL, ATL, Form Now/TSB, and Ramp Rate are all taken from
+this one current-day Form series. Ramp Rate is `CTL(today) - CTL(today - 7 UTC days)`. The last real workout’s TSS is
+shown separately and is never replaced by an assumed zero.
 
 The forecast is a scenario with zero future load, not a prediction of what the athlete will actually do.
 

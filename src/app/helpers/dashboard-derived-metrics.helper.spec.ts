@@ -8,11 +8,13 @@ import {
   resolveDashboardFitnessCtlContext,
   resolveDashboardFreshnessForecastContext,
   resolveDashboardFormNowContext,
+  resolveDashboardFormNowContextFromPoints,
   resolveDashboardFormPlus7dContext,
   resolveDashboardHardPercentContext,
   resolveDashboardIntensityDistributionContext,
   resolveDashboardMonotonyStrainContext,
   resolveDashboardRampRateContext,
+  resolveDashboardRampRateContextFromPoints,
   resolveDashboardTrainingSummaryContext,
   resolveDashboardTrainingBuildComparisonContext,
   resolveDashboardTrainingCapacityContext,
@@ -58,6 +60,33 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(ramp?.trend8Weeks[0]).toEqual({ time: Date.UTC(2025, 11, 1), value: 2 });
     expect(monotony?.strain).toBe(544);
     expect(monotony?.trend8Weeks[0]).toEqual({ time: Date.UTC(2025, 11, 1), value: 490 });
+  });
+
+  it('derives Form Now and Ramp Rate from the one current-day Form series', () => {
+    const firstDayMs = Date.UTC(2026, 0, 1);
+    const todayMs = Date.UTC(2026, 0, 8, 12);
+    const points = [{
+      time: firstDayMs,
+      trainingStressScore: 84,
+      ctl: 42,
+      atl: 50,
+      formSameDay: -8,
+      formPriorDay: -4,
+    }];
+
+    const formNow = resolveDashboardFormNowContextFromPoints(points, todayMs);
+    const ramp = resolveDashboardRampRateContextFromPoints(points, todayMs);
+
+    expect(formNow).toMatchObject({
+      latestDayMs: Date.UTC(2026, 0, 8),
+      value: 18.4848,
+    });
+    expect(ramp).toMatchObject({
+      latestDayMs: Date.UTC(2026, 0, 8),
+      ctlToday: 35.4806,
+      ctl7DaysAgo: 42,
+      rampRate: -6.5194,
+    });
   });
 
   it('normalizes freshness, intensity, and efficiency payload contexts', () => {

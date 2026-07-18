@@ -1231,13 +1231,14 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     expect((viewModels[0] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
-    expect((viewModels[0] as any).formNow?.value).toBe(-6);
+    expect((viewModels[0] as any).formNow?.latestDayMs).toBe(Date.UTC(2026, 0, 8));
+    expect((viewModels[0] as any).formNow?.value).toBeCloseTo(3.2891, 4);
     expect((viewModels[0] as any).rampRate?.rampRate).toBe(1.6);
     expect((viewModels[0] as any).fitnessCtl?.value).toBeCloseTo(40.0238, 4);
     expect((viewModels[0] as any).fatigueAtl?.value).toBeCloseTo(36.7347, 4);
     expect((viewModels[1] as any).fitnessCtl?.value).toBeCloseTo(40.0238, 4);
     expect((viewModels[2] as any).fatigueAtl?.value).toBeCloseTo(36.7347, 4);
-    expect((viewModels[3] as any).formNow?.value).toBe(-6);
+    expect((viewModels[3] as any).formNow?.value).toBeCloseTo(3.2891, 4);
     expect((viewModels[3] as any).formPlus7d?.value).toBe(4);
     expect((viewModels[3] as any).freshnessForecast).toEqual(freshnessForecast);
     expect((viewModels[4] as any).easyPercent?.value).toBe(68);
