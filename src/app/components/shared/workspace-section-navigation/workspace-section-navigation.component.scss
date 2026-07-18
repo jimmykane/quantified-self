@@ -55,13 +55,29 @@
     position: absolute;
     top: 50%;
     z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 36px;
     height: 36px;
+    padding: 0;
     transform: translateY(-50%);
     border: 1px solid var(--mat-sys-outline-variant);
     background: var(--mat-sys-surface-container-lowest);
     color: var(--mat-sys-on-surface);
+    line-height: 1;
     box-shadow: var(--mat-sys-level1);
+}
+
+.workspace-navigation__scroll-control mat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    line-height: 24px;
 }
 
 .workspace-navigation__scroll-control--previous {

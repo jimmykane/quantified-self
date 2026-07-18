@@ -51,6 +51,23 @@ describe('WorkspaceSectionNavigationComponent', () => {
     expect(labelRule).toContain('text-align: center');
   });
 
+  it('centers both mobile scroll icons inside their controls', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/shared/workspace-section-navigation/workspace-section-navigation.component.scss'),
+      'utf8'
+    );
+    const controlRule = styles.match(/\.workspace-navigation__scroll-control\s*\{[^}]*\}/)?.[0] ?? '';
+    const iconRule = styles.match(/\.workspace-navigation__scroll-control mat-icon\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(controlRule).toContain('display: inline-flex');
+    expect(controlRule).toContain('align-items: center');
+    expect(controlRule).toContain('justify-content: center');
+    expect(controlRule).toContain('padding: 0');
+    expect(iconRule).toContain('align-items: center');
+    expect(iconRule).toContain('justify-content: center');
+    expect(iconRule).toContain('line-height: 24px');
+  });
+
   it('emits the selected section from the horizontal navigation', () => {
     const selected = vi.fn();
     component.sectionSelected.subscribe(selected);
