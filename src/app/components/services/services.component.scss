@@ -97,6 +97,8 @@
     width: 100%;
     max-width: 760px;
     min-width: 0;
+    overflow: clip;
+    contain: paint;
 }
 
 .service-tools-dialog__header {
@@ -193,6 +195,10 @@
 
 .service-detail {
     min-width: 0;
+}
+
+.service-detail[hidden] {
+    display: none;
 }
 
 @include bp.max-768 {

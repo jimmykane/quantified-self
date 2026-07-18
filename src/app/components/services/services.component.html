@@ -60,6 +60,9 @@
               [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
             </app-services-garmin>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'garmin' }">
+            </ng-container>
           </section>
 
           <section
@@ -72,6 +75,9 @@
               [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
             </app-services-suunto>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'suunto' }">
+            </ng-container>
           </section>
 
           <section
@@ -84,30 +90,35 @@
               [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('coros', $event)">
             </app-services-coros>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
+            </ng-container>
           </section>
+        </mat-tab-nav-panel>
 
+        <ng-template #serviceOverview let-section>
           <section class="service-overview" aria-label="Connection features">
-            @for (card of serviceOverviewCardsBySection[activeSection]; track card.title) {
-            <article class="service-overview-card">
-              <div class="service-overview-card__icon" aria-hidden="true">
-                <mat-icon>{{ card.icon }}</mat-icon>
-              </div>
-              <div class="service-overview-card__copy">
-                <h2>{{ card.title }}</h2>
-                <p>{{ card.description }}</p>
-                <span class="service-overview-card__detail">
-                  <mat-icon>check_circle</mat-icon>
-                  {{ card.detail }}
-                </span>
-              </div>
-              <button
-                mat-stroked-button
-                type="button"
-                [attr.aria-label]="card.actionLabel + ' for ' + serviceLabelBySection[activeSection]"
-                (click)="openServiceTools(activeSection, card)">
-                {{ card.actionLabel }}
-              </button>
-            </article>
+            @for (card of serviceOverviewCardsBySection[section]; track card.title) {
+              <article class="service-overview-card">
+                <div class="service-overview-card__icon" aria-hidden="true">
+                  <mat-icon>{{ card.icon }}</mat-icon>
+                </div>
+                <div class="service-overview-card__copy">
+                  <h2>{{ card.title }}</h2>
+                  <p>{{ card.description }}</p>
+                  <span class="service-overview-card__detail">
+                    <mat-icon>check_circle</mat-icon>
+                    {{ card.detail }}
+                  </span>
+                </div>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [attr.aria-label]="card.actionLabel + ' for ' + serviceLabelBySection[section]"
+                  (click)="openServiceTools(section, card)">
+                  {{ card.actionLabel }}
+                </button>
+              </article>
             }
 
             <div class="service-overview-status" role="status">
@@ -115,7 +126,7 @@
               <span>Connection permissions and provider tools are available from Manage.</span>
             </div>
           </section>
-        </mat-tab-nav-panel>
+        </ng-template>
     </main>
   </app-loading-overlay>
 </div>

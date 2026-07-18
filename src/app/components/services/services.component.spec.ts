@@ -181,8 +181,12 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const servicePanels = fixture.nativeElement.querySelectorAll('.service-detail');
+        const garminOverview = servicePanels[0].querySelector('.service-overview');
+        const corosOverview = servicePanels[2].querySelector('.service-overview');
 
         expect(servicePanels.length).toBe(3);
+        expect(garminOverview).toBeTruthy();
+        expect(corosOverview).toBeTruthy();
         expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('[aria-label="suunto app" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(true);
@@ -192,15 +196,18 @@ describe('ServicesComponent', () => {
 
         expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(false);
+        expect(servicePanels[0].querySelector('.service-overview')).toBe(garminOverview);
+        expect(servicePanels[2].querySelector('.service-overview')).toBe(corosOverview);
     });
 
     it('opens each overview card at its matching tool', () => {
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelectorAll('.service-overview-card')).toHaveLength(2);
-        expect(fixture.nativeElement.textContent).toContain('Activity sync');
+        const activePanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
+        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(2);
+        expect(activePanel.textContent).toContain('Activity sync');
 
-        const manageButtons = fixture.nativeElement.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
+        const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
         expect(manageButtons[0].textContent?.trim()).toBe('History import');
         expect(manageButtons[0].getAttribute('aria-label')).toBe('History import for Garmin');
@@ -320,6 +327,19 @@ describe('ServicesComponent', () => {
         expect(contentRule).toContain('max-width: 760px');
         expect(contentRule).toContain('margin: 0 auto');
         expect(contentRule).not.toContain('1180px');
+    });
+
+    it('clips provider paints and explicitly removes inactive panels from layout', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+        const workspaceRule = styles.match(/\.services-workspace-main\s*\{[^}]*\}/)?.[0] ?? '';
+        const hiddenPanelRule = styles.match(/\.service-detail\[hidden\]\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(workspaceRule).toContain('overflow: clip');
+        expect(workspaceRule).toContain('contain: paint');
+        expect(hiddenPanelRule).toContain('display: none');
     });
 
     it('keeps service content wrappers from becoming nested scroll containers', () => {
