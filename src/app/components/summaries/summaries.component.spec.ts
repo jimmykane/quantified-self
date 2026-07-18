@@ -184,11 +184,15 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('does not expose the Training action during staged rollout', () => {
+  it('exposes the Training action beside Dashboard manager', () => {
     component.showActions = true;
 
     fixture.detectChanges();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link')).toBeNull();
+    const trainingLink = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link') as HTMLAnchorElement;
+    expect(trainingLink).not.toBeNull();
+    expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
+    expect(trainingLink.textContent).toContain('Open Training');
+    expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
