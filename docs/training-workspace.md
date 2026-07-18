@@ -655,6 +655,9 @@ The cards show:
 - the sport bucket with the largest absolute TSS change; and
 - the discipline with the largest active-day change.
 
+The rhythm card never selects a dormant discipline (zero sessions and active days in both windows). When active-day
+changes tie, it prefers the discipline with more observed active days, then sessions, before using a lexical tie-break.
+
 Rhythm includes session count, active days, active weeks, longest inactivity gap, and longest session. Coverage text makes
 missing parent TSS and unclassified child activity types visible. A sparse one-off baseline must not be described as a
 confident usual pattern.

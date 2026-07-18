@@ -55,6 +55,27 @@ describe('buildTrainingExplanationViewModel', () => {
     expect(view?.cards.find(card => card.key === 'rhythm')?.valueText).toBe('Same active days');
   });
 
+  it('never selects a dormant discipline when active-day changes tie', () => {
+    const input = payload();
+    input.current.rhythms = [
+      { discipline: 'running', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+      { discipline: 'cycling', sessionCount: 26, activeDayCount: 20, activeWeekCount: 4, longestInactivityGapDays: 1, longestSessionDurationSeconds: 7200 },
+      { discipline: 'swimming', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+    ];
+    input.baselineMedian = {
+      ...input.baselineMedian,
+      rhythms: [
+        { discipline: 'running', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+        { discipline: 'cycling', sessionCount: 26, activeDayCount: 20, activeWeekCount: 4, longestInactivityGapDays: 3, longestSessionDurationSeconds: 7200 },
+        { discipline: 'swimming', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+      ],
+    };
+
+    const rhythm = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'rhythm');
+
+    expect(rhythm).toEqual(expect.objectContaining({ title: 'Cycling rhythm', valueText: 'Same active days' }));
+  });
+
   it('preserves each top contributor as a separate display item', () => {
     const input = payload();
     input.topContributors.push({
