@@ -112,6 +112,22 @@ describe('ServiceSourceIconComponent', () => {
         expect(component.serviceLogo).toBe('coros');
     });
 
+    it('should detect Wahoo service source', () => {
+        const user = { getID: () => 'user-1' } as any as User;
+        const event = { getID: () => 'event-1' } as any as EventInterface;
+        eventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.WahooAPI]));
+
+        component.user = user;
+        component.event = event;
+        component.ngOnChanges({
+            event: { currentValue: event, previousValue: null, firstChange: true, isFirstChange: () => true }
+        });
+
+        expect(component.serviceName).toBe(ServiceNames.WahooAPI);
+        expect(component.serviceLogo).toBe('wahoo');
+        expect(component.serviceDisplayName).toBe('Wahoo');
+    });
+
     it('should clear stale service source when the next lookup has no keys', () => {
         const user = { getID: () => 'user-1' } as any as User;
         const event = { getID: () => 'event-1' } as any as EventInterface;

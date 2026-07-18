@@ -94,6 +94,16 @@ describe('processWahooWorkoutQueueItem', () => {
 
     expect(mocks.deletionSkip).toHaveBeenNthCalledWith(1, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_token_refresh');
     expect(mocks.deletionSkip).toHaveBeenNthCalledWith(2, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_event_write');
+    expect(mocks.resolveEventID).toHaveBeenCalledWith({
+      userID: 'firebase-1',
+      startDate: new Date('2026-07-18T09:00:00.000Z'),
+      serviceName: ServiceNames.WahooAPI,
+      providerEventID: 'workout-1',
+      providerEventIDField: 'serviceWorkoutID',
+      providerEventSecondaryID: 'wahoo-1',
+      providerEventSecondaryIDField: 'serviceUserID',
+      preferProviderIdentityEventID: true,
+    });
     expect(mocks.setEvent).toHaveBeenCalledWith(
       'firebase-1',
       'event-1',

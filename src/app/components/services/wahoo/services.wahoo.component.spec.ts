@@ -67,6 +67,25 @@ describe('ServicesWahooComponent', () => {
     expect((component as any).canDisconnectWithoutProAccess).toBe(true);
   });
 
+  it('keeps non-Pro upsell actions keyboard-accessible through Material buttons', () => {
+    component.user = {} as any;
+    component.hasProAccess = false;
+    component.showAdvancedTools = true;
+    const upsell = vi.spyOn(component, 'triggerUpsell').mockImplementation(() => undefined);
+
+    fixture.detectChanges();
+
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    const connectUpsell = buttons.find(button => button.textContent?.includes('View Pro plans'));
+    const historyUpsell = buttons.find(button => button.textContent?.includes('Wahoo history import is a Pro feature'));
+    expect(connectUpsell?.disabled).toBe(false);
+    expect(historyUpsell).toBeTruthy();
+
+    connectUpsell?.click();
+    historyUpsell?.click();
+    expect(upsell).toHaveBeenCalledTimes(2);
+  });
+
   it('exchanges the Wahoo callback state and code through the user service', async () => {
     expect(component.serviceName).toBe(ServiceNames.WahooAPI);
 

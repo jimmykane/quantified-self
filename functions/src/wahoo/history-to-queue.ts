@@ -97,7 +97,7 @@ async function acquireHistoryLease(userID: string, leaseOwner: string): Promise<
   });
 }
 
-async function finishHistoryLease(
+export async function finishWahooHistoryLease(
   userID: string,
   leaseOwner: string,
   startDate: Date,
@@ -108,6 +108,14 @@ async function finishHistoryLease(
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
   await db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(userID, 'wahoo_history_finish', error);
+    }
+    if (deletionGuard.shouldSkip) return;
+
     const snapshot = await transaction.get(metaRef);
     if (`${snapshot.data()?.historyImportLeaseOwner || ''}` !== leaseOwner) return;
     const update: Record<string, unknown> = {
@@ -213,7 +221,7 @@ export async function importWahooHistory(
     completed = true;
     return stats;
   } finally {
-    await finishHistoryLease(userID, leaseOwner, startDate, endDate, stats.successCount, completed);
+    await finishWahooHistoryLease(userID, leaseOwner, startDate, endDate, stats.successCount, completed);
   }
 }
 

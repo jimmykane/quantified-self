@@ -18,8 +18,16 @@ const firestoreMocks = vi.hoisted(() => {
   };
 });
 
+const deletionGuardMocks = vi.hoisted(() => ({
+  getStateInTransaction: vi.fn(),
+}));
+
 vi.mock('./api');
 vi.mock('./auth', () => ({ WahooAPIAuth: vi.fn() }));
+vi.mock('../../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardStateInTransaction: deletionGuardMocks.getStateInTransaction,
+  UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {},
+}));
 vi.mock('firebase-admin', () => ({
   firestore: Object.assign(() => ({
     collection: () => ({ doc: () => firestoreMocks.mappingRef }),
@@ -35,6 +43,11 @@ describe('WahooAuthAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    deletionGuardMocks.getStateInTransaction.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
     adapter = new WahooAuthAdapter();
   });
 
@@ -76,11 +89,30 @@ describe('WahooAuthAdapter', () => {
       previousOwnerUserID: 'previous-user',
     });
     expect(adapter.managesDuplicateConnections).toBe(true);
+    expect(deletionGuardMocks.getStateInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'current-user',
+    );
     expect(firestoreMocks.transactionSet).toHaveBeenCalledWith(firestoreMocks.mappingRef, {
       firebaseUserID: 'current-user',
       wahooUserID: '60462',
       serviceName: ServiceNames.WahooAPI,
       updatedAt: 'server-timestamp',
     });
+  });
+
+  it('does not create or transfer a webhook mapping after account deletion begins', async () => {
+    deletionGuardMocks.getStateInTransaction.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+
+    await expect(adapter.onTokenPersisted('current-user', '60462')).rejects.toThrow(
+      'account deletion is in progress',
+    );
+    expect(firestoreMocks.transactionGet).not.toHaveBeenCalled();
+    expect(firestoreMocks.transactionSet).not.toHaveBeenCalled();
   });
 });

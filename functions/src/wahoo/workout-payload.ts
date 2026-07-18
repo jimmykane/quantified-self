@@ -32,6 +32,9 @@ function asOptionalBoolean(value: unknown): boolean | undefined {
 }
 
 function asOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) {
+    return undefined;
+  }
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
@@ -52,6 +55,8 @@ export function parseWahooWorkout(
   const summaryUpdatedAt = asISODate(summary.updated_at) || asISODate(summary.created_at);
   const starts = asISODate(workout.starts);
   const FITFileURI = typeof file.url === 'string' ? file.url.trim() : '';
+  const manual = asOptionalBoolean(summary.manual);
+  const edited = asOptionalBoolean(summary.edited);
   const fitnessAppID = asOptionalNumber(summary.fitness_app_id);
 
   if (!wahooUserID || !workoutID || !workoutSummaryID || !summaryUpdatedAt || !starts || !FITFileURI) {
@@ -67,8 +72,8 @@ export function parseWahooWorkout(
     summaryUpdatedAt,
     FITFileURI,
     starts,
-    manual: asOptionalBoolean(summary.manual),
-    edited: asOptionalBoolean(summary.edited),
-    fitnessAppID,
+    ...(manual === undefined ? {} : { manual }),
+    ...(edited === undefined ? {} : { edited }),
+    ...(fitnessAppID === undefined ? {} : { fitnessAppID }),
   };
 }

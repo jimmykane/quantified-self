@@ -39,4 +39,14 @@ describe('parseWahooWorkout', () => {
       workout_summary: { ...workout.workout_summary, fitness_app_id: 1001 },
     })).toBeNull();
   });
+
+  it.each([null, undefined, ''])('keeps an unknown fitness app id absent for %s', (fitnessAppID) => {
+    const parsed = parseWahooWorkout(60462, {
+      ...workout,
+      workout_summary: { ...workout.workout_summary, fitness_app_id: fitnessAppID },
+    });
+
+    expect(parsed).not.toBeNull();
+    expect(parsed).not.toHaveProperty('fitnessAppID');
+  });
 });

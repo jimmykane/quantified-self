@@ -125,6 +125,10 @@ vi.mock('firebase-functions', () => ({
             client_id: 'test-garmin-client-id',
             client_secret: 'test-garmin-client-secret',
         },
+        wahooapi: {
+            client_id: 'test-wahoo-client-id',
+            client_secret: 'test-wahoo-client-secret',
+        },
     }),
     region: () => ({
         https: { onRequest: () => { } },
@@ -299,6 +303,15 @@ describe('OAuth2', () => {
             expect(config).toBeDefined();
             expect(config.tokenCollectionName).toBe('garminAPITokens');
             // Scope might be null or specific, let's just check client existence
+            expect(config.oauth2Client).toBeDefined();
+        });
+
+        it('should return config for WahooAPI', () => {
+            const config = getServiceConfig(ServiceNames.WahooAPI);
+
+            expect(config).toBeDefined();
+            expect(config.tokenCollectionName).toBe('wahooAPIAccessTokens');
+            expect(config.oAuthScopes).toBe('user_read workouts_read offline_data');
             expect(config.oauth2Client).toBeDefined();
         });
     });

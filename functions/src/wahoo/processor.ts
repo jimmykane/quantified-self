@@ -74,6 +74,9 @@ export async function processWahooWorkoutQueueItem(
       serviceName: ServiceNames.WahooAPI,
       providerEventID: queueItem.workoutID,
       providerEventIDField: 'serviceWorkoutID',
+      providerEventSecondaryID: queueItem.wahooUserID,
+      providerEventSecondaryIDField: 'serviceUserID',
+      preferProviderIdentityEventID: true,
     });
     const metadata = new WahooAPIEventMetaData(
       queueItem.workoutID,

@@ -6,6 +6,10 @@ import {
 } from '@sports-alliance/sports-lib';
 import { ServiceAuthAdapter, ServiceTokenInput } from '../../auth/ServiceAuthAdapter';
 import {
+  getUserDeletionGuardStateInTransaction,
+  UserDeletionGuardReadError,
+} from '../../shared/user-deletion-guard';
+import {
   WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
   WAHOO_API_SCOPES,
   WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
@@ -62,8 +66,19 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
   }
 
   async onTokenPersisted(userId: string, externalUserId: string): Promise<{ previousOwnerUserID?: string }> {
-    const mappingRef = admin.firestore().collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(externalUserId);
-    const previousOwnerUserID = await admin.firestore().runTransaction(async (transaction) => {
+    const db = admin.firestore();
+    const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(externalUserId);
+    const previousOwnerUserID = await db.runTransaction(async (transaction) => {
+      let deletionGuard;
+      try {
+        deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userId);
+      } catch (error) {
+        throw new UserDeletionGuardReadError(userId, 'wahoo_identity_mapping', error);
+      }
+      if (deletionGuard.shouldSkip) {
+        throw new Error('Cannot persist a Wahoo identity mapping while account deletion is in progress.');
+      }
+
       const snapshot = await transaction.get(mappingRef);
       const existingOwner = snapshot.exists ? `${snapshot.data()?.firebaseUserID || ''}` : '';
       transaction.set(mappingRef, {
