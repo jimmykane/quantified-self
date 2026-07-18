@@ -59,6 +59,11 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    const feedbackAction = element.querySelector('.training-feedback-action');
+    expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
+    expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
+    expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
+    expect(feedbackAction?.getAttribute('target')).toBe('_blank');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     expect(element.textContent).toContain('Compared with your usual 28 days');
     expect(element.textContent).toContain('What drove this');

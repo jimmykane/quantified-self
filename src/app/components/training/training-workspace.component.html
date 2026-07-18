@@ -16,6 +16,17 @@
       </button>
       <a
         mat-stroked-button
+        class="training-feedback-action"
+        [href]="trainingFeedbackMailtoHref"
+        target="_blank"
+        rel="noopener"
+        aria-label="Send feedback about Training to support"
+      >
+        <mat-icon aria-hidden="true">feedback</mat-icon>
+        <span>Feedback</span>
+      </a>
+      <a
+        mat-stroked-button
         class="training-dashboard-action"
         routerLink="/dashboard"
         aria-label="Return to dashboard"

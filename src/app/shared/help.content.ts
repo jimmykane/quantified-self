@@ -92,7 +92,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Where things live
 
 - **Dashboard** is your main activity overview.
-- **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation.
+- **Training (Beta)** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
 - **Services** is where you connect Garmin, Suunto, and COROS.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.

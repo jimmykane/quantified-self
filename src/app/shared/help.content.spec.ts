@@ -154,6 +154,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Durability** performance chart keeps its activity eligibility details collapsed');
   });
 
+  it('should identify Training as beta and direct its feedback to support', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('**Training (Beta)**');
+    expect(gettingStartedSection?.content).toContain('**Feedback** action to email support');
+  });
+
   it('should document that distance values follow unit preferences across the app', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

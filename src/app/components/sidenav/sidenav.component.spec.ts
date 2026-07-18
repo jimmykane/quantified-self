@@ -217,7 +217,7 @@ describe('SideNavComponent', () => {
         expect(component.hasPaidAccess).toBe(false);
     });
 
-    it('does not expose Training in the staged navigation', () => {
+    it('links signed-in users to the beta Training workspace', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             displayName: 'Athlete',
@@ -225,8 +225,16 @@ describe('SideNavComponent', () => {
         });
 
         fixture.detectChanges();
-        expect(fixture.debugElement.queryAll(By.css('mat-list-item'))
-            .some(item => item.nativeElement.textContent.includes('Training'))).toBe(false);
+        const trainingItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Training'));
+
+        expect(trainingItem).toBeTruthy();
+        expect(
+            trainingItem?.nativeElement.getAttribute('routerlink')
+            ?? trainingItem?.nativeElement.getAttribute('routerLink')
+        ).toBe('/training');
+        expect(trainingItem?.nativeElement.textContent).toContain('Beta');
     });
 
     it('should link My Tracks directly for logged-in free users', () => {

@@ -137,8 +137,9 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-During the staged rollout, Training is intentionally absent from the sidenav and Dashboard actions. The `/training` route
-remains registered and directly reachable for internal QA.
+Training is available to signed-in users from the sidenav and is explicitly marked **Beta**. The route header includes a
+Feedback action that opens the configured support email with a Training-specific subject. Training remains absent from
+Dashboard actions, preserving the Dashboard as the user's modular workspace.
 
 Frontend transformation responsibilities are intentionally split into focused helpers:
 
