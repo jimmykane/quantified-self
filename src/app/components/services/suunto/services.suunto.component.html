@@ -112,13 +112,13 @@
   <mat-divider class="connection-tools-divider"></mat-divider>
   }
 
+  @if (!showOnlyActiveProviderTool) {
   <nav
     mat-tab-nav-bar
     [tabPanel]="providerToolsPanel"
     mat-stretch-tabs="false"
     class="provider-tools-tabs"
     aria-label="Suunto tools">
-    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <a
       href=""
       mat-tab-link
@@ -129,9 +129,7 @@
         <span>History Import</span>
       </span>
     </a>
-    }
 
-    @if (!showOnlyActiveProviderTool || activeProviderTool === 'routes') {
     <a
       href=""
       mat-tab-link
@@ -142,9 +140,7 @@
         <span>Route Sync</span>
       </span>
     </a>
-    }
 
-    @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
     <a
       href=""
       mat-tab-link
@@ -155,10 +151,16 @@
         <span>Uploads</span>
       </span>
     </a>
-    }
   </nav>
-
   <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">
+    <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  </mat-tab-nav-panel>
+  } @else {
+  <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  }
+
+  <ng-template #providerToolsContent>
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'history'"
@@ -179,7 +181,9 @@
       </app-status-info>
       }
     </section>
+    }
 
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'routes') {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'routes'"
@@ -301,7 +305,9 @@
       </app-status-info>
       }
     </section>
+    }
 
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
     <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'uploads'">
       <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
         <div class="tool-subsection-header">
@@ -352,6 +358,7 @@
         }
       </section>
     </section>
-  </mat-tab-nav-panel>
+    }
+  </ng-template>
   }
 </div>

@@ -148,13 +148,13 @@
   <mat-divider class="connection-tools-divider"></mat-divider>
   }
 
+  @if (!showOnlyActiveProviderTool) {
   <nav
     mat-tab-nav-bar
     [tabPanel]="providerToolsPanel"
     mat-stretch-tabs="false"
     class="provider-tools-tabs"
     aria-label="Garmin tools">
-    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <a
       href=""
       mat-tab-link
@@ -165,8 +165,7 @@
         <span>History Import</span>
       </span>
     </a>
-    }
-    @if (isGarminToSuuntoRouteAvailableForUser && (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync')) {
+    @if (isGarminToSuuntoRouteAvailableForUser) {
     <a
       href=""
       mat-tab-link
@@ -179,8 +178,15 @@
     </a>
     }
   </nav>
-
   <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">
+    <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  </mat-tab-nav-panel>
+  } @else {
+  <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  }
+
+  <ng-template #providerToolsContent>
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'history'"
@@ -206,8 +212,9 @@
       </app-status-info>
       }
     </section>
+    }
 
-    @if (isGarminToSuuntoRouteAvailableForUser) {
+    @if (isGarminToSuuntoRouteAvailableForUser && (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync')) {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'auto-sync'"
@@ -303,7 +310,7 @@
         }
       </section>
     }
-  </mat-tab-nav-panel>
+  </ng-template>
 
   @if (hasProAccess && (isConnectedToService() || isReconnectRequired)) {
   <mat-divider class="connection-tools-divider"></mat-divider>
