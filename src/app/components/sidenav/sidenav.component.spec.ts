@@ -317,7 +317,7 @@ describe('SideNavComponent', () => {
         expect(compareFilesItem).toBeTruthy();
     });
 
-    it('should link AI Insights directly for basic users and mark it as beta', () => {
+    it('should link AI Insights directly for basic users without a beta badge', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-2',
             displayName: 'Basic User',
@@ -337,7 +337,7 @@ describe('SideNavComponent', () => {
 
         expect(aiInsightsItem).toBeTruthy();
         expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
         expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PRO');
     });
 
@@ -378,7 +378,7 @@ describe('SideNavComponent', () => {
 
         expect(aiInsightsItem).toBeTruthy();
         expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
         expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PAID');
     });
 });
