@@ -706,6 +706,10 @@ duration but not to the zone denominator.
 The separate intensity-distribution chart is global and can include any activity with eligible power or heart-rate zone
 data. It is not filtered by the sport visibility control.
 
+On desktop, Training Mix uses its actual visible-discipline count rather than auto-fitting empty grid tracks: one
+discipline places its compact summary beside the intensity chart, while two and three disciplines use balanced summary
+rows with the global chart below. Tablet and mobile retain the stacked responsive layout.
+
 ### 6. Settings vs Recent Evidence
 
 This section contains capacity evidence, swimming performance, durability, and power profiles.

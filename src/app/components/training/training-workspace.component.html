@@ -447,7 +447,11 @@
         </div>
         <span class="training-section-note">Intensity chart uses all eligible zone data</span>
       </div>
-      <div class="training-mix-grid">
+      <div
+        class="training-mix-grid"
+        [class.training-mix-grid--single]="trainingMixDisciplines.length === 1"
+        [class.training-mix-grid--two]="trainingMixDisciplines.length === 2"
+        [class.training-mix-grid--three]="trainingMixDisciplines.length === 3">
         @if (trainingComparisonState === 'unavailable') {
           <p class="training-empty-state">Training mix comparison is unavailable right now.</p>
         } @else if (trainingComparisonState !== 'preparing') {

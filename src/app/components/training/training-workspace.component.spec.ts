@@ -527,6 +527,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(benchmarkAction?.querySelector('.training-build-benchmark-action-label')?.textContent?.trim())
       .toBe('Set benchmark');
     expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
+    expect(element.querySelector('.training-mix-grid')?.classList.contains('training-mix-grid--single')).toBe(true);
     expect(element.textContent).toContain('Cycling capacity evidence');
     expect(element.textContent).not.toContain('Running capacity evidence');
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
