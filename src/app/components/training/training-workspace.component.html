@@ -14,7 +14,12 @@
         <mat-icon aria-hidden="true">tune</mat-icon>
         <span>{{ visibleDisciplinesCompactLabel }}</span>
       </button>
-      <a mat-stroked-button routerLink="/dashboard" aria-label="Return to dashboard">
+      <a
+        mat-stroked-button
+        class="training-dashboard-action"
+        routerLink="/dashboard"
+        aria-label="Return to dashboard"
+      >
         <mat-icon aria-hidden="true">dashboard</mat-icon>
         <span class="training-dashboard-action-label">Dashboard</span>
       </a>
@@ -235,9 +240,14 @@
                 <span class="training-metric-label">{{ card.label }}</span>
                 <h3>{{ card.state === 'ready' ? card.referenceText : 'Historical benchmark' }}</h3>
               </div>
-              <button mat-stroked-button (click)="openTrainingBuildBenchmarkDialog(card.discipline)">
+              <button
+                mat-stroked-button
+                class="training-build-benchmark-action"
+                [attr.aria-label]="card.expectedSelection ? 'Change ' + card.label + ' benchmark' : 'Set ' + card.label + ' benchmark'"
+                (click)="openTrainingBuildBenchmarkDialog(card.discipline)"
+              >
                 <mat-icon aria-hidden="true">{{ card.expectedSelection ? 'edit' : 'add' }}</mat-icon>
-                <span>{{ card.expectedSelection ? 'Change' : 'Set benchmark' }}</span>
+                <span class="training-build-benchmark-action-label">{{ card.expectedSelection ? 'Change' : 'Set benchmark' }}</span>
               </button>
             </header>
 

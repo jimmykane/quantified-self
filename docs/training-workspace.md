@@ -978,6 +978,8 @@ UI principles:
 - Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
   containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
+- Responsive icon-only Training actions hide only their projected text label and reset Material's icon-and-text margins,
+  keeping the visible icon centered without suppressing Material focus, ripple, or touch-target elements.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.

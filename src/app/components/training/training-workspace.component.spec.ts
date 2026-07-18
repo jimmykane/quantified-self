@@ -59,6 +59,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     expect(element.textContent).toContain('Compared with your usual 28 days');
     expect(element.textContent).toContain('What drove this');
     expect(element.textContent).toContain('How your load is changing');
@@ -516,6 +517,10 @@ describe('TrainingWorkspaceComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.textContent).toContain('Cycling');
     expect(element.querySelectorAll('.training-build-card')).toHaveLength(1);
+    const benchmarkAction = element.querySelector('.training-build-benchmark-action');
+    expect(benchmarkAction?.getAttribute('aria-label')).toBe('Set Cycling benchmark');
+    expect(benchmarkAction?.querySelector('.training-build-benchmark-action-label')?.textContent?.trim())
+      .toBe('Set benchmark');
     expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
     expect(element.textContent).toContain('Cycling capacity evidence');
     expect(element.textContent).not.toContain('Running capacity evidence');
@@ -1067,6 +1072,10 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
+    const benchmarkAction = element.querySelector('.training-build-benchmark-action');
+    expect(benchmarkAction?.getAttribute('aria-label')).toBe('Change Cycling benchmark');
+    expect(benchmarkAction?.querySelector('.training-build-benchmark-action-label')?.textContent?.trim())
+      .toBe('Change');
     const toggle = element.querySelector<HTMLButtonElement>('.training-build-recovery-toggle');
     expect(element.textContent).toContain('Sleep 20m shorter per night · Overnight HRV +3 ms');
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
