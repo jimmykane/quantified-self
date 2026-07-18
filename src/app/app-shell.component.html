@@ -59,6 +59,9 @@
 
           <router-outlet #outlet="outlet"></router-outlet>
         </div>
+        @if (showPublicFooter()) {
+          <app-public-footer></app-public-footer>
+        }
       </div>
     </mat-sidenav-content>
   </mat-sidenav-container>

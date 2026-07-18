@@ -76,11 +76,6 @@ describe('HomeComponent', () => {
         const text = fixture.nativeElement.textContent as string;
         const heroText = (fixture.nativeElement.querySelector('.hero-section') as HTMLElement | null)?.textContent ?? '';
         const aiSectionText = (fixture.nativeElement.querySelector('.ai-insights-section') as HTMLElement | null)?.textContent ?? '';
-        const footerIcons = Array.from(
-            fixture.nativeElement.querySelectorAll('.tech-stack mat-icon')
-        ) as HTMLElement[];
-        const firebaseIcon = fixture.nativeElement.querySelector('.tech-stack mat-icon[svgIcon="firebase"]');
-        const contactLink = fixture.nativeElement.querySelector('.legal-links a[href="mailto:support@quantified-self.io"]') as HTMLElement | null;
         expect(heroText).toContain('Quantify. Analyze. Improve.');
         expect(heroText).toContain('One Dashboard. Every Activity.');
         expect(heroText).toContain('Bring Garmin, Suunto, and COROS activity data into one private training dashboard.');
@@ -92,19 +87,6 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('Turn focused training questions into chart-backed answers grounded in your stored activity data.');
         expect(aiSectionText).toContain('Explore AI Insights');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
-        expect(footerIcons.length).toBe(1);
-        expect(firebaseIcon).toBeTruthy();
-        expect(contactLink).toBeTruthy();
-        expect(contactLink?.textContent).toContain('Contact');
-        expect(contactLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
-        expect(text).toContain('Integrations');
-        expect(text).toContain('Features');
-        expect(text).toContain('File Analyzer');
-        expect(text).toContain('Guides');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features"], a[ng-reflect-router-link="/features"]')).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/fit-gpx-tcx-file-analyzer"], a[ng-reflect-router-link="/features/fit-gpx-tcx-file-analyzer"]')).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('a[routerlink="/guides"], a[ng-reflect-router-link="/guides"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
     });
 
@@ -133,9 +115,6 @@ describe('HomeComponent', () => {
             if (section.classList.contains('analysis-section')) {
                 return 'hardware';
             }
-            if (section.classList.contains('app-footer')) {
-                return 'footer';
-            }
             return 'unknown';
         });
 
@@ -147,7 +126,6 @@ describe('HomeComponent', () => {
             'footprint',
             'sovereignty',
             'hardware',
-            'footer',
         ]);
     });
 

@@ -1,3 +1,5 @@
+import { QUANTIFIED_SELF_OPERATOR } from './company-contact';
+
 export interface PolicyItem {
     id: string;
     title: string;
@@ -155,7 +157,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
         content: [
             'Under the General Data Protection Regulation (GDPR), you have the following rights:',
             '<ul><li><strong>Right of Access:</strong> You can request a copy of your personal data.</li><li><strong>Right to Rectification:</strong> You can correct inaccurate personal data in your profile settings.</li><li><strong>Right to Erasure:</strong> You can request deletion of your account and all associated data ("Right to be Forgotten").</li><li><strong>Right to Restrict Processing:</strong> You can ask us to limit how we use your data.</li><li><strong>Right to Data Portability:</strong> You can request your data in a structured, machine-readable format.</li><li><strong>Right to Object:</strong> You can object to data processing based on legitimate interests.</li><li><strong>Right to Withdraw Consent:</strong> You can withdraw consent at any time for optional processing (e.g., analytics).</li></ul>',
-            '<p><strong>Data Controller:</strong> Quantified Self<br><strong>Contact:</strong> privacy@quantified-self.io<br><strong>Data Location:</strong> European Union (Google Cloud EU region)<br>For privacy inquiries or to exercise your rights, contact us at the email above.</p>',
+            `<p><strong>Data Controller:</strong> ${QUANTIFIED_SELF_OPERATOR.name}, operating ${QUANTIFIED_SELF_OPERATOR.brandName}<br><strong>Address:</strong> ${QUANTIFIED_SELF_OPERATOR.addressLines.join('<br>')}<br><strong>Contact:</strong> ${QUANTIFIED_SELF_OPERATOR.privacyEmail}<br><strong>Data Location:</strong> European Union (Google Cloud EU region)<br>For privacy inquiries or to exercise your rights, contact us at the email above.</p>`,
             '<p><strong>Supervisory Authority:</strong> If you believe your data protection rights have been violated, you have the right to lodge a complaint with your local Data Protection Authority. For users in Greece, this is the Hellenic Data Protection Authority (HDPA) at <a href="https://www.dpa.gr" target="_blank" rel="noopener">www.dpa.gr</a>.</p>'
         ],
         isGdpr: true

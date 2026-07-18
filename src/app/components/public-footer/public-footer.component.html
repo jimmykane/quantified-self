@@ -1,0 +1,50 @@
+<footer class="public-footer" aria-label="Quantified Self site footer">
+  <div class="public-footer__content">
+    <section class="public-footer__brand" aria-labelledby="footer-brand-title">
+      <h2 class="public-footer__wordmark">
+        <a id="footer-brand-title" routerLink="/">{{ operator.brandName }}</a>
+      </h2>
+      <p>Private training analysis for athletes who want their activity data in one place.</p>
+      <a mat-stroked-button routerLink="/pricing">Explore membership</a>
+    </section>
+
+    <nav class="public-footer__column" aria-labelledby="footer-product-title">
+      <h2 id="footer-product-title">Product</h2>
+      <ul>
+        <li><a routerLink="/features/training-analysis">Training analysis</a></li>
+        <li><a routerLink="/integrations">Integrations</a></li>
+        <li><a routerLink="/tools">Workout data tools</a></li>
+        <li><a routerLink="/guides">Guides</a></li>
+      </ul>
+    </nav>
+
+    <nav class="public-footer__column" aria-labelledby="footer-support-title">
+      <h2 id="footer-support-title">Support</h2>
+      <ul>
+        <li><a routerLink="/help">Help &amp; support</a></li>
+        <li><a [href]="supportMailtoHref">{{ supportEmail }}</a></li>
+        <li><a routerLink="/releases">Release notes</a></li>
+      </ul>
+    </nav>
+
+    <section class="public-footer__column public-footer__company" aria-labelledby="footer-company-title">
+      <h2 id="footer-company-title">Company</h2>
+      <p class="public-footer__operator">Operated by {{ operator.name }}</p>
+      <address>
+        @for (line of operator.addressLines; track line) {
+          <span>{{ line }}</span>
+        }
+      </address>
+      <a [href]="privacyMailtoHref">{{ operator.privacyEmail }}</a>
+    </section>
+  </div>
+
+  <div class="public-footer__bottom">
+    <p>&copy; {{ currentYear }} {{ operator.brandName }}. All rights reserved.</p>
+    <nav aria-label="Legal links">
+      <a routerLink="/policies" fragment="privacy">Privacy</a>
+      <a routerLink="/policies" fragment="tos">Terms</a>
+      <a routerLink="/policies">Policies</a>
+    </nav>
+  </div>
+</footer>
