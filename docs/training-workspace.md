@@ -1194,6 +1194,10 @@ The localhost frontend normally calls emulated Functions; `local-prod-functions`
 Backend code can still reach real services depending on environment variables and credentials, so verify the active
 project and never assume `localhost` means isolated data.
 
+The Functions emulator sets `FUNCTIONS_EMULATOR=true`, which bypasses the manual callable App Check guard only inside
+that local worker. Production and beta callables continue to require App Check. This keeps a hosted debug-token exchange
+failure from blocking a loopback Training refresh; it does not weaken deployed endpoints.
+
 Derived metrics also require the Cloud Tasks emulator configuration used by this repository. When
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.

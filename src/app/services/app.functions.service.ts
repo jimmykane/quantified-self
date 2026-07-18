@@ -41,12 +41,18 @@ export class AppFunctionsService {
             throw new Error(`Function ${functionKey} not initialized`);
         }
 
-        await this.appCheckReadiness.ensureReady();
+        const usesFunctionsEmulator = this.shouldUseFunctionsEmulator();
+        // The local Functions worker deliberately bypasses its server-side
+        // App Check guard. Do not let a hosted debug-token exchange prevent a
+        // loopback callable from exercising the emulator.
+        if (!usesFunctionsEmulator) {
+            await this.appCheckReadiness.ensureReady();
+        }
 
         try {
             return await callable(data);
         } catch (error) {
-            if (!this.shouldRetryAfterAppCheckFailure(error)) {
+            if (usesFunctionsEmulator || !this.shouldRetryAfterAppCheckFailure(error)) {
                 throw error;
             }
 

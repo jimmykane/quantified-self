@@ -138,6 +138,26 @@ describe('AppFunctionsService', () => {
         expect(mocks.callableSpy).not.toHaveBeenCalled();
     });
 
+    it('does not gate an emulated callable on hosted App Check readiness', async () => {
+        TestBed.resetTestingModule();
+        mocks.setLocalhost(true);
+        mocks.setUseFunctionsEmulator(true);
+        mocks.ensureReadyMock.mockImplementation(() => {
+            throw new Error('App Check debug token exchange failed');
+        });
+
+        const localService = configureTestingModule();
+
+        try {
+            await expect(localService.call('defaultRegionFunc' as any)).resolves.toEqual({ data: 'success' });
+            expect(mocks.ensureReadyMock).not.toHaveBeenCalled();
+            expect(mocks.callableSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            mocks.ensureReadyMock.mockReset();
+            mocks.ensureReadyMock.mockResolvedValue(undefined);
+        }
+    });
+
     it('should retry once after an App Check verification failure', async () => {
         mocks.callableSpy
             .mockRejectedValueOnce({

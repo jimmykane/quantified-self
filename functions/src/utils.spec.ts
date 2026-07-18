@@ -7,6 +7,7 @@ import {
     determineRedirectURI,
     enforceAppCheck,
     ENFORCE_APP_CHECK,
+    shouldEnforceAppCheck,
 } from './utils';
 
 async function tryCatch(fn: () => Promise<unknown>) {
@@ -306,6 +307,22 @@ describe('utils', () => {
         it('should throw when no app property exists', () => {
             const request = {};
             expect(() => enforceAppCheck(request)).toThrow('App Check verification failed.');
+        });
+
+        it('bypasses manual App Check enforcement only in the Functions emulator', () => {
+            const priorFunctionsEmulator = process.env.FUNCTIONS_EMULATOR;
+            process.env.FUNCTIONS_EMULATOR = 'true';
+
+            try {
+                expect(shouldEnforceAppCheck()).toBe(false);
+                expect(() => enforceAppCheck({})).not.toThrow();
+            } finally {
+                if (priorFunctionsEmulator === undefined) {
+                    delete process.env.FUNCTIONS_EMULATOR;
+                } else {
+                    process.env.FUNCTIONS_EMULATOR = priorFunctionsEmulator;
+                }
+            }
         });
 
         it('ENFORCE_APP_CHECK constant should be defined and be a boolean', () => {

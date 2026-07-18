@@ -126,6 +126,19 @@ export const ENFORCE_APP_CHECK = true;
 import { HttpsError } from 'firebase-functions/v2/https';
 
 /**
+ * The Firebase Functions emulator sets this flag inside the local worker
+ * process. It is not derived from a request value, so it cannot be supplied
+ * by a remote caller to weaken production verification.
+ */
+export function isFunctionsEmulator(): boolean {
+  return process.env.FUNCTIONS_EMULATOR === 'true';
+}
+
+export function shouldEnforceAppCheck(): boolean {
+  return ENFORCE_APP_CHECK && !isFunctionsEmulator();
+}
+
+/**
  * Enforces App Check verification if ENFORCE_APP_CHECK is enabled.
  * Throws an HttpsError if verification fails.
  * 
@@ -133,7 +146,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
  * @throws HttpsError with 'failed-precondition' code if App Check fails
  */
 export function enforceAppCheck(request: { app?: unknown }): void {
-  if (ENFORCE_APP_CHECK && !request.app) {
+  if (shouldEnforceAppCheck() && !request.app) {
     throw new HttpsError('failed-precondition', 'App Check verification failed.');
   }
 }
