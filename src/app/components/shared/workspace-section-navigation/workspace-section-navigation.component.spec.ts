@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { MaterialModule } from '../../../modules/material.module';
 import {
@@ -35,6 +37,18 @@ describe('WorkspaceSectionNavigationComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.workspace-navigation__mobile-tabs a')).toHaveLength(2);
     expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
     expect(fixture.nativeElement.querySelector('[role="tabpanel"]')?.getAttribute('aria-label')).toBe('Settings sections content');
+  });
+
+  it('stacks section icons above labels so tabs do not overlap', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/shared/workspace-section-navigation/workspace-section-navigation.component.scss'),
+      'utf8'
+    );
+    const labelRule = styles.match(/\.workspace-navigation__tab-label\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(labelRule).toContain('flex-direction: column');
+    expect(labelRule).toContain('white-space: normal');
+    expect(labelRule).toContain('text-align: center');
   });
 
   it('emits the selected section from the horizontal navigation', () => {

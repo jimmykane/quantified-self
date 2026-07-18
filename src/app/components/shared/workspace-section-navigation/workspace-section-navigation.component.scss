@@ -104,14 +104,25 @@
 .workspace-navigation__tab-label {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    white-space: nowrap;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-width: 68px;
+    text-align: center;
+    white-space: normal;
+    font-size: 0.78rem;
+    line-height: 1.1;
 }
 
 .workspace-navigation__tab-label mat-icon {
-    width: 20px;
-    height: 20px;
-    font-size: 20px;
+    width: 22px;
+    height: 22px;
+    font-size: 22px;
+}
+
+.workspace-navigation__tab-label > span:last-child {
+    display: block;
+    line-height: 1.1;
 }
 
 .workspace-navigation__panel,
@@ -122,24 +133,6 @@
 
 @include bp.max-768 {
     .workspace-navigation__tab-label {
-        flex-direction: column;
-        justify-content: center;
-        gap: 2px;
-        min-width: 68px;
-        text-align: center;
-        white-space: normal;
         font-size: 0.74rem;
-        line-height: 1.1;
-    }
-
-    .workspace-navigation__tab-label mat-icon {
-        width: 22px;
-        height: 22px;
-        font-size: 22px;
-    }
-
-    .workspace-navigation__tab-label > span:last-child {
-        display: block;
-        line-height: 1.1;
     }
 }
