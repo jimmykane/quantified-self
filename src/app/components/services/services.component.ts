@@ -15,19 +15,11 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros';
-type ServiceWorkspaceSectionId = 'connections' | 'privacy' | 'account';
 
 interface ServiceSectionOption {
   id: ServiceSectionId;
   label: string;
   serviceName: ServiceNames;
-}
-
-interface ServiceWorkspaceSectionOption {
-  id: ServiceWorkspaceSectionId;
-  label: string;
-  description: string;
-  icon: string;
 }
 
 interface ServiceOverviewCard {
@@ -51,26 +43,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
   public activeSection: ServiceSectionId = 'garmin';
   public readonly sectionOrder: ServiceSectionId[] = ['garmin', 'suunto', 'coros'];
-  public readonly workspaceSectionOptions: ServiceWorkspaceSectionOption[] = [
-    {
-      id: 'connections',
-      label: 'Connected services',
-      description: 'Manage provider connections',
-      icon: 'link',
-    },
-    {
-      id: 'privacy',
-      label: 'Data & privacy',
-      description: 'Review provider data use',
-      icon: 'policy',
-    },
-    {
-      id: 'account',
-      label: 'Account',
-      description: 'Open account settings',
-      icon: 'account_circle',
-    },
-  ];
   public readonly serviceSectionOptions: ServiceSectionOption[] = [
     {
       id: 'garmin',
@@ -150,11 +122,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
     garmin: ServiceNames.GarminAPI,
     coros: ServiceNames.COROSAPI,
   };
-  private readonly privacyFragmentBySection: Record<ServiceSectionId, string> = {
-    garmin: 'garmin-data',
-    suunto: 'suunto-data',
-    coros: 'coros-data',
-  };
 
   constructor(private http: HttpClient, private fileService: AppFileService,
     private eventService: AppEventService,
@@ -226,17 +193,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   public setServiceConnectionState(section: ServiceSectionId, connected: boolean): void {
     this.serviceConnectionState[section] = connected;
-  }
-
-  async selectWorkspaceSection(section: string): Promise<void> {
-    if (section === 'privacy') {
-      await this.router.navigate(['/policies'], { fragment: this.privacyFragmentBySection[this.activeSection] });
-      return;
-    }
-
-    if (section === 'account') {
-      await this.router.navigate(['/settings'], { queryParams: { section: 'profile' } });
-    }
   }
 
   processUser(user: User | null, isPro: boolean) {

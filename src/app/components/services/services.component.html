@@ -1,14 +1,6 @@
 <div class="settings-container">
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
     <main class="settings-content services-content">
-      <app-workspace-section-navigation
-        navigationLabel="Workspace"
-        navigationAriaLabel="Services workspace"
-        [sections]="workspaceSectionOptions"
-        activeSection="connections"
-        variant="services"
-        [showMobileNavigation]="false"
-        (sectionSelected)="selectWorkspaceSection($event)">
         <header class="services-page-header">
           <h1>Connections</h1>
           <p>Bring your activity data together.</p>
@@ -138,7 +130,6 @@
           </section>
           }
         </mat-tab-nav-panel>
-      </app-workspace-section-navigation>
     </main>
   </app-loading-overlay>
 </div>

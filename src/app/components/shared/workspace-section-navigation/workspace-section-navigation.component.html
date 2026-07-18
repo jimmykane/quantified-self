@@ -1,7 +1,4 @@
-<div
-  class="workspace-navigation"
-  [class.workspace-navigation--services]="variant === 'services'">
-  @if (showMobileNavigation) {
+<div class="workspace-navigation">
   <div
     class="workspace-navigation__mobile-shell"
     [class.workspace-navigation__mobile-shell--backward]="canScrollMobileBackward"
@@ -33,9 +30,7 @@
         [attr.aria-selected]="activeSection === section.id"
         (click)="selectSection($event, section.id)">
         <span
-          class="workspace-navigation__tab-label"
-          [class.section-tab-label]="variant === 'services'"
-          [class.settings-tab-label]="variant === 'settings'">
+          class="workspace-navigation__tab-label settings-tab-label">
           @if (section.svgIcon) {
           <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
           } @else {
@@ -57,35 +52,11 @@
     </button>
     }
   </div>
-  }
-
-  <aside class="desktop-section-nav workspace-navigation__desktop-nav" [attr.aria-label]="navigationAriaLabel">
-    <div class="desktop-section-nav-title">{{ navigationLabel }}</div>
-    <mat-nav-list class="desktop-section-nav-list">
-      @for (section of sections; track section.id) {
-      <a
-        class="desktop-section-nav-item"
-        href=""
-        mat-list-item
-        [activated]="activeSection === section.id"
-        (click)="selectSection($event, section.id)">
-        @if (section.svgIcon) {
-        <mat-icon matListItemIcon [svgIcon]="section.svgIcon"></mat-icon>
-        } @else {
-        <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
-        }
-        <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
-        <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
-      </a>
-      }
-    </mat-nav-list>
-  </aside>
 
   <div
-    class="workspace-navigation__panel"
     role="tabpanel"
-    [attr.aria-label]="navigationLabel + ' content'"
-    [class.settings-tab-panel]="variant === 'settings'">
+    [attr.aria-label]="navigationAriaLabel + ' content'"
+    class="workspace-navigation__panel settings-tab-panel">
     <section class="workspace-main">
       <ng-content></ng-content>
     </section>

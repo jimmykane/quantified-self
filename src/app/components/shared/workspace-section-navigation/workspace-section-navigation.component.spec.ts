@@ -26,37 +26,26 @@ describe('WorkspaceSectionNavigationComponent', () => {
     component = fixture.componentInstance;
     component.sections = sections;
     component.activeSection = 'appearance';
-    component.navigationLabel = 'Settings';
     component.navigationAriaLabel = 'Settings sections';
   });
 
-  it('renders shared desktop and mobile section navigation', () => {
+  it('renders horizontal section navigation without a workspace rail', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelectorAll('.workspace-navigation__mobile-tabs a')).toHaveLength(2);
-    expect(fixture.nativeElement.querySelectorAll('.desktop-section-nav a')).toHaveLength(2);
-    expect(fixture.nativeElement.querySelector('.desktop-section-nav-title')?.textContent?.trim()).toBe('Settings');
-    expect(fixture.nativeElement.querySelector('.desktop-section-nav a[aria-current="page"]')?.textContent).toContain('Appearance');
-    expect(fixture.nativeElement.querySelector('[role="tabpanel"]')?.getAttribute('aria-label')).toBe('Settings content');
+    expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="tabpanel"]')?.getAttribute('aria-label')).toBe('Settings sections content');
   });
 
-  it('emits the selected section from either navigation surface', () => {
+  it('emits the selected section from the horizontal navigation', () => {
     const selected = vi.fn();
     component.sectionSelected.subscribe(selected);
     fixture.detectChanges();
 
-    const desktopSection = fixture.nativeElement.querySelector('.desktop-section-nav a') as HTMLAnchorElement;
-    desktopSection.click();
+    const section = fixture.nativeElement.querySelector('.workspace-navigation__mobile-tab') as HTMLAnchorElement;
+    section.click();
 
     expect(selected).toHaveBeenCalledWith('profile');
-  });
-
-  it('can hide the mobile navigation while retaining the desktop workspace rail', () => {
-    component.showMobileNavigation = false;
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('.workspace-navigation__mobile-tabs')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeTruthy();
   });
 
   it('brings a visible active mobile section into view', () => {
@@ -92,5 +81,22 @@ describe('WorkspaceSectionNavigationComponent', () => {
     expect(component.canScrollMobileBackward).toBe(true);
     expect(component.canScrollMobileForward).toBe(true);
     expect(scrollBy).toHaveBeenCalledWith({ left: 210, behavior: 'smooth' });
+  });
+
+  it('recalculates overflow affordances when the viewport changes', () => {
+    (component as any).lastVisibleActiveSection = 'appearance';
+    (component as any).mobileNavigation = {
+      nativeElement: {
+        clientWidth: 300,
+        scrollWidth: 700,
+        scrollLeft: 0,
+      },
+    };
+
+    component.handleViewportResize();
+
+    expect((component as any).lastVisibleActiveSection).toBe('');
+    expect(component.canScrollMobileBackward).toBe(false);
+    expect(component.canScrollMobileForward).toBe(true);
   });
 });

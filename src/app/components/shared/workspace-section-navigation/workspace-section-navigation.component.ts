@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   EventEmitter,
+  HostListener,
   Input,
   Output,
   QueryList,
@@ -18,8 +19,6 @@ export interface WorkspaceSectionNavigationItem {
   svgIcon?: string;
 }
 
-export type WorkspaceSectionNavigationVariant = 'services' | 'settings';
-
 @Component({
   selector: 'app-workspace-section-navigation',
   templateUrl: './workspace-section-navigation.component.html',
@@ -29,10 +28,7 @@ export type WorkspaceSectionNavigationVariant = 'services' | 'settings';
 export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
   @Input({ required: true }) public sections: readonly WorkspaceSectionNavigationItem[] = [];
   @Input({ required: true }) public activeSection = '';
-  @Input({ required: true }) public navigationLabel = '';
   @Input({ required: true }) public navigationAriaLabel = '';
-  @Input() public variant: WorkspaceSectionNavigationVariant = 'settings';
-  @Input() public showMobileNavigation = true;
   @Output() public sectionSelected = new EventEmitter<string>();
   @ViewChild('mobileNavigation', { read: ElementRef })
   private mobileNavigation?: ElementRef<HTMLElement>;
@@ -57,6 +53,12 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
 
     activeTab.scrollIntoView({ block: 'nearest', inline: 'center' });
     this.lastVisibleActiveSection = this.activeSection;
+    this.updateMobileNavigationScrollState();
+  }
+
+  @HostListener('window:resize')
+  public handleViewportResize(): void {
+    this.lastVisibleActiveSection = '';
     this.updateMobileNavigationScrollState();
   }
 

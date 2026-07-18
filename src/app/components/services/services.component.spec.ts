@@ -158,23 +158,12 @@ describe('ServicesComponent', () => {
         expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
     });
 
-    it('renders the services workspace rail separately from the provider selector', () => {
+    it('renders connections without a workspace rail', () => {
         fixture.detectChanges();
 
-        const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
-        const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
-            .map((label: Element) => label.textContent?.trim());
-
-        expect(navLabels).toEqual(['Connected services', 'Data & privacy', 'Account']);
-        expect(fixture.nativeElement.querySelector('.workspace-navigation__mobile-tabs')).toBeNull();
-    });
-
-    it('routes workspace rail destinations outside the connection view', async () => {
-        await component.selectWorkspaceSection('privacy');
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/policies'], { fragment: 'garmin-data' });
-
-        await component.selectWorkspaceSection('account');
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings'], { queryParams: { section: 'profile' } });
+        expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-workspace-section-navigation')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.provider-selector--desktop')).toBeTruthy();
     });
 
     it('keeps service panels mounted and hides inactive panels during tab switches', () => {

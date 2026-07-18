@@ -247,27 +247,13 @@ describe('UserSettingsComponent', () => {
         ]);
     });
 
-    it('renders the desktop settings selector as vertical Material list navigation', () => {
-        const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
+    it('uses the horizontal settings selector without a workspace rail', () => {
+        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
         const tabPanel = fixture.nativeElement.querySelector('.settings-tab-panel');
-        const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
-            .map((label: Element) => label.textContent?.trim());
-        const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
-            .map((description: Element) => description.textContent?.trim());
 
-        expect(desktopNav).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
         expect(tabPanel).toBeTruthy();
-        expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
-        expect(navLabels).toEqual([
-            'Profile',
-            'Appearance',
-            'Dashboard',
-            'Maps',
-            'Charts',
-            'Units',
-            'Delete Account',
-        ]);
-        expect(navDescriptions).toEqual(component.settingsSectionOptions.map(section => section.description));
+        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
     });
 
     it('uses dynamic Material subscript sizing for settings form fields', () => {
