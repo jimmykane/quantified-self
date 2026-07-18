@@ -61,6 +61,18 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(fixture.nativeElement.querySelector('mat-divider')).toBeTruthy();
     });
 
+    it('uses the app success green for connected status text', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/service-connection-status/service-connection-status.component.scss'),
+            'utf8'
+        );
+        const connectedStateRule = styles.match(
+            /\.service-connection-status--connected \.service-connection-status__state\s*\{[^}]*\}/
+        )?.[0] ?? '';
+
+        expect(connectedStateRule).toContain('color: var(--qs-theme-success)');
+    });
+
     it('does not make status layout wrappers nested scroll containers', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/service-connection-status/service-connection-status.component.scss'),

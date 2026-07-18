@@ -205,6 +205,13 @@ describe('ServicesComponent', () => {
         const connectionStates = fixture.nativeElement.querySelectorAll('.provider-selector__connection-state');
         expect(connectionStates).toHaveLength(1);
         expect(connectionStates[0].textContent).toContain('Connected');
+
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+        const connectionStateRule = styles.match(/\.provider-selector__connection-state\s*\{[^}]*\}/)?.[0] ?? '';
+        expect(connectionStateRule).toContain('color: var(--qs-theme-success)');
     });
 
     it('lets the services route grow with content instead of forcing viewport height', () => {

@@ -222,6 +222,7 @@ section.component-container {
   --qs-theme-on-primary: #ffffff;
   --qs-theme-accent: #ffd740;
   --qs-theme-on-accent: rgba(0, 0, 0, 0.87);
+  --qs-theme-success: #10b981;
   --mat-sys-background: #fafafa;
   --mat-sys-surface: rgba(255, 255, 255, 0.90);
   --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
@@ -499,16 +500,16 @@ mat-table {
 }
 
 .app-stat-card.status-success {
-  border-bottom: 4px solid #10b981;
+  border-bottom: 4px solid var(--qs-theme-success);
 
   .app-stat-value,
   mat-icon {
-    color: #10b981;
+    color: var(--qs-theme-success);
   }
 }
 
 .dark-theme .app-stat-card.status-success {
-  border-bottom: 4px solid #10b981;
+  border-bottom: 4px solid var(--qs-theme-success);
 }
 
 .app-stat-card.status-error {
