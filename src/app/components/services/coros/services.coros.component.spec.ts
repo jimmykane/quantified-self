@@ -141,6 +141,19 @@ describe('ServicesCorosComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-tabs')).toBeTruthy();
     });
 
+    it('shows only the selected provider tool tab in focused mode', () => {
+        component.user = { uid: 'user-1', settings: {} } as any;
+        component.activeProviderTool = 'auto-sync';
+        component.showOnlyActiveProviderTool = true;
+        fixture.detectChanges();
+
+        const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
+
+        expect(tabs).toHaveLength(1);
+        expect(tabs[0].textContent).toContain('Auto Sync');
+        expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    });
+
     it('renders disconnect beside the connected account details', () => {
         component.hasProAccess = true;
         component.serviceTokens = [{

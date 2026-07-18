@@ -154,6 +154,7 @@
     mat-stretch-tabs="false"
     class="provider-tools-tabs"
     aria-label="Garmin tools">
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <a
       href=""
       mat-tab-link
@@ -164,7 +165,8 @@
         <span>History Import</span>
       </span>
     </a>
-    @if (isGarminToSuuntoRouteAvailableForUser) {
+    }
+    @if (isGarminToSuuntoRouteAvailableForUser && (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync')) {
     <a
       href=""
       mat-tab-link

@@ -142,6 +142,7 @@
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
         [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
       </app-services-garmin>
       }
@@ -152,6 +153,7 @@
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
         [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
       </app-services-suunto>
       }
@@ -162,6 +164,7 @@
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
         [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('coros', $event)">
       </app-services-coros>
       }

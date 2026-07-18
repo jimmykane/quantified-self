@@ -261,6 +261,7 @@ describe('ServicesComponent', () => {
         );
         const toolsOnlyBindings = template.match(/\[showConnectionSummary\]="false"/g) ?? [];
         const initialToolBindings = template.match(/\[activeProviderTool\]="managedTool"/g) ?? [];
+        const focusedToolBindings = template.match(/\[showOnlyActiveProviderTool\]="true"/g) ?? [];
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/services-abstract-component.directive.scss'),
             'utf8'
@@ -274,6 +275,7 @@ describe('ServicesComponent', () => {
 
         expect(toolsOnlyBindings).toHaveLength(3);
         expect(initialToolBindings).toHaveLength(3);
+        expect(focusedToolBindings).toHaveLength(3);
         expect(template).not.toContain('service-tools-dialog__description');
         expect(toolsOnlyRule).toContain('width: 100%');
         expect(toolsOnlyRule).toContain('max-width: none');

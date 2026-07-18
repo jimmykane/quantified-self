@@ -118,6 +118,7 @@
     mat-stretch-tabs="false"
     class="provider-tools-tabs"
     aria-label="Suunto tools">
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <a
       href=""
       mat-tab-link
@@ -128,7 +129,9 @@
         <span>History Import</span>
       </span>
     </a>
+    }
 
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'routes') {
     <a
       href=""
       mat-tab-link
@@ -139,7 +142,9 @@
         <span>Route Sync</span>
       </span>
     </a>
+    }
 
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
     <a
       href=""
       mat-tab-link
@@ -150,6 +155,7 @@
         <span>Uploads</span>
       </span>
     </a>
+    }
   </nav>
 
   <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">

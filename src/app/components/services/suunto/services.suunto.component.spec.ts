@@ -165,6 +165,18 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-tabs')).toBeTruthy();
     });
 
+    it('shows only the selected provider tool tab in focused mode', () => {
+        component.activeProviderTool = 'routes';
+        component.showOnlyActiveProviderTool = true;
+        fixture.detectChanges();
+
+        const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
+
+        expect(tabs).toHaveLength(1);
+        expect(tabs[0].textContent).toContain('Route Sync');
+        expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    });
+
     it('hides inactive provider tool panels when switching tabs', () => {
         component.hasProAccess = true;
         component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];

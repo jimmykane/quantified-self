@@ -50,6 +50,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   @Input() showAdvancedTools = true;
   @Input() showConnectionSummary = true;
   @Input() activeProviderTool = 'history';
+  @Input() showOnlyActiveProviderTool = false;
   @Output() connectionStateChanged = new EventEmitter<boolean>();
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
