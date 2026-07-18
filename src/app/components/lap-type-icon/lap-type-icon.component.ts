@@ -61,7 +61,11 @@ export class LapTypeIconComponent {
     return null;
   }
 
-  getColumnHeaderTextInitials(statName): string {
-    return statName.split(' ').map(i => i.charAt(0).toUpperCase()).join('')
+  getColumnHeaderTextInitials(statName: LapTypes | string | null | undefined): string {
+    return String(statName ?? '')
+      .trim()
+      .split(/\s+/)
+      .map(part => part.charAt(0).toUpperCase())
+      .join('');
   }
 }
