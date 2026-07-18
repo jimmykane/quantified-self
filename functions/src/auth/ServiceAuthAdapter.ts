@@ -30,7 +30,8 @@ export interface ServiceAuthAdapter {
     processNewToken(token: AccessToken, userId: string): Promise<{ uniqueId?: string; permissions?: string[] }>;
 
     // Optional provider-owned identity projection created after the token is durable.
-    onTokenPersisted?(userId: string, externalUserId: string): Promise<void>;
+    onTokenPersisted?(userId: string, externalUserId: string): Promise<{ previousOwnerUserID?: string } | void>;
+    managesDuplicateConnections?: boolean;
 
     // Deauthorization
     deauthorize(token: Auth2ServiceTokenInterface): Promise<void>;

@@ -2,6 +2,8 @@ import fetch from 'node-fetch';
 import * as net from 'net';
 import { config } from '../config';
 import { MAX_ACTIVITY_UPLOAD_BYTES } from '../shared/activity-processing-config';
+import { WAHOO_FIT_DOWNLOAD_TIMEOUT_MS } from './constants';
+import { WahooRequestTimeoutError, withWahooRequestTimeout } from './request-timeout';
 
 const MAX_REDIRECTS = 3;
 
@@ -63,32 +65,46 @@ async function readBoundedBody(body: NodeJS.ReadableStream | null, contentLength
 export async function downloadWahooFITFile(rawUrl: string): Promise<Buffer> {
   let currentUrl = assertAllowedUrl(rawUrl);
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
-    let response;
     try {
-      response = await fetch(currentUrl.toString(), {
-        method: 'GET',
-        redirect: 'manual',
-        headers: { Accept: 'application/octet-stream' },
+      const result = await withWahooRequestTimeout(WAHOO_FIT_DOWNLOAD_TIMEOUT_MS, async (signal) => {
+        const response = await fetch(currentUrl.toString(), {
+          method: 'GET',
+          redirect: 'manual',
+          headers: { Accept: 'application/octet-stream' },
+          signal,
+        });
+        if (response.status >= 300 && response.status < 400) {
+          return { redirectLocation: response.headers.get('location'), payload: null, status: response.status };
+        }
+        if (!response.ok) {
+          const error = new Error(`Wahoo FIT download failed with ${response.status}`) as Error & { statusCode?: number };
+          error.statusCode = response.status;
+          throw error;
+        }
+        return {
+          redirectLocation: null,
+          payload: await readBoundedBody(response.body, response.headers.get('content-length')),
+          status: response.status,
+        };
       });
-    } catch {
+      if (result.status >= 300 && result.status < 400) {
+        if (!result.redirectLocation || redirectCount === MAX_REDIRECTS) {
+          throw new UnsafeWahooFileUrlError('Wahoo FIT redirect could not be followed safely.');
+        }
+        currentUrl = assertAllowedUrl(new URL(result.redirectLocation, currentUrl).toString());
+        continue;
+      }
+      if (!result.payload) throw new Error('Wahoo FIT response did not contain a body.');
+      assertFitPayload(result.payload);
+      return result.payload;
+    } catch (error) {
+      if (error instanceof UnsafeWahooFileUrlError) throw error;
+      if (error instanceof WahooRequestTimeoutError) throw new Error('Wahoo FIT download timed out.');
+      if ((error as { statusCode?: unknown })?.statusCode) throw error;
+      const errorMessage = error instanceof Error ? error.message : '';
+      if (errorMessage.includes('20 MB') || errorMessage.includes('valid FIT')) throw error;
       throw new Error('Wahoo FIT download request failed.');
     }
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location');
-      if (!location || redirectCount === MAX_REDIRECTS) {
-        throw new UnsafeWahooFileUrlError('Wahoo FIT redirect could not be followed safely.');
-      }
-      currentUrl = assertAllowedUrl(new URL(location, currentUrl).toString());
-      continue;
-    }
-    if (!response.ok) {
-      const error = new Error(`Wahoo FIT download failed with ${response.status}`) as Error & { statusCode?: number };
-      error.statusCode = response.status;
-      throw error;
-    }
-    const payload = await readBoundedBody(response.body, response.headers.get('content-length'));
-    assertFitPayload(payload);
-    return payload;
   }
   throw new UnsafeWahooFileUrlError('Wahoo FIT redirect limit exceeded.');
 }

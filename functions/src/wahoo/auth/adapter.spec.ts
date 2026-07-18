@@ -3,11 +3,30 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { WahooAuthAdapter } from './adapter';
 import * as api from './api';
 
+const firestoreMocks = vi.hoisted(() => {
+  const mappingRef = { id: '60462', path: 'wahooAPIUserMappings/60462' };
+  const transactionGet = vi.fn();
+  const transactionSet = vi.fn();
+  return {
+    mappingRef,
+    transactionGet,
+    transactionSet,
+    runTransaction: vi.fn(async (runner: any) => runner({
+      get: transactionGet,
+      set: transactionSet,
+    })),
+  };
+});
+
 vi.mock('./api');
 vi.mock('./auth', () => ({ WahooAPIAuth: vi.fn() }));
 vi.mock('firebase-admin', () => ({
-  firestore: () => ({
+  firestore: Object.assign(() => ({
+    collection: () => ({ doc: () => firestoreMocks.mappingRef }),
     collectionGroup: () => ({ where: () => ({ where: () => ({}) }) }),
+    runTransaction: firestoreMocks.runTransaction,
+  }), {
+    FieldValue: { serverTimestamp: () => 'server-timestamp' },
   }),
 }));
 
@@ -45,5 +64,23 @@ describe('WahooAuthAdapter', () => {
   it('deauthorizes through the permissions endpoint helper', async () => {
     await adapter.deauthorize({ accessToken: 'access' } as any);
     expect(api.deauthorizeWahooUser).toHaveBeenCalledWith('access');
+  });
+
+  it('atomically transfers the webhook mapping and reports the prior owner for local cleanup', async () => {
+    firestoreMocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ firebaseUserID: 'previous-user' }),
+    });
+
+    await expect(adapter.onTokenPersisted('current-user', '60462')).resolves.toEqual({
+      previousOwnerUserID: 'previous-user',
+    });
+    expect(adapter.managesDuplicateConnections).toBe(true);
+    expect(firestoreMocks.transactionSet).toHaveBeenCalledWith(firestoreMocks.mappingRef, {
+      firebaseUserID: 'current-user',
+      wahooUserID: '60462',
+      serviceName: ServiceNames.WahooAPI,
+      updatedAt: 'server-timestamp',
+    });
   });
 });

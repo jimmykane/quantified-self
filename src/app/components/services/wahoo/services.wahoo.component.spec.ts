@@ -88,4 +88,21 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.querySelector('.provider-tool-panel')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.tool-subsection-title')).toBeNull();
   });
+
+  it('rejects a denied Wahoo authorization callback instead of reporting a connection', async () => {
+    (component as any).route.snapshot.queryParamMap = convertToParamMap({
+      state: 'state-1',
+      error: 'access_denied',
+    });
+
+    await expect(component.requestAndSetToken()).rejects.toThrow('Wahoo authorization was not completed.');
+    expect(userService.requestAndSetCurrentUserWahooAPIAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects an incomplete Wahoo authorization callback', async () => {
+    (component as any).route.snapshot.queryParamMap = convertToParamMap({ state: 'state-1' });
+
+    await expect(component.requestAndSetToken()).rejects.toThrow('missing state or code');
+    expect(userService.requestAndSetCurrentUserWahooAPIAccessToken).not.toHaveBeenCalled();
+  });
 });

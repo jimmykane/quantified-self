@@ -326,6 +326,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     }
 
     let uniqueId: string | undefined;
+    let previousOwnerUserID: string | undefined;
     try {
       await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_process:${serviceName}`);
 
@@ -343,9 +344,18 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
         tokenData,
       );
       tokenPersisted = true;
+    } catch (error) {
+      if (!tokenPersisted) {
+        await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);
+      }
+      throw error;
+    }
+
+    if (await hasProAccess(userID)) {
       if (uniqueId && adapter.onTokenPersisted) {
         try {
-          await adapter.onTokenPersisted(userID, uniqueId);
+          const persistedIdentity = await adapter.onTokenPersisted(userID, uniqueId);
+          previousOwnerUserID = persistedIdentity?.previousOwnerUserID;
         } catch (error) {
           await cleanupServiceTokenById(
             userID,
@@ -357,14 +367,6 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
           throw error;
         }
       }
-    } catch (error) {
-      if (!tokenPersisted) {
-        await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);
-      }
-      throw error;
-    }
-
-    if (await hasProAccess(userID)) {
       await clearServiceDisconnectPending(userID, serviceName);
       const didMarkConnected = await markServiceConnected(userID, serviceName);
       if (!didMarkConnected) {
@@ -400,7 +402,18 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     // Remove any OTHER users connected to this same external account
     if (uniqueId) {
       try {
-        await removeDuplicateConnections(userID, serviceName, uniqueId);
+        if (adapter.managesDuplicateConnections) {
+          if (previousOwnerUserID && previousOwnerUserID !== userID) {
+            await cleanupServiceTokenById(
+              previousOwnerUserID,
+              serviceName,
+              uniqueId,
+              SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup,
+            );
+          }
+        } else {
+          await removeDuplicateConnections(userID, serviceName, uniqueId);
+        }
       } catch (e) {
         logger.error(`Failed to cleanup duplicate connections for ${userID}`, e);
         // Don't fail the auth flow for this, just log

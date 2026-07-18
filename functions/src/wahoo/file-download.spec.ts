@@ -5,6 +5,7 @@ const fetchMock = vi.fn();
 vi.mock('node-fetch', () => ({ default: (...args: unknown[]) => fetchMock(...args) }));
 
 import { downloadWahooFITFile, UnsafeWahooFileUrlError } from './file-download';
+import { WAHOO_FIT_DOWNLOAD_TIMEOUT_MS } from './constants';
 
 function fitPayload(size = 16): Buffer {
   const payload = Buffer.alloc(size);
@@ -24,6 +25,7 @@ function response(status: number, payload: Buffer | null, headers: Record<string
 
 describe('downloadWahooFITFile', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     process.env.WAHOOAPI_CLIENT_ID = 'id';
     process.env.WAHOOAPI_CLIENT_SECRET = 'secret';
@@ -62,5 +64,18 @@ describe('downloadWahooFITFile', () => {
 
     await expect(downloadWahooFITFile(signedUrl)).rejects.toThrow('Wahoo FIT download request failed.');
     await expect(downloadWahooFITFile(signedUrl)).rejects.not.toThrow('secret-value');
+  });
+
+  it('aborts a stalled FIT request at the provider deadline', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation((_url: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+
+    const download = downloadWahooFITFile('https://cdn.wahooligan.com/file.fit');
+    const expectation = expect(download).rejects.toThrow('Wahoo FIT download timed out.');
+    await vi.advanceTimersByTimeAsync(WAHOO_FIT_DOWNLOAD_TIMEOUT_MS);
+
+    await expectation;
   });
 });

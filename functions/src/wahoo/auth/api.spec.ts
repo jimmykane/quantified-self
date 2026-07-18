@@ -4,6 +4,7 @@ const fetchMock = vi.fn();
 vi.mock('node-fetch', () => ({ default: (...args: unknown[]) => fetchMock(...args) }));
 
 import { deauthorizeWahooUser, getWahooUserID, requestWahooAPI, WahooAPIRequestError } from './api';
+import { WAHOO_API_REQUEST_TIMEOUT_MS } from '../constants';
 
 function response(status: number, body: unknown, headers: Record<string, string> = {}) {
   return {
@@ -15,7 +16,10 @@ function response(status: number, body: unknown, headers: Record<string, string>
 }
 
 describe('Wahoo auth API helpers', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
 
   it('gets the stable Wahoo user id with a bearer token', async () => {
     fetchMock.mockResolvedValue(response(200, { id: 60462 }));
@@ -38,5 +42,18 @@ describe('Wahoo auth API helpers', () => {
       statusCode: 429,
       resetAfterSeconds: 300,
     });
+  });
+
+  it('aborts a stalled API request at the provider deadline', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation((_url: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+
+    const request = requestWahooAPI('access', '/v1/workouts');
+    const expectation = expect(request).rejects.toThrow('Wahoo API request timed out.');
+    await vi.advanceTimersByTimeAsync(WAHOO_API_REQUEST_TIMEOUT_MS);
+
+    await expectation;
   });
 });

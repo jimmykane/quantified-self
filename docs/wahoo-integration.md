@@ -16,10 +16,10 @@ Workouts without an available FIT file are skipped. Wahoo records identified as 
 ## Data flow
 
 1. The Pro user starts OAuth from **Services**. Callable Functions enforce authentication, App Check, the Wahoo feature gate, and Pro access.
-2. The backend exchanges the code, reads the stable Wahoo user ID, prevents duplicate ownership, and stores rotating credentials in the server-only `wahooAPIAccessTokens` collection.
+2. The backend exchanges the code, reads the stable Wahoo user ID, atomically assigns its one-to-one Firebase mapping, removes any previous local owner token, and stores rotating credentials in the server-only `wahooAPIAccessTokens` collection.
 3. Wahoo posts completed workout summaries to `wahooAPIWebhook`. The shared webhook token, direct user mapping, active connection, deletion guard, pending-disconnect state, and current Pro access are checked before queueing.
 4. History imports use the same queue path. A per-user lease prevents overlapping history requests, pages stop once the selected start date is reached, and Wahoo rate-limit reset metadata is returned on HTTP 429.
-5. Immediate Cloud Tasks and the scheduled dispatcher both process `wahooAPIWorkoutQueue`. The worker rechecks deletion and disconnect state, downloads only allowlisted HTTPS FIT URLs, validates size and FIT magic bytes, parses the event, rechecks deletion immediately before persistence, and retains the original FIT file.
+5. Immediate Cloud Tasks and the scheduled dispatcher both process `wahooAPIWorkoutQueue`. A revision-scoped processing lease serializes updates to the same workout; an older worker releases a newer revision without completing it. The worker rechecks deletion and disconnect state, downloads only allowlisted HTTPS FIT URLs with a bounded request deadline, validates size and FIT magic bytes, parses the event, rechecks deletion immediately before persistence, and retains the original FIT file.
 6. Queue documents expire through the shared queue TTL policy. Disconnect and account deletion write cleanup tombstones before recursively removing matching operational documents.
 
 Webhook delivery and history are idempotent. The deterministic queue and event IDs use the Wahoo user and workout IDs; a newer workout-summary revision reopens the same queue item instead of creating a duplicate event.
@@ -38,7 +38,7 @@ Configure the deployed webhook URL and the same high-entropy webhook token in th
 ## Security and lifecycle controls
 
 - Browser clients can read only the safe connection state under `users/{uid}/meta/Wahoo API`; access and refresh tokens and direct user mappings are server-only in Firestore Rules.
-- File downloads reject non-HTTPS URLs, credentials in URLs, IP literals, local hostnames, unapproved redirect targets, payloads over 20 MB, and non-FIT content.
+- File downloads reject non-HTTPS URLs, credentials in URLs, IP literals, local hostnames, unapproved redirect targets, payloads over 20 MB, non-FIT content, and responses that exceed the bounded request deadline. Wahoo JSON API requests use a separate bounded deadline.
 - Wahoo access tokens are refreshed only immediately before a Wahoo API request. The next API request activates the rotated token, matching Wahoo's token-lifecycle guidance.
 - Webhook retries and duplicate deliveries are safe because queue writes are revision-aware and deterministic.
 - Pro access is required to connect, receive new imports, and run history. Disconnect remains available after Pro access ends.

@@ -5,16 +5,23 @@ const mocks = vi.hoisted(() => {
   const transactionGet = vi.fn();
   const transactionSet = vi.fn();
   const transactionUpdate = vi.fn();
-  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1' };
+  const transactionDelete = vi.fn();
+  const refGet = vi.fn();
+  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', get: refGet };
+  const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
   return {
     transactionGet,
     transactionSet,
     transactionUpdate,
+    transactionDelete,
+    refGet,
     ref,
+    failedRef,
     runTransaction: vi.fn(async (runner: any) => runner({
       get: transactionGet,
       set: transactionSet,
       update: transactionUpdate,
+      delete: transactionDelete,
     })),
     enqueueWorkoutTask: vi.fn().mockResolvedValue(true),
     guardedUpdate: vi.fn().mockResolvedValue('updated'),
@@ -23,9 +30,11 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('firebase-admin', () => ({
-  firestore: () => ({
-    collection: () => ({ doc: () => mocks.ref }),
+  firestore: Object.assign(() => ({
+    collection: (name: string) => ({ doc: () => name === 'failed_jobs' ? mocks.failedRef : mocks.ref }),
     runTransaction: mocks.runTransaction,
+  }), {
+    FieldValue: { delete: () => 'delete-sentinel' },
   }),
 }));
 
@@ -43,7 +52,13 @@ vi.mock('../queue/dispatch-marker', () => ({
   QueueItemUserGuardedUpdateResult: { Updated: 'updated' },
 }));
 
-import { upsertWahooWorkoutQueueItem } from './queue-store';
+import {
+  claimWahooWorkoutQueueRevision,
+  completeWahooWorkoutQueueRevision,
+  failWahooWorkoutQueueRevision,
+  upsertWahooWorkoutQueueItem,
+  WahooQueueRevisionBusyError,
+} from './queue-store';
 
 const input = {
   id: 'queue-1',
@@ -93,6 +108,28 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.enqueueWorkoutTask).not.toHaveBeenCalled();
   });
 
+  it('preserves an active processing lease when a newer summary arrives', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        processed: false,
+        summaryUpdatedAt: '2026-07-18T09:00:00.000Z',
+        processingOwner: 'older-worker',
+        processingRevision: '2026-07-18T09:00:00.000Z',
+        processingLeaseExpiresAt: Date.now() + 60_000,
+      }),
+    });
+
+    await upsertWahooWorkoutQueueItem(input, 'deferred');
+
+    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+      summaryUpdatedAt: input.summaryUpdatedAt,
+      processingOwner: 'older-worker',
+      processingRevision: '2026-07-18T09:00:00.000Z',
+      processingLeaseExpiresAt: expect.any(Number),
+    }));
+  });
+
   it('does not requeue an older duplicate but refreshes its pending signed URL', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,
@@ -115,5 +152,83 @@ describe('upsertWahooWorkoutQueueItem', () => {
     await expect(upsertWahooWorkoutQueueItem(input, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
     expect(mocks.transactionSet).not.toHaveBeenCalled();
     expect(mocks.enqueueWorkoutTask).not.toHaveBeenCalled();
+  });
+
+  it('rejects a concurrent worker while the current revision lease is active', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        processingOwner: 'worker-1',
+        processingLeaseExpiresAt: Date.now() + 60_000,
+      }),
+    });
+
+    await expect(claimWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-2'))
+      .rejects.toBeInstanceOf(WahooQueueRevisionBusyError);
+    expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('releases an older worker lease without completing a newer revision', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        workoutSummaryID: 'summary-2',
+        summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+        processingOwner: 'worker-1',
+      }),
+    });
+
+    await expect(completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-1'))
+      .resolves.toBe('PROCESSED');
+    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+      processed: false,
+      dispatchedToCloudTask: null,
+      processingOwner: 'delete-sentinel',
+    }));
+    expect(mocks.transactionUpdate).not.toHaveBeenCalledWith(
+      mocks.ref,
+      expect.objectContaining({ processed: true }),
+    );
+  });
+
+  it('marks only the claimed current revision as processed', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ ...input, processingOwner: 'worker-1' }),
+    });
+
+    await expect(completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-1'))
+      .resolves.toBe('PROCESSED');
+    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+      processed: true,
+      processedAt: expect.any(Number),
+      processingOwner: 'delete-sentinel',
+    }));
+  });
+
+  it('does not let an older worker retry overwrite a newer revision', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        workoutSummaryID: 'summary-2',
+        summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+        processingOwner: 'worker-1',
+      }),
+    });
+
+    await expect(failWahooWorkoutQueueRevision(
+      { ...input, ref: mocks.ref } as any,
+      'worker-1',
+      new Error('old revision failed'),
+    )).resolves.toBe('PROCESSED');
+    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+      processed: false,
+      dispatchedToCloudTask: null,
+      processingOwner: 'delete-sentinel',
+    }));
+    expect(mocks.transactionSet).not.toHaveBeenCalledWith(mocks.failedRef, expect.anything());
   });
 });

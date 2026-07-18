@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   deferPending: vi.fn().mockResolvedValue('deferred'),
   retry: vi.fn().mockResolvedValue('retry'),
   processed: vi.fn().mockResolvedValue('processed'),
+  claimRevision: vi.fn().mockResolvedValue('claimed'),
+  isCurrentRevision: vi.fn().mockResolvedValue(true),
+  completeRevision: vi.fn().mockResolvedValue('processed'),
+  failRevision: vi.fn().mockResolvedValue('retry'),
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -40,9 +44,13 @@ vi.mock('../utils', () => ({ setEvent: mocks.setEvent }));
 vi.mock('../queue-utils', () => ({
   markQueueItemSkipped: mocks.markSkipped,
   deferQueueItemForPendingDisconnect: mocks.deferPending,
-  increaseRetryCountForQueueItem: mocks.retry,
-  updateToProcessed: mocks.processed,
-  QueueResult: {},
+  QueueResult: { Processed: 'processed' },
+}));
+vi.mock('./queue-store', () => ({
+  claimWahooWorkoutQueueRevision: mocks.claimRevision,
+  isClaimedWahooWorkoutQueueRevisionCurrent: mocks.isCurrentRevision,
+  completeWahooWorkoutQueueRevision: mocks.completeRevision,
+  failWahooWorkoutQueueRevision: mocks.failRevision,
 }));
 
 import { processWahooWorkoutQueueItem } from './processor';
@@ -75,7 +83,10 @@ describe('processWahooWorkoutQueueItem', () => {
     mocks.parseFIT.mockResolvedValue({ startDate: new Date('2026-07-18T09:00:00.000Z'), name: '' });
     mocks.resolveEventID.mockResolvedValue('event-1');
     mocks.setEvent.mockResolvedValue(undefined);
-    mocks.processed.mockResolvedValue('processed');
+    mocks.claimRevision.mockResolvedValue('claimed');
+    mocks.isCurrentRevision.mockResolvedValue(true);
+    mocks.completeRevision.mockResolvedValue('processed');
+    mocks.failRevision.mockResolvedValue('retry');
   });
 
   it('downloads, parses, guards again, writes through setEvent, and marks processed', async () => {
@@ -95,33 +106,61 @@ describe('processWahooWorkoutQueueItem', () => {
       }),
       expect.objectContaining({ extension: 'fit' }),
     );
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
   });
 
   it('does not write if deletion starts after the FIT file was parsed', async () => {
     mocks.deletionSkip.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
-    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('skipped');
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
     expect(mocks.setEvent).not.toHaveBeenCalled();
-    expect(mocks.markSkipped).toHaveBeenCalledWith(queueItem, undefined, 'user_deleted_or_deleting');
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'user_deleted_or_deleting',
+    });
   });
 
   it('skips work if the server-side Wahoo credential is no longer present', async () => {
     mocks.tokenGet.mockResolvedValue({ exists: false });
 
-    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('skipped');
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
     expect(mocks.downloadFIT).not.toHaveBeenCalled();
-    expect(mocks.markSkipped).toHaveBeenCalledWith(queueItem, undefined, 'provider_not_connected');
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'provider_not_connected',
+    });
+  });
+
+  it('releases the claimed revision through retry handling when the token read fails', async () => {
+    mocks.tokenGet.mockRejectedValue(new Error('firestore unavailable'));
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('retry');
+    expect(mocks.downloadFIT).not.toHaveBeenCalled();
+    expect(mocks.failRevision).toHaveBeenCalledWith(
+      queueItem,
+      expect.any(String),
+      expect.objectContaining({ message: 'Wahoo activity processing failed: Error' }),
+    );
   });
 
   it('sanitizes signed provider URLs before persisting retry errors', async () => {
     mocks.downloadFIT.mockRejectedValue(new Error(`request failed for ${queueItem.FITFileURI}?signature=secret-value`));
 
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('retry');
-    expect(mocks.retry).toHaveBeenCalledWith(
+    expect(mocks.failRevision).toHaveBeenCalledWith(
       queueItem,
+      expect.any(String),
       expect.objectContaining({ message: 'Wahoo activity processing failed: Error' }),
     );
-    expect(mocks.retry.mock.calls[0][1].message).not.toContain('secret-value');
-    expect(mocks.retry.mock.calls[0][1].message).not.toContain(queueItem.FITFileURI);
+    expect(mocks.failRevision.mock.calls[0][2].message).not.toContain('secret-value');
+    expect(mocks.failRevision.mock.calls[0][2].message).not.toContain(queueItem.FITFileURI);
+  });
+
+  it('acks a superseded snapshot without downloading or completing the newer revision', async () => {
+    mocks.claimRevision.mockResolvedValue('superseded');
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+    expect(mocks.downloadFIT).not.toHaveBeenCalled();
+    expect(mocks.completeRevision).not.toHaveBeenCalled();
   });
 });

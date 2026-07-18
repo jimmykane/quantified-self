@@ -17,6 +17,7 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
   public serviceName = ServiceNames.WahooAPI;
   public tokenCollectionName = WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME;
   public oAuthScopes = WAHOO_API_SCOPES;
+  public managesDuplicateConnections = true;
 
   getOAuth2Client(): AuthorizationCode {
     return WahooAPIAuth();
@@ -60,21 +61,20 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
     return { uniqueId: await getWahooUserID(`${token.token.access_token || ''}`) };
   }
 
-  async onTokenPersisted(userId: string, externalUserId: string): Promise<void> {
+  async onTokenPersisted(userId: string, externalUserId: string): Promise<{ previousOwnerUserID?: string }> {
     const mappingRef = admin.firestore().collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(externalUserId);
-    await admin.firestore().runTransaction(async (transaction) => {
+    const previousOwnerUserID = await admin.firestore().runTransaction(async (transaction) => {
       const snapshot = await transaction.get(mappingRef);
       const existingOwner = snapshot.exists ? `${snapshot.data()?.firebaseUserID || ''}` : '';
-      if (existingOwner && existingOwner !== userId) {
-        throw new Error('This Wahoo account is already connected to another Quantified Self account.');
-      }
       transaction.set(mappingRef, {
         firebaseUserID: userId,
         wahooUserID: externalUserId,
         serviceName: this.serviceName,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      return existingOwner && existingOwner !== userId ? existingOwner : undefined;
     });
+    return { previousOwnerUserID };
   }
 
   async deauthorize(token: Auth2ServiceTokenInterface): Promise<void> {

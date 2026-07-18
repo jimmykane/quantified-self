@@ -46,6 +46,9 @@ export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
   edited?: boolean;
   fitnessAppID?: number;
   fromHistory?: boolean;
+  processingOwner?: string;
+  processingRevision?: string;
+  processingLeaseExpiresAt?: number;
 }
 
 export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {

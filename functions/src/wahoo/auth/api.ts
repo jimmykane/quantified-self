@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
-import { WAHOO_API_BASE_URL } from '../constants';
+import { WAHOO_API_BASE_URL, WAHOO_API_REQUEST_TIMEOUT_MS } from '../constants';
+import { WahooRequestTimeoutError, withWahooRequestTimeout } from '../request-timeout';
 
 export class WahooAPIRequestError extends Error {
   constructor(
@@ -33,15 +34,25 @@ export async function requestWahooAPI<T>(
   path: string,
   method: 'GET' | 'DELETE' = 'GET',
 ): Promise<{ data: T; rateLimit: { limit: string | null; remaining: string | null; resetAfterSeconds: number | null } }> {
-  const response = await fetch(`${WAHOO_API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
-  });
+  let response;
+  let body: unknown;
+  try {
+    ({ response, body } = await withWahooRequestTimeout(WAHOO_API_REQUEST_TIMEOUT_MS, async (signal) => {
+      const result = await fetch(`${WAHOO_API_BASE_URL}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        signal,
+      });
+      return { response: result, body: await parseResponseBody(result) };
+    }));
+  } catch (error) {
+    if (error instanceof WahooRequestTimeoutError) throw new Error('Wahoo API request timed out.');
+    throw new Error('Wahoo API request failed.');
+  }
   const resetAfterSeconds = parseResetHeader(response.headers.get('x-ratelimit-reset'));
-  const body = await parseResponseBody(response);
   if (!response.ok) {
     throw new WahooAPIRequestError(
       `Wahoo API ${method} ${path} failed with ${response.status}`,
