@@ -27,7 +27,7 @@
         </ng-template>
 
         <app-workspace-section-navigation
-          navigationLabel="Settings"
+          navigationLabel="Workspace"
           navigationAriaLabel="Settings sections"
           [sections]="settingsSectionOptions"
           [activeSection]="activeSection"
@@ -67,22 +67,27 @@
                 <mat-divider></mat-divider>
 
                 <div class="settings-toggle-block">
-                  <mat-slide-toggle formControlName="acceptedTrackingPolicy">
-                    Allow Anonymous Usage Statistics
+                  <div>
+                    <h3>Anonymous usage statistics</h3>
+                    <p>Help us improve Quantified Self by sharing anonymous usage data.</p>
+                  </div>
+                  <mat-slide-toggle
+                    aria-label="Anonymous usage statistics"
+                    formControlName="acceptedTrackingPolicy">
                   </mat-slide-toggle>
-                  <p>Help us improve by sharing anonymous usage data. Disabling this will stop all analytics tracking.</p>
                 </div>
 
                 <mat-divider></mat-divider>
 
                 <div class="settings-toggle-block">
-                  <mat-slide-toggle formControlName="acceptedMarketingPolicy">
-                    Allow Marketing &amp; Update Emails (Optional)
+                  <div>
+                    <h3>Product updates by email</h3>
+                    <p>Receive emails about new features and important product updates.</p>
+                  </div>
+                  <mat-slide-toggle
+                    aria-label="Product updates by email"
+                    formControlName="acceptedMarketingPolicy">
                   </mat-slide-toggle>
-                  <p>
-                    Receive occasional updates about new features, promotions, and special offers. You can manage this
-                    setting here at any time.
-                  </p>
                 </div>
               </div>
             </section>

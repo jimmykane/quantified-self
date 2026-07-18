@@ -163,6 +163,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('shows email in the profile header when available', () => {
+        component.activeSection = 'profile';
         component.user = { ...(component.user as any), email: 'runner@example.com' } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -173,6 +174,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('hides the profile header email when unavailable', () => {
+        component.activeSection = 'profile';
         component.user = { ...(component.user as any), email: null } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -227,12 +229,13 @@ describe('UserSettingsComponent', () => {
         ]);
     });
 
-    it('renders the settings selector as Material tab navigation', () => {
-        const tabNav = fixture.nativeElement.querySelector('nav[mat-tab-nav-bar]');
-        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
+    it('renders the mobile settings selector as Material button navigation', () => {
+        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
+        const tabLabels = Array.from(tabNav.querySelectorAll('.workspace-navigation__mobile-tab'))
             .map((link: Element) => link.querySelector('.settings-tab-label > span:last-child')?.textContent?.trim());
 
         expect(tabNav).toBeTruthy();
+        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
         expect(tabLabels).toEqual([
             'Profile',
             'Appearance',
@@ -313,12 +316,12 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('delete-account');
     });
 
-    it('should restore the profile section when the section query param is missing', () => {
+    it('should restore the appearance section when the section query param is missing', () => {
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
 
-        expect(component.activeSection).toBe('profile');
+        expect(component.activeSection).toBe('app');
     });
 
     it('renders delete account only in the delete account section', () => {

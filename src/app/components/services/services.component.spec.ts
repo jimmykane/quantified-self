@@ -43,6 +43,7 @@ describe('ServicesComponent', () => {
             navigate: vi.fn(),
             createUrlTree: vi.fn(() => ({})),
             serializeUrl: vi.fn(() => '/policies'),
+            events: of(),
         };
 
         mockActivatedRoute = {
@@ -125,36 +126,51 @@ describe('ServicesComponent', () => {
 
     it('should expose service navigation sections in display order', () => {
         expect(component.serviceSectionOptions.map(section => section.id)).toEqual([
-            'suunto',
             'garmin',
+            'suunto',
             'coros',
         ]);
     });
 
-    it('renders the service selector as Material tab navigation', () => {
+    it('renders the mobile provider selector as Material tab navigation', () => {
         fixture.detectChanges();
 
-        const tabNav = fixture.nativeElement.querySelector('nav[mat-tab-nav-bar]');
+        const tabNav = fixture.nativeElement.querySelector('.provider-selector--mobile');
         const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
-            .map((link: Element) => link.querySelector('.section-tab-label > span:last-child')?.textContent?.trim());
+            .map((link: Element) => link.textContent?.trim());
 
         expect(tabNav).toBeTruthy();
-        expect(tabLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
+        expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
     });
 
-    it('renders the desktop service selector as vertical Material list navigation', () => {
+    it('renders the desktop provider selector as a Material button toggle group', () => {
+        fixture.detectChanges();
+
+        const providerSelector = fixture.nativeElement.querySelector('.provider-selector--desktop');
+        const providerLabels = Array.from(providerSelector.querySelectorAll('.provider-selector__option > span'))
+            .map((label: Element) => label.textContent?.trim());
+
+        expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
+    });
+
+    it('renders the services workspace rail separately from the provider selector', () => {
         fixture.detectChanges();
 
         const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
         const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
             .map((label: Element) => label.textContent?.trim());
-        const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
-            .map((description: Element) => description.textContent?.trim());
 
-        expect(desktopNav).toBeTruthy();
-        expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
-        expect(navLabels).toEqual(['Suunto', 'Garmin', 'COROS']);
-        expect(navDescriptions).toEqual(['Suunto App', 'Garmin Connect', 'COROS']);
+        expect(navLabels).toEqual(['Connected services', 'Data & privacy', 'Account']);
+        expect(fixture.nativeElement.querySelector('.workspace-navigation__mobile-tabs')).toBeNull();
+    });
+
+    it('routes workspace rail destinations outside the connection view', async () => {
+        await component.selectWorkspaceSection('privacy');
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/policies'], { fragment: 'garmin-data' });
+
+        await component.selectWorkspaceSection('account');
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings'], { queryParams: { section: 'profile' } });
     });
 
     it('keeps service panels mounted and hides inactive panels during tab switches', () => {
@@ -163,15 +179,15 @@ describe('ServicesComponent', () => {
         const servicePanels = fixture.nativeElement.querySelectorAll('.service-detail');
 
         expect(servicePanels.length).toBe(3);
-        expect(fixture.nativeElement.querySelector('#service-suunto-title').closest('.service-detail').hidden).toBe(false);
-        expect(fixture.nativeElement.querySelector('#service-garmin-title').closest('.service-detail').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('#service-coros-title').closest('.service-detail').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(false);
+        expect(fixture.nativeElement.querySelector('[aria-label="suunto app" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(true);
 
         component.activeSection = 'coros';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('#service-suunto-title').closest('.service-detail').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('#service-coros-title').closest('.service-detail').hidden).toBe(false);
+        expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(false);
     });
 
     it('lets the services route grow with content instead of forcing viewport height', () => {

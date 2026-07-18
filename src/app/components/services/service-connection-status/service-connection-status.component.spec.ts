@@ -35,11 +35,12 @@ describe('ServiceConnectionStatusComponent', () => {
 
         const text = fixture.nativeElement.textContent;
 
-        expect(text).toContain('Garmin connection');
+        expect(text).toContain('Garmin');
         expect(text).toContain('Not connected');
         expect(text).toContain('Required for history imports and auto-sync.');
         expect(fixture.nativeElement.querySelector('mat-card')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('.service-connection-status--connected')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.service-connection-status__state')).toBeTruthy();
     });
 
     it('renders connected and Pro states without a card surface', () => {

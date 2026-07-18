@@ -112,14 +112,6 @@ describe('ServicesCorosComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('renders a direct privacy link to the COROS policy section', () => {
-        const privacyLink = fixture.nativeElement.querySelector('.service-privacy-link a');
-
-        expect(privacyLink).toBeTruthy();
-        expect(privacyLink.textContent).toContain('Privacy details for COROS imports');
-        expect(privacyLink.getAttribute('href')).toContain('/policies#coros-data');
-    });
-
     it('renders connection status outside the provider tool tabs', () => {
         fixture.detectChanges();
 
@@ -129,7 +121,7 @@ describe('ServicesCorosComponent', () => {
         const providerTabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
 
         expect(connectionStatus).toBeTruthy();
-        expect(connectionStatus.textContent).toContain('COROS connection');
+        expect(connectionStatus.textContent).toContain('COROS');
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();

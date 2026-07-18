@@ -37,6 +37,7 @@ describe('WorkspaceSectionNavigationComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.desktop-section-nav a')).toHaveLength(2);
     expect(fixture.nativeElement.querySelector('.desktop-section-nav-title')?.textContent?.trim()).toBe('Settings');
     expect(fixture.nativeElement.querySelector('.desktop-section-nav a[aria-current="page"]')?.textContent).toContain('Appearance');
+    expect(fixture.nativeElement.querySelector('[role="tabpanel"]')?.getAttribute('aria-label')).toBe('Settings content');
   });
 
   it('emits the selected section from either navigation surface', () => {
@@ -48,5 +49,29 @@ describe('WorkspaceSectionNavigationComponent', () => {
     desktopSection.click();
 
     expect(selected).toHaveBeenCalledWith('profile');
+  });
+
+  it('can hide the mobile navigation while retaining the desktop workspace rail', () => {
+    component.showMobileNavigation = false;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.workspace-navigation__mobile-tabs')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeTruthy();
+  });
+
+  it('brings a visible active mobile section into view', () => {
+    const scrollIntoView = vi.fn();
+    component.activeSection = 'profile';
+    (component as any).mobileSectionTabs = {
+      get: vi.fn(() => ({
+        nativeElement: {
+          getClientRects: () => [{}],
+          scrollIntoView,
+        },
+      })),
+    };
+    component.ngAfterViewChecked();
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'center' });
   });
 });

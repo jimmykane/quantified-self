@@ -18,6 +18,26 @@
     min-width: 0;
 }
 
+.workspace-navigation__mobile-tab {
+    flex: 0 0 104px;
+    min-width: 104px;
+    height: 56px;
+    padding-inline: 12px;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.workspace-navigation__mobile-tab--active {
+    border-bottom-color: var(--mat-sys-primary);
+    color: var(--mat-sys-primary);
+}
+
+.workspace-navigation--services .workspace-navigation__mobile-tab {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
 .workspace-navigation__desktop-nav {
     position: sticky;
     top: calc(var(--qs-effective-top-offset, 0px) + 24px);
@@ -40,16 +60,16 @@
 
 .desktop-section-nav-item {
     height: auto;
-    min-height: 64px;
-    padding-block: 8px;
+    min-height: 56px;
+    padding-block: 4px;
 }
 
 .desktop-section-nav-description {
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.25;
+    display: none;
+}
+
+.desktop-section-nav-label {
+    font-size: 0.875rem;
 }
 
 .workspace-navigation__tab-label {
@@ -83,7 +103,7 @@
     }
 
     .workspace-navigation__mobile-tabs {
-        display: block;
+        display: flex;
         max-width: 100%;
         overflow-x: auto;
         overscroll-behavior-inline: contain;

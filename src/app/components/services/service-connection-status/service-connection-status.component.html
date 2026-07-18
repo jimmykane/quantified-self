@@ -6,13 +6,12 @@
   [attr.aria-label]="serviceLabel + ' connection status'">
   <div class="service-connection-status__content">
     <div class="service-connection-status__summary">
-      <div class="service-connection-status__indicator" aria-hidden="true">
-        <mat-icon>{{ statusIcon }}</mat-icon>
-      </div>
-
       <div class="service-connection-status__copy">
-        <span class="service-connection-status__eyebrow">{{ serviceLabel }} connection</span>
-        <span class="service-connection-status__title">{{ statusLabel }}</span>
+        <span class="service-connection-status__label">{{ serviceLabel }}</span>
+        <span class="service-connection-status__state">
+          <mat-icon aria-hidden="true">{{ statusIcon }}</mat-icon>
+          {{ statusLabel }}
+        </span>
         @if (description) {
         <p>{{ description }}</p>
         }

@@ -1,30 +1,36 @@
-<div class="workspace-navigation">
-  <nav
-    mat-tab-nav-bar
-    [tabPanel]="workspaceTabsPanel"
-    mat-stretch-tabs="false"
-    class="workspace-navigation__mobile-tabs"
-    [attr.aria-label]="navigationAriaLabel">
-    @for (section of sections; track section.id) {
-    <a
-      href=""
-      mat-tab-link
-      [active]="activeSection === section.id"
-      (click)="selectSection($event, section.id)">
-      <span
-        class="workspace-navigation__tab-label"
-        [class.section-tab-label]="variant === 'services'"
-        [class.settings-tab-label]="variant === 'settings'">
-        @if (section.svgIcon) {
-        <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
-        } @else {
-        <mat-icon>{{ section.icon }}</mat-icon>
-        }
-        <span>{{ section.label }}</span>
-      </span>
-    </a>
-    }
-  </nav>
+<div
+  class="workspace-navigation"
+  [class.workspace-navigation--services]="variant === 'services'">
+  @if (showMobileNavigation) {
+    <nav
+      class="workspace-navigation__mobile-tabs"
+      role="tablist"
+      [attr.aria-label]="navigationAriaLabel">
+      @for (section of sections; track section.id) {
+      <a
+        #mobileSectionTab
+        href=""
+        mat-button
+        class="workspace-navigation__mobile-tab"
+        role="tab"
+        [class.workspace-navigation__mobile-tab--active]="activeSection === section.id"
+        [attr.aria-selected]="activeSection === section.id"
+        (click)="selectSection($event, section.id)">
+        <span
+          class="workspace-navigation__tab-label"
+          [class.section-tab-label]="variant === 'services'"
+          [class.settings-tab-label]="variant === 'settings'">
+          @if (section.svgIcon) {
+          <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
+          } @else {
+          <mat-icon>{{ section.icon }}</mat-icon>
+          }
+          <span>{{ section.label }}</span>
+        </span>
+      </a>
+      }
+    </nav>
+  }
 
   <aside class="desktop-section-nav workspace-navigation__desktop-nav" [attr.aria-label]="navigationAriaLabel">
     <div class="desktop-section-nav-title">{{ navigationLabel }}</div>
@@ -48,12 +54,13 @@
     </mat-nav-list>
   </aside>
 
-  <mat-tab-nav-panel
-    #workspaceTabsPanel
+  <div
     class="workspace-navigation__panel"
+    role="tabpanel"
+    [attr.aria-label]="navigationLabel + ' content'"
     [class.settings-tab-panel]="variant === 'settings'">
     <section class="workspace-main">
       <ng-content></ng-content>
     </section>
-  </mat-tab-nav-panel>
+  </div>
 </div>

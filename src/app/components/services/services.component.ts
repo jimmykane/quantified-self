@@ -15,12 +15,19 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros';
+type ServiceWorkspaceSectionId = 'connections' | 'privacy' | 'account';
 
 interface ServiceSectionOption {
   id: ServiceSectionId;
   label: string;
+  serviceName: ServiceNames;
+}
+
+interface ServiceWorkspaceSectionOption {
+  id: ServiceWorkspaceSectionId;
+  label: string;
   description: string;
-  svgIcon: string;
+  icon: string;
 }
 
 @Component({
@@ -35,26 +42,43 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public user!: User;
 
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
-  public activeSection: ServiceSectionId = 'suunto';
-  public readonly sectionOrder: ServiceSectionId[] = ['suunto', 'garmin', 'coros'];
-  public readonly serviceSectionOptions: ServiceSectionOption[] = [
+  public activeSection: ServiceSectionId = 'garmin';
+  public readonly sectionOrder: ServiceSectionId[] = ['garmin', 'suunto', 'coros'];
+  public readonly workspaceSectionOptions: ServiceWorkspaceSectionOption[] = [
     {
-      id: 'suunto',
-      label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
-      description: getProviderDisplayName(ServiceNames.SuuntoApp, 'destination'),
-      svgIcon: 'suunto',
+      id: 'connections',
+      label: 'Connected services',
+      description: 'Manage provider connections',
+      icon: 'link',
     },
+    {
+      id: 'privacy',
+      label: 'Data & privacy',
+      description: 'Review provider data use',
+      icon: 'policy',
+    },
+    {
+      id: 'account',
+      label: 'Account',
+      description: 'Open account settings',
+      icon: 'account_circle',
+    },
+  ];
+  public readonly serviceSectionOptions: ServiceSectionOption[] = [
     {
       id: 'garmin',
       label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
-      description: getProviderDisplayName(ServiceNames.GarminAPI, 'destination'),
-      svgIcon: 'garmin',
+      serviceName: ServiceNames.GarminAPI,
+    },
+    {
+      id: 'suunto',
+      label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
+      serviceName: ServiceNames.SuuntoApp,
     },
     {
       id: 'coros',
       label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
-      description: getProviderDisplayName(ServiceNames.COROSAPI, 'destination'),
-      svgIcon: 'coros',
+      serviceName: ServiceNames.COROSAPI,
     },
   ];
   public serviceNames = ServiceNames;
@@ -68,6 +92,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
     suunto: ServiceNames.SuuntoApp,
     garmin: ServiceNames.GarminAPI,
     coros: ServiceNames.COROSAPI,
+  };
+  private readonly privacyFragmentBySection: Record<ServiceSectionId, string> = {
+    garmin: 'garmin-data',
+    suunto: 'suunto-data',
+    coros: 'coros-data',
   };
 
   constructor(private http: HttpClient, private fileService: AppFileService,
@@ -130,6 +159,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
+  async selectWorkspaceSection(section: string): Promise<void> {
+    if (section === 'privacy') {
+      await this.router.navigate(['/policies'], { fragment: this.privacyFragmentBySection[this.activeSection] });
+      return;
+    }
+
+    if (section === 'account') {
+      await this.router.navigate(['/settings'], { queryParams: { section: 'profile' } });
+    }
+  }
+
   processUser(user: User | null, isPro: boolean) {
     if (!user) {
       this.isLoading = false;
@@ -163,6 +203,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
     if (serviceName === ServiceNames.COROSAPI) {
       return 'coros';
     }
-    return 'suunto';
+    return 'garmin';
   }
 }

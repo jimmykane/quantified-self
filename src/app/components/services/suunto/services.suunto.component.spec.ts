@@ -123,14 +123,6 @@ describe('ServicesSuuntoComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('renders a direct privacy link to the Suunto policy section', () => {
-        const privacyLink = fixture.nativeElement.querySelector('.service-privacy-link a');
-
-        expect(privacyLink).toBeTruthy();
-        expect(privacyLink.textContent).toContain('Privacy details for Suunto imports');
-        expect(privacyLink.getAttribute('href')).toContain('/policies#suunto-data');
-    });
-
     it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
         component.forceConnected = true;
         component.serviceTokens = undefined;
@@ -153,7 +145,7 @@ describe('ServicesSuuntoComponent', () => {
         const providerTabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
 
         expect(connectionStatus).toBeTruthy();
-        expect(connectionStatus.textContent).toContain('Suunto App connection');
+        expect(connectionStatus.textContent).toContain('Suunto App');
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();

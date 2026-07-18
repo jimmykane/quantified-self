@@ -2,80 +2,80 @@
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
     <main class="settings-content services-content">
       <app-workspace-section-navigation
-        navigationLabel="Services"
-        navigationAriaLabel="Service integrations"
-        [sections]="serviceSectionOptions"
-        [activeSection]="activeSection"
+        navigationLabel="Workspace"
+        navigationAriaLabel="Services workspace"
+        [sections]="workspaceSectionOptions"
+        activeSection="connections"
         variant="services"
-        (sectionSelected)="selectService($any($event))">
+        [showMobileNavigation]="false"
+        (sectionSelected)="selectWorkspaceSection($event)">
         <header class="services-page-header">
-          <div>
-            <p class="services-page-header__eyebrow">Services</p>
-            <h1>Connections</h1>
-            <p>Bring your activity data together.</p>
-          </div>
-          <a mat-stroked-button class="services-page-header__privacy-link" href="/policies">
-            <mat-icon>policy</mat-icon>
-            Data &amp; privacy
-          </a>
+          <h1>Connections</h1>
+          <p>Bring your activity data together.</p>
         </header>
 
-        <section class="services-workspace-main">
-            <section
-              class="service-detail"
-              [hidden]="activeSection !== 'garmin'"
-              aria-labelledby="service-garmin-title">
-              <header class="service-detail-header">
-                <mat-icon class="service-detail-logo" svgIcon="garmin"></mat-icon>
-                <div>
-                  <h2 id="service-garmin-title">Garmin Connect</h2>
-                  <p>Manage your connection with Garmin Connect.</p>
-                </div>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="service-detail-body">
-                <app-services-garmin
-                  [user]="user"
-                  [hasProAccess]="hasProAccess"
-                  [isAdmin]="isAdmin">
-                </app-services-garmin>
-              </div>
-            </section>
+        <mat-button-toggle-group
+          class="provider-selector provider-selector--desktop"
+          [value]="activeSection"
+          hideSingleSelectionIndicator
+          aria-label="Service providers"
+          (change)="selectService($event.value)">
+          @for (section of serviceSectionOptions; track section.id) {
+          <mat-button-toggle [value]="section.id" [attr.aria-label]="section.label">
+            <span class="provider-selector__option">
+              <app-service-source-icon
+                [sourceServiceName]="section.serviceName"
+                [showTooltip]="false">
+              </app-service-source-icon>
+              <span class="provider-selector__name">{{ section.label }}</span>
+            </span>
+          </mat-button-toggle>
+          }
+        </mat-button-toggle-group>
 
-            <section
-              class="service-detail"
-              [hidden]="activeSection !== 'coros'"
-              aria-labelledby="service-coros-title">
-              <header class="service-detail-header">
-                <mat-icon class="service-detail-logo" svgIcon="coros"></mat-icon>
-                <div>
-                  <h2 id="service-coros-title">COROS</h2>
-                  <p>Manage your connection with COROS.</p>
-                </div>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="service-detail-body">
-                <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
-              </div>
-            </section>
+        <nav
+          mat-tab-nav-bar
+          [tabPanel]="providerPanel"
+          mat-stretch-tabs="true"
+          class="provider-selector provider-selector--mobile"
+          aria-label="Service providers">
+          @for (section of serviceSectionOptions; track section.id) {
+          <a
+            href=""
+            mat-tab-link
+            [active]="activeSection === section.id"
+            (click)="$event.preventDefault(); selectService(section.id)">
+            {{ section.label }}
+          </a>
+          }
+        </nav>
 
-            <section
-              class="service-detail"
-              [hidden]="activeSection !== 'suunto'"
-              aria-labelledby="service-suunto-title">
-              <header class="service-detail-header">
-                <mat-icon class="service-detail-logo" svgIcon="suunto"></mat-icon>
-                <div>
-                  <h2 id="service-suunto-title">Suunto App</h2>
-                  <p>Manage your connection with Suunto App.</p>
-                </div>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="service-detail-body">
-                <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
-              </div>
-            </section>
-        </section>
+        <mat-tab-nav-panel #providerPanel class="services-workspace-main">
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'garmin'"
+            aria-label="Garmin Connect">
+            <app-services-garmin
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [isAdmin]="isAdmin">
+            </app-services-garmin>
+          </section>
+
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'suunto'"
+            aria-label="Suunto App">
+            <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
+          </section>
+
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'coros'"
+            aria-label="COROS">
+            <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
+          </section>
+        </mat-tab-nav-panel>
       </app-workspace-section-navigation>
     </main>
   </app-loading-overlay>
