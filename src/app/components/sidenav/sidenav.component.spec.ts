@@ -83,6 +83,14 @@ describe('SideNavComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('does not render a navigation section heading', () => {
+        fixture.detectChanges();
+
+        const sectionHeaders = fixture.nativeElement.querySelectorAll('.sidenav-section-header');
+
+        expect(Array.from(sectionHeaders).map((header: Element) => header.textContent?.trim())).not.toContain('Navigation');
+    });
+
     it('should delegate theme changes to the theme service', async () => {
         const event = new MouseEvent('click');
 
