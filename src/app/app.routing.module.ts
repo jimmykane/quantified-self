@@ -346,7 +346,7 @@ export const routes: Routes = [
   {
     path: 'training',
     loadChildren: () => import('./modules/training.module').then(module => module.TrainingModule),
-    data: { title: 'Training', animation: 'Training', preload: true },
+    data: { title: 'Training', animation: 'Training', disableRouteAnimation: true, preload: true },
     canMatch: [authGuard, onboardingGuard]
   },
   {

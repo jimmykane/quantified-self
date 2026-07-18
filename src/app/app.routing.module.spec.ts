@@ -60,6 +60,14 @@ describe('AppRoutingModule routes', () => {
     expect(myTracksRoute?.data?.['disableRouteAnimation']).toBe(true);
   });
 
+  it('should skip the shell cross-fade when opening Training', () => {
+    const trainingRoute = routes.find(route => route.path === 'training');
+
+    expect(trainingRoute).toBeTruthy();
+    expect(trainingRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(trainingRoute?.data?.['disableRouteAnimation']).toBe(true);
+  });
+
   it('should keep the private routes library authenticated and noindexed', () => {
     const routesRoute = routes.find(route => route.path === 'routes');
 
