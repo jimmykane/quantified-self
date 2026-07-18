@@ -179,6 +179,7 @@ These policies are infrastructure configuration; starting local emulators does n
 
 ## Architecture documentation
 
+- [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Queue processing architecture](docs/queue-processing.md)

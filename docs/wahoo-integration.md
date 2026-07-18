@@ -2,6 +2,8 @@
 
 Wahoo is a Pro-only, import-only provider integration. Quantified Self receives completed workout summaries through Wahoo webhooks and can request a user-selected range of workout history. It does not upload workouts, plans, routes, or other data to Wahoo.
 
+This is the Wahoo-specific architecture and release record. For the reusable implementation process, lifecycle requirements, operational checklist, and provider-wide pitfalls, see the [provider integration implementation guide](provider-integration-guide.md).
+
 ## Supported scope
 
 - OAuth 2.0 authorization with `user_read`, `workouts_read`, and `offline_data` only.

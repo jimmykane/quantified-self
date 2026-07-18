@@ -20,6 +20,7 @@ Always-on rules:
   read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the
   single detailed Training source of truth instead of creating a competing Training architecture document.
 - When adding a new provider/service integration, add or update a focused public `/integrations/<provider>` page when it has a clear product or search purpose. Keep integration routes intentional, and update route metadata, sitemap/robots, internal links, help content, and tests alongside the page.
+- When adding or materially changing a provider/service integration, update `docs/provider-integration-guide.md` in the same change. Keep its provider matrix, implementation checklist, lifecycle guidance, operational coverage, and pitfalls accurate.
 - For read-only Sentry queries in this repository, source `$HOME/.config/sentry/personal.env` only for the Sentry API command. Infer the organization and project from the `sentry:upload-sourcemaps` script in `package.json`; never print the token or profile contents.
 - Never deploy, publish, push, or otherwise mutate production/cloud infrastructure as part of an implementation task. Prepare and verify changes locally, then report the exact manual command or ask for a separate explicit approval for that specific action.
 
