@@ -258,6 +258,20 @@ describe('UserSettingsComponent', () => {
         expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
     });
 
+    it('centers settings and its save action on the 760px page column', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'),
+            'utf8'
+        );
+        const contentRule = styles.match(/\.settings-content\s*\{[^}]*\}/)?.[0] ?? '';
+        const saveActionRule = styles.match(/\.qs-form-actions-floating\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(contentRule).toContain('max-width: 760px');
+        expect(contentRule).toContain('margin: 0 auto');
+        expect(contentRule).not.toContain('1180px');
+        expect(saveActionRule).toContain('calc((100vw - 760px) / 2)');
+    });
+
     it('uses dynamic Material subscript sizing for settings form fields', () => {
         const sectionsWithFormFields = ['profile', 'app', 'dashboard', 'map', 'charts', 'units'] as const;
 

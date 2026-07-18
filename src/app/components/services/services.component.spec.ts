@@ -310,6 +310,18 @@ describe('ServicesComponent', () => {
         expect(styles).not.toMatch(/@supports\s*\(height:\s*100dvh\)\s*\{\s*\.settings-container/);
     });
 
+    it('centers the connections content in its 760px page column', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+        const contentRule = styles.match(/\.settings-content\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(contentRule).toContain('max-width: 760px');
+        expect(contentRule).toContain('margin: 0 auto');
+        expect(contentRule).not.toContain('1180px');
+    });
+
     it('keeps service content wrappers from becoming nested scroll containers', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/services-abstract-component.directive.scss'),
