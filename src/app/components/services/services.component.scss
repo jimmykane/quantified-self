@@ -11,51 +11,47 @@
     padding: 32px 40px;
 }
 
-.services-shell {
-    display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
-    gap: 32px;
-    align-items: start;
+.services-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    max-width: 820px;
+    margin: 0 0 28px;
 }
 
-.mobile-section-tabs {
-    display: none;
-    width: 100%;
-}
-
-.desktop-section-nav {
-    position: sticky;
-    top: calc(var(--qs-effective-top-offset, 0px) + 24px);
-}
-
-.desktop-section-nav-title {
-    margin: 0 0 8px;
-    padding-inline-start: 56px;
-    color: var(--mat-sys-on-surface-variant);
+.services-page-header__eyebrow {
+    margin: 0 0 6px;
+    color: var(--mat-sys-primary);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
-.desktop-section-nav-list {
-    padding: 0;
+.services-page-header h1 {
+    margin: 0 0 6px;
+    color: var(--mat-sys-on-surface);
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
 }
 
-.section-tab-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
+.services-page-header > div > p:last-child {
+    margin: 0;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 1rem;
+    line-height: 1.5;
 }
 
-.section-tab-label mat-icon {
-    width: 22px;
-    height: 22px;
+.services-page-header__privacy-link {
+    flex: 0 0 auto;
 }
 
-.workspace-main {
+.services-workspace-main {
     min-width: 0;
+    max-width: 820px;
 }
 
 .service-detail {
@@ -76,10 +72,10 @@
     font-size: 56px;
 }
 
-.service-detail-header h1 {
+.service-detail-header h2 {
     margin: 0 0 6px;
     color: var(--mat-sys-on-surface);
-    font-size: 2rem;
+    font-size: 1.5rem;
     line-height: 1.15;
     font-weight: 700;
 }
@@ -100,42 +96,10 @@
         padding: 24px 16px;
     }
 
-    .services-shell {
-        display: flex;
+    .services-page-header {
         flex-direction: column;
-        gap: 24px;
-    }
-
-    .desktop-section-nav {
-        display: none;
-    }
-
-    .mobile-section-tabs {
-        display: flex;
-        align-self: center;
-        width: fit-content;
-        max-width: 100%;
-        margin-inline: auto;
-    }
-
-    .section-tab-label {
-        flex-direction: column;
-        justify-content: center;
-        gap: 2px;
-        text-align: center;
-        white-space: normal;
-        font-size: 0.76rem;
-        line-height: 1.1;
-    }
-
-    .section-tab-label mat-icon {
-        width: 24px;
-        height: 24px;
-    }
-
-    .section-tab-label > span:last-child {
-        display: block;
-        line-height: 1.1;
+        gap: 16px;
+        margin-bottom: 24px;
     }
 
     .service-detail-header {
@@ -150,7 +114,11 @@
         font-size: 44px;
     }
 
-    .service-detail-header h1 {
-        font-size: 1.5rem;
+    .services-page-header h1 {
+        font-size: 1.75rem;
+    }
+
+    .service-detail-header h2 {
+        font-size: 1.35rem;
     }
 }

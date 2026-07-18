@@ -1,0 +1,118 @@
+@use '../../../../styles/breakpoints' as bp;
+
+:host {
+    display: block;
+    min-width: 0;
+}
+
+.workspace-navigation {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+}
+
+.workspace-navigation__mobile-tabs {
+    display: none;
+    width: 100%;
+    min-width: 0;
+}
+
+.workspace-navigation__desktop-nav {
+    position: sticky;
+    top: calc(var(--qs-effective-top-offset, 0px) + 24px);
+    z-index: 1;
+}
+
+.desktop-section-nav-title {
+    margin: 0 0 8px;
+    padding-inline-start: 56px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.desktop-section-nav-list {
+    padding: 0;
+}
+
+.desktop-section-nav-item {
+    height: auto;
+    min-height: 64px;
+    padding-block: 8px;
+}
+
+.desktop-section-nav-description {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+.workspace-navigation__tab-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.workspace-navigation__tab-label mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+}
+
+.workspace-navigation__panel,
+.workspace-main {
+    display: block;
+    min-width: 0;
+}
+
+@include bp.max-768 {
+    .workspace-navigation {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+    }
+
+    .workspace-navigation__desktop-nav {
+        display: none;
+    }
+
+    .workspace-navigation__mobile-tabs {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scrollbar-width: none;
+    }
+
+    .workspace-navigation__mobile-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .workspace-navigation__tab-label {
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        min-width: 68px;
+        text-align: center;
+        white-space: normal;
+        font-size: 0.74rem;
+        line-height: 1.1;
+    }
+
+    .workspace-navigation__tab-label mat-icon {
+        width: 22px;
+        height: 22px;
+        font-size: 22px;
+    }
+
+    .workspace-navigation__tab-label > span:last-child {
+        display: block;
+        line-height: 1.1;
+    }
+}

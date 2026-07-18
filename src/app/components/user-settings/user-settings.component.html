@@ -26,67 +26,45 @@
           }
         </ng-template>
 
-        <div class="settings-workspace">
-          <nav
-            mat-tab-nav-bar
-            [tabPanel]="settingsTabsPanel"
-            mat-stretch-tabs="false"
-            class="mobile-settings-tabs"
-            aria-label="Settings sections">
-            @for (section of settingsSectionOptions; track section.id) {
-            <a
-              href=""
-              mat-tab-link
-              [active]="activeSection === section.id"
-              (click)="$event.preventDefault(); selectSettingsSection(section.id)">
-              <span class="settings-tab-label">
-                <mat-icon>{{ section.icon }}</mat-icon>
-                <span>{{ section.label }}</span>
-              </span>
-            </a>
-            }
-          </nav>
+        <app-workspace-section-navigation
+          navigationLabel="Settings"
+          navigationAriaLabel="Settings sections"
+          [sections]="settingsSectionOptions"
+          [activeSection]="activeSection"
+          variant="settings"
+          (sectionSelected)="selectSettingsSection($any($event))">
+          <header class="settings-page-header">
+            <h1>Settings</h1>
+            <p>Tune the workspace around your training.</p>
+          </header>
 
-          <aside class="desktop-section-nav" aria-label="Settings sections">
-            <div class="desktop-section-nav-title">Settings</div>
-            <mat-nav-list class="desktop-section-nav-list">
-              @for (section of settingsSectionOptions; track section.id) {
-              <a
-                class="desktop-section-nav-item"
-                href=""
-                mat-list-item
-                [activated]="activeSection === section.id"
-                (click)="$event.preventDefault(); selectSettingsSection(section.id)">
-                <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
-                <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
-                <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
-              </a>
-              }
-            </mat-nav-list>
-          </aside>
-
-          <mat-tab-nav-panel #settingsTabsPanel class="settings-tab-panel">
-            <section class="workspace-main">
-              <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
+          <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
             @switch (activeSection) {
             @case ('app') {
             <section class="settings-panel-section" aria-labelledby="settings-general-title">
               <header class="settings-panel-header">
-                <h1 id="settings-general-title">General Settings</h1>
-                <p>Customize your application experience.</p>
+                <h2 id="settings-general-title">Appearance</h2>
+                <p>Choose how Quantified Self looks and behaves.</p>
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Interface Theme</mat-label>
-                  <mat-select formControlName="appTheme">
-                    @for (appTheme of appThemeOptions; track appTheme.value) {
-                    <mat-option [value]="appTheme.value">{{ appTheme.label }}</mat-option>
-                    }
-                  </mat-select>
-                  <mat-hint>Customize the visual look of the entire platform.</mat-hint>
-                </mat-form-field>
+                <div class="settings-theme-control">
+                  <div>
+                    <h3>Theme</h3>
+                    <p>Choose the color theme for the workspace.</p>
+                  </div>
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Theme</mat-label>
+                    <mat-select formControlName="appTheme">
+                      @for (appTheme of appThemeOptions; track appTheme.value) {
+                      <mat-option [value]="appTheme.value">{{ appTheme.label }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+
+                <mat-divider></mat-divider>
 
                 <div class="settings-toggle-block">
                   <mat-slide-toggle formControlName="acceptedTrackingPolicy">
@@ -94,6 +72,8 @@
                   </mat-slide-toggle>
                   <p>Help us improve by sharing anonymous usage data. Disabling this will stop all analytics tracking.</p>
                 </div>
+
+                <mat-divider></mat-divider>
 
                 <div class="settings-toggle-block">
                   <mat-slide-toggle formControlName="acceptedMarketingPolicy">
@@ -111,7 +91,7 @@
             @case ('dashboard') {
             <section class="settings-panel-section" aria-labelledby="settings-dashboard-title">
               <header class="settings-panel-header">
-                <h1 id="settings-dashboard-title">Dashboard Settings</h1>
+                <h2 id="settings-dashboard-title">Dashboard</h2>
                 <p>Fine-tune your main activity views.</p>
               </header>
               <mat-divider></mat-divider>
@@ -166,7 +146,7 @@
             @case ('map') {
             <section class="settings-panel-section" aria-labelledby="settings-map-title">
               <header class="settings-panel-header">
-                <h1 id="settings-map-title">Map Settings</h1>
+                <h2 id="settings-map-title">Maps</h2>
                 <p>Configure how your activities are drawn.</p>
               </header>
               <mat-divider></mat-divider>
@@ -208,7 +188,7 @@
             @case ('charts') {
             <section class="settings-panel-section" aria-labelledby="settings-charts-title">
               <header class="settings-panel-header">
-                <h1 id="settings-charts-title">Chart Settings</h1>
+                <h2 id="settings-charts-title">Charts</h2>
                 <p>Customize data visualization and analysis.</p>
               </header>
               <mat-divider></mat-divider>
@@ -268,7 +248,7 @@
             @case ('units') {
             <section class="settings-panel-section" aria-labelledby="settings-units-title">
               <header class="settings-panel-header">
-                <h1 id="settings-units-title">Measurement Units</h1>
+                <h2 id="settings-units-title">Units</h2>
                 <p>Choose your preferred units for sporting data.</p>
               </header>
               <mat-divider></mat-divider>
@@ -355,7 +335,7 @@
             @case ('delete-account') {
             <section class="settings-panel-section" aria-labelledby="settings-delete-account-title">
               <header class="settings-panel-header">
-                <h1 id="settings-delete-account-title">Delete Account</h1>
+                <h2 id="settings-delete-account-title">Delete Account</h2>
                 <p>Permanently remove your account and all associated data.</p>
               </header>
               <mat-divider></mat-divider>
@@ -387,7 +367,7 @@
             @default {
             <section class="settings-panel-section" aria-labelledby="settings-profile-title">
               <header class="settings-panel-header">
-                <h1 id="settings-profile-title">Profile Settings</h1>
+                <h2 id="settings-profile-title">Profile</h2>
                 <p>Manage your profile details and account controls.</p>
               </header>
               <mat-divider></mat-divider>
@@ -461,19 +441,17 @@
             </section>
             }
             }
-            </section>
-          </mat-tab-nav-panel>
-        </div>
+        </app-workspace-section-navigation>
 
         @if (activeSection !== 'delete-account') {
         <div class="qs-form-actions-floating">
           <button
-            mat-fab
+            mat-flat-button
             class="qs-mat-primary"
             [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid"
-            matTooltip="Save Changes"
             (click)="onSubmit($event)">
             <mat-icon>save</mat-icon>
+            Save changes
           </button>
         </div>
 
@@ -483,7 +461,8 @@
             class="qs-mat-primary"
             [disabled]="isSaving || !userSettingsFormGroup.dirty || userSettingsFormGroup.invalid"
             (click)="onSubmit($event)">
-            Save Settings
+            <mat-icon>save</mat-icon>
+            Save changes
           </button>
         </div>
         }

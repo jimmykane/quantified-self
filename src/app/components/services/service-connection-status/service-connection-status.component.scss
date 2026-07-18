@@ -14,10 +14,13 @@
 .service-connection-status__content {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     min-width: 0;
     max-width: 100%;
-    padding: 8px 0 12px;
+    padding: 20px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 16px;
+    background: var(--mat-sys-surface-container-lowest);
 }
 
 .service-connection-status__summary {
@@ -121,7 +124,7 @@
 
 @media (max-width: 640px) {
     .service-connection-status__content {
-        padding: 8px 0 12px;
+        padding: 16px;
     }
 
     .service-connection-status__summary {

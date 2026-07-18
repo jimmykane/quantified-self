@@ -92,7 +92,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     },
     {
       id: 'app',
-      label: 'General',
+      label: 'Appearance',
       description: 'Theme, tracking, and email',
       icon: 'tune',
     },

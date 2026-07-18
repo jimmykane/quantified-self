@@ -18,6 +18,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { MaterialModule } from '../../modules/material.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconRegistry } from '@angular/material/icon';
+import { SharedModule } from '../../modules/shared.module';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -39,7 +40,9 @@ describe('ServicesComponent', () => {
         };
 
         mockRouter = {
-            navigate: vi.fn()
+            navigate: vi.fn(),
+            createUrlTree: vi.fn(() => ({})),
+            serializeUrl: vi.fn(() => '/policies'),
         };
 
         mockActivatedRoute = {
@@ -54,6 +57,7 @@ describe('ServicesComponent', () => {
             })
         };
         mockIconRegistry = {
+            getDefaultFontSetClass: vi.fn(() => ['material-icons']),
             getNamedSvgIcon: vi.fn(() => {
                 const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 return of(svg);
@@ -62,7 +66,7 @@ describe('ServicesComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [ServicesComponent],
-            imports: [HttpClientTestingModule, MatSnackBarModule, MaterialModule, NoopAnimationsModule],
+            imports: [HttpClientTestingModule, MatSnackBarModule, MaterialModule, SharedModule, NoopAnimationsModule],
             providers: [
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAuthService, useValue: mockAuthService },

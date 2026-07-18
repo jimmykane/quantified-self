@@ -1,46 +1,26 @@
 <div class="settings-container">
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
-    <main class="settings-content">
-      <div class="services-shell">
-        <nav
-          mat-tab-nav-bar
-          [tabPanel]="serviceTabsPanel"
-          mat-stretch-tabs="false"
-          class="mobile-section-tabs"
-          aria-label="Service integrations">
-          @for (section of serviceSectionOptions; track section.id) {
-          <a
-            href=""
-            mat-tab-link
-            [active]="activeSection === section.id"
-            (click)="$event.preventDefault(); selectService(section.id)">
-            <span class="section-tab-label">
-              <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
-              <span>{{ section.label }}</span>
-            </span>
+    <main class="settings-content services-content">
+      <app-workspace-section-navigation
+        navigationLabel="Services"
+        navigationAriaLabel="Service integrations"
+        [sections]="serviceSectionOptions"
+        [activeSection]="activeSection"
+        variant="services"
+        (sectionSelected)="selectService($any($event))">
+        <header class="services-page-header">
+          <div>
+            <p class="services-page-header__eyebrow">Services</p>
+            <h1>Connections</h1>
+            <p>Bring your activity data together.</p>
+          </div>
+          <a mat-stroked-button class="services-page-header__privacy-link" href="/policies">
+            <mat-icon>policy</mat-icon>
+            Data &amp; privacy
           </a>
-          }
-        </nav>
+        </header>
 
-        <aside class="desktop-section-nav" aria-label="Service integrations">
-          <div class="desktop-section-nav-title">Integrations</div>
-          <mat-nav-list class="desktop-section-nav-list">
-            @for (section of serviceSectionOptions; track section.id) {
-            <a
-              href=""
-              mat-list-item
-              [activated]="activeSection === section.id"
-              (click)="$event.preventDefault(); selectService(section.id)">
-              <mat-icon matListItemIcon [svgIcon]="section.svgIcon"></mat-icon>
-              <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
-              <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
-            </a>
-            }
-          </mat-nav-list>
-        </aside>
-
-        <mat-tab-nav-panel #serviceTabsPanel>
-          <section class="workspace-main">
+        <section class="services-workspace-main">
             <section
               class="service-detail"
               [hidden]="activeSection !== 'garmin'"
@@ -48,7 +28,7 @@
               <header class="service-detail-header">
                 <mat-icon class="service-detail-logo" svgIcon="garmin"></mat-icon>
                 <div>
-                  <h1 id="service-garmin-title">Garmin Integration</h1>
+                  <h2 id="service-garmin-title">Garmin Connect</h2>
                   <p>Manage your connection with Garmin Connect.</p>
                 </div>
               </header>
@@ -69,7 +49,7 @@
               <header class="service-detail-header">
                 <mat-icon class="service-detail-logo" svgIcon="coros"></mat-icon>
                 <div>
-                  <h1 id="service-coros-title">COROS Integration</h1>
+                  <h2 id="service-coros-title">COROS</h2>
                   <p>Manage your connection with COROS.</p>
                 </div>
               </header>
@@ -86,7 +66,7 @@
               <header class="service-detail-header">
                 <mat-icon class="service-detail-logo" svgIcon="suunto"></mat-icon>
                 <div>
-                  <h1 id="service-suunto-title">Suunto Integration</h1>
+                  <h2 id="service-suunto-title">Suunto App</h2>
                   <p>Manage your connection with Suunto App.</p>
                 </div>
               </header>
@@ -95,9 +75,8 @@
                 <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
               </div>
             </section>
-          </section>
-        </mat-tab-nav-panel>
-      </div>
+        </section>
+      </app-workspace-section-navigation>
     </main>
   </app-loading-overlay>
 </div>

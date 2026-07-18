@@ -1,0 +1,59 @@
+<div class="workspace-navigation">
+  <nav
+    mat-tab-nav-bar
+    [tabPanel]="workspaceTabsPanel"
+    mat-stretch-tabs="false"
+    class="workspace-navigation__mobile-tabs"
+    [attr.aria-label]="navigationAriaLabel">
+    @for (section of sections; track section.id) {
+    <a
+      href=""
+      mat-tab-link
+      [active]="activeSection === section.id"
+      (click)="selectSection($event, section.id)">
+      <span
+        class="workspace-navigation__tab-label"
+        [class.section-tab-label]="variant === 'services'"
+        [class.settings-tab-label]="variant === 'settings'">
+        @if (section.svgIcon) {
+        <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
+        } @else {
+        <mat-icon>{{ section.icon }}</mat-icon>
+        }
+        <span>{{ section.label }}</span>
+      </span>
+    </a>
+    }
+  </nav>
+
+  <aside class="desktop-section-nav workspace-navigation__desktop-nav" [attr.aria-label]="navigationAriaLabel">
+    <div class="desktop-section-nav-title">{{ navigationLabel }}</div>
+    <mat-nav-list class="desktop-section-nav-list">
+      @for (section of sections; track section.id) {
+      <a
+        class="desktop-section-nav-item"
+        href=""
+        mat-list-item
+        [activated]="activeSection === section.id"
+        (click)="selectSection($event, section.id)">
+        @if (section.svgIcon) {
+        <mat-icon matListItemIcon [svgIcon]="section.svgIcon"></mat-icon>
+        } @else {
+        <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
+        }
+        <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
+        <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
+      </a>
+      }
+    </mat-nav-list>
+  </aside>
+
+  <mat-tab-nav-panel
+    #workspaceTabsPanel
+    class="workspace-navigation__panel"
+    [class.settings-tab-panel]="variant === 'settings'">
+    <section class="workspace-main">
+      <ng-content></ng-content>
+    </section>
+  </mat-tab-nav-panel>
+</div>

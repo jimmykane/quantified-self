@@ -19,6 +19,7 @@ import { MatFormField } from '@angular/material/form-field';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject, of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { SharedModule } from '../../modules/shared.module';
 import {
     ACTIVITIES_EXCLUDED_FROM_ASCENT,
     ACTIVITIES_EXCLUDED_FROM_DESCENT,
@@ -104,7 +105,10 @@ describe('UserSettingsComponent', () => {
             navigate: vi.fn().mockImplementation(async (_commands, extras) => {
                 queryParamMapSubject.next(convertToParamMap(extras?.queryParams || {}));
                 return true;
-            })
+            }),
+            createUrlTree: vi.fn(() => ({})),
+            serializeUrl: vi.fn(() => '/subscriptions'),
+            events: of(),
         };
         mockActivatedRoute = {
             snapshot: {
@@ -117,7 +121,7 @@ describe('UserSettingsComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [UserSettingsComponent],
-            imports: [ReactiveFormsModule, MaterialModule, NoopAnimationsModule],
+            imports: [ReactiveFormsModule, MaterialModule, SharedModule, NoopAnimationsModule],
             providers: [
                 { provide: AppAuthService, useValue: { user$: of(null) } },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
@@ -231,7 +235,7 @@ describe('UserSettingsComponent', () => {
         expect(tabNav).toBeTruthy();
         expect(tabLabels).toEqual([
             'Profile',
-            'General',
+            'Appearance',
             'Dashboard',
             'Maps',
             'Charts',
@@ -253,7 +257,7 @@ describe('UserSettingsComponent', () => {
         expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
         expect(navLabels).toEqual([
             'Profile',
-            'General',
+            'Appearance',
             'Dashboard',
             'Maps',
             'Charts',
