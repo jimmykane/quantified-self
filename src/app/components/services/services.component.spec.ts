@@ -194,32 +194,55 @@ describe('ServicesComponent', () => {
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(false);
     });
 
-    it('opens advanced tools in a dialog without replacing the compact overview', () => {
+    it('opens each overview card at its matching tool', () => {
         fixture.detectChanges();
 
         expect(fixture.nativeElement.querySelectorAll('.service-overview-card')).toHaveLength(2);
         expect(fixture.nativeElement.textContent).toContain('Activity sync');
 
-        const manageButton = fixture.nativeElement.querySelector('.service-overview-card button') as HTMLButtonElement;
-        manageButton.click();
+        const manageButtons = fixture.nativeElement.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
+
+        expect(manageButtons[0].textContent?.trim()).toBe('History import');
+        expect(manageButtons[0].getAttribute('aria-label')).toBe('History import for Garmin');
+        expect(manageButtons[1].textContent?.trim()).toBe('Delivery controls');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Delivery controls for Garmin');
+
+        manageButtons[0].click();
         fixture.detectChanges();
 
         expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('history');
+        expect(component.managedToolTitle).toBe('Activity sync');
         expect(fixture.nativeElement.querySelector('.service-overview')).toBeTruthy();
-        expect(mockDialog.open).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                ariaLabel: 'Garmin tools',
-                autoFocus: 'dialog',
-                maxHeight: 'calc(100dvh - 32px)',
-                maxWidth: 'calc(100vw - 32px)',
-                restoreFocus: true,
-                width: 'min(56rem, calc(100vw - 32px))',
-            })
-        );
+        expect(mockDialog.open.mock.calls[0][1]).toEqual(expect.objectContaining({
+            ariaLabel: 'Garmin Activity sync tools',
+            autoFocus: 'dialog',
+            maxHeight: 'calc(100dvh - 32px)',
+            maxWidth: 'calc(100vw - 32px)',
+            restoreFocus: true,
+            width: 'min(56rem, calc(100vw - 32px))',
+        }));
 
         dialogClosed$.next();
         expect(component.managedService).toBeNull();
+        expect(component.managedTool).toBe('history');
+        expect(component.managedToolTitle).toBeNull();
+
+        manageButtons[1].click();
+        fixture.detectChanges();
+
+        expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('auto-sync');
+        expect(component.managedToolTitle).toBe('Route delivery');
+        expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
+            ariaLabel: 'Garmin Route delivery tools',
+        }));
+    });
+
+    it('maps provider overview cards to distinct tools', () => {
+        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes']);
+        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
     });
 
     it('gives the service tools dialog an accessible close action', () => {
@@ -237,6 +260,7 @@ describe('ServicesComponent', () => {
             'utf8'
         );
         const toolsOnlyBindings = template.match(/\[showConnectionSummary\]="false"/g) ?? [];
+        const initialToolBindings = template.match(/\[activeProviderTool\]="managedTool"/g) ?? [];
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/services-abstract-component.directive.scss'),
             'utf8'
@@ -249,6 +273,7 @@ describe('ServicesComponent', () => {
         const historyFormRule = historyFormStyles.match(/\.history-import-form\s*\{[^}]*\}/)?.[0] ?? '';
 
         expect(toolsOnlyBindings).toHaveLength(3);
+        expect(initialToolBindings).toHaveLength(3);
         expect(template).not.toContain('service-tools-dialog__description');
         expect(toolsOnlyRule).toContain('width: 100%');
         expect(toolsOnlyRule).toContain('max-width: none');

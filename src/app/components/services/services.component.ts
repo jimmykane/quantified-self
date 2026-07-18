@@ -16,6 +16,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros';
+type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync';
 
 interface ServiceSectionOption {
   id: ServiceSectionId;
@@ -28,6 +29,8 @@ interface ServiceOverviewCard {
   description: string;
   detail: string;
   icon: string;
+  actionLabel: string;
+  tool: ServiceToolId;
 }
 
 @Component({
@@ -75,12 +78,16 @@ export class ServicesComponent implements OnInit, OnDestroy {
         description: 'New Garmin activities import automatically while connected.',
         detail: 'History import · Pro',
         icon: 'sync',
+        actionLabel: 'History import',
+        tool: 'history',
       },
       {
         title: 'Route delivery',
         description: 'Send saved routes from Quantified Self to Garmin Connect.',
         detail: 'Course delivery and auto-sync controls',
         icon: 'route',
+        actionLabel: 'Delivery controls',
+        tool: 'auto-sync',
       },
     ],
     suunto: [
@@ -89,12 +96,16 @@ export class ServicesComponent implements OnInit, OnDestroy {
         description: 'New Suunto activities import automatically while connected.',
         detail: 'History import · Pro',
         icon: 'sync',
+        actionLabel: 'History import',
+        tool: 'history',
       },
       {
         title: 'Routes & uploads',
         description: 'Import routes and send FIT or GPX files to Suunto.',
         detail: 'Route sync and upload controls',
         icon: 'route',
+        actionLabel: 'Routes & uploads',
+        tool: 'routes',
       },
     ],
     coros: [
@@ -103,12 +114,16 @@ export class ServicesComponent implements OnInit, OnDestroy {
         description: 'New COROS activities import automatically while connected.',
         detail: 'History import · Pro',
         icon: 'sync',
+        actionLabel: 'History import',
+        tool: 'history',
       },
       {
         title: 'Uploads & auto-sync',
         description: 'Send FIT activities and manage COROS to Suunto sync.',
         detail: 'Upload and automatic sync controls',
         icon: 'cloud_upload',
+        actionLabel: 'Uploads & sync',
+        tool: 'auto-sync',
       },
     ],
   };
@@ -116,6 +131,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public hasProAccess = false;
   public isAdmin = false;
   public managedService: ServiceSectionId | null = null;
+  public managedTool: ServiceToolId = 'history';
+  public managedToolTitle: string | null = null;
   public readonly serviceConnectionState: Record<ServiceSectionId, boolean> = {
     garmin: false,
     suunto: false,
@@ -193,14 +210,16 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  public openServiceTools(section: ServiceSectionId): void {
+  public openServiceTools(section: ServiceSectionId, card: ServiceOverviewCard): void {
     if (!this.serviceToolsDialog || this.serviceToolsDialogRef) {
       return;
     }
 
     this.managedService = section;
+    this.managedTool = card.tool;
+    this.managedToolTitle = card.title;
     const dialogRef = this.dialog.open(this.serviceToolsDialog, {
-      ariaLabel: `${this.serviceLabelBySection[section]} tools`,
+      ariaLabel: `${this.serviceLabelBySection[section]} ${card.title} tools`,
       autoFocus: 'dialog',
       maxHeight: 'calc(100dvh - 32px)',
       maxWidth: 'calc(100vw - 32px)',
@@ -214,6 +233,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
       }
       this.serviceToolsDialogRef = null;
       this.managedService = null;
+      this.managedTool = 'history';
+      this.managedToolTitle = null;
     });
   }
 

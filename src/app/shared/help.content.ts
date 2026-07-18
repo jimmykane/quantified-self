@@ -551,7 +551,7 @@ From an activity action menu you can also:
 
 Garmin, Suunto, and COROS connections are part of **Pro**.
 
-Services opens each provider on a compact connection overview. Choose **Manage** on an activity, route, upload, or auto-sync card to open the provider's advanced tools in a dialog. Close the dialog to return to the unchanged overview.
+Services opens each provider on a compact connection overview. Choose the action on an activity, route, upload, or auto-sync card to open the provider's advanced tools in a dialog. Each action opens directly on the matching tool. Close the dialog to return to the unchanged overview.
 
 ## Integration pages overview
 

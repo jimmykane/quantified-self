@@ -103,9 +103,9 @@
               <button
                 mat-stroked-button
                 type="button"
-                [attr.aria-label]="'Manage ' + serviceLabelBySection[activeSection] + ' tools'"
-                (click)="openServiceTools(activeSection)">
-                Manage
+                [attr.aria-label]="card.actionLabel + ' for ' + serviceLabelBySection[activeSection]"
+                (click)="openServiceTools(activeSection, card)">
+                {{ card.actionLabel }}
               </button>
             </article>
             }
@@ -123,7 +123,7 @@
 <ng-template #serviceToolsDialog>
   @if (managedService; as service) {
   <div class="service-tools-dialog__header">
-    <h2 mat-dialog-title>{{ serviceLabelBySection[service] }} tools</h2>
+    <h2 mat-dialog-title>{{ serviceLabelBySection[service] }} · {{ managedToolTitle }}</h2>
     <button
       mat-icon-button
       mat-dialog-close
@@ -141,6 +141,7 @@
         [isAdmin]="isAdmin"
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
         (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
       </app-services-garmin>
       }
@@ -150,6 +151,7 @@
         [hasProAccess]="hasProAccess"
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
         (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
       </app-services-suunto>
       }
@@ -159,6 +161,7 @@
         [hasProAccess]="hasProAccess"
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
         (connectionStateChanged)="setServiceConnectionState('coros', $event)">
       </app-services-coros>
       }

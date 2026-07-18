@@ -49,12 +49,12 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   @Input() isAdmin: boolean = false;
   @Input() showAdvancedTools = true;
   @Input() showConnectionSummary = true;
+  @Input() activeProviderTool = 'history';
   @Output() connectionStateChanged = new EventEmitter<boolean>();
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
   public serviceMeta: AppUserServiceMetaInterface | undefined;
   public selectedTabIndex = 0;
-  public activeProviderTool = 'history';
   public serviceNames = ServiceNames;
   public isConnecting = false;
   public isDisconnecting = false;
