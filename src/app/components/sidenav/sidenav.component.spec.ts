@@ -287,7 +287,7 @@ describe('SideNavComponent', () => {
         expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
     });
 
-    it('should promote file comparison in navigation for guests and signed-in users', () => {
+    it('should show file comparison in navigation for guests and signed-in users without a new badge', () => {
         fixture.detectChanges();
 
         let compareFilesItem = fixture.debugElement
@@ -299,7 +299,7 @@ describe('SideNavComponent', () => {
             compareFilesItem?.nativeElement.getAttribute('routerlink')
             ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/tools/compare');
-        expect(compareFilesItem?.nativeElement.textContent).toContain('New');
+        expect(compareFilesItem?.nativeElement.textContent).not.toContain('New');
         compareFilesItem?.triggerEventHandler('click');
         expect(mockAnalyticsService.logToolCompareEntry).toHaveBeenCalledWith('side_nav', false);
 
