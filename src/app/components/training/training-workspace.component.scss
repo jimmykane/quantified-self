@@ -185,7 +185,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-durability-panel > .training-empty-state, .training-durability-panel > .training-recovery-update { margin: 12px 20px; }
 .training-durability-panel > .training-capacity-loading { margin: 12px 20px 20px; }
 .training-durability-tab { padding: 16px 20px 22px; }
-.training-durability-evidence { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; margin-bottom: 14px; padding: 12px 14px; border-radius: 10px; background: var(--mat-sys-surface-container-high); }
+.training-durability-evidence { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 10px; }
 .training-durability-evidence span { text-align: right; }
 .training-durability-evidence small { grid-column: 1 / -1; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); }
 .training-durability-context { padding: 14px 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }

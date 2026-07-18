@@ -984,6 +984,8 @@ UI principles:
 - Readiness history uses its parent `qs-glass-card-panel` surface and the app's divider token rather than a nested neutral
   container. On desktop, its 14 daily marks and connecting line remain deliberately compact so the recent trend supports
   the current signal instead of overpowering it.
+- Durability evidence and its trajectory inherit their parent Training card surface. Borders and dividers preserve the
+  hierarchy without stacking gray inset surfaces inside the card.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.

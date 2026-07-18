@@ -1,5 +1,5 @@
 :host { display: block; min-width: 0; }
-.durability-trajectory { min-width: 0; margin-top: 14px; padding: 14px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; background: var(--mat-sys-surface-container-low); }
+.durability-trajectory { min-width: 0; margin-top: 14px; padding: 14px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; }
 header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 h4 { margin: 0; color: var(--mat-sys-on-surface); font-size: 14px; }
 header p, header small, footer, .durability-trajectory-summary { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size, 12px); line-height: 1.4; }
