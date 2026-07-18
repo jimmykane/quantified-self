@@ -37,6 +37,11 @@ mat-icon {
     min-width: 0;
 }
 
+.service-container--tools-only {
+    width: 100%;
+    max-width: none;
+}
+
 .provider-tools-tabs {
     width: 100%;
     min-width: 0;

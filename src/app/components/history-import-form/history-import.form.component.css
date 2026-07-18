@@ -150,6 +150,8 @@
 
 .history-import-form {
   display: flex;
+  width: 100%;
+  max-width: none;
   flex-direction: column;
   gap: 1rem;
 }

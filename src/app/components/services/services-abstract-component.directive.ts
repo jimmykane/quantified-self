@@ -48,6 +48,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   @Input() hasProAccess!: boolean;
   @Input() isAdmin: boolean = false;
   @Input() showAdvancedTools = true;
+  @Input() showConnectionSummary = true;
   @Output() connectionStateChanged = new EventEmitter<boolean>();
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;

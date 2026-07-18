@@ -1,4 +1,8 @@
-<div class="service-container" [class.service-container--advanced]="showAdvancedTools">
+<div
+  class="service-container"
+  [class.service-container--advanced]="showAdvancedTools"
+  [class.service-container--tools-only]="!showConnectionSummary">
+  @if (showConnectionSummary) {
   <app-service-connection-status
     serviceLabel="COROS"
     [description]="connectionDescription"
@@ -90,9 +94,12 @@
 
     </div>
   </app-service-connection-status>
+  }
 
   @if (showAdvancedTools) {
+  @if (showConnectionSummary) {
   <mat-divider class="connection-tools-divider"></mat-divider>
+  }
 
   <nav
     mat-tab-nav-bar

@@ -153,6 +153,18 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
     });
 
+    it('renders tools without repeating the connection summary when requested', () => {
+        component.showConnectionSummary = false;
+        fixture.detectChanges();
+
+        const serviceContainer = fixture.nativeElement.querySelector('.service-container');
+
+        expect(serviceContainer.classList).toContain('service-container--tools-only');
+        expect(fixture.nativeElement.querySelector('.service-connection-status')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.connection-tools-divider')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.provider-tools-tabs')).toBeTruthy();
+    });
+
     it('hides inactive provider tool panels when switching tabs', () => {
         component.hasProAccess = true;
         component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];

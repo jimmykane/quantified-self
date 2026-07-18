@@ -231,6 +231,31 @@ describe('ServicesComponent', () => {
         expect(template).toContain('aria-label="Close tools dialog"');
     });
 
+    it('keeps the tools dialog focused on tool content', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.html'),
+            'utf8'
+        );
+        const toolsOnlyBindings = template.match(/\[showConnectionSummary\]="false"/g) ?? [];
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services-abstract-component.directive.scss'),
+            'utf8'
+        );
+        const toolsOnlyRule = styles.match(/\.service-container--tools-only\s*\{[^}]*\}/)?.[0] ?? '';
+        const historyFormStyles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/history-import-form/history-import.form.component.css'),
+            'utf8'
+        );
+        const historyFormRule = historyFormStyles.match(/\.history-import-form\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(toolsOnlyBindings).toHaveLength(3);
+        expect(template).not.toContain('service-tools-dialog__description');
+        expect(toolsOnlyRule).toContain('width: 100%');
+        expect(toolsOnlyRule).toContain('max-width: none');
+        expect(historyFormRule).toContain('width: 100%');
+        expect(historyFormRule).toContain('max-width: none');
+    });
+
     it('shows live connection state in the desktop provider selector', () => {
         component.setServiceConnectionState('garmin', true);
         fixture.detectChanges();

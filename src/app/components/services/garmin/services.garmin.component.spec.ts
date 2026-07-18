@@ -162,6 +162,18 @@ describe('ServicesGarminComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
     });
 
+    it('renders tools without repeating the connection summary when requested', () => {
+        component.showConnectionSummary = false;
+        fixture.detectChanges();
+
+        const serviceContainer = fixture.nativeElement.querySelector('.service-container');
+
+        expect(serviceContainer.classList).toContain('service-container--tools-only');
+        expect(fixture.nativeElement.querySelector('.service-connection-status')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.connection-tools-divider')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.provider-tools-tabs')).toBeTruthy();
+    });
+
     it('hides the auto-sync panel until the auto-sync tab is selected', () => {
         component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as any;
         component.hasProAccess = true;

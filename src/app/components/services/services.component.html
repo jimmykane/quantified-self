@@ -132,9 +132,6 @@
       <mat-icon>close</mat-icon>
     </button>
   </div>
-  <p class="service-tools-dialog__description">
-    Imports, uploads, delivery, and automatic sync controls.
-  </p>
   <mat-dialog-content class="service-tools-dialog__content qs-scrollbar">
     @switch (service) {
       @case ('garmin') {
@@ -143,6 +140,7 @@
         [hasProAccess]="hasProAccess"
         [isAdmin]="isAdmin"
         [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
         (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
       </app-services-garmin>
       }
@@ -151,6 +149,7 @@
         [user]="user"
         [hasProAccess]="hasProAccess"
         [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
         (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
       </app-services-suunto>
       }
@@ -159,6 +158,7 @@
         [user]="user"
         [hasProAccess]="hasProAccess"
         [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
         (connectionStateChanged)="setServiceConnectionState('coros', $event)">
       </app-services-coros>
       }

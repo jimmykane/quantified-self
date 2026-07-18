@@ -127,13 +127,6 @@
     flex: 1 1 auto;
 }
 
-.service-tools-dialog__description {
-    margin: -12px 24px 16px;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.9rem;
-    line-height: 1.4;
-}
-
 .service-tools-dialog__content {
     max-height: calc(100dvh - 128px);
     min-width: 0;
@@ -222,10 +215,6 @@
     .provider-selector--mobile {
         display: flex;
         margin-bottom: 16px;
-    }
-
-    .service-tools-dialog__description {
-        margin-bottom: 12px;
     }
 
     .service-tools-dialog__content {
