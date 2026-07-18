@@ -707,8 +707,10 @@ The separate intensity-distribution chart is global and can include any activity
 data. It is not filtered by the sport visibility control.
 
 On desktop, Training Mix uses its actual visible-discipline count rather than auto-fitting empty grid tracks: one
-discipline places its compact summary beside the intensity chart, while two and three disciplines use balanced summary
-rows with the global chart below. Tablet and mobile retain the stacked responsive layout.
+discipline places its compact summary beside the intensity chart as a matched-height pair. The summary keeps its activity
+totals at the top and zone rows at the bottom, while the chart's nested loading host participates in the card's flex
+height so the plot occupies the remaining canvas. Two and three disciplines use balanced summary rows with the global
+chart below. Tablet and mobile retain the stacked responsive layout.
 
 ### 6. Settings vs Recent Evidence
 
