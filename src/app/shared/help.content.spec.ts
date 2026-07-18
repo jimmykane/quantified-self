@@ -177,8 +177,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Connect a service** action prompt');
     expect(gettingStartedSection?.content).toContain('dismissing it hides the prompt permanently');
     expect(gettingStartedSection?.content).toContain('**Send new activities to Suunto** action prompt');
-    expect(gettingStartedSection?.content).toContain('Enabling it turns on future Garmin/COROS -> Suunto imports only');
-    expect(gettingStartedSection?.content).toContain('existing activities can still be queued from **Services** with Manual Catch-up');
+    expect(gettingStartedSection?.content).toContain('Turning it on affects new Garmin or COROS activities only');
+    expect(gettingStartedSection?.content).toContain('use **Sync past activities** in **Services** for activities already in Quantified Self');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units');
@@ -334,31 +334,29 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('multi-selected GPX exports download as a ZIP');
   });
 
-  it('should document Garmin saved-route delivery requirements and behavior', () => {
+  it('should document how to send saved routes to Garmin', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
-    expect(serviceConnectionsSection?.content).toContain('Garmin saved-route delivery to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
-    expect(serviceConnectionsSection?.content).toContain('Choose the action');
-    expect(serviceConnectionsSection?.content).toContain('advanced tools in a dialog');
-    expect(serviceConnectionsSection?.content).toContain('opens directly on the matching tool');
+    expect(serviceConnectionsSection?.content).toContain('Choose an action');
+    expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');
     expect(serviceConnectionsSection?.content).toContain('unchanged overview');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**');
-    expect(serviceConnectionsSection?.content).toContain('not a Garmin route import or catch-up feature');
-    expect(serviceConnectionsSection?.content).toContain('**COURSE_IMPORT**');
+    expect(serviceConnectionsSection?.content).toContain('**Course Import** permission');
     expect(serviceConnectionsSection?.content).toContain('Routes can show a Garmin permission prompt');
-    expect(serviceConnectionsSection?.content).toContain('updates the same Garmin course on resend for the same Garmin account');
+    expect(serviceConnectionsSection?.content).toContain('updates the same Garmin course when you send that route again to the same Garmin account');
   });
 
-  it('should document Suunto to Garmin route delivery requirements and manual queue scope', () => {
+  it('should document automatic and one-time Suunto route sending to Garmin', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
-    expect(serviceConnectionsSection?.content).toContain('**Suunto -> Garmin course delivery**');
-    expect(serviceConnectionsSection?.content).toContain('Suunto -> Garmin course delivery, manual catch-up');
-    expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page action prompt');
+    expect(serviceConnectionsSection?.content).toContain('**Automatically send new and updated routes**');
+    expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect, syncing past activities');
+    expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page prompt');
     expect(serviceConnectionsSection?.content).toContain('already saved in Quantified Self to Garmin as courses');
-    expect(serviceConnectionsSection?.content).toContain('requires Garmin to be connected with **COURSE_IMPORT** permission');
-    expect(serviceConnectionsSection?.content).toContain('**Queue now** action is a convenience backfill');
+    expect(serviceConnectionsSection?.content).toContain('Garmin must be connected with **Course Import** permission');
+    expect(serviceConnectionsSection?.content).toContain('**Send routes** uses Suunto routes already saved in Quantified Self');
     expect(serviceConnectionsSection?.content).toContain('does not fetch routes from Suunto or Garmin');
     expect(serviceConnectionsSection?.content).toContain('[Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses)');
     expect(serviceConnectionsSection?.links?.some(link => link.target === '/guides/sync-suunto-routes-to-garmin-courses')).toBe(true);
@@ -384,7 +382,7 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('lightweight encoded route preview for route-table thumbnails, the Routes page map, and dashboard route maps');
     expect(uploadsSection?.content).toContain('Routes page map follows the current table filters using saved-route documents only');
     expect(uploadsSection?.content).toContain('does not load activity events or parse original route files');
-    expect(uploadsSection?.content).toContain('Older saved routes need a reprocess or controlled backfill before they appear with previews');
+    expect(uploadsSection?.content).toContain('Older saved routes need to be reprocessed before they appear with previews');
     expect(uploadsSection?.links).toContainEqual({
       label: 'FIT and GPX Route Files',
       icon: 'route',
@@ -393,7 +391,7 @@ describe('help.content', () => {
     });
   });
 
-  it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
+  it('should document Garmin and COROS activity sync to Suunto in plain language', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
@@ -423,21 +421,20 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Policies -> Suunto Data](/policies#suunto-data)');
     expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
-    expect(serviceConnectionsSection?.content).toContain('Suunto FIT activity uploads in Services show a per-file queue');
-    expect(serviceConnectionsSection?.content).toContain('retry controls for failed files');
+    expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
+    expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');
     expect(serviceConnectionsSection?.content).toContain('row action or the selected-row bulk toolbar');
     expect(serviceConnectionsSection?.content).toContain('uses the saved Quantified Self route name as the route name sent to Suunto');
     expect(serviceConnectionsSection?.content).toContain('Bulk sends upload routes one at a time');
-    expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
-    expect(serviceConnectionsSection?.content).toContain('ACTIVITY_EXPORT');
-    expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in Garmin Services');
-    expect(serviceConnectionsSection?.content).toContain('convenience tool for queuing a period on demand');
-    expect(serviceConnectionsSection?.content).toContain('stored original files already attached to existing Quantified Self events');
-    expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
-    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable Garmin -> Suunto auto-sync');
-    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings');
+    expect(serviceConnectionsSection?.content).toContain('Garmin to Suunto activity sync requires');
+    expect(serviceConnectionsSection?.content).toContain('allow Activity Export in Garmin');
+    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in Garmin Services');
+    expect(serviceConnectionsSection?.content).toContain('uses the original files already saved with those activities');
+    expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
+    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
+    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto turns off related automatic activity sync');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
@@ -446,20 +443,20 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('minimum sleep heart rate');
     expect(serviceConnectionsSection?.content).toContain('range-average reference lines');
     expect(serviceConnectionsSection?.content).toContain('max SpO2');
-    expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
+    expect(serviceConnectionsSection?.content).toContain('Import Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
-    expect(serviceConnectionsSection?.content).toContain('Garmin sleep history backfill is separate from activity history import');
-    expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
-    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file queue');
+    expect(serviceConnectionsSection?.content).toContain('Garmin sleep history import is separate from activity history import');
+    expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
+    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file status');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
-    expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
+    expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
-    expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');
-    expect(serviceConnectionsSection?.content).toContain('can run even when the COROS -> Suunto auto-sync toggle is off');
-    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync');
+    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in COROS Services');
+    expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
+    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync');
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Integrations',
       icon: 'hub',

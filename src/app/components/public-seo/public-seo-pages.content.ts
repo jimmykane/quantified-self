@@ -453,7 +453,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     title: 'FIT, GPX Route Files, Suunto Route Sync, and Garmin Course Send',
     description: `Save FIT course files and GPX route or track files in a private route library, send saved routes to Suunto or Garmin Connect, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
     h1: 'Save FIT and GPX route files, then send them to Suunto or Garmin Connect',
-    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto or Garmin Connect, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; Suunto route sync requires a connected Suunto account, and Garmin route delivery requires a connected Garmin account with COURSE_IMPORT.`,
+    intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto or Garmin Connect, and import new or existing Suunto routes into a private dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; sending routes requires a connected provider account, and Garmin also requires Course Import permission.`,
     chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Saved routes', 'Original files'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
@@ -485,7 +485,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         ],
       },
       {
-        eyebrow: 'Route Delivery',
+        eyebrow: 'Send Routes',
         title: 'Move routes between Quantified Self, Suunto, and Garmin Connect',
         copy: 'Use Routes as the private route library between planning files, saved provider routes, and connected device ecosystems without turning planned courses into completed activities.',
         items: [
@@ -497,12 +497,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'route',
             title: 'Send saved routes to Garmin Connect',
-            copy: 'Send saved FIT and GPX route records to Garmin Connect as Garmin courses when the connected Garmin account includes COURSE_IMPORT. Re-sending the same saved route updates the same Garmin course for that Garmin account.',
+            copy: 'Send saved FIT and GPX route records to Garmin Connect as Garmin courses when Course Import is allowed. Sending the same saved route again updates the same Garmin course for that account.',
           },
           {
             icon: 'sync',
             title: 'Import routes from Suunto',
-            copy: 'Connected Suunto accounts can import new and updated Suunto routes automatically, with manual route catch-up available when you need to queue the current Suunto route library.',
+            copy: 'Connected Suunto accounts can import new and updated routes automatically. Use Import existing routes when you also want routes already in your Suunto account.',
           },
         ],
       },
@@ -544,11 +544,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can I send saved routes to Garmin Connect?',
-        answer: 'Yes, when Garmin is connected and the account includes COURSE_IMPORT. Saved FIT and GPX routes can be sent to Garmin Connect from Routes, and re-sending the same saved route updates the same Garmin course for that Garmin account.',
+        answer: 'Yes, when Garmin is connected and Course Import is allowed. Saved FIT and GPX routes can be sent to Garmin Connect from Routes, and sending the same saved route again updates the same Garmin course for that account.',
       },
       {
         question: 'Can Quantified Self import routes from Suunto?',
-        answer: 'Yes, when Suunto is connected. Connected Suunto accounts can import new and updated Suunto routes automatically. Services also includes manual route catch-up for existing Suunto routes.',
+        answer: 'Yes, when Suunto is connected. New and updated Suunto routes are imported automatically, and Services includes Import existing routes for routes already in your Suunto account.',
       },
       {
         question: 'Are route files counted separately from activities?',
@@ -654,10 +654,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.hub,
     eyebrow: 'Guides',
     title: 'Training Data Sync Guides',
-    description: 'Step-by-step Quantified Self guides for Garmin -> Suunto sync, COROS -> Suunto sync, Suunto route delivery to Garmin courses, and centralizing Garmin, Suunto, and COROS workout data in one private dashboard.',
+    description: 'Step-by-step guides for Garmin to Suunto activity sync, COROS to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one private dashboard.',
     h1: 'Training data sync guides',
     intro: 'Choose the guide that matches the workflow you need: Garmin to Suunto activities, COROS to Suunto activities, Suunto routes to Garmin courses, or a centralized Garmin, Suunto, and COROS workout archive.',
-    chips: ['Garmin to Suunto', 'COROS to Suunto', 'Suunto routes to Garmin', 'Centralized data', 'Catch-up sync', 'Provider setup'],
+    chips: ['Garmin to Suunto', 'COROS to Suunto', 'Suunto routes to Garmin', 'Centralized data', 'Past activity sync', 'Provider setup'],
     actions: [
       routeAction('Garmin to Suunto', '/guides/sync-garmin-to-suunto', 'flat', 'arrow_forward'),
       routeAction('COROS to Suunto', '/guides/sync-coros-to-suunto'),
@@ -667,28 +667,28 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     sections: [
       {
         eyebrow: 'Sync Setup',
-        title: 'Use route-specific guides for cross-service sync',
-        copy: 'Each sync guide explains the provider connections, route toggles, and catch-up behavior before you start moving activities or saved routes between services.',
+        title: 'Choose a guide for the connection you need',
+        copy: 'Each guide explains which accounts to connect, how to turn on automatic sync, and how to send activities or saved routes that are already in Quantified Self.',
         items: [
           {
             icon: 'sync_alt',
-            title: 'Garmin -> Suunto',
-            copy: 'Connect Garmin and Suunto, enable the Garmin -> Suunto route, and use manual catch-up for existing Garmin activities.',
+            title: 'Garmin to Suunto activity sync',
+            copy: 'Connect Garmin and Suunto, turn on automatic activity sync, and choose a date range when you want to sync past Garmin activities.',
           },
           {
             icon: 'published_with_changes',
-            title: 'COROS -> Suunto',
-            copy: 'Connect COROS and Suunto, enable the COROS -> Suunto route, and account for the provider-limited recent history window.',
+            title: 'COROS to Suunto activity sync',
+            copy: 'Connect COROS and Suunto, turn on automatic activity sync, and use the available recent COROS history when syncing past activities.',
           },
           {
             icon: 'route',
-            title: 'Suunto routes -> Garmin courses',
-            copy: 'Connect Suunto and Garmin, keep Garmin COURSE_IMPORT permission active, and enable route delivery for newly imported or updated Suunto routes.',
+            title: 'Send Suunto routes to Garmin',
+            copy: 'Connect Suunto and Garmin, allow Course Import in Garmin, and automatically send new and updated Suunto routes to Garmin Connect.',
           },
           {
             icon: 'toggle_on',
-            title: 'Explicit route control',
-            copy: 'Automatic sync routes are opt-in, and manual catch-up can queue existing eligible records without changing future route settings.',
+            title: 'You control automatic sync',
+            copy: 'Automatic sync is always opt-in. You can also send past activities or saved routes without turning on automatic sync.',
           },
         ],
       },
@@ -718,11 +718,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Which guide should I use first?',
-        answer: 'Use the Garmin -> Suunto or COROS -> Suunto guide when your goal is activity sync, the Suunto routes -> Garmin guide when your goal is course delivery, and the centralization guide when you are planning a private dashboard across providers and uploaded files.',
+        answer: 'Use the Garmin to Suunto or COROS to Suunto guide for activity sync, the Suunto routes to Garmin guide for sending routes to Garmin Connect, and the centralization guide for a private dashboard across providers and uploaded files.',
       },
       {
-        question: 'Do automatic sync routes import old history?',
-        answer: 'No. Automatic routes handle newly imported activities. Existing workouts need provider history import and manual catch-up when you want them queued to another service.',
+        question: 'Does automatic activity sync include old workouts?',
+        answer: 'No. Automatic sync handles newly imported activities. Use provider history import first, then choose a date range to send past activities to another service.',
       },
       {
         question: 'Where do I find provider-specific setup details?',
@@ -730,7 +730,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Start with the workflow, then connect the services',
-    closingCopy: 'Pick the guide that matches the job to be done so provider setup, route toggles, catch-up sync, and analysis stay predictable.',
+    closingCopy: 'Pick the guide that matches what you want to do: sync activities, send saved routes, or bring your training data together for analysis.',
     closingActions: [
       routeAction('All Integrations', '/integrations', 'flat', 'arrow_forward'),
       routeAction('Feature Hub', '/features'),
@@ -741,10 +741,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
     eyebrow: 'Garmin to Suunto Guide',
     title: 'How to Sync Garmin Data to Suunto Automatically',
-    description: 'Learn how to sync Garmin data to Suunto automatically with Quantified Self: connect Garmin, connect Suunto, enable the Garmin -> Suunto route toggle, and use manual catch-up for existing workouts.',
+    description: 'Learn how to sync Garmin activities to Suunto automatically, connect both accounts, and sync past Garmin activities by date with Quantified Self.',
     h1: 'How to sync Garmin data to Suunto automatically',
-    intro: 'Quantified Self keeps Garmin -> Suunto sync explicit: connect both services, enable the route toggle, and new Garmin activities can move to Suunto after they arrive in your private dashboard.',
-    chips: ['Garmin', 'Suunto', 'Automatic sync', 'Catch-up sync', 'Pro'],
+    intro: 'Connect Garmin and Suunto, then choose whether new Garmin activities should be sent to Suunto automatically. You can also sync past activities from a date range whenever you need to.',
+    chips: ['Garmin', 'Suunto', 'Automatic activity sync', 'Past activity sync', 'Pro'],
     actions: [
       routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin'),
@@ -753,40 +753,40 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     sections: [
       {
         eyebrow: 'Setup',
-        title: 'The route toggle controls future Garmin imports',
-        copy: 'Automatic sync is route-based, so you decide when Garmin activities should be forwarded to Suunto.',
+        title: 'Choose how Garmin activities are sent to Suunto',
+        copy: 'You decide whether new Garmin activities are sent automatically and when past activities should be synced.',
         items: [
           {
             icon: 'login',
             title: 'Connect Garmin and Suunto',
-            copy: 'Sign in, connect Garmin, connect Suunto, and keep the required Garmin activity export permission enabled.',
+            copy: 'Sign in, connect Garmin, connect Suunto, and allow Activity Export when Garmin asks for permissions.',
           },
           {
             icon: 'toggle_on',
-            title: 'Enable Garmin -> Suunto',
-            copy: 'Open Garmin Services and enable the Garmin -> Suunto route toggle. This affects newly imported Garmin activities.',
+            title: 'Turn on automatic activity sync',
+            copy: 'Open Garmin Services and turn on automatic activity sync. New Garmin activities will be sent to Suunto after they reach Quantified Self.',
           },
           {
             icon: 'published_with_changes',
-            title: 'Use manual catch-up when needed',
-            copy: 'Choose a date range to queue Garmin -> Suunto sync jobs for Garmin activities already stored in Quantified Self.',
+            title: 'Sync past Garmin activities',
+            copy: 'Choose a date range to send Garmin activities that are already stored in Quantified Self to Suunto.',
           },
         ],
       },
       {
         eyebrow: 'Expectations',
         title: 'Know what sync does and does not do',
-        copy: 'The route uses activity files already attached to Quantified Self events and depends on healthy provider connections.',
+        copy: 'Activity sync uses the original files already saved with your activities and requires both provider connections to be active.',
         items: [
           {
             icon: 'schedule',
             title: 'New imports only',
-            copy: 'Automatic sync runs for newly imported Garmin activities. Existing history is handled by manual catch-up.',
+            copy: 'Automatic sync handles newly imported Garmin activities. Use Sync past activities for workouts that are already in Quantified Self.',
           },
           {
             icon: 'vpn_key',
             title: 'Reconnect if permissions change',
-            copy: 'If Garmin or Suunto revokes access, reconnect the provider and re-enable the route toggle after the connection is healthy.',
+            copy: 'If Garmin or Suunto revokes access, reconnect the provider and turn automatic activity sync back on.',
           },
           {
             icon: 'workspace_premium',
@@ -799,19 +799,19 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can I sync Garmin data to Suunto automatically?',
-        answer: 'Yes. Connect Garmin and Suunto in Quantified Self, enable the Garmin -> Suunto route toggle, and new Garmin activities can be sent to Suunto automatically.',
+        answer: 'Yes. Connect Garmin and Suunto in Quantified Self and turn on automatic activity sync. New Garmin activities can then be sent to Suunto automatically.',
       },
       {
-        question: 'Does Garmin -> Suunto sync import my old Garmin history automatically?',
-        answer: 'No. Automatic sync is for newly imported activities. Use Garmin history import and manual catch-up when you want existing activities queued to Suunto.',
+        question: 'Does Garmin to Suunto sync include my old Garmin history?',
+        answer: 'Not automatically. Import your Garmin history first, then use Sync past activities to send activities from a selected date range to Suunto.',
       },
       {
-        question: 'Can catch-up sync run when the route toggle is off?',
-        answer: 'Yes. Manual catch-up can queue a selected period on demand and does not enable automatic future sync.',
+        question: 'Can I sync past activities while automatic sync is off?',
+        answer: 'Yes. You can send activities from a selected date range without turning on automatic sync for future activities.',
       },
     ],
     closingTitle: 'Connect both services, then keep Garmin and Suunto aligned',
-    closingCopy: 'Use automatic sync for future Garmin activities and catch-up sync for the Garmin workouts already in your Quantified Self archive.',
+    closingCopy: 'Use automatic sync for new Garmin activities and Sync past activities for workouts already in your Quantified Self archive.',
     closingActions: [
       routeAction('Garmin Integration', '/integrations/garmin', 'flat', 'arrow_forward'),
       routeAction('All Integrations', '/integrations'),
@@ -819,8 +819,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     howToSteps: [
       'Connect Garmin to Quantified Self.',
       'Connect Suunto to Quantified Self.',
-      'Enable the Garmin -> Suunto route toggle in Garmin Services.',
-      'Use manual catch-up for existing Garmin activities when needed.',
+      'Turn on automatic activity sync in Garmin Services.',
+      'Use Sync past activities for existing Garmin activities when needed.',
     ],
   },
   syncCorosToSuunto: {
@@ -828,9 +828,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
     eyebrow: 'COROS to Suunto Guide',
     title: 'How to Sync COROS Workouts to Suunto Automatically',
-    description: 'Learn how to sync COROS workouts to Suunto automatically with Quantified Self: connect COROS, connect Suunto, enable the COROS -> Suunto route toggle, and use manual catch-up for existing workouts.',
+    description: 'Learn how to sync COROS activities to Suunto automatically, connect both accounts, and sync past COROS activities by date with Quantified Self.',
     h1: 'How to sync COROS workouts to Suunto automatically',
-    intro: 'Quantified Self can forward new COROS activities to Suunto after both services are connected and the COROS -> Suunto route toggle is enabled.',
+    intro: 'Connect COROS and Suunto, then choose whether new COROS activities should be sent to Suunto automatically. You can also sync past activities from a date range.',
     chips: ['COROS', 'Suunto', 'Automatic sync', 'Recent history', 'Pro'],
     actions: [
       routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
@@ -840,8 +840,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     sections: [
       {
         eyebrow: 'Setup',
-        title: 'Connect COROS and Suunto before enabling the route',
-        copy: 'The COROS route follows the same explicit route model as Garmin -> Suunto sync.',
+        title: 'Connect COROS and Suunto before turning on activity sync',
+        copy: 'Both accounts must be connected before Quantified Self can send COROS activities to Suunto.',
         items: [
           {
             icon: 'login',
@@ -850,8 +850,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'toggle_on',
-            title: 'Enable COROS -> Suunto',
-            copy: 'Open COROS Services and enable the route toggle so future COROS imports can be forwarded to Suunto.',
+            title: 'Turn on automatic activity sync',
+            copy: 'Open COROS Services and turn on automatic activity sync so new COROS activities can be sent to Suunto.',
           },
           {
             icon: 'history',
@@ -861,19 +861,19 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         ],
       },
       {
-        eyebrow: 'Catch-up',
-        title: 'Queue existing activities on demand',
-        copy: 'Manual catch-up is separate from automatic future sync and gives you control over the date range.',
+        eyebrow: 'Past Activities',
+        title: 'Sync existing activities by date',
+        copy: 'Syncing past activities is separate from automatic sync and lets you choose the date range.',
         items: [
           {
             icon: 'published_with_changes',
-            title: 'Manual COROS catch-up',
-            copy: 'Choose a date range in COROS Services to queue COROS -> Suunto jobs for events already stored in Quantified Self.',
+            title: 'Sync past COROS activities',
+            copy: 'Choose a date range in COROS Services to send activities already stored in Quantified Self to Suunto.',
           },
           {
             icon: 'sync_problem',
             title: 'Reconnect when tokens fail',
-            copy: 'If COROS or Suunto marks the connection as reconnect required, reconnect before expecting new automatic sync jobs.',
+            copy: 'If COROS or Suunto shows Reconnect required, reconnect before trying automatic activity sync again.',
           },
           {
             icon: 'dashboard_customize',
@@ -886,19 +886,19 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can COROS workouts sync to Suunto automatically?',
-        answer: 'Yes. Connect COROS and Suunto, enable the COROS -> Suunto route toggle, and new COROS activities can be sent to Suunto automatically.',
+        answer: 'Yes. Connect COROS and Suunto and turn on automatic activity sync. New COROS activities can then be sent to Suunto automatically.',
       },
       {
         question: 'How much COROS history can I import?',
         answer: 'COROS history import is currently limited to the last 3 months because of provider API restrictions.',
       },
       {
-        question: 'Does manual catch-up enable automatic COROS sync?',
-        answer: 'No. Manual catch-up queues selected existing activities and does not turn on future automatic sync.',
+        question: 'Does syncing past activities turn on automatic COROS sync?',
+        answer: 'No. Sync past activities only sends activities from the date range you choose. It does not turn on automatic sync for future activities.',
       },
     ],
     closingTitle: 'Keep COROS and Suunto connected without losing the archive',
-    closingCopy: 'Use Quantified Self as the private hub for future COROS -> Suunto sync, recent history import, catch-up jobs, and analysis.',
+    closingCopy: 'Use Quantified Self as the private hub for COROS to Suunto activity sync, recent history imports, and training analysis.',
     closingActions: [
       routeAction('COROS Integration', '/integrations/coros', 'flat', 'arrow_forward'),
       routeAction('All Integrations', '/integrations'),
@@ -906,19 +906,19 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     howToSteps: [
       'Connect COROS to Quantified Self.',
       'Connect Suunto to Quantified Self.',
-      'Enable the COROS -> Suunto route toggle in COROS Services.',
-      'Use manual catch-up for already imported COROS activities when needed.',
+      'Turn on automatic activity sync in COROS Services.',
+      'Use Sync past activities for already imported COROS activities when needed.',
     ],
   },
   syncSuuntoRoutesToGarmin: {
     key: 'syncSuuntoRoutesToGarmin',
     path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
     eyebrow: 'Suunto Routes to Garmin Guide',
-    title: 'How to Sync Suunto Routes to Garmin Courses',
-    description: 'Learn how to sync Suunto routes to Garmin courses with Quantified Self: connect Suunto, connect Garmin with COURSE_IMPORT, enable Suunto -> Garmin course delivery, and use Queue now for saved Suunto routes when needed.',
-    h1: 'How to sync Suunto routes to Garmin courses',
-    intro: 'Quantified Self can deliver Suunto routes already saved in your private route library to Garmin Connect as courses after both services are connected and Garmin course import permission is active.',
-    chips: ['Suunto routes', 'Garmin courses', 'COURSE_IMPORT', 'Route delivery', 'Queue now'],
+    title: 'How to Send Suunto Routes to Garmin Courses',
+    description: 'Learn how to send Suunto routes to Garmin Connect as courses, connect both accounts, allow Garmin Course Import, and send routes already saved in Quantified Self.',
+    h1: 'How to send Suunto routes to Garmin courses',
+    intro: 'Quantified Self can send Suunto routes from your private Routes library to Garmin Connect as courses after both accounts are connected and Course Import is allowed in Garmin.',
+    chips: ['Suunto routes', 'Garmin courses', 'Course Import', 'Automatic route sending', 'Saved routes'],
     actions: [
       routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
       routeAction('Suunto Integration', '/integrations/suunto'),
@@ -928,8 +928,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     sections: [
       {
         eyebrow: 'Setup',
-        title: 'Connect Suunto and Garmin before enabling course delivery',
-        copy: 'The route-delivery toggle is explicit, destination-aware, and built around routes already saved in Quantified Self.',
+        title: 'Connect Suunto and Garmin before sending routes',
+        copy: 'Quantified Self sends routes already saved in your Routes library, and you choose whether new routes should be sent automatically.',
         items: [
           {
             icon: 'login',
@@ -938,57 +938,57 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'vpn_key',
-            title: 'Connect Garmin with COURSE_IMPORT',
+            title: 'Allow Course Import in Garmin',
             copy: 'Garmin must be connected with Course Import permission before Quantified Self can create or update Garmin courses.',
           },
           {
             icon: 'toggle_on',
-            title: 'Enable Suunto -> Garmin delivery',
-            copy: 'Open Suunto Services and enable Suunto -> Garmin Course Delivery so future imported or updated Suunto routes can be delivered to Garmin.',
+            title: 'Send new routes automatically',
+            copy: 'Open Suunto Services and turn on automatic route sending so new and updated Suunto routes can be sent to Garmin.',
           },
         ],
       },
       {
         eyebrow: 'Behavior',
         title: 'Use saved route metadata instead of provider downloads',
-        copy: 'Route delivery is based on route records and original files already stored in Quantified Self, which keeps manual backfill predictable and auditable.',
+        copy: 'Route sending uses the route records and original files already stored in Quantified Self.',
         items: [
           {
             icon: 'route',
             title: 'New and updated Suunto routes',
-            copy: 'When Suunto route import saves a new revision in Quantified Self, the delivery route can queue a Garmin course create or update.',
+            copy: 'When Quantified Self imports a new or updated Suunto route, it can create or update the matching course in Garmin.',
           },
           {
             icon: 'published_with_changes',
-            title: 'Queue now for existing saved routes',
-            copy: 'The Queue now action scans Suunto-sourced routes already saved in Quantified Self and queues missing Garmin course delivery jobs.',
+            title: 'Send saved routes now',
+            copy: 'Use Send routes to send Suunto routes that are already saved in Quantified Self but have not yet been sent to Garmin.',
           },
           {
             icon: 'sync_problem',
-            title: 'No Suunto or Garmin source fetch during backfill',
-            copy: 'Manual route-delivery backfill does not fetch routes from Suunto or Garmin. Import or catch up Suunto routes first when the QS route library is missing a route.',
+            title: 'Only saved routes are sent',
+            copy: 'Sending saved routes does not fetch anything from Suunto or Garmin. Import existing Suunto routes first if one is missing from the Routes library.',
           },
         ],
       },
       {
-        eyebrow: 'Delivery',
+        eyebrow: 'Sending Routes',
         title: 'Garmin courses are updated instead of duplicated',
-        copy: 'Quantified Self tracks provider-scoped delivery metadata so repeated sends for the same saved route and Garmin account can update the existing course.',
+        copy: 'Quantified Self remembers which Garmin course belongs to each saved route, so sending it again can update the existing course.',
         items: [
           {
             icon: 'update',
             title: 'Update existing Garmin courses',
-            copy: 'If a saved route was already delivered to the same Garmin account, later delivery can update that Garmin course instead of creating a duplicate.',
+            copy: 'If a saved route was already sent to the same Garmin account, sending it again can update that course instead of creating a duplicate.',
           },
           {
             icon: 'shield',
             title: 'Disconnect-safe controls',
-            copy: 'Disconnecting Suunto or Garmin disables related automatic route delivery settings until you reconnect and enable them again.',
+            copy: 'Disconnecting Suunto or Garmin turns off automatic route sending until you reconnect and enable it again.',
           },
           {
             icon: 'workspace_premium',
             title: 'Pro route automation',
-            copy: 'Automatic provider connections and route delivery require Pro. Manual saved-route uploads remain available according to route storage limits.',
+            copy: 'Automatic provider connections and route sending require Pro. Manual saved-route uploads remain available according to route storage limits.',
           },
         ],
       },
@@ -996,23 +996,23 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can Suunto routes sync to Garmin courses automatically?',
-        answer: 'Yes. Connect Suunto and Garmin, grant Garmin COURSE_IMPORT permission, and enable Suunto -> Garmin Course Delivery in Suunto Services. New and updated Suunto routes saved in Quantified Self can then be delivered to Garmin as courses.',
+        answer: 'Yes. Connect Suunto and Garmin, allow Course Import in Garmin, and turn on automatic route sending in Suunto Services. New and updated Suunto routes can then be sent to Garmin as courses.',
       },
       {
-        question: 'Does Queue now fetch routes from Suunto?',
-        answer: 'No. Queue now scans Suunto-sourced routes already saved in Quantified Self. Use Suunto route import or route catch-up first when a route is not yet in the Quantified Self route library.',
+        question: 'Does Send routes fetch routes from Suunto?',
+        answer: 'No. Send routes only uses Suunto routes already saved in Quantified Self. Import existing Suunto routes first if a route is not yet in the Routes library.',
       },
       {
-        question: 'Will re-delivery create duplicate Garmin courses?',
-        answer: 'Quantified Self stores Garmin delivery metadata per saved route and Garmin account so later sends can update the same Garmin course when possible.',
+        question: 'Will sending a route again create a duplicate Garmin course?',
+        answer: 'Quantified Self remembers the Garmin course for each saved route and account, so later sends can update the same course when possible.',
       },
       {
         question: 'What Garmin permission is required?',
-        answer: 'Garmin COURSE_IMPORT is required. If that permission is missing, reconnect Garmin and enable Course Import in Garmin Connect before enabling route delivery.',
+        answer: 'Garmin Course Import permission is required. If it is missing, reconnect Garmin and allow Course Import in Garmin Connect before sending routes.',
       },
     ],
-    closingTitle: 'Import Suunto routes once, then deliver them to Garmin when needed',
-    closingCopy: 'Use Quantified Self as the private route library between Suunto route imports, manual route files, and Garmin Connect course delivery.',
+    closingTitle: 'Import Suunto routes once, then send them to Garmin when needed',
+    closingCopy: 'Use Quantified Self as the private route library between Suunto route imports, manual route files, and Garmin Connect.',
     closingActions: [
       routeAction('Suunto Integration', '/integrations/suunto', 'flat', 'arrow_forward'),
       routeAction('Garmin Integration', '/integrations/garmin'),
@@ -1020,10 +1020,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     ],
     howToSteps: [
       'Connect Suunto to Quantified Self.',
-      'Connect Garmin to Quantified Self with COURSE_IMPORT permission.',
-      'Import Suunto routes or run Suunto route catch-up so the routes are saved in Quantified Self.',
-      'Enable Suunto -> Garmin Course Delivery in Suunto Services.',
-      'Use Queue now for Suunto-sourced routes already saved in Quantified Self when you want a manual backfill.',
+      'Connect Garmin to Quantified Self and allow Course Import.',
+      'Import existing Suunto routes so they are saved in Quantified Self.',
+      'Turn on automatic route sending in Suunto Services if you want new routes sent automatically.',
+      'Use Send routes for Suunto routes already saved in Quantified Self.',
     ],
   },
   centralizeWorkoutData: {
@@ -1054,7 +1054,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'file_download',
             title: 'Original files and exports',
-            copy: 'Keep original source files useful for downloads, reprocessing, Suunto sync jobs, and benchmark comparisons.',
+            copy: 'Keep original source files useful for downloads, reprocessing, sending activities to Suunto, and benchmark comparisons.',
           },
           {
             icon: 'dashboard_customize',
@@ -1071,7 +1071,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'sync_alt',
             title: 'Cross-service sync',
-            copy: 'Set up Garmin -> Suunto or COROS -> Suunto sync routes when Suunto should receive newly imported activities.',
+            copy: 'Set up Garmin to Suunto or COROS to Suunto activity sync when Suunto should receive newly imported activities.',
           },
           {
             icon: 'upload_file',
@@ -1101,7 +1101,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Build the archive first, then choose the workflows you need',
-    closingCopy: 'Start with the providers and files you already use, then add sync routes, uploads, benchmark reports, and AI Insights as your training archive grows.',
+    closingCopy: 'Start with the providers and files you already use, then add activity sync, uploads, benchmark reports, and AI Insights as your training archive grows.',
     closingActions: [
       routeAction('All Integrations', '/integrations', 'flat', 'arrow_forward'),
       routeAction('Workout File Comparison', '/features/workout-file-comparison'),
@@ -1109,7 +1109,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     howToSteps: [
       'Connect the providers you use or upload supported activity files.',
       'Import history or recent activities into Quantified Self.',
-      'Enable cross-service sync routes only when you want future activities forwarded to Suunto.',
+      'Turn on cross-service activity sync only when you want future activities sent to Suunto.',
       'Use dashboard, export, AI Insights, and benchmark workflows from the centralized archive.',
     ],
   },

@@ -733,7 +733,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       routeIds.forEach(routeID => this.analyticsService.logActivitySyncRouteToggle(routeID, true));
       this.snackBar.open(buildActivityAutoSyncEnabledSnackbarMessage(routeIds), undefined, { duration: 3000 });
     } catch (error) {
-      this.activityAutoSyncPromptError = 'Could not enable auto-sync.';
+      this.activityAutoSyncPromptError = 'Could not turn on automatic activity sync.';
       this.logger.error('[DashboardComponent] Failed to enable activity auto-sync prompt routes', error);
     } finally {
       this.isEnablingActivityAutoSyncPrompt = false;
@@ -820,7 +820,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         updatedAtMs: lastBackfillQueuedAtMs,
       };
       this.garminSleepSyncStateLoaded = true;
-      this.snackBar.open(`Garmin sleep backfill requested: ${result.queued} windows.`, undefined, { duration: 3000 });
+      this.snackBar.open(`Garmin sleep history import started for ${result.queued} date ranges.`, undefined, { duration: 3000 });
     } catch (error) {
       this.garminSleepBackfillPromptError = 'Could not request Garmin sleep history.';
       this.logger.error('[DashboardComponent] Failed to request Garmin sleep backfill from dashboard prompt', error);

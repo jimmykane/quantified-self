@@ -19,7 +19,7 @@
     </header>
 
     @if (suuntoRouteCatchUpPrompt(); as prompt) {
-    <section class="routes-prompt" aria-label="Suunto route catch-up prompt">
+    <section class="routes-prompt" aria-label="Import existing Suunto routes prompt">
       <app-dashboard-action-prompt
         [prompt]="prompt"
         (primary)="onSuuntoRouteCatchUpPromptPrimary($event)"

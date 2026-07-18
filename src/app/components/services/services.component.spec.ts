@@ -211,8 +211,8 @@ describe('ServicesComponent', () => {
 
         expect(manageButtons[0].textContent?.trim()).toBe('History import');
         expect(manageButtons[0].getAttribute('aria-label')).toBe('History import for Garmin');
-        expect(manageButtons[1].textContent?.trim()).toBe('Delivery controls');
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Delivery controls for Garmin');
+        expect(manageButtons[1].textContent?.trim()).toBe('Activity sync settings');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
 
         manageButtons[0].click();
         fixture.detectChanges();
@@ -240,9 +240,9 @@ describe('ServicesComponent', () => {
 
         expect(component.managedService).toBe('garmin');
         expect(component.managedTool).toBe('auto-sync');
-        expect(component.managedToolTitle).toBe('Route delivery');
+        expect(component.managedToolTitle).toBe('Send activities to Suunto');
         expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Route delivery tools',
+            ariaLabel: 'Garmin Send activities to Suunto tools',
         }));
     });
 

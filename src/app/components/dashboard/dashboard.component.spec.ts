@@ -463,7 +463,7 @@ describe('DashboardComponent', () => {
 
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(true);
         expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'enableActivityAutoSync')?.description)
-            .toContain('Enable Garmin -> Suunto auto-sync');
+            .toContain('Automatically send new Garmin activities to Suunto');
     });
 
     it('does not show activity auto-sync prompt when Suunto requires reconnect despite a remaining token', async () => {
@@ -513,7 +513,7 @@ describe('DashboardComponent', () => {
         await fixture.whenStable();
 
         const prompt = component.dashboardActionPrompts.find(prompt => prompt.id === 'enableActivityAutoSync');
-        expect(prompt?.description).toContain('Enable COROS -> Suunto auto-sync');
+        expect(prompt?.description).toContain('Automatically send new COROS activities to Suunto');
         expect(prompt?.description).not.toContain('Garmin and COROS');
     });
 
@@ -656,7 +656,7 @@ describe('DashboardComponent', () => {
         expect(mockUser.settings.appSettings?.theme).toBe('dark');
         expect(mockUser.settings.dashboardSettings?.tiles).toEqual([{ name: 'Existing' }]);
         expect(mockSnackBar.open).toHaveBeenCalledWith(
-            'Auto-sync enabled for Garmin and COROS -> Suunto.',
+            'New activities from Garmin and COROS will be sent to Suunto automatically.',
             undefined,
             { duration: 3000 },
         );
@@ -710,7 +710,7 @@ describe('DashboardComponent', () => {
         expect(mockSleepService.watchSyncState).toHaveBeenCalledWith(mockUser.uid, SLEEP_PROVIDERS.GarminAPI);
         const prompt = component.dashboardActionPrompts.find(item => item.id === 'backfillGarminSleep');
         expect(prompt).toBeTruthy();
-        expect(prompt?.title).toBe('Backfill Garmin sleep');
+        expect(prompt?.title).toBe('Import Garmin sleep history');
         expect(prompt?.primaryAction?.id).toBe('backfillGarminSleep');
     });
 
@@ -780,7 +780,7 @@ describe('DashboardComponent', () => {
             source: 'dashboard_prompt',
         });
         expect(mockSnackBar.open).toHaveBeenCalledWith(
-            'Garmin sleep backfill requested: 43 windows.',
+            'Garmin sleep history import started for 43 date ranges.',
             undefined,
             { duration: 3000 },
         );

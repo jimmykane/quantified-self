@@ -47,7 +47,7 @@ describe('ProviderIntegrationPageComponent', () => {
 
     expect(text).toContain('Garmin Integration and Private Training Dashboard');
     expect(text).toContain('private training dashboard for Garmin data');
-    expect(text).toContain('Garmin -> Suunto automatic sync');
+    expect(text).toContain('Garmin to Suunto automatic activity sync');
     expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
   });
 
@@ -56,9 +56,9 @@ describe('ProviderIntegrationPageComponent', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('Suunto Integration for Activity and Route Sync');
-    expect(text).toContain('How to sync activities to Suunto and deliver Suunto routes to Garmin');
-    expect(text).toContain('Suunto route import and catch-up');
-    expect(text).toContain('Suunto -> Garmin course delivery');
+    expect(text).toContain('How to sync activities to Suunto and send Suunto routes to Garmin');
+    expect(text).toContain('Import routes from Suunto');
+    expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('Can Suunto routes sync to Garmin courses?');
     expect(text).toContain('FIT activity upload');
     expect(text).toContain('GPX route upload');
@@ -70,7 +70,7 @@ describe('ProviderIntegrationPageComponent', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('COROS Integration for Suunto Sync and Centralized Training Data');
-    expect(text).toContain('COROS -> Suunto automatic sync');
+    expect(text).toContain('COROS to Suunto automatic activity sync');
     expect(text).toContain('COROS history import');
     expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
   });

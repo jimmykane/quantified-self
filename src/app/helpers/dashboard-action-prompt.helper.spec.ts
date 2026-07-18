@@ -185,10 +185,10 @@ describe('dashboard-action-prompt.helper', () => {
     expect(prompts[3]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
       title: 'Send new activities to Suunto',
-      description: 'Enable Garmin and COROS -> Suunto auto-sync for new imported activities. Existing activities can be queued from Services with Manual Catch-up.',
+      description: 'Automatically send new Garmin and COROS activities to Suunto. You can sync past activities separately from Connections.',
       primaryAction: {
         id: 'enableActivityAutoSync',
-        label: 'Enable auto-sync',
+        label: 'Send automatically',
       },
       secondaryAction: {
         id: 'dismissEnableActivityAutoSync',
@@ -197,10 +197,10 @@ describe('dashboard-action-prompt.helper', () => {
     });
     expect(prompts[4]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
-      title: 'Backfill Garmin sleep',
+      title: 'Import Garmin sleep history',
       primaryAction: {
         id: 'backfillGarminSleep',
-        label: 'Backfill sleep',
+        label: 'Import sleep history',
       },
       secondaryAction: {
         id: 'dismissBackfillGarminSleep',
@@ -236,7 +236,7 @@ describe('dashboard-action-prompt.helper', () => {
     expect(prompts[0]).toMatchObject({
       id: 'reconnectSuuntoService',
       title: 'Reconnect Suunto',
-      description: 'Suunto stopped accepting the previous connection. Reconnect to resume sleep sync, history imports, and uploads. Garmin/COROS -> Suunto auto-sync routes stay off until you enable them again.',
+      description: 'Suunto stopped accepting the previous connection. Reconnect to resume sleep sync, history imports, and uploads. Automatic activity sync from Garmin and COROS stays off until you turn it on again.',
       busy: true,
       error: 'Reconnect failed.',
       primaryAction: {
@@ -363,6 +363,6 @@ describe('dashboard-action-prompt.helper', () => {
     expect(buildActivityAutoSyncEnabledSnackbarMessage([
       ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
       ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
-    ])).toBe('Auto-sync enabled for Garmin and COROS -> Suunto.');
+    ])).toBe('New activities from Garmin and COROS will be sent to Suunto automatically.');
   });
 });

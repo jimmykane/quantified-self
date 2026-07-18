@@ -252,8 +252,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   get activeSyncRouteWarningLabel(): string {
     const activeRouteCount = this.activeSyncRoutesUsingService.length;
     return activeRouteCount === 1
-      ? 'Used by active auto-sync route'
-      : `Used by ${activeRouteCount} active auto-sync routes`;
+      ? 'Used by automatic sync'
+      : `Used by ${activeRouteCount} automatic sync connections`;
   }
 
   triggerUpsell() {
@@ -312,14 +312,14 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   private formatRouteLabel(route: ServiceSyncRouteImpact): string {
-    return `${this.getServiceDisplayName(route.sourceServiceName)} -> ${this.getServiceDisplayName(route.destinationServiceName)}`;
+    return `${this.getServiceDisplayName(route.sourceServiceName)} to ${this.getServiceDisplayName(route.destinationServiceName)}`;
   }
 
   private buildDisconnectImpactMessageHtml(routes: ServiceSyncRouteImpact[]): string {
     const isSingleRoute = routes.length === 1;
     const heading = isSingleRoute
-      ? 'Disconnecting now will disable this active auto-sync route:'
-      : `Disconnecting now will disable ${routes.length} active auto-sync routes:`;
+      ? 'Disconnecting now will turn off this automatic sync:'
+      : `Disconnecting now will turn off ${routes.length} automatic sync connections:`;
     const routeListHtml = routes.map((route) => `<li><strong>${this.formatRouteLabel(route)}</strong></li>`).join('');
     return `${heading}<ul>${routeListHtml}</ul>Automatic sync will stop until you reconnect and re-enable the route${isSingleRoute ? '' : 's'}.`;
   }

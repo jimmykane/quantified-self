@@ -174,9 +174,9 @@ export class SeoService implements OnDestroy {
                 "description": "Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.",
                 "featureList": [
                     "AI Insights with chart-backed answers",
-                    "Automatic Garmin -> Suunto sync for newly imported Garmin activities",
-                    "Automatic COROS -> Suunto sync for newly imported COROS activities",
-                    "Manual catch-up sync for events already stored in Quantified Self"
+                    "Automatic Garmin to Suunto activity sync",
+                    "Automatic COROS to Suunto activity sync",
+                    "Sync past activities to Suunto by date"
                 ],
                 "offers": {
                     "@type": "Offer",

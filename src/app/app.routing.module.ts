@@ -107,12 +107,12 @@ export const routes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
+      description: 'Get help with Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, AI Insights, account setup, uploads, billing, privacy, and troubleshooting.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.",
+        "description": "Get help with Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, AI Insights, account setup, uploads, billing, privacy, and troubleshooting.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -125,10 +125,10 @@ export const routes: Routes = [
           "Account setup",
           "Manual uploads",
           "Membership and billing",
-          "Garmin -> Suunto sync",
-          "COROS -> Suunto sync",
-          "Suunto -> Garmin course delivery",
-          "Catch-up sync",
+          "Garmin to Suunto activity sync",
+          "COROS to Suunto activity sync",
+          "Send Suunto routes to Garmin",
+          "Sync past activities",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
@@ -423,9 +423,9 @@ export const routes: Routes = [
         "description": HOME_SEO_DESCRIPTION,
         "featureList": [
           "AI Insights with chart-backed answers",
-          "Automatic Garmin -> Suunto sync for newly imported Garmin activities",
-          "Automatic COROS -> Suunto sync for newly imported COROS activities",
-          "Manual catch-up sync for events already stored in Quantified Self"
+          "Automatic Garmin to Suunto activity sync",
+          "Automatic COROS to Suunto activity sync",
+          "Sync past activities to Suunto by date"
         ],
         "offers": {
           "@type": "Offer",

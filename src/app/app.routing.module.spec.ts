@@ -15,7 +15,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
+      description: 'Get help with Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, AI Insights, account setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -28,10 +28,10 @@ describe('AppRoutingModule routes', () => {
     });
     const helpJsonLd = helpRoute?.data?.['jsonLd'] as Record<string, unknown> | undefined;
     const helpAbout = helpJsonLd?.['about'] as string[] | undefined;
-    expect(helpAbout).toContain('Garmin -> Suunto sync');
-    expect(helpAbout).toContain('COROS -> Suunto sync');
-    expect(helpAbout).toContain('Suunto -> Garmin course delivery');
-    expect(helpAbout).toContain('Catch-up sync');
+    expect(helpAbout).toContain('Garmin to Suunto activity sync');
+    expect(helpAbout).toContain('COROS to Suunto activity sync');
+    expect(helpAbout).toContain('Send Suunto routes to Garmin');
+    expect(helpAbout).toContain('Sync past activities');
   });
 
   it('should define a public pricing route with membership JSON-LD', () => {
@@ -126,9 +126,9 @@ describe('AppRoutingModule routes', () => {
 
   it('should define public Garmin, Suunto, and COROS provider integration routes', () => {
     const expectedRoutes = [
-      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'private training dashboard for Garmin data' },
+      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'private Garmin training dashboard' },
       { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
-      { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS -> Suunto sync' },
+      { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS to Suunto activity sync' },
     ];
 
     for (const expectedRoute of expectedRoutes) {
@@ -280,7 +280,7 @@ describe('AppRoutingModule routes', () => {
     expect(route?.canMatch).toBeUndefined();
     expect(route?.loadComponent).toBeTypeOf('function');
     expect(route?.data?.['title']).toBe('Training Data Sync Guides');
-    expect(route?.data?.['description']).toContain('Garmin -> Suunto sync');
+    expect(route?.data?.['description']).toContain('Garmin to Suunto activity sync');
     expect(route?.data?.['keywords']).toBeUndefined();
     expect(route?.pathMatch).toBe('full');
     expect(page?.['h1']).toBe('Training data sync guides');
@@ -301,7 +301,7 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
-        h1: 'How to sync Suunto routes to Garmin courses',
+        h1: 'How to send Suunto routes to Garmin courses',
       },
       {
         path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,

@@ -186,7 +186,8 @@ describe('ServicesGarminComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-panel')).toBeNull();
         expect(toolPanels).toHaveLength(1);
         expect(toolPanels[0].hidden).toBe(false);
-        expect(toolPanels[0].textContent).toContain('Garmin -> Suunto Sync');
+        expect(toolPanels[0].querySelector('.tool-subsection-title')).toBeNull();
+        expect(toolPanels[0].textContent).toContain('Sending Garmin activities to Suunto is a Pro feature.');
     });
 
     it('hides the auto-sync panel until the auto-sync tab is selected', () => {
@@ -203,7 +204,7 @@ describe('ServicesGarminComponent', () => {
         expect(panels[0].hidden).toBe(false);
         expect(panels[1].hidden).toBe(true);
         expect(getComputedStyle(panels[1]).display).toBe('none');
-        expect(panels[1].textContent).toContain('Garmin -> Suunto Sync');
+        expect(panels[1].textContent).toContain('Send Garmin activities to Suunto');
 
         tabs[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         fixture.detectChanges();
@@ -365,26 +366,7 @@ describe('ServicesGarminComponent', () => {
             expect(component.isHistoryImportLoading).toBe(true);
         });
 
-        it('keeps saved-route delivery in a loading state while Garmin token permissions are not loaded', () => {
-            component.hasProAccess = true;
-            component.isLoading = false;
-            component.serviceTokens = [{
-                accessToken: 'garmin-token',
-                userID: 'garmin-user',
-            }] as any;
-
-            expect(component.isConnectedToService()).toBe(true);
-            expect(component.hasPermissionsLoaded).toBe(false);
-            expect(component.isRouteSendPermissionStateLoading).toBe(true);
-            expect(component.canSendSavedRoutesToGarmin).toBe(false);
-            expect(component.routeSendMissingPermissions).toEqual([]);
-            expect(component.routeSendStatusType).toBe('info');
-            expect(component.routeSendStatusTitle).toBe('Checking Garmin route delivery');
-            expect(component.routeSendStatusMessage).toContain('Checking Garmin permissions');
-        });
-
         it('ignores permission arrays on Garmin tokens without a provider identity', () => {
-            component.hasProAccess = true;
             component.isLoading = false;
             component.serviceTokens = [{
                 accessToken: 'invalid-token',
@@ -396,8 +378,6 @@ describe('ServicesGarminComponent', () => {
 
             expect(component.isConnectedToService()).toBe(true);
             expect(component.hasPermissionsLoaded).toBe(false);
-            expect(component.isRouteSendPermissionStateLoading).toBe(true);
-            expect(component.canSendSavedRoutesToGarmin).toBe(false);
         });
 
         it('does not report sleep permissions missing when a later Garmin token can backfill sleep', () => {
@@ -425,21 +405,6 @@ describe('ServicesGarminComponent', () => {
             expect(component.missingPermissions).toEqual(['HEALTH_EXPORT']);
         });
 
-        it('reports saved-route delivery as ready when COURSE_IMPORT is available', () => {
-            component.hasProAccess = true;
-            component.isLoading = false;
-            component.serviceTokens = [{
-                accessToken: 'token',
-                userID: 'garmin-user',
-                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT', 'COURSE_IMPORT'],
-                dateCreated: new Date('2026-05-03T10:00:00.000Z'),
-            }] as any;
-
-            expect(component.canSendSavedRoutesToGarmin).toBe(true);
-            expect(component.routeSendStatusTitle).toBe('Saved route delivery ready');
-            expect(component.routeSendStatusMessage).toContain('Garmin Connect');
-        });
-
         it('shows the Garmin account used for saved-route delivery when it differs from the primary connected account', () => {
             component.hasProAccess = true;
             component.isLoading = false;
@@ -462,34 +427,17 @@ describe('ServicesGarminComponent', () => {
             expect(component.garminUserID).toBe('history-garmin-user');
             expect(component.routeSendGarminUserID).toBe('route-garmin-user');
             expect(component.isRouteSendAccountDifferentFromConnectedAccount).toBe(true);
-            expect(component.canSendSavedRoutesToGarmin).toBe(true);
-            expect(component.routeSendStatusMessage).toContain('route-garmin-user');
 
             const content = fixture.nativeElement.textContent;
-            expect(content).toContain('Route Delivery Account');
+            expect(content).toContain('Routes use this Garmin account');
             expect(content).toContain('route-garmin-user');
         });
 
-        it('reports saved-route delivery permission gaps when COURSE_IMPORT is missing', () => {
+        it('does not append route permission guidance to the Garmin service content', () => {
             component.hasProAccess = true;
             component.isLoading = false;
-            component.serviceTokens = [{
-                accessToken: 'token',
-                userID: 'garmin-user',
-                permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
-                dateCreated: new Date('2026-05-03T10:00:00.000Z'),
-            }] as any;
-
-            expect(component.canSendSavedRoutesToGarmin).toBe(false);
-            expect(component.routeSendMissingPermissions).toEqual(['COURSE_IMPORT']);
-            expect(component.routeSendStatusTitle).toBe('Garmin route delivery needs permission');
-            expect(component.routeSendStatusMessage).toContain('COURSE_IMPORT');
-            expect(component.routeSendStatusMessage).toContain('Garmin Connect');
-        });
-
-        it('renders Garmin Connect permission guidance for saved-route delivery when COURSE_IMPORT is missing', () => {
-            component.hasProAccess = true;
-            component.isLoading = false;
+            component.showOnlyActiveProviderTool = true;
+            component.activeProviderTool = 'auto-sync';
             component.serviceTokens = [{
                 accessToken: 'token',
                 userID: 'garmin-user',
@@ -500,9 +448,8 @@ describe('ServicesGarminComponent', () => {
             fixture.detectChanges();
 
             const content = fixture.nativeElement.textContent;
-            expect(content).toContain('Open Garmin Connect');
-            expect(content).toContain('Connected Apps');
-            expect(content).toContain('After updating permissions, reconnect to refresh.');
+            expect(content).not.toContain('Allow Course Import');
+            expect(content).not.toContain('Routes are ready to send');
         });
     });
 
@@ -721,7 +668,7 @@ describe('ServicesGarminComponent', () => {
 
             expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
-                'Connect both Garmin and Suunto accounts before enabling sync.',
+                'Connect Garmin and Suunto before turning on automatic activity sync.',
                 undefined,
                 { duration: 4000 }
             );
@@ -742,7 +689,7 @@ describe('ServicesGarminComponent', () => {
 
             expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
-                'Reconnect Suunto before enabling sync.',
+                'Reconnect Suunto before turning on automatic activity sync.',
                 undefined,
                 { duration: 4000 }
             );
@@ -786,7 +733,7 @@ describe('ServicesGarminComponent', () => {
             fixture.detectChanges();
 
             const queueButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
-                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Queue now')) as HTMLButtonElement | undefined;
+                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Sync activities')) as HTMLButtonElement | undefined;
 
             expect(component.isGarminToSuuntoRouteEnabled).toBe(false);
             expect(queueButton).toBeTruthy();
@@ -804,7 +751,7 @@ describe('ServicesGarminComponent', () => {
 
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.textContent).toContain('Suunto needs to be reconnected before Garmin -> Suunto sync can run.');
+            expect(fixture.nativeElement.textContent).toContain('Reconnect Suunto before syncing Garmin activities.');
             expect(fixture.nativeElement.querySelector('mat-slide-toggle')).toBeFalsy();
         });
 
@@ -813,7 +760,7 @@ describe('ServicesGarminComponent', () => {
             component.user = { uid: 'non-allowlisted-user', settings: {} } as any;
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.textContent).toContain('Garmin -> Suunto Sync');
+            expect(fixture.nativeElement.textContent).toContain('Send Garmin activities to Suunto');
         });
 
         it('should render failed backfill events in the summary', () => {
@@ -838,7 +785,7 @@ describe('ServicesGarminComponent', () => {
             fixture.detectChanges();
 
             const content = fixture.nativeElement.textContent;
-            expect(content).toContain('Failed: 1');
+            expect(content).toContain('Could not schedule: 1');
             expect(content).toContain('event-123');
             expect(content).toContain('queue enqueue failed');
         });
@@ -851,13 +798,11 @@ describe('ServicesGarminComponent', () => {
 
             fixture.detectChanges();
 
-            const infoBlock = fixture.nativeElement.querySelector('app-status-info[title="Manual Catch-up Scope"]');
+            const infoBlock = fixture.nativeElement.querySelector('app-status-info[title="Choose which activities to send"]');
             const content = fixture.nativeElement.textContent;
             expect(infoBlock).toBeTruthy();
-            expect(content).toContain('Use this anytime to queue Garmin -> Suunto sync jobs');
-            expect(content).toContain('activities already imported into Quantified Self');
-            expect(content).toContain('uses stored original files');
-            expect(content).toContain('can run even when automatic sync is turned off');
+            expect(content).toContain('Choose a date range to send Garmin activities already in Quantified Self to Suunto');
+            expect(content).toContain('even when automatic activity sync is off');
         });
 
         it('should log route backfill analytics when catch-up succeeds', async () => {
@@ -904,7 +849,7 @@ describe('ServicesGarminComponent', () => {
 
             const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
             expect(warningPill).toBeTruthy();
-            expect((warningPill.textContent || '').trim()).toContain('Used by active auto-sync route');
+            expect((warningPill.textContent || '').trim()).toContain('Used by automatic sync');
         });
 
         it('should require confirmation before disconnect when active sync route would be disabled', async () => {

@@ -176,7 +176,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-panel')).toBeNull();
         expect(toolPanels).toHaveLength(1);
         expect(toolPanels[0].hidden).toBe(false);
-        expect(toolPanels[0].textContent).toContain('Route sync is a Pro feature.');
+        expect(toolPanels[0].textContent).toContain('Importing and sending routes is a Pro feature.');
     });
 
     it('hides inactive provider tool panels when switching tabs', () => {
@@ -199,7 +199,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(panels[0].hidden).toBe(true);
         expect(getComputedStyle(panels[0]).display).toBe('none');
         expect(panels[1].hidden).toBe(false);
-        expect(panels[1].textContent).toContain('Suunto Route Import');
+        expect(panels[1].textContent).toContain('Import routes from Suunto');
 
         tabs[2].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         fixture.detectChanges();
@@ -386,8 +386,8 @@ describe('ServicesSuuntoComponent', () => {
             fixture.detectChanges();
 
             const content = fixture.nativeElement.textContent;
-            expect(content).toContain('Suunto Route Import');
-            expect(content).toContain('Queue all current routes');
+            expect(content).toContain('Import routes from Suunto');
+            expect(content).toContain('Import existing routes');
         });
 
         it('does not show legacy global route catch-up completion when connected accounts lack provider-scoped state', () => {
@@ -433,7 +433,7 @@ describe('ServicesSuuntoComponent', () => {
             await component.queueRoutesFromSuunto(new MouseEvent('click'));
 
             expect(mockUserService.addSuuntoRoutesToQueueForCurrentUser).toHaveBeenCalled();
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Queued 2 routes. Skipped 1.', undefined, { duration: 3500 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Route import started for 2 routes. Already up to date: 1.', undefined, { duration: 3500 });
         });
 
         it('renders Suunto to Garmin course delivery controls for a regular user', () => {
@@ -463,9 +463,9 @@ describe('ServicesSuuntoComponent', () => {
 
             const content = fixture.nativeElement.textContent;
             expect(component.isSuuntoToGarminRouteAvailableForUser).toBe(true);
-            expect(content).toContain('Suunto -> Garmin Course Delivery');
-            expect(content).toContain('Queue now');
-            expect(content).toContain('only uses routes already saved in Quantified Self');
+            expect(content).toContain('Send Suunto routes to Garmin');
+            expect(content).toContain('Send routes');
+            expect(content).toContain('routes already saved in Quantified Self');
             expect(component.canEnableSuuntoToGarminRoute).toBe(true);
         });
 
@@ -489,7 +489,7 @@ describe('ServicesSuuntoComponent', () => {
 
             expect(mockUserService.updateRouteDeliverySyncRouteSettings).not.toHaveBeenCalled();
             expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Connect Suunto and Garmin with Garmin Course Import permission before enabling route delivery.',
+                'Connect Suunto and Garmin, and allow Course Import in Garmin Connect.',
                 undefined,
                 { duration: 4500 },
             );
@@ -520,7 +520,7 @@ describe('ServicesSuuntoComponent', () => {
 
             expect(mockUserService.updateRouteDeliverySyncRouteSettings).not.toHaveBeenCalled();
             expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Connect Suunto and Garmin with Garmin Course Import permission before enabling route delivery.',
+                'Connect Suunto and Garmin, and allow Course Import in Garmin Connect.',
                 undefined,
                 { duration: 4500 },
             );
@@ -546,7 +546,7 @@ describe('ServicesSuuntoComponent', () => {
             expect(mockUserService.updateRouteDeliverySyncRouteSettings).toHaveBeenCalledWith(component.user, {
                 [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: true,
             });
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Suunto to Garmin route delivery enabled.', undefined, { duration: 3000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('New Suunto routes will be sent to Garmin automatically.', undefined, { duration: 3000 });
         });
 
         it('queues Suunto to Garmin delivery from saved Quantified Self routes', async () => {
@@ -577,7 +577,7 @@ describe('ServicesSuuntoComponent', () => {
                 failedCount: 0,
                 failedRoutes: [],
             });
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Queued 1 route delivery job(s).', undefined, { duration: 4000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Route sending started for 1 route.', undefined, { duration: 4000 });
         });
     });
 
@@ -598,7 +598,7 @@ describe('ServicesSuuntoComponent', () => {
 
         const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
         expect(warningPill).toBeTruthy();
-        expect((warningPill.textContent || '').trim()).toContain('Used by active auto-sync route');
+        expect((warningPill.textContent || '').trim()).toContain('Used by automatic sync');
     });
 
     it('should show inline warning pill when connected service is used by active route delivery sync', () => {
@@ -618,7 +618,7 @@ describe('ServicesSuuntoComponent', () => {
 
         const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
         expect(warningPill).toBeTruthy();
-        expect((warningPill.textContent || '').trim()).toContain('Used by active auto-sync route');
+        expect((warningPill.textContent || '').trim()).toContain('Used by automatic sync');
     });
 
     it('should ask for confirmation before disconnect when active route depends on Suunto', async () => {

@@ -413,7 +413,7 @@ describe('RoutesPageComponent', () => {
         await component.queueSuuntoRouteCatchUpPrompt();
 
         expect(userServiceMock.addSuuntoRoutesToQueueForCurrentUser).toHaveBeenCalled();
-        expect(snackBarMock.open).toHaveBeenLastCalledWith('Queued 2 routes. Skipped 1.', undefined, { duration: 3500 });
+        expect(snackBarMock.open).toHaveBeenLastCalledWith('Route import started for 2 routes. Already up to date: 1.', undefined, { duration: 3500 });
         expect(component.suuntoRouteCatchUpPromptError()).toBeNull();
         expect(component.suuntoRouteCatchUpPrompt()).toBeNull();
     });
@@ -438,7 +438,7 @@ describe('RoutesPageComponent', () => {
         await component.queueSuuntoRouteCatchUpPrompt();
 
         expect(snackBarMock.open).toHaveBeenLastCalledWith(
-            'Queued 2 routes. Skipped 1. Failed 1 connected account.',
+            'Route import started for 2 routes. Already up to date: 1. Could not check 1 connected account.',
             undefined,
             { duration: 4500 },
         );
@@ -465,7 +465,7 @@ describe('RoutesPageComponent', () => {
         await component.queueSuuntoRouteCatchUpPrompt();
 
         expect(snackBarMock.open).toHaveBeenLastCalledWith(
-            'Queued 1 route. Skipped 1. Failed 1.',
+            'Route import started for 1 route. Already up to date: 1. Could not import: 1.',
             undefined,
             { duration: 4500 },
         );
@@ -702,7 +702,7 @@ describe('RoutesPageComponent', () => {
             id: DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
             primaryAction: {
                 id: 'enableRouteDeliveryAutoSync',
-                label: 'Enable route sync',
+                label: 'Send routes automatically',
             },
             secondaryAction: {
                 id: 'dismissRouteDeliveryAutoSync',
@@ -816,7 +816,7 @@ describe('RoutesPageComponent', () => {
             enabled: true,
             source: 'routes_prompt',
         });
-        expect(snackBarMock.open).toHaveBeenCalledWith('Suunto to Garmin route delivery enabled.', undefined, { duration: 3000 });
+        expect(snackBarMock.open).toHaveBeenCalledWith('New Suunto routes will be sent to Garmin automatically.', undefined, { duration: 3000 });
         expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
     });
 

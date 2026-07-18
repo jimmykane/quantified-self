@@ -101,7 +101,7 @@ describe('suunto-route-catch-up.helper', () => {
       failureCount: 0,
       totalCount: 0,
     })).toEqual({
-      message: 'No Suunto routes were found to queue.',
+      message: 'No Suunto routes were found.',
       duration: 3500,
     });
 
@@ -111,7 +111,7 @@ describe('suunto-route-catch-up.helper', () => {
       failureCount: 3,
       totalCount: 6,
     })).toEqual({
-      message: 'Queued 2 routes. Skipped 1. Failed 3.',
+      message: 'Route import started for 2 routes. Already up to date: 1. Could not import: 3.',
       duration: 4500,
     });
 
@@ -122,7 +122,7 @@ describe('suunto-route-catch-up.helper', () => {
       failedProviderCount: 1,
       totalCount: 0,
     })).toEqual({
-      message: 'No Suunto routes were found to queue. Failed 1 connected account.',
+      message: 'No Suunto routes were found. Could not check 1 connected account.',
       duration: 4500,
     });
   });

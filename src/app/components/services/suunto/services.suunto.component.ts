@@ -168,15 +168,15 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   get suuntoToGarminRouteStatusTitle(): string {
     if (!this.garminRouteSendContext.connected) {
-      return 'Connect Garmin for course delivery';
+      return 'Connect Garmin to send routes';
     }
     if (this.garminRouteSendContext.reconnectRequired) {
-      return 'Reconnect Garmin for course delivery';
+      return 'Reconnect Garmin to send routes';
     }
     if (this.garminRouteSendContext.missingPermissions.length > 0) {
       return 'Garmin Course Import permission needed';
     }
-    return 'Garmin course delivery ready';
+    return 'Routes are ready to send to Garmin';
   }
 
   get suuntoToGarminRouteStatusType(): 'success' | 'warning' | 'info' {
@@ -189,17 +189,17 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   get suuntoToGarminRouteStatusMessage(): string {
     const garminAccount = this.garminRouteSendContext.providerUserId;
     if (!this.garminRouteSendContext.connected) {
-      return 'Connect Garmin before enabling automatic Suunto route delivery to Garmin courses.';
+      return 'Connect Garmin before automatically sending Suunto routes to Garmin.';
     }
     if (this.garminRouteSendContext.reconnectRequired) {
-      return 'Reconnect Garmin before enabling automatic Suunto route delivery to Garmin courses.';
+      return 'Reconnect Garmin before automatically sending Suunto routes to Garmin.';
     }
     if (this.garminRouteSendContext.missingPermissions.length > 0) {
-      return 'Grant Garmin COURSE_IMPORT permission in Garmin Connect, then reconnect Garmin before enabling automatic route delivery.';
+      return 'Allow Course Import in Garmin Connect, then reconnect Garmin.';
     }
     return garminAccount
-      ? `Suunto routes saved in Quantified Self can be delivered to Garmin courses using Garmin account ${garminAccount}.`
-      : 'Suunto routes saved in Quantified Self can be delivered to Garmin courses.';
+      ? `Suunto routes saved in Quantified Self can be sent to Garmin account ${garminAccount}.`
+      : 'Suunto routes saved in Quantified Self can be sent to Garmin.';
   }
 
   constructor(protected http: HttpClient,
@@ -242,12 +242,12 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     }
 
     if (this.isReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before queuing route catch-up.', undefined, { duration: 4000 });
+      this.snackBar.open('Reconnect Suunto before importing existing routes.', undefined, { duration: 4000 });
       return;
     }
 
     if (!this.isConnectedToService()) {
-      this.snackBar.open('Connect your Suunto account before queuing routes.', undefined, { duration: 4000 });
+      this.snackBar.open('Connect Suunto before importing existing routes.', undefined, { duration: 4000 });
       return;
     }
 
@@ -258,7 +258,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       this.snackBar.open(feedback.message, undefined, { duration: feedback.duration });
     } catch (error: any) {
       this.logger.error(error);
-      this.snackBar.open(`Could not queue Suunto routes: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.snackBar.open(`Could not start the route import: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
     } finally {
       this.isQueueingRoutes = false;
     }
@@ -270,12 +270,12 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     }
 
     if (!this.isSuuntoToGarminRouteAvailableForUser) {
-      this.snackBar.open('This route delivery sync route is not available for this account.', undefined, { duration: 4000 });
+      this.snackBar.open('Automatic route sending is not available for this account.', undefined, { duration: 4000 });
       return;
     }
 
     if (enabled && !this.canEnableSuuntoToGarminRoute) {
-      this.snackBar.open('Connect Suunto and Garmin with Garmin Course Import permission before enabling route delivery.', undefined, { duration: 4500 });
+      this.snackBar.open('Connect Suunto and Garmin, and allow Course Import in Garmin Connect.', undefined, { duration: 4500 });
       return;
     }
 
@@ -288,10 +288,10 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         route_id: this.suuntoToGarminRouteID,
         enabled,
       });
-      this.snackBar.open(enabled ? 'Suunto to Garmin route delivery enabled.' : 'Suunto to Garmin route delivery disabled.', undefined, { duration: 3000 });
+      this.snackBar.open(enabled ? 'New Suunto routes will be sent to Garmin automatically.' : 'Automatic Suunto route sending to Garmin is off.', undefined, { duration: 3000 });
     } catch (error: any) {
       this.logger.error(error);
-      this.snackBar.open(`Could not update route delivery setting: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.snackBar.open(`Could not update automatic route sending: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
     } finally {
       this.isSavingRouteDeliverySyncRoute = false;
     }
@@ -310,12 +310,12 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     }
 
     if (!this.isSuuntoToGarminRouteAvailableForUser) {
-      this.snackBar.open('This route delivery sync route is not available for this account.', undefined, { duration: 4000 });
+      this.snackBar.open('Sending Suunto routes to Garmin is not available for this account.', undefined, { duration: 4000 });
       return;
     }
 
     if (!this.canQueueSuuntoToGarminRouteBackfill) {
-      this.snackBar.open('Connect Suunto and Garmin with Garmin Course Import permission before queueing route delivery.', undefined, { duration: 4500 });
+      this.snackBar.open('Connect Suunto and Garmin, and allow Course Import in Garmin Connect.', undefined, { duration: 4500 });
       return;
     }
 
@@ -332,11 +332,11 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         queued: summary.queued,
         failed_count: summary.failedCount,
       });
-      const failureSuffix = summary.failedCount > 0 ? ` Failed: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Queued ${summary.queued} route delivery job(s).${failureSuffix}`, undefined, { duration: 4000 });
+      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
+      this.snackBar.open(`Route sending started for ${summary.queued} ${summary.queued === 1 ? 'route' : 'routes'}.${failureSuffix}`, undefined, { duration: 4000 });
     } catch (error: any) {
       this.logger.error(error);
-      this.snackBar.open(`Could not queue route delivery: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.snackBar.open(`Could not start route sending: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
     } finally {
       this.isQueueingRouteDeliverySyncBackfill = false;
     }

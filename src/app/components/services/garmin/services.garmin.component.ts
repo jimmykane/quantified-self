@@ -23,7 +23,6 @@ import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfi
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
   getGarminProviderUserIdFromTokenLike,
-  getMissingGarminPermissionsForTokenLike,
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
 } from '@shared/garmin-service-token';
@@ -57,7 +56,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
     'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
     'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
-    'HEALTH_EXPORT': 'Required for Garmin sleep sync and sleep history backfill.',
+    'HEALTH_EXPORT': 'Required to import Garmin sleep history.',
     'COURSE_IMPORT': 'Required to send saved Quantified Self routes to Garmin Connect.',
     'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
   };
@@ -130,8 +129,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       : this.isDisconnectPending
       ? 'Disconnect is pending while Garmin finishes deauthorization. Sync and imports are paused for this connection.'
       : this.isReconnectRequired
-      ? 'Reconnect Garmin to resume history imports, saved route delivery, and Garmin to Suunto auto-sync.'
-      : 'Required for history imports, saved route delivery, and Garmin to Suunto auto-sync.';
+      ? 'Reconnect Garmin to resume history imports, sending saved routes to Garmin, and automatic activity sync to Suunto.'
+      : 'Required for history imports, sending saved routes to Garmin, and automatic activity sync to Suunto.';
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -188,71 +187,6 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
         .forEach(permission => missingPermissions.add(permission));
     }
     return GARMIN_REQUIRED_PERMISSIONS.filter(permission => missingPermissions.has(permission));
-  }
-
-  get routeSendMissingPermissions(): string[] {
-    const token = this.preferredGarminRouteSendToken;
-    return token
-      ? getMissingGarminPermissionsForTokenLike(token, GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS)
-      : [];
-  }
-
-  get isRouteSendPermissionStateLoading(): boolean {
-    return this.isConnectedToService()
-      && !this.isReconnectRequired
-      && !this.hasPermissionsLoaded;
-  }
-
-  get canSendSavedRoutesToGarmin(): boolean {
-    return this.hasProAccess
-      && this.isConnectedToService()
-      && !this.isReconnectRequired
-      && !this.isRouteSendPermissionStateLoading
-      && !!this.preferredGarminRouteSendToken
-      && this.routeSendMissingPermissions.length === 0;
-  }
-
-  get routeSendStatusType(): 'success' | 'warning' | 'info' {
-    if (this.isReconnectRequired || this.isRouteSendPermissionStateLoading) {
-      return 'info';
-    }
-    if (this.routeSendMissingPermissions.length > 0) {
-      return 'warning';
-    }
-    return 'success';
-  }
-
-  get routeSendStatusTitle(): string {
-    if (this.isReconnectRequired) {
-      return 'Reconnect Garmin for route delivery';
-    }
-    if (this.isRouteSendPermissionStateLoading) {
-      return 'Checking Garmin route delivery';
-    }
-    if (this.routeSendMissingPermissions.length > 0) {
-      return 'Garmin route delivery needs permission';
-    }
-    return 'Saved route delivery ready';
-  }
-
-  get routeSendStatusMessage(): string {
-    const routeSendAccount = this.routeSendGarminUserID;
-    if (this.isReconnectRequired) {
-      return routeSendAccount
-        ? `Reconnect Garmin account ${routeSendAccount} before sending saved routes from Routes to Garmin Connect.`
-        : 'Reconnect Garmin before sending saved routes from Routes to Garmin Connect.';
-    }
-    if (this.isRouteSendPermissionStateLoading) {
-      return 'Checking Garmin permissions for saved route delivery.';
-    }
-    if (this.routeSendMissingPermissions.length > 0) {
-      return routeSendAccount
-        ? `Grant Garmin COURSE_IMPORT permission for ${routeSendAccount} in Garmin Connect, then reconnect before sending saved routes to Garmin Connect.`
-        : 'Grant Garmin COURSE_IMPORT permission in Garmin Connect, then reconnect before sending saved routes to Garmin Connect.';
-    }
-    return routeSendAccount
-      ? `Saved FIT and GPX routes can be sent from Routes to Garmin Connect using ${routeSendAccount}, and later sends update the same Garmin course for the same saved route.`
-      : 'Saved FIT and GPX routes can be sent from Routes to Garmin Connect, and later sends update the same Garmin course for the same saved route.';
   }
 
   get hasPermissionsLoaded(): boolean {
@@ -380,17 +314,17 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     }
 
     if (!this.isGarminToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
       return;
     }
 
     if (enabled && this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before enabling sync.', undefined, { duration: 4000 });
+      this.snackBar.open('Reconnect Suunto before turning on automatic activity sync.', undefined, { duration: 4000 });
       return;
     }
 
     if (enabled && (!this.isConnectedToService() || !this.isSuuntoConnected)) {
-      this.snackBar.open('Connect both Garmin and Suunto accounts before enabling sync.', undefined, { duration: 4000 });
+      this.snackBar.open('Connect Garmin and Suunto before turning on automatic activity sync.', undefined, { duration: 4000 });
       return;
     }
 
@@ -401,10 +335,10 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       });
 
       this.analyticsService.logActivitySyncRouteToggle(this.garminToSuuntoRouteID, enabled);
-      this.snackBar.open(enabled ? 'Garmin to Suunto auto-sync enabled.' : 'Garmin to Suunto auto-sync disabled.', undefined, { duration: 3000 });
+      this.snackBar.open(enabled ? 'New Garmin activities will be sent to Suunto automatically.' : 'Automatic Garmin activity sync to Suunto is off.', undefined, { duration: 3000 });
     } catch (error: any) {
       this.logger.error(error);
-      this.snackBar.open(`Could not update sync setting: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.snackBar.open('Could not update automatic activity sync.', undefined, { duration: 5000 });
     } finally {
       this.isSavingSyncRoute = false;
     }
@@ -418,22 +352,22 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     }
 
     if (!this.isGarminToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
       return;
     }
 
     if (this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before running Garmin to Suunto catch-up.', undefined, { duration: 4000 });
+      this.snackBar.open('Reconnect Suunto before syncing past Garmin activities.', undefined, { duration: 4000 });
       return;
     }
 
     if (!this.isConnectedToService() || !this.isSuuntoConnected) {
-      this.snackBar.open('Connect both Garmin and Suunto accounts before running catch-up.', undefined, { duration: 4000 });
+      this.snackBar.open('Connect Garmin and Suunto before syncing past activities.', undefined, { duration: 4000 });
       return;
     }
 
     if (this.isBackfillDateRangeInvalid) {
-      this.snackBar.open('Backfill start date must be before end date.', undefined, { duration: 3500 });
+      this.snackBar.open('The start date must be before the end date.', undefined, { duration: 3500 });
       return;
     }
 
@@ -452,11 +386,11 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
         queued: summary.queued,
         failedCount: summary.failedCount,
       });
-      const failureSuffix = summary.failedCount > 0 ? ` Failed: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Backfill complete. Queued ${summary.queued} sync job(s).${failureSuffix}`, undefined, { duration: 4000 });
+      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
+      this.snackBar.open(`Activity sync started for ${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'}.${failureSuffix}`, undefined, { duration: 4000 });
     } catch (error: any) {
       this.logger.error(error);
-      this.snackBar.open(`Backfill failed: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
     } finally {
       this.isBackfillingSync = false;
     }

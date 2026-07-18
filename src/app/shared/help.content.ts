@@ -138,8 +138,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
 - Pro users with activity data but without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
-- Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when an eligible auto-sync route is still disabled. Enabling it turns on future Garmin/COROS -> Suunto imports only; existing activities can still be queued from **Services** with Manual Catch-up. Dismissing it hides the prompt permanently.
-- If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Garmin/COROS -> Suunto auto-sync routes stay disabled until you enable them again in **Services**; dismissing the card only hides the reminder.
+- Pro users with Suunto plus Garmin and/or COROS connected may see a **Send new activities to Suunto** action prompt when automatic activity sync is off. Turning it on affects new Garmin or COROS activities only; use **Sync past activities** in **Services** for activities already in Quantified Self. Dismissing the prompt hides it permanently.
+- If Suunto disconnects server-side or stops accepting the stored token, the dashboard can show a **Reconnect Suunto** action prompt. Reconnecting restarts sleep sync, history imports, and upload tools. Automatic Garmin to Suunto and COROS to Suunto activity sync stays off until you turn it on again in **Services**; dismissing the card only hides the reminder.
 - Distance values in dashboards, event charts, activity chips, and CSV exports follow your kilometers or miles preference from **Settings -> Units**; jump distances display in feet when miles are selected.
 - **Map** tiles can use activity events or saved route previews as their source. Activity map tiles use their own tile date-range and activity filters, independent from the event table search; **Routes** map tiles show recent saved routes from lightweight route previews and do not use event filters.
 - **Cycling Power Curve** and **Running Power Curve** are curated derived snapshots: each uses its own prepared date range, defaults to **1y**, and compares your best power per duration with either the latest activity or a saved recent-best comparison window. Power Curve tiles do not use activity subfilters or historical window navigation.
@@ -209,6 +209,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The chart does not use slider or reload/reset toolbar controls.
 - Form trend lines continue to **today** with zero-load decay after your latest workout.
 - Headline **Current CTL / Current ATL / Current TSB** values reflect the current-day decayed state; **Latest workout TSS** stays anchored to your latest real workout.
+- CTL, ATL, Form Now, and Ramp Rate use that same current UTC-day Form series, so their dates and values stay aligned across Dashboard and Training.
+- CTL updates as **previous CTL + (today TSS - previous CTL) / 42**; ATL uses the same calculation with **/ 7**; TSB is **CTL - ATL**.
 - Form/TSS uses adaptive render granularity by view: **W = daily points**, **M = weekly points**, **Y = monthly points**.
 - While derived metrics are refreshing, the tile shows a training-metrics **updating** message instead of generic no-data text.
 - When snapshots are missing or stale, they rebuild asynchronously; refresh usually follows within a few minutes.
@@ -230,7 +232,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Load Status** summarizes current training state from current TSB, CTL ramp, current CTL, and current ATL.
 - KPI detail menus show the current metric state, the latest derived day or week used, and the input signals behind summary labels such as **Load Status** and **Training Balance**.
 - KPI no-data guidance is metric-specific: efficiency asks for power plus heart-rate samples, intensity balance asks for power or heart-rate zones, and load/readiness KPIs ask for TSS-backed training load.
-- **Form Now** uses current TSB readiness from the latest derived load state.
+- **Form Now** uses current TSB from the same current-day Form series as CTL, ATL, and Ramp Rate.
 - **Fitness (CTL)** uses current 42-day chronic training load from the derived Form model.
 - **Fatigue (ATL)** uses current 7-day acute training load from the derived Form model.
 - **Fitness Trend** shows recent CTL direction from the derived Form model.
@@ -497,7 +499,7 @@ The app accepts these file types for manual activity upload:
 
 The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML activity uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout File Comparison](/features/workout-file-comparison) page explains how those files can be compared with provider activities and benchmark reports. The public [FIT and GPX Route Files](/features/fit-gpx-route-files) page explains saved FIT course and GPX route/track uploads, original-file retention, downloads, and route limits.
 
-Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints and turn instructions, and original-file download. GPX files with route points, untimed tracks, or timed track geometry can be saved as routes from **Routes**. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore. New or reprocessed saved routes store a lightweight encoded route preview for route-table thumbnails, the Routes page map, and dashboard route maps. The Routes page map follows the current table filters using saved-route documents only; it does not load activity events or parse original route files. Older saved routes need a reprocess or controlled backfill before they appear with previews.
+Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints and turn instructions, and original-file download. GPX files with route points, untimed tracks, or timed track geometry can be saved as routes from **Routes**. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore. New or reprocessed saved routes store a lightweight encoded route preview for route-table thumbnails, the Routes page map, and dashboard route maps. The Routes page map follows the current table filters using saved-route documents only; it does not load activity events or parse original route files. Older saved routes need to be reprocessed before they appear with previews.
 
 ## Activity limits
 
@@ -551,11 +553,11 @@ From an activity action menu you can also:
 
 Garmin, Suunto, and COROS connections are part of **Pro**.
 
-Services opens each provider on a compact connection overview. Choose the action on an activity, route, upload, or auto-sync card to open the provider's advanced tools in a dialog. Each action opens directly on the matching tool. Close the dialog to return to the unchanged overview.
+Services opens each provider on a compact connection overview. Choose an action on an activity, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin -> Suunto sync, COROS -> Suunto sync, Garmin saved-route delivery to Garmin Connect, Suunto -> Garmin course delivery, manual catch-up, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin to Suunto activity sync, COROS to Suunto activity sync, sending saved routes to Garmin Connect, syncing past activities, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
@@ -567,7 +569,7 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Suunto and Garmin Pro users can queue **Backfill Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto queues sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin requests sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Suunto and Garmin Pro users can choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
 
 ## Suunto
 
@@ -575,22 +577,22 @@ Suunto tools currently include:
 
 - connecting your account,
 - syncing recent sleep samples,
-- backfilling sleep history from Jan 1, 2016,
+- importing sleep history from Jan 1, 2016,
 - importing history,
 - automatically importing saved Suunto routes,
-- queueing a manual Suunto route catch-up,
+- importing existing Suunto routes,
 - uploading FIT activities to Suunto,
 - uploading GPX routes to Suunto.
 
-Suunto FIT activity uploads in Services show a per-file queue with upload status, duplicate detection, failure messages, and retry controls for failed files. Large upload batches are processed one file at a time with short pauses between provider upload calls.
+Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
-While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes a **Route Sync** panel with manual catch-up, which queues every current Suunto route again for first-time imports or reconnect cases. The **Routes** page can also show a one-time prompt for the same first-time Suunto route catch-up.
+While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes an **Import existing routes** action for first-time imports or after reconnecting. The **Routes** page can also show a one-time prompt to import existing Suunto routes.
 
-Suunto users can also enable **Suunto -> Garmin course delivery** from the Suunto **Route Sync** panel or from a one-time **Routes** page action prompt when Suunto and Garmin route delivery are both ready. This sends newly imported or updated Suunto routes that are already saved in Quantified Self to Garmin as courses. It requires Garmin to be connected with **COURSE_IMPORT** permission. The **Queue now** action is a convenience backfill that scans Suunto-sourced routes already saved in Quantified Self; it does not fetch routes from Suunto or Garmin.
+Suunto users can turn on **Automatically send new and updated routes** in Suunto Services or from a one-time **Routes** page prompt when both Suunto and Garmin are ready. This sends newly imported or updated Suunto routes already saved in Quantified Self to Garmin as courses. Garmin must be connected with **Course Import** permission. **Send routes** uses Suunto routes already saved in Quantified Self; it does not fetch routes from Suunto or Garmin.
 
 Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Suunto imports sent route files as new routes, so sending an edited route that was already sent to Suunto creates an updated copy in Suunto App. Routes imported from Suunto are not sent back to the same connected Suunto account, but they can still be sent to a different connected Suunto account when one exists. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
 
-See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, sleep sync, route imports, and route delivery.
+See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, sleep sync, route imports, and sending routes to Garmin.
 
 ## Garmin
 
@@ -601,32 +603,30 @@ Garmin history import has two important limits:
 
 Garmin can deliver imported activities gradually over hours or days.
 
-Garmin sleep history backfill is separate from activity history import. It requests sleep through Garmin Health API and records appear later as Garmin sends sleep notifications.
+Garmin sleep history import is separate from activity history import. It requests sleep through Garmin Health API and records appear later as Garmin sends sleep notifications.
 
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
 
-Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**. This is a user-initiated route delivery workflow, not a Garmin route import or catch-up feature. Garmin route delivery requires a connected Garmin account with **COURSE_IMPORT** permission. If that permission is missing, Routes can show a Garmin permission prompt; open Garmin Connect, go to **Connected Apps**, update the Quantified Self permissions, and reconnect Garmin from Routes or **Services**. Quantified Self reparses the original saved route file, sends the saved Quantified Self route name, and updates the same Garmin course on resend for the same Garmin account instead of creating duplicates.
+Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**. Garmin must be connected with **Course Import** permission. If that permission is missing, Routes can show a Garmin permission prompt; open Garmin Connect, go to **Connected Apps**, allow Course Import for Quantified Self, and reconnect Garmin from Routes or **Services**. Quantified Self reads the original saved route file, uses the saved route name, and updates the same Garmin course when you send that route again to the same Garmin account.
 See [Policies -> Garmin Data](/policies#garmin-data) for the provider-specific privacy summary for Garmin imports, sleep history, and Garmin to Suunto sync.
 
-Garmin -> Suunto activity sync is route-based:
+Garmin to Suunto activity sync requires:
 
 - you must connect both Garmin and Suunto,
-- enable the route toggle in Garmin Services,
-- and keep Garmin ACTIVITY_EXPORT permission enabled.
+- turn on automatic activity sync in Garmin Services,
+- and allow Activity Export in Garmin.
 
-Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings. After reconnecting, re-enable the route toggle if you want automatic sync to resume.
+Disconnecting Garmin, COROS, or Suunto turns off related automatic activity sync. After reconnecting, turn it on again if you want automatic sync to resume.
 
-If a provider revokes access or rejects the stored refresh token, Quantified Self marks that connection as **Reconnect required** in Services and may also show a dashboard reconnect prompt. Reconnecting creates a fresh token chain; dismissing the prompt does not reconnect automatically.
+If a provider revokes access, Quantified Self marks that connection as **Reconnect required** in Services and may also show a dashboard reconnect prompt. Reconnecting restores access; dismissing the prompt does not reconnect automatically.
 
 Automatic sync runs only for newly imported Garmin activities and uses the stored original activity file from your event.
 
-Manual catch-up is available in Garmin Services: choose a date range to queue Garmin -> Suunto sync jobs for events already imported into Quantified Self.
+**Sync past activities** is available in Garmin Services: choose a date range to send Garmin activities already imported into Quantified Self to Suunto. It uses the original files already saved with those activities.
 
-Manual catch-up is a convenience tool for queuing a period on demand. It uses stored original files already attached to existing Quantified Self events.
+You can sync past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
 
-Manual catch-up can run even when the Garmin -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
-
-When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to enable Garmin -> Suunto auto-sync. Dismissing the prompt hides it permanently; Manual catch-up remains available in Services.
+When Garmin and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync. Dismissing the prompt hides it permanently; **Sync past activities** remains available in Services.
 
 ## COROS
 
@@ -639,27 +639,27 @@ COROS tools currently include:
 - importing history,
 - uploading FIT activities to COROS.
 
-COROS FIT activity uploads in Services use the same per-file queue, short provider upload pacing, and failed-file retry controls as Suunto uploads.
+COROS FIT activity uploads in Services use the same per-file status, short provider upload pacing, and failed-file retry controls as Suunto uploads.
 
-COROS -> Suunto activity sync is route-based:
+COROS to Suunto activity sync requires:
 
 - you must connect both COROS and Suunto,
-- enable the route toggle in COROS Services,
+- turn on automatic activity sync in COROS Services,
 - and keep both service connections active.
 
 Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event.
 
-Manual catch-up is available in COROS Services: choose a date range to queue COROS -> Suunto sync jobs for events already imported into Quantified Self.
+**Sync past activities** is available in COROS Services: choose a date range to send COROS activities already imported into Quantified Self to Suunto.
 
-Manual catch-up can run even when the COROS -> Suunto auto-sync toggle is off, and it does not enable auto-sync for future imports.
+You can sync past activities while automatic activity sync is off. This does not turn on automatic sync for future imports.
 
-When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync. Dismissing the prompt hides it permanently; Manual catch-up remains available in Services.
+When COROS and Suunto are connected, the dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync. Dismissing the prompt hides it permanently; **Sync past activities** remains available in Services.
 
 See [Policies -> COROS Data](/policies#coros-data) for the provider-specific privacy summary for COROS imports, sleep summaries, uploads, and COROS to Suunto sync.
 
-## Queue behavior
+## Import processing times
 
-Suunto and COROS history imports are queued jobs. Large ranges can take hours or days to finish, depending on volume and queue load.`,
+Suunto and COROS history imports run in the background. Large date ranges can take hours or days to finish, depending on volume and current demand.`,
     links: [
       { label: 'Integrations', icon: 'hub', kind: 'route', target: '/integrations' },
       { label: 'Features', icon: 'dashboard_customize', kind: 'route', target: '/features' },
@@ -754,8 +754,8 @@ This action cannot be undone.
 
 ## Imports taking longer than expected
 
-- Garmin backfills can arrive gradually.
-- Suunto and COROS imports are queue-based and can take hours or days.
+- Garmin history imports can arrive gradually.
+- Suunto and COROS imports run in the background and can take hours or days.
 - Check cooldowns and connection status before retrying.
 - If Services shows **Reconnect required**, reconnect that provider before retrying imports or sleep sync.
 

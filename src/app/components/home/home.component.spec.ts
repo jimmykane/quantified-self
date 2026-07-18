@@ -157,12 +157,12 @@ describe('HomeComponent', () => {
         );
 
         expect(integrationCards.length).toBe(5);
-        expect(text).toContain('Garmin -> Suunto and COROS -> Suunto sync are built in');
+        expect(text).toContain('Automatically send new Garmin and COROS activities to Suunto');
         expect(text).toContain('Automatic Sync for All Services');
         expect(text).toContain('Automatic Sync Between Services');
         expect(text).toContain('Manual Route Uploads');
         expect(text).toContain('Manual Activity Uploads to Suunto');
-        expect(text).toContain('reliable and instant sync');
+        expect(text).toContain('choose a date range to sync activities');
         expect(text).toContain('Explore Integrations');
         expect(integrationLinks.length).toBeGreaterThanOrEqual(1);
         expect(text).not.toContain('Set up sync');

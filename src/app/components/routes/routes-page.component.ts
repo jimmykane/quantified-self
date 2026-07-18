@@ -876,7 +876,7 @@ export class RoutesPageComponent implements OnInit {
                 enabled: true,
                 source: 'routes_prompt',
             });
-            this.snackBar.open('Suunto to Garmin route delivery enabled.', undefined, { duration: 3000 });
+            this.snackBar.open('New Suunto routes will be sent to Garmin automatically.', undefined, { duration: 3000 });
         } catch (error) {
             this.routeDeliveryAutoSyncPromptError.set('Could not enable route sync.');
             this.logger.error('[RoutesPageComponent] Failed to enable Suunto to Garmin route delivery prompt', error);

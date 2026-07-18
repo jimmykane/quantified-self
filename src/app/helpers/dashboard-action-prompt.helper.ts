@@ -210,7 +210,7 @@ export function resolveDashboardActivityAutoSyncRouteIds(
 }
 
 export function buildActivityAutoSyncEnabledSnackbarMessage(routeIds: readonly ActivitySyncRouteId[]): string {
-  return `Auto-sync enabled for ${formatActivityAutoSyncRouteSourceLabel(routeIds)} -> Suunto.`;
+  return `New activities from ${formatActivityAutoSyncRouteSourceLabel(routeIds)} will be sent to Suunto automatically.`;
 }
 
 export function buildDashboardActionPromptViewModels(
@@ -305,12 +305,12 @@ export function buildDashboardActionPromptViewModels(
       id: DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,
       icon: 'published_with_changes',
       title: 'Send new activities to Suunto',
-      description: `Enable ${formatActivityAutoSyncRouteSourceLabel(options.enableActivityAutoSyncRouteIds)} -> Suunto auto-sync for new imported activities. Existing activities can be queued from Services with Manual Catch-up.`,
+      description: `Automatically send new ${formatActivityAutoSyncRouteSourceLabel(options.enableActivityAutoSyncRouteIds)} activities to Suunto. You can sync past activities separately from Connections.`,
       busy: options.enableActivityAutoSyncBusy,
       error: options.enableActivityAutoSyncError,
       primaryAction: {
         id: 'enableActivityAutoSync',
-        label: 'Enable auto-sync',
+        label: 'Send automatically',
         loadingLabel: 'Enabling...',
         icon: 'sync',
       },
@@ -325,13 +325,13 @@ export function buildDashboardActionPromptViewModels(
     prompts.push({
       id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
       icon: 'bedtime',
-      title: 'Backfill Garmin sleep',
-      description: 'Request Garmin sleep history from Jan 1, 2016. Garmin sends sleep records asynchronously, and existing records update idempotently.',
+      title: 'Import Garmin sleep history',
+      description: 'Import Garmin sleep records from January 1, 2016 to today. Records may appear gradually over the next few hours.',
       busy: options.backfillGarminSleepBusy,
       error: options.backfillGarminSleepError,
       primaryAction: {
         id: 'backfillGarminSleep',
-        label: 'Backfill sleep',
+        label: 'Import sleep history',
         loadingLabel: 'Requesting...',
         icon: 'bedtime',
       },
@@ -347,7 +347,7 @@ export function buildDashboardActionPromptViewModels(
       id: DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
       icon: 'sync_problem',
       title: 'Reconnect Suunto',
-      description: 'Suunto stopped accepting the previous connection. Reconnect to resume sleep sync, history imports, and uploads. Garmin/COROS -> Suunto auto-sync routes stay off until you enable them again.',
+      description: 'Suunto stopped accepting the previous connection. Reconnect to resume sleep sync, history imports, and uploads. Automatic activity sync from Garmin and COROS stays off until you turn it on again.',
       busy: options.reconnectSuuntoServiceBusy,
       error: options.reconnectSuuntoServiceError,
       primaryAction: {

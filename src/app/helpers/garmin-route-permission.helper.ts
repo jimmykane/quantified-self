@@ -109,8 +109,8 @@ export function buildGarminRoutePermissionPromptViewModel(
   return {
     id: DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
     icon: 'route',
-    title: 'Enable Garmin route delivery',
-    description: 'Garmin is connected, but sending saved routes needs route delivery permission. In Garmin Connect, open Connected Apps, choose Quantified Self, enable Course Import, then reconnect Garmin here.',
+    title: 'Allow saved routes to be sent to Garmin',
+    description: 'Garmin is connected, but Course Import is off. In Garmin Connect, open Connected Apps, choose Quantified Self, allow Course Import, then reconnect Garmin here.',
     busy: options.busy,
     error: options.error,
     primaryAction: {

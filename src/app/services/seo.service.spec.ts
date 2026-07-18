@@ -131,9 +131,9 @@ describe('SeoService', () => {
         expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
         expect(mockScript.textContent).toContain('"@type":"SoftwareApplication"');
         expect(mockScript.textContent).toContain('private training dashboard');
-        expect(mockScript.textContent).toContain('Garmin -> Suunto');
-        expect(mockScript.textContent).toContain('COROS -> Suunto');
-        expect(mockScript.textContent).toContain('catch-up sync');
+        expect(mockScript.textContent).toContain('Garmin to Suunto activity sync');
+        expect(mockScript.textContent).toContain('COROS to Suunto activity sync');
+        expect(mockScript.textContent).toContain('Sync past activities to Suunto by date');
     });
 
     it('should remove JSON-LD on non-home page', () => {

@@ -53,7 +53,7 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
     content: [
         '<strong>What this section covers:</strong> This page explains what connected-service data Quantified Self collects, how it is used inside the product, what may be stored for exports, reprocessing, and sync tools, and which third parties process that data.',
         '<strong>Storage location:</strong> Imported provider data, saved route metadata, source-file references, and related processing metadata are stored in Quantified Self infrastructure on Google Cloud in the EU region.',
-        '<strong>User-initiated sharing:</strong> When you explicitly use provider features such as history import, FIT/GPX uploads, Suunto route delivery, or Garmin/COROS to Suunto sync, Quantified Self must transmit the relevant activity, route, or metadata payload to the destination provider so that workflow can complete.',
+        '<strong>User-initiated sharing:</strong> When you use features such as history import, FIT/GPX uploads, sending routes, or Garmin/COROS to Suunto activity sync, Quantified Self must send the activity, route, or related data needed by the destination provider.',
         '<strong>AI scope:</strong> Connected-service data is not forwarded wholesale to AI providers. AI Insights uses only the minimum derived stats needed to answer the prompt you submit, and does not send your raw activities, raw routes, or uploaded source files to the AI provider.',
     ],
     navLinks: [
@@ -71,19 +71,19 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             summary: 'Garmin activity, sleep, and Garmin to Suunto sync workflows.',
             content: [
                 '<strong>Collected from Garmin:</strong> When you connect Garmin, Quantified Self can import Garmin activities, request Garmin history imports, request Garmin sleep history, and receive Garmin health/sleep updates when Garmin permissions allow it.',
-                '<strong>Stored and used in Quantified Self:</strong> Imported Garmin data is used to build your dashboard, event analysis, sleep views, and related summaries. When the workflow requires it, Quantified Self may retain original activity files or equivalent source-file metadata so downloads, exports, reprocessing, and manual catch-up can work later.',
-                '<strong>Shared with Suunto from Garmin:</strong> If you enable Garmin to Suunto auto-sync or manual catch-up, Quantified Self uses the stored original activity file already attached to the Quantified Self event to deliver that activity to Suunto. That workflow therefore involves both Garmin-originated data and Suunto as a destination processor.',
+                '<strong>Stored and used in Quantified Self:</strong> Imported Garmin data is used to build your dashboard, event analysis, sleep views, and related summaries. When needed, Quantified Self may retain original activity files or equivalent source-file metadata for downloads, exports, reprocessing, and syncing past activities.',
+                '<strong>Shared with Suunto from Garmin:</strong> If you turn on automatic Garmin to Suunto activity sync or choose to sync past activities, Quantified Self uses the original activity file already saved with the Quantified Self event to send that activity to Suunto. That workflow therefore involves both Garmin-originated data and Suunto as a destination processor.',
             ],
         },
         {
             id: POLICIES_SUUNTO_DATA_FRAGMENT,
             title: 'Suunto Data',
             icon: 'published_with_changes',
-            summary: 'Suunto activity, sleep, route-import, FIT upload, and route-delivery workflows.',
+            summary: 'Suunto activity, sleep, route import, FIT upload, and route sending workflows.',
             content: [
-                '<strong>Collected from Suunto:</strong> When you connect Suunto, Quantified Self can import Suunto activities, request Suunto history imports, sync recent sleep data, request sleep backfill, and automatically import new or updated Suunto routes into your saved Routes list.',
+                '<strong>Collected from Suunto:</strong> When you connect Suunto, Quantified Self can import Suunto activities and history, sync recent sleep data, import sleep history, and automatically import new or updated Suunto routes into your saved Routes list.',
                 '<strong>Stored and used in Quantified Self:</strong> Imported Suunto data is used for event analysis, route detail views, dashboard summaries, sleep views, and saved route management. Connection metadata and processing metadata are also stored so reconnect, dedupe, and refresh workflows can work reliably.',
-                '<strong>Shared back to Suunto:</strong> When you upload FIT activities to Suunto or send a saved Quantified Self route to Suunto, Quantified Self transmits the file or generated GPX route payload needed for that upload. Saved route sends reparse the original saved route source file, generate a normalized GPX payload, and use the saved Quantified Self route name for the outbound route name.',
+                '<strong>Shared back to Suunto:</strong> When you upload FIT activities or send a saved route to Suunto, Quantified Self sends the file or generated GPX route needed for that upload. For saved routes, it reads the original source file, generates a compatible GPX file, and uses the saved Quantified Self route name.',
                 '<strong>Account-scope note:</strong> Routes imported from one Suunto account are blocked from being sent back to that same account, but can still be sent to a different connected Suunto account when that workflow is available to you.',
             ],
         },
@@ -95,8 +95,8 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             content: [
                 '<strong>Collected from COROS:</strong> When you connect COROS, Quantified Self can import recent COROS history, sync recent COROS sleep summaries, and import activities for event analysis and dashboard use.',
                 '<strong>Stored and used in Quantified Self:</strong> Imported COROS activities and summaries are used for dashboard metrics, event analysis, and provider-specific history tooling. Quantified Self may retain original activity files or equivalent source-file metadata when later downloads, exports, reprocessing, or sync tools depend on them.',
-                '<strong>Shared back to COROS:</strong> When you use the COROS FIT upload workflow, Quantified Self sends the selected FIT payload to COROS so the upload can complete.',
-                '<strong>Shared with Suunto from COROS:</strong> If you enable COROS to Suunto auto-sync or manual catch-up, Quantified Self uses the stored original activity file already attached to the imported Quantified Self event to transmit that activity to Suunto. That workflow therefore involves both COROS-originated data and Suunto as a destination processor.',
+                '<strong>Shared back to COROS:</strong> When you upload a FIT activity to COROS, Quantified Self sends the selected FIT file to COROS.',
+                '<strong>Shared with Suunto from COROS:</strong> If you turn on automatic COROS to Suunto activity sync or choose to sync past activities, Quantified Self uses the original activity file already saved with the imported Quantified Self event to send that activity to Suunto. That workflow therefore involves both COROS-originated data and Suunto as a destination processor.',
             ],
         },
         {
