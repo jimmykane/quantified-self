@@ -2,6 +2,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
+import { WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../wahoo/constants';
 
 export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
     switch (serviceName) {
@@ -13,5 +14,7 @@ export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
             return SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME;
         case ServiceNames.COROSAPI:
             return COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME;
+        case ServiceNames.WahooAPI:
+            return WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME;
     }
 }

@@ -15,7 +15,7 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
-type ServiceSectionId = 'suunto' | 'garmin' | 'coros';
+type ServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
 type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync';
 
 interface ServiceSectionOption {
@@ -48,11 +48,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
   public activeSection: ServiceSectionId = 'garmin';
-  public readonly sectionOrder: ServiceSectionId[] = ['garmin', 'suunto', 'coros'];
+  public readonly sectionOrder: ServiceSectionId[] = ['garmin', 'suunto', 'coros', 'wahoo'];
   public readonly serviceLabelBySection: Record<ServiceSectionId, string> = {
     garmin: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
     suunto: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     coros: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
+    wahoo: getProviderDisplayName(ServiceNames.WahooAPI, 'source'),
   };
   public readonly serviceSectionOptions: ServiceSectionOption[] = [
     {
@@ -69,6 +70,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
       id: 'coros',
       label: this.serviceLabelBySection.coros,
       serviceName: ServiceNames.COROSAPI,
+    },
+    {
+      id: 'wahoo',
+      label: this.serviceLabelBySection.wahoo,
+      serviceName: ServiceNames.WahooAPI,
     },
   ];
   public readonly serviceOverviewCardsBySection: Record<ServiceSectionId, readonly ServiceOverviewCard[]> = {
@@ -134,6 +140,16 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'auto-sync',
       },
     ],
+    wahoo: [
+      {
+        title: 'Activity sync',
+        description: 'New Wahoo activities import automatically while connected.',
+        detail: 'History import · Pro',
+        icon: 'sync',
+        actionLabel: 'History import',
+        tool: 'history',
+      },
+    ],
   };
   public serviceNames = ServiceNames;
   public hasProAccess = false;
@@ -145,6 +161,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     garmin: false,
     suunto: false,
     coros: false,
+    wahoo: false,
   };
 
 
@@ -156,6 +173,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     suunto: ServiceNames.SuuntoApp,
     garmin: ServiceNames.GarminAPI,
     coros: ServiceNames.COROSAPI,
+    wahoo: ServiceNames.WahooAPI,
   };
 
   constructor(private http: HttpClient, private fileService: AppFileService,
@@ -286,6 +304,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
     }
     if (serviceName === ServiceNames.COROSAPI) {
       return 'coros';
+    }
+    if (serviceName === ServiceNames.WahooAPI) {
+      return 'wahoo';
     }
     return 'garmin';
   }

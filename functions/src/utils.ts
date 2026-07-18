@@ -6,7 +6,8 @@ import * as logger from 'firebase-functions/logger';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import {
   COROSAPIEventMetaData,
-  SuuntoAppEventMetaData
+  SuuntoAppEventMetaData,
+  WahooAPIEventMetaData,
 } from '@sports-alliance/sports-lib';
 import { GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 
@@ -239,7 +240,7 @@ export async function setEventDocumentIfUserActive(
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<SetEventResult> {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData | WahooAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<SetEventResult> {
   await assertEventWriteUserActive(userID, 'event_write_start');
 
   // Enforce Usage Limit

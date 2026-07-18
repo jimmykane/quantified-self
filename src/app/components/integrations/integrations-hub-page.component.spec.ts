@@ -30,12 +30,13 @@ describe('IntegrationsHubPageComponent', () => {
     const text = fixture.nativeElement.textContent as string;
     const cards = fixture.nativeElement.querySelectorAll('.integration-card');
 
-    expect(cards.length).toBe(3);
-    expect(text).toContain('Integrations for Garmin, Suunto, and COROS');
+    expect(cards.length).toBe(4);
+    expect(text).toContain('Integrations for Garmin, Suunto, COROS, and Wahoo');
     expect(text).toContain('Garmin Integration');
     expect(text).toContain('Suunto Integration');
     expect(text).toContain('COROS Integration');
-    expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
+    expect(text).toContain('Wahoo Integration');
+    expect(text).toContain('centralize Garmin, Suunto, COROS, and Wahoo workout data');
     expect(text).toContain('Compare workout data across devices');
     expect(text).toContain('benchmark reports, metric overlays, source files, and reviewer-ready exports');
     expect(text).toContain('Set up the connection you need');
@@ -54,6 +55,7 @@ describe('IntegrationsHubPageComponent', () => {
     expect(hrefs).toContain('/integrations/garmin');
     expect(hrefs).toContain('/integrations/suunto');
     expect(hrefs).toContain('/integrations/coros');
+    expect(hrefs).toContain('/integrations/wahoo');
     expect(hrefs).toContain('/features');
     expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/features/workout-file-comparison');

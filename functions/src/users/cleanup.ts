@@ -12,6 +12,11 @@ import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from '../sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
+import {
+    WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
+    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
+    WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+} from '../wahoo/constants';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
     cleanupServiceConnectionForUser,
@@ -105,6 +110,7 @@ interface UserProviderIdentifiers {
     suuntoUserNames: Set<string>;
     corosOpenIds: Set<string>;
     garminUserIDs: Set<string>;
+    wahooUserIDs: Set<string>;
 }
 
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
@@ -115,11 +121,12 @@ const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
     SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
     COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
     GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
+    WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 ]);
 
 const LEGACY_PROVIDER_QUEUE_ORPHAN_SWEEP_LIMIT = 500;
 
-type ProviderIdentifierField = 'userName' | 'openId' | 'userID';
+type ProviderIdentifierField = 'userName' | 'openId' | 'userID' | 'wahooUserID';
 
 interface ProviderQueueLookup {
     serviceName: ServiceNames;
@@ -155,6 +162,9 @@ function addProviderIdentifier(
         case ServiceNames.GarminAPI:
             identifiers.garminUserIDs.add(providerUserIDValue);
             break;
+        case ServiceNames.WahooAPI:
+            identifiers.wahooUserIDs.add(providerUserIDValue);
+            break;
         default:
             break;
     }
@@ -174,6 +184,9 @@ function addProviderIdentifiersFromTokenData(
             break;
         case ServiceNames.GarminAPI:
             addProviderIdentifier(identifiers, serviceName, tokenData.userID);
+            break;
+        case ServiceNames.WahooAPI:
+            addProviderIdentifier(identifiers, serviceName, tokenData.wahooUserID);
             break;
         default:
             break;
@@ -202,6 +215,7 @@ async function collectProviderIdentifiersForUser(uid: string, services: readonly
         suuntoUserNames: new Set<string>(),
         corosOpenIds: new Set<string>(),
         garminUserIDs: new Set<string>(),
+        wahooUserIDs: new Set<string>(),
     };
     const db = admin.firestore();
 
@@ -370,6 +384,9 @@ function sourceQueueCollectionFromFailedJobData(data: Record<string, unknown>): 
     if (asNonEmptyString(data.openId)) {
         return COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME;
     }
+    if (asNonEmptyString(data.wahooUserID)) {
+        return WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME;
+    }
     if (asNonEmptyString(data.userID) && looksLikeLegacyGarminWorkoutQueueData(data)) {
         return GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME;
     }
@@ -434,6 +451,12 @@ function providerLookupForService(serviceName: ServiceNames, providerUserID: unk
                 tokenField: 'userID',
                 providerUserID: providerUserIDValue,
             };
+        case ServiceNames.WahooAPI:
+            return {
+                serviceName,
+                tokenField: 'wahooUserID',
+                providerUserID: providerUserIDValue,
+            };
         default:
             return null;
     }
@@ -458,6 +481,8 @@ function providerQueueLookupFromCollectionData(
             return providerLookupForService(ServiceNames.COROSAPI, data.openId);
         case GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME:
             return providerLookupForService(ServiceNames.GarminAPI, data.userID);
+        case WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME:
+            return providerLookupForService(ServiceNames.WahooAPI, data.wahooUserID);
         case 'failed_jobs': {
             const originalCollection = asNonEmptyString(data.originalCollection);
             if (originalCollection && originalCollection !== 'failed_jobs') {
@@ -480,7 +505,8 @@ function providerQueueLookupFromLegacyFailedJobData(data: Record<string, unknown
         || providerLookupForService(ServiceNames.COROSAPI, data.openId)
         || (looksLikeLegacyGarminWorkoutQueueData(data)
             ? providerLookupForService(ServiceNames.GarminAPI, data.userID)
-            : null);
+            : null)
+        || providerLookupForService(ServiceNames.WahooAPI, data.wahooUserID);
 }
 
 function getExplicitFirebaseUidAssociation(collectionName: string, data: Record<string, unknown>): string | null {
@@ -552,6 +578,8 @@ function providerLookupBelongsToUserIdentifiers(lookup: ProviderQueueLookup, ide
             return identifiers.corosOpenIds.has(lookup.providerUserID);
         case ServiceNames.GarminAPI:
             return identifiers.garminUserIDs.has(lookup.providerUserID);
+        case ServiceNames.WahooAPI:
+            return identifiers.wahooUserIDs.has(lookup.providerUserID);
         default:
             return false;
     }
@@ -560,7 +588,8 @@ function providerLookupBelongsToUserIdentifiers(lookup: ProviderQueueLookup, ide
 function hasAnyProviderIdentifier(identifiers: UserProviderIdentifiers): boolean {
     return identifiers.suuntoUserNames.size > 0
         || identifiers.corosOpenIds.size > 0
-        || identifiers.garminUserIDs.size > 0;
+        || identifiers.garminUserIDs.size > 0
+        || identifiers.wahooUserIDs.size > 0;
 }
 
 async function shouldDeleteProviderKeyedOperationalDoc(
@@ -600,6 +629,7 @@ async function cleanupLegacyProviderKeyedQueueOrphans(
         SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
         COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
         GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
+        WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
         'failed_jobs',
     ];
 
@@ -695,6 +725,9 @@ function addProviderIdentifiersFromFailedJobData(identifiers: UserProviderIdenti
         case GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME:
             addProviderIdentifier(identifiers, ServiceNames.GarminAPI, data.userID);
             return;
+        case WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME:
+            addProviderIdentifier(identifiers, ServiceNames.WahooAPI, data.wahooUserID);
+            return;
         default:
             break;
     }
@@ -706,6 +739,7 @@ function addProviderIdentifiersFromFailedJobData(identifiers: UserProviderIdenti
     if (looksLikeLegacyGarminWorkoutQueueData(data)) {
         addProviderIdentifier(identifiers, ServiceNames.GarminAPI, data.userID);
     }
+    addProviderIdentifier(identifiers, ServiceNames.WahooAPI, data.wahooUserID);
 }
 
 async function collectProviderIdentifiersFromQueueQuery(
@@ -784,6 +818,14 @@ async function collectProviderIdentifiersFromUidKeyedQueueState(
     await collectProviderIdentifiersFromQueueQuery(
         db,
         uid,
+        WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+        'firebaseUserID',
+        firebaseUIDValues,
+        (data) => addProviderIdentifier(identifiers, ServiceNames.WahooAPI, data.wahooUserID),
+    );
+    await collectProviderIdentifiersFromQueueQuery(
+        db,
+        uid,
         'failed_jobs',
         'userID',
         firebaseUIDValues,
@@ -819,7 +861,8 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     const suuntoValues = [...identifiers.suuntoUserNames];
     const corosValues = [...identifiers.corosOpenIds];
     const garminValues = [...identifiers.garminUserIDs];
-    const providerValues = [...suuntoValues, ...corosValues, ...garminValues];
+    const wahooValues = [...identifiers.wahooUserIDs];
+    const providerValues = [...suuntoValues, ...corosValues, ...garminValues, ...wahooValues];
     const providerKeyedDeleteFilter = (collectionName: string): OperationalDocDeleteFilter =>
         (doc) => shouldDeleteProviderKeyedOperationalDoc(db, uid, collectionName, doc);
     const failedJobFirebaseUidDeleteFilter: OperationalDocDeleteFilter = async (doc) =>
@@ -840,6 +883,9 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     await recursiveDeleteQueryResults(db, uid, 'COROS workout queue', COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, 'openId', corosValues, deletedRefKeys, providerKeyedDeleteFilter(COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter(GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'wahooUserID', wahooValues, deletedRefKeys, providerKeyedDeleteFilter(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME));
+    await recursiveDeleteQueryResults(db, uid, 'Wahoo user mapping', WAHOO_API_USER_MAPPINGS_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', firebaseUIDValues, deletedRefKeys, failedJobFirebaseUidDeleteFilter);
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
@@ -897,6 +943,17 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
             ),
             collectionName: GARMIN_API_TOKENS_COLLECTION_NAME,
             serviceName: ServiceNames.GarminAPI
+        },
+        {
+            name: 'Wahoo',
+            deauthFn: (id) => cleanupServiceConnectionForUser(
+                id,
+                ServiceNames.WahooAPI,
+                SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+                { missingTokensBehavior: 'ignore' },
+            ),
+            collectionName: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
+            serviceName: ServiceNames.WahooAPI
         }
     ];
     const providerIdentifiers = await collectProviderIdentifiersForUser(uid, services);

@@ -295,6 +295,7 @@ describe('cleanupUserAccounts', () => {
 
         // Verify Garmin
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.WahooAPI);
         expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
             'testUser123',
             ServiceNames.SuuntoApp,
@@ -310,6 +311,12 @@ describe('cleanupUserAccounts', () => {
         expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
             'testUser123',
             ServiceNames.GarminAPI,
+            'account_deletion',
+            { missingTokensBehavior: 'ignore' },
+        );
+        expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
+            'testUser123',
+            ServiceNames.WahooAPI,
             'account_deletion',
             { missingTokensBehavior: 'ignore' },
         );
@@ -664,6 +671,7 @@ describe('cleanupUserAccounts', () => {
             .mockResolvedValueOnce(emptyTokensSnapshot)
             .mockResolvedValueOnce(emptyTokensSnapshot)
             .mockResolvedValueOnce(emptyTokensSnapshot)
+            .mockResolvedValueOnce(emptyTokensSnapshot)
             .mockResolvedValueOnce({
                 empty: false,
                 size: 1,
@@ -727,7 +735,7 @@ describe('cleanupUserAccounts', () => {
 
         const tokenRootDeleteCalls = recursiveDeleteMock.mock.calls
             .filter(([ref]) => ref?.path === 'doc/testUser123');
-        expect(tokenRootDeleteCalls).toHaveLength(3);
+        expect(tokenRootDeleteCalls).toHaveLength(4);
     });
 
     it('should skip archiving when no tokens remain', async () => {

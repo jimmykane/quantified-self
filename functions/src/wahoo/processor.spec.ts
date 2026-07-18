@@ -1,0 +1,127 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+
+const mocks = vi.hoisted(() => ({
+  tokenGet: vi.fn(),
+  parseFIT: vi.fn(),
+  downloadFIT: vi.fn(),
+  deletionSkip: vi.fn(),
+  disconnectPending: vi.fn(),
+  resolveEventID: vi.fn(),
+  setEvent: vi.fn(),
+  markSkipped: vi.fn().mockResolvedValue('skipped'),
+  deferPending: vi.fn().mockResolvedValue('deferred'),
+  retry: vi.fn().mockResolvedValue('retry'),
+  processed: vi.fn().mockResolvedValue('processed'),
+}));
+
+vi.mock('firebase-admin', () => ({
+  firestore: () => ({
+    collection: () => ({
+      doc: () => ({
+        collection: () => ({ doc: () => ({ get: mocks.tokenGet }) }),
+      }),
+    }),
+  }),
+}));
+
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+  return {
+    ...actual,
+    EventImporterFIT: { getFromArrayBuffer: mocks.parseFIT },
+  };
+});
+vi.mock('./file-download', () => ({ downloadWahooFITFile: mocks.downloadFIT }));
+vi.mock('../queue/user-deletion-skip', () => ({ shouldSkipQueueWorkForDeletedUser: mocks.deletionSkip }));
+vi.mock('../service-disconnect-pending', () => ({ isServiceDisconnectPendingForUser: mocks.disconnectPending }));
+vi.mock('../queue/provider-event-id', () => ({ resolveProviderImportEventID: mocks.resolveEventID }));
+vi.mock('../utils', () => ({ setEvent: mocks.setEvent }));
+vi.mock('../queue-utils', () => ({
+  markQueueItemSkipped: mocks.markSkipped,
+  deferQueueItemForPendingDisconnect: mocks.deferPending,
+  increaseRetryCountForQueueItem: mocks.retry,
+  updateToProcessed: mocks.processed,
+  QueueResult: {},
+}));
+
+import { processWahooWorkoutQueueItem } from './processor';
+
+const queueItem = {
+  id: 'queue-1',
+  firebaseUserID: 'firebase-1',
+  wahooUserID: 'wahoo-1',
+  workoutID: 'workout-1',
+  workoutSummaryID: 'summary-1',
+  summaryUpdatedAt: '2026-07-18T10:00:00.000Z',
+  FITFileURI: 'https://cdn.wahooligan.com/one.fit',
+  starts: '2026-07-18T09:00:00.000Z',
+  manual: false,
+  edited: true,
+  fitnessAppID: 5,
+  dateCreated: Date.now(),
+  processed: false,
+  retryCount: 0,
+  dispatchedToCloudTask: null,
+} as any;
+
+describe('processWahooWorkoutQueueItem', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.deletionSkip.mockResolvedValue(false);
+    mocks.disconnectPending.mockResolvedValue(false);
+    mocks.tokenGet.mockResolvedValue({ exists: true, data: () => ({ serviceName: ServiceNames.WahooAPI }) });
+    mocks.downloadFIT.mockResolvedValue(Buffer.from('valid-fit'));
+    mocks.parseFIT.mockResolvedValue({ startDate: new Date('2026-07-18T09:00:00.000Z'), name: '' });
+    mocks.resolveEventID.mockResolvedValue('event-1');
+    mocks.setEvent.mockResolvedValue(undefined);
+    mocks.processed.mockResolvedValue('processed');
+  });
+
+  it('downloads, parses, guards again, writes through setEvent, and marks processed', async () => {
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.deletionSkip).toHaveBeenNthCalledWith(1, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_token_refresh');
+    expect(mocks.deletionSkip).toHaveBeenNthCalledWith(2, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_event_write');
+    expect(mocks.setEvent).toHaveBeenCalledWith(
+      'firebase-1',
+      'event-1',
+      expect.objectContaining({ name: '2026-07-18T09:00:00.000Z' }),
+      expect.objectContaining({
+        serviceName: ServiceNames.WahooAPI,
+        serviceWorkoutID: 'workout-1',
+        serviceWorkoutSummaryID: 'summary-1',
+        serviceUserID: 'wahoo-1',
+      }),
+      expect.objectContaining({ extension: 'fit' }),
+    );
+  });
+
+  it('does not write if deletion starts after the FIT file was parsed', async () => {
+    mocks.deletionSkip.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('skipped');
+    expect(mocks.setEvent).not.toHaveBeenCalled();
+    expect(mocks.markSkipped).toHaveBeenCalledWith(queueItem, undefined, 'user_deleted_or_deleting');
+  });
+
+  it('skips work if the server-side Wahoo credential is no longer present', async () => {
+    mocks.tokenGet.mockResolvedValue({ exists: false });
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('skipped');
+    expect(mocks.downloadFIT).not.toHaveBeenCalled();
+    expect(mocks.markSkipped).toHaveBeenCalledWith(queueItem, undefined, 'provider_not_connected');
+  });
+
+  it('sanitizes signed provider URLs before persisting retry errors', async () => {
+    mocks.downloadFIT.mockRejectedValue(new Error(`request failed for ${queueItem.FITFileURI}?signature=secret-value`));
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('retry');
+    expect(mocks.retry).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({ message: 'Wahoo activity processing failed: Error' }),
+    );
+    expect(mocks.retry.mock.calls[0][1].message).not.toContain('secret-value');
+    expect(mocks.retry.mock.calls[0][1].message).not.toContain(queueItem.FITFileURI);
+  });
+});

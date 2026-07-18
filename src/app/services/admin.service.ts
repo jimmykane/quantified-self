@@ -64,7 +64,7 @@ export interface ListUsersParams {
     searchTerm?: string;
     sortField?: string;
     sortDirection?: 'asc' | 'desc';
-    filterService?: 'garmin' | 'suunto' | 'coros';
+    filterService?: 'garmin' | 'suunto' | 'coros' | 'wahoo';
 }
 
 export interface ListUsersResponse {

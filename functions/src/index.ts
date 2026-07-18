@@ -72,6 +72,12 @@ export {
   deauthorizeCOROSAPI,
 } from './coros/auth/wrapper';
 
+export {
+  getWahooAPIAuthRequestTokenRedirectURI,
+  requestAndSetWahooAPIAccessToken,
+  deauthorizeWahooAPI,
+} from './wahoo/auth/wrapper';
+
 // Suunto Auth
 export {
   getSuuntoAPIAuthRequestTokenRedirectURI,
@@ -103,6 +109,10 @@ export {
 export {
   parseCOROSAPIWorkoutQueue,
 } from './queue';
+
+export { parseWahooAPIWorkoutQueue } from './queue';
+export { wahooAPIWebhook } from './wahoo/webhook';
+export { addWahooAPIHistoryToQueue } from './wahoo/history-to-queue';
 
 
 // Suunto Queue & History

@@ -16,6 +16,7 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/integrations/garmin',
   '/integrations/suunto',
   '/integrations/coros',
+  '/integrations/wahoo',
   '/features',
   '/features/workout-data-comparison',
   '/features/training-analysis',

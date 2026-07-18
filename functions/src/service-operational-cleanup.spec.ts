@@ -11,13 +11,17 @@ const {
   mockCollection,
   mockCollectionGroup,
   mockRecursiveDelete,
+  mockMappingDelete,
   mockMarkQueueItemDeletedForUserCleanup,
   queryDocsByKey,
   activeTokenDocs,
+  mappingDataById,
 } = vi.hoisted(() => {
   const queryDocsByKey = new Map<string, FirestoreDocMock[]>();
   const activeTokenDocs: FirestoreDocMock[] = [];
+  const mappingDataById = new Map<string, Record<string, unknown>>();
   const mockRecursiveDelete = vi.fn().mockResolvedValue(undefined);
+  const mockMappingDelete = vi.fn().mockResolvedValue(undefined);
   const mockMarkQueueItemDeletedForUserCleanup = vi.fn().mockResolvedValue(true);
 
   const buildSnapshot = (docs: FirestoreDocMock[]) => ({
@@ -32,6 +36,13 @@ const {
         queryDocsByKey.get(`${collectionName}:${fieldName}:${value}`) || [],
       )),
     })),
+    doc: vi.fn((id: string) => ({
+      get: vi.fn().mockResolvedValue({
+        exists: mappingDataById.has(`${collectionName}:${id}`),
+        data: () => mappingDataById.get(`${collectionName}:${id}`),
+      }),
+      delete: mockMappingDelete,
+    })),
   }));
 
   const mockCollectionGroup = vi.fn(() => ({
@@ -44,9 +55,11 @@ const {
     mockCollection,
     mockCollectionGroup,
     mockRecursiveDelete,
+    mockMappingDelete,
     mockMarkQueueItemDeletedForUserCleanup,
     queryDocsByKey,
     activeTokenDocs,
+    mappingDataById,
   };
 });
 
@@ -91,6 +104,7 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
     vi.clearAllMocks();
     queryDocsByKey.clear();
     activeTokenDocs.length = 0;
+    mappingDataById.clear();
   });
 
   it('deletes provider-keyed queue and DLQ docs while the service token still exposes the provider id', async () => {
@@ -322,5 +336,28 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       'service_disconnect_cleanup',
     );
     expect(mockRecursiveDelete).not.toHaveBeenCalled();
+  });
+
+  it('deletes a disconnected Wahoo user mapping owned by the Firebase user', async () => {
+    mappingDataById.set('wahooAPIUserMappings:wahoo-user', {
+      firebaseUserID: 'firebase-user-123',
+      wahooUserID: 'wahoo-user',
+    });
+
+    const result = await cleanupProviderOperationalDocsForServiceToken(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      {
+        serviceName: ServiceNames.WahooAPI,
+        wahooUserID: 'wahoo-user',
+      },
+    );
+
+    expect(result).toMatchObject({
+      providerUserId: 'wahoo-user',
+      deletedDocCount: 1,
+      skippedForActiveConnection: false,
+    });
+    expect(mockMappingDelete).toHaveBeenCalledOnce();
   });
 });

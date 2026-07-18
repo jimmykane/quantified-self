@@ -23,7 +23,7 @@ describe('workout-data-comparison-page.content', () => {
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
-      name: 'Compare Garmin, Suunto, and COROS workout data',
+      name: 'Compare Garmin, Suunto, COROS, and Wahoo workout data',
       url: WORKOUT_DATA_COMPARISON_URL,
       inLanguage: 'en',
     });
@@ -43,13 +43,13 @@ describe('workout-data-comparison-page.content', () => {
       WORKOUT_DATA_COMPARISON_ROUTE_DATA.description,
     ].join(' ');
 
-    expect(COMPARISON_PROVIDER_SOURCES.map(source => source.label)).toEqual(['Garmin', 'Suunto', 'COROS']);
+    expect(COMPARISON_PROVIDER_SOURCES.map(source => source.label)).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(COMPARISON_FREE_PLAN_ACTIVITY_LIMIT).toBe(100);
     expect(COMPARISON_FREE_PLAN_ROUTE_LIMIT).toBe(10);
     expect(COMPARISON_FEATURE_ITEMS).toHaveLength(4);
     expect(COMPARISON_SEARCH_INTENT_ITEMS).toHaveLength(5);
     expect(COMPARISON_FAQ_ITEMS).toHaveLength(5);
-    expect(visibleCopy).toContain('Centralize Garmin, Suunto, and COROS workout data');
+    expect(visibleCopy).toContain('Centralize Garmin, Suunto, COROS, and Wahoo workout data');
     expect(visibleCopy).toContain('manual FIT, TCX, GPX, JSON, and SML imports');
     expect(visibleCopy).toContain('custom activity files');
     expect(visibleCopy).toContain('YouTube reviews, blog posts, coaching notes, and device QA');

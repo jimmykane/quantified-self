@@ -321,7 +321,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     const results: AccessToken = await oauth2Client.getToken(tokenConfig);
 
     if (!results || !results.token || !results.token.access_token) {
-      logger.error(`Failed to get token results for ${serviceName}`, { results });
+      logger.error(`Failed to get a usable access token for ${serviceName}`);
       throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
     }
 
@@ -343,6 +343,20 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
         tokenData,
       );
       tokenPersisted = true;
+      if (uniqueId && adapter.onTokenPersisted) {
+        try {
+          await adapter.onTokenPersisted(userID, uniqueId);
+        } catch (error) {
+          await cleanupServiceTokenById(
+            userID,
+            serviceName,
+            uniqueId,
+            SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup,
+          );
+          tokenPersisted = false;
+          throw error;
+        }
+      }
     } catch (error) {
       if (!tokenPersisted) {
         await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);

@@ -110,6 +110,7 @@ describe('AdminQueueStatsComponent', () => {
             expect(component.getServiceLogo('Garmin')).toBe('assets/logos/garmin.svg');
             expect(component.getServiceLogo('suunto')).toBe('assets/logos/suunto.svg');
             expect(component.getServiceLogo('Coros')).toBe('assets/logos/coros.svg');
+            expect(component.getServiceLogo('Wahoo')).toBe('assets/logos/wahoo.svg');
         });
 
         it('should return empty string for unknown', () => {

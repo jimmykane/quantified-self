@@ -6,6 +6,7 @@ import {
   POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
+  POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
 
 export type HelpSectionId =
@@ -140,7 +141,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Dashboard** is your main activity overview.
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
-- **Services** is where you connect Garmin, Suunto, and COROS.
+- **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.
 - **Subscription** is where you review your current plan.
 - **Release Notes** shows product updates and fixes.
@@ -180,7 +181,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Event search filters only the dashboard event table.
 - Event tags can be added from an event row or event details. The table supports an exact tag filter, and up to 250 selected events can receive atomic add/remove tag changes in bulk. Each event supports up to 10 tags of 32 characters; tags are visible on public event and comparison links.
 - **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
-- If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, and COROS.
+- If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, COROS, and Wahoo.
 - Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
 - Pro users with activity data but without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
@@ -467,7 +468,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Everything in Basic
 - **Unlimited activities**
 - **Unlimited saved routes**
-- Garmin, Suunto, and COROS integration workflows
+- Garmin, Suunto, COROS, and Wahoo integration workflows
 - History import workflows (provider limits still apply)
 - Suunto FIT activity upload and GPX route upload tools
 - COROS FIT activity upload tool
@@ -580,18 +581,18 @@ From an activity action menu you can also:
     id: 'service-connections',
     icon: 'sync',
     title: 'Connected Services',
-    summary: 'Garmin, Suunto, and COROS connection rules, limits, and expected import behavior.',
+    summary: 'Garmin, Suunto, COROS, and Wahoo connection rules, limits, and expected import behavior.',
     content: `## Pro requirement
 
-Garmin, Suunto, and COROS connections are part of **Pro**.
+Garmin, Suunto, COROS, and Wahoo connections are part of **Pro**.
 
 Services opens each provider on a compact connection overview. Choose an action on an activity, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin to Suunto activity sync, COROS to Suunto activity sync, sending saved routes to Garmin Connect, syncing past activities, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, Garmin to Suunto activity sync, COROS to Suunto activity sync, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin, history imports, uploads, and how those workflows connect to the private training dashboard.
 
-Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
+Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
 The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
@@ -689,9 +690,24 @@ When COROS and Suunto are connected, the dashboard may offer a one-time action p
 
 See [Policies -> COROS Data](/policies#coros-data) for the provider-specific privacy summary for COROS imports, sleep summaries, uploads, and COROS to Suunto sync.
 
-## Import processing times
+## Wahoo
 
-Suunto and COROS history imports run in the background. Large date ranges can take hours or days to finish, depending on volume and current demand.`,
+Wahoo is an import-only **Pro** integration. Connect Wahoo from Services to:
+
+- receive new completed Wahoo workouts automatically,
+- import Wahoo workout history for a selected date range,
+- retain the original FIT activity with the imported event for downloads, exports, and reprocessing,
+- analyze Wahoo activities alongside your other activity sources.
+
+Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
+
+Disconnecting Wahoo revokes future access and stops new imports. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo uploads, sleep sync, routes, and Wahoo-to-Suunto forwarding are not supported in this release.
+
+See [Policies -> Wahoo Data](/policies#wahoo-data) for the provider-specific privacy and retention summary.
+
+## Queue behavior
+
+Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take hours or days to finish, depending on volume and queue load.`,
     links: [
       { label: 'Integrations', icon: 'hub', kind: 'route', target: '/integrations' },
       { label: 'Features', icon: 'dashboard_customize', kind: 'route', target: '/features' },
@@ -707,10 +723,12 @@ Suunto and COROS history imports run in the background. Large date ranges can ta
       { label: 'Garmin Integration', icon: 'sync_alt', kind: 'route', target: '/integrations/garmin' },
       { label: 'Suunto Integration', icon: 'published_with_changes', kind: 'route', target: '/integrations/suunto' },
       { label: 'COROS Integration', icon: 'sync', kind: 'route', target: '/integrations/coros' },
+      { label: 'Wahoo Integration', icon: 'directions_bike', kind: 'route', target: '/integrations/wahoo' },
       { label: 'Connected Service Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_CONNECTED_SERVICES_FRAGMENT },
       { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
       { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },
       { label: 'COROS Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_COROS_DATA_FRAGMENT },
+      { label: 'Wahoo Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_WAHOO_DATA_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
@@ -732,7 +750,7 @@ Suunto and COROS history imports run in the background. Large date ranges can ta
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
 - For AI Insights, we do **not** share your raw activity data with AI providers.
 - Only the minimum derived stats required to answer your prompt are sent.
-- The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
+- The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
 ## Settings you can change yourself
 

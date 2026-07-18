@@ -3,11 +3,11 @@ import { INTEGRATION_HUB_CARDS, INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATIO
 
 describe('integration-pages.content', () => {
   it('should define a hub card and route metadata for each provider page', () => {
-    expect(INTEGRATION_HUB_CARDS.map(card => card.slug)).toEqual(['garmin', 'suunto', 'coros']);
+    expect(INTEGRATION_HUB_CARDS.map(card => card.slug)).toEqual(['garmin', 'suunto', 'coros', 'wahoo']);
     expect(INTEGRATIONS_HUB_ROUTE_DATA.jsonLd['@type']).toBe('CollectionPage');
     expect(INTEGRATIONS_HUB_ROUTE_DATA.description).toContain('route sending');
 
-    for (const key of ['garmin', 'suunto', 'coros'] as const) {
+    for (const key of ['garmin', 'suunto', 'coros', 'wahoo'] as const) {
       const page = PROVIDER_INTEGRATION_PAGES[key];
       const routeData = PROVIDER_INTEGRATION_ROUTE_DATA[key];
 
@@ -20,6 +20,14 @@ describe('integration-pages.content', () => {
       expect(routeData.jsonLd['@type']).toBe('WebPage');
       expect(routeData.jsonLd['url']).toBe(`https://quantified-self.io/integrations/${key}`);
     }
+  });
+
+  it('documents Wahoo as FIT-backed, import-only, and retained after disconnect', () => {
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('automatic FIT activity imports');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('import source');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not enabled');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question.includes('disconnecting'))?.answer)
+      .toContain('previously imported activities remain');
   });
 
   it('should keep Garmin and COROS SEO intent distinct from the Suunto sync page', () => {

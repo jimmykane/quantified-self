@@ -29,6 +29,9 @@ export interface ServiceAuthAdapter {
     // Process post-token logic (e.g. fetch User ID from API if not in token)
     processNewToken(token: AccessToken, userId: string): Promise<{ uniqueId?: string; permissions?: string[] }>;
 
+    // Optional provider-owned identity projection created after the token is durable.
+    onTokenPersisted?(userId: string, externalUserId: string): Promise<void>;
+
     // Deauthorization
     deauthorize(token: Auth2ServiceTokenInterface): Promise<void>;
 

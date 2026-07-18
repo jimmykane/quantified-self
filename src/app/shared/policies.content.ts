@@ -16,6 +16,7 @@ export const POLICIES_CONNECTED_SERVICES_FRAGMENT = 'connected-services-data';
 export const POLICIES_GARMIN_DATA_FRAGMENT = 'garmin-data';
 export const POLICIES_SUUNTO_DATA_FRAGMENT = 'suunto-data';
 export const POLICIES_COROS_DATA_FRAGMENT = 'coros-data';
+export const POLICIES_WAHOO_DATA_FRAGMENT = 'wahoo-data';
 export const POLICIES_AI_AND_PROCESSORS_FRAGMENT = 'ai-and-third-party-processing';
 
 export type PolicyFragmentId =
@@ -23,6 +24,7 @@ export type PolicyFragmentId =
     | typeof POLICIES_GARMIN_DATA_FRAGMENT
     | typeof POLICIES_SUUNTO_DATA_FRAGMENT
     | typeof POLICIES_COROS_DATA_FRAGMENT
+    | typeof POLICIES_WAHOO_DATA_FRAGMENT
     | typeof POLICIES_AI_AND_PROCESSORS_FRAGMENT;
 
 export interface ConnectedServicesPolicyAnchor {
@@ -51,7 +53,7 @@ export interface ConnectedServicesPolicySection {
 export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection = {
     id: POLICIES_CONNECTED_SERVICES_FRAGMENT,
     title: 'Connected Services, AI & Third-Party Processing',
-    summary: 'Provider-specific disclosures for Garmin, Suunto, COROS, AI Insights, infrastructure, payments, and analytics.',
+    summary: 'Provider-specific disclosures for Garmin, Suunto, COROS, Wahoo, AI Insights, infrastructure, payments, and analytics.',
     content: [
         '<strong>What this section covers:</strong> This page explains what connected-service data Quantified Self collects, how it is used inside the product, what may be stored for exports, reprocessing, and sync tools, and which third parties process that data.',
         '<strong>Storage location:</strong> Imported provider data, saved route metadata, source-file references, and related processing metadata are stored in Quantified Self infrastructure on Google Cloud in the EU region.',
@@ -63,6 +65,7 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
         { id: POLICIES_GARMIN_DATA_FRAGMENT, label: 'Garmin', icon: 'sync_alt' },
         { id: POLICIES_SUUNTO_DATA_FRAGMENT, label: 'Suunto', icon: 'published_with_changes' },
         { id: POLICIES_COROS_DATA_FRAGMENT, label: 'COROS', icon: 'sync' },
+        { id: POLICIES_WAHOO_DATA_FRAGMENT, label: 'Wahoo', icon: 'directions_bike' },
         { id: POLICIES_AI_AND_PROCESSORS_FRAGMENT, label: 'AI & Processors', icon: 'shield' },
     ],
     topics: [
@@ -102,6 +105,18 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             ],
         },
         {
+            id: POLICIES_WAHOO_DATA_FRAGMENT,
+            title: 'Wahoo Data',
+            icon: 'directions_bike',
+            summary: 'Wahoo OAuth, webhook, FIT activity, and history-import workflows.',
+            content: [
+                '<strong>Collected from Wahoo:</strong> When you connect Wahoo, Quantified Self can receive completed workout-summary webhooks and request Wahoo workout history. Only workouts with an available FIT file are imported, and records identified by Wahoo as originating from third-party fitness applications are skipped.',
+                '<strong>Stored and used in Quantified Self:</strong> Imported Wahoo FIT activities, source identifiers, summary revision metadata, and original activity files are used for event analysis, dashboard metrics, exports, deduplication, and reprocessing. OAuth credentials are stored server-side and are not readable by the browser.',
+                '<strong>Disconnect and retention:</strong> Disconnecting Wahoo revokes future provider access and stops new imports. Activities already imported into Quantified Self are retained until you delete those activities or delete your account. Account deletion removes Wahoo tokens, provider mappings, queue state, and imported account data under the normal deletion workflow.',
+                '<strong>No outbound Wahoo workflow:</strong> This integration does not upload workouts to Wahoo or automatically forward Wahoo activities to another connected provider.',
+            ],
+        },
+        {
             id: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
             title: 'AI & Third-Party Processing',
             icon: 'shield',
@@ -112,7 +127,7 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
                 '<strong>Google Analytics:</strong> If you consent to analytics cookies, Google Analytics receives anonymized usage analytics used to improve the service. Analytics is optional and can be withdrawn in Settings.',
                 '<strong>Mapbox:</strong> When you use location-based AI Insights queries, Mapbox is used to resolve places and geographic scope for those prompts.',
                 '<strong>Google GenAI / Gemini:</strong> AI Insights currently uses Google\'s Gemini models through Google GenAI. Quantified Self sends only the minimum derived statistics needed to answer the prompt you explicitly submit. Raw activities, raw routes, uploaded FIT/GPX/TCX/JSON/SML files, and saved route source files are not sent to the AI provider.',
-                '<strong>No hidden provider forwarding:</strong> Connected Garmin, Suunto, and COROS data is only sent to destination providers when you explicitly use the related import, upload, delivery, or sync feature.',
+                '<strong>No hidden provider forwarding:</strong> Connected Garmin, Suunto, COROS, and Wahoo data is only sent to destination providers when you explicitly use the related import, upload, delivery, or sync feature. Wahoo is import-only in this release.',
             ],
         },
     ],

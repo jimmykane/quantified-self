@@ -7,6 +7,7 @@ export const PRERENDERED_INTEGRATION_ROUTES = [
   'integrations/garmin',
   'integrations/suunto',
   'integrations/coros',
+  'integrations/wahoo',
 ] as const;
 
 export const PRERENDERED_FEATURE_ROUTES = [

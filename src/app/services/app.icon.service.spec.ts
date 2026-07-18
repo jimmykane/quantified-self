@@ -33,5 +33,6 @@ describe('AppIconService', () => {
         expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalled();
         // We can be more specific if we want, checking for a specific icon
         expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalledWith('logo', undefined);
+        expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalledWith('wahoo', undefined);
     });
 });

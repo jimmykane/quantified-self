@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService, isActionableProfileReadState } from './app.user.service';
 import { Auth, authState, user } from 'app/firebase/auth';
-import { Firestore, collection, collectionData, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -1415,6 +1415,17 @@ describe('AppUserService', () => {
             expect(result).toEqual(tokens);
         });
 
+        it('getServiceToken should derive Wahoo connection state from safe user metadata', async () => {
+            const user = { uid: 'u-wahoo' } as any;
+            (docData as any).mockReturnValueOnce(of({ connectionState: 'connected' }));
+
+            const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.WahooAPI));
+
+            expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'u-wahoo', 'meta', ServiceNames.WahooAPI);
+            expect(result).toEqual([{}]);
+            expect(collectionData).not.toHaveBeenCalled();
+        });
+
         it('getServiceToken should throw for unsupported service names', () => {
             const user = { uid: 'u4' } as any;
 
@@ -1461,6 +1472,7 @@ describe('AppUserService', () => {
                 [ServiceNames.GarminAPI]: true,
                 [ServiceNames.SuuntoApp]: true,
                 [ServiceNames.COROSAPI]: false,
+                [ServiceNames.WahooAPI]: false,
             });
         });
 
@@ -1477,6 +1489,7 @@ describe('AppUserService', () => {
                 [ServiceNames.GarminAPI]: false,
                 [ServiceNames.SuuntoApp]: false,
                 [ServiceNames.COROSAPI]: false,
+                [ServiceNames.WahooAPI]: false,
             });
         });
 
@@ -2077,6 +2090,15 @@ describe('AppUserService', () => {
                     endDate: endDate.toISOString()
                 });
             });
+
+            it('should call cloud function for Wahoo', async () => {
+                await service.importServiceHistoryForCurrentUser(ServiceNames.WahooAPI, startDate, endDate);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addWahooAPIHistoryToQueue', {
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString(),
+                });
+            });
         });
 
         describe('backfillSuuntoSleepForCurrentUser', () => {
@@ -2268,6 +2290,11 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeGarminAPI');
             });
+
+            it('should call cloud function for Wahoo', async () => {
+                await service.deauthorizeService(ServiceNames.WahooAPI);
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeWahooAPI');
+            });
         });
 
         describe('getCurrentUserServiceTokenAndRedirectURI', () => {
@@ -2297,6 +2324,26 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminAPIAuthRequestTokenRedirectURI', {
                     redirectUri: expect.stringMatching(/Garmin%20API/)
+                });
+            });
+
+            it('should call cloud function for Wahoo', async () => {
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.WahooAPI);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
+                    redirectUri: expect.stringMatching(/Wahoo%20API/),
+                });
+            });
+        });
+
+        describe('requestAndSetCurrentUserWahooAPIAccessToken', () => {
+            it('should call cloud function', async () => {
+                await service.requestAndSetCurrentUserWahooAPIAccessToken('state', 'code');
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetWahooAPIAccessToken', {
+                    state: 'state',
+                    code: 'code',
+                    redirectUri: expect.stringMatching(/Wahoo%20API/),
                 });
             });
         });

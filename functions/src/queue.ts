@@ -12,6 +12,7 @@ import {
   COROSAPIWorkoutQueueItemInterface,
   GarminAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
+  WahooAPIWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
 import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth, EventWriteSkippedForDeletedUserError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -47,6 +48,12 @@ import {
   QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from './queue/cleanup-tombstone';
 import { resolveProviderImportEventID } from './queue/provider-event-id';
+import { processWahooWorkoutQueueItem } from './wahoo/processor';
+
+type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
+  | GarminAPIActivityQueueItemInterface
+  | COROSAPIWorkoutQueueItemInterface
+  | WahooAPIWorkoutQueueItemInterface;
 
 export {
   ProviderQueueUserDeletedOrDeletingError,
@@ -193,8 +200,8 @@ enum WorkoutQueueGuardedUpdateResult {
 
 function getProviderUserIDForQueueItem(
   serviceName: ServiceNames,
-  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
-): { fieldName: 'userName' | 'openId' | 'userID'; value: string } | null {
+  queueItem: ProviderWorkoutQueueItem,
+): { fieldName: 'userName' | 'openId' | 'userID' | 'wahooUserID'; value: string } | null {
   switch (serviceName) {
     case ServiceNames.SuuntoApp:
       return { fieldName: 'userName', value: `${(queueItem as SuuntoAppWorkoutQueueItemInterface).userName || ''}` };
@@ -202,6 +209,8 @@ function getProviderUserIDForQueueItem(
       return { fieldName: 'openId', value: `${(queueItem as COROSAPIWorkoutQueueItemInterface).openId || ''}` };
     case ServiceNames.GarminAPI:
       return { fieldName: 'userID', value: `${(queueItem as GarminAPIActivityQueueItemInterface).userID || ''}` };
+    case ServiceNames.WahooAPI:
+      return { fieldName: 'wahooUserID', value: `${(queueItem as WahooAPIWorkoutQueueItemInterface).wahooUserID || ''}` };
     default:
       return null;
   }
@@ -209,7 +218,7 @@ function getProviderUserIDForQueueItem(
 
 async function resolveFirebaseUserIDForQueueItem(
   serviceName: ServiceNames,
-  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+  queueItem: ProviderWorkoutQueueItem,
 ): Promise<string | null> {
   if (queueItem.firebaseUserID) {
     return queueItem.firebaseUserID;
@@ -230,7 +239,7 @@ async function resolveFirebaseUserIDForQueueItem(
 
 async function resolveFirebaseUserIDForProviderIdentity(
   serviceName: ServiceNames,
-  providerFieldName: 'userName' | 'openId' | 'userID',
+  providerFieldName: 'userName' | 'openId' | 'userID' | 'wahooUserID',
   providerUserID: string,
   logContext: string,
 ): Promise<string | null> {
@@ -262,7 +271,7 @@ export function resolveFirebaseUserIDForGarminUserID(userID: string): Promise<st
   );
 }
 
-async function attachFirebaseUserIDToQueueItem<T extends SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface>(
+async function attachFirebaseUserIDToQueueItem<T extends ProviderWorkoutQueueItem>(
   queueItem: T,
   serviceName: ServiceNames,
 ): Promise<T> {
@@ -331,7 +340,7 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
     try {
       dispatchContext = await assertWorkoutQueueCanDispatch(
         doc.ref,
-        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+        Object.assign({}, data, { id: doc.id }) as ProviderWorkoutQueueItem,
         serviceName,
         `workout_queue_scheduled_dispatch:${serviceName}`,
       );
@@ -424,6 +433,14 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
   await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+});
+
+export const parseWahooAPIWorkoutQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_HIGH,
+  memory: MEMORY_HIGH,
+  maxInstances: 1,
+}).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
+  await dispatchQueueItemTasks(ServiceNames.WahooAPI);
 });
 
 
@@ -533,9 +550,12 @@ function getTokenQueryForWorkoutQueueItem(
 }
 
 
-export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: ProviderWorkoutQueueItem, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
     return processGarminAPIActivityQueueItem(queueItem as GarminAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
+  }
+  if (serviceName === ServiceNames.WahooAPI) {
+    return processWahooWorkoutQueueItem(queueItem as WahooAPIWorkoutQueueItemInterface);
   }
 
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
@@ -637,7 +657,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
-      const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+      const downloadedPayload = await getWorkoutForService(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, serviceToken as any);
       const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
       if (normalizedPayload.normalizedFromMultipart) {
         const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
@@ -652,7 +672,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
-          const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+          const downloadedPayload = await getWorkoutForService(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, serviceToken as any);
           const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
           if (normalizedPayload.normalizedFromMultipart) {
             const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
@@ -1111,7 +1131,7 @@ async function deleteWorkoutQueueDocBeforeDispatch(
 
 async function assertWorkoutQueueCanDispatch(
   queueItemDocument: admin.firestore.DocumentReference,
-  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+  queueItem: ProviderWorkoutQueueItem,
   serviceName: ServiceNames,
   phase: string,
 ): Promise<WorkoutQueueDispatchContext> {

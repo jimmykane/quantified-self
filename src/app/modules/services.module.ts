@@ -9,6 +9,7 @@ import { UploadRoutesToServiceComponent } from '../components/upload/upload-rout
 import { ServicesSuuntoComponent } from '../components/services/suunto/services.suunto.component';
 import { ServicesGarminComponent } from '../components/services/garmin/services.garmin.component';
 import { ServicesCorosComponent } from '../components/services/coros/services.coros.component';
+import { ServicesWahooComponent } from '../components/services/wahoo/services.wahoo.component';
 import { UploadActivitiesToServiceComponent } from '../components/upload/upload-activities-to-service/upload-activities-to-service.component';
 import { ServiceConnectionStatusComponent } from '../components/services/service-connection-status/service-connection-status.component';
 
@@ -25,6 +26,7 @@ import { ServiceConnectionStatusComponent } from '../components/services/service
         ServicesSuuntoComponent,
         ServicesGarminComponent,
         ServicesCorosComponent,
+        ServicesWahooComponent,
         ServiceConnectionStatusComponent,
         HistoryImportFormComponent,
         UploadRoutesToServiceComponent,

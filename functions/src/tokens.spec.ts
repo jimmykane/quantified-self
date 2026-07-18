@@ -476,6 +476,39 @@ describe('tokens', () => {
             expect(mockDoc.ref.update).toHaveBeenCalled();
         });
 
+        it('should persist Wahoo rotating tokens with the exact provider expiry and stable user ID', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-wahoo',
+                refreshToken: 'old-wahoo-refresh',
+                serviceName: ServiceNames.WahooAPI,
+                wahooUserID: 'wahoo-user',
+                expiresAt: 1000,
+                dateCreated: 500,
+                dateRefreshed: 500,
+            });
+            const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: 'new-wahoo',
+                    refresh_token: 'new-wahoo-refresh',
+                    expires_at: expiresAt,
+                    token_type: 'Bearer',
+                    scope: 'user_read workouts_read offline_data',
+                },
+            });
+
+            const result: any = await getTokenData(mockDoc, ServiceNames.WahooAPI, false);
+
+            expect(result).toEqual(expect.objectContaining({
+                accessToken: 'new-wahoo',
+                refreshToken: 'new-wahoo-refresh',
+                expiresAt: expiresAt.getTime(),
+                wahooUserID: 'wahoo-user',
+            }));
+            expect(mockDoc.ref.update).toHaveBeenCalledWith(expect.objectContaining({ expiresAt: expiresAt.getTime() }));
+        });
+
         it('should delegate 401 Boom errors to the terminal auth lifecycle', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('Unauthorized');

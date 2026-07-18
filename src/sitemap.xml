@@ -56,6 +56,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://quantified-self.io/integrations/wahoo</loc>
+    <lastmod>2026-07-18</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://quantified-self.io/features</loc>
     <lastmod>2026-07-18</lastmod>
     <priority>0.8</priority>

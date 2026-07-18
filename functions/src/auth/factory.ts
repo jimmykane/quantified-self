@@ -3,6 +3,7 @@ import { ServiceAuthAdapter } from './ServiceAuthAdapter';
 import { GarminAuthAdapter } from '../garmin/auth/adapter';
 import { SuuntoAuthAdapter } from '../suunto/auth/adapter';
 import { COROSAuthAdapter } from '../coros/auth/adapter';
+import { WahooAuthAdapter } from '../wahoo/auth/adapter';
 
 /**
  * Factory for retrieving the appropriate ServiceAuthAdapter for a given service.
@@ -15,6 +16,8 @@ export function getServiceAdapter(serviceName: ServiceNames, refresh = false): S
             return new SuuntoAuthAdapter();
         case ServiceNames.COROSAPI:
             return new COROSAuthAdapter();
+        case ServiceNames.WahooAPI:
+            return new WahooAuthAdapter();
         default:
             throw new Error(`Auth adapter not implemented for service: ${serviceName}`);
     }

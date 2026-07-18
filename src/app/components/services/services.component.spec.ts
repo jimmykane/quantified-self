@@ -140,6 +140,7 @@ describe('ServicesComponent', () => {
             'garmin',
             'suunto',
             'coros',
+            'wahoo',
         ]);
     });
 
@@ -155,7 +156,7 @@ describe('ServicesComponent', () => {
             .map((link: Element) => link.textContent?.trim());
 
         expect(tabNav).toBeTruthy();
-        expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
+        expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     });
 
     it('renders the desktop provider selector as a Material button toggle group', () => {
@@ -166,7 +167,7 @@ describe('ServicesComponent', () => {
             .map((label: Element) => label.textContent?.trim());
 
         expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
-        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     });
 
     it('renders connections without a workspace rail', () => {
@@ -184,12 +185,13 @@ describe('ServicesComponent', () => {
         const garminOverview = servicePanels[0].querySelector('.service-overview');
         const corosOverview = servicePanels[2].querySelector('.service-overview');
 
-        expect(servicePanels.length).toBe(3);
+        expect(servicePanels.length).toBe(4);
         expect(garminOverview).toBeTruthy();
         expect(corosOverview).toBeTruthy();
         expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('[aria-label="suunto app" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('[aria-label="wahoo" i]').hidden).toBe(true);
 
         component.activeSection = 'coros';
         fixture.detectChanges();
@@ -252,6 +254,7 @@ describe('ServicesComponent', () => {
         expect(component.serviceOverviewCardsBySection.suunto[2].description)
             .toBe('Send FIT activity files or GPX route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history']);
     });
 
     it('opens the Suunto route and upload cards at their matching tools', () => {
@@ -306,9 +309,9 @@ describe('ServicesComponent', () => {
         );
         const historyFormRule = historyFormStyles.match(/\.history-import-form\s*\{[^}]*\}/)?.[0] ?? '';
 
-        expect(toolsOnlyBindings).toHaveLength(3);
-        expect(initialToolBindings).toHaveLength(3);
-        expect(focusedToolBindings).toHaveLength(3);
+        expect(toolsOnlyBindings).toHaveLength(4);
+        expect(initialToolBindings).toHaveLength(4);
+        expect(focusedToolBindings).toHaveLength(4);
         expect(template).not.toContain('service-tools-dialog__description');
         expect(toolsOnlyRule).toContain('width: 100%');
         expect(toolsOnlyRule).toContain('max-width: none');

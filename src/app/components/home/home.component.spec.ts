@@ -78,7 +78,7 @@ describe('HomeComponent', () => {
         const aiSectionText = (fixture.nativeElement.querySelector('.ai-insights-section') as HTMLElement | null)?.textContent ?? '';
         expect(heroText).toContain('Quantify. Analyze. Improve.');
         expect(heroText).toContain('One Dashboard. Every Activity.');
-        expect(heroText).toContain('Bring Garmin, Suunto, and COROS activity data into one private training dashboard.');
+        expect(heroText).toContain('Bring Garmin, Suunto, COROS, and Wahoo activity data into one private training dashboard.');
         expect(heroText).toContain('Review readiness, load, intensity, durability, and sleep context');
         expect(heroText).toContain('keep Garmin or COROS activities syncing to Suunto');
         expect(heroText).not.toContain('AI Insights');
@@ -140,6 +140,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('Automatically send new Garmin and COROS activities to Suunto');
         expect(text).toContain('Automatic Sync for All Services');
         expect(text).toContain('Automatic Sync Between Services');
+        expect(fixture.nativeElement.querySelector('mat-icon[svgIcon="wahoo"], mat-icon[ng-reflect-svg-icon="wahoo"]')).toBeTruthy();
         expect(text).toContain('Manual Route Uploads');
         expect(text).toContain('Manual Activity Uploads to Suunto');
         expect(text).toContain('choose a date range to sync activities');

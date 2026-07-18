@@ -1,0 +1,86 @@
+<div
+  class="service-container"
+  [class.service-container--advanced]="showAdvancedTools"
+  [class.service-container--tools-only]="!showConnectionSummary">
+  @if (showConnectionSummary) {
+  <app-service-connection-status
+    serviceLabel="Wahoo"
+    [description]="connectionDescription"
+    [connected]="isConnectedToService()"
+    [loading]="isLoading"
+    [compact]="!showAdvancedTools"
+    [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
+    [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
+    [showDetails]="isConnectedToService() || isDisconnectPending"
+    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : null"
+    [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
+    [statusTone]="isDisconnectPending ? 'attention' : 'default'"
+    (click)="!canConnectServiceWithCurrentAccess && !isConnectedToService() && triggerUpsell()">
+    <div connection-body class="connection-details">
+      @if (isDisconnectPending) {
+      <div class="reconnect-required-banner" role="status">
+        <mat-icon>sync_problem</mat-icon>
+        <div class="reconnect-required-banner__copy">
+          <div class="reconnect-required-banner__title">Disconnect pending</div>
+          <div class="reconnect-required-banner__message">We are retrying Wahoo deauthorization. New imports are paused.</div>
+        </div>
+      </div>
+      }
+      @if (isConnectedToService()) {
+      <div class="connection-account-row">
+        <div class="connection-account-info">
+          <mat-icon class="connected-account-icon">account_circle</mat-icon>
+          <div class="connected-account-copy">
+            <div class="connected-account-title">Wahoo account connected</div>
+            <div class="connected-account-line">OAuth credentials are stored securely on the server.</div>
+          </div>
+        </div>
+        <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"
+          [disabled]="isLoading || isDisconnecting" (click)="deauthorizeService($event)">
+          <mat-icon>link_off</mat-icon> {{ isDisconnecting ? 'Disconnecting...' : 'Disconnect' }}
+        </button>
+      </div>
+      }
+    </div>
+
+    <div connection-actions class="tool-actions">
+      @if (!isConnectedToService() && !isDisconnectPending) {
+      <button mat-flat-button class="qs-mat-primary"
+        [disabled]="!user || isLoading || isConnecting || !canConnectServiceWithCurrentAccess"
+        (click)="connectWithService($event)">
+        <mat-icon>link</mat-icon> {{ isConnecting ? 'Connecting...' : 'Connect' }}
+      </button>
+      }
+    </div>
+  </app-service-connection-status>
+  }
+
+  @if (showAdvancedTools) {
+  @if (showConnectionSummary) {
+  <mat-divider class="connection-tools-divider"></mat-divider>
+  }
+  @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
+  <section
+    class="provider-tool-panel"
+    [hidden]="activeProviderTool !== 'history'"
+    [class.locked-panel]="!hasProAccess"
+    (click)="!hasProAccess && triggerUpsell()">
+    @if (!showOnlyActiveProviderTool) {
+    <div class="tool-subsection-title">
+      <mat-icon>history</mat-icon>
+      <span>History Import</span>
+    </div>
+    }
+    @if (!hasProAccess) {
+    <div class="pro-required-inline"><mat-icon>lock</mat-icon><span>Wahoo history import is a Pro feature.</span></div>
+    } @else if (isConnectedToService()) {
+    <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+      [providerConnected]="true" [isLoadingParent]="isLoading"
+      (importInitiated)="onHistoryImportInitiated($event)"></app-history-import-form>
+    } @else {
+    <app-status-info type="info" title="Connect Account First">Connect Wahoo before importing history.</app-status-info>
+    }
+  </section>
+  }
+  }
+</div>

@@ -107,12 +107,14 @@ import {
 import {
   isDisconnectPendingServiceConnection,
   isReconnectRequiredServiceConnection,
+  SERVICE_CONNECTION_STATES,
 } from '@shared/service-connection';
 
 export const ACTIVITY_SERVICE_CONNECTION_NAMES = [
   ServiceNames.GarminAPI,
   ServiceNames.SuuntoApp,
   ServiceNames.COROSAPI,
+  ServiceNames.WahooAPI,
 ] as const;
 
 export type ActivityServiceConnectionName = typeof ACTIVITY_SERVICE_CONNECTION_NAMES[number];
@@ -955,6 +957,12 @@ export class AppUserService implements OnDestroy {
       case ServiceNames.COROSAPI:
       case ServiceNames.SuuntoApp:
         return this.getServiceTokens(user, serviceName);
+      case ServiceNames.WahooAPI:
+        // Wahoo OAuth credentials are deliberately server-only. Expose a token-like
+        // connection marker derived from the safe user service metadata projection.
+        return this.getUserMetaForService(user, serviceName).pipe(
+          map(serviceMeta => serviceMeta?.connectionState === SERVICE_CONNECTION_STATES.Connected ? [{}] : []),
+        );
       case ServiceNames.GarminAPI:
         return this.getGarminAPITokens(user);
     }
@@ -1254,6 +1262,10 @@ export class AppUserService implements OnDestroy {
         functionName = 'addSuuntoAppHistoryToQueue';
         payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
         break;
+      case ServiceNames.WahooAPI:
+        functionName = 'addWahooAPIHistoryToQueue';
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        break;
       default:
         throw new Error(`Service ${serviceName} not supported for history import`);
     }
@@ -1334,6 +1346,9 @@ export class AppUserService implements OnDestroy {
       case ServiceNames.SuuntoApp:
         functionName = 'deauthorizeSuuntoApp';
         break;
+      case ServiceNames.WahooAPI:
+        functionName = 'deauthorizeWahooAPI';
+        break;
       default:
         throw new Error(`Service ${serviceName} not supported for deauthorization`);
     }
@@ -1356,6 +1371,9 @@ export class AppUserService implements OnDestroy {
         break;
       case ServiceNames.SuuntoApp:
         functionName = 'getSuuntoAPIAuthRequestTokenRedirectURI';
+        break;
+      case ServiceNames.WahooAPI:
+        functionName = 'getWahooAPIAuthRequestTokenRedirectURI';
         break;
       default:
         throw new Error(`Service ${serviceName} not supported for auth redirect`);
@@ -1392,6 +1410,16 @@ export class AppUserService implements OnDestroy {
     const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
       'requestAndSetCOROSAPIAccessToken',
       { state, code, redirectUri }
+    );
+    return result.data;
+  }
+
+  public async requestAndSetCurrentUserWahooAPIAccessToken(state: string, code: string) {
+    const currentDomain = this.windowService.currentDomain;
+    const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.WahooAPI}&connect=1`);
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+      'requestAndSetWahooAPIAccessToken',
+      { state, code, redirectUri },
     );
     return result.data;
   }
@@ -1682,6 +1710,7 @@ export class AppUserService implements OnDestroy {
       [ServiceNames.GarminAPI]: false,
       [ServiceNames.SuuntoApp]: false,
       [ServiceNames.COROSAPI]: false,
+      [ServiceNames.WahooAPI]: false,
     };
   }
 

@@ -4,6 +4,7 @@ import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
   Auth2ServiceTokenInterface,
+  WahooAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceAdapter } from './auth/factory';
@@ -16,6 +17,7 @@ import {
 } from './service-auth-lifecycle';
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
 import { isServiceDisconnectPendingForUser } from './service-disconnect-pending';
+import { getWahooErrorLogDetails } from './wahoo/error-details';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import DocumentSnapshot = admin.firestore.DocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
@@ -115,7 +117,7 @@ export async function getTokenData(
   serviceName: ServiceNames,
   forceRefreshAndSave = false,
   options: GetTokenDataOptions = {},
-): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface> {
+): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface | WahooAPIAuth2ServiceTokenInterface> {
   const serviceConfig = getServiceAdapter(serviceName, true);
   const serviceTokenData = <Auth2ServiceTokenInterface | undefined>doc.data();
   if (!serviceTokenData) {
@@ -172,6 +174,18 @@ export async function getTokenData(
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
         };
+      case ServiceNames.WahooAPI:
+        return <WahooAPIAuth2ServiceTokenInterface>{
+          serviceName,
+          accessToken: serviceTokenData.accessToken,
+          refreshToken: serviceTokenData.refreshToken,
+          expiresAt: serviceTokenData.expiresAt,
+          scope: serviceTokenData.scope,
+          tokenType: serviceTokenData.tokenType,
+          wahooUserID: (serviceTokenData as WahooAPIAuth2ServiceTokenInterface).wahooUserID,
+          dateRefreshed: serviceTokenData.dateRefreshed,
+          dateCreated: serviceTokenData.dateCreated,
+        };
     }
   }
 
@@ -193,9 +207,13 @@ export async function getTokenData(
     const failure = extractRefreshFailureDetails(e);
     const recoverTerminalAuthFailure = options.recoverTerminalAuthFailure !== false;
 
-    if (failure.isTransientError) {
+    if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
+      logger.warn(`Token refresh for user ${doc.id} failed`, getWahooErrorLogDetails(e));
+    } else if (failure.isTransientError) {
       // Do not log the full stack trace for these known errors during cleanup
       logger.warn(`Token refresh for user ${doc.id} failed (${failure.statusCode || 'unknown'}): ${failure.logMessage}`);
+    } else if (serviceName === ServiceNames.WahooAPI) {
+      logger.error(`Could not refresh token for user ${doc.id}`, getWahooErrorLogDetails(e));
     } else {
       logger.error(`Could not refresh token for user ${doc.id}`, e);
     }
@@ -207,7 +225,7 @@ export async function getTokenData(
           serviceName,
           serviceTokenData,
           failure,
-          e,
+          serviceName === ServiceNames.WahooAPI ? new Error('Wahoo token refresh failed.') : e,
         );
         if (resolution.kind === 'retry_with_latest_snapshot' && options.allowSupersededSnapshotRetry !== false) {
           logger.info(`Retrying ${serviceName} token ${doc.id} with a newer stored snapshot after terminal auth failure.`);
@@ -229,7 +247,7 @@ export async function getTokenData(
         failure.statusCode,
         failure.providerErrorCode,
         failure.providerErrorMessage,
-        e,
+        serviceName === ServiceNames.WahooAPI ? new Error('Wahoo token refresh failed.') : e,
       );
     }
     throw e;
@@ -270,6 +288,19 @@ export async function getTokenData(
       newToken = <COROSAPIAuth2ServiceTokenInterface>serviceTokenData;
       newToken.expiresAt = date.getTime() - 6000;
       newToken.dateRefreshed = date.getTime();
+      break;
+    case ServiceNames.WahooAPI:
+      newToken = <WahooAPIAuth2ServiceTokenInterface>{
+        serviceName,
+        accessToken: `${responseToken.token.access_token || ''}`,
+        refreshToken: `${responseToken.token.refresh_token || serviceTokenData.refreshToken}`,
+        expiresAt: (responseToken.token as any).expires_at.getTime(),
+        scope: `${responseToken.token.scope || serviceTokenData.scope}`,
+        tokenType: `${responseToken.token.token_type || serviceTokenData.tokenType || 'bearer'}`,
+        wahooUserID: (serviceTokenData as WahooAPIAuth2ServiceTokenInterface).wahooUserID,
+        dateRefreshed: date.getTime(),
+        dateCreated: serviceTokenData.dateCreated,
+      };
       break;
   }
 

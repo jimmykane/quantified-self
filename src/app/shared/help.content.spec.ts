@@ -7,6 +7,7 @@ import {
   POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
+  POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
 
 describe('help.content', () => {
@@ -205,7 +206,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Upload activity**');
     expect(gettingStartedSection?.content).toContain('**Connect service**');
     expect(gettingStartedSection?.content).toContain('FIT, GPX, TCX, JSON, and SML files');
-    expect(gettingStartedSection?.content).toContain('Garmin, Suunto, and COROS');
+    expect(gettingStartedSection?.content).toContain('Garmin, Suunto, COROS, and Wahoo');
     expect(gettingStartedSection?.content).toContain('after activity data exists');
     expect(gettingStartedSection?.content).toContain('Pro users with activity data but without a connected activity service');
     expect(gettingStartedSection?.content).toContain('**Connect a service** action prompt');
@@ -606,6 +607,18 @@ describe('help.content', () => {
       target: '/policies',
       fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
     });
+  });
+
+  it('documents Wahoo FIT imports, skip rules, and retained imported activities', () => {
+    const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
+    expect(serviceConnectionsSection?.content).toContain('## Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
+    expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
+    expect(serviceConnectionsSection?.content).toContain('[Wahoo Integration](/integrations/wahoo)');
+    expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
+      target: '/policies',
+      fragment: POLICIES_WAHOO_DATA_FRAGMENT,
+    }));
   });
 
   it('should expose provider-specific privacy links from the data-and-privacy section', () => {

@@ -15,7 +15,7 @@ import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from 
 import { routeResolver } from './resolvers/route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
-const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, and COROS training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync to Suunto.';
+const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync to Suunto and Wahoo.';
 
 const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   '',
@@ -188,6 +188,14 @@ const topLevelRoutes: Routes = [
     data: {
       ...PROVIDER_INTEGRATION_ROUTE_DATA.coros,
       integrationProvider: 'coros'
+    }
+  },
+  {
+    path: 'integrations/wahoo',
+    loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    data: {
+      ...PROVIDER_INTEGRATION_ROUTE_DATA.wahoo,
+      integrationProvider: 'wahoo'
     }
   },
   {

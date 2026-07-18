@@ -168,11 +168,13 @@
                 Suunto["🔵 Suunto"]
                 Coros["🟢 COROS"]
                 Garmin["🟠 Garmin"]
+                Wahoo["🔴 Wahoo"]
                 Email["📧 Email"]
 
                 Suunto -->|"1. Deauthorize API<br />2. Delete Tokens<br />3. Delete Parent Doc"| Suunto
                 Garmin -->|"1. DELETE API<br />2. Delete Doc"| Garmin
                 Coros -->|"1. Delete Tokens<br />2. Delete Parent Doc"| Coros
+                Wahoo -->|"1. DELETE permissions<br />2. Delete Tokens<br />3. Delete Mapping"| Wahoo
                 end
 
                 subgraph ExtensionCleanup["📦 delete-user-data (Extension)"]
@@ -233,14 +235,14 @@
                     </tr>
                     <tr>
                         <td><strong>Access Tokens</strong></td>
-                        <td><code>suuntoAppAccessTokens/{uid}</code><br><code>COROSAPIAccessTokens/{uid}</code><br><code>garminAPITokens/{uid}</code>
+                        <td><code>suuntoAppAccessTokens/{uid}</code><br><code>COROSAPIAccessTokens/{uid}</code><br><code>garminAPITokens/{uid}</code><br><code>wahooAPIAccessTokens/{uid}</code>
                         </td>
                         <td><code>cleanupUserAccounts</code></td>
                         <td>Attempts partner deauthorization first; if the provider is unavailable, archives token material for follow-up, then guarantees local token-root cleanup</td>
                     </tr>
                     <tr>
                         <td><strong>Operational Queues</strong></td>
-                        <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
+                        <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>wahooAPIWorkoutQueue/*</code><br><code>wahooAPIUserMappings/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
                         <td><code>cleanupUserAccounts</code></td>
                         <td>Top-level queue docs are outside the extension paths, so cleanup queries by Firebase UID and known provider ids, writes short-lived cleanup tombstones, then recursively deletes queue roots, including route sync and route reparse jobs</td>
                     </tr>

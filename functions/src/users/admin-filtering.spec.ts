@@ -77,6 +77,7 @@ describe('listUsers Cloud Function - Service Filtering', () => {
                 { uid: 'u_garmin', email: 'g@test.com', providerData: [] },
                 { uid: 'u_suunto', email: 's@test.com', providerData: [] },
                 { uid: 'u_coros', email: 'c@test.com', providerData: [] },
+                { uid: 'u_wahoo', email: 'w@test.com', providerData: [] },
                 { uid: 'u_none', email: 'n@test.com', providerData: [] },
             ],
             pageToken: undefined
@@ -169,6 +170,32 @@ describe('listUsers Cloud Function - Service Filtering', () => {
 
         expect(result.users).toHaveLength(1);
         expect(result.users[0].uid).toBe('u_coros');
+    });
+
+    it('should filter users by Wahoo service', async () => {
+        mockCollection.mockImplementation((name) => {
+            if (name === 'wahooAPIAccessTokens') {
+                return {
+                    select: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({
+                        docs: [{ id: 'u_wahoo' }]
+                    })
+                };
+            }
+            return {};
+        });
+
+        const request = {
+            data: { filterService: 'wahoo' },
+            auth: { uid: 'admin', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
+        } as unknown as CallableRequest<any>;
+
+        const result: any = await (listUsers as any)(request);
+
+        expect(result.users).toHaveLength(1);
+        expect(result.users[0].uid).toBe('u_wahoo');
+        expect(mockCollection).toHaveBeenCalledWith('wahooAPIAccessTokens');
     });
 
     it('should return empty list if no users satisfy the service filter', async () => {

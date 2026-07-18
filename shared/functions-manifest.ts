@@ -24,6 +24,12 @@ export const FUNCTIONS_MANIFEST = {
     addCOROSAPIHistoryToQueue: { name: 'addCOROSAPIHistoryToQueue', region: 'europe-west2' },
     importActivityToCOROSAPI: { name: 'importActivityToCOROSAPI', region: 'europe-west2' },
 
+    // Wahoo Functions
+    getWahooAPIAuthRequestTokenRedirectURI: { name: 'getWahooAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
+    requestAndSetWahooAPIAccessToken: { name: 'requestAndSetWahooAPIAccessToken', region: 'europe-west2' },
+    deauthorizeWahooAPI: { name: 'deauthorizeWahooAPI', region: 'europe-west2' },
+    addWahooAPIHistoryToQueue: { name: 'addWahooAPIHistoryToQueue', region: 'europe-west2' },
+
     // Suunto Functions
     getSuuntoAPIAuthRequestTokenRedirectURI: { name: 'getSuuntoAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetSuuntoAPIAccessToken: { name: 'requestAndSetSuuntoAPIAccessToken', region: 'europe-west2' },

@@ -7,6 +7,7 @@ import { getCloudTaskQueueStatsForQueue } from '../../utils';
 import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../../coros/constants';
+import { WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../../wahoo/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { config } from '../../config';
 import {
@@ -144,7 +145,8 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
     const PROVIDER_QUEUES: Record<string, string[]> = {
         'Suunto': [SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME],
         'COROS': [COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME],
-        'Garmin': [GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME]
+        'Garmin': [GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME],
+        'Wahoo': [WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME]
     };
 
     try {

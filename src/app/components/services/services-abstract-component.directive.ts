@@ -170,6 +170,10 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     return false;
   }
 
+  protected get canDisconnectWithoutProAccess(): boolean {
+    return false;
+  }
+
   get canConnectServiceWithCurrentAccess(): boolean {
     return this.hasProAccess || this.canConnectWithoutProAccess;
   }
@@ -209,7 +213,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async deauthorizeService(event) {
-    if (!this.hasProAccess) {
+    if (!this.hasProAccess && !this.canDisconnectWithoutProAccess) {
       this.triggerUpsell();
       return;
     }

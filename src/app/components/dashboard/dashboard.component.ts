@@ -113,6 +113,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { serviceName: ServiceNames.GarminAPI, label: 'Garmin' },
     { serviceName: ServiceNames.SuuntoApp, label: 'Suunto' },
     { serviceName: ServiceNames.COROSAPI, label: 'COROS' },
+    { serviceName: ServiceNames.WahooAPI, label: 'Wahoo' },
   ];
 
   private shouldSearch: boolean;

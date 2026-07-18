@@ -248,7 +248,7 @@ export function buildDashboardActionPromptViewModels(
       id: DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
       icon: 'upload_file',
       title: 'Upload your first activities',
-      description: 'Start with FIT, GPX, TCX, JSON, or SML files. Upgrade to Pro when you want automatic imports from Garmin, Suunto, or COROS.',
+      description: 'Start with FIT, GPX, TCX, JSON, or SML files. Upgrade to Pro when you want automatic imports from Garmin, Suunto, COROS, or Wahoo.',
       busy: options.firstActivityUploadBusy,
       error: options.firstActivityUploadError,
       primaryAction: {
@@ -268,7 +268,7 @@ export function buildDashboardActionPromptViewModels(
       id: DASHBOARD_ACTION_PROMPT_CONNECT_ACTIVITY_SERVICE_ID,
       icon: 'sync',
       title: 'Connect a service',
-      description: 'Import activities automatically by connecting Garmin, Suunto, or COROS.',
+      description: 'Import activities automatically by connecting Garmin, Suunto, COROS, or Wahoo.',
       busy: options.connectActivityServiceBusy,
       error: options.connectActivityServiceError,
       primaryAction: {
@@ -296,6 +296,11 @@ export function buildDashboardActionPromptViewModels(
         label: 'COROS',
         value: ServiceNames.COROSAPI,
         serviceName: ServiceNames.COROSAPI,
+      }, {
+        id: 'connectServiceProvider',
+        label: 'Wahoo',
+        value: ServiceNames.WahooAPI,
+        serviceName: ServiceNames.WahooAPI,
       }],
     });
   }

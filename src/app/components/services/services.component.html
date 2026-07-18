@@ -94,6 +94,20 @@
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
             </ng-container>
           </section>
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'wahoo'"
+            aria-label="Wahoo">
+            <app-services-wahoo
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
+            </app-services-wahoo>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
+            </ng-container>
+          </section>
         </mat-tab-nav-panel>
 
         <ng-template #serviceOverview let-section>
@@ -173,6 +187,17 @@
         [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('coros', $event)">
       </app-services-coros>
+      }
+      @case ('wahoo') {
+      <app-services-wahoo
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
+        (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
+      </app-services-wahoo>
       }
     }
   </mat-dialog-content>

@@ -298,7 +298,9 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         GarminAPI: 'garminAPI',
         SuuntoApp: 'suuntoApp',
         COROSAPI: 'corosAPI',
+        WahooAPI: 'wahooAPI',
     },
+    WahooAPIEventMetaData: actual.WahooAPIEventMetaData,
     GarminAPIAuth: () => ({
         toHeader: () => ({}),
         authorize: () => ({}),

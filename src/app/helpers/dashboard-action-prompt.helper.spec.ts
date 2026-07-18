@@ -156,7 +156,7 @@ describe('dashboard-action-prompt.helper', () => {
     expect(prompts[1]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID,
       title: 'Upload your first activities',
-      description: 'Start with FIT, GPX, TCX, JSON, or SML files. Upgrade to Pro when you want automatic imports from Garmin, Suunto, or COROS.',
+      description: 'Start with FIT, GPX, TCX, JSON, or SML files. Upgrade to Pro when you want automatic imports from Garmin, Suunto, COROS, or Wahoo.',
       primaryAction: {
         id: 'upgradeToPro',
       },
@@ -176,11 +176,13 @@ describe('dashboard-action-prompt.helper', () => {
       ServiceNames.GarminAPI,
       ServiceNames.SuuntoApp,
       ServiceNames.COROSAPI,
+      ServiceNames.WahooAPI,
     ]);
     expect(prompts[2].menuActions?.map(action => action.serviceName)).toEqual([
       ServiceNames.GarminAPI,
       ServiceNames.SuuntoApp,
       ServiceNames.COROSAPI,
+      ServiceNames.WahooAPI,
     ]);
     expect(prompts[3]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_ENABLE_ACTIVITY_AUTO_SYNC_ID,

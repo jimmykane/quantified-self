@@ -29,6 +29,10 @@ describe('config.ts', () => {
             COROSAPI_CLIENT_SECRET: 'coros-secret',
             GARMINAPI_CLIENT_ID: 'garmin-id',
             GARMINAPI_CLIENT_SECRET: 'garmin-secret',
+            WAHOOAPI_CLIENT_ID: 'wahoo-id',
+            WAHOOAPI_CLIENT_SECRET: 'wahoo-secret',
+            WAHOOAPI_WEBHOOK_TOKEN: 'wahoo-webhook-secret',
+            WAHOOAPI_ENABLED: 'true',
         });
         delete process.env.GCLOUD_PROJECT; // force fallback to admin.instanceId
     });
@@ -45,6 +49,13 @@ describe('config.ts', () => {
         expect(config.suuntoapp.subscription_key).toBe('suunto-sub');
         expect(config.corosapi.client_secret).toBe('coros-secret');
         expect(config.garminapi.client_id).toBe('garmin-id');
+        expect(config.wahooapi).toEqual(expect.objectContaining({
+            client_id: 'wahoo-id',
+            client_secret: 'wahoo-secret',
+            webhook_token: 'wahoo-webhook-secret',
+            enabled: true,
+            allowed_file_hosts: ['cdn.wahooligan.com'],
+        }));
 
         expect(config.cloudtasks.projectId).toBe('mock-project');
         expect(config.cloudtasks.workoutQueue).toBe('processWorkoutTask');
@@ -57,6 +68,17 @@ describe('config.ts', () => {
         expect(config.cloudtasks.derivedMetricsIngressBucketSeconds).toBe(30);
         expect(config.cloudtasks.sleepSyncQueue).toBe('processSleepSyncTask');
         expect(config.debug.bucketName).toBe('quantified-self-io-debug-files');
+    });
+
+    it('can keep Wahoo disabled without provisioning production credentials', async () => {
+        process.env.WAHOOAPI_ENABLED = 'false';
+        delete process.env.WAHOOAPI_CLIENT_ID;
+        delete process.env.WAHOOAPI_CLIENT_SECRET;
+        delete process.env.WAHOOAPI_WEBHOOK_TOKEN;
+        const { config } = await import('./config');
+
+        expect(config.wahooapi.enabled).toBe(false);
+        expect(config.wahooapi.client_id).toBe('');
     });
 
     it('throws when a required env var is missing', async () => {
