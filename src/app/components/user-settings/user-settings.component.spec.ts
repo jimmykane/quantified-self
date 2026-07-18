@@ -183,16 +183,18 @@ describe('UserSettingsComponent', () => {
         expect(emailLine).toBeNull();
     });
 
-    it('renders the profile identity strip only inside the profile section', () => {
+    it('shows the profile identity strip only while the profile section is active', () => {
         component.activeSection = 'profile';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.settings-panel-body .user-profile-header')).toBeTruthy();
+        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]');
+        expect(profilePanel.querySelector('.settings-panel-body .user-profile-header')).toBeTruthy();
+        expect(profilePanel.hidden).toBe(false);
 
         component.activeSection = 'units';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.user-profile-header')).toBeNull();
+        expect(profilePanel.hidden).toBe(true);
     });
 
     it('does not expose the About You profile description in user settings', () => {
@@ -294,6 +296,27 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('map');
     });
 
+    it('keeps settings panels mounted while switching the visible section', () => {
+        component.activeSection = 'profile';
+        fixture.detectChanges();
+
+        const panels = fixture.nativeElement.querySelectorAll('.settings-panel-section');
+        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]');
+        const mapPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]');
+
+        expect(panels).toHaveLength(7);
+        expect(profilePanel.hidden).toBe(false);
+        expect(mapPanel.hidden).toBe(true);
+
+        component.activeSection = 'map';
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]')).toBe(profilePanel);
+        expect(fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]')).toBe(mapPanel);
+        expect(profilePanel.hidden).toBe(true);
+        expect(mapPanel.hidden).toBe(false);
+    });
+
     it('should update the active section from section query param changes', () => {
         component.activeSection = 'profile';
 
@@ -310,18 +333,18 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('app');
     });
 
-    it('renders delete account only in the delete account section', () => {
+    it('shows delete account only while the delete account section is active', () => {
         component.activeSection = 'profile';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.danger-card')).toBeNull();
-        expect(fixture.nativeElement.textContent).not.toContain('Delete My Account');
+        const deletePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-delete-account-title"]');
+        expect(deletePanel.querySelector('.danger-card')).toBeTruthy();
+        expect(deletePanel.hidden).toBe(true);
 
         component.activeSection = 'delete-account';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.danger-card')).toBeTruthy();
-        expect(fixture.nativeElement.textContent).toContain('Delete My Account');
+        expect(deletePanel.hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('.qs-form-actions-floating')).toBeNull();
         expect(fixture.nativeElement.querySelector('.mobile-save-bar')).toBeNull();
     });

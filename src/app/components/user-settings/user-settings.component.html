@@ -38,9 +38,10 @@
 
           <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
-            @switch (activeSection) {
-            @case ('app') {
-            <section class="settings-panel-section" aria-labelledby="settings-general-title">
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-general-title"
+              [hidden]="activeSection !== 'app'">
               <header class="settings-panel-header">
                 <h2 id="settings-general-title">Appearance</h2>
                 <p>Choose how Quantified Self looks and behaves.</p>
@@ -89,10 +90,10 @@
                 </div>
               </div>
             </section>
-            }
-
-            @case ('dashboard') {
-            <section class="settings-panel-section" aria-labelledby="settings-dashboard-title">
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-dashboard-title"
+              [hidden]="activeSection !== 'dashboard'">
               <header class="settings-panel-header">
                 <h2 id="settings-dashboard-title">Dashboard</h2>
                 <p>Fine-tune your main activity views.</p>
@@ -144,10 +145,10 @@
                 </mat-form-field>
               </div>
             </section>
-            }
-
-            @case ('map') {
-            <section class="settings-panel-section" aria-labelledby="settings-map-title">
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-map-title"
+              [hidden]="activeSection !== 'map'">
               <header class="settings-panel-header">
                 <h2 id="settings-map-title">Maps</h2>
                 <p>Configure how your activities are drawn.</p>
@@ -186,10 +187,10 @@
                 </div>
               </div>
             </section>
-            }
-
-            @case ('charts') {
-            <section class="settings-panel-section" aria-labelledby="settings-charts-title">
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-charts-title"
+              [hidden]="activeSection !== 'charts'">
               <header class="settings-panel-header">
                 <h2 id="settings-charts-title">Charts</h2>
                 <p>Customize data visualization and analysis.</p>
@@ -246,10 +247,10 @@
                 </div>
               </div>
             </section>
-            }
-
-            @case ('units') {
-            <section class="settings-panel-section" aria-labelledby="settings-units-title">
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-units-title"
+              [hidden]="activeSection !== 'units'">
               <header class="settings-panel-header">
                 <h2 id="settings-units-title">Units</h2>
                 <p>Choose your preferred units for sporting data.</p>
@@ -333,10 +334,10 @@
                 </div>
               </div>
             </section>
-            }
-
-            @case ('delete-account') {
-            <section class="settings-panel-section" aria-labelledby="settings-delete-account-title">
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-delete-account-title"
+              [hidden]="activeSection !== 'delete-account'">
               <header class="settings-panel-header">
                 <h2 id="settings-delete-account-title">Delete Account</h2>
                 <p>Permanently remove your account and all associated data.</p>
@@ -365,10 +366,10 @@
                 </mat-card>
               </div>
             </section>
-            }
-
-            @default {
-            <section class="settings-panel-section" aria-labelledby="settings-profile-title">
+            <section
+              class="settings-panel-section"
+              aria-labelledby="settings-profile-title"
+              [hidden]="activeSection !== 'profile'">
               <header class="settings-panel-header">
                 <h2 id="settings-profile-title">Profile</h2>
                 <p>Manage your profile details and account controls.</p>
@@ -442,8 +443,6 @@
                 }
               </div>
             </section>
-            }
-            }
         </app-workspace-section-navigation>
 
         @if (activeSection !== 'delete-account') {
