@@ -201,15 +201,28 @@ describe('EventCardStatsTableComponent', () => {
             },
             getID: () => 'act-suunto',
         } as unknown as ActivityInterface;
+        const wahooActivity = {
+            ...mockActivity,
+            creator: {
+                name: 'Player 3',
+                devices: [{ manufacturer: 'Wahoo Fitness', name: 'ELEMNT RIVAL' }],
+            },
+            getID: () => 'act-wahoo',
+        } as unknown as ActivityInterface;
 
-        mockEventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.GarminAPI, ServiceNames.SuuntoApp]));
-        component.selectedActivities = [garminActivity, suuntoActivity];
+        mockEventService.getEventMetaDataKeys.mockReturnValue(of([
+            ServiceNames.GarminAPI,
+            ServiceNames.SuuntoApp,
+            ServiceNames.WahooAPI,
+        ]));
+        component.selectedActivities = [garminActivity, suuntoActivity, wahooActivity];
         component.ngOnChanges({});
 
         const row1 = {
             Name: 'Distance',
             'Player 1 #ff0000': '10 km',
             'Player 2 #ff0000': '12 km',
+            'Player 3 #ff0000': '11 km',
         };
         component.selection.select(row1);
 
@@ -224,6 +237,10 @@ describe('EventCardStatsTableComponent', () => {
                 'Player 2 #ff0000': expect.objectContaining({
                     serviceName: ServiceNames.SuuntoApp,
                     exportLabel: 'Suunto',
+                }),
+                'Player 3 #ff0000': expect.objectContaining({
+                    serviceName: ServiceNames.WahooAPI,
+                    exportLabel: 'Wahoo',
                 }),
             },
         });

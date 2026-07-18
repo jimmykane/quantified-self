@@ -13,6 +13,8 @@ const {
     batchMock,
     whereMock,
     recursiveDeleteMock,
+    runTransactionMock,
+    transactionDeleteMock,
     tokensGetMock,
     setMock,
     limitMock,
@@ -94,6 +96,16 @@ const {
     };
 
     const recursiveDeleteMock = vi.fn().mockResolvedValue({});
+    const transactionDeleteMock = vi.fn();
+    const runTransactionMock = vi.fn(async (handler: (transaction: {
+        get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
+        delete: (ref: unknown) => void;
+    }) => Promise<unknown>) => handler({
+        get: async (ref) => ref?.get
+            ? ref.get()
+            : { exists: false, data: () => ({}) },
+        delete: transactionDeleteMock,
+    }));
 
     // Timestamp mock
     const mockTimestamp = {
@@ -104,7 +116,8 @@ const {
         collection: collectionMock,
         collectionGroup: collectionGroupMock,
         batch: vi.fn(() => batchMock),
-        recursiveDelete: recursiveDeleteMock
+        recursiveDelete: recursiveDeleteMock,
+        runTransaction: runTransactionMock,
     })), {
         Timestamp: {
             now: vi.fn(() => mockTimestamp),
@@ -126,6 +139,8 @@ const {
         batchMock,
         whereMock,
         recursiveDeleteMock,
+        runTransactionMock,
+        transactionDeleteMock,
         tokensGetMock,
         setMock,
         limitMock,
@@ -267,6 +282,16 @@ describe('cleanupUserAccounts', () => {
             get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
         }));
         markQueueItemDeletedForUserCleanupMock.mockReset().mockResolvedValue(true);
+        transactionDeleteMock.mockReset();
+        runTransactionMock.mockReset().mockImplementation(async (handler: (transaction: {
+            get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
+            delete: (ref: unknown) => void;
+        }) => Promise<unknown>) => handler({
+            get: async (ref) => ref?.get
+                ? ref.get()
+                : { exists: false, data: () => ({}) },
+            delete: transactionDeleteMock,
+        }));
 
         // Reset batch/where mocks specific behavior if needed
         batchMock.commit.mockResolvedValue({});
@@ -857,6 +882,89 @@ describe('cleanupUserAccounts', () => {
             'activity-job-1',
             'account_deletion_cleanup',
         );
+    });
+
+    it('should preserve a Wahoo mapping transferred while account cleanup is in flight', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const mappingRef = { path: 'wahooAPIUserMappings/wahoo-user' };
+        const restoreCollectionMock = mockCollectionWhereResultsByName((collectionName, field, _operator, value) => (
+            collectionName === 'wahooAPIUserMappings'
+            && field === 'firebaseUserID'
+            && value === 'testUser123'
+                ? {
+                    docs: [{
+                        id: 'wahoo-user',
+                        ref: mappingRef,
+                        data: () => ({ firebaseUserID: 'testUser123', wahooUserID: 'wahoo-user' }),
+                    }],
+                }
+                : null
+        ));
+        const discardedFirstAttemptDelete = vi.fn();
+        const committedRetryDelete = vi.fn();
+        runTransactionMock.mockImplementationOnce(async (handler: (transaction: {
+            get: (ref: unknown) => Promise<unknown>;
+            delete: (ref: unknown) => void;
+        }) => Promise<unknown>) => {
+            await handler({
+                get: async () => ({
+                    exists: true,
+                    data: () => ({ firebaseUserID: 'testUser123', wahooUserID: 'wahoo-user' }),
+                }),
+                delete: discardedFirstAttemptDelete,
+            });
+            return handler({
+                get: async () => ({
+                    exists: true,
+                    data: () => ({ firebaseUserID: 'newFirebaseUser', wahooUserID: 'wahoo-user' }),
+                }),
+                delete: committedRetryDelete,
+            });
+        });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        restoreCollectionMock();
+
+        expect(runTransactionMock).toHaveBeenCalled();
+        expect(discardedFirstAttemptDelete).toHaveBeenCalledWith(mappingRef);
+        expect(committedRetryDelete).not.toHaveBeenCalled();
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(mappingRef);
+    });
+
+    it('should transactionally delete a Wahoo mapping that is still owned by the deleted user', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const mappingRef = { path: 'wahooAPIUserMappings/wahoo-user' };
+        const restoreCollectionMock = mockCollectionWhereResultsByName((collectionName, field, _operator, value) => (
+            collectionName === 'wahooAPIUserMappings'
+            && field === 'firebaseUserID'
+            && value === 'testUser123'
+                ? {
+                    docs: [{
+                        id: 'wahoo-user',
+                        ref: mappingRef,
+                        data: () => ({ firebaseUserID: 'testUser123', wahooUserID: 'wahoo-user' }),
+                    }],
+                }
+                : null
+        ));
+        runTransactionMock.mockImplementationOnce(async (handler: (transaction: {
+            get: (ref: unknown) => Promise<unknown>;
+            delete: (ref: unknown) => void;
+        }) => Promise<unknown>) => handler({
+            get: async () => ({
+                exists: true,
+                data: () => ({ firebaseUserID: 'testUser123', wahooUserID: 'wahoo-user' }),
+            }),
+            delete: transactionDeleteMock,
+        }));
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        restoreCollectionMock();
+
+        expect(transactionDeleteMock).toHaveBeenCalledWith(mappingRef);
+        expect(recursiveDeleteMock).not.toHaveBeenCalledWith(mappingRef);
     });
 
     it('should preserve queue state when cleanup tombstone write fails during account deletion', async () => {

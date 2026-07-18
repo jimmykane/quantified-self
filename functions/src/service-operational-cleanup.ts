@@ -390,10 +390,17 @@ export async function cleanupProviderOperationalDocsForServiceToken(
 
   if (serviceName === ServiceNames.WahooAPI && !hasActiveConnection) {
     const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(config.providerUserId);
-    const mappingSnapshot = await mappingRef.get();
-    if (mappingSnapshot.exists && asNonEmptyString(mappingSnapshot.data()?.firebaseUserID) === userID) {
-      // Mapping documents cannot have descendants by design.
-      await mappingRef.delete();
+    const mappingDeleted = await db.runTransaction(async (transaction) => {
+      const mappingSnapshot = await transaction.get(mappingRef);
+      if (!mappingSnapshot.exists || asNonEmptyString(mappingSnapshot.data()?.firebaseUserID) !== userID) {
+        return false;
+      }
+
+      // Mapping documents cannot have descendants by design, so a transactional document delete is sufficient.
+      transaction.delete(mappingRef);
+      return true;
+    });
+    if (mappingDeleted) {
       deletedDocCount += 1;
     }
   }

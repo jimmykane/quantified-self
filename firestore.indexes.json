@@ -222,6 +222,29 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "wahooAPIAccessTokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "wahooAPIWorkoutQueue",
       "queryScope": "COLLECTION",
       "fields": [

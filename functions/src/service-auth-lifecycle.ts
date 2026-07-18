@@ -1,6 +1,10 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
+import {
+  Auth2ServiceTokenInterface,
+  ServiceNames,
+  WahooAPIAuth2ServiceTokenInterface,
+} from '@sports-alliance/sports-lib';
 import { GarminAPIAuth2ServiceTokenInterface } from './garmin/auth/adapter';
 import { getServiceAdapter } from './auth/factory';
 import { TokenNotFoundError } from './utils';
@@ -19,7 +23,10 @@ import {
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 
-type StoredServiceToken = Auth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface;
+type StoredServiceToken =
+  | Auth2ServiceTokenInterface
+  | GarminAPIAuth2ServiceTokenInterface
+  | WahooAPIAuth2ServiceTokenInterface;
 type QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
 
@@ -349,6 +356,18 @@ function buildStoredServiceToken(
         dateRefreshed: tokenData.dateRefreshed,
         dateCreated: tokenData.dateCreated,
       } as GarminAPIAuth2ServiceTokenInterface;
+    case ServiceNames.WahooAPI:
+      return {
+        serviceName,
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
+        expiresAt: tokenData.expiresAt,
+        scope: tokenData.scope,
+        tokenType: tokenData.tokenType,
+        wahooUserID: (tokenData as WahooAPIAuth2ServiceTokenInterface).wahooUserID,
+        dateRefreshed: tokenData.dateRefreshed,
+        dateCreated: tokenData.dateCreated,
+      } as WahooAPIAuth2ServiceTokenInterface;
     default:
       throw new Error(`Unsupported service ${serviceName}`);
   }

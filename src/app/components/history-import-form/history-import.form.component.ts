@@ -35,7 +35,7 @@ import { AppSleepService } from '../../services/app.sleep.service';
 
 dayjs.extend(relativeTime);
 
-/** Response from COROS/Suunto history import */
+/** Response from COROS/Suunto/Wahoo history import */
 export interface HistoryImportResult {
   successCount: number;
   failureCount: number;
@@ -75,7 +75,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public sleepBackfillStartDate = new Date(SLEEP_BACKFILL_START_DATE_ISO);
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
-  /** stores the actual backend response for display (COROS/Suunto only) */
+  /** Stores the actual backend response for display (COROS/Suunto/Wahoo only). */
   public pendingImportResult = signal<HistoryImportResult | null>(null);
   public isSleepBackfillSubmitting = signal(false);
   public pendingSleepBackfillResult = signal<SleepBackfillQueueResponse | null>(null);
@@ -180,6 +180,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     switch (this.serviceName) {
       case ServiceNames.SuuntoApp:
       case ServiceNames.COROSAPI:
+      case ServiceNames.WahooAPI:
         if (!this.userMetaForService.processedActivitiesFromLastHistoryImportCount) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();

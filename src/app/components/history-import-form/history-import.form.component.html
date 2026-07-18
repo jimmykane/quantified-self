@@ -1,7 +1,7 @@
 @if (isHistoryImportPending()) {
 <!-- Optimistic UI: Show queued status immediately using Shared Callout Component -->
 <div class="status-container">
-  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
+  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
   @if (pendingImportResult()) {
   <app-status-info type="success" title="Import started">
     {{ pendingImportResult()?.successCount ?? 0 }} activities scheduled.
@@ -38,7 +38,7 @@
 </div>
 } @else if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
 <div class="status-container">
-  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
+  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
   <app-status-info type="success" title="Import In Progress">
     {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities scheduled from the last import.
     Cooldown active for {{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}.
@@ -119,7 +119,7 @@
   <div class="confirmation-section">
     <mat-checkbox formControlName="accepted" class="qs-checkbox-primary">
       <span class="checkbox-label">
-        @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
+        @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
         I understand this may take hours to days.
         }
         @if (serviceName === serviceNames.GarminAPI) {

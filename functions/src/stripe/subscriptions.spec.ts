@@ -582,12 +582,13 @@ describe('onSubscriptionUpdated', () => {
             setupSubscriptionsQuery(true);
             mockReconcileClaims.mockResolvedValue({ role: 'pro' });
             mockIsServiceDisconnectPendingForUser.mockImplementation(async (_uid: string, serviceName: ServiceNames) => (
-                serviceName === ServiceNames.SuuntoApp
+                serviceName === ServiceNames.SuuntoApp || serviceName === ServiceNames.WahooAPI
             ));
 
             await onSubscriptionUpdated(event);
 
             expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(uid, ServiceNames.SuuntoApp);
+            expect(mockClearServiceDisconnectPending).toHaveBeenCalledWith(uid, ServiceNames.WahooAPI);
             expect(mockClearServiceDisconnectPending).not.toHaveBeenCalledWith(uid, ServiceNames.COROSAPI);
             expect(mockClearServiceDisconnectPending).not.toHaveBeenCalledWith(uid, ServiceNames.GarminAPI);
         });

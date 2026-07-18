@@ -3,7 +3,6 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { cleanupOrphanedUsers } from './cleanup-orphaned-users';
 import * as OAuth2 from '../OAuth2';
-import * as GarminWrapper from '../garmin/auth/wrapper';
 import * as readline from 'readline';
 
 // Mock the dependencies
@@ -15,10 +14,6 @@ vi.mock('../OAuth2', () => ({
     deauthorizeServiceForUser: vi.fn(),
 }));
 
-vi.mock('../garmin/auth/wrapper', () => ({
-    deauthorizeGarminAPIForUser: vi.fn(),
-}));
-
 vi.mock('firebase-admin', () => {
     const mockAuth = {
         listUsers: vi.fn(),
@@ -26,6 +21,7 @@ vi.mock('firebase-admin', () => {
     const mockFirestore = {
         collection: vi.fn(),
         recursiveDelete: vi.fn(),
+        runTransaction: vi.fn(),
         batch: vi.fn(),
         select: vi.fn(),
     };
@@ -59,6 +55,7 @@ describe('cleanupOrphanedUsers', () => {
     let mockFirestoreGet: ReturnType<typeof vi.fn>;
     let mockFirestoreSelect: ReturnType<typeof vi.fn>;
     let mockRecursiveDelete: ReturnType<typeof vi.fn>;
+    let mockRunTransaction: ReturnType<typeof vi.fn>;
     let mockStorageGetFiles: ReturnType<typeof vi.fn>;
     let mockStorageDeleteFiles: ReturnType<typeof vi.fn>;
     let mockMailWhere: ReturnType<typeof vi.fn>;
@@ -88,6 +85,14 @@ describe('cleanupOrphanedUsers', () => {
         mockFirestoreGet = vi.fn();
         mockFirestoreSelect = vi.fn().mockReturnThis();
         mockRecursiveDelete = firestoreMock.recursiveDelete;
+        mockRunTransaction = firestoreMock.runTransaction;
+        mockRunTransaction.mockImplementation(async (handler: (transaction: {
+            get: () => Promise<unknown>;
+            delete: ReturnType<typeof vi.fn>;
+        }) => Promise<unknown>) => handler({
+            get: async () => ({ exists: false, data: () => ({}) }),
+            delete: vi.fn(),
+        }));
 
         mockBatchDelete = vi.fn();
         mockBatchCommit = vi.fn().mockResolvedValue({});
@@ -202,5 +207,7 @@ describe('cleanupOrphanedUsers', () => {
         expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', ServiceNames.SuuntoApp);
         expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', ServiceNames.COROSAPI);
         expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', ServiceNames.GarminAPI);
+        expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', ServiceNames.WahooAPI);
+        expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'wahooAPIAccessTokens/orphaned-user' }));
     });
 });

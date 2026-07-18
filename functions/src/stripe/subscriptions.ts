@@ -62,6 +62,7 @@ const SUBSCRIPTION_ENFORCED_SERVICE_NAMES: ReadonlyArray<ServiceNames> = [
     ServiceNames.SuuntoApp,
     ServiceNames.COROSAPI,
     ServiceNames.GarminAPI,
+    ServiceNames.WahooAPI,
 ];
 
 const clearPendingServiceDisconnectsForRestoredEntitlement = async (
