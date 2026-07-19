@@ -1,6 +1,7 @@
 import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
-import { routes as appRoutes } from './app.routing.module';
+import { publicLayoutRoutes, routes as appRoutes } from './app.routing.module';
+import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 import {
   CLIENT_RENDERED_APP_ROUTES,
   PRERENDERED_FEATURE_ROUTES,
@@ -21,9 +22,13 @@ import { servicesRoutes } from './services.routing.module';
 import { userRoutes } from './user.routing.module';
 
 function definedRoutePaths(routes: typeof appRoutes): string[] {
-  return routes
-    .map(route => route.path)
-    .filter((path): path is string => path !== undefined && path !== '**');
+  return routes.flatMap(route => {
+    if (route.children) {
+      return definedRoutePaths(route.children);
+    }
+
+    return route.path !== undefined && route.path !== '**' ? [route.path] : [];
+  });
 }
 
 function fullAdminRoutePaths(): string[] {
@@ -130,7 +135,7 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'user/:userID/route/:routeID')?.status).toBeUndefined();
   });
 
-  it('keeps every top-level app route represented in the server render config', () => {
+  it('keeps every app route represented in the server render config', () => {
     const serverRoutePaths = new Set([
       ...PRERENDERED_PUBLIC_ROUTES,
       ...CLIENT_RENDERED_APP_ROUTES,
@@ -143,9 +148,9 @@ describe('serverRoutes', () => {
   });
 
   it('does not keep stale non-admin routes in the server render config', () => {
-    const topLevelAppPaths = new Set(definedRoutePaths(appRoutes));
+    const appRoutePaths = new Set(definedRoutePaths(appRoutes));
     const validServerPaths = new Set([
-      ...topLevelAppPaths,
+      ...appRoutePaths,
       ...fullAdminRoutePaths(),
     ]);
 
@@ -155,6 +160,19 @@ describe('serverRoutes', () => {
     ].filter(path => !validServerPaths.has(path));
 
     expect(staleServerRoutes).toEqual([]);
+  });
+
+  it('puts every footer-bearing route inside the public layout, never the admin route', () => {
+    const publicLayout = appRoutes.at(-1);
+
+    expect(publicLayout).toMatchObject({
+      path: '',
+      component: PublicLayoutComponent,
+      children: publicLayoutRoutes,
+    });
+    expect(publicLayoutRoutes.some(route => route.path === 'admin')).toBe(false);
+    expect(publicLayoutRoutes.some(route => route.path === 'help')).toBe(true);
+    expect(publicLayoutRoutes.some(route => route.path === '**')).toBe(true);
   });
 
   it('keeps exact admin child routes mirrored as client-rendered server routes', () => {

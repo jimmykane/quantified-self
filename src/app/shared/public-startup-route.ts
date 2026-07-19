@@ -36,34 +36,6 @@ const AUTH_SENSITIVE_PUBLIC_STARTUP_PATHS = new Set([
   '/tools/compare/saved',
 ]);
 
-/**
- * Application flows intentionally stay free of marketing chrome. Every other
- * route, including a future public page or a not-found page, receives the
- * shared public footer by default.
- */
-const PUBLIC_FOOTER_EXCLUDED_PATHS = new Set([
-  '/login',
-  '/onboarding',
-  '/admin',
-  '/subscriptions',
-  '/payment/success',
-  '/payment/cancel',
-  '/services',
-  '/dashboard',
-  '/training',
-  '/mytracks',
-  '/routes',
-  '/settings',
-  '/ai-insights',
-]);
-
-const PUBLIC_FOOTER_EXCLUDED_PREFIXES = [
-  '/admin/',
-  '/payment/',
-  '/services/',
-  '/user/',
-] as const;
-
 const PUBLIC_STARTUP_PREFIXES = [
   '/share/event/',
   '/share/comparison/',
@@ -98,12 +70,6 @@ export function isPublicContentPath(path: string): boolean {
   const normalizedPath = normalizeRoutePath(path);
   return PUBLIC_CONTENT_PATHS.has(normalizedPath)
     || PUBLIC_STARTUP_PREFIXES.some(prefix => normalizedPath.startsWith(prefix));
-}
-
-export function shouldShowPublicFooter(path: string): boolean {
-  const normalizedPath = normalizeRoutePath(path);
-  return !PUBLIC_FOOTER_EXCLUDED_PATHS.has(normalizedPath)
-    && !PUBLIC_FOOTER_EXCLUDED_PREFIXES.some(prefix => normalizedPath.startsWith(prefix));
 }
 
 export function isPublicStartupDocument(documentRef: Document | null | undefined): boolean {
