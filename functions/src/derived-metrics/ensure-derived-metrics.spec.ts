@@ -110,6 +110,28 @@ describe('decideDerivedMetricsFreshness', () => {
         });
     });
 
+    it('queues hard- and calendar-stale snapshots together in request order', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d],
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormNow]: {
+                    schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1,
+                    asOfDayMs: Date.UTC(2026, 3, 15),
+                },
+                [DERIVED_METRIC_KINDS.FormPlus7d]: {
+                    asOfDayMs: Date.UTC(2026, 3, 14),
+                },
+            }),
+        });
+
+        expect(decision).toEqual({
+            shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.FormPlus7d],
+            reason: 'schema_version_mismatch',
+        });
+    });
+
     it('queues all requested kinds when requested snapshot is missing', () => {
         const snapshots = buildMetricSnapshots();
         snapshots[DERIVED_METRIC_KINDS.FormNow] = {
@@ -179,6 +201,40 @@ describe('decideDerivedMetricsFreshness', () => {
             shouldQueue: true,
             metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow],
             reason: 'latest_event_update_after_completion',
+        });
+    });
+
+    it('queues the whole requested scope when a latest-event fallback accompanies a calendar-stale snapshot', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
+            latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 11, 0, 0),
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormNow]: { asOfDayMs: Date.UTC(2026, 3, 14) },
+            }),
+        });
+
+        expect(decision).toEqual({
+            shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
+            reason: 'calendar_day_behind',
+        });
+    });
+
+    it('queues the whole requested scope when a latest-event fallback accompanies a hard-stale snapshot', () => {
+        const decision = decideDerivedMetricsFreshness({
+            ...baseInput,
+            metricKinds: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
+            latestEventUpdatedAtMs: Date.UTC(2026, 3, 15, 11, 0, 0),
+            metricSnapshotsByKind: buildMetricSnapshots({
+                [DERIVED_METRIC_KINDS.FormNow]: { payloadValid: false },
+            }),
+        });
+
+        expect(decision).toEqual({
+            shouldQueue: true,
+            metricKindsToQueue: [DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.Acwr],
+            reason: 'invalid_metric_payload',
         });
     });
 

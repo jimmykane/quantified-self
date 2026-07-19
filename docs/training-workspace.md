@@ -407,10 +407,12 @@ and the latest event update before deciding whether to queue work.
 Readiness payload validity is also checked in the callable with the same environment-neutral runtime validator used by
 the frontend. A `ready` document that predates a required history field or otherwise fails that contract is therefore
 treated as stale by both layers. Snapshot-specific freshness failures enqueue only the affected kinds even when the
-initial page probe contains the complete Training scope, so this case queues only `training_readiness`. That targeted
-repair reuses a compatible Form snapshot seed and the bounded sleep envelope; it does not trigger an event or activity
-history scan. Keep the validator shared when the readiness payload evolves so backend freshness cannot call an invalid
-document fresh while the frontend remains indefinitely on Preparing.
+initial page probe contains the complete Training scope, so this case queues only `training_readiness`. A mixed probe
+queues the ordered union of hard snapshot failures and calendar-stale kinds; if the latest-event fallback detects a
+missed event trigger, it queues the complete requested scope. That targeted repair reuses a compatible Form snapshot
+seed and the bounded sleep envelope; it does not trigger an event or activity history scan. Keep the validator shared
+when the readiness payload evolves so backend freshness cannot call an invalid document fresh while the frontend remains
+indefinitely on Preparing.
 
 The readiness payload also carries `formulaVersion: 3`. This is intentionally independent of the global derived schema:
 changing the current/historical readiness formula or its persisted input projection invalidates only

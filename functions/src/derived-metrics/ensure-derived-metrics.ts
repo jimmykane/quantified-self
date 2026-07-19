@@ -216,6 +216,21 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
         }
     }
 
+    const latestEventUpdateAfterCompletion = Number.isFinite(input.latestEventUpdatedAtMs)
+        && Number.isFinite(input.coordinatorCompletedAtMs)
+        && (input.latestEventUpdatedAtMs as number) > (input.coordinatorCompletedAtMs as number);
+    const staleKindsToQueue = new Set<DerivedMetricKind>([
+        ...hardStaleKinds,
+        ...calendarStaleKinds,
+    ]);
+    // A missed event trigger can leave every requested snapshot stale, even if a
+    // separate snapshot-level failure also exists in this same probe.
+    if (latestEventUpdateAfterCompletion) {
+        for (const metricKind of input.metricKinds) {
+            staleKindsToQueue.add(metricKind);
+        }
+    }
+
     if (hardStaleKinds.length > 0) {
         const hasMissingSnapshot = hardStaleKinds.some((metricKind) => !input.metricSnapshotsByKind[metricKind]?.status);
         const hasNotReadySnapshot = hardStaleKinds.some((kind) => {
@@ -246,7 +261,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
                             : 'event_mutation_version_behind';
         return {
             shouldQueue: true,
-            metricKindsToQueue: hardStaleKinds,
+            metricKindsToQueue: input.metricKinds.filter(metricKind => staleKindsToQueue.has(metricKind)),
             reason,
         };
     }
@@ -254,16 +269,14 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     if (calendarStaleKinds.length > 0) {
         return {
             shouldQueue: true,
-            metricKindsToQueue: calendarStaleKinds,
+            metricKindsToQueue: input.metricKinds.filter(metricKind => staleKindsToQueue.has(metricKind)),
             reason: 'calendar_day_behind',
         };
     }
     // Fallback safety net for missed trigger executions:
     // if the most recent event document update is newer than the last successful
     // completion, force a rebuild even when mutation-version metadata did not advance.
-    if (Number.isFinite(input.latestEventUpdatedAtMs)
-        && Number.isFinite(input.coordinatorCompletedAtMs)
-        && (input.latestEventUpdatedAtMs as number) > (input.coordinatorCompletedAtMs as number)) {
+    if (latestEventUpdateAfterCompletion) {
         return {
             shouldQueue: true,
             metricKindsToQueue: [...input.metricKinds],
