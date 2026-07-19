@@ -490,6 +490,11 @@ export class ToolsComparePageComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.analyticsService.logToolCompareView(
+      this.showSavedComparisonsFirst ? 'saved' : 'new',
+      this.firebaseSignedIn(),
+    );
+
     this.breakpointObserver
       .observe(PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES)
       .pipe(takeUntilDestroyed(this.destroyRef))

@@ -154,12 +154,17 @@ describe('AppAnalyticsService', () => {
         });
     });
 
-    it('should log compare tool entry and sign-in analytics', () => {
+    it('should log compare tool view, entry, and sign-in analytics', () => {
         userSubject.next({ acceptedTrackingPolicy: true } as User);
 
+        service.logToolCompareView('saved', true);
         service.logToolCompareEntry('side_nav', true);
         service.logToolCompareSignIn('guest_create', 'compare');
 
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_view', {
+            view: 'saved',
+            signed_in: true,
+        });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'tool_compare_entry', {
             source: 'side_nav',
             signed_in: true,

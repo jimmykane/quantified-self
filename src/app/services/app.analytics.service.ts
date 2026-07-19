@@ -10,6 +10,7 @@ import { environment } from '../../environments/environment';
 
 export type ToolCompareEntrySource = 'side_nav' | 'tools_hub_hero' | 'tools_hub_card';
 export type ToolCompareDestination = 'compare' | 'saved';
+export type ToolCompareView = 'new' | 'saved';
 export type ToolCompareSignInSource = 'guest_cta' | 'guest_create' | 'saved_action';
 export type ToolCompareCreateStatus = 'validation_failure' | 'start' | 'success' | 'failure';
 export type ToolCompareErrorCategory =
@@ -285,6 +286,13 @@ export class AppAnalyticsService {
     // ─────────────────────────────────────────────────────────────────────────────
     // Tools / Compare Events
     // ─────────────────────────────────────────────────────────────────────────────
+
+    logToolCompareView(view: ToolCompareView, signedIn?: boolean): void {
+        this.logEvent('tool_compare_view', this.compactParams({
+            view,
+            signed_in: signedIn,
+        }));
+    }
 
     logToolCompareEntry(source: ToolCompareEntrySource, signedIn?: boolean): void {
         this.logEvent('tool_compare_entry', this.compactParams({
