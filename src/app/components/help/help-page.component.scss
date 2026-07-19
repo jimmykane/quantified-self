@@ -3,19 +3,20 @@
 }
 
 .help-page {
-  max-width: 76rem;
+  max-width: 88rem;
   margin: 0 auto;
-  padding: 2.5rem 1rem 3rem;
+  padding: 2.75rem 1.5rem 3.5rem;
 }
 
 .docs-hero {
   max-width: 46rem;
-  margin: 0 auto 2rem;
+  margin: 0 auto 2.5rem;
   text-align: center;
 }
 
 .hero-title {
   margin: 0.5rem 0 0.75rem;
+  color: var(--mat-sys-primary);
 }
 
 .hero-subtitle {
@@ -37,13 +38,14 @@
 
 .quick-actions {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .quick-action,
 .topic-card,
 .search-result {
-  --mat-button-outlined-container-shape: var(--mat-sys-corner-medium);
+  --mat-button-outlined-container-shape: 0.75rem;
+  --mat-button-outlined-outline-color: var(--mat-sys-outline-variant);
   width: 100%;
   min-height: 5.5rem;
   height: auto;
@@ -104,7 +106,7 @@
   display: grid;
   align-items: start;
   grid-template-columns: minmax(0, 1fr) minmax(16rem, 19rem);
-  gap: 1.25rem;
+  gap: 1.5rem;
 }
 
 .documentation-section,
@@ -133,6 +135,7 @@
 
 .topic-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
 
 .topic-card,
@@ -148,6 +151,17 @@
 
 .popular-guides-card mat-nav-list {
   padding-top: 0;
+}
+
+.popular-guides-card,
+.popular-guides-card mat-nav-list,
+.popular-guides-card [mat-list-item] {
+  min-width: 0;
+}
+
+.popular-guides-card :is([matListItemTitle], [matListItemLine]) {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .support-card {

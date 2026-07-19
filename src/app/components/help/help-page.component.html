@@ -184,11 +184,11 @@
             </mat-card-header>
             <mat-card-content>
               <mat-nav-list aria-label="Popular documentation guides">
-                @for (section of popularSections(); track section.id) {
-                  <a mat-list-item [routerLink]="[]" [fragment]="section.id" (click)="openSection(section.id)">
-                    <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
-                    <span matListItemTitle>{{ section.title }}</span>
-                    <span matListItemLine>{{ section.summary }}</span>
+                @for (guide of popularGuides(); track guide.section.id) {
+                  <a mat-list-item [routerLink]="[]" [fragment]="guide.section.id" (click)="openSection(guide.section.id)">
+                    <mat-icon matListItemIcon>{{ guide.section.icon }}</mat-icon>
+                    <span matListItemTitle>{{ guide.section.title }}</span>
+                    <span matListItemLine>{{ guide.description }}</span>
                   </a>
                 }
               </mat-nav-list>
