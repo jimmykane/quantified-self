@@ -22,6 +22,7 @@ const HELP_ACTION_DESCRIPTIONS: Record<HelpAction['id'], string> = {
 };
 
 const POPULAR_SECTION_IDS: readonly HelpSectionId[] = [
+  'training-analysis',
   'service-connections',
   'uploads-and-imports',
   'ai-insights',

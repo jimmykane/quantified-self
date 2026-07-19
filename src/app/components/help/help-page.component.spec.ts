@@ -81,6 +81,18 @@ describe('HelpPageComponent', () => {
     expect(component.hasSearchQuery()).toBe(false);
   });
 
+  it('opens the dedicated Training analysis guide from search', () => {
+    component.onSearchQueryChange('historical benchmark');
+    fixture.detectChanges();
+
+    expect(component.searchResults().map(section => section.id)).toContain('training-analysis');
+
+    component.openSection('training-analysis');
+    fixture.detectChanges();
+
+    expect(component.selectedSection().title).toBe('Training Analysis');
+  });
+
   it('clears an active search when returning to all documentation', () => {
     component.openSection('plans-and-billing');
     component.onSearchQueryChange('billing');

@@ -18,4 +18,10 @@ describe('searchHelpSections', () => {
 
     expect(matches.map(section => section.id)).toContain('getting-started');
   });
+
+  it('finds the Training guide from benchmark terminology', () => {
+    const matches = searchHelpSections(HELP_SECTIONS, 'historical benchmark');
+
+    expect(matches.map(section => section.id)).toContain('training-analysis');
+  });
 });

@@ -13,6 +13,7 @@ describe('help.content', () => {
   it('should expose the expected ordered section ids', () => {
     expect(HELP_SECTIONS.map(section => section.id)).toEqual<HelpSectionId[]>([
       'getting-started',
+      'training-analysis',
       'ai-insights',
       'plans-and-billing',
       'uploads-and-imports',
@@ -22,8 +23,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define seven unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(7);
+  it('should define eight unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(8);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -99,43 +100,6 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
     expect(gettingStartedSection?.content).toContain('current **Readiness**');
-    expect(gettingStartedSection?.content).toContain('What drove this');
-    expect(gettingStartedSection?.content).toContain('neutral higher/lower language');
-    expect(gettingStartedSection?.content).toContain('plots a readable 12-week durability trend');
-    expect(gettingStartedSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
-    expect(gettingStartedSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
-    expect(gettingStartedSection?.content).toContain('**Sports shown**');
-    expect(gettingStartedSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
-    expect(gettingStartedSection?.content).toContain('**Use automatic selection**');
-    expect(gettingStartedSection?.content).toContain('does not filter the overall comparison or **What drove this**');
-    expect(gettingStartedSection?.content).toContain('Mountain Biking groups');
-    expect(gettingStartedSection?.content).toContain('one activity leg at a time');
-    expect(gettingStartedSection?.content).toContain('shown first as quick picks');
-    expect(gettingStartedSection?.content).toContain('selecting an event never changes its tags');
-    expect(gettingStartedSection?.content).toContain('**Recovery history**');
-    expect(gettingStartedSection?.content).toContain('without changing the Training state');
-    expect(gettingStartedSection?.content).toContain('same current formula as Dashboard Today');
-    expect(gettingStartedSection?.content).toContain('average sleep HR (70%) and minimum sleep HR (30%)');
-    expect(gettingStartedSection?.content).toContain('Lower average or minimum sleep HR supports the score only relative');
-    expect(gettingStartedSection?.content).toContain('Suunto records can provide average and minimum sleep HR');
-    expect(gettingStartedSection?.content).toContain('Garmin Health sleep summaries currently do not populate');
-    expect(gettingStartedSection?.content).toContain('bounded 30-day sleep-only query');
-    expect(gettingStartedSection?.content).toContain('does not load event or activity history');
-    expect(gettingStartedSection?.content).toContain('Failed load or sleep reads are identified separately');
-    expect(gettingStartedSection?.content).toContain('Sleep already loaded before a listener failure remains visible only while eligible');
-    expect(gettingStartedSection?.content).toContain('context, not a workout instruction');
-    expect(gettingStartedSection?.content).toContain('**14-day trend**');
-    expect(gettingStartedSection?.content).toContain('without scanning activity history');
-    expect(gettingStartedSection?.content).toContain('each daily point applies its own 30-day sleep window');
-    expect(gettingStartedSection?.content).toContain('missing scores stay as gaps');
-    expect(gettingStartedSection?.content).toContain('longest valid main overnight record');
-    expect(gettingStartedSection?.content).toContain('at least three recorded nights');
-    expect(gettingStartedSection?.content).toContain('at least five qualifying nights');
-    expect(gettingStartedSection?.content).toContain('Missing nights and missing HRV are never counted as zero');
-    expect(gettingStartedSection?.content).toContain('at least seven recorded nights and at least half of the window');
-    expect(gettingStartedSection?.content).toContain('keeps pool and open-water evidence separate');
-    expect(gettingStartedSection?.content).toContain('does not infer Critical Swim Speed');
-    expect(gettingStartedSection?.content).toContain('zero-session result');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
     expect(gettingStartedSection?.content).toContain('**Activity Overview**, **Routes & Maps**, and **Custom Charts**');
     expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
@@ -144,27 +108,90 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
-    expect(gettingStartedSection?.content).toContain('Imported VO₂ max');
-    expect(gettingStartedSection?.content).toContain('aggregate best 3–20 minute power curve');
-    expect(gettingStartedSection?.content).toContain("95% of that activity's 20-minute best");
-    expect(gettingStartedSection?.content).toContain('without large interpolation gaps');
-    expect(gettingStartedSection?.content).toContain('inconsistent body weights');
-    expect(gettingStartedSection?.content).toContain('does not by itself mean fitness declined');
-    expect(gettingStartedSection?.content).toContain('never a readiness score');
-    expect(gettingStartedSection?.content).toContain('**Durability** performance chart keeps its activity eligibility details collapsed');
   });
 
-  it('should identify Training as beta and direct its feedback to support', () => {
-    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+  it('should provide a dedicated Training analysis guide with evidence and missing-data rules', () => {
+    const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
-    expect(gettingStartedSection?.content).toContain('**Training (Beta)**');
+    expect(trainingSection?.content).toContain('What drove this');
+    expect(trainingSection?.content).toContain('neutral higher/lower language');
+    expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
+    expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
+    expect(trainingSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
+    expect(trainingSection?.content).toContain('**Sports shown**');
+    expect(trainingSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
+    expect(trainingSection?.content).toContain('**Use automatic selection**');
+    expect(trainingSection?.content).toContain('does not filter the overall comparison or **What drove this**');
+    expect(trainingSection?.content).toContain('Mountain Biking groups');
+    expect(trainingSection?.content).toContain('one activity leg at a time');
+    expect(trainingSection?.content).toContain('shown first as quick picks');
+    expect(trainingSection?.content).toContain('selecting an event never changes its tags');
+    expect(trainingSection?.content).toContain('**Recovery history**');
+    expect(trainingSection?.content).toContain('without changing the Training state');
+    expect(trainingSection?.content).toContain('same current formula as Dashboard Today');
+    expect(trainingSection?.content).toContain('Average HR leads the single Overnight HR driver at 70%, minimum HR contributes 30%');
+    expect(trainingSection?.content).toContain('Lower Overnight HR versus personal baseline supports readiness');
+    expect(trainingSection?.content).toContain('can provide both HR measures');
+    expect(trainingSection?.content).toContain('Garmin Health sleep summaries currently provide neither');
+    expect(trainingSection?.content).toContain('bounded 30-day sleep-only query');
+    expect(trainingSection?.content).toContain('does not load event or activity history');
+    expect(trainingSection?.content).toContain('Failed load or sleep reads are identified separately');
+    expect(trainingSection?.content).toContain('Sleep already loaded before a listener failure remains visible only while eligible');
+    expect(trainingSection?.content).toContain('context, not a workout instruction');
+    expect(trainingSection?.content).toContain('**14-day trend**');
+    expect(trainingSection?.content).toContain('without scanning activity history');
+    expect(trainingSection?.content).toContain('each daily point applies its own 30-day sleep window');
+    expect(trainingSection?.content).toContain('missing scores stay as gaps');
+    expect(trainingSection?.content).toContain('longest valid main overnight record');
+    expect(trainingSection?.content).toContain('at least three recorded nights');
+    expect(trainingSection?.content).toContain('at least five qualifying nights');
+    expect(trainingSection?.content).toContain('Missing nights and missing HRV are never counted as zero');
+    expect(trainingSection?.content).toContain('at least seven recorded nights and at least half of the window');
+    expect(trainingSection?.content).toContain('keeps pool and open-water evidence separate');
+    expect(trainingSection?.content).toContain('does not infer Critical Swim Speed');
+    expect(trainingSection?.content).toContain('zero-session result');
+    expect(trainingSection?.content).toContain('Imported VO₂ max');
+    expect(trainingSection?.content).toContain('aggregate best 3–20 minute power curve');
+    expect(trainingSection?.content).toContain("95% of that activity's 20-minute best");
+    expect(trainingSection?.content).toContain('without large interpolation gaps');
+    expect(trainingSection?.content).toContain('inconsistent body weights');
+    expect(trainingSection?.content).toContain('does not by itself mean fitness declined');
+    expect(trainingSection?.content).toContain('never a readiness score');
+    expect(trainingSection?.links).toContainEqual({
+      label: 'Open Training',
+      icon: 'monitoring',
+      kind: 'route',
+      target: '/training',
+    });
+  });
+
+  it('should link Getting Started to Training guidance and feedback', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
+
+    expect(gettingStartedSection?.content).toContain('**Training** is your fixed workspace');
+    expect(gettingStartedSection?.content).toContain('[Training analysis guide](/help#training-analysis)');
     expect(gettingStartedSection?.content).toContain('[Training Analysis overview](/features/training-analysis)');
     expect(gettingStartedSection?.content).toContain('**Feedback** action to email support');
+    expect(gettingStartedSection?.content).not.toContain('**Training (Beta)**');
+    expect(gettingStartedSection?.links).toContainEqual({
+      label: 'Training analysis guide',
+      icon: 'school',
+      kind: 'route',
+      target: '/help',
+      fragment: 'training-analysis',
+    });
     expect(gettingStartedSection?.links).toContainEqual({
       label: 'Training Analysis Overview',
       icon: 'monitoring',
       kind: 'route',
       target: '/features/training-analysis',
+    });
+    expect(trainingSection?.links).toContainEqual({
+      label: 'Email Training Feedback',
+      icon: 'email',
+      kind: 'external',
+      target: expect.stringMatching(/^mailto:.*subject=Training%20feedback$/),
     });
   });
 
