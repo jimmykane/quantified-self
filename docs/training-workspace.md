@@ -456,6 +456,10 @@ Sport visibility has two modes:
 The action label compacts to one sport, `2 sports`, or `All 3`; its accessible label lists the actual disciplines and
 whether selection is automatic.
 
+The status header names the visible-detail scope (for example, `Cycling/MTB details`) and explicitly says that the
+overall comparison still uses all recorded Training disciplines. This prevents the selected-card preference from being
+mistaken for a filter on the global state, time, sessions, or load explanation.
+
 Visibility affects:
 
 - Best Build cards;

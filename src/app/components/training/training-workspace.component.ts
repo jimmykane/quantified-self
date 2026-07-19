@@ -98,6 +98,7 @@ import {
   formatTrainingVisibleDisciplinesAccessibleLabel,
   formatTrainingVisibleDisciplinesCompactLabel,
   formatTrainingVisibleDisciplinesLabel,
+  formatTrainingVisibleDisciplinesScopeLabel,
   resolveTrainingSportVisibility,
   trainingSportVisibilitySelectionKey,
 } from '../../helpers/training-sport-visibility.helper';
@@ -262,6 +263,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
   public visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
   public visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
+  public visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(this.visibleDisciplines);
   public isAutomaticSportVisibility = true;
   public isRunningVisible = true;
   public isCyclingVisible = true;
@@ -454,6 +456,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
     this.visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
     this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
+    this.visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(this.visibleDisciplines);
     this.isAutomaticSportVisibility = true;
     this.isRunningVisible = true;
     this.isCyclingVisible = true;
@@ -558,6 +561,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       resolution.isAutomatic,
     );
     this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(resolution.disciplines);
+    this.visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(resolution.disciplines);
   }
 
   private reconcilePendingTrainingSportVisibility(): void {

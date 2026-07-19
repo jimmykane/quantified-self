@@ -548,7 +548,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Running capacity evidence');
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
     expect(element.querySelector('app-power-curve-chart[title="Running Power Curve"]')).toBeNull();
-    expect(element.textContent).toContain('Running, cycling/MTB, and swimming');
+    expect(element.textContent).toContain('Cycling/MTB details · Overall comparison uses all training');
     expect(element.textContent).toContain('All activities with TSS');
     expect(element.textContent).toContain('Intensity chart uses all eligible zone data');
   });
@@ -597,7 +597,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('app-power-curve-chart')).toBeNull();
     expect(element.textContent).not.toContain('Preparing capacity evidence');
     expect(element.textContent).not.toContain('capacity evidence');
-    expect(element.textContent).toContain('Running, cycling/MTB, and swimming');
+    expect(element.textContent).toContain('Swimming details · Overall comparison uses all training');
   });
 
   it('applies a saved visibility result immediately while settings propagation catches up', () => {
