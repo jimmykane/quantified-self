@@ -10,6 +10,13 @@ export interface TrainingStateClassification {
   caption: string | null;
 }
 
+/**
+ * Shared between the Training state card and its tests so the compact UI keeps
+ * the underlying Form-model boundary visible without duplicating rules in the
+ * workspace component.
+ */
+export const TRAINING_STATE_INFO_TOOLTIP = 'Training state uses TSS-derived Form (CTL minus ATL), 7-day CTL ramp, current CTL, and current ATL. Balanced means none of the Starting, overload, fatigued, building, fresh, or detraining thresholds applies. Sleep, session count, and 28-day training time do not change this label.';
+
 export function resolveTrainingStateClassification(
   { form, rampRate, fitness, fatigue }: TrainingStateSignalInput,
 ): TrainingStateClassification {

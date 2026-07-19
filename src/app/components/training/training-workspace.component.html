@@ -50,9 +50,26 @@
       </div>
       <div class="training-status-grid">
         <article class="training-state-panel qs-glass-card-panel">
-          <span class="training-metric-label">State</span>
+          <div class="training-state-label-row">
+            <span class="training-metric-label">State</span>
+            <button
+              mat-icon-button
+              type="button"
+              class="training-state-info-button"
+              appHapticTap
+              appTooltipTap
+              [matTooltip]="trainingStateInfoTooltip"
+              matTooltipPosition="below"
+              aria-label="How Training state is calculated"
+            >
+              <mat-icon aria-hidden="true">info</mat-icon>
+            </button>
+          </div>
           <strong>{{ trainingStatus.stateLabel }}</strong>
-          <span>{{ trainingStatus.stateCaption }}</span>
+          <span class="training-state-caption">{{ trainingStatus.stateCaption }}</span>
+          @if (trainingStatus.stateUpdateText) {
+            <small class="training-state-update" role="status">{{ trainingStatus.stateUpdateText }}</small>
+          }
         </article>
         @if (trainingComparisonState === 'preparing') {
           <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel" role="status">

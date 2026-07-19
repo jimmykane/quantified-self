@@ -62,6 +62,7 @@ import {
   type TrainingWindowComparison,
   resolveTrainingComparisonState,
 } from '../../helpers/training-analysis.helper';
+import { TRAINING_STATE_INFO_TOOLTIP } from '../../helpers/training-state.helper';
 import {
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
 } from '../../helpers/dashboard-recovery-now.helper';
@@ -131,6 +132,7 @@ interface TrainingMixZoneViewModel {
 interface TrainingStatusViewModel {
   stateLabel: string;
   stateCaption: string;
+  stateUpdateText: string | null;
   volumeText: string;
   volumeCaption: string;
   sessionsText: string;
@@ -215,6 +217,7 @@ function createEmptyTrainingStatusViewModel(): TrainingStatusViewModel {
   return {
     stateLabel: 'Awaiting data',
     stateCaption: 'No current load signals',
+    stateUpdateText: null,
     volumeText: '--',
     volumeCaption: 'Preparing your training comparison…',
     sessionsText: '--',
@@ -259,6 +262,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
   public readonly loadTrajectoryInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FORM_CHART_TYPE);
+  public readonly trainingStateInfoTooltip = TRAINING_STATE_INFO_TOOLTIP;
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
   public capacityDisciplines: TrainingCapacityDisciplineViewModel[] = [];
   public trainingBuildCards: TrainingBuildCardViewModel[] = [];
@@ -863,9 +867,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private refreshDerivedViewModels(): void {
     const nowMs = Date.now();
     const formPoints = this.derivedState.formPoints;
-    const currentFormNow = resolveDashboardFormNowContextFromPoints(formPoints, nowMs)
+    const formNowFromSeries = resolveDashboardFormNowContextFromPoints(formPoints, nowMs);
+    const rampRateFromSeries = resolveDashboardRampRateContextFromPoints(formPoints, nowMs);
+    const currentFormNow = formNowFromSeries
       || this.derivedState.formNow;
-    const currentRampRate = resolveDashboardRampRateContextFromPoints(formPoints, nowMs)
+    const currentRampRate = rampRateFromSeries
       || this.derivedState.rampRate;
     const currentFitness = resolveDashboardFitnessCtlContext(formPoints, nowMs);
     const currentFatigue = resolveDashboardFatigueAtlContext(formPoints, nowMs);
@@ -888,7 +894,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       analysis.activities.current,
       analysis.activities.baseline,
     );
-    this.trainingStatus = this.buildTrainingStatus(analysis, this.trainingComparisonState);
+    const stateSignalStatuses = [
+      formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
+      rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
+    ];
+    const isTrainingStateUpdating = stateSignalStatuses.some(isDerivedMetricPendingStatus);
+    this.trainingStatus = this.buildTrainingStatus(analysis, this.trainingComparisonState, isTrainingStateUpdating);
     this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
     this.refreshTrainingRecoveryEstimate();
     this.trainingRecovery = this.buildTrainingRecoveryViewModel(
@@ -1668,10 +1679,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private buildTrainingStatus(
     analysis: TrainingAnalysis,
     comparisonState: TrainingComparisonState,
+    isStateUpdating: boolean,
   ): TrainingStatusViewModel {
     const currentState = {
       stateLabel: analysis.state.label || 'Awaiting data',
       stateCaption: analysis.state.caption || 'No current load signals',
+      stateUpdateText: isStateUpdating
+        ? (analysis.state.label ? 'Updating from the latest completed TSS calculation…' : 'Calculating current TSS state…')
+        : null,
     };
     if (comparisonState === 'preparing') {
       return {

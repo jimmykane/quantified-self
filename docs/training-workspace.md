@@ -517,6 +517,12 @@ The frontend classifies existing form signals in this order:
 
 If all state inputs are missing, the page shows an awaiting-data state rather than guessing.
 
+The State label has a Material info control that explains this input boundary in context. It explicitly identifies Form as
+`CTL - ATL`, the seven-day CTL ramp, and current CTL/ATL as the inputs, and makes clear that sleep, sessions, and the
+28-day time comparison do not change the label. A Form refresh can temporarily mark the TSS/load chart as building while
+the snapshot service retains the prior valid Form series. In that case the State card keeps the last complete label for
+continuity, but adds **Updating from the latest completed TSS calculation…** so it is never mistaken for a new result.
+
 #### Readiness today
 
 Training renders one wide Readiness card instead of separate top-level readiness and sleep cards. The current result is

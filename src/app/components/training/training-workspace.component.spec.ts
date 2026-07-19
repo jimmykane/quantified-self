@@ -89,6 +89,68 @@ describe('TrainingWorkspaceComponent', () => {
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the last complete Training state visible but labels it while the Form/TSS refresh is building', async () => {
+    const nowMs = Date.UTC(2026, 6, 19, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      formStatus: 'building',
+      formPoints: [
+        {
+          time: nowMs - (7 * 24 * 60 * 60 * 1000),
+          trainingStressScore: 40,
+          ctl: 100,
+          atl: 98,
+          formSameDay: 2,
+          formPriorDay: 1,
+        },
+        {
+          time: nowMs,
+          trainingStressScore: 60,
+          ctl: 102,
+          atl: 98,
+          formSameDay: 4,
+          formPriorDay: 3,
+        },
+      ],
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: nowMs,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    try {
+      await TestBed.configureTestingModule({
+        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+        providers: [
+          { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+          { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+          { provide: AppSleepService, useValue: createSleepService() },
+          { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+        ],
+        schemas: [NO_ERRORS_SCHEMA],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+      fixture.detectChanges();
+
+      const statePanel = fixture.nativeElement.querySelector('.training-state-panel') as HTMLElement;
+      expect(statePanel.textContent).toContain('Balanced');
+      expect(statePanel.textContent).toContain('Updating from the latest completed TSS calculation');
+      const infoButton = statePanel.querySelector('.training-state-info-button');
+      expect(infoButton?.getAttribute('aria-label')).toBe('How Training state is calculated');
+      expect(fixture.componentInstance.trainingStateInfoTooltip).toContain('CTL minus ATL');
+      fixture.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reuses the bounded sleep-only readiness path without loading event or activity history', async () => {
     const nowMs = Date.UTC(2026, 6, 16, 12);
     vi.useFakeTimers();
