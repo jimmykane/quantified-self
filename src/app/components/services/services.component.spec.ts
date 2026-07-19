@@ -249,6 +249,8 @@ describe('ServicesComponent', () => {
     it('maps provider overview cards to distinct tools', () => {
         expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'auto-sync']);
         expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes', 'uploads']);
+        expect(component.serviceOverviewCardsBySection.suunto[2].description)
+            .toBe('Send FIT activity files or GPX route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
     });
 

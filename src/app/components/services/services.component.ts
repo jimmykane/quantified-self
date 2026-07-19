@@ -109,7 +109,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       },
       {
         title: 'Upload activities and routes',
-        description: 'Send FIT activity files or GPX route files to Suunto.',
+        description: 'Send FIT activity files or GPX route files to the Suunto app.',
         detail: 'FIT and GPX uploads',
         icon: 'cloud_upload',
         actionLabel: 'Upload files',
