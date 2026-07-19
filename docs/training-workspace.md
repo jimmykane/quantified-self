@@ -621,6 +621,10 @@ The picker shows up to 20 tagged races and up to 100 other historical events. It
 or earlier history, and sort by latest, longest, or highest load. Generic `New Event` names are suppressed; date and
 available distance, duration, and TSS provide identity.
 
+The Best Build card shows a meaningful selected-event name when one exists. Default, blank, or timestamp-like event
+names are never repeated as a card heading: event-mode benchmarks instead show `Event on <UTC anchor date>`, while
+manual selections remain labeled as a historical period.
+
 #### Callable validation
 
 `setTrainingBuildBenchmark` requires authentication and App Check. It validates:

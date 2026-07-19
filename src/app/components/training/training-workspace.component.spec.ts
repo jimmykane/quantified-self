@@ -1205,6 +1205,32 @@ describe('TrainingWorkspaceComponent', () => {
     });
   });
 
+  it('uses the selected event date when a saved benchmark has only a generic name', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const genericEvent = {
+      selection: {
+        mode: 'event',
+        eventId: 'event-1',
+        label: 'New Event',
+        windowStartDayMs: Date.UTC(2026, 0, 17),
+        windowEndDayMs: Date.UTC(2026, 2, 13),
+      },
+    };
+
+    expect((component as any).formatTrainingBuildReference(genericEvent))
+      .toMatch(/^Event on (Mar 14, 2026|14 Mar 2026)$/);
+    expect((component as any).formatTrainingBuildReference({
+      selection: { ...genericEvent.selection, label: 'Gran Fondo' },
+    })).toBe('Gran Fondo');
+  });
+
   it('keeps derived metric listeners active after the initial user change', async () => {
     const derivedState$ = new Subject<DashboardDerivedMetricsState>();
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
