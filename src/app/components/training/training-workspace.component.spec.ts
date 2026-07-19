@@ -1,12 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { concat, NEVER, of, Subject, throwError } from 'rxjs';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
+import type { TrainingBuildBenchmarkSelection } from '@shared/derived-metrics';
 import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
@@ -23,6 +25,15 @@ function createSleepService(sessions: readonly SleepSession[] = []) {
 }
 
 describe('TrainingWorkspaceComponent', () => {
+  let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    analyticsService = { logEvent: vi.fn() };
+    TestBed.configureTestingModule({
+      providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
+    });
+  });
+
   it('renders the fixed training workspace without dashboard tile rendering', async () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
@@ -600,6 +611,8 @@ describe('TrainingWorkspaceComponent', () => {
       { appTheme: () => AppThemes.Normal } as any,
       dialog as any,
       { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
     );
     component.derivedState = {
       ...createDashboardDerivedMetricsMissingState(),
@@ -630,6 +643,10 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(component.visibleDisciplines).toEqual(['cycling']);
     expect(component.isAutomaticSportVisibility).toBe(false);
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_sport_visibility_saved', {
+      selection_mode: 'fixed',
+      selection_count: 1,
+    });
   });
 
   it('opens the benchmark picker as a wide dialog bounded by the viewport', () => {
@@ -642,6 +659,8 @@ describe('TrainingWorkspaceComponent', () => {
       { appTheme: () => AppThemes.Normal } as any,
       dialog as any,
       { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
     );
 
     component.toggleTrainingBuildRecovery('cycling');
@@ -655,6 +674,38 @@ describe('TrainingWorkspaceComponent', () => {
     }));
     afterClosed.next({ saved: true, selection: null });
     expect(component.trainingBuildRecoveryExpanded.cycling).toBe(false);
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_benchmark_saved', {
+      action: 'cleared',
+      discipline: 'cycling',
+    });
+  });
+
+  it('records only the non-identifying benchmark configuration after a saved selection', () => {
+    const afterClosed = new Subject<{ saved: true; selection: TrainingBuildBenchmarkSelection }>();
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+    );
+
+    component.openTrainingBuildBenchmarkDialog('swimming');
+    afterClosed.next({
+      saved: true,
+      selection: { mode: 'period', durationWeeks: 12, endDayMs: Date.UTC(2026, 6, 18) },
+    });
+
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_benchmark_saved', {
+      action: 'set',
+      discipline: 'swimming',
+      reference_mode: 'period',
+      duration_weeks: 12,
+    });
   });
 
   it('does not retain a pending override when settings propagated before the dialog result', () => {

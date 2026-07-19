@@ -147,6 +147,20 @@ overview is the indexable search entry point: it describes the curated workspace
 non-prescriptive treatment of readiness and sleep without exposing account-specific data. Keep that public page, the
 Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when the Training product contract changes.
 
+### Product analytics
+
+The app-wide, consent-gated Firebase `screen_view` already records `/training` route visits, so Training must not emit a
+second custom page-view event. The workspace records only these low-volume configuration outcomes through
+`AppAnalyticsService.logEvent`:
+
+- `training_sport_visibility_saved`: automatic or fixed mode and saved-selection count.
+- `training_benchmark_saved`: set or cleared action and discipline; successful saves also include event/manual reference
+  mode and duration preset.
+
+These events never include activity or benchmark IDs, dates, names, device details, sleep data, chart interaction, or
+free text. Keep analytics at completed user-intent boundaries; do not add events for derived snapshot updates, scrolling,
+hovering, search keystrokes, or chart rendering.
+
 Frontend transformation responsibilities are intentionally split into focused helpers:
 
 | Helper | Responsibility |

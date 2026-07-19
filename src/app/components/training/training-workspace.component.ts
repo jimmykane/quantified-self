@@ -83,6 +83,7 @@ import {
 } from '../../helpers/training-power-profile.helper';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import type { SleepSession } from '@shared/sleep';
 import {
   TrainingBuildBenchmarkDialogComponent,
@@ -300,6 +301,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     private readonly dialog: MatDialog,
     private readonly changeDetector: ChangeDetectorRef,
     @Optional() private readonly ngZone: NgZone | null = null,
+    @Optional() private readonly analyticsService: AppAnalyticsService | null = null,
   ) {}
 
   ngOnInit(): void {
@@ -609,6 +611,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       if (!result?.saved) {
         return;
       }
+      this.analyticsService?.logEvent('training_sport_visibility_saved', {
+        selection_mode: result.visibleDisciplines === null ? 'automatic' : 'fixed',
+        selection_count: result.visibleDisciplines?.length ?? 0,
+      });
       if (this.isPersistedTrainingSportVisibility(result.visibleDisciplines)) {
         this.pendingTrainingVisibleDisciplines = undefined;
         this.pendingTrainingVisibleDisciplinesBaselineKey = undefined;
@@ -651,6 +657,21 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       if (!result?.saved) {
         return;
       }
+      const selection = result.selection ?? null;
+      this.analyticsService?.logEvent(
+        'training_benchmark_saved',
+        selection
+          ? {
+            action: 'set',
+            discipline,
+            reference_mode: selection.mode,
+            duration_weeks: selection.durationWeeks,
+          }
+          : {
+            action: 'cleared',
+            discipline,
+          },
+      );
       this.trainingBuildRecoveryExpanded = {
         ...this.trainingBuildRecoveryExpanded,
         [discipline]: false,
