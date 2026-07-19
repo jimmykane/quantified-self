@@ -13,6 +13,8 @@ import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { of, throwError, BehaviorSubject, map, NEVER } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from '../../authentication/auth-redirect-url';
+import { APP_STORAGE } from '../../services/storage/app.storage.token';
+import { MemoryStorage } from '../../services/storage/memory.storage';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -118,7 +120,8 @@ describe('LoginComponent', () => {
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: Auth, useValue: mockAuth },
-                { provide: Analytics, useValue: mockAnalytics }
+                { provide: Analytics, useValue: mockAnalytics },
+                { provide: APP_STORAGE, useClass: MemoryStorage },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         });

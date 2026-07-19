@@ -33,6 +33,8 @@ import { buildSuuntoServiceConnectionViewModel } from '../../helpers/suunto-serv
 import { AppSleepService } from '../../services/app.sleep.service';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
 import { MaterialModule } from '../../modules/material.module';
+import { APP_STORAGE } from '../../services/storage/app.storage.token';
+import { MemoryStorage } from '../../services/storage/memory.storage';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -146,6 +148,7 @@ describe('DashboardComponent', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppWindowService, useValue: { windowRef: { location: { href: '' } } } },
                 { provide: AppSleepService, useValue: mockSleepService },
+                { provide: APP_STORAGE, useClass: MemoryStorage },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
