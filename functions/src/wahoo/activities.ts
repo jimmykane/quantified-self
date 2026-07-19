@@ -227,11 +227,11 @@ export async function uploadActivityFileToWahoo(
 
   return withWahooWorkoutWriteToken(userID, async (accessToken) => {
     const form = new URLSearchParams();
-    form.set('workout_file_upload[file]', `data:application/vnd.ant.fit;base64,${fileBuffer.toString('base64')}`);
+    form.set('workout_file_upload[file]', `data:application/vnd.fit;base64,${fileBuffer.toString('base64')}`);
     const filename = normalizeFilename(options.filename);
     const timeZone = normalizeTimeZone(options.timeZone);
     if (filename) form.set('workout_file_upload[filename]', filename);
-    if (timeZone) form.set('workout_file_upload[timezone]', timeZone);
+    if (timeZone) form.set('workout_file_upload[time_zone]', timeZone);
     const { data } = await requestWahooAPI<WahooWorkoutFileUploadPayload>(
       accessToken,
       '/v1/workout_file_uploads',

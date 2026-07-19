@@ -179,6 +179,18 @@ describe('ServicesSuuntoComponent', () => {
         expect(toolPanels[0].textContent).toContain('Importing and sending routes is a Pro feature.');
     });
 
+    it('renders the Wahoo activity-sync control in focused mode', () => {
+        component.activeProviderTool = 'activity-sync';
+        component.showOnlyActiveProviderTool = true;
+        fixture.detectChanges();
+
+        const toolPanels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
+
+        expect(toolPanels).toHaveLength(1);
+        expect(toolPanels[0].hidden).toBe(false);
+        expect(toolPanels[0].querySelector('app-activity-sync-route-control')).toBeTruthy();
+    });
+
     it('hides inactive provider tool panels when switching tabs', () => {
         component.hasProAccess = true;
         component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];

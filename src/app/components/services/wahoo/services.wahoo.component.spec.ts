@@ -120,6 +120,21 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
   });
 
+  it('renders direct FIT delivery in the focused uploads tool', () => {
+    component.user = {} as any;
+    component.hasProAccess = true;
+    component.serviceMeta = { connectionState: 'connected' } as any;
+    component.showAdvancedTools = true;
+    component.showConnectionSummary = false;
+    component.showOnlyActiveProviderTool = true;
+    component.activeProviderTool = 'uploads';
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.provider-tool-panel')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+  });
+
   it('rejects a denied Wahoo authorization callback instead of reporting a connection', async () => {
     (component as any).route.snapshot.queryParamMap = convertToParamMap({
       state: 'state-1',

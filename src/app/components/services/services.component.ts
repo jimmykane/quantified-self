@@ -16,7 +16,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
-type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync';
+type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync' | 'activity-sync';
 
 interface ServiceSectionOption {
   id: ServiceSectionId;
@@ -88,8 +88,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Send activities to Suunto',
-        description: 'Automatically send new Garmin activities to Suunto, or sync past activities by date.',
+        title: 'Send activities to connected services',
+        description: 'Automatically send new Garmin activities to Suunto or Wahoo, or sync past activities by date.',
         detail: 'Automatic and past activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
@@ -121,6 +121,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
         actionLabel: 'Upload files',
         tool: 'uploads',
       },
+      {
+        title: 'Send activities to Wahoo',
+        description: 'Automatically send new Suunto activities to Wahoo, or sync past activities by date.',
+        detail: 'Automatic and past activity sync',
+        icon: 'published_with_changes',
+        actionLabel: 'Activity sync settings',
+        tool: 'activity-sync',
+      },
     ],
     coros: [
       {
@@ -132,8 +140,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Send activities to Suunto',
-        description: 'Automatically send new COROS activities to Suunto, or sync past activities by date.',
+        title: 'Send activities to connected services',
+        description: 'Automatically send new COROS activities to Suunto or Wahoo, or sync past activities by date.',
         detail: 'Automatic and past activity sync',
         icon: 'published_with_changes',
         actionLabel: 'Activity sync settings',
@@ -148,6 +156,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
         icon: 'sync',
         actionLabel: 'History import',
         tool: 'history',
+      },
+      {
+        title: 'Send FIT activity',
+        description: 'Send a FIT file directly to Wahoo without adding it to your Quantified Self archive.',
+        detail: 'Direct FIT delivery · Pro',
+        icon: 'cloud_upload',
+        actionLabel: 'Send FIT activity',
+        tool: 'uploads',
       },
     ],
   };

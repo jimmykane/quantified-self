@@ -108,6 +108,26 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.enqueueWorkoutTask).not.toHaveBeenCalled();
   });
 
+  it('treats a different summary ID at the same timestamp as a newer revision', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        processed: true,
+        workoutSummaryID: 'summary-previous',
+        summaryUpdatedAt: input.summaryUpdatedAt,
+      }),
+    });
+
+    await upsertWahooWorkoutQueueItem(input, 'deferred');
+
+    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+      workoutSummaryID: input.workoutSummaryID,
+      summaryUpdatedAt: input.summaryUpdatedAt,
+      processed: false,
+    }));
+    expect(mocks.transactionUpdate).not.toHaveBeenCalledWith(mocks.ref, { FITFileURI: input.FITFileURI });
+  });
+
   it('preserves an active processing lease when a newer summary arrives', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,

@@ -408,17 +408,17 @@ export async function processActivitySyncQueueItem(
 
         const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
         const isManualRun = queueItem.manual === true;
-        if (!enabled && !isManualRun) {
-            const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
-            if (pendingDisconnectService) {
-                return deferActivitySyncQueueItemForPendingDisconnect(
-                    queueItem,
-                    bulkWriter,
-                    routeMeta,
-                    pendingDisconnectService,
-                );
-            }
+        const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
+        if (pendingDisconnectService) {
+            return deferActivitySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                routeMeta,
+                pendingDisconnectService,
+            );
+        }
 
+        if (!enabled && !isManualRun) {
             await setActivitySyncSkippedMetadata({
                 ...routeMeta,
                 skippedReason: 'route_disabled',

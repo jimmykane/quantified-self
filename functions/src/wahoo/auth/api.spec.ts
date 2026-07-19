@@ -39,7 +39,7 @@ describe('Wahoo auth API helpers', () => {
   it('sends workout file uploads as URL-encoded form data without exposing the bearer token in the body', async () => {
     fetchMock.mockResolvedValue(response(201, { token: 'upload-token', status: 'pending' }));
     const form = new URLSearchParams();
-    form.set('workout_file_upload[file]', 'data:application/vnd.ant.fit;base64,RklU');
+    form.set('workout_file_upload[file]', 'data:application/vnd.fit;base64,RklU');
     form.set('workout_file_upload[filename]', 'ride.fit');
 
     await requestWahooAPI('access', '/v1/workout_file_uploads', { method: 'POST', form });

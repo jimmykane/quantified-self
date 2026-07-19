@@ -81,9 +81,9 @@ describe('Wahoo activity uploads', () => {
     const [, path, request] = mocks.requestWahooAPI.mock.calls[0];
     expect(path).toBe('/v1/workout_file_uploads');
     expect(request.method).toBe('POST');
-    expect(request.form.get('workout_file_upload[file]')).toBe('data:application/vnd.ant.fit;base64,RklU');
+    expect(request.form.get('workout_file_upload[file]')).toBe('data:application/vnd.fit;base64,RklU');
     expect(request.form.get('workout_file_upload[filename]')).toBe('.._ride.fit');
-    expect(request.form.get('workout_file_upload[timezone]')).toBe('Europe/Helsinki');
+    expect(request.form.get('workout_file_upload[time_zone]')).toBe('Europe/Helsinki');
   });
 
   it('maps a duplicate Wahoo upload to the existing activity result contract', async () => {

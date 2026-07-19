@@ -513,6 +513,34 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
+  it('defers an enabled Wahoo route when its source service is pending disconnect', async () => {
+    const route = ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI];
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
+      serviceName === route.sourceServiceName
+        ? { connectionState: 'disconnect_pending' }
+        : null
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(queueItem.userID, route.sourceServiceName);
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockDeferQueueItemForPendingDisconnect).toHaveBeenCalledWith(
+      queueItem,
+      undefined,
+      expect.objectContaining({
+        deferredServiceName: `${route.sourceServiceName}`,
+      }),
+    );
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+  });
+
   it('defers route-disabled work when route was disabled by pending disconnect', async () => {
     const route = ACTIVITY_SYNC_ROUTES[baseQueueItem.routeId];
     mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);

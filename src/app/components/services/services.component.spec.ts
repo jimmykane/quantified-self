@@ -242,19 +242,19 @@ describe('ServicesComponent', () => {
 
         expect(component.managedService).toBe('garmin');
         expect(component.managedTool).toBe('auto-sync');
-        expect(component.managedToolTitle).toBe('Send activities to Suunto');
+        expect(component.managedToolTitle).toBe('Send activities to connected services');
         expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Send activities to Suunto tools',
+            ariaLabel: 'Garmin Send activities to connected services tools',
         }));
     });
 
     it('maps provider overview cards to distinct tools', () => {
         expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes', 'uploads']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes', 'uploads', 'activity-sync']);
         expect(component.serviceOverviewCardsBySection.suunto[2].description)
             .toBe('Send FIT activity files or GPX route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history']);
+        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads']);
     });
 
     it('opens the Suunto route and upload cards at their matching tools', () => {
@@ -264,9 +264,10 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Suunto App"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(3);
+        expect(manageButtons).toHaveLength(4);
         expect(manageButtons[1].textContent?.trim()).toBe('Route sync settings');
         expect(manageButtons[2].textContent?.trim()).toBe('Upload files');
+        expect(manageButtons[3].textContent?.trim()).toBe('Activity sync settings');
 
         manageButtons[1].click();
         expect(component.managedService).toBe('suunto');
@@ -279,6 +280,13 @@ describe('ServicesComponent', () => {
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('uploads');
         expect(component.managedToolTitle).toBe('Upload activities and routes');
+
+        dialogClosed$.next();
+        manageButtons[3].click();
+
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('activity-sync');
+        expect(component.managedToolTitle).toBe('Send activities to Wahoo');
     });
 
     it('gives the service tools dialog an accessible close action', () => {

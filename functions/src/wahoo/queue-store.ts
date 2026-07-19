@@ -34,6 +34,21 @@ function hasSameRevision(
     && current.summaryUpdatedAt === queueItem.summaryUpdatedAt;
 }
 
+function isNewerRevision(
+  existing: Partial<WahooAPIWorkoutQueueItemInterface>,
+  incoming: Pick<WahooAPIWorkoutQueueItemInterface, 'workoutSummaryID' | 'summaryUpdatedAt'>,
+): boolean {
+  const incomingRevision = revisionTime(incoming.summaryUpdatedAt);
+  const existingRevision = revisionTime(existing.summaryUpdatedAt);
+  const existingSummaryID = `${existing.workoutSummaryID || ''}`.trim();
+  const incomingSummaryID = `${incoming.workoutSummaryID || ''}`.trim();
+  return incomingRevision > existingRevision
+    || (incomingRevision === existingRevision
+      && existingSummaryID.length > 0
+      && incomingSummaryID.length > 0
+      && existingSummaryID !== incomingSummaryID);
+}
+
 function processingLeaseFields(
   existing: Partial<WahooAPIWorkoutQueueItemInterface> | null,
   now: number,
@@ -71,9 +86,7 @@ export async function upsertWahooWorkoutQueueItem(
 
     const existingSnapshot = await transaction.get(ref);
     const existing = existingSnapshot.exists ? existingSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface> : null;
-    const incomingRevision = revisionTime(input.summaryUpdatedAt);
-    const existingRevision = revisionTime(existing?.summaryUpdatedAt);
-    if (existing && incomingRevision <= existingRevision) {
+    if (existing && !isNewerRevision(existing, input)) {
       if ((existing as Record<string, unknown>).processed !== true && existing.FITFileURI !== input.FITFileURI) {
         transaction.update(ref, { FITFileURI: input.FITFileURI });
       }
