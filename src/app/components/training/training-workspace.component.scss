@@ -35,8 +35,10 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-state-panel strong, .training-comparison-panel strong { font-size: 24px; line-height: 1.1; overflow-wrap: anywhere; }
 .training-comparison-status-panel strong { font-size: 20px; }
 .training-recovery-estimate-panel small { color: var(--mat-sys-primary); font-size: var(--training-inter-fine-font-size); }
-.training-state-label-row { display: flex; align-items: center; gap: 2px; min-height: 32px; }
-.training-state-info-button { flex: 0 0 auto; }
+.training-state-label-row, .training-state-value-row { display: flex; align-items: center; }
+.training-state-value-row { gap: 4px; }
+.training-state-info-button { width: 20px; min-width: 20px; height: 20px; min-height: 20px; line-height: 20px; flex: 0 0 auto; padding: 0; display: inline-flex; align-items: center; justify-content: center; --mdc-icon-button-state-layer-size: 20px; }
+.training-state-info-button mat-icon { width: 16px; height: 16px; line-height: 16px; font-size: 16px; color: var(--mat-sys-on-surface-variant); }
 .training-state-caption, .training-comparison-panel > span:last-child, .training-mix-panel dd span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-body-font-size); line-height: 1.3; }
 .training-state-update { color: var(--mat-sys-primary); font-size: var(--training-inter-fine-font-size); line-height: 1.3; }
 .training-readiness-panel { min-width: 0; padding: 20px; }

@@ -143,8 +143,9 @@ describe('TrainingWorkspaceComponent', () => {
       expect(statePanel.textContent).toContain('Balanced');
       expect(statePanel.textContent).toContain('Updating from the latest completed TSS calculation');
       const infoButton = statePanel.querySelector('.training-state-info-button');
-      expect(infoButton?.getAttribute('aria-label')).toBe('How Training state is calculated');
-      expect(fixture.componentInstance.trainingStateInfoTooltip).toContain('CTL minus ATL');
+      expect(infoButton?.getAttribute('aria-label')).toBe('How Balanced is calculated');
+      expect(fixture.componentInstance.trainingStatus.stateInfoTooltip).toContain('CTL minus ATL');
+      expect(fixture.componentInstance.trainingStatus.stateInfoTooltip).toContain('Form +4 (CTL 102 − ATL 98)');
       fixture.destroy();
     } finally {
       vi.useRealTimers();

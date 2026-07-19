@@ -52,20 +52,22 @@
         <article class="training-state-panel qs-glass-card-panel">
           <div class="training-state-label-row">
             <span class="training-metric-label">State</span>
+          </div>
+          <div class="training-state-value-row">
+            <strong>{{ trainingStatus.stateLabel }}</strong>
             <button
               mat-icon-button
               type="button"
-              class="training-state-info-button"
+              class="title-info-button training-state-info-button"
               appHapticTap
               appTooltipTap
-              [matTooltip]="trainingStateInfoTooltip"
+              [matTooltip]="trainingStatus.stateInfoTooltip"
               matTooltipPosition="below"
-              aria-label="How Training state is calculated"
+              [attr.aria-label]="'How ' + trainingStatus.stateLabel + ' is calculated'"
             >
               <mat-icon aria-hidden="true">info</mat-icon>
             </button>
           </div>
-          <strong>{{ trainingStatus.stateLabel }}</strong>
           <span class="training-state-caption">{{ trainingStatus.stateCaption }}</span>
           @if (trainingStatus.stateUpdateText) {
             <small class="training-state-update" role="status">{{ trainingStatus.stateUpdateText }}</small>

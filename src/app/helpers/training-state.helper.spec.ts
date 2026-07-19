@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveTrainingStateClassification,
+  resolveTrainingStateInfoTooltip,
   TRAINING_STATE_INFO_TOOLTIP,
 } from './training-state.helper';
 
@@ -19,9 +20,27 @@ describe('resolveTrainingStateClassification', () => {
       .toEqual({ label: null, caption: null });
   });
 
-  it('documents the Form-model inputs and what does not affect the state', () => {
+  it('explains the Form-model inputs, current values, and why Balanced applies', () => {
+    const tooltip = resolveTrainingStateInfoTooltip({
+      form: -6.6,
+      rampRate: -0.35,
+      fitness: 105.5,
+      fatigue: 112.1,
+    });
+
     expect(TRAINING_STATE_INFO_TOOLTIP).toContain('CTL minus ATL');
-    expect(TRAINING_STATE_INFO_TOOLTIP).toContain('7-day CTL ramp');
-    expect(TRAINING_STATE_INFO_TOOLTIP).toContain('Sleep, session count, and 28-day training time');
+    expect(tooltip).toContain('Form -6.6 (CTL 105.5 − ATL 112.1)');
+    expect(tooltip).toContain('7-day CTL ramp -0.35');
+    expect(tooltip).toContain('Building specifically needs a 7-day CTL ramp of at least +1');
+    expect(tooltip).toContain('Sleep, session count, and 28-day training time');
+  });
+
+  it('keeps unavailable inputs explicit in the state explanation', () => {
+    const tooltip = resolveTrainingStateInfoTooltip({ form: null, rampRate: null, fitness: null, fatigue: null });
+
+    expect(tooltip).toContain('Form unavailable');
+    expect(tooltip).toContain('7-day CTL ramp unavailable');
+    expect(tooltip).toContain('CTL unavailable');
+    expect(tooltip).toContain('ATL unavailable');
   });
 });
