@@ -129,18 +129,18 @@
         </div>
 
         @if (searchResults().length) {
-          <div class="search-results-list">
-            @for (section of searchResults(); track section.id) {
-              <button mat-stroked-button type="button" class="search-result" (click)="openSection(section.id)">
-                <span class="topic-avatar"><mat-icon>{{ section.icon }}</mat-icon></span>
-                <span class="search-result-copy">
-                  <span class="search-result-title">{{ section.title }}</span>
-                  <span class="search-result-summary">{{ section.summary }}</span>
-                </span>
-                <span class="quick-action-arrow"><mat-icon>arrow_forward</mat-icon></span>
-              </button>
-            }
-          </div>
+          <mat-card appearance="outlined" class="search-results-card">
+            <mat-nav-list class="search-results-list" aria-label="Matching documentation guides">
+              @for (section of searchResults(); track section.id) {
+                <a mat-list-item class="search-result" [routerLink]="[]" [fragment]="section.id" (click)="openSection(section.id)">
+                  <span matListItemIcon class="topic-avatar"><mat-icon>{{ section.icon }}</mat-icon></span>
+                  <span matListItemTitle class="search-result-title">{{ section.title }}</span>
+                  <span matListItemLine class="search-result-summary">{{ section.summary }}</span>
+                  <span matListItemMeta class="search-result-arrow"><mat-icon>arrow_forward</mat-icon></span>
+                </a>
+              }
+            </mat-nav-list>
+          </mat-card>
         } @else {
           <mat-card appearance="outlined" class="empty-search-card">
             <mat-card-content>
