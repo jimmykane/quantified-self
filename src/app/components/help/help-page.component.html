@@ -1,123 +1,222 @@
 <div class="help-page">
-  <section class="hero">
-    <p class="mat-label-large">Help &amp; Support</p>
-    <h1 class="mat-headline-medium hero-title">Help for AI Insights, setup, uploads, billing, and integrations.</h1>
-    <p class="mat-body-large hero-subtitle">Use this page to solve common issues fast, then contact support if you still need help.</p>
-  </section>
+  <header class="docs-hero">
+    <p class="mat-label-large">Quantified Self Support</p>
+    <h1 class="mat-display-small hero-title">How can we help?</h1>
+    <p class="mat-body-large hero-subtitle">Find a guide, solve a problem, or get the right support path.</p>
 
-  <section class="help-nav" aria-label="Help topics">
-    @if (isHandset()) {
-      <mat-form-field appearance="outline" class="section-picker">
-        <mat-label>Choose a help topic</mat-label>
-        <mat-select
-          [value]="selectedSectionId"
-          [hideSingleSelectionIndicator]="true"
-          [disableOptionCentering]="true"
-          (selectionChange)="onSectionSelect($event.value)">
-          <mat-select-trigger>
-            <span class="picker-option">
-              <span class="topic-avatar">
-                <mat-icon>{{ selectedSection.icon }}</mat-icon>
+    <mat-form-field appearance="outline" class="help-search">
+      <mat-label>Search guides and troubleshooting</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input
+        #searchInput
+        matInput
+        type="search"
+        [value]="searchQuery()"
+        (input)="onSearchQueryChange(searchInput.value)">
+      @if (hasSearchQuery()) {
+        <button mat-icon-button matSuffix type="button" aria-label="Clear help search" (click)="clearSearch()">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </mat-form-field>
+  </header>
+
+  @if (isArticleOpen()) {
+    <section class="article-layout" aria-label="Help article">
+      <div class="article-column">
+        <button mat-button type="button" class="back-button" (click)="returnToHelpCenter()">
+          <mat-icon>arrow_back</mat-icon>
+          <span>All documentation</span>
+        </button>
+
+        <mat-card appearance="outlined" class="article-card" id="help-section-content">
+          <mat-card-header>
+            <div mat-card-avatar class="section-avatar">
+              <mat-icon>{{ selectedSection().icon }}</mat-icon>
+            </div>
+            <mat-card-title>{{ selectedSection().title }}</mat-card-title>
+            <mat-card-subtitle>{{ selectedSection().summary }}</mat-card-subtitle>
+          </mat-card-header>
+
+          <mat-card-content>
+            <div class="section-copy" [innerHTML]="renderedSectionContent()[selectedSection().id] || ''"></div>
+
+            <mat-divider></mat-divider>
+
+            <div class="section-links" aria-label="Related links">
+              @for (link of selectedSection().links; track link.label) {
+                @if (link.kind === 'route') {
+                  <a
+                    mat-stroked-button
+                    class="section-link"
+                    [routerLink]="link.target"
+                    [fragment]="link.fragment ?? null">
+                    <mat-icon>{{ link.icon }}</mat-icon>
+                    <span>{{ link.label }}</span>
+                  </a>
+                } @else {
+                  <a
+                    mat-stroked-button
+                    class="section-link"
+                    [href]="link.target"
+                    target="_blank"
+                    rel="noopener noreferrer">
+                    <mat-icon>{{ link.icon }}</mat-icon>
+                    <span>{{ link.label }}</span>
+                  </a>
+                }
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+
+      <aside class="article-aside">
+        <mat-card appearance="outlined" class="support-card">
+          <mat-card-header>
+            <div mat-card-avatar class="section-avatar">
+              <mat-icon>support_agent</mat-icon>
+            </div>
+            <mat-card-title>Need more help?</mat-card-title>
+            <mat-card-subtitle>Send the details that help us understand the issue.</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <p class="mat-body-medium support-guidance">Include the service or file type, activity date, and a screenshot or exact error where possible.</p>
+            @for (action of actions; track action.id) {
+              @if (action.id === 'email-support') {
+                <a mat-flat-button class="support-contact" [href]="action.target" target="_blank" rel="noopener noreferrer">
+                  <mat-icon>{{ action.icon }}</mat-icon>
+                  <span>{{ action.label }}</span>
+                </a>
+              }
+            }
+          </mat-card-content>
+        </mat-card>
+      </aside>
+    </section>
+  } @else {
+    @if (!hasSearchQuery()) {
+      <section class="quick-actions" aria-label="Quick actions">
+        @for (action of actions; track action.id) {
+          @if (action.kind === 'route') {
+            <a mat-stroked-button class="quick-action" [routerLink]="action.target">
+              <span class="quick-action-icon"><mat-icon>{{ action.icon }}</mat-icon></span>
+              <span class="quick-action-copy">
+                <span class="quick-action-label">{{ action.label }}</span>
+                <span class="quick-action-description">{{ action.description }}</span>
               </span>
-              <span>{{ selectedSection.title }}</span>
-            </span>
-          </mat-select-trigger>
-          @for (section of sections; track section.id) {
-            <mat-option [value]="section.id">
-              <mat-icon>{{ section.icon }}</mat-icon>
-              <span>{{ section.title }}</span>
-            </mat-option>
+              <span class="quick-action-arrow"><mat-icon>arrow_forward</mat-icon></span>
+            </a>
+          } @else {
+            <a mat-stroked-button class="quick-action" [href]="action.target" target="_blank" rel="noopener noreferrer">
+              <span class="quick-action-icon"><mat-icon>{{ action.icon }}</mat-icon></span>
+              <span class="quick-action-copy">
+                <span class="quick-action-label">{{ action.label }}</span>
+                <span class="quick-action-description">{{ action.description }}</span>
+              </span>
+              <span class="quick-action-arrow"><mat-icon>arrow_forward</mat-icon></span>
+            </a>
           }
-        </mat-select>
-      </mat-form-field>
-    } @else {
-      <nav mat-tab-nav-bar [tabPanel]="helpTabsPanel" class="help-tabs">
-        @for (section of sections; track section.id; let index = $index) {
-          <a
-            mat-tab-link
-            [active]="selectedSectionId === section.id"
-            (click)="onSectionTabChange(index)">
-            <span class="tab-label">
-              <span class="topic-avatar">
-                <mat-icon>{{ section.icon }}</mat-icon>
-              </span>
-              <span>{{ section.title }}</span>
-            </span>
-          </a>
         }
-      </nav>
-      <mat-tab-nav-panel #helpTabsPanel></mat-tab-nav-panel>
+      </section>
     }
-  </section>
 
-  <div class="help-content-grid">
-    <mat-card appearance="outlined" class="section-card" id="help-section-content">
-      <mat-card-header>
-        <div mat-card-avatar class="section-avatar">
-          <mat-icon>{{ selectedSection.icon }}</mat-icon>
+    @if (hasSearchQuery()) {
+      <section class="search-results" aria-live="polite">
+        <div class="section-heading">
+          <p class="mat-label-large">Search results</p>
+          <h2 class="mat-headline-small">Documentation matching “{{ searchQuery() }}”</h2>
         </div>
-        <mat-card-title>{{ selectedSection.title }}</mat-card-title>
-        <mat-card-subtitle>{{ selectedSection.summary }}</mat-card-subtitle>
-      </mat-card-header>
 
-      <mat-card-content>
-        <div class="section-copy" [innerHTML]="renderedSectionContent[selectedSection.id] || ''"></div>
-
-        <mat-divider></mat-divider>
-
-        <div class="section-links">
-          @for (link of selectedSection.links; track link.label) {
-            @if (link.kind === 'route') {
-              <a
-                mat-stroked-button
-                class="section-link"
-                [routerLink]="link.target"
-                [fragment]="link.fragment ?? null">
-                <mat-icon>{{ link.icon }}</mat-icon>
-                <span>{{ link.label }}</span>
-              </a>
-            } @else {
-              <a
-                mat-stroked-button
-                class="section-link"
-                [href]="link.target"
-                target="_blank"
-                rel="noopener noreferrer">
-                <mat-icon>{{ link.icon }}</mat-icon>
-                <span>{{ link.label }}</span>
-              </a>
+        @if (searchResults().length) {
+          <div class="search-results-list">
+            @for (section of searchResults(); track section.id) {
+              <button mat-stroked-button type="button" class="search-result" (click)="openSection(section.id)">
+                <span class="topic-avatar"><mat-icon>{{ section.icon }}</mat-icon></span>
+                <span class="search-result-copy">
+                  <span class="search-result-title">{{ section.title }}</span>
+                  <span class="search-result-summary">{{ section.summary }}</span>
+                </span>
+                <span class="quick-action-arrow"><mat-icon>arrow_forward</mat-icon></span>
+              </button>
             }
-          }
-        </div>
-      </mat-card-content>
-    </mat-card>
+          </div>
+        } @else {
+          <mat-card appearance="outlined" class="empty-search-card">
+            <mat-card-content>
+              <mat-icon>search_off</mat-icon>
+              <div>
+                <h3 class="mat-title-medium">No guides found</h3>
+                <p class="mat-body-medium">Try a service name, file type, metric, or a shorter phrase.</p>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        }
+      </section>
+    } @else {
+      <div class="documentation-grid">
+        <section class="documentation-section" aria-labelledby="browse-documentation-title">
+          <div class="section-heading">
+            <p class="mat-label-large">Documentation</p>
+            <h2 id="browse-documentation-title" class="mat-headline-small">Browse documentation</h2>
+            <p class="mat-body-large">Start with the topic closest to what you are trying to do.</p>
+          </div>
 
-    <mat-card appearance="outlined" class="support-card">
-      <mat-card-header>
-        <div mat-card-avatar class="section-avatar">
-          <mat-icon>support_agent</mat-icon>
-        </div>
-        <mat-card-title>Support</mat-card-title>
-        <mat-card-subtitle>Direct links for common support actions.</mat-card-subtitle>
-      </mat-card-header>
-
-      <mat-card-content>
-        <mat-nav-list aria-label="Support actions">
-          @for (action of actions; track action.id) {
-            @if (action.kind === 'route') {
-              <a mat-list-item [routerLink]="action.target">
-                <mat-icon matListItemIcon>{{ action.icon }}</mat-icon>
-                <span matListItemTitle>{{ action.label }}</span>
-              </a>
-            } @else {
-              <a mat-list-item [href]="action.target" target="_blank" rel="noopener noreferrer">
-                <mat-icon matListItemIcon>{{ action.icon }}</mat-icon>
-                <span matListItemTitle>{{ action.label }}</span>
-              </a>
+          <div class="topic-grid">
+            @for (section of sections; track section.id) {
+              <button mat-stroked-button type="button" class="topic-card" (click)="openSection(section.id)">
+                <span class="topic-avatar"><mat-icon>{{ section.icon }}</mat-icon></span>
+                <span class="topic-card-copy">
+                  <span class="topic-card-title">{{ section.title }}</span>
+                  <span class="topic-card-summary">{{ section.summary }}</span>
+                </span>
+                <span class="quick-action-arrow"><mat-icon>arrow_forward</mat-icon></span>
+              </button>
             }
-          }
-        </mat-nav-list>
-      </mat-card-content>
-    </mat-card>
-  </div>
+          </div>
+        </section>
+
+        <aside class="documentation-aside">
+          <mat-card appearance="outlined" class="popular-guides-card">
+            <mat-card-header>
+              <mat-card-title>Popular guides</mat-card-title>
+              <mat-card-subtitle>Common places to start.</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <mat-nav-list aria-label="Popular documentation guides">
+                @for (section of popularSections(); track section.id) {
+                  <a mat-list-item [routerLink]="[]" [fragment]="section.id" (click)="openSection(section.id)">
+                    <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
+                    <span matListItemTitle>{{ section.title }}</span>
+                    <span matListItemLine>{{ section.summary }}</span>
+                  </a>
+                }
+              </mat-nav-list>
+            </mat-card-content>
+          </mat-card>
+
+          <mat-card appearance="outlined" class="support-card">
+            <mat-card-header>
+              <div mat-card-avatar class="section-avatar">
+                <mat-icon>support_agent</mat-icon>
+              </div>
+              <mat-card-title>Need more help?</mat-card-title>
+              <mat-card-subtitle>We will point you to the right next step.</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <p class="mat-body-medium support-guidance">Include the service or file type, activity date, and a screenshot or exact error where possible.</p>
+              @for (action of actions; track action.id) {
+                @if (action.id === 'email-support') {
+                  <a mat-flat-button class="support-contact" [href]="action.target" target="_blank" rel="noopener noreferrer">
+                    <mat-icon>{{ action.icon }}</mat-icon>
+                    <span>{{ action.label }}</span>
+                  </a>
+                }
+              }
+            </mat-card-content>
+          </mat-card>
+        </aside>
+      </div>
+    }
+  }
 </div>

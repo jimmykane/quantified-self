@@ -548,7 +548,7 @@ From an activity action menu you can also:
   {
     id: 'service-connections',
     icon: 'sync',
-    title: 'Service Connections',
+    title: 'Connected Services',
     summary: 'Garmin, Suunto, and COROS connection rules, limits, and expected import behavior.',
     content: `## Pro requirement
 
