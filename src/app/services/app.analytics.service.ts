@@ -5,6 +5,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { APP_STORAGE } from './storage/app.storage.token';
 
 import { environment } from '../../environments/environment';
 
@@ -75,6 +76,8 @@ export type SavedRouteActionSource =
     | 'routes_list_bulk'
     | 'dashboard_route_map'
     | 'routes_page_map';
+export type SubscriptionPlan = 'basic' | 'pro';
+export type SubscriptionStartStatus = 'active' | 'trialing';
 export type SavedRouteSortColumn =
     | 'activityTypes'
     | 'ascent'
@@ -159,7 +162,9 @@ export class AppAnalyticsService {
     private analytics = inject(Analytics, { optional: true });
     private authService = inject(AppAuthService);
     private logger = inject(LoggerService);
+    private storage = inject(APP_STORAGE);
     private hasConsent = false;
+    private readonly subscriptionStartedStoragePrefix = 'analytics.subscription_started.';
 
     constructor() {
         this.authService.user$.pipe(takeUntilDestroyed()).subscribe(user => {
@@ -186,14 +191,18 @@ export class AppAnalyticsService {
         }
     }
 
-    logEvent(eventName: string, params?: Record<string, any>) {
-        if (this.hasConsent && this.analytics) {
-            try {
-                // Defer to the Firebase SDK
-                logEvent(this.analytics, eventName, params);
-            } catch (error) {
-                this.logger.warn('Analytics logEvent error:', error);
-            }
+    logEvent(eventName: string, params?: Record<string, any>): boolean {
+        if (!this.hasConsent || !this.analytics) {
+            return false;
+        }
+
+        try {
+            // Defer to the Firebase SDK
+            logEvent(this.analytics, eventName, params);
+            return true;
+        } catch (error) {
+            this.logger.warn('Analytics logEvent error:', error);
+            return false;
         }
     }
 
@@ -210,6 +219,37 @@ export class AppAnalyticsService {
             currency,
             value
         });
+    }
+
+    /**
+     * Log a completed paid subscription once per Stripe subscription. The Stripe
+     * subscription ID is used only as a local deduplication key and is never sent
+     * to Analytics.
+     */
+    logSubscriptionStarted(
+        subscriptionId: string,
+        plan: SubscriptionPlan,
+        status: SubscriptionStartStatus,
+    ): void {
+        if (!subscriptionId) {
+            this.logger.warn('Analytics subscription_started skipped because the subscription ID is missing.');
+            return;
+        }
+
+        const storageKey = `${this.subscriptionStartedStoragePrefix}${subscriptionId}`;
+        if (this.hasStoredValue(storageKey)) {
+            return;
+        }
+
+        const logged = this.logEvent('subscription_started', {
+            plan,
+            subscription_status: status,
+            is_trial: status === 'trialing' ? 1 : 0,
+        });
+
+        if (logged) {
+            this.storeValue(storageKey);
+        }
     }
 
     /**
@@ -231,6 +271,23 @@ export class AppAnalyticsService {
      */
     logRestorePurchases(status: 'initiated' | 'success' | 'failure', role?: string, error?: string): void {
         this.logEvent('restore_purchases', { status, role, error });
+    }
+
+    private hasStoredValue(key: string): boolean {
+        try {
+            return this.storage.getItem(key) !== null;
+        } catch (error) {
+            this.logger.warn('Analytics storage read error:', error);
+            return false;
+        }
+    }
+
+    private storeValue(key: string): void {
+        try {
+            this.storage.setItem(key, '1');
+        } catch (error) {
+            this.logger.warn('Analytics storage write error:', error);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

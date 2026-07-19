@@ -7,6 +7,7 @@ import { BehaviorSubject } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LoggerService } from './logger.service';
+import { APP_STORAGE } from './storage/app.storage.token';
 
 // Mock firebase/analytics (not app/firebase/analytics)
 vi.mock('firebase/analytics', async (importOriginal) => {
@@ -32,6 +33,8 @@ describe('AppAnalyticsService', () => {
     let mockAuthService: any;
     let userSubject: BehaviorSubject<User | null>;
     let mockLogger: any;
+    let mockStorage: Storage;
+    let storageValues: Map<string, string>;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -44,13 +47,25 @@ describe('AppAnalyticsService', () => {
             error: vi.fn(),
             log: vi.fn()
         };
+        storageValues = new Map<string, string>();
+        mockStorage = {
+            get length() {
+                return storageValues.size;
+            },
+            clear: vi.fn(() => storageValues.clear()),
+            getItem: vi.fn((key: string) => storageValues.get(key) ?? null),
+            key: vi.fn(() => null),
+            removeItem: vi.fn((key: string) => storageValues.delete(key)),
+            setItem: vi.fn((key: string, value: string) => storageValues.set(key, value)),
+        };
 
         TestBed.configureTestingModule({
             providers: [
                 AppAnalyticsService,
                 { provide: Analytics, useValue: {} },
                 { provide: AppAuthService, useValue: mockAuthService },
-                { provide: LoggerService, useValue: mockLogger }
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: APP_STORAGE, useValue: mockStorage },
             ]
         });
         service = TestBed.inject(AppAnalyticsService);
@@ -107,7 +122,8 @@ describe('AppAnalyticsService', () => {
                 AppAnalyticsService,
                 { provide: Analytics, useValue: {} },
                 { provide: AppAuthService, useValue: mockAuthService },
-                { provide: LoggerService, useValue: mockLogger }
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: APP_STORAGE, useValue: mockStorage },
             ]
         });
         const forceService = TestBed.inject(AppAnalyticsService);
@@ -133,6 +149,21 @@ describe('AppAnalyticsService', () => {
             enabled: true,
             action: 'enable',
         });
+    });
+
+    it('should log a deduplicated subscription_started event without a subscription identifier', () => {
+        userSubject.next({ acceptedTrackingPolicy: true } as User);
+
+        service.logSubscriptionStarted('sub_123', 'pro', 'trialing');
+        service.logSubscriptionStarted('sub_123', 'pro', 'trialing');
+
+        expect(logEvent).toHaveBeenCalledTimes(1);
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'subscription_started', {
+            plan: 'pro',
+            subscription_status: 'trialing',
+            is_trial: 1,
+        });
+        expect(mockStorage.setItem).toHaveBeenCalledWith('analytics.subscription_started.sub_123', '1');
     });
 
     it('should log summary metadata when running an activity sync route backfill', () => {
