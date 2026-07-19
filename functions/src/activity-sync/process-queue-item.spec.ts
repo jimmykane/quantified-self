@@ -26,6 +26,7 @@ const {
   mockGetServiceConnectionMeta,
   mockShouldSkipQueueWorkForDeletedUser,
   mockMarkQueueItemSkipped,
+  mockUpdateQueueItemIfUserActive,
   mockWahooEnabled,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
@@ -58,6 +59,7 @@ const {
     mockGetServiceConnectionMeta: vi.fn(),
     mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
     mockMarkQueueItemSkipped: vi.fn(),
+    mockUpdateQueueItemIfUserActive: vi.fn(),
     mockWahooEnabled: { value: true },
   };
 });
@@ -150,6 +152,14 @@ vi.mock('../queue/user-deletion-skip', () => ({
   shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
 }));
 
+vi.mock('../queue/dispatch-marker', () => ({
+  QueueItemUserGuardedUpdateResult: {
+    Updated: 'updated',
+    SkippedDeletedUser: 'skipped_deleted_user',
+  },
+  updateQueueItemIfUserActive: mockUpdateQueueItemIfUserActive,
+}));
+
 import { processActivitySyncQueueItem } from './process-queue-item';
 import { QueueResult } from '../queue-utils';
 
@@ -208,6 +218,7 @@ describe('activity-sync/process-queue-item', () => {
     mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+    mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
     mockWahooEnabled.value = true;
   });
 
@@ -231,12 +242,11 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('persists a pending Wahoo upload token and retries status checks without posting the FIT file again', async () => {
-    const update = vi.fn().mockResolvedValue(undefined);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
       destinationServiceName: ServiceNames.WahooAPI,
-      ref: { update } as any,
+      ref: {} as any,
     };
     mockUploadActivityFileToWahoo.mockResolvedValueOnce({
       status: 'pending',
@@ -250,7 +260,13 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'), expect.objectContaining({
       filename: 'original.fit',
     }));
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ destinationUploadID: 'wahoo-upload-1' }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      queueItemDocument: queueItem.ref,
+      queueItemId: queueItem.id,
+      userID: queueItem.userID,
+      phase: 'before_activity_sync_wahoo_pending_upload_persist',
+      updateData: expect.objectContaining({ destinationUploadID: 'wahoo-upload-1' }),
+    }));
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
       queueItem,
       expect.objectContaining({ code: 'deadline-exceeded' }),
@@ -262,6 +278,28 @@ describe('activity-sync/process-queue-item', () => {
 
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1');
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not persist a Wahoo upload token after account deletion begins', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      ref: {} as any,
+    };
+    mockUploadActivityFileToWahoo.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'processing',
+      uploadId: 'wahoo-upload-1',
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('skipped_deleted_user');
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(queueItem.destinationUploadID).toBeUndefined();
+    expect(mockMarkQueueItemSkipped).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
   it('skips Wahoo delivery when the saved OAuth grant lacks workout write scope', async () => {

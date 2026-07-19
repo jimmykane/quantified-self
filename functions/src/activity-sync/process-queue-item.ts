@@ -33,6 +33,10 @@ import { config } from '../config';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
+import {
+    QueueItemUserGuardedUpdateResult,
+    updateQueueItemIfUserActive,
+} from '../queue/dispatch-marker';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -145,7 +149,6 @@ function isAccountDeletionSkipError(error: unknown): boolean {
         && (
             error.name === 'TokenRefreshSkippedForDeletedUserError'
             || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
-            || error.name === 'WahooActivityUploadSkippedForDeletedUserError'
         );
 }
 
@@ -259,28 +262,35 @@ async function uploadToDestination(
 async function persistWahooPendingUpload(
     queueItem: ActivitySyncQueueItemInterface,
     uploadResult: UploadActivityFileResult,
-): Promise<void> {
+): Promise<boolean> {
     if (!queueItem.ref || !uploadResult.uploadId) {
         throw new Error('Wahoo pending upload is missing queue persistence data.');
     }
-    if (await shouldSkipQueueWorkForDeletedUser(
-        queueItem.userID,
-        queueItem.destinationServiceName,
-        queueItem.id,
-        'before_activity_sync_wahoo_pending_upload_persist',
-    )) {
-        const error = new Error('Wahoo pending upload was skipped because account deletion is in progress.');
-        error.name = 'WahooActivityUploadSkippedForDeletedUserError';
-        throw error;
-    }
-    queueItem.destinationUploadID = uploadResult.uploadId;
-    queueItem.destinationWorkoutKey = uploadResult.workoutKey || queueItem.destinationWorkoutKey;
-    queueItem.destinationInfoCode = uploadResult.code || queueItem.destinationInfoCode;
-    await queueItem.ref.update({
-        destinationUploadID: queueItem.destinationUploadID,
-        destinationWorkoutKey: queueItem.destinationWorkoutKey || null,
-        destinationInfoCode: queueItem.destinationInfoCode || null,
+    const destinationUploadID = uploadResult.uploadId;
+    const destinationWorkoutKey = uploadResult.workoutKey || queueItem.destinationWorkoutKey;
+    const destinationInfoCode = uploadResult.code || queueItem.destinationInfoCode;
+    const updateResult = await updateQueueItemIfUserActive({
+        queueItemDocument: queueItem.ref,
+        queueItemId: queueItem.id,
+        userID: queueItem.userID,
+        phase: 'before_activity_sync_wahoo_pending_upload_persist',
+        updateData: {
+            destinationUploadID,
+            destinationWorkoutKey: destinationWorkoutKey || null,
+            destinationInfoCode: destinationInfoCode || null,
+        },
+        logPrefix: 'ActivitySync',
+        actionDescription: 'Wahoo pending upload token persistence',
     });
+    if (updateResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
+        // The guarded update writes a cleanup tombstone and deletes the queue item.
+        // A follow-up queue-state write would target a document that no longer exists.
+        return false;
+    }
+    queueItem.destinationUploadID = destinationUploadID;
+    queueItem.destinationWorkoutKey = destinationWorkoutKey;
+    queueItem.destinationInfoCode = destinationInfoCode;
+    return true;
 }
 
 async function safelyWriteMetadata(writeOperation: () => Promise<void>): Promise<void> {
@@ -490,7 +500,10 @@ export async function processActivitySyncQueueItem(
         duringDestinationUpload = true;
         const uploadResult = await uploadToDestination(queueItem, fileBuffer);
         if (uploadResult.status === 'pending') {
-            await persistWahooPendingUpload(queueItem, uploadResult);
+            const persisted = await persistWahooPendingUpload(queueItem, uploadResult);
+            if (!persisted) {
+                return QueueResult.Processed;
+            }
             throw Object.assign(new Error('Wahoo is still processing the activity.'), {
                 code: 'deadline-exceeded',
             });
