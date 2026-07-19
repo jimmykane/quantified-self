@@ -14,5 +14,6 @@ export class PublicFooterComponent {
   public readonly operator = QUANTIFIED_SELF_OPERATOR;
   public readonly supportEmail = environment.supportEmail;
   public readonly supportMailtoHref = `mailto:${this.supportEmail}`;
-  public readonly privacyMailtoHref = `mailto:${this.operator.privacyEmail}`;
+  public readonly contactEmail = 'contact@quantified-self.io';
+  public readonly contactMailtoHref = `mailto:${this.contactEmail}`;
 }

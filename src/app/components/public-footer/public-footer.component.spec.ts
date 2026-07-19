@@ -29,8 +29,8 @@ describe('PublicFooterComponent', () => {
     expect(text).toContain('45500 Ioannina');
     expect(text).toContain('Greece');
     expect(text).toContain('support@quantified-self.io');
-    expect(text).toContain('privacy@quantified-self.io');
+    expect(text).toContain('contact@quantified-self.io');
     expect(footer?.querySelector('a[href="mailto:support@quantified-self.io"]')).toBeTruthy();
-    expect(footer?.querySelector('a[href="mailto:privacy@quantified-self.io"]')).toBeTruthy();
+    expect(footer?.querySelector('a[href="mailto:contact@quantified-self.io"]')).toBeTruthy();
   });
 });
