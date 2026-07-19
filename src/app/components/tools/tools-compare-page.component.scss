@@ -1112,7 +1112,7 @@ mat-paginator {
 
   .upload-controls {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     width: 100%;
   }
 
@@ -1124,6 +1124,10 @@ mat-paginator {
   .upload-controls button[mat-icon-button] {
     width: 42px;
     justify-self: center;
+  }
+
+  .upload-controls button[mat-flat-button] {
+    grid-column: 1 / -1;
   }
 
   .comparison-table-shell {
