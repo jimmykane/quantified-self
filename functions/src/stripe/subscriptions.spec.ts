@@ -146,6 +146,7 @@ describe('onSubscriptionUpdated', () => {
             document: 'customers/{uid}/subscriptions/{subscriptionId}',
             region: 'europe-west3',
             memory: '512MiB',
+            concurrency: 5,
             retry: true,
         }));
     });

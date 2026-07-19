@@ -167,6 +167,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
     document: 'customers/{uid}/subscriptions/{subscriptionId}',
     region: 'europe-west3',
     memory: '512MiB',
+    concurrency: 5,
     retry: true,
 }, async (event) => {
     const uid = event.params.uid;
