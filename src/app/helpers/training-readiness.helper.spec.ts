@@ -182,10 +182,19 @@ describe('training-readiness.helper', () => {
     expect(view.updatedText).toContain('Jul 16');
     expect(view.historyState).toBe('ready');
     expect(view.historyEvidenceText).toBe('13/14 days scored');
-    expect(view.historyPoints.at(0)?.x).toBe(10);
+    expect(view.historyPoints.at(0)?.x).toBe(30);
     expect(view.historyPoints.at(-1)?.x).toBe(350);
     expect(view.historyPoints.at(-1)?.score).toBe(82);
+    expect(view.historyPoints.at(-1)?.label).toContain('Jul 16, 2026: 82/100, Ready');
+    expect(view.historyPoints.at(-1)?.label).toContain('High confidence; 4/4 signals');
+    expect(view.historyAxisTicks).toEqual([
+      { score: 100, label: '100', y: 8, isReadinessThreshold: false },
+      { score: 75, label: '75', y: 25, isReadinessThreshold: true },
+      { score: 55, label: '55', y: 38.6, isReadinessThreshold: true },
+      { score: 0, label: '0', y: 76, isReadinessThreshold: false },
+    ]);
     expect(view.historySegments).toHaveLength(2);
+    expect(view.historyAriaLabel).toContain('fixed 0 to 100 axis');
     expect(view.historyAriaLabel).toContain('missing days are gaps');
   });
 

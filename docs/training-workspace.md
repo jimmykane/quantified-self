@@ -560,6 +560,11 @@ mislabel a new score as yesterday's. An open Training route schedules a narrow U
 `ramp_rate`, `form_plus_7d`, `freshness_forecast`, and `training_readiness`. Those projection-sensitive kinds can reuse a compatible Form seed and do not
 require an event or activity scan.
 
+The compact chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes remain
+interpretable across days. Each scored SVG point is keyboard focusable and provides a native hover/focus tooltip with
+its UTC date, score, status, confidence, available-signal count, and recovery-baseline-night count. Missing scores have
+no point and therefore remain visible as gaps rather than being interpolated.
+
 #### Recovery remaining
 
 `recovery_now` combines supported imported post-workout recovery estimates. The card counts down using the stored end

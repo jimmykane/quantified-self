@@ -206,6 +206,10 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('14/14 days scored');
       expect(panel.textContent).toContain('browser does not load event or activity history');
       expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
+      expect(panel.querySelectorAll('.training-readiness-trend-axis-label')).toHaveLength(4);
+      const readinessPoint = panel.querySelector('.training-readiness-trend-point');
+      expect(readinessPoint?.getAttribute('tabindex')).toBe('0');
+      expect(readinessPoint?.getAttribute('aria-label')).toContain('/100');
       expect(fixture.nativeElement.querySelector('.training-recovery-panel')).toBeNull();
       expect(fixture.nativeElement.querySelectorAll('.training-current-context-grid > article')).toHaveLength(1);
       fixture.destroy();

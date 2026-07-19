@@ -148,14 +148,19 @@
               </header>
               @if (trainingReadiness.historyPoints.length) {
                 <svg class="training-readiness-trend" viewBox="0 0 360 90" role="img" [attr.aria-label]="trainingReadiness.historyAriaLabel">
-                  <line class="training-readiness-trend-threshold" x1="10" x2="350" y1="26.5" y2="26.5"></line>
-                  <line class="training-readiness-trend-threshold" x1="10" x2="350" y1="41.3" y2="41.3"></line>
+                  <g aria-hidden="true">
+                    @for (tick of trainingReadiness.historyAxisTicks; track tick.score) {
+                      <line class="training-readiness-trend-grid" [class.training-readiness-trend-threshold]="tick.isReadinessThreshold" x1="30" x2="350" [attr.y1]="tick.y" [attr.y2]="tick.y"></line>
+                      <text class="training-readiness-trend-axis-label" x="24" [attr.y]="tick.y" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+                    }
+                    <line class="training-readiness-trend-axis" x1="30" x2="30" y1="8" y2="76"></line>
+                  </g>
                   @for (segment of trainingReadiness.historySegments; track segment) {
                     <polyline class="training-readiness-trend-line" [attr.points]="segment"></polyline>
                   }
                   @for (point of trainingReadiness.historyPoints; track point.dayMs) {
                     @if (point.y !== null) {
-                      <circle class="training-readiness-trend-point" [attr.cx]="point.x" [attr.cy]="point.y" r="3">
+                      <circle class="training-readiness-trend-point" [attr.cx]="point.x" [attr.cy]="point.y" r="3" tabindex="0" focusable="true" [attr.aria-label]="point.label">
                         <title>{{ point.label }}</title>
                       </circle>
                     }
