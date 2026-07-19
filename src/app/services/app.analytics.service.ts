@@ -411,6 +411,12 @@ export class AppAnalyticsService {
     // Route File Events
     // ─────────────────────────────────────────────────────────────────────────────
 
+    logRoutesPageView(routeCount: number | null): void {
+        this.logEvent('routes_page_view', this.compactParams({
+            route_count: routeCount,
+        }));
+    }
+
     logRouteUpload(status: RouteUploadStatus, params: RouteUploadAnalytics = {}): void {
         this.logEvent('route_upload', this.compactParams({
             status,

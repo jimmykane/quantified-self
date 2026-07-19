@@ -273,9 +273,10 @@ describe('AppAnalyticsService', () => {
         });
     });
 
-    it('should log route upload and saved route analytics with compact params', () => {
+    it('should log routes page, upload, and saved route analytics with compact params', () => {
         userSubject.next({ acceptedTrackingPolicy: true } as User);
 
+        service.logRoutesPageView(4);
         service.logRouteUpload('success', {
             fileType: 'gpx',
             storedFileType: 'gpx.gz',
@@ -312,6 +313,9 @@ describe('AppAnalyticsService', () => {
             resultCount: 4,
         });
 
+        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'routes_page_view', {
+            route_count: 4,
+        });
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'route_upload', {
             status: 'success',
             file_type: 'gpx',

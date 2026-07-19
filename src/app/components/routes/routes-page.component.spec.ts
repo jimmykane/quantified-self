@@ -190,6 +190,7 @@ describe('RoutesPageComponent', () => {
         };
         analyticsServiceMock = {
             logEvent: vi.fn(),
+            logRoutesPageView: vi.fn(),
             logSavedRouteAction: vi.fn(),
         };
         hapticsServiceMock = {
@@ -323,6 +324,7 @@ describe('RoutesPageComponent', () => {
         );
         expect(routeServiceMock.getRouteCount).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1' }));
         expect(component.routeCount()).toBe(1);
+        expect(analyticsServiceMock.logRoutesPageView).toHaveBeenCalledWith(1);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('view', {
             routeCount: 1,
         });

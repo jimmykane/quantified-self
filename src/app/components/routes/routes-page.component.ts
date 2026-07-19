@@ -526,6 +526,7 @@ export class RoutesPageComponent implements OnInit {
                 }),
             );
             const routeCount = await this.refreshRouteCount();
+            this.analyticsService.logRoutesPageView(routeCount);
             this.analyticsService.logSavedRouteAction('view', { routeCount });
         }
     }
