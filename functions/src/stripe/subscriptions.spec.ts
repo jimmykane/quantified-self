@@ -145,6 +145,7 @@ describe('onSubscriptionUpdated', () => {
         expect(firestoreTriggerState.options).toEqual(expect.objectContaining({
             document: 'customers/{uid}/subscriptions/{subscriptionId}',
             region: 'europe-west3',
+            memory: '512MiB',
             retry: true,
         }));
     });
