@@ -14,71 +14,58 @@
 .service-connection-status__content {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     min-width: 0;
     max-width: 100%;
-    padding: 8px 0 12px;
+    padding: 20px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 12px;
+    background: var(--mat-sys-surface-container-lowest);
 }
 
 .service-connection-status__summary {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    align-items: flex-start;
+    gap: 16px;
     min-width: 0;
-}
-
-.service-connection-status__indicator {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 36px;
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    color: var(--mat-sys-on-surface-variant);
-    background: var(--mat-sys-surface-container-high);
-}
-
-.service-connection-status--connected .service-connection-status__indicator {
-    color: var(--mat-sys-on-primary-container);
-    background: var(--mat-sys-primary-container);
-}
-
-.service-connection-status--attention .service-connection-status__indicator {
-    color: var(--mat-sys-on-error-container);
-    background: var(--mat-sys-error-container);
-}
-
-.service-connection-status__indicator mat-icon {
-    font-size: 22px;
-    width: 22px;
-    height: 22px;
 }
 
 .service-connection-status__copy {
     display: grid;
     flex: 1 1 auto;
-    gap: 2px;
+    gap: 4px;
     min-width: 0;
 }
 
-.service-connection-status__eyebrow {
-    overflow: hidden;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.72rem;
-    font-weight: 650;
-    letter-spacing: 0.04em;
-    line-height: 1.2;
-    text-overflow: ellipsis;
-    text-transform: uppercase;
-    white-space: nowrap;
-}
-
-.service-connection-status__title {
+.service-connection-status__label {
     color: var(--mat-sys-on-surface);
-    font-size: 1rem;
+    font-size: 1.25rem;
     font-weight: 700;
     line-height: 1.2;
+}
+
+.service-connection-status__state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.service-connection-status__state mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+}
+
+.service-connection-status--connected .service-connection-status__state {
+    color: var(--qs-theme-success);
+}
+
+.service-connection-status--attention .service-connection-status__state {
+    color: var(--mat-sys-error);
 }
 
 .service-connection-status__copy p {
@@ -86,6 +73,10 @@
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.84rem;
     line-height: 1.35;
+}
+
+.service-connection-status--compact .service-connection-status__copy p {
+    display: none;
 }
 
 .service-connection-status__chips {
@@ -121,28 +112,23 @@
 
 @media (max-width: 640px) {
     .service-connection-status__content {
-        padding: 8px 0 12px;
+        padding: 16px;
     }
 
     .service-connection-status__summary {
         display: grid;
-        grid-template-columns: 36px minmax(0, 1fr);
-        column-gap: 12px;
+        grid-template-columns: minmax(0, 1fr);
         row-gap: 10px;
         align-items: flex-start;
     }
 
-    .service-connection-status__indicator {
-        grid-column: 1;
-    }
-
     .service-connection-status__copy {
-        grid-column: 2;
+        grid-column: 1;
     }
 
     .service-connection-status__chips,
     .service-connection-status__actions {
-        grid-column: 1 / -1;
+        grid-column: 1;
         justify-self: start;
     }
 

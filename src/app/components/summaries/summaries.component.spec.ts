@@ -35,7 +35,6 @@ import {
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
 import { getDashboardPowerCurveActivityTypes } from '../../helpers/dashboard-power-curve-scope.helper';
@@ -185,11 +184,15 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('does not expose the Training action during staged rollout', () => {
+  it('exposes the Training action beside Dashboard manager', () => {
     component.showActions = true;
 
     fixture.detectChanges();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link')).toBeNull();
+    const trainingLink = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link') as HTMLAnchorElement;
+    expect(trainingLink).not.toBeNull();
+    expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
+    expect(trainingLink.textContent).toContain('Open Training');
+    expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
@@ -297,33 +300,12 @@ describe('SummariesComponent', () => {
       lastSeenAtMs: Date.UTC(2026, 6, 11),
       trend: [],
     };
-    const readinessSignals = {
-      score: 82,
-      label: 'Ready',
-      confidence: 'high',
-      availableSignalCount: 4,
-      totalSignalCount: 4,
-      form: 17.6,
-      rampRate: -2.4,
-      sleepScore: 69,
-      latestSleepAtMs: Date.UTC(2026, 6, 16),
-      hrvRatio: 1.04,
-      minimumHeartRateRatio: 0.97,
-      trend: [],
-    };
     const tiles = [
       {
         type: TileTypes.Chart,
         order: 0,
         chartType: DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
         aerobicCapacity,
-        size: { columns: 1, rows: 1 },
-      },
-      {
-        type: TileTypes.Chart,
-        order: 1,
-        chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-        readinessSignals,
         size: { columns: 1, rows: 1 },
       },
     ] as any[];
@@ -335,9 +317,8 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     const charts = (fixture.nativeElement as HTMLElement).querySelectorAll('app-tile-chart');
-    expect(charts).toHaveLength(2);
+    expect(charts).toHaveLength(1);
     expect((charts[0] as any).aerobicCapacity).toBe(aerobicCapacity);
-    expect((charts[1] as any).readinessSignals).toBe(readinessSignals);
   });
 
   it('keeps intent section headings compact against the shared dashboard header style', () => {
@@ -621,7 +602,34 @@ describe('SummariesComponent', () => {
     expect(emptyGuidance?.textContent).not.toContain('Performance & Power');
   });
 
-  it('does not render an empty read-only dashboard shell', () => {
+  it('hides the Today summary while preserving manager access on an editable dashboard', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [],
+          showTodaySummary: false,
+        },
+      },
+    } as any;
+    component.showActions = true;
+    component.tiles = [];
+    component.kpiLaneTiles = [];
+    component.mainGridTiles = [];
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const dashboardHeader = nativeElement.querySelector('.dashboard-summary-header');
+    expect(component.showTodaySummary).toBe(false);
+    expect(dashboardHeader).not.toBeNull();
+    expect(dashboardHeader?.classList.contains('dashboard-summary-header-actions-only')).toBe(true);
+    expect(dashboardHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
+    expect(nativeElement.querySelector('#dashboard-today-title')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-current-state-row')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+  });
+
+  it('renders the fixed Today summary on an otherwise empty read-only dashboard', () => {
     component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = false;
     component.tiles = [];
@@ -631,9 +639,72 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('.pie')).toBeNull();
-    expect(nativeElement.querySelector('.dashboard-summary-header')).toBeNull();
+    expect(nativeElement.querySelector('.pie')).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-current-state-row')).not.toBeNull();
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
+  });
+
+  it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    (component as any).derivedFormNowContext = { value: 12, latestDayMs: nowMs };
+    (component as any).derivedRampRateContext = { rampRate: 1, latestDayMs: nowMs };
+    (component as any).readinessSleepSessions = [
+      ...Array.from({ length: 5 }, (_, index) => ({
+        id: `baseline-${index}`,
+        sleepDate: new Date(nowMs - ((index + 2) * 86_400_000)).toISOString().slice(0, 10),
+        startTimeMs: nowMs - ((index + 2) * 86_400_000) - (9 * 3_600_000),
+        endTimeMs: nowMs - ((index + 2) * 86_400_000) - 3_600_000,
+        durationSeconds: 8 * 3_600,
+        score: { value: 80 },
+        vitals: { averageHrvMs: 50, averageHeartRateBpm: 52, minimumHeartRateBpm: 44 },
+        source: { provider: 'GarminAPI', sourceSessionKey: `baseline-${index}` },
+      })),
+      {
+        id: 'latest',
+        sleepDate: new Date(nowMs).toISOString().slice(0, 10),
+        startTimeMs: nowMs - (9 * 3_600_000),
+        endTimeMs: nowMs - 3_600_000,
+        durationSeconds: 8 * 3_600,
+        score: { value: 90 },
+        vitals: { averageHrvMs: 55, averageHeartRateBpm: 48, minimumHeartRateBpm: 40 },
+        source: { provider: 'GarminAPI', sourceSessionKey: 'latest' },
+      },
+    ];
+    component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
+
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('/100');
+    expect(nativeElement.querySelector('.dashboard-current-state-primary small')?.textContent).toContain('High confidence · 4/4 signals');
+    expect(nativeElement.querySelector('dd[data-tone="positive"]')?.textContent).toContain('+10%');
+    const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
+      .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
+    expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
+    expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+  });
+
+  it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    (component as any).derivedFormPoints = [{
+      time: Date.UTC(2026, 6, 11),
+      trainingStressScore: 84,
+      ctl: 42,
+      atl: 50,
+      formSameDay: -8,
+      formPriorDay: -4,
+    }];
+    (component as any).derivedFormNowContext = { value: -99, latestDayMs: Date.UTC(2026, 6, 11) };
+    (component as any).derivedRampRateContext = { rampRate: 99, latestDayMs: Date.UTC(2026, 6, 11) };
+
+    const readiness = (component as any).buildDashboardTodayReadiness();
+
+    expect(readiness.loadText).toBe('+18.5 / -6.5');
   });
 
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
@@ -688,7 +759,6 @@ describe('SummariesComponent', () => {
         removeDescentForEventTypes: [ActivityTypes.Cycling],
       },
       sleepSessions: [],
-      readinessSleepSessions: [],
       sleepTrendWindow: expect.objectContaining({
         range: '14d',
         startMs: expect.any(Number),
@@ -1539,7 +1609,7 @@ describe('SummariesComponent', () => {
     expect(component.sleepTrendWindowLabel).toBe('Last 14 days');
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith('user-1', nowMs - fourteenDaysMs, nowMs);
 
-    expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(1);
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(2);
   });
 
   it('should persist sleep range changes and reset the listener to the latest selected window', async () => {
@@ -1719,7 +1789,7 @@ describe('SummariesComponent', () => {
     buildDashboardTileViewModelsSpy.mockClear();
 
     component.onSleepTrendNavigate('older');
-    sleepStreams[1].next([]);
+    sleepStreams[2].next([]);
     await Promise.resolve();
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
@@ -1750,26 +1820,15 @@ describe('SummariesComponent', () => {
       settings: {
         dashboardSettings: {
           sleepTrend: { range: '14d' },
-          tiles: [
-            {
-              type: TileTypes.Chart,
-              order: 0,
-              chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
-              dataType: 'SleepDuration',
-              dataValueType: ChartDataValueTypes.Total,
-              dataCategoryType: ChartDataCategoryTypes.DateType,
-              size: { columns: 2, rows: 1 },
-            },
-            {
-              type: TileTypes.Chart,
-              order: 1,
-              chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-              dataType: 'Training Stress Score',
-              dataValueType: ChartDataValueTypes.Total,
-              dataCategoryType: ChartDataCategoryTypes.DateType,
-              size: { columns: 1, rows: 1 },
-            },
-          ],
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
+            dataType: 'SleepDuration',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 2, rows: 1 },
+          }],
         },
       },
     } as any;
@@ -1799,43 +1858,10 @@ describe('SummariesComponent', () => {
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(3);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       sleepSessions: [{ id: 'historical-sleep' }],
-      readinessSleepSessions: [{ id: 'current-sleep' }],
     }));
   });
 
-  it('does not surface a derived pending state when readiness already has usable signals', () => {
-    (component as any).derivedFormNowStatus = 'missing';
-    (component as any).derivedRampRateStatus = 'building';
-    const tile = {
-      type: TileTypes.Chart,
-      order: 0,
-      chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-      readinessSignals: {
-        score: 80,
-        label: 'Ready',
-        confidence: 'medium',
-        availableSignalCount: 2,
-        totalSignalCount: 4,
-        form: null,
-        sleepScore: 85,
-        hrvRatio: 1.05,
-        minimumHeartRateRatio: null,
-        trend: [],
-      },
-    } as any;
-
-    expect(component.getReadinessSignalsStatusForTile(tile)).toBeNull();
-    (component as any).derivedRampRateContext = { rampRate: 1 };
-    expect((component as any).resolveDerivedStatusForChartType(
-      DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-    )).toBeNull();
-
-    (component as any).derivedRampRateContext = null;
-    tile.readinessSignals = null;
-    expect(component.getReadinessSignalsStatusForTile(tile)).toBe('building');
-  });
-
-  it('rebuilds readiness when the latest sleep evidence crosses its freshness limit', async () => {
+  it('rebuilds readiness at time-only boundaries and keeps scheduling remaining transitions', async () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
@@ -1861,13 +1887,13 @@ describe('SummariesComponent', () => {
     ];
     const rebuildSpy = vi.spyOn(component as any, 'rebuildTilesFromCurrentState').mockResolvedValue(undefined);
 
-    (component as any).updateReadinessSleepExpiryTimer();
-    expect((component as any).readinessSleepExpiryTimeoutHandle).not.toBeNull();
+    (component as any).updateReadinessSleepRefreshTimer();
+    expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();
 
     await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
 
     expect(rebuildSpy).toHaveBeenCalledTimes(1);
-    expect((component as any).readinessSleepExpiryTimeoutHandle).toBeNull();
+    expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();
   });
 
   it('should treat the 1y sleep range as a bounded pageable window', async () => {
@@ -1898,7 +1924,7 @@ describe('SummariesComponent', () => {
     expect(component.sleepTrendRange).toBe('1y');
     expect(component.sleepTrendWindowLabel).toBe('Last 1 year');
     expect(component.sleepTrendCanNavigateOlder).toBe(true);
-    expect(mockSleepService.watchForDashboard).toHaveBeenLastCalledWith(
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith(
       'user-1',
       nowMs - yearMs,
       nowMs,
@@ -2301,10 +2327,77 @@ describe('SummariesComponent', () => {
         user: component.user,
         initialMode: undefined,
         initialEditTileOrder: null,
+        previewTodaySummaryVisibility: expect.any(Function),
       }),
     }));
     expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(component.isDashboardManagerOpen).toBe(false);
+  });
+
+  it('previews Today summary visibility while the manager remains open', async () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [],
+          showTodaySummary: true,
+        },
+      },
+    } as any;
+    component.showActions = true;
+    const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
+    mockDialog.open.mockReturnValueOnce({
+      afterClosed: () => afterClosedSubject.asObservable(),
+    });
+
+    const openPromise = component.openDashboardManagerDialog();
+    const dialogConfig = mockDialog.open.mock.calls[0]?.[1];
+    const previewTodaySummaryVisibility = dialogConfig?.data?.previewTodaySummaryVisibility;
+
+    expect(previewTodaySummaryVisibility).toEqual(expect.any(Function));
+
+    (component.user as any).settings.dashboardSettings.showTodaySummary = false;
+    previewTodaySummaryVisibility(false);
+    fixture.detectChanges();
+
+    expect(component.showTodaySummary).toBe(false);
+    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(false);
+    expect(fixture.nativeElement.querySelector('#dashboard-today-title')).toBeNull();
+
+    (component.user as any).settings.dashboardSettings.showTodaySummary = true;
+    previewTodaySummaryVisibility(true);
+    fixture.detectChanges();
+
+    expect(component.showTodaySummary).toBe(true);
+    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(true);
+    expect(fixture.nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
+
+    afterClosedSubject.next(undefined);
+    afterClosedSubject.complete();
+    await openPromise;
+  });
+
+  it('starts and stops the bounded readiness listener with the Today preview', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    component.user = {
+      uid: 'user-1',
+      settings: { dashboardSettings: { tiles: [], showTodaySummary: false } },
+    } as any;
+    component.showTodaySummary = false;
+
+    (component as any).previewTodaySummaryVisibility(true);
+
+    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith(
+      'user-1',
+      nowMs - (30 * 24 * 60 * 60 * 1000),
+      Number.MAX_SAFE_INTEGER,
+    );
+    expect((component as any).readinessSleepListenerKey).toBe('user-1:current-readiness');
+
+    (component as any).previewTodaySummaryVisibility(false);
+
+    expect((component as any).readinessSleepListenerKey).toBeNull();
   });
 
   it('should re-enable dashboard manager button as soon as the dialog starts closing', async () => {

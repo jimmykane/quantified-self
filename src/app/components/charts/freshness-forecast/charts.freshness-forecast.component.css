@@ -63,7 +63,7 @@
 
 .forecast-stat-value {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.24rem;
+  font-size: var(--qs-dashboard-chart-stat-font-size, 1.24rem);
   line-height: 1;
   font-weight: 700;
   color: var(--mat-sys-on-surface);

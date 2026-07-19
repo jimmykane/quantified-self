@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsIntensityDistributionComponent } from './charts.intensity-distribution.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -281,5 +283,16 @@ describe('ChartsIntensityDistributionComponent', () => {
 
     expect(component.selectedRange).toBe('8w');
     expect((component as any).getVisibleWeeks()).toHaveLength(8);
+  });
+
+  it('allows the chart to fill a constrained parent card', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/charts/intensity-distribution/charts.intensity-distribution.component.css'),
+      'utf8',
+    );
+
+    expect(styles).toMatch(/:host\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;/);
+    expect(styles).toMatch(/app-loading-overlay\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*height:\s*100%;/);
+    expect(styles).toMatch(/\.intensity-chart\s*\{[\s\S]*flex:\s*1 1 auto;/);
   });
 });

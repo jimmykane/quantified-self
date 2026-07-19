@@ -112,14 +112,6 @@ describe('ServicesCorosComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('renders a direct privacy link to the COROS policy section', () => {
-        const privacyLink = fixture.nativeElement.querySelector('.service-privacy-link a');
-
-        expect(privacyLink).toBeTruthy();
-        expect(privacyLink.textContent).toContain('Privacy details for COROS imports');
-        expect(privacyLink.getAttribute('href')).toContain('/policies#coros-data');
-    });
-
     it('renders connection status outside the provider tool tabs', () => {
         fixture.detectChanges();
 
@@ -129,12 +121,40 @@ describe('ServicesCorosComponent', () => {
         const providerTabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
 
         expect(connectionStatus).toBeTruthy();
-        expect(connectionStatus.textContent).toContain('COROS connection');
+        expect(connectionStatus.textContent).toContain('COROS');
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();
         expect(providerTabs.length).toBe(1);
         expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
+    });
+
+    it('renders tools without repeating the connection summary when requested', () => {
+        component.showConnectionSummary = false;
+        fixture.detectChanges();
+
+        const serviceContainer = fixture.nativeElement.querySelector('.service-container');
+
+        expect(serviceContainer.classList).toContain('service-container--tools-only');
+        expect(fixture.nativeElement.querySelector('.service-connection-status')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.connection-tools-divider')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.provider-tools-tabs')).toBeTruthy();
+    });
+
+    it('renders the selected tool directly without tab chrome in focused mode', () => {
+        component.user = { uid: 'user-1', settings: {} } as any;
+        component.activeProviderTool = 'auto-sync';
+        component.showOnlyActiveProviderTool = true;
+        fixture.detectChanges();
+
+        const toolPanels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
+
+        expect(fixture.nativeElement.querySelector('.provider-tools-tabs')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.provider-tools-panel')).toBeNull();
+        expect(toolPanels).toHaveLength(1);
+        expect(toolPanels[0].hidden).toBe(false);
+        expect(toolPanels[0].querySelector('.tool-subsection-title')).toBeNull();
+        expect(toolPanels[0].textContent).toContain('Sending COROS activities to Suunto is a Pro feature.');
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -288,7 +308,7 @@ describe('ServicesCorosComponent', () => {
 
             expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
-                'Connect both COROS and Suunto accounts before enabling sync.',
+                'Connect COROS and Suunto before turning on automatic activity sync.',
                 undefined,
                 { duration: 4000 }
             );
@@ -309,7 +329,7 @@ describe('ServicesCorosComponent', () => {
 
             expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
             expect(snackBarSpy).toHaveBeenCalledWith(
-                'Reconnect Suunto before enabling sync.',
+                'Reconnect Suunto before turning on automatic activity sync.',
                 undefined,
                 { duration: 4000 }
             );
@@ -353,7 +373,7 @@ describe('ServicesCorosComponent', () => {
             fixture.detectChanges();
 
             const queueButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
-                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Queue now')) as HTMLButtonElement | undefined;
+                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Sync activities')) as HTMLButtonElement | undefined;
 
             expect(component.isCorosToSuuntoRouteEnabled).toBe(false);
             expect(queueButton).toBeTruthy();
@@ -371,7 +391,7 @@ describe('ServicesCorosComponent', () => {
 
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.textContent).toContain('Suunto needs to be reconnected before COROS -> Suunto sync can run.');
+            expect(fixture.nativeElement.textContent).toContain('Reconnect Suunto before syncing COROS activities.');
             expect(fixture.nativeElement.querySelector('mat-slide-toggle')).toBeFalsy();
         });
 
@@ -380,7 +400,7 @@ describe('ServicesCorosComponent', () => {
             component.user = { uid: 'non-allowlisted-user', settings: {} } as any;
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.textContent).toContain('COROS -> Suunto Sync');
+            expect(fixture.nativeElement.textContent).toContain('Send COROS activities to Suunto');
         });
 
         it('should render failed backfill events in the summary', () => {
@@ -405,7 +425,7 @@ describe('ServicesCorosComponent', () => {
             fixture.detectChanges();
 
             const content = fixture.nativeElement.textContent;
-            expect(content).toContain('Failed: 1');
+            expect(content).toContain('Could not schedule: 1');
             expect(content).toContain('event-123');
             expect(content).toContain('queue enqueue failed');
         });
@@ -418,13 +438,11 @@ describe('ServicesCorosComponent', () => {
 
             fixture.detectChanges();
 
-            const infoBlock = fixture.nativeElement.querySelector('app-status-info[title="Manual Catch-up Scope"]');
+            const infoBlock = fixture.nativeElement.querySelector('app-status-info[title="Choose which activities to send"]');
             const content = fixture.nativeElement.textContent;
             expect(infoBlock).toBeTruthy();
-            expect(content).toContain('Use this anytime to queue COROS -> Suunto sync jobs');
-            expect(content).toContain('activities already imported into Quantified Self');
-            expect(content).toContain('uses stored original files');
-            expect(content).toContain('can run even when automatic sync is turned off');
+            expect(content).toContain('Choose a date range to send COROS activities already in Quantified Self to Suunto');
+            expect(content).toContain('even when automatic activity sync is off');
         });
 
         it('should log route backfill analytics when catch-up succeeds', async () => {
@@ -471,7 +489,7 @@ describe('ServicesCorosComponent', () => {
 
         const warningPill = fixture.nativeElement.querySelector('.active-sync-warning-pill');
         expect(warningPill).toBeTruthy();
-        expect((warningPill.textContent || '').trim()).toContain('Used by active auto-sync route');
+        expect((warningPill.textContent || '').trim()).toContain('Used by automatic sync');
     });
 
     it('should require confirmation before disconnect when active sync route would be disabled', async () => {

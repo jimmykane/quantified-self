@@ -84,6 +84,15 @@ describe('PoliciesComponent', () => {
     expect(sectionCopy).toContain('not sent to the AI provider');
   });
 
+  it('renders public controller and contact details', () => {
+    const sectionCopy = fixture.nativeElement.textContent as string;
+
+    expect(sectionCopy).toContain('Dimitrios Kanellopoulos');
+    expect(sectionCopy).toContain('Kaloudi 15');
+    expect(sectionCopy).toContain('45500 Ioannina');
+    expect(sectionCopy).toContain('privacy@quantified-self.io');
+  });
+
   it('scrolls to the requested fragment on first render', async () => {
     window.history.replaceState(null, '', '/policies#garmin-data');
 

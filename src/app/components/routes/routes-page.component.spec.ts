@@ -156,7 +156,7 @@ describe('RoutesPageComponent', () => {
             getUser: vi.fn().mockResolvedValue(currentUser),
         };
         routeServiceMock = {
-            getRoutes: vi.fn().mockReturnValue(of([route])),
+            getAllRoutes: vi.fn().mockReturnValue(of([route])),
             getRouteCount: vi.fn().mockResolvedValue(1),
             getOriginalRouteFiles: vi.fn((sourceRoute: FirestoreRouteJSON) => sourceRoute.originalFiles || []),
             downloadFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
@@ -190,6 +190,7 @@ describe('RoutesPageComponent', () => {
         };
         analyticsServiceMock = {
             logEvent: vi.fn(),
+            logRoutesPageView: vi.fn(),
             logSavedRouteAction: vi.fn(),
         };
         hapticsServiceMock = {
@@ -318,16 +319,23 @@ describe('RoutesPageComponent', () => {
         await firstValueFrom(component.routes$!);
 
         expect(authServiceMock.getUser).toHaveBeenCalled();
-        expect(routeServiceMock.getRoutes).toHaveBeenCalledWith(
+        expect(routeServiceMock.getAllRoutes).toHaveBeenCalledWith(
             expect.objectContaining({ uid: 'user-1' }),
-            50,
-            { active: 'date', direction: 'desc' },
         );
         expect(routeServiceMock.getRouteCount).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1' }));
         expect(component.routeCount()).toBe(1);
+        expect(analyticsServiceMock.logRoutesPageView).toHaveBeenCalledWith(1);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('view', {
             routeCount: 1,
         });
+    });
+
+    it('uses the live all-routes collection as the displayed route total', () => {
+        component.routeCount.set(50);
+        component.loadedRouteCount.set(2);
+        component.filteredRouteCount.set(2);
+
+        expect(component.routeResultSummary()).toBe('2 routes');
     });
 
     it('shows the actionable Suunto route catch-up prompt when manual catch-up has never run', async () => {
@@ -407,7 +415,7 @@ describe('RoutesPageComponent', () => {
         await component.queueSuuntoRouteCatchUpPrompt();
 
         expect(userServiceMock.addSuuntoRoutesToQueueForCurrentUser).toHaveBeenCalled();
-        expect(snackBarMock.open).toHaveBeenLastCalledWith('Queued 2 routes. Skipped 1.', undefined, { duration: 3500 });
+        expect(snackBarMock.open).toHaveBeenLastCalledWith('Route import started for 2 routes. Already up to date: 1.', undefined, { duration: 3500 });
         expect(component.suuntoRouteCatchUpPromptError()).toBeNull();
         expect(component.suuntoRouteCatchUpPrompt()).toBeNull();
     });
@@ -432,7 +440,7 @@ describe('RoutesPageComponent', () => {
         await component.queueSuuntoRouteCatchUpPrompt();
 
         expect(snackBarMock.open).toHaveBeenLastCalledWith(
-            'Queued 2 routes. Skipped 1. Failed 1 connected account.',
+            'Route import started for 2 routes. Already up to date: 1. Could not check 1 connected account.',
             undefined,
             { duration: 4500 },
         );
@@ -459,7 +467,7 @@ describe('RoutesPageComponent', () => {
         await component.queueSuuntoRouteCatchUpPrompt();
 
         expect(snackBarMock.open).toHaveBeenLastCalledWith(
-            'Queued 1 route. Skipped 1. Failed 1.',
+            'Route import started for 1 route. Already up to date: 1. Could not import: 1.',
             undefined,
             { duration: 4500 },
         );
@@ -696,7 +704,7 @@ describe('RoutesPageComponent', () => {
             id: DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
             primaryAction: {
                 id: 'enableRouteDeliveryAutoSync',
-                label: 'Enable route sync',
+                label: 'Send routes automatically',
             },
             secondaryAction: {
                 id: 'dismissRouteDeliveryAutoSync',
@@ -810,7 +818,7 @@ describe('RoutesPageComponent', () => {
             enabled: true,
             source: 'routes_prompt',
         });
-        expect(snackBarMock.open).toHaveBeenCalledWith('Suunto to Garmin route delivery enabled.', undefined, { duration: 3000 });
+        expect(snackBarMock.open).toHaveBeenCalledWith('New Suunto routes will be sent to Garmin automatically.', undefined, { duration: 3000 });
         expect(component.suuntoToGarminRouteDeliveryPrompt()).toBeNull();
     });
 
@@ -922,7 +930,7 @@ describe('RoutesPageComponent', () => {
             ...suuntoRouteCatchUpPromptContext$.value,
             connectedProviderUserIds: ['suunto-user-1', 'suunto-user-2'],
         });
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([{
+        routeServiceMock.getAllRoutes.mockReturnValueOnce(of([{
             ...route,
             sourceSummary: {
                 sourceType: 'service_sync',
@@ -957,7 +965,7 @@ describe('RoutesPageComponent', () => {
     });
 
     it('keeps same-account Suunto routes blocked from resend', async () => {
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([{
+        routeServiceMock.getAllRoutes.mockReturnValueOnce(of([{
             ...route,
             sourceSummary: {
                 sourceType: 'service_sync',
@@ -983,7 +991,7 @@ describe('RoutesPageComponent', () => {
                 'Maximum Grade': 11,
             },
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([routeWithAggregateStats]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([routeWithAggregateStats]));
         await component.ngOnInit();
 
         const routes = await firstValueFrom(component.routes$!);
@@ -1001,7 +1009,7 @@ describe('RoutesPageComponent', () => {
 
     it('does not aggregate table metrics from segment summaries when top-level stats are missing', async () => {
         const routeWithoutTopLevelStats = withoutTopLevelStats(route);
-        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([routeWithoutTopLevelStats]));
         await component.ngOnInit();
 
         const routes = await firstValueFrom(component.routes$!);
@@ -1051,13 +1059,14 @@ describe('RoutesPageComponent', () => {
                 extension: 'fit',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, cyclingRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, cyclingRoute]));
         routeServiceMock.getRouteCount.mockResolvedValueOnce(2);
         await component.ngOnInit();
 
         let routes = await firstValueFrom(component.routes$!);
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
+        expect(component.routeMapRoutes().map(item => item.id)).toEqual(['route-2', 'route-1']);
         expect(component.loadedRouteCount()).toBe(2);
         expect(component.filteredRouteCount()).toBe(2);
         expect(component.routeResultSummary()).toBe('2 routes');
@@ -1074,6 +1083,7 @@ describe('RoutesPageComponent', () => {
         routes = await firstValueFrom(component.routes$!);
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2']);
+        expect(component.routeMapRoutes().map(item => item.id)).toEqual(['route-2']);
         expect(component.routeResultSummary()).toBe('1 of 2 loaded routes');
         expect(component.routeFilterActive()).toBe(true);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('filter', {
@@ -1096,6 +1106,7 @@ describe('RoutesPageComponent', () => {
         routes = await firstValueFrom(component.routes$!);
 
         expect(routes.map(item => item.route.id)).toEqual(['route-1']);
+        expect(component.routeMapRoutes().map(item => item.id)).toEqual(['route-1']);
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('filter', {
             status: 'applied',
             filterActive: true,
@@ -1106,7 +1117,25 @@ describe('RoutesPageComponent', () => {
         routes = await firstValueFrom(component.routes$!);
 
         expect(routes.map(item => item.route.id)).toEqual(['route-1']);
+        expect(component.routeMapRoutes().map(item => item.id)).toEqual(['route-1']);
         expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(4);
+    });
+
+    it('does not rebuild route view models when only table filters change', async () => {
+        const projectionSpy = vi.spyOn(component as any, 'toRouteViewModel');
+        await component.ngOnInit();
+        const subscription = component.routes$!.subscribe();
+
+        expect(projectionSpy).toHaveBeenCalledTimes(1);
+        projectionSpy.mockClear();
+
+        component.updateRouteFilter('Morning');
+        component.updateRouteFileTypeFilter('gpx');
+        component.updateRouteActivityTypeFilter('Running');
+
+        expect(component.routeMapRoutes().map(item => item.id)).toEqual(['route-1']);
+        expect(projectionSpy).not.toHaveBeenCalled();
+        subscription.unsubscribe();
     });
 
     it('selects only visible rows and drops hidden selections after filtering', async () => {
@@ -1123,7 +1152,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'fit',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, cyclingRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, cyclingRoute]));
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
 
@@ -1162,8 +1191,16 @@ describe('RoutesPageComponent', () => {
         expect(template).toContain('(selectionChange)="updateRouteFileTypeFilter($event.value)"');
         expect(template).toContain('(selectionChange)="updateRouteActivityTypeFilter($event.value)"');
         expect(template).toContain('{{ routeResultSummary() }}');
+        expect(template).toContain('{{ loadedRouteCount() }}');
+        expect(template).toContain('class="routes-map-panel"');
+        expect(template).toContain('<app-route-preview-map');
+        expect(template).toContain('[routes]="routeMapRoutes()"');
+        expect(template).toContain('[mapStyle]="currentUser.settings?.mapSettings?.mapStyle || \'default\'"');
+        expect(template).toContain('analyticsSource="routes_page_map"');
         expect(template).toContain('No loaded routes match this filter');
         expect(styles).toContain('.routes-table-panel');
+        expect(styles).toContain('.routes-map-stage');
+        expect(styles).toContain('height: clamp(22rem, 46vh, 32rem);');
         expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
         expect(styles).toContain('@include tableControls.comparisonTableControlsLayout();');
         expect(styles).toContain('@include bp.max-768 {');
@@ -1340,7 +1377,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, shorterRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, shorterRoute]));
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
 
@@ -1349,15 +1386,12 @@ describe('RoutesPageComponent', () => {
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-1']);
         expect(routes.map(item => item.distance.label)).toEqual(['5.00 Km', '10.00 Km']);
-        expect(routeServiceMock.getRoutes).not.toHaveBeenCalledWith(
+        expect(routeServiceMock.getAllRoutes).not.toHaveBeenCalledWith(
             expect.objectContaining({ uid: 'user-1' }),
-            50,
             { active: 'distance', direction: 'asc' },
         );
-        expect(routeServiceMock.getRoutes).toHaveBeenLastCalledWith(
+        expect(routeServiceMock.getAllRoutes).toHaveBeenLastCalledWith(
             expect.objectContaining({ uid: 'user-1' }),
-            50,
-            { active: 'date', direction: 'desc' },
         );
         expect(hapticsServiceMock.selection).toHaveBeenCalled();
         expect(analyticsServiceMock.logSavedRouteAction).toHaveBeenCalledWith('sort', {
@@ -1397,7 +1431,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([syncedRoute, manualUploadRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([syncedRoute, manualUploadRoute]));
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
 
@@ -1406,10 +1440,8 @@ describe('RoutesPageComponent', () => {
 
         expect(routes.map(item => item.route.id)).toEqual(['route-2', 'route-3']);
         expect(routes.map(item => item.sourceServiceTitle)).toEqual(['Manual upload', 'Synced from Suunto']);
-        expect(routeServiceMock.getRoutes).toHaveBeenLastCalledWith(
+        expect(routeServiceMock.getAllRoutes).toHaveBeenLastCalledWith(
             expect.objectContaining({ uid: 'user-1' }),
-            50,
-            { active: 'date', direction: 'desc' },
         );
     });
 
@@ -1424,7 +1456,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         });
-        routeServiceMock.getRoutes.mockReturnValue(of([routeWithoutTopLevelStats, route]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([routeWithoutTopLevelStats, route]));
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
 
@@ -1433,9 +1465,8 @@ describe('RoutesPageComponent', () => {
 
         expect(routes.map(item => item.route.id)).toEqual(['route-1', 'route-2']);
         expect(routes.map(item => item.ascent.label)).toEqual(['120 m', '-']);
-        expect(routeServiceMock.getRoutes).not.toHaveBeenCalledWith(
+        expect(routeServiceMock.getAllRoutes).not.toHaveBeenCalledWith(
             { uid: 'user-1' },
-            50,
             { active: 'ascent', direction: 'asc' },
         );
     });
@@ -1473,7 +1504,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, steeperRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, steeperRoute]));
         await component.ngOnInit();
 
         component.onRouteSortChange({ active: 'minGrade', direction: 'asc' });
@@ -1502,7 +1533,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, emptyRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, emptyRoute]));
         await component.ngOnInit();
 
         component.onRouteSortChange({ active: 'pointCount', direction: 'asc' });
@@ -1569,7 +1600,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'fit',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, secondRoute]));
         routeGPXExportServiceMock.getRouteDocumentAsGPXBlob.mockImplementation(async (routeDocument: FirestoreRouteJSON) => ({
             blob: new Blob([`<gpx>${routeDocument.id}</gpx>`], { type: 'application/gpx+xml' }),
             hydratedRoute: { routeDocument },
@@ -1635,7 +1666,7 @@ describe('RoutesPageComponent', () => {
                 latestProviderUserId: 'suunto-user-1',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([suuntoDeliveredRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValueOnce(of([suuntoDeliveredRoute]));
         await component.ngOnInit();
         const routes = await firstValueFrom(component.routes$!);
 
@@ -1782,7 +1813,7 @@ describe('RoutesPageComponent', () => {
                 latestProviderUserId: 'garmin-user-1',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValueOnce(of([garminDeliveredRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValueOnce(of([garminDeliveredRoute]));
         garminRouteSendContext$.next({
             connected: true,
             reconnectRequired: false,
@@ -1851,7 +1882,7 @@ describe('RoutesPageComponent', () => {
             }],
             serviceMeta: null,
         });
-        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, secondRoute]));
         routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
             destinationServiceName: ServiceNames.GarminAPI,
             status: 'partial_success',
@@ -1900,7 +1931,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, secondRoute]));
         routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
             destinationServiceName: ServiceNames.SuuntoApp,
             status: 'partial_success',
@@ -1943,7 +1974,7 @@ describe('RoutesPageComponent', () => {
             ...route,
             syncedDestinationServiceNames: [ServiceNames.SuuntoApp],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([suuntoDeliveredRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([suuntoDeliveredRoute]));
         dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(false) });
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
@@ -1968,7 +1999,7 @@ describe('RoutesPageComponent', () => {
             name: 'No Source Route',
             originalFiles: [],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, routeWithoutOriginals]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, routeWithoutOriginals]));
         routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
             destinationServiceName: ServiceNames.SuuntoApp,
             status: 'success',
@@ -2011,7 +2042,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, secondRoute]));
         routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
             destinationServiceName: ServiceNames.SuuntoApp,
             status: 'partial_success',
@@ -2051,7 +2082,7 @@ describe('RoutesPageComponent', () => {
             name: 'No Source Route',
             originalFiles: [],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, routeWithoutOriginals]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, routeWithoutOriginals]));
         await component.ngOnInit();
         await firstValueFrom(component.routes$!);
         component.toggleVisibleRouteSelection(true);
@@ -2099,7 +2130,7 @@ describe('RoutesPageComponent', () => {
             name: 'No Source Route',
             originalFiles: [],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute, routeWithoutOriginals]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, secondRoute, routeWithoutOriginals]));
         routeServiceMock.downloadOriginalFile
             .mockResolvedValueOnce(new Uint8Array([1, 2, 3]).buffer)
             .mockRejectedValueOnce(new Error('download failed'));
@@ -2138,7 +2169,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'gpx',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([route, secondRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([route, secondRoute]));
         routeServiceMock.deleteRoute.mockImplementation(async (_user: unknown, routeID: string) => {
             if (routeID === 'route-2') {
                 throw new Error('delete failed');
@@ -2343,7 +2374,7 @@ describe('RoutesPageComponent', () => {
                 extension: 'fit',
             }],
         };
-        routeServiceMock.getRoutes.mockReturnValue(of([gzRoute]));
+        routeServiceMock.getAllRoutes.mockReturnValue(of([gzRoute]));
         routeServiceMock.getOriginalRouteFiles.mockReturnValue(gzRoute.originalFiles || []);
         fileServiceMock.getExtensionFromPath.mockReturnValue('fit');
 

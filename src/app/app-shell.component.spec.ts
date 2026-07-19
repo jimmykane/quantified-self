@@ -259,6 +259,17 @@ describe('AppShellComponent', () => {
         expect(component.showNavigation()).toBe(true);
     });
 
+    it('shows the shared footer on public content routes only', () => {
+      syncRoute('/help');
+      expect(component.showPublicFooter()).toBe(true);
+
+      syncRoute('/not-found');
+      expect(component.showPublicFooter()).toBe(true);
+
+      syncRoute('/training');
+        expect(component.showPublicFooter()).toBe(false);
+    });
+
     it('should show navigation for free users on dashboard', () => {
         // Mock user as free
         component['currentUser'] = { stripeRole: undefined };
@@ -678,7 +689,7 @@ describe('AppShellComponent', () => {
         expect(component.showInitialLoader).toBe(false);
     });
 
-    it('should reset scroll to top on NavigationEnd', () => {
+    it('should reset scroll to top when NavigationEnd changes route', () => {
         const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => { });
         fixture.detectChanges();
         component.headerHidden = true;
@@ -690,7 +701,7 @@ describe('AppShellComponent', () => {
         }
 
         (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
-        (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(2, '/help', '/help'));
 
         if (shellScroller) {
             expect(shellScroller.scrollTop).toBe(0);

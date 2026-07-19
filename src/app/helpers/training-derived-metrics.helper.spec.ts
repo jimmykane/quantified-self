@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveTrainingDurabilityMetricPayload,
   resolveTrainingExplanationMetricPayload,
+  resolveTrainingReadinessMetricPayload,
 } from './training-derived-metrics.helper';
 
 const loadCoverage = { totalCount: 2, loadedCount: 1, classifiedCount: 2, unclassifiedCount: 0, ratio: 0.5 };
@@ -50,6 +51,106 @@ function durabilityPayload() {
 }
 
 describe('training derived metric normalizers', () => {
+  it('normalizes a contiguous 14-day readiness history and rejects malformed gaps', () => {
+    const asOfDayMs = Date.UTC(2026, 6, 16);
+    const points = Array.from({ length: 14 }, (_, index) => ({
+      dayMs: asOfDayMs - ((13 - index) * 24 * 60 * 60 * 1000),
+      score: index === 0 ? null : 65,
+      label: index === 0 ? null : 'Mixed',
+      confidence: index === 0 ? null : 'medium',
+      availableSignalCount: index === 0 ? 0 : 4,
+      baselineEvidenceCount: index === 0 ? 0 : 3,
+      totalSignalCount: 4,
+      form: index === 0 ? null : 4,
+      rampRate: index === 0 ? null : 1,
+      sleepScore: index === 0 ? null : 80,
+      latestSleepAtMs: index === 0 ? null : asOfDayMs - ((13 - index) * 24 * 60 * 60 * 1000) + (6 * 60 * 60 * 1000),
+      hrvRatio: index === 0 ? null : 1.05,
+      averageHeartRateRatio: index === 0 ? null : 0.98,
+      minimumHeartRateRatio: index === 0 ? null : 0.98,
+      overnightHeartRateRatio: index === 0 ? null : 0.98,
+    }));
+    const payload = {
+      formulaVersion: 3,
+      dayBoundary: 'UTC',
+      asOfDayMs,
+      generatedAtMs: asOfDayMs + (12 * 60 * 60 * 1000),
+      historyDays: 14,
+      points,
+    };
+
+    expect(resolveTrainingReadinessMetricPayload(payload)).toEqual(payload);
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4 ? { ...point, dayMs: point.dayMs + 1 } : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({ ...payload, asOfDayMs: asOfDayMs + 1 })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4 ? { ...point, label: 'Ready' } : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4 ? { ...point, score: 66 } : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4 ? { ...point, availableSignalCount: 3 } : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map(({ baselineEvidenceCount: _baselineEvidenceCount, ...point }) => point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4
+        ? { ...point, confidence: 'high', baselineEvidenceCount: 3 }
+        : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4 ? { ...point, latestSleepAtMs: null } : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4 ? {
+        ...point,
+        score: 65,
+        confidence: 'low',
+        availableSignalCount: 1,
+        baselineEvidenceCount: 3,
+        sleepScore: null,
+        latestSleepAtMs: null,
+        hrvRatio: null,
+        averageHeartRateRatio: null,
+        minimumHeartRateRatio: null,
+        overnightHeartRateRatio: null,
+      } : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      formulaVersion: 2,
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4
+        ? { ...point, averageHeartRateRatio: 1.1 }
+        : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 0
+        ? { ...point, averageHeartRateRatio: 1 }
+        : point),
+    })).toBeNull();
+    expect(resolveTrainingReadinessMetricPayload({
+      ...payload,
+      points: points.map((point, index) => index === 4
+        ? { ...point, latestSleepAtMs: point.dayMs + (24 * 60 * 60 * 1000) }
+        : point),
+    })).toBeNull();
+  });
+
   it('normalizes a complete training explanation payload', () => {
     const payload = {
       dayBoundary: 'UTC', asOfDayMs: 2, currentWindowDays: 28, baselineBlockCount: 3,

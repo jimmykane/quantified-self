@@ -1,20 +1,14 @@
-<p class="description-text">
-  Suunto is a trusted companion for athletes and adventurers. The durable and precise sports watches are tested in
-  the toughest conditions and built to last in adventures from the deepest oceans to the highest mountains.
-</p>
-<p class="service-privacy-link">
-  <mat-icon>policy</mat-icon>
-  <a class="tool-link" [routerLink]="['/policies']" fragment="suunto-data">
-    Privacy details for Suunto imports, route sync, uploads, and processors
-  </a>
-</p>
-
-<div class="service-container">
+<div
+  class="service-container"
+  [class.service-container--advanced]="showAdvancedTools"
+  [class.service-container--tools-only]="!showConnectionSummary">
+  @if (showConnectionSummary) {
   <app-service-connection-status
     serviceLabel="Suunto App"
     [description]="connectionDescription"
     [connected]="isServiceConnected"
     [loading]="isLoading"
+    [compact]="!showAdvancedTools"
     [locked]="!canConnectServiceWithCurrentAccess && !isServiceConnected"
     [proRequired]="!canConnectServiceWithCurrentAccess && !isServiceConnected"
     [showDetails]="connectionView.showDetails"
@@ -111,9 +105,14 @@
 
     </div>
   </app-service-connection-status>
+  }
 
+  @if (showAdvancedTools) {
+  @if (showConnectionSummary) {
   <mat-divider class="connection-tools-divider"></mat-divider>
+  }
 
+  @if (!showOnlyActiveProviderTool) {
   <nav
     mat-tab-nav-bar
     [tabPanel]="providerToolsPanel"
@@ -153,8 +152,15 @@
       </span>
     </a>
   </nav>
-
   <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">
+    <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  </mat-tab-nav-panel>
+  } @else {
+  <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  }
+
+  <ng-template #providerToolsContent>
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'history'"
@@ -175,7 +181,9 @@
       </app-status-info>
       }
     </section>
+    }
 
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'routes') {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'routes'"
@@ -184,29 +192,30 @@
       @if (!hasProAccess) {
       <div class="pro-required-inline">
         <mat-icon>lock</mat-icon>
-        <span>Route sync is a Pro feature.</span>
+        <span>Importing and sending routes is a Pro feature.</span>
       </div>
       } @else if (!isReconnectRequired && isServiceConnected) {
       <section class="tool-subsection">
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
             <mat-icon>route</mat-icon>
-            <span>Suunto Route Import</span>
+            <span>Import routes from Suunto</span>
           </div>
           @if (didLastRouteImport) {
           <span class="tool-subsection-meta">{{ didLastRouteImport | date:'short' }}</span>
           }
         </div>
         <p class="description-text">
-          New and updated Suunto routes are imported automatically while your account stays connected. Manual catch-up queues every current Suunto route again so recently connected accounts can pull the existing library.
+          New and updated Suunto routes import automatically while your account stays connected. Use the button below
+          after connecting or reconnecting to import routes that are already in Suunto.
         </p>
         <p class="description-text">
           Imported Suunto routes stay in your saved Routes list with their source marked as Suunto. They are blocked from being sent back to the same Suunto account, but can still be sent to a different connected Suunto account.
         </p>
         @if (didLastRouteImport) {
         <div class="tool-subsection-meta">
-          Last catch-up checked {{ totalRoutesFromLastRouteImportCount }} {{ totalRoutesFromLastRouteImportCount === 1 ? 'route' : 'routes' }}.
-          Queued {{ queuedRoutesFromLastRouteImportCount }}, skipped {{ skippedRoutesFromLastRouteImportCount }}, failed {{ failedRoutesFromLastRouteImportCount }}.
+          Last import checked {{ totalRoutesFromLastRouteImportCount }} {{ totalRoutesFromLastRouteImportCount === 1 ? 'route' : 'routes' }}.
+          Scheduled {{ queuedRoutesFromLastRouteImportCount }}, already up to date {{ skippedRoutesFromLastRouteImportCount }}, could not import {{ failedRoutesFromLastRouteImportCount }}.
         </div>
         }
         <div class="tool-actions">
@@ -216,12 +225,12 @@
             @if (isQueueingRoutes) {
             <ng-container>
               <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-              Queueing...
+              Starting import...
             </ng-container>
             } @else {
             <ng-container>
               <mat-icon>playlist_add</mat-icon>
-              Queue all current routes
+              Import existing routes
             </ng-container>
             }
           </button>
@@ -233,14 +242,14 @@
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
             <mat-icon>directions</mat-icon>
-            <span>Suunto -> Garmin Course Delivery</span>
+            <span>Send Suunto routes to Garmin</span>
           </div>
           <mat-slide-toggle
             color="primary"
             [checked]="isSuuntoToGarminRouteEnabled"
             [disabled]="isSavingRouteDeliverySyncRoute || (!isSuuntoToGarminRouteEnabled && !canEnableSuuntoToGarminRoute)"
             (change)="onSuuntoToGarminRouteToggle($event.checked)">
-            {{ isSuuntoToGarminRouteEnabled ? 'Enabled' : 'Disabled' }}
+            Automatically send new and updated routes
           </mat-slide-toggle>
         </div>
 
@@ -249,14 +258,14 @@
         </app-status-info>
 
         <p class="description-text">
-          When enabled, newly imported or updated Suunto routes saved in Quantified Self are queued for delivery to Garmin as courses.
-          Manual queueing below only uses routes already saved in Quantified Self; it does not fetch routes from Suunto.
+          When this is on, new and updated Suunto routes are sent to Garmin automatically after they are saved in
+          Quantified Self. The button below sends routes already in your Quantified Self library.
         </p>
 
-        <div class="tool-section-title">Manual Queue</div>
-        <app-status-info type="info" title="Manual Queue Scope">
-          Use this anytime to queue Suunto -> Garmin course delivery for Suunto-sourced routes already saved in Quantified Self.
-          It can run even when automatic route delivery is turned off.
+        <div class="tool-section-title">Send saved routes now</div>
+        <app-status-info type="info" title="Which routes will be sent">
+          This checks Suunto routes already saved in Quantified Self and sends any that are missing from Garmin. It
+          does not import routes from Suunto, and it works even when automatic route sending is off.
         </app-status-info>
 
         <button mat-flat-button class="qs-mat-primary full-width-action"
@@ -265,20 +274,20 @@
           @if (isQueueingRouteDeliverySyncBackfill) {
           <ng-container>
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-            Queueing...
+            Starting route send...
           </ng-container>
           } @else {
           <ng-container>
-            Queue now
+            Send routes
           </ng-container>
           }
         </button>
 
         @if (routeDeliveryBackfillSummary) {
-        <app-status-info type="success" title="Queue Summary">
-          <div>Scanned: {{ routeDeliveryBackfillSummary.scanned }} | Queued: {{ routeDeliveryBackfillSummary.queued }}</div>
+        <app-status-info type="success" title="Route sending started">
+          <div>Found: {{ routeDeliveryBackfillSummary.scanned }} | Scheduled: {{ routeDeliveryBackfillSummary.queued }}</div>
           @if (routeDeliveryBackfillSummary.failedCount > 0) {
-          <div>Failed: {{ routeDeliveryBackfillSummary.failedCount }}</div>
+          <div>Could not schedule: {{ routeDeliveryBackfillSummary.failedCount }}</div>
           @if (routeDeliveryBackfillSummary.failedRoutes?.length) {
           <ul class="backfill-summary-list">
             <li *ngFor="let failedRoute of routeDeliveryBackfillSummary.failedRoutes">
@@ -297,7 +306,9 @@
       </app-status-info>
       }
     </section>
+    }
 
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
     <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'uploads'">
       <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
         <div class="tool-subsection-header">
@@ -348,5 +359,7 @@
         }
       </section>
     </section>
-  </mat-tab-nav-panel>
+    }
+  </ng-template>
+  }
 </div>

@@ -426,12 +426,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         ? await this.userService.backfillGarminSleepForCurrentUser()
         : await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
-      this.snackBar.open(`${this.sleepBackfillProviderLabel} sleep backfill ${this.sleepBackfillResultVerb.toLowerCase()}: ${result.queued} windows.`, undefined, {
+      this.snackBar.open(`${this.sleepBackfillProviderLabel} sleep history import started for ${result.queued} date ranges.`, undefined, {
         duration: 3000,
       });
     } catch (e: any) {
       this.logger.error(e);
-      this.snackBar.open(`Could not queue sleep backfill due to ${e.message}`, undefined, {
+      this.snackBar.open(`Could not start the sleep history import: ${e.message}`, undefined, {
         duration: 3000,
       });
     } finally {

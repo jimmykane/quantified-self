@@ -15,7 +15,9 @@ import {
   type DerivedTrainingExplanationSportLoad,
   type DerivedTrainingExplanationWindow,
   type DerivedTrainingExplanationWindowMetrics,
+  type DerivedTrainingReadinessMetricPayload,
 } from '@shared/derived-metrics';
+import { normalizeDerivedTrainingReadinessMetricPayload } from '@shared/training-readiness-metric';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -32,6 +34,11 @@ const EXPLANATION_SPORTS: readonly DerivedTrainingExplanationSportBucket[] = [
   'other',
   'unclassified',
 ];
+export function resolveTrainingReadinessMetricPayload(
+  value: unknown,
+): DerivedTrainingReadinessMetricPayload | null {
+  return normalizeDerivedTrainingReadinessMetricPayload(value);
+}
 
 export function resolveTrainingExplanationMetricPayload(
   value: unknown,

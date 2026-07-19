@@ -48,6 +48,13 @@ export interface RoutePreviewMapTrackMetadata {
   routeUserId: string | null;
 }
 
+export interface RoutePreviewMapBuildOptions {
+  decodedSegmentCache?: WeakMap<RoutePreviewSegmentJSONInterface, {
+    encodedPolyline: string;
+    positions: RoutePreviewCoordinateInterface[];
+  }>;
+}
+
 export function isRenderableRoutePreview(preview: RoutePreviewJSONInterface | null | undefined): boolean {
   return !!preview
     && preview.version === 1
@@ -59,8 +66,10 @@ export function isRenderableRoutePreview(preview: RoutePreviewJSONInterface | nu
     && preview.segments.some(segment => isRenderableRoutePreviewSegment(segment));
 }
 
-export function buildRoutePreviewMapTracks(routes: readonly FirestoreRouteJSON[] | null | undefined): TrackMapRenderData[] {
-  let segmentIndex = 0;
+export function buildRoutePreviewMapTracks(
+  routes: readonly FirestoreRouteJSON[] | null | undefined,
+  options: RoutePreviewMapBuildOptions = {},
+): TrackMapRenderData[] {
   return (routes || []).flatMap((route, routeIndex) => {
     if (!isRenderableRoutePreview(route.preview)) {
       return [];
@@ -69,16 +78,15 @@ export function buildRoutePreviewMapTracks(routes: readonly FirestoreRouteJSON[]
     return route.preview.segments
       .filter(segment => isRenderableRoutePreviewSegment(segment))
       .map<TrackMapRenderData | null>((segment, routeSegmentIndex) => {
-        const decodedPositions = decodeRoutePolyline5(segment.encodedPolyline)
-          .filter(point => Number.isFinite(point.latitudeDegrees) && Number.isFinite(point.longitudeDegrees));
+        const decodedPositions = decodeRoutePreviewSegment(segment, options.decodedSegmentCache);
         if (decodedPositions.length < 2) {
           return null;
         }
 
-        const color = ROUTE_PREVIEW_TRACK_COLORS[segmentIndex % ROUTE_PREVIEW_TRACK_COLORS.length];
-        segmentIndex += 1;
+        const trackId = `${route.id || `route-${routeIndex}`}-${segment.id || routeSegmentIndex}`;
+        const color = ROUTE_PREVIEW_TRACK_COLORS[stablePaletteIndex(trackId, ROUTE_PREVIEW_TRACK_COLORS.length)];
         return {
-          id: `${route.id || `route-${routeIndex}`}-${segment.id || routeSegmentIndex}`,
+          id: trackId,
           label: segment.name || route.name || 'Route',
           strokeColor: color,
           positions: decodedPositions,
@@ -90,6 +98,33 @@ export function buildRoutePreviewMapTracks(routes: readonly FirestoreRouteJSON[]
       })
       .filter((track): track is TrackMapRenderData => track !== null);
   });
+}
+
+function decodeRoutePreviewSegment(
+  segment: RoutePreviewSegmentJSONInterface,
+  cache: RoutePreviewMapBuildOptions['decodedSegmentCache'],
+): RoutePreviewCoordinateInterface[] {
+  const cachedSegment = cache?.get(segment);
+  if (cachedSegment?.encodedPolyline === segment.encodedPolyline) {
+    return cachedSegment.positions;
+  }
+
+  const decodedPositions = decodeRoutePolyline5(segment.encodedPolyline)
+    .filter(point => Number.isFinite(point.latitudeDegrees) && Number.isFinite(point.longitudeDegrees));
+  cache?.set(segment, {
+    encodedPolyline: segment.encodedPolyline,
+    positions: decodedPositions,
+  });
+  return decodedPositions;
+}
+
+function stablePaletteIndex(value: string, paletteLength: number): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % Math.max(1, paletteLength);
 }
 
 export function buildRoutePreviewThumbnail(

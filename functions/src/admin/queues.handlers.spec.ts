@@ -1481,6 +1481,84 @@ describe('getQueueStats Cloud Function', () => {
         expect(mockEnqueueSportsLibReparseHeavyTask).toHaveBeenCalledTimes(1);
     });
 
+    it('should retry stale pending heavy reparse job when explicitly requested', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            const guardCollection = createUserDeletionGuardCollectionMock(collectionName);
+            if (guardCollection) {
+                return guardCollection;
+            }
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({
+                                status: 'pending',
+                                processingTier: 'heavy',
+                                uid: 'uid-1',
+                                enqueuedAt: { toMillis: () => 0 },
+                            }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+        mockEnqueueSportsLibReparseHeavyTask.mockResolvedValueOnce(true);
+
+        const result = await (retrySportsLibReparseHeavyJob as any)(getAdminRequest({
+            jobId: 'job-1',
+            allowPendingStale: true,
+        }));
+
+        expect(jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'pending',
+            processingTier: 'heavy',
+            heavyReason: 'manual_admin',
+        }), { merge: true });
+        expect(mockEnqueueSportsLibReparseHeavyTask).toHaveBeenCalledWith('job-1', {
+            taskNameSuffix: expect.stringMatching(/^manual-\d+-[0-9a-f-]+$/),
+        });
+        expect(result).toEqual({
+            success: true,
+            jobId: 'job-1',
+            taskCreated: true,
+        });
+    });
+
+    it('should reject fresh pending heavy reparse job even when stale pending retry is requested', async () => {
+        const jobSet = vi.fn().mockResolvedValue(undefined);
+        mockCollection.mockImplementation((collectionName: string) => {
+            if (collectionName === 'sportsLibReparseJobs') {
+                return {
+                    doc: vi.fn(() => ({
+                        get: vi.fn().mockResolvedValue({
+                            exists: true,
+                            data: () => ({
+                                status: 'pending',
+                                processingTier: 'heavy',
+                                uid: 'uid-1',
+                                enqueuedAt: { toMillis: () => Date.now() },
+                            }),
+                        }),
+                        set: jobSet,
+                    })),
+                };
+            }
+            throw new Error(`Unexpected collection ${collectionName}`);
+        });
+
+        await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({
+            jobId: 'job-1',
+            allowPendingStale: true,
+        }))).rejects.toThrow('must be failed before heavy retry');
+
+        expect(jobSet).not.toHaveBeenCalled();
+        expect(mockEnqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();
+    });
+
     it('should reject heavy retry for a historical target job', async () => {
         const jobSet = vi.fn().mockResolvedValue(undefined);
         mockCollection.mockImplementation((collectionName: string) => {

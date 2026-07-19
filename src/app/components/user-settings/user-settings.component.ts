@@ -73,7 +73,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public consentToDelete: boolean;
   public errorDeleting;
   public errorSaving;
-  public activeSection: SettingsSectionId = 'profile';
+  public activeSection: SettingsSectionId = 'app';
   public readonly sectionOrder: SettingsSectionId[] = [
     'profile',
     'app',
@@ -92,7 +92,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     },
     {
       id: 'app',
-      label: 'General',
+      label: 'Appearance',
       description: 'Theme, tracking, and email',
       icon: 'tune',
     },
@@ -585,7 +585,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       return;
     }
 
-    this.activeSection = 'profile';
+    this.activeSection = 'app';
   }
 
   private isSettingsSection(section: unknown): section is SettingsSectionId {

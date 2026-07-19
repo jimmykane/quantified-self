@@ -19,6 +19,7 @@ import { MatFormField } from '@angular/material/form-field';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject, of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { SharedModule } from '../../modules/shared.module';
 import {
     ACTIVITIES_EXCLUDED_FROM_ASCENT,
     ACTIVITIES_EXCLUDED_FROM_DESCENT,
@@ -104,7 +105,10 @@ describe('UserSettingsComponent', () => {
             navigate: vi.fn().mockImplementation(async (_commands, extras) => {
                 queryParamMapSubject.next(convertToParamMap(extras?.queryParams || {}));
                 return true;
-            })
+            }),
+            createUrlTree: vi.fn(() => ({})),
+            serializeUrl: vi.fn(() => '/subscriptions'),
+            events: of(),
         };
         mockActivatedRoute = {
             snapshot: {
@@ -117,7 +121,7 @@ describe('UserSettingsComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [UserSettingsComponent],
-            imports: [ReactiveFormsModule, MaterialModule, NoopAnimationsModule],
+            imports: [ReactiveFormsModule, MaterialModule, SharedModule, NoopAnimationsModule],
             providers: [
                 { provide: AppAuthService, useValue: { user$: of(null) } },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
@@ -159,6 +163,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('shows email in the profile header when available', () => {
+        component.activeSection = 'profile';
         component.user = { ...(component.user as any), email: 'runner@example.com' } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -169,6 +174,7 @@ describe('UserSettingsComponent', () => {
     });
 
     it('hides the profile header email when unavailable', () => {
+        component.activeSection = 'profile';
         component.user = { ...(component.user as any), email: null } as any;
         component.ngOnChanges();
         fixture.detectChanges();
@@ -177,16 +183,18 @@ describe('UserSettingsComponent', () => {
         expect(emailLine).toBeNull();
     });
 
-    it('renders the profile identity strip only inside the profile section', () => {
+    it('shows the profile identity strip only while the profile section is active', () => {
         component.activeSection = 'profile';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.settings-panel-body .user-profile-header')).toBeTruthy();
+        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]');
+        expect(profilePanel.querySelector('.settings-panel-body .user-profile-header')).toBeTruthy();
+        expect(profilePanel.hidden).toBe(false);
 
         component.activeSection = 'units';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.user-profile-header')).toBeNull();
+        expect(profilePanel.hidden).toBe(true);
     });
 
     it('does not expose the About You profile description in user settings', () => {
@@ -223,15 +231,16 @@ describe('UserSettingsComponent', () => {
         ]);
     });
 
-    it('renders the settings selector as Material tab navigation', () => {
-        const tabNav = fixture.nativeElement.querySelector('nav[mat-tab-nav-bar]');
-        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
+    it('renders the mobile settings selector as Material button navigation', () => {
+        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
+        const tabLabels = Array.from(tabNav.querySelectorAll('.workspace-navigation__mobile-tab'))
             .map((link: Element) => link.querySelector('.settings-tab-label > span:last-child')?.textContent?.trim());
 
         expect(tabNav).toBeTruthy();
+        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
         expect(tabLabels).toEqual([
             'Profile',
-            'General',
+            'Appearance',
             'Dashboard',
             'Maps',
             'Charts',
@@ -240,27 +249,27 @@ describe('UserSettingsComponent', () => {
         ]);
     });
 
-    it('renders the desktop settings selector as vertical Material list navigation', () => {
-        const desktopNav = fixture.nativeElement.querySelector('.desktop-section-nav');
+    it('uses the horizontal settings selector without a workspace rail', () => {
+        const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
         const tabPanel = fixture.nativeElement.querySelector('.settings-tab-panel');
-        const navLabels = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-label'))
-            .map((label: Element) => label.textContent?.trim());
-        const navDescriptions = Array.from(desktopNav.querySelectorAll('.desktop-section-nav-description'))
-            .map((description: Element) => description.textContent?.trim());
 
-        expect(desktopNav).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.desktop-section-nav')).toBeNull();
         expect(tabPanel).toBeTruthy();
-        expect(desktopNav.querySelector('mat-nav-list')).toBeTruthy();
-        expect(navLabels).toEqual([
-            'Profile',
-            'General',
-            'Dashboard',
-            'Maps',
-            'Charts',
-            'Units',
-            'Delete Account',
-        ]);
-        expect(navDescriptions).toEqual(component.settingsSectionOptions.map(section => section.description));
+        expect(tabNav.querySelectorAll('.mat-mdc-button')).toHaveLength(7);
+    });
+
+    it('centers settings and its save action on the 760px page column', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/user-settings/user-settings.component.scss'),
+            'utf8'
+        );
+        const contentRule = styles.match(/\.settings-content\s*\{[^}]*\}/)?.[0] ?? '';
+        const saveActionRule = styles.match(/\.qs-form-actions-floating\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(contentRule).toContain('max-width: 760px');
+        expect(contentRule).toContain('margin: 0 auto');
+        expect(contentRule).not.toContain('1180px');
+        expect(saveActionRule).toContain('calc((100vw - 760px) / 2)');
     });
 
     it('uses dynamic Material subscript sizing for settings form fields', () => {
@@ -301,6 +310,27 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('map');
     });
 
+    it('keeps settings panels mounted while switching the visible section', () => {
+        component.activeSection = 'profile';
+        fixture.detectChanges();
+
+        const panels = fixture.nativeElement.querySelectorAll('.settings-panel-section');
+        const profilePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]');
+        const mapPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]');
+
+        expect(panels).toHaveLength(7);
+        expect(profilePanel.hidden).toBe(false);
+        expect(mapPanel.hidden).toBe(true);
+
+        component.activeSection = 'map';
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('[aria-labelledby="settings-profile-title"]')).toBe(profilePanel);
+        expect(fixture.nativeElement.querySelector('[aria-labelledby="settings-map-title"]')).toBe(mapPanel);
+        expect(profilePanel.hidden).toBe(true);
+        expect(mapPanel.hidden).toBe(false);
+    });
+
     it('should update the active section from section query param changes', () => {
         component.activeSection = 'profile';
 
@@ -309,26 +339,26 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('delete-account');
     });
 
-    it('should restore the profile section when the section query param is missing', () => {
+    it('should restore the appearance section when the section query param is missing', () => {
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
 
-        expect(component.activeSection).toBe('profile');
+        expect(component.activeSection).toBe('app');
     });
 
-    it('renders delete account only in the delete account section', () => {
+    it('shows delete account only while the delete account section is active', () => {
         component.activeSection = 'profile';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.danger-card')).toBeNull();
-        expect(fixture.nativeElement.textContent).not.toContain('Delete My Account');
+        const deletePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-delete-account-title"]');
+        expect(deletePanel.querySelector('.danger-card')).toBeTruthy();
+        expect(deletePanel.hidden).toBe(true);
 
         component.activeSection = 'delete-account';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.danger-card')).toBeTruthy();
-        expect(fixture.nativeElement.textContent).toContain('Delete My Account');
+        expect(deletePanel.hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('.qs-form-actions-floating')).toBeNull();
         expect(fixture.nativeElement.querySelector('.mobile-save-bar')).toBeNull();
     });

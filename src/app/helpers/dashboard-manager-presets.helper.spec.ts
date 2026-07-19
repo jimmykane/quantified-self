@@ -29,13 +29,13 @@ import {
 import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
 
 describe('dashboard-manager-presets.helper', () => {
-  it('exposes the expanded preset catalog with 36 unique definitions', () => {
+  it('exposes the expanded preset catalog with 35 unique definitions', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(36);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(36);
+    expect(definitions).toHaveLength(35);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(35);
     expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(8);
-    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(18);
+    expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(17);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(2);
     expect(definitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
@@ -51,7 +51,6 @@ describe('dashboard-manager-presets.helper', () => {
       'running-power': false,
       'aerobic-capacity': true,
       'aerobic-durability': false,
-      'readiness-signals': false,
       'event-map': true,
       routes: false,
     });
@@ -77,7 +76,6 @@ describe('dashboard-manager-presets.helper', () => {
       'running-power': false,
       'aerobic-capacity': false,
       'aerobic-durability': false,
-      'readiness-signals': false,
       'event-map': false,
       routes: false,
     });

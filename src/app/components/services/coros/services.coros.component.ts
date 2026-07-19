@@ -107,7 +107,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       ? 'COROS disconnect retries have stopped. Reconnect COROS to refresh this connection, or contact support if the old connection still appears in COROS.'
       : this.isDisconnectPending
       ? 'Disconnect is pending while COROS finishes deauthorization. Sync and imports are paused for this connection.'
-      : 'Required for history imports, uploads, and COROS to Suunto auto-sync.';
+      : 'Required for history imports, uploads, and automatic activity sync from COROS to Suunto.';
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -166,17 +166,17 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     }
 
     if (!this.isCorosToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
       return;
     }
 
     if (enabled && this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before enabling sync.', undefined, { duration: 4000 });
+      this.snackBar.open('Reconnect Suunto before turning on automatic activity sync.', undefined, { duration: 4000 });
       return;
     }
 
     if (enabled && (!this.isConnectedToService() || !this.isSuuntoConnected)) {
-      this.snackBar.open('Connect both COROS and Suunto accounts before enabling sync.', undefined, { duration: 4000 });
+      this.snackBar.open('Connect COROS and Suunto before turning on automatic activity sync.', undefined, { duration: 4000 });
       return;
     }
 
@@ -187,10 +187,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       });
 
       this.analyticsService.logActivitySyncRouteToggle(this.corosToSuuntoRouteID, enabled);
-      this.snackBar.open(enabled ? 'COROS to Suunto auto-sync enabled.' : 'COROS to Suunto auto-sync disabled.', undefined, { duration: 3000 });
+      this.snackBar.open(enabled ? 'New COROS activities will be sent to Suunto automatically.' : 'Automatic COROS activity sync to Suunto is off.', undefined, { duration: 3000 });
     } catch (error: any) {
       this.logger.error(error);
-      this.snackBar.open(`Could not update sync setting: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.snackBar.open('Could not update automatic activity sync.', undefined, { duration: 5000 });
     } finally {
       this.isSavingSyncRoute = false;
     }
@@ -204,22 +204,22 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     }
 
     if (!this.isCorosToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('This activity sync route is not available for this account.', undefined, { duration: 4000 });
+      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
       return;
     }
 
     if (this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before running COROS to Suunto catch-up.', undefined, { duration: 4000 });
+      this.snackBar.open('Reconnect Suunto before syncing past COROS activities.', undefined, { duration: 4000 });
       return;
     }
 
     if (!this.isConnectedToService() || !this.isSuuntoConnected) {
-      this.snackBar.open('Connect both COROS and Suunto accounts before running catch-up.', undefined, { duration: 4000 });
+      this.snackBar.open('Connect COROS and Suunto before syncing past activities.', undefined, { duration: 4000 });
       return;
     }
 
     if (this.isBackfillDateRangeInvalid) {
-      this.snackBar.open('Backfill start date must be before end date.', undefined, { duration: 3500 });
+      this.snackBar.open('The start date must be before the end date.', undefined, { duration: 3500 });
       return;
     }
 
@@ -238,11 +238,11 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
         queued: summary.queued,
         failedCount: summary.failedCount,
       });
-      const failureSuffix = summary.failedCount > 0 ? ` Failed: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Backfill complete. Queued ${summary.queued} sync job(s).${failureSuffix}`, undefined, { duration: 4000 });
+      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
+      this.snackBar.open(`Activity sync started for ${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'}.${failureSuffix}`, undefined, { duration: 4000 });
     } catch (error: any) {
       this.logger.error(error);
-      this.snackBar.open(`Backfill failed: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+      this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
     } finally {
       this.isBackfillingSync = false;
     }

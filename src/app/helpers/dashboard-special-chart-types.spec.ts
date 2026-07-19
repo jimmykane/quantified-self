@@ -21,7 +21,6 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
@@ -35,6 +34,9 @@ import {
   isDashboardEventBackedSpecialChartType,
   isDashboardKpiChartType,
   isDashboardRecoveryNowChartType,
+  isDashboardSpecialChartType,
+  isRetiredDashboardReadinessConfidenceKpiChartType,
+  RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   resolveDashboardChartCategory,
 } from './dashboard-special-chart-types';
 
@@ -107,7 +109,6 @@ describe('dashboard-special-chart-types', () => {
       DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
       DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
       DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
-      DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
     ]);
     expect(isDashboardKpiChartType(DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe(true);
     expect(isDashboardKpiChartType(DASHBOARD_RAMP_RATE_KPI_CHART_TYPE)).toBe(true);
@@ -126,7 +127,21 @@ describe('dashboard-special-chart-types', () => {
     expect(isDashboardKpiChartType(DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE)).toBe(true);
     expect(isDashboardKpiChartType(DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE)).toBe(true);
     expect(isDashboardKpiChartType(DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE)).toBe(true);
-    expect(isDashboardKpiChartType(DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE)).toBe(true);
+  });
+
+  it('recognizes the retired readiness value only for local preview cleanup', () => {
+    expect(isRetiredDashboardReadinessConfidenceKpiChartType(
+      RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+    )).toBe(true);
+    expect(isDashboardKpiChartType(
+      RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+    )).toBe(false);
+    expect(isDashboardSpecialChartType(
+      RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+    )).toBe(false);
+    expect(resolveDashboardChartCategory(
+      RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+    )).toBe('custom');
   });
 
   it('returns the recommended default KPI chart definitions', () => {

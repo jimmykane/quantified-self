@@ -24,6 +24,11 @@ import {
   EChartsHostController,
 } from '../../helpers/echarts-host-controller';
 import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from '../../helpers/echarts-tooltip-interaction.helper';
+import {
   buildDashboardEChartsStyleTokens,
   buildDashboardEChartsTooltipChrome,
   renderDashboardEChartsTooltipCard,
@@ -121,6 +126,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
       return { animation: false, tooltip: { show: false }, xAxis: [], yAxis: [], series: [] };
     }
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, this.chartDiv.nativeElement.clientWidth || 0);
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const pointsByTime = new Map<number, { pool: typeof this.view.pool[number] | null; open: typeof this.view.openWater[number] | null }>();
     this.view.pool.forEach(point => pointsByTime.set(point.weekStartMs, { pool: point, open: null }));
     this.view.openWater.forEach((point) => {
@@ -139,7 +145,9 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
       legend: { top: 0, right: 4, textStyle: { color: style.textColor } },
       tooltip: {
         trigger: 'axis',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',
+        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
         ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: Array<{ data?: [number, number | null]; seriesName?: string }>) => {
           const time = params?.[0]?.data?.[0];

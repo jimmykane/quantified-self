@@ -154,6 +154,7 @@ export interface SportsLibReparseJobDocDataBase {
     terminalFailure?: boolean;
     terminalFailureAt?: unknown;
     updatedAt?: unknown;
+    enqueuedAt?: unknown;
     targetSportsLibVersion?: string;
     supersededBySportsLibVersion?: string;
 }
@@ -182,6 +183,7 @@ export interface DerivedMetricsCoordinatorDocData {
 
 export interface RetrySportsLibReparseHeavyJobRequest {
     jobId?: string;
+    allowPendingStale?: boolean;
 }
 
 export interface RetrySportsLibReparseHeavyJobResponse {

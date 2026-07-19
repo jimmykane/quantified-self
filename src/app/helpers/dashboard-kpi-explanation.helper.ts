@@ -33,14 +33,12 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
 import type {
   DashboardAerobicCapacityContext,
   DashboardAerobicDurabilityContext,
-  DashboardReadinessSignalsContext,
 } from './dashboard-training-insights.helper';
 import { getBrowserLocale } from '../shared/adapters/date-locale.config';
 
@@ -75,7 +73,6 @@ export interface DashboardKpiExplanationInputs {
   intensityDistribution?: DashboardIntensityDistributionContext | null;
   aerobicCapacity?: DashboardAerobicCapacityContext | null;
   aerobicDurability?: DashboardAerobicDurabilityContext | null;
-  readinessSignals?: DashboardReadinessSignalsContext | null;
   locale?: string;
 }
 
@@ -117,16 +114,14 @@ function resolveDescription(inputs: DashboardKpiExplanationInputs): string {
       return inputs.aerobicDurability?.metric === 'pace-retention'
         ? 'Shows pool durability from persisted eligible activity evidence; higher pace retention is steadier.'
         : 'Shows long-session durability from persisted eligible activity evidence; lower aerobic decoupling is steadier.';
-    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
-      return 'Combines available load, sleep, HRV, and overnight minimum heart-rate signals. Confidence reports evidence coverage separately.';
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
-      return 'Combines current Form, ramp rate, CTL, and ATL into one current-state label.';
+      return 'Combines current Form, ramp rate, CTL, and ATL from the same UTC-day Form model into one current-state label.';
     case DASHBOARD_FORM_NOW_KPI_CHART_TYPE:
-      return 'Current Form is TSB: CTL minus ATL, decayed through today after the latest workout.';
+      return 'Current Form is TSB: CTL minus ATL. It uses the same UTC-day Form series as the chart and decays through today after the latest workout.';
     case DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE:
-      return 'Fitness is current CTL, a 42-day exponential moving average of daily TSS.';
+      return 'Fitness is current CTL, a 42-day exponential moving average of daily TSS, carried through empty UTC days with zero load.';
     case DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE:
-      return 'Fatigue is current ATL, a 7-day exponential moving average of daily TSS.';
+      return 'Fatigue is current ATL, a 7-day exponential moving average of daily TSS, carried through empty UTC days with zero load.';
     case DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE:
       return 'Shows recent CTL direction so you can see whether chronic training load is rising or easing.';
     case DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE:
@@ -144,7 +139,7 @@ function resolveDescription(inputs: DashboardKpiExplanationInputs): string {
     case DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE:
       return 'Compares latest weekly efficiency with the previous baseline weeks.';
     case DASHBOARD_RAMP_RATE_KPI_CHART_TYPE:
-      return 'Ramp Rate is CTL today minus CTL seven days ago.';
+      return 'Ramp Rate is CTL today minus CTL seven UTC days ago, calculated from the same current Form series.';
     case DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE:
       return 'Monotony captures day-to-day load variation; strain combines weekly load with monotony.';
     case DASHBOARD_ACWR_KPI_CHART_TYPE:
@@ -159,8 +154,6 @@ function resolveMissingHint(chartType: DashboardKpiChartType): string {
       return 'Needs a stable imported VO2 max observation from a running or cycling activity.';
     case DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE:
       return 'Needs eligible persisted durability evidence from comparable long aerobic activities.';
-    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
-      return 'Needs derived load or recorded overnight sleep; more personal baseline signals increase confidence.';
     case DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE:
     case DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE:
     case DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE:
@@ -206,27 +199,9 @@ function resolveMetricRows(
           ? null
           : inputs.aerobicDurability.eligibilityRatio * 100, formatMetricValue, { suffix: '%' }),
       ].filter(isExplanationRow);
-    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
-      return [
-        textRow('Current label', inputs.readinessSignals?.label),
-        metricRow('Signal score', inputs.readinessSignals?.score, formatMetricValue, { suffix: '/100' }),
-        textRow('Confidence', inputs.readinessSignals?.confidence),
-        textRow('Available signals', inputs.readinessSignals
-          ? `${inputs.readinessSignals.availableSignalCount}/${inputs.readinessSignals.totalSignalCount}`
-          : ''),
-        metricRow('Form (TSB)', inputs.readinessSignals?.form, formatMetricValue, { signed: true }),
-        metricRow('Ramp rate', inputs.readinessSignals?.rampRate, formatMetricValue, { signed: true }),
-        metricRow('Sleep score', inputs.readinessSignals?.sleepScore, formatMetricValue),
-        dateRow('Latest sleep', inputs.readinessSignals?.latestSleepAtMs, locale),
-        metricRow('HRV vs baseline', inputs.readinessSignals?.hrvRatio === null || inputs.readinessSignals?.hrvRatio === undefined
-          ? null
-          : (inputs.readinessSignals.hrvRatio - 1) * 100, formatMetricValue, { signed: true, suffix: '%' }),
-        metricRow('Min HR vs baseline', inputs.readinessSignals?.minimumHeartRateRatio === null || inputs.readinessSignals?.minimumHeartRateRatio === undefined
-          ? null
-          : (inputs.readinessSignals.minimumHeartRateRatio - 1) * 100, formatMetricValue, { signed: true, suffix: '%' }),
-      ].filter(isExplanationRow);
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
       return [
+        textRow('Model basis', 'UTC daily TSS; zero-load decay through today'),
         textRow('Current label', inputs.primaryValueText),
         textRow('Reason', inputs.primaryLabel),
         metricRow('Form (TSB)', inputs.formNow?.value, formatMetricValue, { signed: true }),
@@ -237,14 +212,23 @@ function resolveMetricRows(
     case DASHBOARD_FORM_NOW_KPI_CHART_TYPE:
       return [
         metricRow('Current TSB', inputs.formNow?.value, formatMetricValue, { signed: true }),
+        textRow('Formula', 'CTL - ATL'),
+        textRow('Daily input', 'Training Stress Score (TSS)'),
+        textRow('Empty UTC days', '0 TSS through today'),
       ].filter(isExplanationRow);
     case DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE:
       return [
         metricRow('Current CTL', inputs.fitnessCtl?.value, formatMetricValue),
+        textRow('Formula', 'Previous CTL + (today TSS - CTL) / 42'),
+        textRow('Time constant', '42 days'),
+        textRow('Empty UTC days', '0 TSS through today'),
       ].filter(isExplanationRow);
     case DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE:
       return [
         metricRow('Current ATL', inputs.fatigueAtl?.value, formatMetricValue),
+        textRow('Formula', 'Previous ATL + (today TSS - ATL) / 7'),
+        textRow('Time constant', '7 days'),
+        textRow('Empty UTC days', '0 TSS through today'),
       ].filter(isExplanationRow);
     case DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE:
       return [
@@ -295,6 +279,8 @@ function resolveMetricRows(
         metricRow('Ramp', inputs.rampRate?.rampRate, formatMetricValue, { signed: true }),
         metricRow('CTL today', inputs.rampRate?.ctlToday, formatMetricValue),
         metricRow('CTL 7d ago', inputs.rampRate?.ctl7DaysAgo, formatMetricValue),
+        textRow('Formula', 'CTL(today) - CTL(7 UTC days ago)'),
+        textRow('Empty UTC days', '0 TSS through today'),
       ].filter(isExplanationRow);
     case DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE:
       return [
@@ -351,12 +337,6 @@ function resolveLatestDayMs(inputs: DashboardKpiExplanationInputs): number | nul
   switch (inputs.chartType) {
     case DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE:
       return toFiniteNumber(inputs.aerobicCapacity?.lastSeenAtMs);
-    case DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE:
-      return maxFiniteNumber([
-        inputs.formNow?.latestDayMs,
-        inputs.rampRate?.latestDayMs,
-        inputs.readinessSignals?.latestSleepAtMs,
-      ]);
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
       return maxFiniteNumber([
         inputs.formNow?.latestDayMs,

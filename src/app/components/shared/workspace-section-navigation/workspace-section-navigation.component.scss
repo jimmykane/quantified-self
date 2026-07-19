@@ -1,0 +1,154 @@
+@use '../../../../styles/breakpoints' as bp;
+
+:host {
+    display: block;
+    min-width: 0;
+}
+
+.workspace-navigation {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.workspace-navigation__mobile-shell {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-width: 0;
+}
+
+.workspace-navigation__mobile-tabs {
+    display: flex;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+    scroll-snap-type: inline proximity;
+}
+
+.workspace-navigation__mobile-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.workspace-navigation__mobile-tab {
+    flex: 0 0 104px;
+    min-width: 104px;
+    height: 56px;
+    padding-inline: 12px;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: var(--mat-sys-on-surface-variant);
+    scroll-snap-align: start;
+}
+
+.workspace-navigation__mobile-tab--active {
+    border-bottom-color: var(--mat-sys-primary);
+    color: var(--mat-sys-primary);
+}
+
+.workspace-navigation__scroll-control {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    transform: translateY(-50%);
+    border: 1px solid var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-lowest);
+    color: var(--mat-sys-on-surface);
+    line-height: 1;
+    box-shadow: var(--mat-sys-level1);
+}
+
+.workspace-navigation__scroll-control mat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    line-height: 24px;
+}
+
+.workspace-navigation__scroll-control--previous {
+    left: 4px;
+}
+
+.workspace-navigation__scroll-control--next {
+    right: 4px;
+}
+
+.workspace-navigation__mobile-shell--backward .workspace-navigation__mobile-tabs {
+    margin-inline-start: 60px;
+}
+
+.workspace-navigation__mobile-shell--forward .workspace-navigation__mobile-tabs {
+    margin-inline-end: 60px;
+}
+
+.workspace-navigation__mobile-shell--backward::before,
+.workspace-navigation__mobile-shell--forward::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    width: 52px;
+    pointer-events: none;
+    content: '';
+}
+
+.workspace-navigation__mobile-shell--backward::before {
+    left: 0;
+    background: linear-gradient(90deg, var(--mat-sys-surface) 12%, transparent);
+}
+
+.workspace-navigation__mobile-shell--forward::after {
+    right: 0;
+    background: linear-gradient(270deg, var(--mat-sys-surface) 12%, transparent);
+}
+
+.workspace-navigation__tab-label {
+    display: inline-flex;
+    align-items: center;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-width: 68px;
+    text-align: center;
+    white-space: normal;
+    font-size: 0.78rem;
+    line-height: 1.1;
+}
+
+.workspace-navigation__tab-label mat-icon {
+    width: 22px;
+    height: 22px;
+    font-size: 22px;
+}
+
+.workspace-navigation__tab-label > span:last-child {
+    display: block;
+    line-height: 1.1;
+}
+
+.workspace-navigation__panel,
+.workspace-main {
+    display: block;
+    min-width: 0;
+}
+
+@include bp.max-768 {
+    .workspace-navigation__tab-label {
+        font-size: 0.74rem;
+    }
+}

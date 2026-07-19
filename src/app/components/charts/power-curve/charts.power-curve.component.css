@@ -107,7 +107,7 @@
 }
 
 .power-curve-benchmark-power {
-  font-size: 1.12rem;
+  font-size: var(--qs-dashboard-chart-stat-font-size, 1.12rem);
   font-weight: 700;
 }
 
@@ -123,7 +123,7 @@
 
 .power-curve-benchmark-empty {
   color: var(--mat-sys-on-surface);
-  font-size: 1rem;
+  font-size: var(--qs-dashboard-chart-stat-font-size, 1rem);
   font-weight: 700;
 }
 

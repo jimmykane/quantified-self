@@ -39,6 +39,7 @@ import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 import { EventCardChartPanelComponent } from '../components/event/chart/panel/event.card.chart.panel.component';
 import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
+import { WorkspaceSectionNavigationComponent } from '../components/shared/workspace-section-navigation/workspace-section-navigation.component';
 
 @NgModule({
     imports: [
@@ -82,6 +83,7 @@ import { DashboardActionPromptComponent } from '../components/dashboard/dashboar
         UploadActivitiesComponent,
         EventCardChartPanelComponent,
         DashboardActionPromptComponent,
+        WorkspaceSectionNavigationComponent,
     ],
     providers: [],
     exports: [
@@ -121,6 +123,7 @@ import { DashboardActionPromptComponent } from '../components/dashboard/dashboar
         UploadActivitiesComponent,
         EventCardChartPanelComponent,
         DashboardActionPromptComponent,
+        WorkspaceSectionNavigationComponent,
     ]
 })
 

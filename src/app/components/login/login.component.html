@@ -1,7 +1,25 @@
 <div class="login-container">
   <mat-card class="login-card">
-    <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
+    <app-loading-overlay
+      [isLoading]="!userService.hasActionableProfileReadFailure() && (isLoading || userService.isProfileReadBlocking())"
+      [showSkeleton]="false" height="auto">
       <div class="login-content">
+        @if (userService.hasActionableProfileReadFailure()) {
+        <div class="profile-read-error" role="alert" data-testid="profile-read-error">
+          <mat-icon aria-hidden="true">error_outline</mat-icon>
+          @if (userService.profileReadState().status === 'error') {
+          <h2 class="title">We couldn't load your account</h2>
+          <p class="subtitle">Your account data could not be verified securely. Check your connection, then sign out and try again.</p>
+          } @else {
+          <h2 class="title">We can't reach your account data</h2>
+          <p class="subtitle">The secure server check is still retrying. Check your connection or sign out and try again.</p>
+          }
+          <button mat-raised-button class="action-button qs-mat-primary" data-testid="profile-read-error-sign-out"
+            (click)="recoverFromProfileReadError()" [disabled]="isProfileRecoveryInProgress">
+            {{ isProfileRecoveryInProgress ? 'Signing out…' : 'Sign out and try again' }}
+          </button>
+        </div>
+        } @else {
 
         <!-- Email Link Sign In -->
         <div class="email-section">
@@ -39,6 +57,7 @@
             Sign in with GitHub
           </button>
         </div>
+        }
       </div>
     </app-loading-overlay>
   </mat-card>

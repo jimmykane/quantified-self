@@ -23,15 +23,20 @@ Training is a curated analytical workspace, not a second configurable dashboard.
 5. Is long-session durability changing?
 6. How does the current build compare with a deliberately selected historical build?
 7. What recovery and sleep context was recorded alongside those builds?
+8. What do the available current load and recorded recovery signals say right now?
 
 The following rules are architectural constraints:
 
 - The frontend must not query activity or event history to calculate Training insights.
 - The frontend must not download or reparse source files to calculate Training insights.
-- Training-specific calculations belong in derived-metric builders or sports-lib, not Angular components.
-- Dashboard remains the user's modular surface. Training does not remove, relocate, or reconfigure Dashboard tiles, and
-  curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard
-  Aerobic Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
+- Historical and comparative Training calculations belong in derived-metric builders or sports-lib, not Angular
+  components. Readiness uses one environment-neutral formula in `shared/readiness.ts`: the frontend applies it to live
+  Form/ramp plus bounded sleep evidence, while Functions applies it at each daily cutoff for the historical series.
+- Dashboard remains the user's modular chart and map surface. Current Readiness is a fixed part of the optional
+  Dashboard Today summary rather than a configurable tile, while Training owns its deeper current and historical
+  presentation.
+  Curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard Aerobic
+  Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
 - Missing TSS, zones, pace, sleep, power, heart rate, or durability evidence remains unavailable. Missing values are not
   converted to zero.
 - Merged benchmark events are excluded from Training. Multisport parent events are retained, but their normalized child
@@ -57,6 +62,8 @@ The following rules are architectural constraints:
 | Derived snapshot persistence and refresh | Quantified Self Functions | coordinator, triggers, ingress worker, and derived worker |
 | User visibility and benchmark settings | Quantified Self Functions/shared contracts | authenticated callables and `shared/derived-metrics.ts` |
 | Payload validation and view models | Quantified Self frontend | `dashboard-derived-metrics.service.ts` and Training helpers |
+| Shared readiness scoring, labels, and confidence | Quantified Self shared layer | `shared/readiness.ts` |
+| Historical 14-day readiness series | Quantified Self Functions | `training_readiness` derived builder |
 | Layout, wording, empty states, and charts | Quantified Self frontend | `training-workspace.component.*` and child components |
 
 In short:
@@ -81,6 +88,7 @@ flowchart TD
     C --> F["Event/activity write ingress"]
     D --> F
     S["Sleep session write"] --> G["Targeted sleep ingress"]
+    S --> P["Bounded 30-day live sleep listener"]
     U["Training benchmark callable"] --> H["Training settings"]
     U --> I["Mark training_build_comparison dirty"]
     F --> J["Derived-metrics coordinator"]
@@ -91,23 +99,36 @@ flowchart TD
     C --> K
     D --> K
     S --> K
-    K --> L["Per-kind derived snapshot documents"]
+    K --> R["training_readiness: Form seed + bounded sleep envelope"]
+    R --> L["Per-kind derived snapshot documents"]
+    K --> L
     L --> M["Angular snapshot listeners"]
     M --> N["Payload normalizers and view-model helpers"]
     N --> O["Curated Training workspace"]
+    M --> Q["Shared live readiness formula"]
+    P --> Q
+    Q --> O
 ```
 
-The page is eventually consistent. A complete historical scan happens in the worker, never in the browser. The browser
-can continue showing the latest complete payload while a newer generation is building.
+The page is eventually consistent. A complete event/activity historical scan happens in the worker, never in the
+browser. The browser can continue showing the latest complete payload while a newer generation is building. The only
+live contextual read added by Readiness is the bounded sleep-session listener shown above; it does not read event or
+activity history. A readiness-only worker refresh reuses a compatible Form snapshot seed and fetches only the bounded
+sleep envelope, so it does not perform a new event or activity scan. Event-driven all-metric builds still share their
+already-loaded Form history, and the existing sleep-triggered Best Build comparison retains its broader dependencies.
 
 ## Route and Frontend Entry Points
 
 - Route: `src/app/app.routing.module.ts`
+- Public SEO overview: `/features/training-analysis` via `src/app/components/public-seo/public-seo-pages.content.ts`
 - Lazy routing module: `src/app/training.routing.module.ts`
 - Angular module: `src/app/modules/training.module.ts`
 - Workspace controller: `src/app/components/training/training-workspace.component.ts`
 - Workspace template: `src/app/components/training/training-workspace.component.html`
 - Workspace styles: `src/app/components/training/training-workspace.component.scss`
+- Shared readiness formula: `shared/readiness.ts`
+- Shared readiness snapshot validator: `shared/training-readiness-metric.ts`
+- Historical readiness builder: `functions/src/derived-metrics/derived-metrics.service.ts`
 - Benchmark dialog: `src/app/components/training/training-build-benchmark-dialog.component.*`
 - Sport visibility dialog: `src/app/components/training/training-sport-visibility-dialog.component.*`
 - Swimming chart: `src/app/components/training/training-swim-performance-chart.component.*`
@@ -117,8 +138,28 @@ can continue showing the latest complete payload while a newer generation is bui
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-During the staged rollout, Training is intentionally absent from the sidenav and Dashboard actions. The `/training` route
-remains registered and directly reachable for internal QA.
+Training is available to signed-in users from the sidenav and is explicitly marked **Beta**. The route header includes a
+Feedback action that opens the configured support email with a Training-specific subject. Training remains absent from
+Dashboard actions, preserving the Dashboard as the user's modular workspace.
+
+The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
+overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
+non-prescriptive treatment of readiness and sleep without exposing account-specific data. Keep that public page, the
+Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when the Training product contract changes.
+
+### Product analytics
+
+The app-wide, consent-gated Firebase `screen_view` already records `/training` route visits, so Training must not emit a
+second custom page-view event. The workspace records only these low-volume configuration outcomes through
+`AppAnalyticsService.logEvent`:
+
+- `training_sport_visibility_saved`: automatic or fixed mode and saved-selection count.
+- `training_benchmark_saved`: set or cleared action and discipline; successful saves also include event/manual reference
+  mode and duration preset.
+
+These events never include activity or benchmark IDs, dates, names, device details, sleep data, chart interaction, or
+free text. Keep analytics at completed user-intent boundaries; do not add events for derived snapshot updates, scrolling,
+hovering, search keystrokes, or chart rendering.
 
 Frontend transformation responsibilities are intentionally split into focused helpers:
 
@@ -126,10 +167,12 @@ Frontend transformation responsibilities are intentionally split into focused he
 | --- | --- |
 | `training-analysis.helper.ts` | Overall 28-day comparison and state inputs |
 | `training-capacity.helper.ts` | Imported-marker provenance and FTP/CP interpretation |
-| `training-derived-metrics.helper.ts` | Strict normalization of explanation and durability payloads |
+| `training-derived-metrics.helper.ts` | Strict normalization of explanation, durability, and readiness-history payloads |
 | `training-durability-view.helper.ts` | Context grouping, comparison rows, tones, and weekly trajectory models |
 | `training-explanation-view.helper.ts` | Load, contributor, sport-driver, rhythm, and coverage cards |
 | `training-power-profile.helper.ts` | 90-day versus one-year power retention |
+| `dashboard-training-insights.helper.ts` | Live readiness adapter and bounded sleep window |
+| `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend geometry |
 | `training-recovery-estimate.helper.ts` | Imported recovery countdown wording |
 | `training-sport-visibility.helper.ts` | Automatic/fixed sport resolution and compact labels |
 | `training-swim-performance.helper.ts` | Swim pace units and pool/open-water chart model |
@@ -176,9 +219,19 @@ cloning a second activity metric object.
 
 ### Sleep sessions
 
-Training uses main overnight sleep sessions for contextual comparisons. Naps are excluded. Sleep is fetched only when
-`training_build_comparison` is requested because that snapshot owns both the top 28-day recovery context and per-build
-sleep comparisons.
+Training uses main overnight sleep sessions for contextual comparisons. Naps are excluded. The backend has two narrow
+sleep sources: `training_build_comparison` fetches the 28/84-day and selected build ranges, while `training_readiness`
+fetches a bounded sleep-end envelope of about 43 days. That envelope lets each of the 14 daily cutoffs independently
+apply the canonical 30-day sleep lookback without querying event or activity history. Separately, Training Readiness and
+the fixed Dashboard Today Readiness summary each use the same bounded live-query contract: it is lower-bounded to the
+last 30 days, keeps an open upper bound for newly imported nights, and never loads event or activity history. A local
+refresh timer re-evaluates the shared result when a future-dated record becomes eligible, the latest night reaches its
+48-hour limit,
+or a night leaves the 30-day baseline window; it reschedules after every boundary and caps long browser timers. Both
+live and backend paths reject unknown providers or invalid sleep dates, ignore non-positive physiological samples, and
+discard unusable timezone offsets instead of letting malformed evidence change or break the result. The backend readiness
+projection must include average and minimum sleep HR as well as HRV fields; the shared formula gives average sleep HR
+priority when building the single Overnight HR driver.
 
 ### Settings
 
@@ -268,6 +321,7 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `training_explanation` | What drove this | Parent events plus joined child activities |
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
 | `training_build_comparison` | Best Build and sleep context | Activities, settings, parent events, sleep |
+| `training_readiness` | Readiness 14-day trend | Form snapshot seed plus bounded sleep sessions |
 | `training_swim_performance` | Pool/open-water pace and contextual SWOLF | Activities plus active swim lengths |
 
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
@@ -278,9 +332,10 @@ kinds are excluded from the default Dashboard subscription and freshness scope. 
 `training_durability` to that scope only while a matching explicitly configured tile exists. Opening a normal Dashboard
 therefore does not create a hidden Training dependency or freshness probe for those kinds.
 
-### Dashboard insight reuse
+### Shared Dashboard and Training insight reuse
 
-The configurable Dashboard can present a narrow, read-only view of selected Training evidence:
+The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while current Readiness
+is fixed inside the optional Today summary:
 
 - **Aerobic Capacity** selects the most recent imported running or cycling VO2 max, displays its provider/source
   provenance, and compares only observations from the same source. FTP settings and modeled critical power never become
@@ -289,29 +344,43 @@ The configurable Dashboard can present a narrow, read-only view of selected Trai
   The card selects the current context with the most eligible samples, then uses eligibility ratio and discipline priority
   as deterministic tie-breakers, followed by the lexical context key when every meaningful signal is equal. Running,
   Cycling, and Open water show aerobic decoupling; Pool shows pace retention. Missing weeks remain gaps.
-- **Readiness Signals** is a Dashboard-only frontend heuristic. It combines available current Form/ramp, sleep score or
-  duration, HRV versus the user's recent recorded baseline, and overnight minimum heart rate versus that baseline. Its
-  sleep evidence comes from a dedicated live query lower-bounded to the current 30-day lookback, independent of the
-  pageable Sleep chart. The open upper bound lets a dashboard left open receive newly imported nights. The latest
-  aggregated non-nap night must be no more than 48 hours old. Future-dated records are ignored and cannot suppress the
-  latest valid night; HRV and minimum-heart-rate baselines use up to 14 prior nights from the same provider. An expiry
-  timer rebuilds the card when that 48-hour boundary is crossed even if no new data arrives. A historical composite
-  readiness series is not shown because historical Form/ramp and sleep signals are not currently aligned into one series.
-  The score and evidence confidence are separate, missing inputs remain missing, and the result is not a medical score, a
-  VO2 estimate, or a change to the curated Training state.
-  Training continues to treat sleep as non-causal context.
+- **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
+  it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
+  backend-derived
+  `training_readiness` snapshot containing 14 UTC-aligned daily cutoffs. Each historical day uses the Form state for that
+  day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff; a night older than 48 hours is
+  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider
+  and require at least three prior values for the matching measure. Average and minimum HR are not independent score
+  drivers: their ratios are bounded to `0.8..1.2`, then combined into one Overnight HR ratio at 70% average and 30%
+  minimum, with fallback to whichever is available. Lower HR relative to personal baseline supports that driver. The
+  live sleep query is lower-bounded to 30 days and keeps an open upper bound so an open page can
+  receive newly imported nights. The backend sleep query is bounded at both ends to the envelope required for all 14
+  cutoffs, and the formula then applies its own 30-day lookback at each cutoff. Future records are ignored. Training
+  replaces the final chart point with the live current result only when the retained snapshot is for the current UTC day,
+  so the headline and today's dot stay in sync without plotting a new score on yesterday after a day rollover. Score,
+  status, confidence, timestamp, driver freshness, baseline evidence count, and missing values stay separate. Persisting
+  the baseline count lets the frontend verify historical confidence against the shared formula instead of accepting only
+  a plausible range. The combined load freshness uses the oldest contributing Form/ramp timestamp so one fresh input
+  cannot hide a stale one. The result is not a medical score, VO2 estimate, workout prescription, or change to the
+  curated Training state; the implication text remains neutral and asks the user to inspect evidence rather than obey a
+  score. Dashboard Today shows the same four driver groups and stops its bounded listener when Today is hidden. The
+  retired pre-release raw value `KpiReadinessConfidence` has a narrow cleanup predicate for local preview settings; it
+  is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
+  sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
+  cannot select different latest evidence because query order changed.
 
 Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
 useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
-its default 14-day window, Readiness accepts sleep-only evidence only when its latest aggregated non-nap night is no more
-than 48 hours old, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild merely
-because the manager dialog was opened.
+its default 14-day window, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild
+merely because the manager dialog was opened.
 
 ### Writes and ingress
 
 - Event creates, updates, and deletes enqueue debounced derived-metric ingress.
 - Activity creates, updates, and deletes enqueue the same ingress.
-- Sleep writes enqueue only `training_build_comparison` and do not increment the event mutation version.
+- Sleep writes enqueue `training_build_comparison` and `training_readiness` and do not increment the event mutation
+  version. Readiness itself has no activity dependency and can reuse the Form seed; the pre-existing build comparison
+  still owns the wider activity/settings scan needed for build-range recovery context.
 - The benchmark callable marks only `training_build_comparison` dirty.
 - The visibility callable writes settings only; it does not rebuild data because visibility is presentation state.
 
@@ -334,6 +403,20 @@ On `/training`, the frontend:
 Missing, failed, or stale kinds have a 30-second request cooldown. Healthy scopes still receive a lightweight freshness
 probe with a five-minute cooldown. The callable compares coordinator/snapshot state, the calendar day, mutation versions,
 and the latest event update before deciding whether to queue work.
+
+Readiness payload validity is also checked in the callable with the same environment-neutral runtime validator used by
+the frontend. A `ready` document that predates a required history field or otherwise fails that contract is therefore
+treated as stale by both layers. Snapshot-specific freshness failures enqueue only the affected kinds even when the
+initial page probe contains the complete Training scope, so this case queues only `training_readiness`. A mixed probe
+queues the ordered union of hard snapshot failures and calendar-stale kinds; if the latest-event fallback detects a
+missed event trigger, it queues the complete requested scope. That targeted repair reuses a compatible Form snapshot
+seed and the bounded sleep envelope; it does not trigger an event or activity history scan. Keep the validator shared
+when the readiness payload evolves so backend freshness cannot call an invalid document fresh while the frontend remains
+indefinitely on Preparing.
+
+The readiness payload also carries `formulaVersion: 3`. This is intentionally independent of the global derived schema:
+changing the current/historical readiness formula or its persisted input projection invalidates only
+`training_readiness`, preserving compatible snapshots for every unrelated kind.
 
 This probe is important in local development and recovery scenarios: opening Training can repair missing or stale
 snapshots even when no new Firestore write arrives.
@@ -430,6 +513,49 @@ The frontend classifies existing form signals in this order:
 
 If all state inputs are missing, the page shows an awaiting-data state rather than guessing.
 
+#### Readiness today
+
+Training renders one wide Readiness card instead of separate top-level readiness and sleep cards. The current result is
+contextual rather than causal or prescriptive. It calls the same shared formula as the fixed Dashboard Today summary and
+combines only:
+
+- the current UTC-day Form series as one 40% Load driver (with the Form Now/Ramp snapshots used only when the series cannot provide the needed value);
+- sleep score when recorded, otherwise a duration-based score centered on eight hours, at 25%;
+- latest-night HRV versus up to 14 prior nights from the same provider, at 20%; and
+- one 15% Overnight HR driver that blends same-provider average sleep HR (70%) and minimum sleep HR (30%).
+
+Each available HR ratio is bounded to 80–120% of its own baseline before blending; if one HR measure is unavailable,
+the other supplies the driver. Lower HR supports the score only relative to the user's own provider-matched baseline
+and is not a universal medical claim. Missing drivers are excluded and available weights are renormalized rather than treating
+missing evidence as zero.
+
+Provider coverage follows the normalized sleep document rather than assumptions about a device. The current Suunto
+mapper persists average and minimum sleep HR, the COROS mapper persists average sleep HR, and the Garmin Health sleep
+summary mapper currently persists neither normalized sleep-HR measure. The score therefore uses only the measures that
+are actually present; provider-specific omissions remain missing and do not become neutral or zero-valued evidence.
+
+The sleep listener is lower-bounded to 30 days, excludes naps, ignores future-dated records, and accepts a latest night
+only through 48 hours after its end. The card also refreshes when a future record becomes eligible or baseline evidence
+leaves the 30-day window, even if Firestore emits nothing. Score, status, confidence, calculation timestamp, signal
+count, driver values, and driver freshness are shown separately. Combined Form/ramp freshness is the oldest contributing
+timestamp. The training implication is deliberately non-prescriptive: it summarizes whether evidence is supportive,
+mixed, or strained and directs attention to the drivers rather than choosing a workout. Failed Form/ramp reads and a
+failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
+failure remains visible only while it is still eligible; load-only readiness remains available afterward.
+
+The same card plots a backend-derived 14-day series. `training_readiness` declares only `formDocs` and
+`trainingReadinessSleepDocs`; it never declares activities or settings. On a readiness-only refresh, the worker accepts a
+schema-compatible Form snapshot seed, avoids a full event scan, and queries a bounded sleep-end envelope covering every
+daily cutoff's own 30-day lookback. Each daily point evaluates the shared formula at that UTC day's final millisecond,
+except today, which uses the worker build timestamp. Missing scores remain chart gaps and the frontend rejects malformed,
+non-contiguous, or internally inconsistent payloads, including confidence that does not match the recorded signal and
+baseline evidence counts. The latest complete series may remain visible while its status is updating or after a failed
+refresh. The live current calculation replaces today's plotted score only when the snapshot's `asOfDayMs` is the current
+UTC day, so newly imported sleep can update the card without waiting for a historical snapshot and a stale series cannot
+mislabel a new score as yesterday's. An open Training route schedules a narrow UTC-day rollover refresh for `form_now`,
+`ramp_rate`, `form_plus_7d`, `freshness_forecast`, and `training_readiness`. Those projection-sensitive kinds can reuse a compatible Form seed and do not
+require an event or activity scan.
+
 #### Recovery remaining
 
 `recovery_now` combines supported imported post-workout recovery estimates. The card counts down using the stored end
@@ -437,9 +563,9 @@ time. It is explicitly labeled as an imported estimate, not readiness, and does 
 worker scans a bounded 16-day event window; no events in that window is a valid empty result for new or inactive users
 and is logged as informational rather than a warning.
 
-#### Recorded sleep alongside training
+#### Recovery history
 
-The main recovery comparison uses:
+The expandable Recovery history inside Readiness uses:
 
 - Current: the current 28-day window.
 - Reference: the immediately preceding 84-day window.
@@ -503,6 +629,10 @@ available distance, duration, and TSS provide identity.
 The callable writes only `trainingSettings.buildBenchmarks.{discipline}`. Clearing uses field deletion. It then dirties
 only `training_build_comparison` without incrementing the event mutation version.
 
+Save failures remain visible in the dialog and are also announced through the shared Material snackbar, because the
+inline error can sit below the viewport in the long mobile event picker. Known App Check failures use actionable
+secure-session copy instead of exposing raw Firebase transport details.
+
 #### Compared workload
 
 Each current and benchmark window contains:
@@ -549,9 +679,17 @@ The cards show:
 - the sport bucket with the largest absolute TSS change; and
 - the discipline with the largest active-day change.
 
+The rhythm card never selects a dormant discipline (zero sessions and active days in both windows). When active-day
+changes tie, it prefers the discipline with more observed active days, then sessions, before using a lexical tie-break.
+
 Rhythm includes session count, active days, active weeks, longest inactivity gap, and longest session. Coverage text makes
 missing parent TSS and unclassified child activity types visible. A sparse one-off baseline must not be described as a
 confident usual pattern.
+
+The four driver cards use one balanced row on wide screens, a two-by-two tablet layout, and a single mobile column.
+Within each card, the card heading, primary comparison, supporting explanation, and coverage note use distinct type
+levels. Contributor events render as separate list items so an event label and its load share do not split into an
+ambiguous separator-delimited sentence.
 
 ### 4. Load Trajectory
 
@@ -576,6 +714,12 @@ ATL_today = ATL_previous + (load_today - ATL_previous) / 7
 Form      = CTL - ATL
 ```
 
+Every Training and Dashboard “current” load surface resolves this same model through the current UTC day. If no TSS
+has been recorded on an intervening day, that day is explicitly zero load; CTL and ATL still decay at their respective
+rates, so TSB and Ramp Rate can change without a new workout. CTL, ATL, Form Now/TSB, and Ramp Rate are all taken from
+this one current-day Form series. Ramp Rate is `CTL(today) - CTL(today - 7 UTC days)`. The last real workout’s TSS is
+shown separately and is never replaced by an assumed zero.
+
 The forecast is a scenario with zero future load, not a prediction of what the athlete will actually do.
 
 ### 5. Training Mix
@@ -591,6 +735,14 @@ duration but not to the zone denominator.
 
 The separate intensity-distribution chart is global and can include any activity with eligible power or heart-rate zone
 data. It is not filtered by the sport visibility control.
+
+On desktop, Training Mix uses its actual visible-discipline count rather than auto-fitting empty grid tracks: one
+discipline pairs a matched-height summary with the intensity chart. The summary keeps activity totals at the top and uses
+the otherwise available vertical space for a clear current-versus-usual intensity balance: each zone has a current share,
+normalized baseline share, current fill, and baseline marker. It deliberately does not add redundant load, readiness, or
+capacity metrics just to fill the card. The chart's nested loading host participates in the card's flex height so the plot
+occupies the remaining canvas. Two and three disciplines use compact balanced summary rows with the global chart below.
+Tablet and mobile retain the stacked responsive layout.
 
 ### 6. Settings vs Recent Evidence
 
@@ -804,6 +956,20 @@ and SWOLF change. Training compares:
 - Twelve fixed UTC weeks for the trajectory.
 - Up to five recent supporting eligible activities.
 
+The 12-week chart is a durability trend, not a general power-availability chart. For cycling power contexts, the
+frontend reports candidates, activities whose processed durability evidence confirms recorded power, eligible samples,
+and the primary ineligibility reasons already present in the snapshot. The power-confirmed count is the evidence count
+minus `missing-output` exclusions; it does not query activity history. Bar height shows power-recorded activities, the
+compact bar label shows `eligible / power-recorded`, and the line appears only for eligible aerobic-decoupling evidence.
+A stored Power Curve alone therefore does not guarantee a durability point. Sports-lib records one primary eligibility
+reason per activity, so aggregate exclusion copy must call these **primary exclusions** rather than implying an
+exhaustive list of every threshold that activity missed.
+
+The trajectory chart host is conditionally mounted only after its view model exists. Its Angular view query must remain
+dynamic and initialize through the shared ECharts host controller when that element appears; a static query resolves
+before the conditional view and leaves the chart blank. The component lifecycle spec must exercise that delayed host
+insertion rather than only assigning a synthetic element before testing chart options.
+
 The usual value is withheld unless evidence exists in at least two baseline blocks with at least two samples in total.
 Best Build requires at least two samples on both sides of the exact context.
 
@@ -842,12 +1008,33 @@ is treated as stale and re-requested.
 
 UI principles:
 
+- Primary numeric and stat values use the app's locally bundled Barlow Condensed family with tabular numerals. In mixed
+  stat copy, only numeric expressions and their attached units use Barlow Condensed; comparison words and other context
+  inherit Inter. Headings, labels, status words, and narrative explanations remain in Inter. ECharts continues to use its
+  shared Barlow Condensed font token so chart typography matches the surrounding Training metrics.
+- On desktop, Training uses a 15 px route base with 14 px card-body copy, 13 px captions, 12 px microcopy, and 11 px fine
+  print. Mobile restores the compact 14/13/12/11/10 px scale. Card titles stay at 16 px and secondary key stats at 20 px,
+  matching embedded Dashboard charts. The four primary **What Drove This** comparison claims use 24 px to lead their cards.
+  Hero summaries remain intentionally larger, while dense comparison tables, supporting chart values, and evidence captions
+  remain intentionally smaller.
+- Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
+  containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
+  confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
+- Responsive icon-only Training actions hide only their projected text label and reset Material's icon-and-text margins,
+  keeping the visible icon centered without suppressing Material focus, ripple, or touch-target elements.
+- Readiness history uses its parent `qs-glass-card-panel` surface and the app's divider token rather than a nested neutral
+  container. On desktop, its 14 daily marks and connecting line remain deliberately compact so the recent trend supports
+  the current signal instead of overpowering it.
+- Durability evidence and its trajectory inherit their parent Training card surface. Borders and dividers preserve the
+  hierarchy without stacking gray inset surfaces inside the card.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.
 - A chart with no previous payload is not mounted while its snapshot builds. Training shows a compact, bounded status card
   instead, so chart minimum heights and overlays cannot stretch or bleed during the initial load.
 - A valid payload with zero eligible data shows a domain-specific empty state, not a spinner.
+- A durability week without an eligible sample must expose candidate/input counts and primary exclusion reasons rather
+  than using an unexplained `Empty` label.
 - Null optional metrics render as an em dash or unavailable copy, never zero.
 - Compact loading cards remain readable without reserving the full chart canvas. Ready empty states keep the full chart card
   height so their domain-specific explanation is not compressed.
@@ -979,6 +1166,8 @@ training-derived-metrics.helper.spec.ts
 training-durability-view.helper.spec.ts
 training-explanation-view.helper.spec.ts
 training-power-profile.helper.spec.ts
+dashboard-training-insights.helper.spec.ts
+training-readiness.helper.spec.ts
 training-recovery-estimate.helper.spec.ts
 training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
@@ -1003,6 +1192,10 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - event and manual benchmark flows for 8/10/12 weeks;
 - no TSS, no zones, no pace, no SWOLF, and no sleep;
 - limited and cross-provider sleep;
+- Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, and
+  expandable Recovery history states;
+- Dashboard Today Readiness with full, partial, and missing evidence, plus Today hidden and retired local-preview tile
+  cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;
 - one and multiple capacity/power cards;
 - loading, stale, failed, and valid empty snapshots;
@@ -1018,6 +1211,10 @@ Start with the repository workflows in `.agent/workflows/serve-local.md` and
 The localhost frontend normally calls emulated Functions; `local-prod-functions` explicitly targets production Functions.
 Backend code can still reach real services depending on environment variables and credentials, so verify the active
 project and never assume `localhost` means isolated data.
+
+The Functions emulator sets `FUNCTIONS_EMULATOR=true`, which bypasses the manual callable App Check guard only inside
+that local worker. Production and beta callables continue to require App Check. This keeps a hosted debug-token exchange
+failure from blocking a loopback Training refresh; it does not weaken deployed endpoints.
 
 Derived metrics also require the Cloud Tasks emulator configuration used by this repository. When
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production

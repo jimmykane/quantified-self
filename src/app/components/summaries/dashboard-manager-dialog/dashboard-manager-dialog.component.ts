@@ -75,7 +75,6 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardCuratedChartType,
@@ -87,6 +86,7 @@ import {
   isDashboardCuratedChartType,
   isDashboardEventBackedSpecialChartType,
   isDashboardRecoveryNowChartType,
+  isRetiredDashboardReadinessConfidenceKpiChartType,
   isDashboardSpecialChartType,
   resolveDashboardChartCategory,
 } from '../../../helpers/dashboard-special-chart-types';
@@ -161,10 +161,8 @@ import {
 import {
   buildDashboardAerobicCapacityContext,
   buildDashboardAerobicDurabilityContext,
-  buildDashboardReadinessSignalsContext,
 } from '../../../helpers/dashboard-training-insights.helper';
 import { buildDashboardPowerCurveContextFromSnapshot } from '../../../helpers/dashboard-power-curve.helper';
-import { buildDashboardSleepTrendContext } from '../../../helpers/dashboard-sleep-chart.helper';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import type { SleepSession } from '@shared/sleep';
 
@@ -172,6 +170,7 @@ export interface DashboardManagerDialogData {
   user: AppUserInterface;
   initialMode?: 'add' | 'edit';
   initialEditTileOrder?: number | null;
+  previewTodaySummaryVisibility?: (showTodaySummary: boolean) => void;
 }
 
 export interface DashboardManagerDialogResult {
@@ -197,11 +196,12 @@ interface IconOption<TValue> {
 
 interface DashboardManagerSettingsSnapshot {
   tiles: TileSettingsInterface[];
+  showTodaySummary?: boolean;
   dismissedCuratedRecoveryNowTile?: boolean;
   autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
-type DashboardManagerSavingAction = 'save' | 'addRecommended' | 'addAll' | 'removeAll' | null;
+type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'addRecommended' | 'addAll' | 'removeAll' | null;
 
 @Component({
   selector: 'app-dashboard-manager-dialog',
@@ -362,7 +362,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'query_stats',
     [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'air',
     [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'timeline',
-    [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'fact_check',
   };
   public readonly kpiChartDescriptionByType: Record<DashboardKpiChartType, string> = {
     [DASHBOARD_ACWR_KPI_CHART_TYPE]: 'Acute/chronic workload ratio with 8-week sparkline.',
@@ -382,7 +381,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     [DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'Current efficiency vs prior 4-week baseline.',
     [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'Latest imported VO2 max with same-source history.',
     [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'Long-session decoupling or pool pace retention from persisted evidence.',
-    [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE]: 'Load, sleep, HRV, and overnight heart-rate signals with explicit confidence.',
   };
   public readonly mapStyleOptions: Array<{ value: MapStyleName; label: string }> = [
     { value: 'default', label: 'Default' },
@@ -433,6 +431,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public isSaving = false;
   public savingAction: DashboardManagerSavingAction = null;
   public saveError = '';
+  public showTodaySummary = true;
   public recommendedEligibility: DashboardManagerPresetEligibility = {
     'activity-history': false,
     sleep: false,
@@ -440,13 +439,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     'running-power': false,
     'aerobic-capacity': false,
     'aerobic-durability': false,
-    'readiness-signals': false,
     'event-map': false,
     routes: false,
   };
   private hasSavedChanges = false;
-  private hasCurrentReadinessSleep = false;
-  private hasDerivedReadinessLoad = false;
   private bulkEligibilitySubscription = new Subscription();
   private shouldAutoFocusEditSection = false;
 
@@ -486,6 +482,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     if (!Array.isArray(this.data.user.settings.dashboardSettings.tiles)) {
       this.data.user.settings.dashboardSettings.tiles = [];
     }
+    this.showTodaySummary = this.data.user.settings.dashboardSettings.showTodaySummary !== false;
 
     this.dataGroups = this.buildDataGroups();
     this.ensurePresetSelection();
@@ -520,6 +517,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
   get dashboardTiles(): TileSettingsInterface[] {
     return [...(this.data?.user?.settings?.dashboardSettings?.tiles || [])]
+      .filter(tile => !(
+        tile.type === TileTypes.Chart
+        && isRetiredDashboardReadinessConfidenceKpiChartType((tile as TileChartSettingsInterface).chartType)
+      ))
       .sort((left, right) => left.order - right.order);
   }
 
@@ -590,15 +591,15 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   get isAddRecommendedDisabled(): boolean {
-    return this.isSaving || this.getMissingRecommendedDashboardTiles().length === 0;
+    return this.isSaving || (this.showTodaySummary && this.getMissingRecommendedDashboardTiles().length === 0);
   }
 
   get isAddAllDisabled(): boolean {
-    return this.isSaving || this.getMissingAllDashboardTiles().length === 0;
+    return this.isSaving || (this.showTodaySummary && this.getMissingAllDashboardTiles().length === 0);
   }
 
   get isRemoveAllDisabled(): boolean {
-    return this.isSaving || this.dashboardTiles.length === 0;
+    return this.isSaving || (this.dashboardTiles.length === 0 && !this.showTodaySummary);
   }
 
   get isSaveSaving(): boolean {
@@ -615,6 +616,34 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
   get isRemoveAllSaving(): boolean {
     return this.savingAction === 'removeAll';
+  }
+
+  get isTodaySummarySaving(): boolean {
+    return this.savingAction === 'todaySummary';
+  }
+
+  async onTodaySummaryVisibilityChange(showTodaySummary: boolean): Promise<void> {
+    if (this.isSaving || this.showTodaySummary === showTodaySummary) {
+      return;
+    }
+
+    this.hapticsService.selection();
+    this.startSaving('todaySummary');
+    this.saveError = '';
+    const dashboardSettings = this.data.user.settings.dashboardSettings;
+    const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
+
+    try {
+      this.setTodaySummaryVisibility(dashboardSettings, showTodaySummary);
+      await this.persistDashboardSettings(dashboardSettings);
+      this.hasSavedChanges = true;
+      this.hapticsService.success();
+    } catch (error) {
+      this.rollbackDashboardSettings(dashboardSettings, previousSettings);
+      this.handleDashboardSettingsSaveError(error);
+    } finally {
+      this.stopSaving();
+    }
   }
 
   onModeChange(nextMode: 'add' | 'edit'): void {
@@ -958,7 +987,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     try {
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
       const missingTiles = this.getMissingAllDashboardTiles(clonedTiles);
-      if (!missingTiles.length) {
+      if (!missingTiles.length && this.showTodaySummary) {
         this.saveError = 'All available dashboard tiles are already on your dashboard.';
         this.stopSaving();
         return;
@@ -972,6 +1001,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }
 
       dashboardSettings.tiles = clonedTiles;
+      this.setTodaySummaryVisibility(dashboardSettings, true);
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
@@ -1000,7 +1030,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       await this.refreshRecommendedEligibility();
       const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
       const missingTiles = this.getMissingRecommendedDashboardTiles(clonedTiles);
-      if (!missingTiles.length) {
+      if (!missingTiles.length && this.showTodaySummary) {
         this.saveError = 'All recommended dashboard tiles for your available data are already present.';
         this.stopSaving();
         return;
@@ -1014,6 +1044,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }
 
       dashboardSettings.tiles = clonedTiles;
+      this.setTodaySummaryVisibility(dashboardSettings, true);
       this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
@@ -1045,6 +1076,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
     try {
       dashboardSettings.tiles = [];
+      this.setTodaySummaryVisibility(dashboardSettings, false);
       this.markAllDashboardAutoTilesDismissed(dashboardSettings, Date.now());
       dashboardSettings.dismissedCuratedRecoveryNowTile = true;
       await this.persistDashboardSettings(dashboardSettings);
@@ -1170,6 +1202,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   ): DashboardManagerSettingsSnapshot {
     return {
       tiles: this.cloneTiles(dashboardSettings.tiles || []),
+      showTodaySummary: dashboardSettings.showTodaySummary,
       dismissedCuratedRecoveryNowTile: dashboardSettings.dismissedCuratedRecoveryNowTile,
       autoTiles: this.cloneAutoTiles(dashboardSettings.autoTiles || {}),
     };
@@ -1180,19 +1213,44 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     previousSettings: DashboardManagerSettingsSnapshot,
   ): void {
     dashboardSettings.tiles = this.cloneTiles(previousSettings.tiles);
+    if (previousSettings.showTodaySummary === undefined) {
+      delete dashboardSettings.showTodaySummary;
+    } else {
+      dashboardSettings.showTodaySummary = previousSettings.showTodaySummary;
+    }
+    this.showTodaySummary = previousSettings.showTodaySummary !== false;
+    this.data.previewTodaySummaryVisibility?.(this.showTodaySummary);
     dashboardSettings.dismissedCuratedRecoveryNowTile = previousSettings.dismissedCuratedRecoveryNowTile;
     dashboardSettings.autoTiles = previousSettings.autoTiles as AppDashboardSettingsInterface['autoTiles'];
   }
 
   private handleDashboardSettingsSaveError(error: unknown): void {
-    this.saveError = 'Could not save dashboard tile settings.';
+    this.saveError = 'Could not save dashboard settings.';
     this.hapticsService.error();
-    console.error('[DashboardManagerDialogComponent] Failed to save dashboard tile settings', error);
+    console.error('[DashboardManagerDialogComponent] Failed to save dashboard settings', error);
+  }
+
+  private setTodaySummaryVisibility(
+    dashboardSettings: AppDashboardSettingsInterface,
+    showTodaySummary: boolean,
+  ): void {
+    dashboardSettings.showTodaySummary = showTodaySummary;
+    this.showTodaySummary = showTodaySummary;
+    this.data.previewTodaySummaryVisibility?.(showTodaySummary);
   }
 
   private async persistDashboardSettings(dashboardSettings: AppDashboardSettingsInterface): Promise<void> {
+    const tiles = this.cloneTiles(dashboardSettings.tiles || [])
+      .filter(tile => !(
+        tile.type === TileTypes.Chart
+        && isRetiredDashboardReadinessConfidenceKpiChartType((tile as TileChartSettingsInterface).chartType)
+      ))
+      .sort((left, right) => left.order - right.order)
+      .map((tile, index) => ({ ...tile, order: index } as TileSettingsInterface));
+    dashboardSettings.tiles = tiles;
     const dashboardSettingsPatch: Partial<AppDashboardSettingsInterface> = {
-      tiles: dashboardSettings.tiles || [],
+      tiles,
+      showTodaySummary: dashboardSettings.showTodaySummary !== false,
     };
     if (dashboardSettings.autoTiles !== undefined) {
       dashboardSettingsPatch.autoTiles = dashboardSettings.autoTiles;
@@ -1520,8 +1578,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   private async confirmRemoveAllTiles(): Promise<boolean> {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Remove all dashboard tiles?',
-        message: 'This clears every chart and map tile from your dashboard. Automatic dashboard suggestions will also stay dismissed until you add them again.',
+        title: 'Clear dashboard?',
+        message: 'This hides the Today summary and clears every chart and map tile. Automatic dashboard suggestions will also stay dismissed until you add them again.',
         confirmLabel: 'Remove all',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',
@@ -1707,15 +1765,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     this.recommendedEligibility['event-map'] = hasEvents;
   }
 
-  private updateSleepEligibility(sessions: readonly SleepSession[], nowMs = Date.now()): void {
+  private updateSleepEligibility(sessions: readonly SleepSession[]): void {
     this.recommendedEligibility.sleep = sessions.length > 0;
-    this.hasCurrentReadinessSleep = buildDashboardReadinessSignalsContext({
-      sleepTrend: buildDashboardSleepTrendContext(sessions, { nowMs }),
-      nowMs,
-    }) !== null;
-    this.recommendedEligibility['readiness-signals'] = (
-      this.hasCurrentReadinessSleep || this.hasDerivedReadinessLoad
-    );
   }
 
   private updateDerivedEligibility(
@@ -1737,16 +1788,10 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     });
     this.recommendedEligibility['cycling-power'] = !!cyclingPower?.matchedEventCount && cyclingPower.series.length > 0;
     this.recommendedEligibility['running-power'] = !!runningPower?.matchedEventCount && runningPower.series.length > 0;
-    this.hasDerivedReadinessLoad = state.formNow !== null || state.rampRate !== null;
-    this.recommendedEligibility['readiness-signals'] = (
-      this.hasCurrentReadinessSleep || this.hasDerivedReadinessLoad
-    );
   }
 
   private getBulkEligibilityMetricKinds() {
     return [
-      DERIVED_METRIC_KINDS.FormNow,
-      DERIVED_METRIC_KINDS.RampRate,
       DERIVED_METRIC_KINDS.TrainingCapacity,
       DERIVED_METRIC_KINDS.TrainingDurability,
       DERIVED_METRIC_KINDS.PowerCurve,
@@ -1757,8 +1802,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     Object.keys(this.recommendedEligibility).forEach((key) => {
       this.recommendedEligibility[key as keyof DashboardManagerPresetEligibility] = false;
     });
-    this.hasCurrentReadinessSleep = false;
-    this.hasDerivedReadinessLoad = false;
   }
 
   private markAllDashboardAutoTilesDismissed(

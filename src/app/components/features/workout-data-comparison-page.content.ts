@@ -69,7 +69,7 @@ export const COMPARISON_SEARCH_INTENT_ITEMS: readonly ComparisonFeatureItem[] = 
   {
     icon: 'sync_alt',
     title: 'Garmin and COROS to Suunto sync context',
-    copy: 'Connect source services once, enable the explicit route toggle, and keep new Garmin or COROS activities moving to Suunto while existing workouts remain available for catch-up sync.',
+    copy: 'Connect your services once and automatically send new Garmin or COROS activities to Suunto. You can also choose a date range to sync past activities.',
   },
   {
     icon: 'hub',
@@ -107,7 +107,7 @@ export const COMPARISON_FAQ_ITEMS: readonly ComparisonFaqItem[] = [
   },
   {
     question: 'Can I sync Garmin data to Suunto automatically?',
-    answer: 'Yes. Connect Garmin and Suunto, enable the Garmin -> Suunto route toggle in Services, and newly imported Garmin activities can be sent to Suunto automatically.',
+    answer: 'Yes. Connect Garmin and Suunto, turn on automatic activity sync in Connections, and new Garmin activities can be sent to Suunto automatically.',
   },
 ];
 
@@ -144,8 +144,8 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
       'Custom FIT and TCX workout file comparison',
       'Sports watch review benchmark reports',
       'Private Garmin training dashboard',
-      'Garmin -> Suunto sync',
-      'COROS -> Suunto sync',
+      'Garmin to Suunto activity sync',
+      'COROS to Suunto activity sync',
     ],
     mainEntity: [
       {

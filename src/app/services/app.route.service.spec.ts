@@ -81,6 +81,28 @@ describe('AppRouteService', () => {
         expect(result).toEqual([{ id: 'route-1', name: 'Route 1' }]);
     });
 
+    it('lists every route without adding a query limit', async () => {
+        vi.mocked(collectionData).mockReturnValue(of([
+            { id: 'route-1', name: 'Route 1' },
+            { id: 'route-2', name: 'Route 2' },
+        ]));
+
+        const result = await firstValueFrom(service.getAllRoutes({ uid: 'user-1' }));
+
+        expect(collection).toHaveBeenCalledWith(firestoreMock, 'users', 'user-1', 'routes');
+        expect(orderBy).not.toHaveBeenCalled();
+        expect(limit).not.toHaveBeenCalled();
+        expect(query).not.toHaveBeenCalled();
+        expect(collectionData).toHaveBeenCalledWith(
+            { path: 'users/user-1/routes' },
+            { idField: 'id' },
+        );
+        expect(result).toEqual([
+            { id: 'route-1', name: 'Route 1' },
+            { id: 'route-2', name: 'Route 2' },
+        ]);
+    });
+
     it('keeps nullable metric sorts on the default server query', async () => {
         vi.mocked(collectionData).mockReturnValue(of([{ id: 'route-1', name: 'Route 1' }]));
 

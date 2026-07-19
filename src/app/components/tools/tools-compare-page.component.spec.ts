@@ -186,6 +186,7 @@ describe('ToolsComparePageComponent', () => {
     normalizeDeviceColorKey: ReturnType<typeof vi.fn>;
   };
   let analyticsServiceMock: {
+    logToolCompareView: ReturnType<typeof vi.fn>;
     logToolCompareCreate: ReturnType<typeof vi.fn>;
     logToolCompareFileSelection: ReturnType<typeof vi.fn>;
     logToolCompareSavedAction: ReturnType<typeof vi.fn>;
@@ -317,6 +318,7 @@ describe('ToolsComparePageComponent', () => {
       normalizeDeviceColorKey: vi.fn((name: string) => normalizeDeviceColorKey(name)),
     };
     analyticsServiceMock = {
+      logToolCompareView: vi.fn(),
       logToolCompareCreate: vi.fn(),
       logToolCompareFileSelection: vi.fn(),
       logToolCompareSavedAction: vi.fn(),
@@ -362,6 +364,10 @@ describe('ToolsComparePageComponent', () => {
     component = fixture.componentInstance;
     overlayContainer = TestBed.inject(OverlayContainer);
     fixture.detectChanges();
+  });
+
+  it('tracks the initial comparison route view', () => {
+    expect(analyticsServiceMock.logToolCompareView).toHaveBeenCalledWith('new', false);
   });
 
   it('renders the public compare tool and guest sign-in state', () => {

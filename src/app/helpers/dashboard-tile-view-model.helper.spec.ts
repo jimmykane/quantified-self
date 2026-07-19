@@ -39,9 +39,9 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
+  RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import type { EventStatAggregationResult } from '@shared/event-stat-aggregation.types';
 import { getDashboardPowerCurveActivityTypes } from './dashboard-power-curve-scope.helper';
@@ -1231,13 +1231,14 @@ describe('dashboard-tile-view-model.helper', () => {
     });
 
     expect((viewModels[0] as any).chartType).toBe(DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE);
-    expect((viewModels[0] as any).formNow?.value).toBe(-6);
+    expect((viewModels[0] as any).formNow?.latestDayMs).toBe(Date.UTC(2026, 0, 8));
+    expect((viewModels[0] as any).formNow?.value).toBeCloseTo(3.2891, 4);
     expect((viewModels[0] as any).rampRate?.rampRate).toBe(1.6);
     expect((viewModels[0] as any).fitnessCtl?.value).toBeCloseTo(40.0238, 4);
     expect((viewModels[0] as any).fatigueAtl?.value).toBeCloseTo(36.7347, 4);
     expect((viewModels[1] as any).fitnessCtl?.value).toBeCloseTo(40.0238, 4);
     expect((viewModels[2] as any).fatigueAtl?.value).toBeCloseTo(36.7347, 4);
-    expect((viewModels[3] as any).formNow?.value).toBe(-6);
+    expect((viewModels[3] as any).formNow?.value).toBeCloseTo(3.2891, 4);
     expect((viewModels[3] as any).formPlus7d?.value).toBe(4);
     expect((viewModels[3] as any).freshnessForecast).toEqual(freshnessForecast);
     expect((viewModels[4] as any).easyPercent?.value).toBe(68);
@@ -1451,7 +1452,7 @@ describe('dashboard-tile-view-model.helper', () => {
     vi.useRealTimers();
   });
 
-  it('should attach capacity, durability, and current readiness evidence to insight KPI tiles', () => {
+  it('should attach capacity and durability evidence while ignoring the retired readiness preview tile', () => {
     const nowMs = Date.UTC(2026, 0, 8, 12);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
@@ -1460,7 +1461,7 @@ describe('dashboard-tile-view-model.helper', () => {
       tiles: [
         DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
         DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
-        DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
+        RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
       ].map((chartType, order) => ({
         type: TileTypes.Chart,
         order,
@@ -1472,15 +1473,6 @@ describe('dashboard-tile-view-model.helper', () => {
         size: { columns: 1, rows: 1 },
       })) as any,
       events: [],
-      readinessSleepSessions: [{
-        id: 'sleep-1',
-        sleepDate: '2026-01-08',
-        startTimeMs: nowMs - (9 * 60 * 60 * 1000),
-        endTimeMs: nowMs - (60 * 60 * 1000),
-        durationSeconds: 8 * 60 * 60,
-        score: { value: 88 },
-        source: { provider: 'GarminAPI', sourceSessionKey: 'sleep-1' },
-      } as any],
       derivedMetrics: {
         formNow: { value: 10, latestDayMs: nowMs, trend8Weeks: [] } as any,
         rampRate: { rampRate: 1.5, latestDayMs: nowMs, trend8Weeks: [] } as any,
@@ -1531,11 +1523,7 @@ describe('dashboard-tile-view-model.helper', () => {
       value: 3.2,
       contextLabel: 'Grade-adjusted speed',
     });
-    expect((viewModels[2] as any).readinessSignals).toMatchObject({
-      rampRate: 1.5,
-      sleepScore: 88,
-      latestSleepAtMs: nowMs - (60 * 60 * 1000),
-    });
+    expect(viewModels).toHaveLength(2);
 
     vi.useRealTimers();
   });

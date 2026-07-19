@@ -28,7 +28,6 @@ import type { DashboardPowerCurveContext } from '../../../helpers/dashboard-powe
 import type {
   DashboardAerobicCapacityContext,
   DashboardAerobicDurabilityContext,
-  DashboardReadinessSignalsContext,
 } from '../../../helpers/dashboard-training-insights.helper';
 import type {
   DashboardSleepTrendNavigationDirection,
@@ -55,7 +54,6 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
@@ -146,7 +144,6 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() powerCurve?: DashboardPowerCurveContext | null;
   @Input() aerobicCapacity?: DashboardAerobicCapacityContext | null;
   @Input() aerobicDurability?: DashboardAerobicDurabilityContext | null;
-  @Input() readinessSignals?: DashboardReadinessSignalsContext | null;
   @Input() sleepTrendRange?: AppDashboardSleepTrendRange;
   @Input() sleepTrendWindowLabel?: string | null;
   @Input() sleepTrendCanNavigateOlder = false;
@@ -166,7 +163,6 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() efficiencyTrendStatus?: DashboardDerivedMetricStatus | null;
   @Input() aerobicCapacityStatus?: DashboardDerivedMetricStatus | null;
   @Input() aerobicDurabilityStatus?: DashboardDerivedMetricStatus | null;
-  @Input() readinessSignalsStatus?: DashboardDerivedMetricStatus | null;
   @Input() absoluteLatestFormPoint?: DashboardFormPoint | null;
   @Input()
   set derivedChartRange(value: AppDashboardDerivedChartRange | null | undefined) {
@@ -219,7 +215,6 @@ export class TileChartComponent extends TileAbstractDirective {
   public efficiencyDelta4wKpiChartType = DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE;
   public aerobicCapacityKpiChartType = DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE;
   public aerobicDurabilityKpiChartType = DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE;
-  public readinessConfidenceKpiChartType = DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE;
   public freshnessForecastChartType = DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE;
   public intensityDistributionChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;

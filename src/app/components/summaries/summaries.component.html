@@ -1,7 +1,10 @@
-@if (tiles.length || showActions) {
+@if (tiles.length || showActions || showTodaySummary) {
 <section class="pie">
-  @if (showActions || kpiLaneTiles.length) {
-  <div class="dashboard-section-header dashboard-summary-header" aria-labelledby="dashboard-today-title">
+  @if (showTodaySummary || showActions) {
+  <div class="dashboard-section-header dashboard-summary-header" [class.dashboard-summary-header-actions-only]="!showTodaySummary"
+    [attr.aria-labelledby]="showTodaySummary ? 'dashboard-today-title' : null"
+    [attr.aria-label]="showTodaySummary ? null : 'Dashboard controls'">
+    @if (showTodaySummary) {
     <div class="dashboard-section-title-block">
       <mat-icon aria-hidden="true">today</mat-icon>
       <div class="dashboard-section-title-copy">
@@ -11,8 +14,13 @@
         </div>
       </div>
     </div>
+    }
     @if (showActions) {
     <div class="dashboard-section-actions">
+      <a mat-stroked-button class="dashboard-training-link" routerLink="/training" aria-label="Open Training workspace">
+        <mat-icon aria-hidden="true">monitoring</mat-icon>
+        <span>Open Training</span>
+      </a>
       <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
         (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
         <mat-icon>add_chart</mat-icon>
@@ -26,19 +34,27 @@
     }
   </div>
   }
-  <section class="dashboard-current-state-row" aria-label="Current training state">
+  @if (showTodaySummary) {
+  <section class="dashboard-current-state-row" aria-label="Current readiness signals">
     <div class="dashboard-current-state-primary">
-      <span>Current state</span>
-      <strong>{{ dashboardCurrentState.stateLabel }}</strong>
-      <small>{{ dashboardCurrentState.stateCaption }}</small>
+      <span>Readiness</span>
+      <div class="dashboard-readiness-primary-value">
+        <strong>{{ dashboardTodayReadiness.label }}</strong>
+        <b>{{ dashboardTodayReadiness.scoreText }}</b>
+      </div>
+      <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
+      @if (dashboardTodayReadiness.recoveryText !== '--') {
+      <small>Imported recovery · {{ dashboardTodayReadiness.recoveryText }}</small>
+      }
     </div>
     <dl>
-      <div><dt>Form</dt><dd>{{ dashboardCurrentState.formText }}</dd></div>
-      <div><dt>Recovery</dt><dd>{{ dashboardCurrentState.recoveryText }}</dd></div>
-      <div><dt>Ramp</dt><dd>{{ dashboardCurrentState.rampText }}</dd></div>
-      <div><dt>CTL / ATL</dt><dd>{{ dashboardCurrentState.ctlAtlText }}</dd></div>
+      <div><dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd><small>Form / ramp</small></div>
+      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><small>Latest eligible night</small></div>
+      <div><dt>HRV</dt><dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd><small>vs baseline</small></div>
+      <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><small>vs baseline · lower supports</small></div>
     </dl>
   </section>
+  }
   @if (derivedMetricsBanner) {
   <div class="derived-metrics-banner" [class.pending]="derivedMetricsBanner.type === 'pending'"
     [class.warning]="derivedMetricsBanner.type === 'warning'">
@@ -91,7 +107,6 @@
           [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
           [aerobicCapacity]="getChartTile(tile).aerobicCapacity" [aerobicCapacityStatus]="getAerobicCapacityStatusForTile(tile)"
           [aerobicDurability]="getChartTile(tile).aerobicDurability" [aerobicDurabilityStatus]="getAerobicDurabilityStatusForTile(tile)"
-          [readinessSignals]="getChartTile(tile).readinessSignals" [readinessSignalsStatus]="getReadinessSignalsStatusForTile(tile)"
           [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
           [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
           [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"
@@ -169,7 +184,6 @@
             [efficiencyTrend]="getChartTile(tile).efficiencyTrend" [efficiencyTrendStatus]="getEfficiencyTrendStatusForTile(tile)"
             [aerobicCapacity]="getChartTile(tile).aerobicCapacity" [aerobicCapacityStatus]="getAerobicCapacityStatusForTile(tile)"
             [aerobicDurability]="getChartTile(tile).aerobicDurability" [aerobicDurabilityStatus]="getAerobicDurabilityStatusForTile(tile)"
-            [readinessSignals]="getChartTile(tile).readinessSignals" [readinessSignalsStatus]="getReadinessSignalsStatusForTile(tile)"
             [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
             [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
             [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"

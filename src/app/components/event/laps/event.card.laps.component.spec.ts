@@ -83,6 +83,19 @@ describe('EventCardLapsComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
     });
 
+    it('should exclude laps with a missing type from the rendered lap tables', () => {
+        const activity = createActivity([
+            createRenderableLap(undefined),
+        ]);
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        expect(component.availableLapTypes).toEqual([]);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
+    });
+
     it('should not render the index column header icon', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.html'),

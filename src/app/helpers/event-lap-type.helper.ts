@@ -49,16 +49,17 @@ export function buildAllowedEventLapTypeSet(lapTypes: readonly EventLapTypeInput
 }
 
 export function isEventLapTypeAllowed(lapType: EventLapTypeInput, allowedLapTypes: readonly EventLapTypeInput[]): boolean {
-  if (isExcludedEventLapType(lapType)) {
+  const normalizedLapType = normalizeEventLapType(lapType);
+  if (normalizedLapType === '' || EXCLUDED_EVENT_LAP_TYPE_SET.has(normalizedLapType)) {
     return false;
   }
 
   const allowedLapTypeSet = buildAllowedEventLapTypeSet(allowedLapTypes);
-  return allowedLapTypeSet.size === 0 || allowedLapTypeSet.has(normalizeEventLapType(lapType));
+  return allowedLapTypeSet.size === 0 || allowedLapTypeSet.has(normalizedLapType);
 }
 
 export function hasVisibleEventLaps(activities: readonly EventLapActivityLike[] | null | undefined): boolean {
   return (activities || []).some((activity) =>
-    (activity.getLaps() || []).some((lap: EventLapLike) => !isExcludedEventLapType(lap.type))
+    (activity.getLaps() || []).some((lap: EventLapLike) => isEventLapTypeAllowed(lap.type, []))
   );
 }

@@ -1,14 +1,3 @@
-<p class="description-text">
-  Garmin designs and builds products that enhance people’s lives. Since the company’s inception, the Garmin brand
-  has been defined by its products.
-</p>
-<p class="service-privacy-link">
-  <mat-icon>policy</mat-icon>
-  <a class="tool-link" [routerLink]="['/policies']" fragment="garmin-data">
-    Privacy details for Garmin data, sync, and processors
-  </a>
-</p>
-
 <ng-template #garminPermissionUpdateGuidance>
   <p><strong>To update permissions:</strong></p>
   <a class="tool-link" (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)">
@@ -16,18 +5,23 @@
   </a>
   <p><strong>Navigate to:</strong></p>
   <ul class="permissions-list">
-    <li><strong>Web:</strong> Account Information -> Connected Apps</li>
-    <li><strong>App:</strong> More -> Settings -> Connected Apps</li>
+    <li><strong>Web:</strong> Account Information, then Connected Apps</li>
+    <li><strong>App:</strong> More, Settings, then Connected Apps</li>
   </ul>
   <p class="permission-description">After updating permissions, reconnect to refresh.</p>
 </ng-template>
 
-<div class="service-container">
+<div
+  class="service-container"
+  [class.service-container--advanced]="showAdvancedTools"
+  [class.service-container--tools-only]="!showConnectionSummary">
+  @if (showConnectionSummary) {
   <app-service-connection-status
     serviceLabel="Garmin Connect"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
+    [compact]="!showAdvancedTools"
     [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [showDetails]="isConnectedToService() || isReconnectRequired || isDisconnectPending"
@@ -69,7 +63,7 @@
       <div class="connected-account-item" role="listitem">
         <mat-icon class="connected-account-icon">route</mat-icon>
         <div class="connected-account-copy">
-          <div class="connected-account-title">Route Delivery Account</div>
+          <div class="connected-account-title">Routes use this Garmin account</div>
           <div class="connected-account-line">
             {{ routeSendGarminUserID }}
             @if (routeSendConnectedAt) {
@@ -147,9 +141,14 @@
 
     </div>
   </app-service-connection-status>
+  }
 
+  @if (showAdvancedTools) {
+  @if (showConnectionSummary) {
   <mat-divider class="connection-tools-divider"></mat-divider>
+  }
 
+  @if (!showOnlyActiveProviderTool) {
   <nav
     mat-tab-nav-bar
     [tabPanel]="providerToolsPanel"
@@ -174,13 +173,20 @@
       (click)="$event.preventDefault(); selectProviderTool('auto-sync')">
       <span class="provider-tab-label">
         <mat-icon>published_with_changes</mat-icon>
-        <span>Auto Sync</span>
+        <span>Activity Sync</span>
       </span>
     </a>
     }
   </nav>
-
   <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">
+    <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  </mat-tab-nav-panel>
+  } @else {
+  <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  }
+
+  <ng-template #providerToolsContent>
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'history'"
@@ -206,63 +212,66 @@
       </app-status-info>
       }
     </section>
+    }
 
-    @if (isGarminToSuuntoRouteAvailableForUser) {
+    @if (isGarminToSuuntoRouteAvailableForUser && (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync')) {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'auto-sync'"
       [class.locked-panel]="!hasProAccess"
         (click)="!hasProAccess && triggerUpsell()">
-        <div class="tool-subsection-title">
-          <mat-icon>published_with_changes</mat-icon>
-          <span>Garmin -> Suunto Sync</span>
-        </div>
+        @if (!showOnlyActiveProviderTool) {
+          <div class="tool-subsection-title">
+            <mat-icon>published_with_changes</mat-icon>
+            <span>Send Garmin activities to Suunto</span>
+          </div>
+        }
         @if (!hasProAccess) {
         <div class="pro-required-inline">
           <mat-icon>lock</mat-icon>
-          <span>Garmin -> Suunto sync is a Pro feature.</span>
+          <span>Sending Garmin activities to Suunto is a Pro feature.</span>
         </div>
         } @else if (isSuuntoReconnectRequired) {
         <app-status-info type="info" title="Reconnect Suunto Required">
-          Suunto needs to be reconnected before Garmin -> Suunto sync can run.
+          Reconnect Suunto before syncing Garmin activities.
         </app-status-info>
         } @else if (!isConnectedToService() || !isSuuntoConnected) {
         <app-status-info type="info" title="Connect Garmin + Suunto First">
-          Garmin and Suunto must both be connected before route sync can run.
+          Connect Garmin and Suunto before syncing activities.
         </app-status-info>
         } @else {
         <mat-slide-toggle [checked]="isGarminToSuuntoRouteEnabled" [disabled]="isSavingSyncRoute || isBackfillingSync"
           (change)="onGarminToSuuntoRouteToggle($event.checked)">
-          Enable automatic sync for new Garmin imports
+          Automatically send new Garmin activities to Suunto
         </mat-slide-toggle>
 
         @if (missingPermissions.includes('ACTIVITY_EXPORT')) {
         <div class="qs-warning-box">
           <mat-icon>warning</mat-icon>
           <div class="qs-warning-content">
-            <strong>Garmin Activity Export Permission Needed</strong>
-            <p>Grant Garmin <code>ACTIVITY_EXPORT</code> permission to receive new activity callbacks for sync.</p>
+            <strong>Allow automatic Garmin activity sync</strong>
+            <p>Reconnect Garmin and allow Activity Export so new Garmin activities can be sent to Suunto automatically.</p>
           </div>
         </div>
         }
 
         <mat-divider class="tool-divider"></mat-divider>
 
-        <div class="tool-section-title">Manual Catch-up</div>
-        <app-status-info type="info" title="Manual Catch-up Scope">
-          Use this anytime to queue Garmin -> Suunto sync jobs for activities already imported into Quantified Self in
-          the selected date range. It uses stored original files and can run even when automatic sync is turned off.
+        <div class="tool-section-title">Sync past activities</div>
+        <app-status-info type="info" title="Choose which activities to send">
+          Choose a date range to send Garmin activities already in Quantified Self to Suunto. You can do this even
+          when automatic activity sync is off.
         </app-status-info>
         <div class="date-fields">
           <mat-form-field appearance="outline">
-            <mat-label>Start Date</mat-label>
+            <mat-label>From</mat-label>
             <input matInput [matDatepicker]="syncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
               [ngModelOptions]="{standalone: true}" (click)="syncStartDatePicker.open()">
             <mat-datepicker-toggle matSuffix [for]="syncStartDatePicker"></mat-datepicker-toggle>
             <mat-datepicker #syncStartDatePicker></mat-datepicker>
           </mat-form-field>
           <mat-form-field appearance="outline">
-            <mat-label>End Date</mat-label>
+            <mat-label>To</mat-label>
             <input matInput [matDatepicker]="syncEndDatePicker" [min]="backfillStartDate" [(ngModel)]="backfillEndDate"
               [ngModelOptions]="{standalone: true}" (click)="syncEndDatePicker.open()">
             <mat-datepicker-toggle matSuffix [for]="syncEndDatePicker"></mat-datepicker-toggle>
@@ -276,20 +285,20 @@
           @if (isBackfillingSync) {
           <ng-container>
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-            Running Backfill...
+            Starting sync...
           </ng-container>
           } @else {
           <ng-container>
-            Queue now
+            Sync activities
           </ng-container>
           }
         </button>
 
         @if (backfillSummary) {
-        <app-status-info type="success" title="Backfill Summary">
-          <div>Scanned: {{ backfillSummary.scanned }} | Queued: {{ backfillSummary.queued }}</div>
+        <app-status-info type="success" title="Activity sync started">
+          <div>Found: {{ backfillSummary.scanned }} | Scheduled: {{ backfillSummary.queued }}</div>
           @if (backfillSummary.failedCount > 0) {
-          <div>Failed: {{ backfillSummary.failedCount }}</div>
+          <div>Could not schedule: {{ backfillSummary.failedCount }}</div>
           @if (backfillSummary.failedEvents?.length) {
           <ul class="backfill-summary-list">
             <li *ngFor="let failedEvent of backfillSummary.failedEvents">
@@ -303,17 +312,6 @@
         }
       </section>
     }
-  </mat-tab-nav-panel>
-
-  @if (hasProAccess && (isConnectedToService() || isReconnectRequired)) {
-  <mat-divider class="connection-tools-divider"></mat-divider>
-  <app-status-info [type]="routeSendStatusType" [title]="routeSendStatusTitle">
-    <div>{{ routeSendStatusMessage }}</div>
-    @if (routeSendMissingPermissions.length > 0) {
-    <div class="route-send-permission-guidance">
-      <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
-    </div>
-    }
-  </app-status-info>
+  </ng-template>
   }
 </div>

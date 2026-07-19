@@ -2,13 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, doc, docData, getDocs, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
 
 import { Auth } from 'app/firebase/auth';
-import { Observable, from, switchMap, filter, take, map, timeout, firstValueFrom } from 'rxjs';
+import type { FirebaseUserType } from 'app/firebase/auth';
+import { Observable, catchError, from, switchMap, filter, take, map, of, retry, throwError, timeout, timer, firstValueFrom } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -88,6 +89,8 @@ export class AppPaymentService {
     private dialog = inject(MatDialog);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
+    private readonly subscriptionReadRetryAttempts = 4;
+    private readonly subscriptionReadRetryDelayMs = 750;
     private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
 
     constructor(private windowService: AppWindowService, private logger: LoggerService) { }
@@ -309,15 +312,19 @@ export class AppPaymentService {
         user: { getIdToken: (forceRefresh?: boolean) => Promise<string> },
         attempt: number
     ): Promise<void> {
+        this.assertCheckoutUserStillCurrent(userId);
         const checkoutInput = this.resolveCheckoutInput(price);
         const trialPeriodDays = await this.resolveTrialPeriodDaysForCheckout(price);
+        this.assertCheckoutUserStillCurrent(userId);
 
-        await this.runPreCheckoutLinkCheck(user);
+        await this.runPreCheckoutLinkCheck(user, userId);
+        this.assertCheckoutUserStillCurrent(userId);
 
         const shouldExitCheckout = await this.handleExistingActiveSubscriptions(userId);
         if (shouldExitCheckout) {
             return;
         }
+        this.assertCheckoutUserStillCurrent(userId);
 
         this.logger.log('Creating checkout session for price:', checkoutInput.priceId, 'mode:', checkoutInput.mode);
         const checkoutSessionsRef = collection(this.firestore, `customers/${userId}/checkout_sessions`);
@@ -346,6 +353,7 @@ export class AppPaymentService {
             }
             return;
         }
+        this.assertCheckoutUserStillCurrent(userId);
 
         if (session.error) {
             const errorMessage = this.getCheckoutErrorMessage(session.error);
@@ -420,15 +428,20 @@ export class AppPaymentService {
         return Number.parseInt(normalizedTrialDays, 10);
     }
 
-    private async runPreCheckoutLinkCheck(user: { getIdToken: (forceRefresh?: boolean) => Promise<string> }): Promise<void> {
+    private async runPreCheckoutLinkCheck(
+        user: { getIdToken: (forceRefresh?: boolean) => Promise<string> },
+        userId: string
+    ): Promise<void> {
         try {
             const result = await this.functionsService.call<void, { linked: boolean, role?: string }>('linkExistingStripeCustomer');
+            this.assertCheckoutUserStillCurrent(userId);
             if (!result.data.linked) {
                 return;
             }
 
             this.logger.log(`Existing subscription found and linked. Role: ${result.data.role}. Skipping checkout.`);
             await user.getIdToken(true);
+            this.assertCheckoutUserStillCurrent(userId);
             throw new Error(`SUBSCRIPTION_RESTORED:${result.data.role}`);
         } catch (error: unknown) {
             if (error instanceof Error && error.message.startsWith('SUBSCRIPTION_RESTORED:')) {
@@ -443,11 +456,10 @@ export class AppPaymentService {
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
         try {
-            const activeSubs = await firstValueFrom(
-                collectionData(activeQuery).pipe(take(1))
-            );
+            const activeSubscriptionsSnapshot = await getDocsFromServer(activeQuery);
+            this.assertCheckoutUserStillCurrent(userId);
 
-            if (!activeSubs.length) {
+            if (!activeSubscriptionsSnapshot.docs.length) {
                 return false;
             }
 
@@ -466,7 +478,8 @@ export class AppPaymentService {
                 throw new Error(this.userCancelledPortalMessage);
             }
 
-            await this.manageSubscriptions();
+            this.assertCheckoutUserStillCurrent(userId);
+            await this.manageSubscriptions(userId);
             return true;
         } catch (error) {
             if (error instanceof Error && error.message === this.userCancelledPortalMessage) {
@@ -474,7 +487,13 @@ export class AppPaymentService {
             }
 
             this.logger.error('Error checking existing subscriptions:', error);
-            return false;
+            throw error;
+        }
+    }
+
+    private assertCheckoutUserStillCurrent(userId: string): void {
+        if (this.auth.currentUser?.uid !== userId) {
+            throw new Error('Authenticated user changed while checkout was being prepared. Please try again.');
         }
     }
 
@@ -549,6 +568,10 @@ export class AppPaymentService {
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
         return collectionData(activeQuery, { idField: 'id' }).pipe(
+            retry({
+                count: this.subscriptionReadRetryAttempts,
+                delay: (error, retryCount) => this.getSubscriptionReadRetryNotifier(user, error, retryCount),
+            }),
             map(docs => docs as StripeSubscription[]),
             switchMap((subscriptions: StripeSubscription[]) => {
                 if (subscriptions.length === 0) return from([[]]);
@@ -583,15 +606,103 @@ export class AppPaymentService {
         ) as Observable<(StripeSubscription & { role?: string })[]>;
     }
 
-    async hasPaidSubscriptionHistory(): Promise<boolean> {
+    private getSubscriptionReadRetryNotifier(
+        user: FirebaseUserType,
+        error: unknown,
+        retryCount: number
+    ): Observable<unknown> {
+        if (this.auth.currentUser?.uid !== user.uid) {
+            return throwError(() => error);
+        }
+
+        if (!this.isRecoverableSubscriptionReadError(error)) {
+            return throwError(() => error);
+        }
+
+        const code = this.getErrorCode(error);
+        const retryDelayMs = this.subscriptionReadRetryDelayMs * Math.pow(2, retryCount - 1);
+        this.logger.warn('[AppPaymentService] Retrying subscription listener after a recoverable read failure.', {
+            uid: user.uid,
+            code,
+            retryCount,
+            retryDelayMs,
+        });
+
+        if (!this.isSubscriptionAuthenticationReadError(error)) {
+            return this.waitForSubscriptionRetryDelay(user, error, retryDelayMs);
+        }
+
+        return from(user.getIdToken(true)).pipe(
+            catchError((tokenError) => {
+                if (this.isRecoverableSubscriptionReadError(tokenError)) {
+                    this.logger.warn('[AppPaymentService] Auth refresh was temporarily unavailable; retrying the subscription read.', {
+                        uid: user.uid,
+                        code: this.getErrorCode(tokenError),
+                        retryCount,
+                    });
+                    return of(null);
+                }
+                return throwError(() => tokenError);
+            }),
+            switchMap(() => this.waitForSubscriptionRetryDelay(user, error, retryDelayMs))
+        );
+    }
+
+    private waitForSubscriptionRetryDelay(
+        user: FirebaseUserType,
+        originalError: unknown,
+        retryDelayMs: number
+    ): Observable<unknown> {
+        return timer(retryDelayMs).pipe(
+            switchMap(() => this.auth.currentUser?.uid === user.uid
+                ? of(null)
+                : throwError(() => originalError))
+        );
+    }
+
+    private isRecoverableSubscriptionReadError(error: unknown): boolean {
+        const code = this.getErrorCode(error);
+        return this.isPermissionDenied(error)
+            || code === 'unauthenticated'
+            || code === 'firestore/unauthenticated'
+            || code === 'unavailable'
+            || code === 'firestore/unavailable'
+            || code === 'deadline-exceeded'
+            || code === 'firestore/deadline-exceeded'
+            || code === 'aborted'
+            || code === 'firestore/aborted'
+            || code === 'cancelled'
+            || code === 'firestore/cancelled'
+            || code === 'network-request-failed'
+            || code === 'auth/network-request-failed';
+    }
+
+    private isPermissionDenied(error: unknown): boolean {
+        const code = this.getErrorCode(error);
+        return code === 'permission-denied' || code === 'firestore/permission-denied';
+    }
+
+    private isSubscriptionAuthenticationReadError(error: unknown): boolean {
+        const code = this.getErrorCode(error);
+        return this.isPermissionDenied(error)
+            || code === 'unauthenticated'
+            || code === 'firestore/unauthenticated';
+    }
+
+    private getErrorCode(error: unknown): string | null {
+        const code = (error as { code?: unknown } | null)?.code;
+        return typeof code === 'string' ? code : null;
+    }
+
+    async hasPaidSubscriptionHistory(): Promise<boolean | null> {
         return this.checkPaidSubscriptionHistory('fail-open');
     }
 
     private async hasPaidSubscriptionHistoryForCheckoutEligibility(): Promise<boolean> {
-        return this.checkPaidSubscriptionHistory('fail-closed');
+        return (await this.checkPaidSubscriptionHistory('fail-closed')) ?? true;
     }
 
-    private async checkPaidSubscriptionHistory(onError: 'fail-open' | 'fail-closed'): Promise<boolean> {
+    private async checkPaidSubscriptionHistory(onError: 'fail-open' | 'fail-closed'): Promise<boolean | null> {
         const user = this.auth.currentUser;
         if (!user) {
             return false;
@@ -605,7 +716,7 @@ export class AppPaymentService {
         );
 
         try {
-            const snapshot = await getDocs(historyQuery);
+            const snapshot = await getDocsFromServer(historyQuery);
             return snapshot.docs.length > 0;
         } catch (error) {
             if (onError === 'fail-closed') {
@@ -613,8 +724,8 @@ export class AppPaymentService {
                 return true;
             }
 
-            this.logger.warn('Could not verify subscription history. Proceeding with trial messaging (fail-open).', error);
-            return false;
+            this.logger.warn('Could not verify subscription history. Suppressing trial messaging until the read recovers.', error);
+            return null;
         }
     }
 
@@ -666,11 +777,17 @@ export class AppPaymentService {
     /**
      * Opens the Stripe Customer Portal for managing subscriptions.
      */
-    async manageSubscriptions(): Promise<void> {
+    async manageSubscriptions(expectedUserId?: string): Promise<void> {
+        const userId = expectedUserId ?? this.auth.currentUser?.uid;
+        if (!userId) {
+            throw new Error('User must be authenticated to manage subscriptions.');
+        }
+        this.assertCheckoutUserStillCurrent(userId);
         const returnUrl = `${this.windowService.currentDomain}/subscriptions`;
 
         try {
             const result = await this.functionsService.call<{ returnUrl: string }, { url: string }>('createPortalLink', { returnUrl });
+            this.assertCheckoutUserStillCurrent(userId);
             window.location.assign(result.data.url);
         } catch (error) {
             this.logger.error('Error creating portal link:', error);

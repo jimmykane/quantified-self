@@ -34,11 +34,11 @@ class MockDashboardTileEventFiltersComponent {
 }
 
 @Component({
-  selector: 'app-dashboard-route-preview-map',
+  selector: 'app-route-preview-map',
   template: '',
   standalone: false,
 })
-class MockDashboardRoutePreviewMapComponent {
+class MockRoutePreviewMapComponent {
   @Input() routes: any[] = [];
   @Input() isLoading = false;
   @Input() mapStyle = 'default';
@@ -55,7 +55,7 @@ describe('TileMapComponent', () => {
         TileMapComponent,
         MockTileMapActionsComponent,
         MockDashboardTileEventFiltersComponent,
-        MockDashboardRoutePreviewMapComponent,
+        MockRoutePreviewMapComponent,
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -138,9 +138,9 @@ describe('TileMapComponent', () => {
     expect(header.querySelector('.tile-event-filter-controls')).toBeNull();
     expect(fixture.debugElement.query(By.directive(MockDashboardTileEventFiltersComponent))).toBeNull();
     expect(body.querySelector('app-events-map')).toBeNull();
-    expect(body.querySelector('app-dashboard-route-preview-map')).toBeTruthy();
-    const routeMap = fixture.debugElement.query(By.directive(MockDashboardRoutePreviewMapComponent))
-      .componentInstance as MockDashboardRoutePreviewMapComponent;
+    expect(body.querySelector('app-route-preview-map')).toBeTruthy();
+    const routeMap = fixture.debugElement.query(By.directive(MockRoutePreviewMapComponent))
+      .componentInstance as MockRoutePreviewMapComponent;
     expect(routeMap.routes).toEqual([{ id: 'route-1' }]);
     expect(routeMap.showEndpointMarkers).toBe(false);
   });

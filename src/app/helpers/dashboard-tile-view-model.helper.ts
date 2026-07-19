@@ -46,6 +46,8 @@ import type {
 import {
   resolveDashboardFatigueAtlContext,
   resolveDashboardFitnessCtlContext,
+  resolveDashboardFormNowContextFromPoints,
+  resolveDashboardRampRateContextFromPoints,
 } from './dashboard-derived-metrics.helper';
 import {
   buildDashboardSleepTrendContext,
@@ -69,10 +71,8 @@ import type {
 import {
   buildDashboardAerobicCapacityContext,
   buildDashboardAerobicDurabilityContext,
-  buildDashboardReadinessSignalsContext,
   type DashboardAerobicCapacityContext,
   type DashboardAerobicDurabilityContext,
-  type DashboardReadinessSignalsContext,
 } from './dashboard-training-insights.helper';
 import {
   DASHBOARD_TILE_EVENT_DEFAULT_RANGE,
@@ -100,7 +100,6 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
@@ -126,7 +125,7 @@ import {
   isDashboardRampRateKpiChartType,
   isDashboardRecoveryDebtKpiChartType,
   isDashboardRecoveryNowChartType,
-  isDashboardReadinessConfidenceKpiChartType,
+  isRetiredDashboardReadinessConfidenceKpiChartType,
   isDashboardSleepTrendChartType,
   isDashboardPowerCurveChartType,
   isDashboardTrainingBalanceKpiChartType,
@@ -160,7 +159,6 @@ export interface DashboardChartTileViewModel extends AppDashboardChartTileSettin
   powerCurve?: DashboardPowerCurveContext | null;
   aerobicCapacity?: DashboardAerobicCapacityContext | null;
   aerobicDurability?: DashboardAerobicDurabilityContext | null;
-  readinessSignals?: DashboardReadinessSignalsContext | null;
 }
 
 export type DashboardMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & AppDashboardMapTileSettingsInterface & {
@@ -183,7 +181,6 @@ interface BuildDashboardTileViewModelsInput {
   tileEventsByOrder?: Record<number, EventInterface[] | undefined> | null;
   routePreviews?: FirestoreRouteJSON[] | null;
   sleepSessions?: SleepSession[] | null;
-  readinessSleepSessions?: SleepSession[] | null;
   sleepTrendWindow?: DashboardSleepTrendWindow | null;
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
@@ -296,13 +293,18 @@ export function buildDashboardTileViewModels(
 ): DashboardTileViewModel[] {
   const normalizedEvents = normalizeDashboardTileEvents(input.events);
   const derivedFormPoints = Array.isArray(input.derivedMetrics?.formPoints) ? input.derivedMetrics?.formPoints : null;
+  const nowMs = Date.now();
   const derivedRecoveryNowContext = input.derivedMetrics?.recoveryNow || null;
   const derivedAcwrContext = input.derivedMetrics?.acwr || null;
-  const derivedRampRateContext = input.derivedMetrics?.rampRate || null;
+  const derivedRampRateContext = resolveDashboardRampRateContextFromPoints(derivedFormPoints, nowMs)
+    || input.derivedMetrics?.rampRate
+    || null;
   const derivedMonotonyStrainContext = input.derivedMetrics?.monotonyStrain || null;
-  const derivedFormNowContext = input.derivedMetrics?.formNow || null;
-  const derivedFitnessCtlContext = resolveDashboardFitnessCtlContext(derivedFormPoints);
-  const derivedFatigueAtlContext = resolveDashboardFatigueAtlContext(derivedFormPoints);
+  const derivedFormNowContext = resolveDashboardFormNowContextFromPoints(derivedFormPoints, nowMs)
+    || input.derivedMetrics?.formNow
+    || null;
+  const derivedFitnessCtlContext = resolveDashboardFitnessCtlContext(derivedFormPoints, nowMs);
+  const derivedFatigueAtlContext = resolveDashboardFatigueAtlContext(derivedFormPoints, nowMs);
   const derivedFormPlus7dContext = input.derivedMetrics?.formPlus7d || null;
   const derivedEasyPercentContext = input.derivedMetrics?.easyPercent || null;
   const derivedHardPercentContext = input.derivedMetrics?.hardPercent || null;
@@ -314,15 +316,8 @@ export function buildDashboardTileViewModels(
   const sleepTrendContext = buildDashboardSleepTrendContext(input.sleepSessions || [], {
     sleepWindow: input.sleepTrendWindow || null,
   });
-  const readinessSleepTrendContext = buildDashboardSleepTrendContext(input.readinessSleepSessions || []);
   const aerobicCapacityContext = buildDashboardAerobicCapacityContext(input.derivedMetrics?.trainingCapacity);
   const aerobicDurabilityContext = buildDashboardAerobicDurabilityContext(input.derivedMetrics?.trainingDurability);
-  const readinessSignalsContext = buildDashboardReadinessSignalsContext({
-    formNow: derivedFormNowContext,
-    rampRate: derivedRampRateContext,
-    sleepTrend: readinessSleepTrendContext,
-  });
-
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
@@ -344,6 +339,11 @@ export function buildDashboardTileViewModels(
     }
 
     const chartTile = tile as AppDashboardChartTileSettingsInterface;
+    // Readiness is a fixed part of Dashboard Today. Ignore stale saved copies so
+    // users never see the same signal twice while settings are cleaned on save.
+    if (isRetiredDashboardReadinessConfidenceKpiChartType(chartTile.chartType)) {
+      return viewModels;
+    }
     const requestedTimeInterval = resolveDashboardCustomChartRequestedTimeInterval(chartTile);
     if (isDashboardFormChartType(chartTile.chartType)) {
       const fullFormPoints = derivedFormPoints || [];
@@ -548,17 +548,6 @@ export function buildDashboardTileViewModels(
         timeInterval: TimeIntervals.Weekly,
         data: [],
         aerobicDurability: aerobicDurabilityContext,
-      });
-      return viewModels;
-    }
-
-    if (isDashboardReadinessConfidenceKpiChartType(chartTile.chartType)) {
-      viewModels.push({
-        ...chartTile,
-        chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE as unknown as ChartTypes,
-        timeInterval: TimeIntervals.Daily,
-        data: [],
-        readinessSignals: readinessSignalsContext,
       });
       return viewModels;
     }

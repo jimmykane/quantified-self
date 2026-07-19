@@ -13,6 +13,7 @@ describe('help.content', () => {
   it('should expose the expected ordered section ids', () => {
     expect(HELP_SECTIONS.map(section => section.id)).toEqual<HelpSectionId[]>([
       'getting-started',
+      'training-analysis',
       'ai-insights',
       'plans-and-billing',
       'uploads-and-imports',
@@ -22,8 +23,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define seven unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(7);
+  it('should define eight unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(8);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -98,29 +99,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Training** remains the fixed analytical workspace');
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
-    expect(gettingStartedSection?.content).toContain('**Readiness Signals**');
-    expect(gettingStartedSection?.content).toContain('What drove this');
-    expect(gettingStartedSection?.content).toContain('neutral higher/lower language');
-    expect(gettingStartedSection?.content).toContain('plots a readable 12-week trajectory');
-    expect(gettingStartedSection?.content).toContain('empty weeks stay explicit');
-    expect(gettingStartedSection?.content).toContain('**Sports shown**');
-    expect(gettingStartedSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
-    expect(gettingStartedSection?.content).toContain('**Use automatic selection**');
-    expect(gettingStartedSection?.content).toContain('does not filter the overall comparison or **What drove this**');
-    expect(gettingStartedSection?.content).toContain('Mountain Biking groups');
-    expect(gettingStartedSection?.content).toContain('one activity leg at a time');
-    expect(gettingStartedSection?.content).toContain('shown first as quick picks');
-    expect(gettingStartedSection?.content).toContain('selecting an event never changes its tags');
-    expect(gettingStartedSection?.content).toContain('**Recovery context**');
-    expect(gettingStartedSection?.content).toContain('without changing the Training state');
-    expect(gettingStartedSection?.content).toContain('longest valid main overnight record');
-    expect(gettingStartedSection?.content).toContain('at least three recorded nights');
-    expect(gettingStartedSection?.content).toContain('at least five qualifying nights');
-    expect(gettingStartedSection?.content).toContain('Missing nights and missing HRV are never counted as zero');
-    expect(gettingStartedSection?.content).toContain('at least seven recorded nights and at least half of the window');
-    expect(gettingStartedSection?.content).toContain('keeps pool and open-water evidence separate');
-    expect(gettingStartedSection?.content).toContain('does not infer Critical Swim Speed');
-    expect(gettingStartedSection?.content).toContain('zero-session result');
+    expect(gettingStartedSection?.content).toContain('current **Readiness**');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
     expect(gettingStartedSection?.content).toContain('**Activity Overview**, **Routes & Maps**, and **Custom Charts**');
     expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
@@ -129,14 +108,91 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
-    expect(gettingStartedSection?.content).toContain('Imported VO₂ max');
-    expect(gettingStartedSection?.content).toContain('aggregate best 3–20 minute power curve');
-    expect(gettingStartedSection?.content).toContain("95% of that activity's 20-minute best");
-    expect(gettingStartedSection?.content).toContain('without large interpolation gaps');
-    expect(gettingStartedSection?.content).toContain('inconsistent body weights');
-    expect(gettingStartedSection?.content).toContain('does not by itself mean fitness declined');
-    expect(gettingStartedSection?.content).toContain('never a readiness score');
-    expect(gettingStartedSection?.content).toContain('**Durability** performance chart keeps its activity eligibility details collapsed');
+  });
+
+  it('should provide a dedicated Training analysis guide with evidence and missing-data rules', () => {
+    const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
+
+    expect(trainingSection?.content).toContain('What drove this');
+    expect(trainingSection?.content).toContain('neutral higher/lower language');
+    expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
+    expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
+    expect(trainingSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
+    expect(trainingSection?.content).toContain('**Sports shown**');
+    expect(trainingSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
+    expect(trainingSection?.content).toContain('**Use automatic selection**');
+    expect(trainingSection?.content).toContain('does not filter the overall comparison or **What drove this**');
+    expect(trainingSection?.content).toContain('Mountain Biking groups');
+    expect(trainingSection?.content).toContain('one activity leg at a time');
+    expect(trainingSection?.content).toContain('shown first as quick picks');
+    expect(trainingSection?.content).toContain('selecting an event never changes its tags');
+    expect(trainingSection?.content).toContain('**Recovery history**');
+    expect(trainingSection?.content).toContain('without changing the Training state');
+    expect(trainingSection?.content).toContain('same current formula as Dashboard Today');
+    expect(trainingSection?.content).toContain('Average HR leads the single Overnight HR driver at 70%, minimum HR contributes 30%');
+    expect(trainingSection?.content).toContain('Lower Overnight HR versus personal baseline supports readiness');
+    expect(trainingSection?.content).toContain('can provide both HR measures');
+    expect(trainingSection?.content).toContain('Garmin Health sleep summaries currently provide neither');
+    expect(trainingSection?.content).toContain('bounded 30-day sleep-only query');
+    expect(trainingSection?.content).toContain('does not load event or activity history');
+    expect(trainingSection?.content).toContain('Failed load or sleep reads are identified separately');
+    expect(trainingSection?.content).toContain('Sleep already loaded before a listener failure remains visible only while eligible');
+    expect(trainingSection?.content).toContain('context, not a workout instruction');
+    expect(trainingSection?.content).toContain('**14-day trend**');
+    expect(trainingSection?.content).toContain('without scanning activity history');
+    expect(trainingSection?.content).toContain('each daily point applies its own 30-day sleep window');
+    expect(trainingSection?.content).toContain('missing scores stay as gaps');
+    expect(trainingSection?.content).toContain('longest valid main overnight record');
+    expect(trainingSection?.content).toContain('at least three recorded nights');
+    expect(trainingSection?.content).toContain('at least five qualifying nights');
+    expect(trainingSection?.content).toContain('Missing nights and missing HRV are never counted as zero');
+    expect(trainingSection?.content).toContain('at least seven recorded nights and at least half of the window');
+    expect(trainingSection?.content).toContain('keeps pool and open-water evidence separate');
+    expect(trainingSection?.content).toContain('does not infer Critical Swim Speed');
+    expect(trainingSection?.content).toContain('zero-session result');
+    expect(trainingSection?.content).toContain('Imported VO₂ max');
+    expect(trainingSection?.content).toContain('aggregate best 3–20 minute power curve');
+    expect(trainingSection?.content).toContain("95% of that activity's 20-minute best");
+    expect(trainingSection?.content).toContain('without large interpolation gaps');
+    expect(trainingSection?.content).toContain('inconsistent body weights');
+    expect(trainingSection?.content).toContain('does not by itself mean fitness declined');
+    expect(trainingSection?.content).toContain('never a readiness score');
+    expect(trainingSection?.links).toContainEqual({
+      label: 'Open Training',
+      icon: 'monitoring',
+      kind: 'route',
+      target: '/training',
+    });
+  });
+
+  it('should link Getting Started to Training guidance and feedback', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
+
+    expect(gettingStartedSection?.content).toContain('**Training** is your fixed workspace');
+    expect(gettingStartedSection?.content).toContain('[Training analysis guide](/help#training-analysis)');
+    expect(gettingStartedSection?.content).toContain('[Training Analysis overview](/features/training-analysis)');
+    expect(gettingStartedSection?.content).toContain('**Feedback** action to email support');
+    expect(gettingStartedSection?.content).not.toContain('**Training (Beta)**');
+    expect(gettingStartedSection?.links).toContainEqual({
+      label: 'Training analysis guide',
+      icon: 'school',
+      kind: 'route',
+      target: '/help',
+      fragment: 'training-analysis',
+    });
+    expect(gettingStartedSection?.links).toContainEqual({
+      label: 'Training Analysis Overview',
+      icon: 'monitoring',
+      kind: 'route',
+      target: '/features/training-analysis',
+    });
+    expect(trainingSection?.links).toContainEqual({
+      label: 'Email Training Feedback',
+      icon: 'email',
+      kind: 'external',
+      target: expect.stringMatching(/^mailto:.*subject=Training%20feedback$/),
+    });
   });
 
   it('should document that distance values follow unit preferences across the app', () => {
@@ -155,8 +211,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Connect a service** action prompt');
     expect(gettingStartedSection?.content).toContain('dismissing it hides the prompt permanently');
     expect(gettingStartedSection?.content).toContain('**Send new activities to Suunto** action prompt');
-    expect(gettingStartedSection?.content).toContain('Enabling it turns on future Garmin/COROS -> Suunto imports only');
-    expect(gettingStartedSection?.content).toContain('existing activities can still be queued from **Services** with Manual Catch-up');
+    expect(gettingStartedSection?.content).toContain('Turning it on affects new Garmin or COROS activities only');
+    expect(gettingStartedSection?.content).toContain('use **Sync past activities** in **Services** for activities already in Quantified Self');
     expect(gettingStartedSection?.content).toContain('Advanced settings');
     expect(gettingStartedSection?.content).toContain('kilometers or miles');
     expect(gettingStartedSection?.content).toContain('Settings -> Units');
@@ -288,6 +344,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Training-derived tiles do not fall back');
     expect(gettingStartedSection?.content).toContain('**info** icon');
     expect(gettingStartedSection?.content).toContain('Dashboard **Today** header');
+    expect(gettingStartedSection?.content).toContain('**Show Today summary**');
+    expect(gettingStartedSection?.content).toContain('hides the Today summary');
     expect(gettingStartedSection?.content).toContain('Today rows stay compact');
     expect(gettingStartedSection?.content).toContain('KPI detail rows');
     expect(gettingStartedSection?.content).toContain('freshness date');
@@ -310,26 +368,29 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('multi-selected GPX exports download as a ZIP');
   });
 
-  it('should document Garmin saved-route delivery requirements and behavior', () => {
+  it('should document how to send saved routes to Garmin', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
-    expect(serviceConnectionsSection?.content).toContain('Garmin saved-route delivery to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
+    expect(serviceConnectionsSection?.content).toContain('Choose an action');
+    expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');
+    expect(serviceConnectionsSection?.content).toContain('unchanged overview');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**');
-    expect(serviceConnectionsSection?.content).toContain('not a Garmin route import or catch-up feature');
-    expect(serviceConnectionsSection?.content).toContain('**COURSE_IMPORT**');
+    expect(serviceConnectionsSection?.content).toContain('**Course Import** permission');
     expect(serviceConnectionsSection?.content).toContain('Routes can show a Garmin permission prompt');
-    expect(serviceConnectionsSection?.content).toContain('updates the same Garmin course on resend for the same Garmin account');
+    expect(serviceConnectionsSection?.content).toContain('updates the same Garmin course when you send that route again to the same Garmin account');
   });
 
-  it('should document Suunto to Garmin route delivery requirements and manual queue scope', () => {
+  it('should document automatic and one-time Suunto route sending to Garmin', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
-    expect(serviceConnectionsSection?.content).toContain('**Suunto -> Garmin course delivery**');
-    expect(serviceConnectionsSection?.content).toContain('Suunto -> Garmin course delivery, manual catch-up');
-    expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page action prompt');
+    expect(serviceConnectionsSection?.content).toContain('**Automatically send new and updated routes**');
+    expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect, syncing past activities');
+    expect(serviceConnectionsSection?.content).toContain('one-time **Routes** page prompt');
     expect(serviceConnectionsSection?.content).toContain('already saved in Quantified Self to Garmin as courses');
-    expect(serviceConnectionsSection?.content).toContain('requires Garmin to be connected with **COURSE_IMPORT** permission');
-    expect(serviceConnectionsSection?.content).toContain('**Queue now** action is a convenience backfill');
+    expect(serviceConnectionsSection?.content).toContain('Garmin must be connected with **Course Import** permission');
+    expect(serviceConnectionsSection?.content).toContain('**Send routes** uses Suunto routes already saved in Quantified Self');
     expect(serviceConnectionsSection?.content).toContain('does not fetch routes from Suunto or Garmin');
     expect(serviceConnectionsSection?.content).toContain('[Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses)');
     expect(serviceConnectionsSection?.links?.some(link => link.target === '/guides/sync-suunto-routes-to-garmin-courses')).toBe(true);
@@ -352,8 +413,10 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
     expect(uploadsSection?.content).toContain('waypoints and turn instructions');
     expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
-    expect(uploadsSection?.content).toContain('lightweight encoded route preview for route-table thumbnails and dashboard route maps');
-    expect(uploadsSection?.content).toContain('older saved routes need a reprocess or controlled backfill before they appear with previews');
+    expect(uploadsSection?.content).toContain('lightweight encoded route preview for route-table thumbnails, the Routes page map, and dashboard route maps');
+    expect(uploadsSection?.content).toContain('Routes page map follows the current table filters using saved-route documents only');
+    expect(uploadsSection?.content).toContain('does not load activity events or parse original route files');
+    expect(uploadsSection?.content).toContain('Older saved routes need to be reprocessed before they appear with previews');
     expect(uploadsSection?.links).toContainEqual({
       label: 'FIT and GPX Route Files',
       icon: 'route',
@@ -362,7 +425,7 @@ describe('help.content', () => {
     });
   });
 
-  it('should document Garmin/COROS to Suunto route-based activity sync and manual catch-up', () => {
+  it('should document Garmin and COROS activity sync to Suunto in plain language', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
@@ -392,21 +455,20 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Policies -> Suunto Data](/policies#suunto-data)');
     expect(serviceConnectionsSection?.content).toContain('[Policies -> COROS Data](/policies#coros-data)');
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
-    expect(serviceConnectionsSection?.content).toContain('Suunto FIT activity uploads in Services show a per-file queue');
-    expect(serviceConnectionsSection?.content).toContain('retry controls for failed files');
+    expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
+    expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');
     expect(serviceConnectionsSection?.content).toContain('row action or the selected-row bulk toolbar');
     expect(serviceConnectionsSection?.content).toContain('uses the saved Quantified Self route name as the route name sent to Suunto');
     expect(serviceConnectionsSection?.content).toContain('Bulk sends upload routes one at a time');
-    expect(serviceConnectionsSection?.content).toContain('Garmin -> Suunto activity sync is route-based');
-    expect(serviceConnectionsSection?.content).toContain('ACTIVITY_EXPORT');
-    expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in Garmin Services');
-    expect(serviceConnectionsSection?.content).toContain('convenience tool for queuing a period on demand');
-    expect(serviceConnectionsSection?.content).toContain('stored original files already attached to existing Quantified Self events');
-    expect(serviceConnectionsSection?.content).toContain('can run even when the Garmin -> Suunto auto-sync toggle is off');
-    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable Garmin -> Suunto auto-sync');
-    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto automatically disables related route auto-sync settings');
+    expect(serviceConnectionsSection?.content).toContain('Garmin to Suunto activity sync requires');
+    expect(serviceConnectionsSection?.content).toContain('allow Activity Export in Garmin');
+    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in Garmin Services');
+    expect(serviceConnectionsSection?.content).toContain('uses the original files already saved with those activities');
+    expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
+    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
+    expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto turns off related automatic activity sync');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
@@ -415,20 +477,20 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('minimum sleep heart rate');
     expect(serviceConnectionsSection?.content).toContain('range-average reference lines');
     expect(serviceConnectionsSection?.content).toContain('max SpO2');
-    expect(serviceConnectionsSection?.content).toContain('Backfill Sleep History');
+    expect(serviceConnectionsSection?.content).toContain('Import Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
-    expect(serviceConnectionsSection?.content).toContain('Garmin sleep history backfill is separate from activity history import');
-    expect(serviceConnectionsSection?.content).toContain('COROS -> Suunto activity sync is route-based');
-    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file queue');
+    expect(serviceConnectionsSection?.content).toContain('Garmin sleep history import is separate from activity history import');
+    expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
+    expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services use the same per-file status');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');
-    expect(serviceConnectionsSection?.content).toContain('enable the route toggle in COROS Services');
+    expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported COROS activities');
-    expect(serviceConnectionsSection?.content).toContain('Manual catch-up is available in COROS Services');
-    expect(serviceConnectionsSection?.content).toContain('can run even when the COROS -> Suunto auto-sync toggle is off');
-    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to enable COROS -> Suunto auto-sync');
+    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in COROS Services');
+    expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
+    expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync');
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Integrations',
       icon: 'hub',

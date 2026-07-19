@@ -42,8 +42,8 @@ export function buildSuuntoServiceConnectionViewModel(options: {
       : disconnectPending
       ? 'Disconnect is pending while the partner service finishes deauthorization. Sync and imports are paused for this connection.'
       : reconnectRequired
-      ? 'Reconnect Suunto to resume sleep sync, activity history imports, route sync, and uploads. If you use Garmin or COROS auto-sync into Suunto, re-enable those routes after reconnecting.'
-      : 'Required for activity history imports, route sync, and Suunto uploads.',
+      ? 'Reconnect Suunto to resume sleep sync, activity history imports, route imports, and uploads. Automatic activity sync from Garmin and COROS stays off until you turn it on again.'
+      : 'Required for activity history imports, route imports, and Suunto uploads.',
     failureMessage: options.serviceMeta?.lastAuthFailureMessage || null,
     statusLabelOverride: disconnectManualReviewRequired ? 'Reconnect needed' : disconnectPending ? 'Disconnect pending' : reconnectRequired ? 'Reconnect required' : null,
     statusIconOverride: disconnectPending ? 'sync_problem' : reconnectRequired ? 'sync_problem' : null,

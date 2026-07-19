@@ -28,6 +28,23 @@ export interface TrackMapPosition {
   longitudeDegrees: number;
 }
 
+export function isValidTrackMapPosition(
+  position: Partial<TrackMapPosition> | null | undefined,
+): position is TrackMapPosition {
+  const latitudeDegrees = position?.latitudeDegrees;
+  const longitudeDegrees = position?.longitudeDegrees;
+  if (typeof latitudeDegrees !== 'number' || typeof longitudeDegrees !== 'number') {
+    return false;
+  }
+
+  return Number.isFinite(latitudeDegrees)
+    && Number.isFinite(longitudeDegrees)
+    && latitudeDegrees >= -90
+    && latitudeDegrees <= 90
+    && longitudeDegrees >= -180
+    && longitudeDegrees <= 180;
+}
+
 export interface TrackMapExtraMarkerRenderData extends TrackMapPosition {
   id: string;
   element: HTMLElement;
@@ -77,6 +94,8 @@ interface StoredTrackLayers {
 export interface TrackMapManagerOptions {
   layerPrefix?: string;
   logPrefix?: string;
+  /** Render all track lines through one GeoJSON source and data-driven layer set. */
+  combineTrackLayers?: boolean;
 }
 
 const TRACK_CLICK_HIT_STROKE_WIDTH = 18;
@@ -114,6 +133,7 @@ export class TrackMapManager {
 
   private readonly layerPrefix: string;
   private readonly logPrefix: string;
+  private readonly combineTrackLayers: boolean;
 
   constructor(
     private markerFactory: MarkerFactoryService,
@@ -122,6 +142,7 @@ export class TrackMapManager {
   ) {
     this.layerPrefix = options.layerPrefix || 'track';
     this.logPrefix = options.logPrefix || 'TrackMapManager';
+    this.combineTrackLayers = options.combineTrackLayers === true;
   }
 
   public setMap(map: any, mapboxgl: any): void {
@@ -176,7 +197,9 @@ export class TrackMapManager {
   }
 
   public setCursorMarkers(cursors: TrackMapCursorRenderData[]): void {
-    this.cursorState = new Map((cursors || []).map(cursor => [cursor.trackId, cursor]));
+    this.cursorState = new Map((cursors || [])
+      .filter(cursor => isValidTrackMapPosition(cursor))
+      .map(cursor => [cursor.trackId, cursor]));
     this.renderCursorMarkers();
   }
 
@@ -266,14 +289,14 @@ export class TrackMapManager {
     let hasPoints = false;
     this.currentTracks.forEach(track => {
       (track.positions || []).forEach(position => {
-        if (!this.isFinitePosition(position)) {
+        if (!isValidTrackMapPosition(position)) {
           return;
         }
         bounds.extend([position.longitudeDegrees, position.latitudeDegrees]);
         hasPoints = true;
       });
       (track.markers || []).forEach(marker => {
-        if (!this.isFinitePosition(marker)) {
+        if (!isValidTrackMapPosition(marker)) {
           return;
         }
         bounds.extend([marker.longitudeDegrees, marker.latitudeDegrees]);
@@ -299,7 +322,7 @@ export class TrackMapManager {
   }
 
   public project(latitudeDegrees: number, longitudeDegrees: number): { x: number; y: number } | null {
-    if (!this.map?.project) {
+    if (!this.map?.project || !isValidTrackMapPosition({ latitudeDegrees, longitudeDegrees })) {
       return null;
     }
     const point = this.map.project([longitudeDegrees, latitudeDegrees]);
@@ -328,6 +351,11 @@ export class TrackMapManager {
     this.styleReadyRenderCleanup = null;
 
     try {
+      if (this.combineTrackLayers) {
+        this.renderCombinedTracks();
+        return;
+      }
+
       const incomingTrackIds = new Set((this.currentTracks || []).map((track) => track.id));
       this.activeLayersByTrackId.forEach((_ids, trackId) => {
         if (!incomingTrackIds.has(trackId)) {
@@ -347,6 +375,175 @@ export class TrackMapManager {
       }
       throw error;
     }
+  }
+
+  private renderCombinedTracks(): void {
+    this.activeLayersByTrackId.forEach((_ids, trackId) => this.removeTrack(trackId));
+
+    const renderableTracks = (this.currentTracks || []).map(track => ({
+      track,
+      coordinates: (track.positions || [])
+        .filter(position => isValidTrackMapPosition(position))
+        .map(position => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]),
+    })).filter(item => item.track?.id && item.coordinates.length > 1);
+
+    this.syncCombinedTrackMarkers(renderableTracks);
+
+    const ids = this.getCombinedTrackLayerIds();
+    if (renderableTracks.length === 0) {
+      this.removeCombinedTrackLayers();
+      return;
+    }
+
+    const sourceData = {
+      type: 'FeatureCollection',
+      features: renderableTracks.map(({ track, coordinates }) => ({
+        type: 'Feature',
+        properties: {
+          trackId: track.id,
+          label: track.label || '',
+          strokeColor: track.strokeColor,
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates,
+        },
+      })),
+    };
+    const strokeColorExpression = ['get', 'strokeColor'];
+
+    upsertGeoJsonSource(this.map, ids.sourceId, sourceData);
+    ensureLayer(this.map, {
+      id: ids.lineLayerId,
+      type: 'line',
+      source: ids.sourceId,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+      paint: {
+        'line-color': strokeColorExpression,
+        'line-width': this.currentOptions.strokeWidth || 3,
+        'line-opacity': 1,
+        'line-emissive-strength': 1,
+      },
+    });
+    setPaintIfLayerExists(this.map, ids.lineLayerId, {
+      'line-color': strokeColorExpression,
+      'line-width': this.currentOptions.strokeWidth || 3,
+      'line-opacity': 1,
+      'line-emissive-strength': 1,
+    });
+    this.syncCombinedTrackClick(ids.hitLayerId, ids.sourceId);
+
+    if (this.currentOptions.showArrows) {
+      ensureLayer(this.map, {
+        id: ids.arrowLayerId,
+        type: 'symbol',
+        source: ids.sourceId,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': 100,
+          'text-field': '▶',
+          'text-size': 11,
+          'text-rotation-alignment': 'map',
+          'text-keep-upright': false,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': strokeColorExpression,
+          'text-halo-width': 1.1,
+          'text-opacity': 1,
+        },
+      });
+      setPaintIfLayerExists(this.map, ids.arrowLayerId, {
+        'text-halo-color': strokeColorExpression,
+        'text-opacity': 1,
+      });
+    } else {
+      removeLayerIfExists(this.map, ids.arrowLayerId);
+    }
+  }
+
+  private syncCombinedTrackClick(hitLayerId: string, sourceId: string): void {
+    unbindLayerClicks(this.map, this.lineClickBindings, hitLayerId);
+    if (!this.currentOptions.onTrackClick) {
+      removeLayerIfExists(this.map, hitLayerId);
+      return;
+    }
+
+    const hitStrokeWidth = Math.max(TRACK_CLICK_HIT_STROKE_WIDTH, (this.currentOptions.strokeWidth || 3) + 12);
+    ensureLayer(this.map, {
+      id: hitLayerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+      paint: {
+        'line-color': '#000000',
+        'line-width': hitStrokeWidth,
+        'line-opacity': TRACK_CLICK_HIT_OPACITY,
+      },
+    });
+    setPaintIfLayerExists(this.map, hitLayerId, {
+      'line-width': hitStrokeWidth,
+      'line-opacity': TRACK_CLICK_HIT_OPACITY,
+    });
+    bindLayerClickOnce(this.map, this.lineClickBindings, hitLayerId, (event: unknown) => {
+      const trackId = `${(event as { features?: Array<{ properties?: { trackId?: unknown } }> })
+        ?.features?.[0]?.properties?.trackId || ''}`.trim();
+      const track = this.currentTracks.find(candidate => candidate.id === trackId);
+      if (!track) {
+        return;
+      }
+      this.emitTrackClick(
+        track,
+        event,
+        (event as { lngLat?: { lng?: unknown; lat?: unknown } } | null | undefined)?.lngLat,
+      );
+    });
+  }
+
+  private syncCombinedTrackMarkers(
+    renderableTracks: Array<{ track: TrackMapRenderData; coordinates: [number, number][] }>,
+  ): void {
+    const renderableTrackIds = new Set(renderableTracks.map(item => item.track.id));
+    const markerTrackIds = new Set([
+      ...this.startMarkers.keys(),
+      ...this.endMarkers.keys(),
+      ...this.extraMarkers.keys(),
+    ]);
+    markerTrackIds.forEach(trackId => {
+      if (!renderableTrackIds.has(trackId)) {
+        this.removeTrackMarkers(trackId);
+      }
+    });
+    renderableTracks.forEach(({ track, coordinates }) => this.renderTrackMarkers(track, coordinates));
+  }
+
+  private getCombinedTrackLayerIds(): StoredTrackLayers {
+    return {
+      sourceId: `${this.layerPrefix}-combined-source`,
+      lineLayerId: `${this.layerPrefix}-combined-line`,
+      hitLayerId: `${this.layerPrefix}-combined-hit`,
+      arrowLayerId: `${this.layerPrefix}-combined-arrow`,
+    };
+  }
+
+  private removeCombinedTrackLayers(): void {
+    if (!this.map) {
+      return;
+    }
+    const ids = this.getCombinedTrackLayerIds();
+    unbindLayerClicks(this.map, this.lineClickBindings, ids.hitLayerId);
+    removeLayerIfExists(this.map, ids.arrowLayerId);
+    removeLayerIfExists(this.map, ids.hitLayerId);
+    removeLayerIfExists(this.map, ids.lineLayerId);
+    removeSourceIfExists(this.map, ids.sourceId);
   }
 
   private scheduleRenderWhenStyleReady(): void {
@@ -371,7 +568,7 @@ export class TrackMapManager {
     }
 
     const coordinates = (track.positions || [])
-      .filter(position => this.isFinitePosition(position))
+      .filter(position => isValidTrackMapPosition(position))
       .map(position => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]);
 
     if (coordinates.length <= 1) {
@@ -521,7 +718,7 @@ export class TrackMapManager {
     }
 
     const customMarkers = (track.markers || [])
-      .filter(marker => marker?.id && marker.element && this.isFinitePosition(marker))
+      .filter(marker => marker?.id && marker.element && isValidTrackMapPosition(marker))
       .map(marker => this.createMarker(
         marker.element,
         marker.longitudeDegrees,
@@ -529,7 +726,9 @@ export class TrackMapManager {
         marker.anchor || 'center',
         track,
       ));
-    this.extraMarkers.set(track.id, customMarkers);
+    if (customMarkers.length > 0) {
+      this.extraMarkers.set(track.id, customMarkers);
+    }
   }
 
   private createEndpointMarker(track: TrackMapRenderData, endpoint: 'start' | 'end'): HTMLElement {
@@ -668,6 +867,7 @@ export class TrackMapManager {
       return;
     }
 
+    this.removeCombinedTrackLayers();
     this.activeLayersByTrackId.forEach((ids) => {
       unbindLayerClicks(this.map, this.lineClickBindings, ids.hitLayerId);
       unbindLayerClicks(this.map, this.lineClickBindings, ids.lineLayerId);
@@ -736,11 +936,6 @@ export class TrackMapManager {
       hash = Math.imul(hash, 16777619);
     }
     return (hash >>> 0).toString(36);
-  }
-
-  private isFinitePosition(position: TrackMapPosition | null | undefined): position is TrackMapPosition {
-    return Number.isFinite(position?.latitudeDegrees)
-      && Number.isFinite(position?.longitudeDegrees);
   }
 
   private nowMs(): number {

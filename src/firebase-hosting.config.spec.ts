@@ -180,7 +180,6 @@ describe('Firebase Hosting configuration', () => {
   it('marks route-delivery SEO launch pages as recently updated in sitemap', () => {
     const expectedLastmod = '2026-06-26';
     const updatedUrls = [
-      `${siteOrigin}/help`,
       `${siteOrigin}/integrations`,
       `${siteOrigin}/integrations/garmin`,
       `${siteOrigin}/integrations/suunto`,
@@ -194,13 +193,22 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
+  it('marks Training launch surfaces and Help content as recently updated in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-18');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-18');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-07-18');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-07-19');
+  });
+
   it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/event/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
     expect(robotsTxt).toContain('Disallow: /routes');
+    expect(robotsTxt).toContain('Disallow: /training');
   });
 
   it('marks public share routes noindex at the hosting layer', () => {

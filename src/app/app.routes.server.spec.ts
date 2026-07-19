@@ -55,6 +55,7 @@ describe('serverRoutes', () => {
     expect(PRERENDERED_FEATURE_ROUTES).toEqual([
       'features',
       'features/workout-data-comparison',
+      'features/training-analysis',
       'features/ai-insights',
       'features/workout-file-comparison',
       'features/fit-gpx-tcx-file-analyzer',
@@ -92,6 +93,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('tools/compare/saved')).toBe(false);
     expect(prerenderedPaths.has('features')).toBe(true);
     expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
+    expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
     expect(prerenderedPaths.has('features/workout-file-comparison')).toBe(true);
     expect(prerenderedPaths.has('features/fit-gpx-tcx-file-analyzer')).toBe(true);

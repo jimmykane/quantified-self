@@ -60,7 +60,7 @@ describe('garmin-route-permission helper', () => {
 
     expect(prompt).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
-      title: 'Enable Garmin route delivery',
+      title: 'Allow saved routes to be sent to Garmin',
       description: expect.stringContaining('In Garmin Connect, open Connected Apps'),
       primaryAction: {
         id: 'reconnectGarminRoutePermission',

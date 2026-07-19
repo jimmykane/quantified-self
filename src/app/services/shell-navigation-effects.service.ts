@@ -31,6 +31,7 @@ export class ShellNavigationEffectsService {
   private hasCompletedInitialNavigation = false;
   private shouldTriggerNavigationHaptics = false;
   private shellScroller: HTMLElement | null = null;
+  private lastNavigationPath: string | null = null;
 
   setShellScroller(shellScroller: HTMLElement | null): void {
     this.shellScroller = shellScroller;
@@ -51,6 +52,9 @@ export class ShellNavigationEffectsService {
         if (event instanceof NavigationStart) {
           this.shouldTriggerNavigationHaptics =
             this.hasCompletedInitialNavigation && event.navigationTrigger === 'imperative';
+          if (this.hasCompletedInitialNavigation && this.hasNavigationPathChanged(event.url)) {
+            this.resetScrollPosition();
+          }
           return;
         }
 
@@ -65,8 +69,10 @@ export class ShellNavigationEffectsService {
 
         this.shouldTriggerNavigationHaptics = false;
         this.hasCompletedInitialNavigation = true;
+        const hasNavigationPathChanged = this.hasNavigationPathChanged(event.urlAfterRedirects);
+        this.lastNavigationPath = this.readNavigationPath(event.urlAfterRedirects);
         const isInitialNavigationEnd = this.updateAnimationState();
-        if (!isInitialNavigationEnd) {
+        if (!isInitialNavigationEnd && hasNavigationPathChanged) {
           this.resetScrollPosition();
         }
         this.navigationEndSubject.next();
@@ -127,5 +133,14 @@ export class ShellNavigationEffectsService {
     } catch {
       windowRef.scrollTo(0, 0);
     }
+  }
+
+  private hasNavigationPathChanged(url: string): boolean {
+    const nextPath = this.readNavigationPath(url);
+    return this.lastNavigationPath !== null && this.lastNavigationPath !== nextPath;
+  }
+
+  private readNavigationPath(url: string): string {
+    return url.split(/[?#]/, 1)[0] || '/';
   }
 }

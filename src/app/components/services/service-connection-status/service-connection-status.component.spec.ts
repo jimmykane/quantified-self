@@ -35,11 +35,12 @@ describe('ServiceConnectionStatusComponent', () => {
 
         const text = fixture.nativeElement.textContent;
 
-        expect(text).toContain('Garmin connection');
+        expect(text).toContain('Garmin');
         expect(text).toContain('Not connected');
         expect(text).toContain('Required for history imports and auto-sync.');
         expect(fixture.nativeElement.querySelector('mat-card')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('.service-connection-status--connected')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('.service-connection-status__state')).toBeTruthy();
     });
 
     it('renders connected and Pro states without a card surface', () => {
@@ -58,6 +59,18 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(fixture.nativeElement.textContent).toContain('PRO');
         expect(fixture.nativeElement.querySelector('mat-progress-bar')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('mat-divider')).toBeTruthy();
+    });
+
+    it('uses the app success green for connected status text', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/service-connection-status/service-connection-status.component.scss'),
+            'utf8'
+        );
+        const connectedStateRule = styles.match(
+            /\.service-connection-status--connected \.service-connection-status__state\s*\{[^}]*\}/
+        )?.[0] ?? '';
+
+        expect(connectedStateRule).toContain('color: var(--qs-theme-success)');
     });
 
     it('does not make status layout wrappers nested scroll containers', () => {

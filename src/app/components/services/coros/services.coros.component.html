@@ -1,21 +1,14 @@
-<p class="description-text">
-  COROS is a performance sports technology company that helps athletes train to be their best. For COROS it’s all
-  about outdoors, mountains, and a passionate active lifestyle. We combine high grade hardware with innovative
-  technology to provide endurance athletes with the gear they rely on in the world’s most extreme environments.
-</p>
-<p class="service-privacy-link">
-  <mat-icon>policy</mat-icon>
-  <a class="tool-link" [routerLink]="['/policies']" fragment="coros-data">
-    Privacy details for COROS imports, COROS to Suunto sync, uploads, and processors
-  </a>
-</p>
-
-<div class="service-container">
+<div
+  class="service-container"
+  [class.service-container--advanced]="showAdvancedTools"
+  [class.service-container--tools-only]="!showConnectionSummary">
+  @if (showConnectionSummary) {
   <app-service-connection-status
     serviceLabel="COROS"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
+    [compact]="!showAdvancedTools"
     [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
     [showDetails]="isConnectedToService() || isDisconnectPending"
@@ -101,9 +94,14 @@
 
     </div>
   </app-service-connection-status>
+  }
 
+  @if (showAdvancedTools) {
+  @if (showConnectionSummary) {
   <mat-divider class="connection-tools-divider"></mat-divider>
+  }
 
+  @if (!showOnlyActiveProviderTool) {
   <nav
     mat-tab-nav-bar
     [tabPanel]="providerToolsPanel"
@@ -140,13 +138,20 @@
       (click)="$event.preventDefault(); selectProviderTool('auto-sync')">
       <span class="provider-tab-label">
         <mat-icon>published_with_changes</mat-icon>
-        <span>Auto Sync</span>
+        <span>Activity Sync</span>
       </span>
     </a>
     }
   </nav>
-
   <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">
+    <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  </mat-tab-nav-panel>
+  } @else {
+  <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
+  }
+
+  <ng-template #providerToolsContent>
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'history'"
@@ -167,8 +172,9 @@
       </app-status-info>
       }
     </section>
+    }
 
-    @if (showCorosUploadActivityCard) {
+    @if (showCorosUploadActivityCard && (!showOnlyActiveProviderTool || activeProviderTool === 'uploads')) {
     <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'uploads'">
       <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
         <div class="tool-subsection-header">
@@ -197,52 +203,54 @@
     </section>
     }
 
-    @if (isCorosToSuuntoRouteAvailableForUser) {
+    @if (isCorosToSuuntoRouteAvailableForUser && (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync')) {
     <section
       class="provider-tool-panel"
       [hidden]="activeProviderTool !== 'auto-sync'"
       [class.locked-panel]="!hasProAccess"
         (click)="!hasProAccess && triggerUpsell()">
-        <div class="tool-subsection-title">
-          <mat-icon>published_with_changes</mat-icon>
-          <span>COROS -> Suunto Sync</span>
-        </div>
+        @if (!showOnlyActiveProviderTool) {
+          <div class="tool-subsection-title">
+            <mat-icon>published_with_changes</mat-icon>
+            <span>Send COROS activities to Suunto</span>
+          </div>
+        }
         @if (!hasProAccess) {
         <div class="pro-required-inline">
           <mat-icon>lock</mat-icon>
-          <span>COROS -> Suunto sync is a Pro feature.</span>
+          <span>Sending COROS activities to Suunto is a Pro feature.</span>
         </div>
         } @else if (isSuuntoReconnectRequired) {
         <app-status-info type="info" title="Reconnect Suunto Required">
-          Suunto needs to be reconnected before COROS -> Suunto sync can run.
+          Reconnect Suunto before syncing COROS activities.
         </app-status-info>
         } @else if (!isConnectedToService() || !isSuuntoConnected) {
         <app-status-info type="info" title="Connect COROS + Suunto First">
-          COROS and Suunto must both be connected before route sync can run.
+          Connect COROS and Suunto before syncing activities.
         </app-status-info>
         } @else {
         <mat-slide-toggle [checked]="isCorosToSuuntoRouteEnabled" [disabled]="isSavingSyncRoute || isBackfillingSync"
           (change)="onCorosToSuuntoRouteToggle($event.checked)">
-          Enable automatic sync for new COROS imports
+          Automatically send new COROS activities to Suunto
         </mat-slide-toggle>
 
         <mat-divider class="tool-divider"></mat-divider>
 
-        <div class="tool-section-title">Manual Catch-up</div>
-        <app-status-info type="info" title="Manual Catch-up Scope">
-          Use this anytime to queue COROS -> Suunto sync jobs for activities already imported into Quantified Self in
-          the selected date range. It uses stored original files and can run even when automatic sync is turned off.
+        <div class="tool-section-title">Sync past activities</div>
+        <app-status-info type="info" title="Choose which activities to send">
+          Choose a date range to send COROS activities already in Quantified Self to Suunto. You can do this even
+          when automatic activity sync is off.
         </app-status-info>
         <div class="date-fields">
           <mat-form-field appearance="outline">
-            <mat-label>Start Date</mat-label>
+            <mat-label>From</mat-label>
             <input matInput [matDatepicker]="syncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
               [ngModelOptions]="{standalone: true}" (click)="syncStartDatePicker.open()">
             <mat-datepicker-toggle matSuffix [for]="syncStartDatePicker"></mat-datepicker-toggle>
             <mat-datepicker #syncStartDatePicker></mat-datepicker>
           </mat-form-field>
           <mat-form-field appearance="outline">
-            <mat-label>End Date</mat-label>
+            <mat-label>To</mat-label>
             <input matInput [matDatepicker]="syncEndDatePicker" [min]="backfillStartDate" [(ngModel)]="backfillEndDate"
               [ngModelOptions]="{standalone: true}" (click)="syncEndDatePicker.open()">
             <mat-datepicker-toggle matSuffix [for]="syncEndDatePicker"></mat-datepicker-toggle>
@@ -256,20 +264,20 @@
           @if (isBackfillingSync) {
           <ng-container>
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-            Running Backfill...
+            Starting sync...
           </ng-container>
           } @else {
           <ng-container>
-            Queue now
+            Sync activities
           </ng-container>
           }
         </button>
 
         @if (backfillSummary) {
-        <app-status-info type="success" title="Backfill Summary">
-          <div>Scanned: {{ backfillSummary.scanned }} | Queued: {{ backfillSummary.queued }}</div>
+        <app-status-info type="success" title="Activity sync started">
+          <div>Found: {{ backfillSummary.scanned }} | Scheduled: {{ backfillSummary.queued }}</div>
           @if (backfillSummary.failedCount > 0) {
-          <div>Failed: {{ backfillSummary.failedCount }}</div>
+          <div>Could not schedule: {{ backfillSummary.failedCount }}</div>
           @if (backfillSummary.failedEvents?.length) {
           <ul class="backfill-summary-list">
             <li *ngFor="let failedEvent of backfillSummary.failedEvents">
@@ -283,5 +291,6 @@
         }
       </section>
     }
-  </mat-tab-nav-panel>
+  </ng-template>
+  }
 </div>

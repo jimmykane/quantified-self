@@ -14,6 +14,7 @@ Always-on rules:
 - Use prefixed commit subjects: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
+- After completing implementation changes, create an unsigned commit by default, staging only files changed for the current task with explicit paths. Do not push unless the user explicitly asks.
 - When building a feature, review the app help page and update or add help content when needed.
 - Before changing the Training workspace, Training settings, Training-derived metrics, or sports-lib durability integration,
   read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the

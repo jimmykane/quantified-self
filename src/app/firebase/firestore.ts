@@ -8,8 +8,10 @@ import {
 import type {
   DocumentData,
   DocumentReference,
+  DocumentSnapshot as FirebaseDocumentSnapshot,
   Firestore as FirebaseFirestore,
-  Query
+  Query,
+  QuerySnapshot as FirebaseQuerySnapshot
 } from 'firebase/firestore';
 import { onSnapshot as firebaseOnSnapshot } from 'firebase/firestore';
 import { Observable } from 'rxjs';
@@ -59,6 +61,7 @@ export const Firestore = new InjectionToken<FirebaseFirestore>('Firestore');
 
 export interface FirestoreDataOptions {
   idField?: string;
+  waitForServer?: boolean;
 }
 
 const firestoreZoneRegistry = new WeakMap<FirebaseFirestore, NgZone | null>();
@@ -182,16 +185,20 @@ export function collectionData<T = DocumentData>(
   const zone = resolveNgZoneForSource(query);
 
   return new Observable<T[]>((subscriber) => {
-    const unsubscribe = firebaseOnSnapshot(
-      query,
-      (snapshot) => {
-        const values = snapshot.docs.map((documentSnapshot) => {
-          return withOptionalID(documentSnapshot.data(), documentSnapshot.id, options);
-        });
-        runInAngularZone(zone, () => subscriber.next(values));
-      },
-      (error) => runInAngularZone(zone, () => subscriber.error(error))
-    );
+    const next = (snapshot: FirebaseQuerySnapshot<T>) => {
+      if (options?.waitForServer && (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)) {
+        return;
+      }
+
+      const values = snapshot.docs.map((documentSnapshot) => {
+        return withOptionalID(documentSnapshot.data() as T, documentSnapshot.id, options);
+      });
+      runInAngularZone(zone, () => subscriber.next(values));
+    };
+    const error = (snapshotError: Error) => runInAngularZone(zone, () => subscriber.error(snapshotError));
+    const unsubscribe = options?.waitForServer
+      ? firebaseOnSnapshot(query, { includeMetadataChanges: true }, next, error)
+      : firebaseOnSnapshot(query, next, error);
 
     return unsubscribe;
   });
@@ -204,20 +211,24 @@ export function docData<T = DocumentData>(
   const zone = resolveNgZoneForSource(reference);
 
   return new Observable<T | undefined>((subscriber) => {
-    const unsubscribe = firebaseOnSnapshot(
-      reference,
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          runInAngularZone(zone, () => subscriber.next(undefined));
-          return;
-        }
+    const next = (snapshot: FirebaseDocumentSnapshot<T>) => {
+      if (options?.waitForServer && (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)) {
+        return;
+      }
 
-        runInAngularZone(zone, () => {
-          subscriber.next(withOptionalID(snapshot.data(), snapshot.id, options));
-        });
-      },
-      (error) => runInAngularZone(zone, () => subscriber.error(error))
-    );
+      if (!snapshot.exists()) {
+        runInAngularZone(zone, () => subscriber.next(undefined));
+        return;
+      }
+
+      runInAngularZone(zone, () => {
+        subscriber.next(withOptionalID(snapshot.data() as T, snapshot.id, options));
+      });
+    };
+    const error = (snapshotError: Error) => runInAngularZone(zone, () => subscriber.error(snapshotError));
+    const unsubscribe = options?.waitForServer
+      ? firebaseOnSnapshot(reference, { includeMetadataChanges: true }, next, error)
+      : firebaseOnSnapshot(reference, next, error);
 
     return unsubscribe;
   });

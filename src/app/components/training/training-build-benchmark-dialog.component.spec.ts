@@ -4,9 +4,16 @@ import { TrainingBuildBenchmarkDialogComponent } from './training-build-benchmar
 function createDialog(data: any) {
   const dialogRef = { close: vi.fn() } as any;
   const functionsService = { call: vi.fn().mockResolvedValue({ data: { accepted: true } }) } as any;
+  const snackBar = { open: vi.fn() } as any;
   const changeDetector = { markForCheck: vi.fn() } as any;
-  const component = new TrainingBuildBenchmarkDialogComponent(data, dialogRef, functionsService, changeDetector);
-  return { component, dialogRef, functionsService, changeDetector };
+  const component = new TrainingBuildBenchmarkDialogComponent(
+    data,
+    dialogRef,
+    functionsService,
+    snackBar,
+    changeDetector,
+  );
+  return { component, dialogRef, functionsService, snackBar, changeDetector };
 }
 
 describe('TrainingBuildBenchmarkDialogComponent', () => {
@@ -33,7 +40,7 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
   });
 
   it('does not report success when the derived update was not accepted', async () => {
-    const { component, dialogRef, functionsService } = createDialog({
+    const { component, dialogRef, functionsService, snackBar } = createDialog({
       discipline: 'running',
       asOfDayMs: Date.UTC(2026, 0, 1),
       selection: null,
@@ -46,6 +53,35 @@ describe('TrainingBuildBenchmarkDialogComponent', () => {
 
     expect(dialogRef.close).not.toHaveBeenCalled();
     expect(component.errorMessage).toContain('benchmark was saved');
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'The benchmark was saved, but the comparison could not be queued. Try again.',
+      'Dismiss',
+      { duration: 6000, politeness: 'assertive' },
+    );
+  });
+
+  it('shows App Check failures immediately without exposing raw SDK details', async () => {
+    const { component, dialogRef, functionsService, snackBar } = createDialog({
+      discipline: 'running',
+      asOfDayMs: Date.UTC(2026, 0, 1),
+      selection: null,
+      suggestedRaces: [{ eventId: 'race-1', startDayMs: Date.UTC(2025, 8, 12), label: 'Autumn marathon' }],
+    });
+    functionsService.call.mockRejectedValueOnce({
+      code: 'appCheck/fetch-status-error',
+      message: 'AppCheck: Fetch server returned an HTTP error status. HTTP status: 403.',
+    });
+
+    component.selectEvent('race-1');
+    await component.save();
+
+    const message = 'Could not verify your secure session. Refresh the app and try again.';
+    expect(dialogRef.close).not.toHaveBeenCalled();
+    expect(component.errorMessage).toBe(message);
+    expect(snackBar.open).toHaveBeenCalledWith(message, 'Dismiss', {
+      duration: 6000,
+      politeness: 'assertive',
+    });
   });
 
   it('saves a manual period and keeps invalid dates out of the callable', async () => {

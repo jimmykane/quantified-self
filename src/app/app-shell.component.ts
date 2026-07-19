@@ -40,6 +40,7 @@ import {
   isAuthSensitivePublicStartupDocument,
   isAuthSensitivePublicStartupPath,
   isPublicStartupDocument,
+  shouldShowPublicFooter,
 } from './shared/public-startup-route';
 
 export const APP_SHELL_HEADER_HEIGHT_PX = 64;
@@ -113,6 +114,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     // }
     return true;
   });
+  public readonly showPublicFooter = computed(() => shouldShowPublicFooter(this.currentUrlSignal()));
   public readonly showUploadActivities = computed(() => this.isDashboardRouteComputed() && !!this.currentUserSignal());
   public authService = inject(AppAuthService);
   private userService = inject(AppUserService);

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { of, Observable } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, of, Observable } from 'rxjs';
 import { onboardingGuard } from './onboarding.guard';
 import { AppAuthService } from './app.auth.service';
 import { LoggerService } from '../services/logger.service';
@@ -28,13 +28,17 @@ describe('onboardingGuard', () => {
         error: vi.fn()
     };
 
-    const mockAuthService: { user$: Observable<any> } = {
-        user$: of(null)
+    const mockAuthService: { authState$: Observable<any>; user$: Observable<any>; redirectUrl: string | null } = {
+        authState$: of(null),
+        user$: of(null),
+        redirectUrl: null,
     };
 
+    const profileReadStateSubject = new BehaviorSubject<any>({ status: 'signed-out' });
     const mockUserService = {
         hasPaidAccessSignal: signal(false),
-        hasIncompleteProfileReads: vi.fn().mockReturnValue(false)
+        hasIncompleteProfileReads: vi.fn().mockReturnValue(false),
+        profileReadState$: profileReadStateSubject.asObservable(),
     };
 
     beforeEach(() => {
@@ -53,11 +57,17 @@ describe('onboardingGuard', () => {
         logger = TestBed.inject(LoggerService);
         mockUserService.hasPaidAccessSignal.set(false); // Reset state
         mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
+        profileReadStateSubject.next({ status: 'signed-out' });
+        mockAuthService.redirectUrl = null;
         vi.clearAllMocks();
     });
 
     const runGuard = (user: Partial<User> | null, segments: any[] = []) => {
+        mockAuthService.authState$ = of(user ? { uid: user.uid } : null);
         mockAuthService.user$ = of(user);
+        profileReadStateSubject.next(user
+            ? { status: 'ready', uid: user.uid, profileExists: true }
+            : { status: 'signed-out' });
         return TestBed.runInInjectionContext(() => onboardingGuard({} as any, segments));
     };
 
@@ -172,18 +182,107 @@ describe('onboardingGuard', () => {
         expect(result).toBe(true);
     });
 
-    it('should redirect to onboarding when profile reads are incomplete', async () => {
-        const user = {
+    it('should wait for the recovered user emission before deciding whether to redirect to onboarding', async () => {
+        const staleUser = {
             uid: '123',
-            acceptedPrivacyPolicy: false,
-            acceptedDataPolicy: false,
-            acceptedTos: false
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            onboardingCompleted: true,
         };
+        const users$ = new BehaviorSubject(staleUser);
+        mockAuthService.authState$ = of({ uid: staleUser.uid });
+        mockAuthService.user$ = users$;
         mockUserService.hasIncompleteProfileReads.mockReturnValue(true);
 
-        const result = await (runGuard(user, [{ path: 'dashboard' }] as any) as any).toPromise();
+        const results: unknown[] = [];
+        const guardResult = TestBed.runInInjectionContext(() => onboardingGuard(
+            {} as any,
+            [{ path: 'dashboard' }] as any
+        ));
+        const subscription = (guardResult as Observable<unknown>)
+            .subscribe((result) => results.push(result));
+
+        expect(results).toEqual([]);
+        expect(mockRouter.createUrlTree).not.toHaveBeenCalledWith(['/onboarding']);
+
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
+        await Promise.resolve();
+
+        expect(results).toEqual([]);
+
+        users$.next(staleUser);
+        await Promise.resolve();
+
+        expect(results).toHaveLength(1);
+        const result = results[0];
+        expect(result).toBe(true);
+        subscription.unsubscribe();
+    });
+
+    it('should wait for the app user matching the current Firebase account', async () => {
+        const users$ = new BehaviorSubject<any>({
+            uid: 'previous-user',
+            acceptedPrivacyPolicy: false,
+            acceptedDataPolicy: false,
+            acceptedTos: false,
+        });
+        mockAuthService.authState$ = of({ uid: 'current-user' });
+        mockAuthService.user$ = users$;
+
+        const results: unknown[] = [];
+        const guardResult = TestBed.runInInjectionContext(() => onboardingGuard(
+            {} as any,
+            [{ path: 'dashboard' }] as any
+        ));
+        const subscription = (guardResult as Observable<unknown>)
+            .subscribe((result) => results.push(result));
+
+        expect(results).toEqual([]);
+        expect(mockRouter.createUrlTree).not.toHaveBeenCalledWith(['/onboarding']);
+
+        users$.next({
+            uid: 'current-user',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            onboardingCompleted: true,
+        });
+
+        expect(results).toEqual([true]);
+        subscription.unsubscribe();
+    });
+
+    it('should route an actionable profile failure to login recovery', async () => {
+        const users$ = new BehaviorSubject<any>({
+            uid: 'current-user',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            onboardingCompleted: true,
+        });
+        mockAuthService.authState$ = of({ uid: 'current-user' });
+        mockAuthService.user$ = users$;
+        mockUserService.hasIncompleteProfileReads.mockReturnValue(true);
+        profileReadStateSubject.next({ status: 'loading', uid: 'current-user' });
+
+        const guardPromise = firstValueFrom(TestBed.runInInjectionContext(() => onboardingGuard(
+            {} as any,
+            [{ path: 'dashboard' }] as any
+        )) as Observable<unknown>);
+        profileReadStateSubject.next({
+            status: 'recovering',
+            uid: 'current-user',
+            attempt: 4,
+            code: 'permission-denied',
+        });
+
+        const result = await guardPromise;
+
         expect(result).not.toBe(true);
-        expect(result).not.toBe(false);
-        expect((result as any).toString()).toContain('/onboarding');
+        expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/login'], {
+            queryParams: { returnUrl: '/dashboard' },
+        });
+        expect(mockAuthService.redirectUrl).toBe('/dashboard');
     });
 });

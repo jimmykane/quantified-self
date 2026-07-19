@@ -6,93 +6,199 @@
 }
 
 .settings-content {
-    max-width: 1180px;
+    max-width: 760px;
     margin: 0 auto;
     padding: 32px 40px;
 }
 
-.services-shell {
-    display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
-    gap: 32px;
-    align-items: start;
+.services-page-header {
+    max-width: 760px;
+    margin: 0 0 20px;
 }
 
-.mobile-section-tabs {
-    display: none;
-    width: 100%;
-}
-
-.desktop-section-nav {
-    position: sticky;
-    top: calc(var(--qs-effective-top-offset, 0px) + 24px);
-}
-
-.desktop-section-nav-title {
-    margin: 0 0 8px;
-    padding-inline-start: 56px;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.desktop-section-nav-list {
-    padding: 0;
-}
-
-.section-tab-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-}
-
-.section-tab-label mat-icon {
-    width: 22px;
-    height: 22px;
-}
-
-.workspace-main {
-    min-width: 0;
-}
-
-.service-detail {
-    min-width: 0;
-}
-
-.service-detail-header {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 24px;
-}
-
-.service-detail-logo {
-    flex: 0 0 72px;
-    width: 72px;
-    height: 56px;
-    font-size: 56px;
-}
-
-.service-detail-header h1 {
+.services-page-header h1 {
     margin: 0 0 6px;
     color: var(--mat-sys-on-surface);
     font-size: 2rem;
-    line-height: 1.15;
     font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
 }
 
-.service-detail-header p {
+.services-page-header p {
     margin: 0;
     color: var(--mat-sys-on-surface-variant);
     font-size: 1rem;
     line-height: 1.5;
 }
 
-.service-detail-body {
-    padding-top: 24px;
+.provider-selector {
+    width: 100%;
+    max-width: 760px;
+    margin-bottom: 20px;
+}
+
+.provider-selector--desktop {
+    display: flex;
+}
+
+.provider-selector--desktop mat-button-toggle {
+    flex: 1 1 0;
+}
+
+.provider-selector__option {
+    display: flex;
+    min-height: 64px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.provider-selector__option app-service-source-icon {
+    transform: scale(3);
+}
+
+.provider-selector__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    margin: -1px;
+    padding: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.provider-selector__connection-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--qs-theme-success);
+    font-size: 0.72rem;
+    font-weight: 650;
+    line-height: 1;
+}
+
+.provider-selector__connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.provider-selector--mobile {
+    display: none;
+}
+
+.services-workspace-main {
+    display: block;
+    width: 100%;
+    max-width: 760px;
+    min-width: 0;
+    overflow: clip;
+    contain: paint;
+}
+
+.service-tools-dialog__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-right: 8px;
+}
+
+.service-tools-dialog__header h2,
+.service-overview-card h2 {
+    margin: 0;
+    color: var(--mat-sys-on-surface);
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.service-overview-card p {
+    margin: 4px 0 0;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.service-tools-dialog__header h2 {
+    flex: 1 1 auto;
+}
+
+.service-tools-dialog__content {
+    max-height: calc(100dvh - 128px);
+    min-width: 0;
+    padding-bottom: 24px;
+}
+
+.service-overview {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.service-overview-card {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 12px;
+    background: var(--mat-sys-surface-container-lowest);
+}
+
+.service-overview-card__icon {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 10px;
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+}
+
+.service-overview-card__copy {
+    min-width: 0;
+}
+
+.service-overview-card__detail {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    color: var(--mat-sys-tertiary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.service-overview-card__detail mat-icon {
+    width: 17px;
+    height: 17px;
+    font-size: 17px;
+}
+
+.service-overview-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+    font-size: 0.85rem;
+}
+
+.service-detail {
+    min-width: 0;
+}
+
+.service-detail[hidden] {
+    display: none;
 }
 
 @include bp.max-768 {
@@ -100,57 +206,40 @@
         padding: 24px 16px;
     }
 
-    .services-shell {
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
+    .services-page-header {
+        margin-bottom: 16px;
     }
 
-    .desktop-section-nav {
+    .services-page-header h1 {
+        font-size: 1.75rem;
+    }
+
+    .provider-selector--desktop {
         display: none;
     }
 
-    .mobile-section-tabs {
+    .provider-selector--mobile {
         display: flex;
-        align-self: center;
-        width: fit-content;
-        max-width: 100%;
-        margin-inline: auto;
+        margin-bottom: 16px;
     }
 
-    .section-tab-label {
-        flex-direction: column;
-        justify-content: center;
-        gap: 2px;
-        text-align: center;
-        white-space: normal;
-        font-size: 0.76rem;
-        line-height: 1.1;
+    .service-tools-dialog__content {
+        max-height: calc(100dvh - 112px);
+        padding-inline: 16px;
     }
 
-    .section-tab-label mat-icon {
-        width: 24px;
-        height: 24px;
+    .service-overview-card {
+        grid-template-columns: 36px minmax(0, 1fr);
+        padding: 16px;
     }
 
-    .section-tab-label > span:last-child {
-        display: block;
-        line-height: 1.1;
+    .service-overview-card__icon {
+        width: 36px;
+        height: 36px;
     }
 
-    .service-detail-header {
-        align-items: flex-start;
-        gap: 16px;
-    }
-
-    .service-detail-logo {
-        flex-basis: 56px;
-        width: 56px;
-        height: 44px;
-        font-size: 44px;
-    }
-
-    .service-detail-header h1 {
-        font-size: 1.5rem;
+    .service-overview-card button {
+        grid-column: 1 / -1;
+        width: 100%;
     }
 }

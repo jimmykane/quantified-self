@@ -35,11 +35,72 @@ describe('buildTrainingExplanationViewModel', () => {
     const view = buildTrainingExplanationViewModel(payload());
     expect(view?.cards).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'load', valueText: '50% higher than usual', tone: 'neutral' }),
-      expect.objectContaining({ key: 'contributors', description: 'Long run (40%; mostly running)' }),
+      expect.objectContaining({
+        key: 'contributors',
+        description: 'Long run (40%; mostly running)',
+        descriptionItems: ['Long run (40%; mostly running)'],
+      }),
       expect.objectContaining({ key: 'mix', title: 'Running load', valueText: '100 TSS higher', tone: 'neutral' }),
       expect.objectContaining({ key: 'rhythm', valueText: '2 active days higher', tone: 'neutral' }),
     ]));
     expect(view?.coverageText).toContain('4/4 current parent events');
+  });
+
+  it('retains text-only comparison values for the metric renderer', () => {
+    const input = payload();
+    input.current.rhythms[0] = { ...input.current.rhythms[0], activeDayCount: input.baselineMedian.rhythms[0].activeDayCount };
+
+    const view = buildTrainingExplanationViewModel(input);
+
+    expect(view?.cards.find(card => card.key === 'rhythm')?.valueText).toBe('Same active days');
+  });
+
+  it('never selects a dormant discipline when active-day changes tie', () => {
+    const input = payload();
+    input.current.rhythms = [
+      { discipline: 'running', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+      { discipline: 'cycling', sessionCount: 26, activeDayCount: 20, activeWeekCount: 4, longestInactivityGapDays: 1, longestSessionDurationSeconds: 7200 },
+      { discipline: 'swimming', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+    ];
+    input.baselineMedian = {
+      ...input.baselineMedian,
+      rhythms: [
+        { discipline: 'running', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+        { discipline: 'cycling', sessionCount: 26, activeDayCount: 20, activeWeekCount: 4, longestInactivityGapDays: 3, longestSessionDurationSeconds: 7200 },
+        { discipline: 'swimming', sessionCount: 0, activeDayCount: 0, activeWeekCount: 0, longestInactivityGapDays: 28, longestSessionDurationSeconds: 0 },
+      ],
+    };
+
+    const rhythm = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'rhythm');
+
+    expect(rhythm).toEqual(expect.objectContaining({ title: 'Cycling rhythm', valueText: 'Same active days' }));
+  });
+
+  it('preserves each top contributor as a separate display item', () => {
+    const input = payload();
+    input.topContributors.push({
+      eventId: 'event-2',
+      label: 'Tempo ride',
+      startDayMs: 2,
+      trainingStressScore: 60,
+      loadSharePercent: 20,
+      childComposition: [{
+        sport: 'cycling',
+        label: 'Cycling',
+        activityCount: 1,
+        loadActivityCount: 1,
+        trainingStressScore: 60,
+        loadSharePercent: 100,
+      }],
+    });
+
+    const contributorCard = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'contributors');
+
+    expect(contributorCard?.descriptionItems).toEqual([
+      'Long run (40%; mostly running)',
+      'Tempo ride (20%; mostly cycling)',
+    ]);
+    expect(contributorCard?.description).toBe('Long run (40%; mostly running) · Tempo ride (20%; mostly cycling)');
   });
 
   it('returns null without a normalized payload', () => {
@@ -58,6 +119,9 @@ describe('buildTrainingExplanationViewModel', () => {
     const view = buildTrainingExplanationViewModel(input);
 
     expect(view?.cards.find(card => card.key === 'contributors')?.description).toMatch(/^Running · (Jul 10|10 Jul) \(40%\)$/);
+    expect(view?.cards.find(card => card.key === 'contributors')?.descriptionItems).toEqual([
+      expect.stringMatching(/^Running · (Jul 10|10 Jul) \(40%\)$/),
+    ]);
     expect(view?.cards.find(card => card.key === 'rhythm')?.description).toContain('Longest inactivity gap: 1 day;');
   });
 });

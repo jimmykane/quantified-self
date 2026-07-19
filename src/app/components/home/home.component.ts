@@ -15,7 +15,6 @@ import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   public serviceNames = ServiceNames;
-  public currentYear = new Date().getFullYear();
   private observer: IntersectionObserver | undefined;
   public readonly aiPromptExamples: readonly string[] = getAiInsightsHeroPrompts();
   private readonly destroyRef = inject(DestroyRef);

@@ -5,6 +5,8 @@ import {
   HostListener,
   inject,
   Input,
+  Output,
+  EventEmitter,
   OnChanges,
   OnDestroy,
   OnInit,
@@ -45,11 +47,15 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   @Input() hasProAccess!: boolean;
   @Input() isAdmin: boolean = false;
+  @Input() showAdvancedTools = true;
+  @Input() showConnectionSummary = true;
+  @Input() activeProviderTool = 'history';
+  @Input() showOnlyActiveProviderTool = false;
+  @Output() connectionStateChanged = new EventEmitter<boolean>();
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
   public serviceMeta: AppUserServiceMetaInterface | undefined;
   public selectedTabIndex = 0;
-  public activeProviderTool = 'history';
   public serviceNames = ServiceNames;
   public isConnecting = false;
   public isDisconnecting = false;
@@ -98,11 +104,13 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
           this.serviceTokens = undefined;
           this.serviceMeta = undefined;
           this.onServiceDataChanged();
+          this.emitConnectionState();
           return;
         }
         this.serviceTokens = results[0];
         this.serviceMeta = results[1];
         this.onServiceDataChanged();
+        this.emitConnectionState();
       }),
     ).subscribe(async (results) => {
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
@@ -123,6 +131,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
+        this.emitConnectionState();
         this.snackBar.open(`Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
@@ -233,6 +242,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     }
     this.isDisconnecting = false;
     this.forceConnected = false;
+    this.emitConnectionState();
   }
 
   get hasActiveSyncRoutesUsingService(): boolean {
@@ -242,8 +252,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   get activeSyncRouteWarningLabel(): string {
     const activeRouteCount = this.activeSyncRoutesUsingService.length;
     return activeRouteCount === 1
-      ? 'Used by active auto-sync route'
-      : `Used by ${activeRouteCount} active auto-sync routes`;
+      ? 'Used by automatic sync'
+      : `Used by ${activeRouteCount} automatic sync connections`;
   }
 
   triggerUpsell() {
@@ -302,14 +312,14 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   private formatRouteLabel(route: ServiceSyncRouteImpact): string {
-    return `${this.getServiceDisplayName(route.sourceServiceName)} -> ${this.getServiceDisplayName(route.destinationServiceName)}`;
+    return `${this.getServiceDisplayName(route.sourceServiceName)} to ${this.getServiceDisplayName(route.destinationServiceName)}`;
   }
 
   private buildDisconnectImpactMessageHtml(routes: ServiceSyncRouteImpact[]): string {
     const isSingleRoute = routes.length === 1;
     const heading = isSingleRoute
-      ? 'Disconnecting now will disable this active auto-sync route:'
-      : `Disconnecting now will disable ${routes.length} active auto-sync routes:`;
+      ? 'Disconnecting now will turn off this automatic sync:'
+      : `Disconnecting now will turn off ${routes.length} automatic sync connections:`;
     const routeListHtml = routes.map((route) => `<li><strong>${this.formatRouteLabel(route)}</strong></li>`).join('');
     return `${heading}<ul>${routeListHtml}</ul>Automatic sync will stop until you reconnect and re-enable the route${isSingleRoute ? '' : 's'}.`;
   }
@@ -353,5 +363,9 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       processedActivitiesFromLastHistoryImportCount: stats?.stats?.successCount || 0
     };
     this.changeDetectorRef.detectChanges();
+  }
+
+  private emitConnectionState(): void {
+    this.connectionStateChanged.emit(this.isConnectedToService());
   }
 }

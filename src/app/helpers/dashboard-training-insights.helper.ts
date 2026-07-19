@@ -1,4 +1,11 @@
 import type { DerivedTrainingDurabilityMetricPayload } from '@shared/derived-metrics';
+import {
+  buildReadinessSignals,
+  READINESS_SLEEP_LOOKBACK_MS,
+  READINESS_SLEEP_MAX_AGE_MS,
+  type ReadinessConfidence,
+  type ReadinessSleepEvidencePoint,
+} from '@shared/readiness';
 import type {
   DashboardFormNowContext,
   DashboardRampRateContext,
@@ -32,30 +39,84 @@ export interface DashboardAerobicDurabilityContext {
   trend: DashboardInsightTrendPoint[];
 }
 
-export type DashboardReadinessConfidence = 'high' | 'medium' | 'low';
+export type DashboardReadinessConfidence = ReadinessConfidence;
 
 export interface DashboardReadinessSignalsContext {
   score: number;
   label: 'Ready' | 'Mixed' | 'Recover';
   confidence: DashboardReadinessConfidence;
   availableSignalCount: number;
+  baselineEvidenceCount: number;
   totalSignalCount: 4;
   form: number | null;
   rampRate: number | null;
   sleepScore: number | null;
   latestSleepAtMs: number | null;
   hrvRatio: number | null;
+  averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
+  overnightHeartRateRatio: number | null;
+  loadAtMs?: number | null;
   trend: DashboardInsightTrendPoint[];
 }
 
-interface WeightedReadinessSignal {
-  score: number;
-  weight: number;
+export const DASHBOARD_READINESS_SLEEP_LOOKBACK_MS = READINESS_SLEEP_LOOKBACK_MS;
+export const DASHBOARD_READINESS_SLEEP_QUERY_END_MS = Number.MAX_SAFE_INTEGER;
+export const DASHBOARD_READINESS_SLEEP_MAX_AGE_MS = READINESS_SLEEP_MAX_AGE_MS;
+
+export function buildDashboardReadinessSleepQueryWindow(nowMs = Date.now()): {
+  startMs: number;
+  endMs: number;
+} {
+  const safeNowMs = toFiniteNumber(nowMs) ?? Date.now();
+  return {
+    startMs: Math.max(0, safeNowMs - DASHBOARD_READINESS_SLEEP_LOOKBACK_MS),
+    endMs: DASHBOARD_READINESS_SLEEP_QUERY_END_MS,
+  };
 }
 
-const READINESS_TOTAL_SIGNAL_COUNT = 4 as const;
-export const DASHBOARD_READINESS_SLEEP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+const READINESS_MAX_TIMER_DELAY_MS = 2_147_000_000;
+
+export function resolveDashboardReadinessSleepRefreshAtMs(
+  sleepTrend: DashboardSleepTrendContext | null | undefined,
+  nowMs = Date.now(),
+): number | null {
+  const safeNowMs = toFiniteNumber(nowMs) ?? Date.now();
+  const sleepEndTimes = (sleepTrend?.points || [])
+    .filter(point => point.isPlaceholder !== true && point.isNap !== true)
+    .map(resolveSleepPointTime)
+    .filter(pointTime => pointTime > 0);
+  const completedSleepEndTimes = sleepEndTimes.filter(pointTime => (
+    pointTime <= safeNowMs
+    && pointTime >= safeNowMs - DASHBOARD_READINESS_SLEEP_LOOKBACK_MS
+  ));
+  const futureRefreshTimes = sleepEndTimes.filter(pointTime => pointTime > safeNowMs);
+  const baselineExpiryTimes = completedSleepEndTimes
+    .map(pointTime => pointTime + DASHBOARD_READINESS_SLEEP_LOOKBACK_MS + 1)
+    .filter(refreshAtMs => refreshAtMs > safeNowMs);
+  const latestCompletedSleepEndMs = completedSleepEndTimes.length
+    ? Math.max(...completedSleepEndTimes)
+    : null;
+  const latestSleepExpiryAtMs = latestCompletedSleepEndMs === null
+    ? null
+    : latestCompletedSleepEndMs + DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1;
+  const refreshTimes = [
+    ...futureRefreshTimes,
+    ...baselineExpiryTimes,
+    latestSleepExpiryAtMs,
+  ].filter((refreshAtMs): refreshAtMs is number => (
+    refreshAtMs !== null
+    && Number.isFinite(refreshAtMs)
+    && refreshAtMs > safeNowMs
+  ));
+  if (!refreshTimes.length) {
+    return null;
+  }
+  return Math.min(
+    Math.min(...refreshTimes),
+    safeNowMs + READINESS_MAX_TIMER_DELAY_MS,
+  );
+}
 
 export function buildDashboardAerobicCapacityContext(
   capacity: DashboardTrainingCapacityContext | null | undefined,
@@ -158,151 +219,39 @@ export function buildDashboardReadinessSignalsContext(input: {
   sleepTrend?: DashboardSleepTrendContext | null;
   nowMs?: number;
 }): DashboardReadinessSignalsContext | null {
-  const nowMs = toFiniteNumber(input.nowMs) ?? Date.now();
-  const sleepPoints = (input.sleepTrend?.points || [])
+  const sleepPoints: ReadinessSleepEvidencePoint[] = (input.sleepTrend?.points || [])
     .filter(point => point.isPlaceholder !== true && point.isNap !== true)
-    .filter((point) => {
-      const pointTime = resolveSleepPointTime(point);
-      return pointTime > 0 && pointTime <= nowMs;
-    })
-    .sort((left, right) => resolveSleepPointTime(left) - resolveSleepPointTime(right));
-  const latestSleepCandidate = sleepPoints[sleepPoints.length - 1] || null;
-  const latestSleepAgeMs = latestSleepCandidate
-    ? nowMs - resolveSleepPointTime(latestSleepCandidate)
-    : Number.POSITIVE_INFINITY;
-  const latestSleep = latestSleepCandidate
-    && latestSleepAgeMs >= 0
-    && latestSleepAgeMs <= DASHBOARD_READINESS_SLEEP_MAX_AGE_MS
-    ? latestSleepCandidate
-    : null;
-  const baselineSleep = latestSleep
-    ? sleepPoints.filter(point => (
-      point.id !== latestSleep.id
-      && point.sleepDate !== latestSleep.sleepDate
-      && point.provider === latestSleep.provider
-    )).slice(-14)
-    : [];
-
-  const form = toFiniteNumber(input.formNow?.value);
-  const rampRate = toFiniteNumber(input.rampRate?.rampRate);
-  const sleepScore = resolveSleepScore(latestSleep);
-  const hrvRatio = resolveRatioToMedian(
-    latestSleep?.averageHrvMs,
-    baselineSleep.map(point => point.averageHrvMs),
-  );
-  const minimumHeartRateRatio = resolveRatioToMedian(
-    latestSleep?.minimumHeartRateBpm,
-    baselineSleep.map(point => point.minimumHeartRateBpm),
-  );
-  const signals: WeightedReadinessSignal[] = [];
-
-  const loadScore = resolveLoadReadinessScore(form, rampRate);
-  if (loadScore !== null) {
-    signals.push({ score: loadScore, weight: 40 });
-  }
-  if (sleepScore !== null) {
-    signals.push({ score: sleepScore, weight: 25 });
-  }
-  if (hrvRatio !== null) {
-    signals.push({ score: clamp(50 + ((hrvRatio - 1) * 100), 0, 100), weight: 20 });
-  }
-  if (minimumHeartRateRatio !== null) {
-    signals.push({ score: clamp(50 + ((1 - minimumHeartRateRatio) * 100), 0, 100), weight: 15 });
-  }
-  if (!signals.length) {
-    return null;
-  }
-
-  const availableWeight = signals.reduce((total, signal) => total + signal.weight, 0);
-  const score = Math.round(
-    signals.reduce((total, signal) => total + (signal.score * signal.weight), 0) / availableWeight,
-  );
-  const baselineEvidenceCount = baselineSleep.filter(point => (
-    point.averageHrvMs !== null || point.minimumHeartRateBpm !== null
-  )).length;
-  const confidence = resolveReadinessConfidence(availableWeight, baselineEvidenceCount);
-
-  return {
-    score,
-    label: score >= 75 ? 'Ready' : score >= 55 ? 'Mixed' : 'Recover',
-    confidence,
-    availableSignalCount: signals.length,
-    totalSignalCount: READINESS_TOTAL_SIGNAL_COUNT,
-    form,
-    rampRate,
-    sleepScore,
-    latestSleepAtMs: latestSleep ? resolveSleepPointTime(latestSleep) : null,
-    hrvRatio,
-    minimumHeartRateRatio,
+    .map(point => ({
+      id: point.id,
+      sleepDate: point.sleepDate,
+      provider: point.provider,
+      startTimeMs: toFiniteNumber(point.startTimeMs),
+      endTimeMs: toFiniteNumber(point.endTimeMs),
+      totalSeconds: toFiniteNumber(point.totalSeconds),
+      score: toFiniteNumber(point.score),
+      averageHrvMs: toFiniteNumber(point.averageHrvMs),
+      averageHeartRateBpm: toFiniteNumber(point.averageHeartRateBpm),
+      minimumHeartRateBpm: toFiniteNumber(point.minimumHeartRateBpm),
+    }));
+  const context = buildReadinessSignals({
+    form: input.formNow?.value,
+    rampRate: input.rampRate?.rampRate,
+    sleepPoints,
+    nowMs: input.nowMs,
+  });
+  return context ? {
+    ...context,
+    loadAtMs: [input.formNow?.latestDayMs, input.rampRate?.latestDayMs]
+      .map(toFiniteNumber)
+      .filter((value): value is number => value !== null)
+      .reduce<number | null>((earliest, value) => earliest === null ? value : Math.min(earliest, value), null),
     trend: [],
-  };
-}
-
-function resolveLoadReadinessScore(form: number | null, rampRate: number | null): number | null {
-  if (form === null && rampRate === null) {
-    return null;
-  }
-  let score = form === null
-    ? 65
-    : form <= -30 ? 10
-      : form <= -20 ? 25
-        : form <= -10 ? 45
-          : form < 8 ? 65
-            : form <= 20 ? 90
-              : 75;
-  if (rampRate !== null && rampRate >= 5) {
-    score -= 15;
-  } else if (rampRate !== null && rampRate >= 2) {
-    score -= 7;
-  }
-  return clamp(score, 0, 100);
-}
-
-function resolveSleepScore(point: DashboardSleepTrendPoint | null): number | null {
-  const recordedScore = toFiniteNumber(point?.score);
-  if (recordedScore !== null) {
-    return clamp(recordedScore, 0, 100);
-  }
-  const totalSeconds = toFiniteNumber(point?.totalSeconds);
-  if (totalSeconds === null || totalSeconds <= 0) {
-    return null;
-  }
-  const hours = totalSeconds / 3600;
-  return clamp(100 - (Math.abs(hours - 8) * 20), 0, 100);
+  } : null;
 }
 
 function resolveSleepPointTime(point: DashboardSleepTrendPoint): number {
   const endTimeMs = toFiniteNumber(point.endTimeMs);
   return endTimeMs ?? toFiniteNumber(point.startTimeMs) ?? 0;
-}
-
-function resolveRatioToMedian(value: unknown, baselineValues: readonly unknown[]): number | null {
-  const current = toFiniteNumber(value);
-  const baseline = baselineValues
-    .map(toFiniteNumber)
-    .filter((candidate): candidate is number => candidate !== null && candidate > 0)
-    .sort((left, right) => left - right);
-  if (current === null || current <= 0 || baseline.length < 3) {
-    return null;
-  }
-  const middle = Math.floor(baseline.length / 2);
-  const median = baseline.length % 2
-    ? baseline[middle]
-    : (baseline[middle - 1] + baseline[middle]) / 2;
-  return median > 0 ? current / median : null;
-}
-
-function resolveReadinessConfidence(
-  availableWeight: number,
-  baselineEvidenceCount: number,
-): DashboardReadinessConfidence {
-  if (availableWeight >= 85 && baselineEvidenceCount >= 5) {
-    return 'high';
-  }
-  if (availableWeight >= 60) {
-    return 'medium';
-  }
-  return 'low';
 }
 
 function durabilityScopePriority(scope: DerivedTrainingDurabilityMetricPayload['scopes'][number]['scope']): number {
@@ -355,10 +304,6 @@ function formatWords(value: string): string {
     .filter(Boolean)
     .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function toFiniteNumber(value: unknown): number | null {

@@ -39,6 +39,7 @@ import { ProcessingIndicatorComponent } from './components/notifications/process
 import { ImpersonationBannerComponent } from './components/impersonation-banner/impersonation-banner.component';
 import { MetricLoaderComponent } from './components/metric-loader/metric-loader.component';
 import { AppShellHeaderComponent } from './components/app-shell-header/app-shell-header.component';
+import { PublicFooterComponent } from './components/public-footer/public-footer.component';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { FirebaseAnalyticsTrackingService } from './services/firebase-analytics-tracking.service';
 
@@ -78,6 +79,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     RouteLoaderComponent,
     MetricLoaderComponent,
     AppShellHeaderComponent,
+    PublicFooterComponent,
   ],
   bootstrap: [AppComponent],
   imports: [

@@ -59,6 +59,8 @@ export class PricingComponent implements OnInit, OnDestroy {
     private readonly requiredPolicies = POLICY_CONTENT.filter((policy) => !!policy.checkboxLabel && !policy.isOptional);
     private subscriptionsListener: Subscription | null = null;
     private renewalSummarySequence = 0;
+    private initializationSequence = 0;
+    private destroyed = false;
 
     private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
@@ -76,6 +78,17 @@ export class PricingComponent implements OnInit, OnDestroy {
     isLoadingRole = true;
 
     async ngOnInit(): Promise<void> {
+        if (this.destroyed) {
+            return;
+        }
+        const initializationId = ++this.initializationSequence;
+        this.renewalSummarySequence++;
+        this.subscriptionsListener?.unsubscribe();
+        this.subscriptionsListener = null;
+        this.activeSubscriptions$ = null;
+        this.subscriptionSummarySubject.next(null);
+        this.isLoadingRole = true;
+
         // Define a synthetic "Free" product that matches the StripeProduct structure
         const freeProduct: StripeProduct = {
             id: 'free_tier',
@@ -108,6 +121,9 @@ export class PricingComponent implements OnInit, OnDestroy {
             this.userService.getSubscriptionRole(),
             this.paymentService.hasPaidSubscriptionHistory()
         ]);
+        if (!this.isCurrentInitialization(initializationId)) {
+            return;
+        }
         this.currentRole = role;
         this.hasPaidSubscriptionHistory = hasPaidSubscriptionHistory;
         this.isLoadingRole = false;
@@ -119,11 +135,17 @@ export class PricingComponent implements OnInit, OnDestroy {
             map(subs => {
                 void this.userService.getSubscriptionRole()
                     .then(newRole => {
+                        if (!this.isCurrentInitialization(initializationId)) {
+                            return;
+                        }
                         if (this.currentRole !== newRole) {
                             this.currentRole = newRole;
                         }
                     })
                     .catch((error) => {
+                        if (!this.isCurrentInitialization(initializationId)) {
+                            return;
+                        }
                         this.logger.error('Failed to refresh subscription role after subscription update', error);
                     });
                 return subs.filter(sub => sub.role !== 'free');
@@ -131,9 +153,24 @@ export class PricingComponent implements OnInit, OnDestroy {
         );
 
         this.activeSubscriptions$ = subscriptions$;
-        this.subscriptionsListener?.unsubscribe();
-        this.subscriptionsListener = subscriptions$.subscribe((subs) => {
-            void this.refreshSubscriptionSummary(subs);
+        this.subscriptionsListener = subscriptions$.subscribe({
+            next: (subs) => {
+                if (!this.isCurrentInitialization(initializationId)) {
+                    return;
+                }
+                void this.refreshSubscriptionSummary(subs);
+            },
+            error: (error) => {
+                if (!this.isCurrentInitialization(initializationId)) {
+                    return;
+                }
+                this.renewalSummarySequence++;
+                const code = (error as { code?: unknown } | null)?.code;
+                this.logger.warn('[PricingComponent] Subscription listener unavailable; preserving the claim-derived role.', {
+                    code: typeof code === 'string' ? code : null,
+                });
+                this.subscriptionSummarySubject.next(null);
+            }
         });
 
         // Reset loading state if user returns to the tab (e.g. from Stripe Checkout via back button)
@@ -143,11 +180,17 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy() {
+        this.destroyed = true;
+        this.initializationSequence++;
         this.renewalSummarySequence++;
         this.subscriptionsListener?.unsubscribe();
         if (isPlatformBrowser(this.platformId)) {
             document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
+    }
+
+    private isCurrentInitialization(initializationId: number): boolean {
+        return !this.destroyed && this.initializationSequence === initializationId;
     }
 
     private handleVisibilityChange = () => {
@@ -481,8 +524,8 @@ export class PricingComponent implements OnInit, OnDestroy {
     async manageSubscription() {
         if (this.currentRole === 'pro' || this.currentRole === 'basic') {
             const isPro = this.currentRole === 'pro';
-            const message = `You will be redirected to our secure billing portal where you can manage your plan and payment methods.<br><br>` +
-                `<span style="color: var(--mat-sys-error); font-weight: bold;">Important:</span> If you decide to downgrade your plan, you will keep your features for a 30-day grace period. ` +
+            const htmlMessage = `You will be redirected to our secure billing portal where you can manage your plan and payment methods.<br><br>` +
+                `<strong>Important:</strong> If you decide to downgrade your plan, you will keep your features for a 30-day grace period. ` +
                 (isPro ? `After that, your device sync will be disconnected, and your new plan limits will apply to future uploads. Existing activities are not automatically deleted.` :
                     `After that, your new plan limits will apply to future uploads. Existing activities are not automatically deleted.`);
 
@@ -490,7 +533,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 this.dialog.open(ConfirmationDialogComponent, {
                     data: {
                         title: 'Manage Subscription',
-                        message: message,
+                        htmlMessage,
                         confirmText: 'Manage Subscription',
                         cancelText: 'Cancel'
                     }

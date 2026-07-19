@@ -1,5 +1,6 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { UntypedFormGroup } from '@angular/forms';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClient } from '@angular/common/http';
 import { AppFileService } from '../../services/app.file.service';
@@ -15,12 +16,21 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros';
+type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync';
 
 interface ServiceSectionOption {
   id: ServiceSectionId;
   label: string;
+  serviceName: ServiceNames;
+}
+
+interface ServiceOverviewCard {
+  title: string;
   description: string;
-  svgIcon: string;
+  detail: string;
+  icon: string;
+  actionLabel: string;
+  tool: ServiceToolId;
 }
 
 @Component({
@@ -30,40 +40,118 @@ interface ServiceSectionOption {
   standalone: false
 })
 export class ServicesComponent implements OnInit, OnDestroy {
+  @ViewChild('serviceToolsDialog') private serviceToolsDialog?: TemplateRef<unknown>;
+
   public suuntoAppLinkFormGroup!: UntypedFormGroup;
   public isLoading = false;
   public user!: User;
 
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
-  public activeSection: ServiceSectionId = 'suunto';
-  public readonly sectionOrder: ServiceSectionId[] = ['suunto', 'garmin', 'coros'];
+  public activeSection: ServiceSectionId = 'garmin';
+  public readonly sectionOrder: ServiceSectionId[] = ['garmin', 'suunto', 'coros'];
+  public readonly serviceLabelBySection: Record<ServiceSectionId, string> = {
+    garmin: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
+    suunto: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
+    coros: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
+  };
   public readonly serviceSectionOptions: ServiceSectionOption[] = [
     {
-      id: 'suunto',
-      label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
-      description: getProviderDisplayName(ServiceNames.SuuntoApp, 'destination'),
-      svgIcon: 'suunto',
+      id: 'garmin',
+      label: this.serviceLabelBySection.garmin,
+      serviceName: ServiceNames.GarminAPI,
     },
     {
-      id: 'garmin',
-      label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
-      description: getProviderDisplayName(ServiceNames.GarminAPI, 'destination'),
-      svgIcon: 'garmin',
+      id: 'suunto',
+      label: this.serviceLabelBySection.suunto,
+      serviceName: ServiceNames.SuuntoApp,
     },
     {
       id: 'coros',
-      label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
-      description: getProviderDisplayName(ServiceNames.COROSAPI, 'destination'),
-      svgIcon: 'coros',
+      label: this.serviceLabelBySection.coros,
+      serviceName: ServiceNames.COROSAPI,
     },
   ];
+  public readonly serviceOverviewCardsBySection: Record<ServiceSectionId, readonly ServiceOverviewCard[]> = {
+    garmin: [
+      {
+        title: 'Activity sync',
+        description: 'New Garmin activities import automatically while connected.',
+        detail: 'History import · Pro',
+        icon: 'sync',
+        actionLabel: 'History import',
+        tool: 'history',
+      },
+      {
+        title: 'Send activities to Suunto',
+        description: 'Automatically send new Garmin activities to Suunto, or sync past activities by date.',
+        detail: 'Automatic and past activity sync',
+        icon: 'published_with_changes',
+        actionLabel: 'Activity sync settings',
+        tool: 'auto-sync',
+      },
+    ],
+    suunto: [
+      {
+        title: 'Activity sync',
+        description: 'New Suunto activities import automatically while connected.',
+        detail: 'History import · Pro',
+        icon: 'sync',
+        actionLabel: 'History import',
+        tool: 'history',
+      },
+      {
+        title: 'Route sync',
+        description: 'Import routes from Suunto and send saved Suunto routes to Garmin.',
+        detail: 'Automatic and manual route sync',
+        icon: 'route',
+        actionLabel: 'Route sync settings',
+        tool: 'routes',
+      },
+      {
+        title: 'Upload activities and routes',
+        description: 'Send FIT activity files or GPX route files to the Suunto app.',
+        detail: 'FIT and GPX uploads',
+        icon: 'cloud_upload',
+        actionLabel: 'Upload files',
+        tool: 'uploads',
+      },
+    ],
+    coros: [
+      {
+        title: 'Activity sync',
+        description: 'New COROS activities import automatically while connected.',
+        detail: 'History import · Pro',
+        icon: 'sync',
+        actionLabel: 'History import',
+        tool: 'history',
+      },
+      {
+        title: 'Send activities to Suunto',
+        description: 'Automatically send new COROS activities to Suunto, or sync past activities by date.',
+        detail: 'Automatic and past activity sync',
+        icon: 'published_with_changes',
+        actionLabel: 'Activity sync settings',
+        tool: 'auto-sync',
+      },
+    ],
+  };
   public serviceNames = ServiceNames;
   public hasProAccess = false;
   public isAdmin = false;
+  public managedService: ServiceSectionId | null = null;
+  public managedTool: ServiceToolId = 'history';
+  public managedToolTitle: string | null = null;
+  public readonly serviceConnectionState: Record<ServiceSectionId, boolean> = {
+    garmin: false,
+    suunto: false,
+    coros: false,
+  };
 
 
   private userSubscription!: Subscription;
   private routeSubscription!: Subscription;
+  private serviceToolsDialogRef: MatDialogRef<unknown> | null = null;
+  private readonly dialog = inject(MatDialog);
   private readonly serviceNameBySection: Record<ServiceSectionId, ServiceNames> = {
     suunto: ServiceNames.SuuntoApp,
     garmin: ServiceNames.GarminAPI,
@@ -130,6 +218,38 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
+  public openServiceTools(section: ServiceSectionId, card: ServiceOverviewCard): void {
+    if (!this.serviceToolsDialog || this.serviceToolsDialogRef) {
+      return;
+    }
+
+    this.managedService = section;
+    this.managedTool = card.tool;
+    this.managedToolTitle = card.title;
+    const dialogRef = this.dialog.open(this.serviceToolsDialog, {
+      ariaLabel: `${this.serviceLabelBySection[section]} ${card.title} tools`,
+      autoFocus: 'dialog',
+      maxHeight: 'calc(100dvh - 32px)',
+      maxWidth: 'calc(100vw - 32px)',
+      restoreFocus: true,
+      width: 'min(56rem, calc(100vw - 32px))',
+    });
+    this.serviceToolsDialogRef = dialogRef;
+    dialogRef.afterClosed().subscribe(() => {
+      if (this.serviceToolsDialogRef !== dialogRef) {
+        return;
+      }
+      this.serviceToolsDialogRef = null;
+      this.managedService = null;
+      this.managedTool = 'history';
+      this.managedToolTitle = null;
+    });
+  }
+
+  public setServiceConnectionState(section: ServiceSectionId, connected: boolean): void {
+    this.serviceConnectionState[section] = connected;
+  }
+
   processUser(user: User | null, isPro: boolean) {
     if (!user) {
       this.isLoading = false;
@@ -148,6 +268,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.serviceToolsDialogRef?.close();
     if (this.userSubscription) {
       this.userSubscription.unsubscribe();
     }
@@ -160,9 +281,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
     if (serviceName === ServiceNames.GarminAPI) {
       return 'garmin';
     }
+    if (serviceName === ServiceNames.SuuntoApp) {
+      return 'suunto';
+    }
     if (serviceName === ServiceNames.COROSAPI) {
       return 'coros';
     }
-    return 'suunto';
+    return 'garmin';
   }
 }

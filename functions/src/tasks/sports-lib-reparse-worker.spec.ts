@@ -180,7 +180,7 @@ describe('processSportsLibReparseTask', () => {
             maxInstances: 1,
             timeoutSeconds: 1800,
             retryConfig: expect.objectContaining({
-                maxAttempts: 2,
+                maxAttempts: 10,
             }),
             rateLimits: {
                 maxConcurrentDispatches: 1,
@@ -701,6 +701,7 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
+            deadlineMs: expect.any(Number),
             beforePersist: expect.any(Function),
         }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({

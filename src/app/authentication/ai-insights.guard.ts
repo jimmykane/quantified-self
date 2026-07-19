@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { CanMatchFn, Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { CanMatchFn, Router, UrlSegment } from '@angular/router';
+import { combineLatest, firstValueFrom } from 'rxjs';
+import { filter, startWith, take } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
+import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LoggerService } from '../services/logger.service';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { getAiInsightsRequestLimitForRole } from '@shared/limits';
@@ -13,14 +14,48 @@ import { getAiInsightsRequestLimitForRole } from '@shared/limits';
 class AiInsightsPermissionsService {
   private readonly router = inject(Router);
   private readonly authService = inject(AppAuthService);
+  private readonly userService = inject(AppUserService);
   private readonly logger = inject(LoggerService);
 
-  async canMatch(): Promise<boolean | import('@angular/router').UrlTree> {
+  async canMatch(segments: UrlSegment[]): Promise<boolean | import('@angular/router').UrlTree> {
     try {
       this.logger.log('[AiInsightsGuard] Checking access...');
-      const user = await firstValueFrom(this.authService.user$.pipe(take(1)));
+      const [firebaseUser, user, profileReadState] = await firstValueFrom(
+        combineLatest([
+          this.authService.authState$,
+          this.authService.user$.pipe(startWith(null)),
+          this.userService.profileReadState$,
+        ]).pipe(
+          filter(([currentFirebaseUser, currentAppUser, currentProfileReadState]) => {
+            if (!currentFirebaseUser) {
+              return true;
+            }
 
-      if (!user) {
+            const hasActionableProfileFailure = 'uid' in currentProfileReadState
+              && currentProfileReadState.uid === currentFirebaseUser.uid
+              && isActionableProfileReadState(currentProfileReadState);
+            return hasActionableProfileFailure
+              || (!!currentAppUser
+                && currentAppUser.uid === currentFirebaseUser.uid
+                && !this.userService.hasIncompleteProfileReads(currentFirebaseUser.uid));
+          }),
+          take(1)
+        )
+      );
+
+      const hasActionableProfileFailure = !!firebaseUser
+        && 'uid' in profileReadState
+        && profileReadState.uid === firebaseUser.uid
+        && isActionableProfileReadState(profileReadState);
+      if (hasActionableProfileFailure) {
+        const url = '/' + segments.map(segment => segment.path).join('/');
+        this.authService.redirectUrl = url;
+        return this.router.createUrlTree(['/login'], {
+          queryParams: { returnUrl: url },
+        });
+      }
+
+      if (!firebaseUser || !user) {
         this.logger.log('[AiInsightsGuard] No user found, allowing (authGuard will handle)');
         return true;
       }
@@ -76,4 +111,4 @@ class AiInsightsPermissionsService {
   }
 }
 
-export const aiInsightsGuard: CanMatchFn = () => inject(AiInsightsPermissionsService).canMatch();
+export const aiInsightsGuard: CanMatchFn = (route, segments) => inject(AiInsightsPermissionsService).canMatch(segments);

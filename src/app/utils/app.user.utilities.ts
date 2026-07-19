@@ -524,6 +524,7 @@ export class AppUserUtilities {
         settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
+        settings.dashboardSettings.showTodaySummary = settings.dashboardSettings.showTodaySummary !== false;
         settings.dashboardSettings.eventTableFilters = normalizeDashboardEventTableFilters(
             settings.dashboardSettings.eventTableFilters,
             {

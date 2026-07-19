@@ -1,8 +1,14 @@
-const PUBLIC_STARTUP_PATHS = new Set([
+/**
+ * Routes that present public content instead of an authenticated workspace.
+ * The shell uses this registry to keep public content visible while browser
+ * authentication resolves.
+ */
+const PUBLIC_CONTENT_PATHS = new Set([
   '/',
   '/pricing',
   '/help',
   '/releases',
+  '/policies',
   '/tools',
   '/tools/compare',
   '/tools/compare/saved',
@@ -12,6 +18,7 @@ const PUBLIC_STARTUP_PATHS = new Set([
   '/integrations/coros',
   '/features',
   '/features/workout-data-comparison',
+  '/features/training-analysis',
   '/features/ai-insights',
   '/features/workout-file-comparison',
   '/features/fit-gpx-tcx-file-analyzer',
@@ -28,6 +35,34 @@ const AUTH_SENSITIVE_PUBLIC_STARTUP_PATHS = new Set([
   '/tools/compare',
   '/tools/compare/saved',
 ]);
+
+/**
+ * Application flows intentionally stay free of marketing chrome. Every other
+ * route, including a future public page or a not-found page, receives the
+ * shared public footer by default.
+ */
+const PUBLIC_FOOTER_EXCLUDED_PATHS = new Set([
+  '/login',
+  '/onboarding',
+  '/admin',
+  '/subscriptions',
+  '/payment/success',
+  '/payment/cancel',
+  '/services',
+  '/dashboard',
+  '/training',
+  '/mytracks',
+  '/routes',
+  '/settings',
+  '/ai-insights',
+]);
+
+const PUBLIC_FOOTER_EXCLUDED_PREFIXES = [
+  '/admin/',
+  '/payment/',
+  '/services/',
+  '/user/',
+] as const;
 
 const PUBLIC_STARTUP_PREFIXES = [
   '/share/event/',
@@ -56,9 +91,19 @@ export function documentRoutePath(documentRef: Document | null | undefined): str
 }
 
 export function isPublicStartupPath(path: string): boolean {
+  return isPublicContentPath(path);
+}
+
+export function isPublicContentPath(path: string): boolean {
   const normalizedPath = normalizeRoutePath(path);
-  return PUBLIC_STARTUP_PATHS.has(normalizedPath)
+  return PUBLIC_CONTENT_PATHS.has(normalizedPath)
     || PUBLIC_STARTUP_PREFIXES.some(prefix => normalizedPath.startsWith(prefix));
+}
+
+export function shouldShowPublicFooter(path: string): boolean {
+  const normalizedPath = normalizeRoutePath(path);
+  return !PUBLIC_FOOTER_EXCLUDED_PATHS.has(normalizedPath)
+    && !PUBLIC_FOOTER_EXCLUDED_PREFIXES.some(prefix => normalizedPath.startsWith(prefix));
 }
 
 export function isPublicStartupDocument(documentRef: Document | null | undefined): boolean {
@@ -66,7 +111,7 @@ export function isPublicStartupDocument(documentRef: Document | null | undefined
 }
 
 export function isRouteLoaderSuppressedStartupPath(path: string): boolean {
-  return PUBLIC_STARTUP_PATHS.has(normalizeRoutePath(path));
+  return PUBLIC_CONTENT_PATHS.has(normalizeRoutePath(path));
 }
 
 export function isRouteLoaderSuppressedStartupDocument(documentRef: Document | null | undefined): boolean {

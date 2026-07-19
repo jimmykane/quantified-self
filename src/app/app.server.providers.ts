@@ -7,7 +7,7 @@ import { AppUserInterface } from './models/app-user.interface';
 import { AppAnalyticsService } from './services/app.analytics.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { AppThemeService } from './services/app.theme.service';
-import { AppUserService } from './services/app.user.service';
+import { AppUserService, type AppUserProfileReadState } from './services/app.user.service';
 import { AppWhatsNewService, type ChangelogPost } from './services/app.whats-new.service';
 import { AppPaymentService, type StripeProduct, type StripeSubscription } from './services/app.payment.service';
 
@@ -28,8 +28,14 @@ class ServerAuthService {
 
 @Injectable()
 class ServerUserService {
+  private readonly profileReadStateSignal = signal<AppUserProfileReadState>({ status: 'signed-out' });
+
   readonly user$: Observable<AppUserInterface | null> = of(null);
   readonly user = signal<AppUserInterface | null>(null).asReadonly();
+  readonly profileReadState = this.profileReadStateSignal.asReadonly();
+  readonly profileReadState$ = of<AppUserProfileReadState>(this.profileReadStateSignal());
+  readonly isProfileReadBlocking = signal(false).asReadonly();
+  readonly hasActionableProfileReadFailure = signal(false).asReadonly();
   readonly stripeRoleSignal = signal(null).asReadonly();
   readonly isAdminSignal = signal(false).asReadonly();
   readonly isProSignal = signal(false).asReadonly();

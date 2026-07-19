@@ -1,10 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { NEVER, of, Subject } from 'rxjs';
-import { describe, expect, it, vi } from 'vitest';
+import { concat, NEVER, of, Subject, throwError } from 'rxjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppSleepService } from '../../services/app.sleep.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
+import type { TrainingBuildBenchmarkSelection } from '@shared/derived-metrics';
 import {
   DashboardDerivedMetricsService,
   createDashboardDerivedMetricsMissingState,
@@ -12,8 +16,24 @@ import {
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
 import { TrainingWorkspaceComponent } from './training-workspace.component';
+import { TrainingMetricTextComponent } from './training-metric-text.component';
+
+function createSleepService(sessions: readonly SleepSession[] = []) {
+  return {
+    watchForDashboard: vi.fn(() => of([...sessions])),
+  };
+}
 
 describe('TrainingWorkspaceComponent', () => {
+  let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    analyticsService = { logEvent: vi.fn() };
+    TestBed.configureTestingModule({
+      providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
+    });
+  });
+
   it('renders the fixed training workspace without dashboard tile rendering', async () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
@@ -33,10 +53,11 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -49,6 +70,12 @@ describe('TrainingWorkspaceComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    const feedbackAction = element.querySelector('.training-feedback-action');
+    expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
+    expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
+    expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
+    expect(feedbackAction?.getAttribute('target')).toBe('_blank');
+    expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     expect(element.textContent).toContain('Compared with your usual 28 days');
     expect(element.textContent).toContain('What drove this');
     expect(element.textContent).toContain('How your load is changing');
@@ -62,14 +89,306 @@ describe('TrainingWorkspaceComponent', () => {
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
+  it('reuses the bounded sleep-only readiness path without loading event or activity history', async () => {
+    const nowMs = Date.UTC(2026, 6, 16, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    const createSession = (
+      id: string,
+      daysAgo: number,
+      score: number,
+      averageHrvMs: number,
+      minimumHeartRateBpm: number,
+    ): SleepSession => {
+      const endTimeMs = nowMs - (daysAgo * 24 * 60 * 60 * 1000) - (6 * 60 * 60 * 1000);
+      const startTimeMs = endTimeMs - (8 * 60 * 60 * 1000);
+      return {
+        id,
+        userID: 'user-1',
+        source: {
+          provider: SLEEP_PROVIDERS.GarminAPI,
+          sourceSessionKey: id,
+          providerUserId: 'garmin-user-1',
+        },
+        sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+        startTimeMs,
+        endTimeMs,
+        durationSeconds: 8 * 60 * 60,
+        isNap: false,
+        stages: [],
+        stageDurationsSeconds: {},
+        score: { value: score },
+        vitals: { averageHrvMs, minimumHeartRateBpm },
+        createdAtMs: endTimeMs,
+        updatedAtMs: endTimeMs,
+      };
+    };
+    const sleepSessions = [
+      createSession('baseline-6', 6, 75, 50, 50),
+      createSession('baseline-5', 5, 75, 50, 50),
+      createSession('baseline-4', 4, 75, 50, 50),
+      createSession('baseline-3', 3, 75, 50, 50),
+      createSession('baseline-2', 2, 75, 50, 50),
+      createSession('baseline-1', 1, 75, 50, 50),
+      createSession('latest', 0, 90, 55, 48),
+    ];
+    const sleepService = createSleepService(sleepSessions);
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      formNowStatus: 'ready',
+      formNow: { latestDayMs: nowMs, value: 10, trend8Weeks: [] },
+      rampRateStatus: 'ready',
+      rampRate: { rampRate: 1 } as any,
+      trainingReadinessStatus: 'ready',
+      trainingReadiness: {
+        formulaVersion: 3,
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.UTC(2026, 6, 16),
+        generatedAtMs: nowMs - 1000,
+        historyDays: 14,
+        points: Array.from({ length: 14 }, (_, index) => ({
+          dayMs: Date.UTC(2026, 6, 3 + index),
+          score: 70,
+          label: 'Mixed',
+          confidence: 'medium',
+          availableSignalCount: 4,
+          baselineEvidenceCount: 3,
+          totalSignalCount: 4,
+          form: 5,
+          rampRate: 1,
+          sleepScore: 80,
+          latestSleepAtMs: Date.UTC(2026, 6, 3 + index, 6),
+          hrvRatio: 1,
+          averageHeartRateRatio: 1,
+          minimumHeartRateRatio: 1,
+          overnightHeartRateRatio: 1,
+        })),
+      },
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: nowMs,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    try {
+      await TestBed.configureTestingModule({
+        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+        providers: [
+          { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+          { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+          { provide: AppSleepService, useValue: sleepService },
+          { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+        ],
+        schemas: [NO_ERRORS_SCHEMA],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+      fixture.detectChanges();
+
+      expect(sleepService.watchForDashboard).toHaveBeenCalledWith(
+        'user-1',
+        nowMs - (30 * 24 * 60 * 60 * 1000),
+        Number.MAX_SAFE_INTEGER,
+      );
+      const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
+      expect(panel.textContent).toContain('Readiness today');
+      expect(panel.textContent).toContain('Ready');
+      expect(panel.textContent).toContain('4/4 signals');
+      expect(panel.textContent).toContain('Sleep');
+      expect(panel.textContent).toContain('90/100');
+      expect(panel.textContent).toContain('+10%');
+      expect(panel.textContent).toContain('-4%');
+      expect(panel.textContent).toContain('14-day trend');
+      expect(panel.textContent).toContain('14/14 days scored');
+      expect(panel.textContent).toContain('browser does not load event or activity history');
+      expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
+      expect(fixture.nativeElement.querySelector('.training-recovery-panel')).toBeNull();
+      expect(fixture.nativeElement.querySelectorAll('.training-current-context-grid > article')).toHaveLength(1);
+      fixture.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows a sleep read failure separately while retaining load-only readiness', async () => {
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      formNowStatus: 'ready',
+      formNow: { latestDayMs: Date.now(), value: 10, trend8Weeks: [] },
+      rampRateStatus: 'ready',
+      rampRate: { rampRate: 1 } as never,
+      trainingReadinessStatus: 'failed',
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+    const sleepService = {
+      watchForDashboard: vi.fn(() => throwError(() => new Error('sleep read failed'))),
+    };
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: sleepService },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
+
+    expect(panel.textContent).toContain('showing available load signals only');
+    expect(panel.textContent).toContain('Recorded sleep evidence could not be loaded');
+    fixture.destroy();
+  });
+
+  it('retains eligible sleep evidence when the live listener fails after loading', async () => {
+    const nowMs = Date.now();
+    const sleepSession = {
+      id: 'retained-sleep',
+      userID: 'user-1',
+      source: {
+        provider: SLEEP_PROVIDERS.GarminAPI,
+        sourceSessionKey: 'retained-sleep',
+        providerUserId: 'garmin-user-1',
+      },
+      sleepDate: new Date(nowMs).toISOString().slice(0, 10),
+      startTimeMs: nowMs - (9 * 60 * 60 * 1000),
+      endTimeMs: nowMs - (60 * 60 * 1000),
+      durationSeconds: 8 * 60 * 60,
+      isNap: false,
+      stages: [],
+      stageDurationsSeconds: {},
+      score: { value: 88 },
+      createdAtMs: nowMs,
+      updatedAtMs: nowMs,
+    } as SleepSession;
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      formNowStatus: 'ready',
+      formNow: { latestDayMs: nowMs, value: 10, trend8Weeks: [] },
+      rampRateStatus: 'ready',
+      rampRate: { rampRate: 1 } as never,
+      trainingReadinessStatus: 'failed',
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+    const sleepService = {
+      watchForDashboard: vi.fn(() => concat(
+        of([sleepSession]),
+        throwError(() => new Error('listener disconnected')),
+      )),
+    };
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: sleepService },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
+
+    expect(panel.textContent).toContain('88/100');
+    expect(panel.textContent).toContain('showing the last loaded evidence');
+    fixture.destroy();
+  });
+
+  it('shows failed current load reads separately from missing readiness evidence', async () => {
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      formNowStatus: 'failed',
+      rampRateStatus: 'failed',
+      trainingReadinessStatus: 'failed',
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Current load evidence could not be loaded');
+    fixture.destroy();
+  });
+
+  it('requests only projection-sensitive readiness inputs at the next UTC day', async () => {
+    const nowMs = Date.UTC(2026, 6, 16, 23, 59, 59, 500);
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      formNowStatus: 'ready',
+      formNow: { latestDayMs: Date.UTC(2026, 6, 16), value: 10, trend8Weeks: [] },
+      rampRateStatus: 'ready',
+      rampRate: { rampRate: 1 } as never,
+      trainingReadinessStatus: 'ready',
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    try {
+      await TestBed.configureTestingModule({
+        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+        providers: [
+          { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+          { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+          { provide: AppSleepService, useValue: createSleepService() },
+          { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+        ],
+        schemas: [NO_ERRORS_SCHEMA],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+      fixture.detectChanges();
+      derivedMetrics.ensureForDashboard.mockClear();
+
+      await vi.advanceTimersByTimeAsync(502);
+
+      expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
+        { uid: 'user-1' },
+        derivedState,
+        {
+          force: true,
+          metricKinds: [
+            'form_now',
+            'ramp_rate',
+            'form_plus_7d',
+            'freshness_forecast',
+            'training_readiness',
+          ],
+        },
+      );
+      fixture.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('renders the workspace and requests snapshots when the derived stream has not emitted yet', async () => {
     const derivedMetrics = { watch: vi.fn(() => NEVER), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -129,10 +448,11 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -196,13 +516,14 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
         {
           provide: AppAuthService,
           useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['cycling'] } } }) },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -214,7 +535,15 @@ describe('TrainingWorkspaceComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.textContent).toContain('Cycling');
     expect(element.querySelectorAll('.training-build-card')).toHaveLength(1);
+    const benchmarkAction = element.querySelector('.training-build-benchmark-action');
+    expect(benchmarkAction?.getAttribute('aria-label')).toBe('Set Cycling benchmark');
+    expect(benchmarkAction?.querySelector('.training-build-benchmark-action-label')?.textContent?.trim())
+      .toBe('Set benchmark');
     expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
+    expect(element.querySelector('.training-mix-grid')?.classList.contains('training-mix-grid--single')).toBe(true);
+    expect(element.querySelector('.training-mix-panel')?.classList.contains('training-mix-panel--single')).toBe(true);
+    expect(element.querySelector('.training-mix-zone-comparison')?.textContent).toContain('Intensity balance');
+    expect(element.querySelectorAll('.training-mix-zone-track')).toHaveLength(3);
     expect(element.textContent).toContain('Cycling capacity evidence');
     expect(element.textContent).not.toContain('Running capacity evidence');
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
@@ -245,13 +574,14 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
         {
           provide: AppAuthService,
           useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['swimming'] } } }) },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -277,9 +607,12 @@ describe('TrainingWorkspaceComponent', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
+      {} as any,
       { appTheme: () => AppThemes.Normal } as any,
       dialog as any,
       { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
     );
     component.derivedState = {
       ...createDashboardDerivedMetricsMissingState(),
@@ -310,6 +643,10 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(component.visibleDisciplines).toEqual(['cycling']);
     expect(component.isAutomaticSportVisibility).toBe(false);
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_sport_visibility_saved', {
+      selection_mode: 'fixed',
+      selection_count: 1,
+    });
   });
 
   it('opens the benchmark picker as a wide dialog bounded by the viewport', () => {
@@ -318,9 +655,12 @@ describe('TrainingWorkspaceComponent', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
+      {} as any,
       { appTheme: () => AppThemes.Normal } as any,
       dialog as any,
       { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
     );
 
     component.toggleTrainingBuildRecovery('cycling');
@@ -334,12 +674,45 @@ describe('TrainingWorkspaceComponent', () => {
     }));
     afterClosed.next({ saved: true, selection: null });
     expect(component.trainingBuildRecoveryExpanded.cycling).toBe(false);
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_benchmark_saved', {
+      action: 'cleared',
+      discipline: 'cycling',
+    });
+  });
+
+  it('records only the non-identifying benchmark configuration after a saved selection', () => {
+    const afterClosed = new Subject<{ saved: true; selection: TrainingBuildBenchmarkSelection }>();
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+      null,
+      analyticsService as any,
+    );
+
+    component.openTrainingBuildBenchmarkDialog('swimming');
+    afterClosed.next({
+      saved: true,
+      selection: { mode: 'period', durationWeeks: 12, endDayMs: Date.UTC(2026, 6, 18) },
+    });
+
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('training_benchmark_saved', {
+      action: 'set',
+      discipline: 'swimming',
+      reference_mode: 'period',
+      duration_weeks: 12,
+    });
   });
 
   it('does not retain a pending override when settings propagated before the dialog result', () => {
     const afterClosed = new Subject<{ saved: true; visibleDisciplines: ['cycling'] }>();
     const dialog = { open: vi.fn(() => ({ afterClosed: () => afterClosed })) };
     const component = new TrainingWorkspaceComponent(
+      {} as any,
       {} as any,
       {} as any,
       { appTheme: () => AppThemes.Normal } as any,
@@ -364,6 +737,7 @@ describe('TrainingWorkspaceComponent', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
+      {} as any,
       { appTheme: () => AppThemes.Normal } as any,
       dialog as any,
       { markForCheck: vi.fn() } as any,
@@ -383,6 +757,7 @@ describe('TrainingWorkspaceComponent', () => {
 
   it('distinguishes benchmark card states and formats comparison deltas without a chart', () => {
     const component = new TrainingWorkspaceComponent(
+      {} as any,
       {} as any,
       {} as any,
       { appTheme: () => AppThemes.Normal } as any,
@@ -709,13 +1084,14 @@ describe('TrainingWorkspaceComponent', () => {
     const selection = { mode: 'period' as const, durationWeeks: 12 as const, endDayMs };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({
           uid: 'user-1',
           settings: { trainingSettings: { visibleDisciplines: ['cycling'], buildBenchmarks: { cycling: selection } } },
         }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -758,6 +1134,10 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
+    const benchmarkAction = element.querySelector('.training-build-benchmark-action');
+    expect(benchmarkAction?.getAttribute('aria-label')).toBe('Change Cycling benchmark');
+    expect(benchmarkAction?.querySelector('.training-build-benchmark-action-label')?.textContent?.trim())
+      .toBe('Change');
     const toggle = element.querySelector<HTMLButtonElement>('.training-build-recovery-toggle');
     expect(element.textContent).toContain('Sleep 20m shorter per night · Overnight HRV +3 ms');
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
@@ -775,6 +1155,7 @@ describe('TrainingWorkspaceComponent', () => {
 
   it('updates an open benchmark dialog when event suggestions arrive', () => {
     const component = new TrainingWorkspaceComponent(
+      {} as any,
       {} as any,
       {} as any,
       { appTheme: () => AppThemes.Normal } as any,
@@ -825,10 +1206,11 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent],
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
       schemas: [NO_ERRORS_SCHEMA],

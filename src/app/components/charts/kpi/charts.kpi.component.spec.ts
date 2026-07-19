@@ -31,7 +31,6 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 
@@ -619,39 +618,9 @@ describe('ChartsKpiComponent', () => {
     expect(component.secondaryValueText).toBe('3 samples');
   });
 
-  it('renders readiness score and evidence confidence separately', async () => {
-    component.chartType = DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE;
-    component.readinessSignals = {
-      score: 82,
-      label: 'Ready',
-      confidence: 'high',
-      availableSignalCount: 4,
-      totalSignalCount: 4,
-      form: 10,
-      rampRate: 1,
-      sleepScore: 90,
-      latestSleepAtMs: Date.UTC(2026, 0, 1),
-      hrvRatio: 1.1,
-      minimumHeartRateRatio: 0.96,
-      trend: [],
-    };
-
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(component.title).toBe('Readiness Signals');
-    expect(component.primaryValueText).toBe('Ready');
-    expect(component.primaryLabel).toBe('82/100 signal score');
-    expect(component.secondaryLabel).toBe('High confidence');
-    expect(component.secondaryValueText).toBe('4/4 signals');
-    expect(component.hasTrendData).toBe(false);
-    expect(fixture.nativeElement.querySelector('.kpi-layout-no-trend')).toBeTruthy();
-  });
-
   it.each([
     [DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE, 'No imported VO2 max'],
     [DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE, 'No eligible durability evidence'],
-    [DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE, 'No current readiness signals'],
   ])('uses evidence-specific empty copy for %s', async (chartType, expectedLabel) => {
     component.chartType = chartType;
 

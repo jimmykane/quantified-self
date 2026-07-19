@@ -32,26 +32,14 @@ mat-icon {
     line-height: 1.5;
 }
 
-.service-privacy-link {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: -4px 0 16px;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.88rem;
-    line-height: 1.5;
-}
-
-.service-privacy-link mat-icon {
-    width: 18px;
-    height: 18px;
-    font-size: 18px;
-}
-
 .service-container {
     max-width: 760px;
     min-width: 0;
+}
+
+.service-container--tools-only {
+    width: 100%;
+    max-width: none;
 }
 
 .provider-tools-tabs {
@@ -208,8 +196,13 @@ mat-icon {
     display: block;
     min-width: 0;
     max-width: 100%;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.service-container:not(.service-container--advanced) .connected-account-item:not(:first-child) {
+    display: none;
 }
 
 .connected-account-line {
@@ -391,6 +384,15 @@ mat-icon {
     }
 
     .connection-disconnect-button {
-        align-self: flex-start;
+        align-self: stretch;
+        width: 100%;
+    }
+
+    .tool-actions {
+        width: 100%;
+    }
+
+    .tool-actions button {
+        width: 100%;
     }
 }

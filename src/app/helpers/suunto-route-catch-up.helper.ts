@@ -149,22 +149,22 @@ export function buildSuuntoRouteCatchUpSnackbarMessage(
 
   if (summary.totalCount === 0 && failedProviderCount === 0) {
     return {
-      message: 'No Suunto routes were found to queue.',
+      message: 'No Suunto routes were found.',
       duration: 3500,
     };
   }
 
   const messageParts = summary.totalCount === 0
-    ? ['No Suunto routes were found to queue.']
-    : [`Queued ${summary.queuedCount} ${summary.queuedCount === 1 ? 'route' : 'routes'}.`];
+    ? ['No Suunto routes were found.']
+    : [`Route import started for ${summary.queuedCount} ${summary.queuedCount === 1 ? 'route' : 'routes'}.`];
   if (summary.skippedCount > 0) {
-    messageParts.push(`Skipped ${summary.skippedCount}.`);
+    messageParts.push(`Already up to date: ${summary.skippedCount}.`);
   }
   if (summary.failureCount > 0) {
-    messageParts.push(`Failed ${summary.failureCount}.`);
+    messageParts.push(`Could not import: ${summary.failureCount}.`);
   }
   if (failedProviderCount > 0) {
-    messageParts.push(`Failed ${failedProviderCount} connected ${failedProviderCount === 1 ? 'account' : 'accounts'}.`);
+    messageParts.push(`Could not check ${failedProviderCount} connected ${failedProviderCount === 1 ? 'account' : 'accounts'}.`);
   }
 
   return {
@@ -206,7 +206,7 @@ export function buildSuuntoRouteCatchUpPromptViewModel(options: {
         id: DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
         icon: 'route',
         title: 'Import existing Suunto routes',
-        description: 'Older Suunto routes need one manual catch-up. Upgrade to Pro to queue your current Suunto route library.',
+        description: 'Upgrade to Pro to import routes that are already saved in your Suunto account.',
         busy: options.busy,
         error: options.error,
         primaryAction: {
@@ -224,7 +224,7 @@ export function buildSuuntoRouteCatchUpPromptViewModel(options: {
         id: DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
         icon: 'sync_problem',
         title: 'Import existing Suunto routes',
-        description: 'Older Suunto routes need one manual catch-up. Reconnect Suunto before queueing your current route library.',
+        description: 'Reconnect Suunto before importing routes that are already saved in your Suunto account.',
         busy: options.busy,
         error: options.error,
         primaryAction: {
@@ -243,14 +243,14 @@ export function buildSuuntoRouteCatchUpPromptViewModel(options: {
         id: DASHBOARD_ACTION_PROMPT_SUUNTO_ROUTE_CATCH_UP_ID,
         icon: 'route',
         title: 'Import existing Suunto routes',
-        description: 'New and updated Suunto routes already import automatically while connected. Queue one manual catch-up to pull older routes already stored in Suunto.',
+        description: 'New and updated Suunto routes import automatically while connected. Import existing routes once to add your current Suunto route library.',
         busy: options.busy,
         error: options.error,
         primaryAction: {
           id: 'queueSuuntoRouteCatchUp',
-          label: 'Queue route catch-up',
+          label: 'Import existing routes',
           icon: 'playlist_add',
-          loadingLabel: 'Queueing...',
+          loadingLabel: 'Starting import...',
         },
         secondaryAction: {
           id: 'dismissSuuntoRouteCatchUp',

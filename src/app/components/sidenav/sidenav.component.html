@@ -31,10 +31,6 @@
   </div>
   }
 
-  <!-- Navigation Section -->
-  <div class="sidenav-section-header">Navigation</div>
-
-
   @if (!user) {
   <mat-list-item routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" routerLink="/"
     (click)="closeSideNav()">
@@ -48,25 +44,17 @@
     <mat-icon>dashboard</mat-icon>
     <span>Dashboard</span>
   </mat-list-item>
+
+  <mat-list-item routerLinkActive="active" routerLink="/training" (click)="closeSideNav()">
+    <mat-icon>monitoring</mat-icon>
+    <span>Training <span class="nav-badge">Beta</span></span>
+  </mat-list-item>
   }
 
   <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
     <mat-icon>compare_arrows</mat-icon>
-    <span>Compare Files <span class="nav-badge">New</span></span>
+    <span>Compare Files</span>
   </mat-list-item>
-
-  @if (user) {
-  <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
-    (click)="closeSideNav()">
-    <mat-icon>insights</mat-icon>
-    <span>AI Insights <span class="nav-badge">Beta</span></span>
-    <span class="fill-space"></span>
-    @if (!hasAiInsightsAccess) {
-    <mat-icon class="lock-icon">lock</mat-icon>
-    <span class="pro-badge">PAID</span>
-    }
-  </mat-list-item>
-  }
 
   @if (!user) {
   <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNav()">
@@ -93,6 +81,17 @@
     <mat-icon>route</mat-icon>
     <span>Routes <span class="mat-small">(Beta)</span></span>
     <span class="fill-space"></span>
+  </mat-list-item>
+
+  <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
+    (click)="closeSideNav()">
+    <mat-icon>insights</mat-icon>
+    <span>AI Insights</span>
+    <span class="fill-space"></span>
+    @if (!hasAiInsightsAccess) {
+    <mat-icon class="lock-icon">lock</mat-icon>
+    <span class="pro-badge">PAID</span>
+    }
   </mat-list-item>
   }
 

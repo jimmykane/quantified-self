@@ -1,103 +1,180 @@
 <div class="settings-container">
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
-    <main class="settings-content">
-      <div class="services-shell">
+    <main class="settings-content services-content">
+        <header class="services-page-header">
+          <h1>Connections</h1>
+          <p>Bring your activity data together.</p>
+        </header>
+
+        <mat-button-toggle-group
+          class="provider-selector provider-selector--desktop"
+          [value]="activeSection"
+          hideSingleSelectionIndicator
+          aria-label="Service providers"
+          (change)="selectService($event.value)">
+          @for (section of serviceSectionOptions; track section.id) {
+          <mat-button-toggle [value]="section.id" [attr.aria-label]="section.label">
+            <span class="provider-selector__option">
+              <app-service-source-icon
+                [sourceServiceName]="section.serviceName"
+                [showTooltip]="false">
+              </app-service-source-icon>
+              <span class="provider-selector__name">{{ section.label }}</span>
+              @if (serviceConnectionState[section.id]) {
+              <span class="provider-selector__connection-state">
+                <span class="provider-selector__connection-dot"></span>
+                Connected
+              </span>
+              }
+            </span>
+          </mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+
         <nav
           mat-tab-nav-bar
-          [tabPanel]="serviceTabsPanel"
-          mat-stretch-tabs="false"
-          class="mobile-section-tabs"
-          aria-label="Service integrations">
+          [tabPanel]="providerPanel"
+          mat-stretch-tabs="true"
+          class="provider-selector provider-selector--mobile"
+          aria-label="Service providers">
           @for (section of serviceSectionOptions; track section.id) {
           <a
             href=""
             mat-tab-link
             [active]="activeSection === section.id"
             (click)="$event.preventDefault(); selectService(section.id)">
-            <span class="section-tab-label">
-              <mat-icon [svgIcon]="section.svgIcon"></mat-icon>
-              <span>{{ section.label }}</span>
-            </span>
+            {{ section.label }}
           </a>
           }
         </nav>
 
-        <aside class="desktop-section-nav" aria-label="Service integrations">
-          <div class="desktop-section-nav-title">Integrations</div>
-          <mat-nav-list class="desktop-section-nav-list">
-            @for (section of serviceSectionOptions; track section.id) {
-            <a
-              href=""
-              mat-list-item
-              [activated]="activeSection === section.id"
-              (click)="$event.preventDefault(); selectService(section.id)">
-              <mat-icon matListItemIcon [svgIcon]="section.svgIcon"></mat-icon>
-              <span matListItemTitle class="desktop-section-nav-label">{{ section.label }}</span>
-              <span matListItemLine class="desktop-section-nav-description">{{ section.description }}</span>
-            </a>
-            }
-          </mat-nav-list>
-        </aside>
+        <mat-tab-nav-panel #providerPanel class="services-workspace-main">
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'garmin'"
+            aria-label="Garmin Connect">
+            <app-services-garmin
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [isAdmin]="isAdmin"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
+            </app-services-garmin>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'garmin' }">
+            </ng-container>
+          </section>
 
-        <mat-tab-nav-panel #serviceTabsPanel>
-          <section class="workspace-main">
-            <section
-              class="service-detail"
-              [hidden]="activeSection !== 'garmin'"
-              aria-labelledby="service-garmin-title">
-              <header class="service-detail-header">
-                <mat-icon class="service-detail-logo" svgIcon="garmin"></mat-icon>
-                <div>
-                  <h1 id="service-garmin-title">Garmin Integration</h1>
-                  <p>Manage your connection with Garmin Connect.</p>
-                </div>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="service-detail-body">
-                <app-services-garmin
-                  [user]="user"
-                  [hasProAccess]="hasProAccess"
-                  [isAdmin]="isAdmin">
-                </app-services-garmin>
-              </div>
-            </section>
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'suunto'"
+            aria-label="Suunto App">
+            <app-services-suunto
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
+            </app-services-suunto>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'suunto' }">
+            </ng-container>
+          </section>
 
-            <section
-              class="service-detail"
-              [hidden]="activeSection !== 'coros'"
-              aria-labelledby="service-coros-title">
-              <header class="service-detail-header">
-                <mat-icon class="service-detail-logo" svgIcon="coros"></mat-icon>
-                <div>
-                  <h1 id="service-coros-title">COROS Integration</h1>
-                  <p>Manage your connection with COROS.</p>
-                </div>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="service-detail-body">
-                <app-services-coros [user]="user" [hasProAccess]="hasProAccess"></app-services-coros>
-              </div>
-            </section>
-
-            <section
-              class="service-detail"
-              [hidden]="activeSection !== 'suunto'"
-              aria-labelledby="service-suunto-title">
-              <header class="service-detail-header">
-                <mat-icon class="service-detail-logo" svgIcon="suunto"></mat-icon>
-                <div>
-                  <h1 id="service-suunto-title">Suunto Integration</h1>
-                  <p>Manage your connection with Suunto App.</p>
-                </div>
-              </header>
-              <mat-divider></mat-divider>
-              <div class="service-detail-body">
-                <app-services-suunto [user]="user" [hasProAccess]="hasProAccess"></app-services-suunto>
-              </div>
-            </section>
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'coros'"
+            aria-label="COROS">
+            <app-services-coros
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('coros', $event)">
+            </app-services-coros>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
+            </ng-container>
           </section>
         </mat-tab-nav-panel>
-      </div>
+
+        <ng-template #serviceOverview let-section>
+          <section class="service-overview" aria-label="Connection features">
+            @for (card of serviceOverviewCardsBySection[section]; track card.title) {
+              <article class="service-overview-card">
+                <div class="service-overview-card__icon" aria-hidden="true">
+                  <mat-icon>{{ card.icon }}</mat-icon>
+                </div>
+                <div class="service-overview-card__copy">
+                  <h2>{{ card.title }}</h2>
+                  <p>{{ card.description }}</p>
+                  <span class="service-overview-card__detail">
+                    <mat-icon>check_circle</mat-icon>
+                    {{ card.detail }}
+                  </span>
+                </div>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [attr.aria-label]="card.actionLabel + ' for ' + serviceLabelBySection[section]"
+                  (click)="openServiceTools(section, card)">
+                  {{ card.actionLabel }}
+                </button>
+              </article>
+            }
+          </section>
+        </ng-template>
     </main>
   </app-loading-overlay>
 </div>
+
+<ng-template #serviceToolsDialog>
+  @if (managedService; as service) {
+  <div class="service-tools-dialog__header">
+    <h2 mat-dialog-title>{{ serviceLabelBySection[service] }} · {{ managedToolTitle }}</h2>
+    <button
+      mat-icon-button
+      mat-dialog-close
+      type="button"
+      aria-label="Close tools dialog">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+  <mat-dialog-content class="service-tools-dialog__content qs-scrollbar">
+    @switch (service) {
+      @case ('garmin') {
+      <app-services-garmin
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [isAdmin]="isAdmin"
+        [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
+        (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
+      </app-services-garmin>
+      }
+      @case ('suunto') {
+      <app-services-suunto
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
+        (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
+      </app-services-suunto>
+      }
+      @case ('coros') {
+      <app-services-coros
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
+        (connectionStateChanged)="setServiceConnectionState('coros', $event)">
+      </app-services-coros>
+      }
+    }
+  </mat-dialog-content>
+  }
+</ng-template>

@@ -149,8 +149,8 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Backfill Sleep History');
-        expect(text).toContain('Queues Suunto sleep');
+        expect(text).toContain('Import Sleep History');
+        expect(text).toContain('Imports Suunto sleep');
         expect(text).toContain('once every 7 days');
     });
 
@@ -165,9 +165,9 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Backfill Sleep History');
-        expect(text).toContain('Requests Garmin sleep');
-        expect(text).toContain('Garmin sends records asynchronously');
+        expect(text).toContain('Import Sleep History');
+        expect(text).toContain('Imports Garmin sleep');
+        expect(text).toContain('Records may appear gradually');
         expect(text).toContain('once every 30 days');
     });
 
@@ -183,10 +183,10 @@ describe('HistoryImportFormComponent', () => {
 
         const text = fixture.nativeElement.textContent;
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-        const sleepButton = buttons.find(button => button.textContent?.includes('Backfill Sleep History'));
+        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep History'));
 
-        expect(text).toContain('Backfill Sleep History');
-        expect(text).toContain('Requests Garmin sleep');
+        expect(text).toContain('Import Sleep History');
+        expect(text).toContain('Imports Garmin sleep');
         expect(sleepButton?.disabled).toBe(false);
     });
 
@@ -200,7 +200,7 @@ describe('HistoryImportFormComponent', () => {
         (component as any).processChanges();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.textContent).not.toContain('Backfill Sleep History');
+        expect(fixture.nativeElement.textContent).not.toContain('Import Sleep History');
     });
 
     it('should not render sleep backfill button for unsupported providers', async () => {
@@ -212,7 +212,7 @@ describe('HistoryImportFormComponent', () => {
         (component as any).processChanges();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.textContent).not.toContain('Backfill Sleep History');
+        expect(fixture.nativeElement.textContent).not.toContain('Import Sleep History');
     });
 
     it('should disable sleep backfill during the provider cooldown', async () => {
@@ -231,7 +231,7 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-        const sleepButton = buttons.find(button => button.textContent?.includes('Backfill Sleep History'));
+        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep History'));
         expect(sleepButton?.disabled).toBe(true);
         expect(fixture.nativeElement.textContent).toContain('Next available');
     });
@@ -290,7 +290,7 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-        const sleepButton = buttons.find(button => button.textContent?.includes('Backfill Sleep History'));
+        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep History'));
         expect(sleepButton?.disabled).toBe(true);
         expect(fixture.nativeElement.textContent).toContain('Reconnect Garmin');
     });

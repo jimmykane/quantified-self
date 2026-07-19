@@ -83,6 +83,14 @@ describe('SideNavComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('does not render a navigation section heading', () => {
+        fixture.detectChanges();
+
+        const sectionHeaders = fixture.nativeElement.querySelectorAll('.sidenav-section-header');
+
+        expect(Array.from(sectionHeaders).map((header: Element) => header.textContent?.trim())).not.toContain('Navigation');
+    });
+
     it('should delegate theme changes to the theme service', async () => {
         const event = new MouseEvent('click');
 
@@ -217,7 +225,7 @@ describe('SideNavComponent', () => {
         expect(component.hasPaidAccess).toBe(false);
     });
 
-    it('does not expose Training in the staged navigation', () => {
+    it('links signed-in users to the beta Training workspace', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             displayName: 'Athlete',
@@ -225,8 +233,33 @@ describe('SideNavComponent', () => {
         });
 
         fixture.detectChanges();
-        expect(fixture.debugElement.queryAll(By.css('mat-list-item'))
-            .some(item => item.nativeElement.textContent.includes('Training'))).toBe(false);
+        const trainingItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Training'));
+
+        expect(trainingItem).toBeTruthy();
+        expect(
+            trainingItem?.nativeElement.getAttribute('routerlink')
+            ?? trainingItem?.nativeElement.getAttribute('routerLink')
+        ).toBe('/training');
+        expect(trainingItem?.nativeElement.textContent).toContain('Beta');
+    });
+
+    it('places AI Insights after the signed-in activity navigation items', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-1',
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        const navigationItems = fixture.debugElement.queryAll(By.css('mat-list-item'));
+        const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
+        const aiInsightsItem = navigationItems.find(item => item.nativeElement.textContent.includes('AI Insights'));
+
+        expect(routesItem).toBeTruthy();
+        expect(aiInsightsItem).toBeTruthy();
+        expect(navigationItems.indexOf(aiInsightsItem!)).toBeGreaterThan(navigationItems.indexOf(routesItem!));
     });
 
     it('should link My Tracks directly for logged-in free users', () => {
@@ -254,7 +287,7 @@ describe('SideNavComponent', () => {
         expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
     });
 
-    it('should promote file comparison in navigation for guests and signed-in users', () => {
+    it('should show file comparison in navigation for guests and signed-in users without a new badge', () => {
         fixture.detectChanges();
 
         let compareFilesItem = fixture.debugElement
@@ -266,7 +299,7 @@ describe('SideNavComponent', () => {
             compareFilesItem?.nativeElement.getAttribute('routerlink')
             ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/tools/compare');
-        expect(compareFilesItem?.nativeElement.textContent).toContain('New');
+        expect(compareFilesItem?.nativeElement.textContent).not.toContain('New');
         compareFilesItem?.triggerEventHandler('click');
         expect(mockAnalyticsService.logToolCompareEntry).toHaveBeenCalledWith('side_nav', false);
 
@@ -284,7 +317,7 @@ describe('SideNavComponent', () => {
         expect(compareFilesItem).toBeTruthy();
     });
 
-    it('should link AI Insights directly for basic users and mark it as beta', () => {
+    it('should link AI Insights directly for basic users without a beta badge', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-2',
             displayName: 'Basic User',
@@ -304,7 +337,7 @@ describe('SideNavComponent', () => {
 
         expect(aiInsightsItem).toBeTruthy();
         expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
         expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PRO');
     });
 
@@ -345,7 +378,7 @@ describe('SideNavComponent', () => {
 
         expect(aiInsightsItem).toBeTruthy();
         expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).toContain('Beta');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
         expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PAID');
     });
 });

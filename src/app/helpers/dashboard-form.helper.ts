@@ -245,6 +245,22 @@ export function resolveDashboardFormLatestPoint(
   return points[points.length - 1] || null;
 }
 
+/**
+ * Resolves the shared current-day Form state used by Dashboard and Training.
+ *
+ * Form snapshots end on the latest day that has recorded TSS. Empty UTC days
+ * are still meaningful: CTL and ATL decay at different rates, so their
+ * difference (TSB) changes even when no new workout is recorded.
+ */
+export function resolveDashboardFormCurrentPoint(
+  points: readonly DashboardFormPoint[] | null | undefined,
+  nowMs = Date.now(),
+): DashboardFormPoint | null {
+  return resolveDashboardFormLatestPoint(
+    extendDashboardFormPointsWithZeroLoadUntil(points, nowMs),
+  );
+}
+
 function resolveFormBucketTime(time: number, timeInterval: TimeIntervals): number {
   const date = new Date(time);
   if (!Number.isFinite(date.getTime())) {

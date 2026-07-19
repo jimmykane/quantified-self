@@ -16,7 +16,7 @@
 
       <p class="hero-subtitle">
         Bring Garmin, Suunto, and COROS activity data into one private training dashboard.<br>
-        Upload files, analyze performance, and keep Garmin or COROS activities syncing to Suunto.
+        Review readiness, load, intensity, durability, and sleep context, then optionally keep Garmin or COROS activities syncing to Suunto.
       </p>
 
       <div class="hero-actions">
@@ -24,6 +24,10 @@
           Get Started Free
           <mat-icon iconPositionEnd>arrow_forward</mat-icon>
         </button>
+        <a mat-stroked-button routerLink="/features/training-analysis">
+          Explore Training Analysis
+          <mat-icon iconPositionEnd>monitoring</mat-icon>
+        </a>
       </div>
 
       <!-- Quick Trust Indicators -->
@@ -90,8 +94,8 @@
           <mat-card-title>Automatic Sync Between Services</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Garmin -> Suunto and COROS -> Suunto sync are built in, with reliable and instant sync for newly imported
-            activities, plus catch-up sync for events already stored in Quantified Self.</p>
+          <p>Automatically send new Garmin and COROS activities to Suunto, or choose a date range to sync activities
+            already stored in Quantified Self.</p>
           <a mat-stroked-button class="feature-link" routerLink="/integrations">
             Explore Integrations
           </a>
@@ -694,32 +698,5 @@
       </mat-card>
     </div>
   </section>
-
-  <!-- 8. Modern Footer -->
-  <footer class="app-footer">
-    <div class="footer-content">
-      <div class="maker-info">
-        <span>Built by <a href="https://dimitrioskanellopoulos.com" target="_blank" class="maker-link">Dimitrios
-            Kanellopoulos</a></span>
-      </div>
-
-      <div class="tech-stack">
-        <mat-icon svgIcon="firebase" matTooltip="Built with Firebase"></mat-icon>
-      </div>
-
-      <div class="legal-links">
-        <a href="mailto:support@quantified-self.io">Contact</a>
-        <a routerLink="/integrations">Integrations</a>
-        <a routerLink="/features">Features</a>
-        <a routerLink="/features/ai-insights">AI Insights</a>
-        <a routerLink="/features/workout-file-comparison">File Comparison</a>
-        <a routerLink="/features/fit-gpx-tcx-file-analyzer">File Analyzer</a>
-        <a routerLink="/features/sports-watch-benchmark">Benchmarks</a>
-        <a routerLink="/guides">Guides</a>
-        <a routerLink="/policies">Privacy & Policies</a>
-        <span class="copyright">&copy; {{ currentYear }} Quantified Self</span>
-      </div>
-    </div>
-  </footer>
 
 </div>

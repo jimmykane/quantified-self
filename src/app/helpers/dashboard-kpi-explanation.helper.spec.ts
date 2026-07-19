@@ -7,7 +7,6 @@ import {
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from './dashboard-special-chart-types';
 
@@ -51,6 +50,19 @@ describe('dashboard-kpi-explanation.helper', () => {
     expect(explanation.rows).toContainEqual({ label: 'Ramp', value: '+0.83' });
     expect(explanation.rows).toContainEqual({ label: 'Fitness (CTL)', value: '97' });
     expect(explanation.rows).toContainEqual({ label: 'Fatigue (ATL)', value: '102' });
+    expect(explanation.rows).toContainEqual({ label: 'Model basis', value: 'UTC daily TSS; zero-load decay through today' });
+  });
+
+  it('shows the Form calculation and zero-load convention in KPI details', () => {
+    const explanation = buildDashboardKpiExplanation({
+      chartType: DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+      formNow: { latestDayMs: Date.UTC(2026, 4, 8), value: -4.91, trend8Weeks: [] },
+      rampRate: { latestDayMs: Date.UTC(2026, 4, 8), ctlToday: 97, ctl7DaysAgo: 88, rampRate: 0.83, trend8Weeks: [] },
+      fitnessCtl: { latestDayMs: Date.UTC(2026, 4, 8), value: 97, trend8Weeks: [] },
+      fatigueAtl: { latestDayMs: Date.UTC(2026, 4, 8), value: 102, trend8Weeks: [] },
+    });
+
+    expect(explanation.rows).toContainEqual({ label: 'Model basis', value: 'UTC daily TSS; zero-load decay through today' });
   });
 
   it('uses intensity source and weekly split details for Training Balance', () => {
@@ -142,28 +154,4 @@ describe('dashboard-kpi-explanation.helper', () => {
     expect(explanation.rows).toContainEqual({ label: 'Pace retained', value: '98%' });
   });
 
-  it('shows every input used by readiness load scoring', () => {
-    const latestSleepAtMs = Date.UTC(2026, 0, 3, 6);
-    const explanation = buildDashboardKpiExplanation({
-      chartType: DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
-      readinessSignals: {
-        score: 82,
-        label: 'Ready',
-        confidence: 'high',
-        availableSignalCount: 4,
-        totalSignalCount: 4,
-        form: 10,
-        rampRate: 1.5,
-        sleepScore: 90,
-        latestSleepAtMs,
-        hrvRatio: 1.1,
-        minimumHeartRateRatio: 0.96,
-        trend: [],
-      },
-      locale: 'en-US',
-    });
-
-    expect(explanation.rows).toContainEqual({ label: 'Ramp rate', value: '+1.5' });
-    expect(explanation.rows).toContainEqual({ label: 'Latest sleep', value: 'Jan 3, 2026' });
-  });
 });

@@ -7,7 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { FirebaseApp } from 'app/firebase/app';
 import { AppWindowService } from './app.window.service';
 import { AppFunctionsService } from './app.functions.service';
-import { of } from 'rxjs';
+import { defer, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const { mockHttpsCallableFromURL } = vi.hoisted(() => {
@@ -29,7 +29,7 @@ vi.mock('app/firebase/functions', async () => {
 const {
     mockSetDoc,
     mockGetDoc,
-    mockGetDocs,
+    mockGetDocsFromServer,
     mockLimit,
     mockDocData,
     mockCollection,
@@ -42,7 +42,7 @@ const {
     return {
         mockSetDoc: vi.fn(),
         mockGetDoc: vi.fn(),
-        mockGetDocs: vi.fn(),
+        mockGetDocsFromServer: vi.fn(),
         mockLimit: vi.fn(),
         mockDocData: vi.fn(),
         mockCollection: vi.fn(),
@@ -61,7 +61,7 @@ vi.mock('app/firebase/firestore', async () => {
         ...actual,
         setDoc: mockSetDoc,
         getDoc: mockGetDoc,
-        getDocs: mockGetDocs,
+        getDocsFromServer: mockGetDocsFromServer,
         limit: mockLimit,
         collection: mockCollection,
         doc: mockDoc,
@@ -101,7 +101,7 @@ describe('AppPaymentService', () => {
 
         mockAuth.currentUser = {
             uid: 'test_user_uid',
-            getIdToken: vi.fn()
+            getIdToken: vi.fn().mockResolvedValue('test-token')
         };
         mockFunctionsService.call.mockReset();
         mockFunctionsService.call.mockResolvedValue({ data: {} });
@@ -118,7 +118,7 @@ describe('AppPaymentService', () => {
         });
         mockDocData.mockReturnValue(of({ url: 'http://stripe.com/checkout' }));
         mockCollectionData.mockReturnValue(of([]));
-        mockGetDocs.mockResolvedValue({ docs: [] });
+        mockGetDocsFromServer.mockResolvedValue({ docs: [] });
         mockGetDoc.mockResolvedValue({
             exists: () => false,
             data: () => undefined
@@ -143,6 +143,128 @@ describe('AppPaymentService', () => {
 
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    it('should refresh auth and recover a permission-denied subscription listener', async () => {
+        const permissionDeniedError = Object.assign(new Error('Missing or insufficient permissions.'), {
+            code: 'permission-denied'
+        });
+        let subscriptions = 0;
+        mockCollectionData.mockReturnValue(defer(() => {
+            subscriptions += 1;
+            if (subscriptions <= 2) {
+                return throwError(() => permissionDeniedError);
+            }
+            return of([{ id: 'sub_1', status: 'active', role: 'pro' }]);
+        }));
+        mockAuth.currentUser.getIdToken
+            .mockRejectedValueOnce(Object.assign(new Error('Auth network unavailable'), {
+                code: 'auth/network-request-failed'
+            }))
+            .mockResolvedValue('test-token');
+
+        vi.useFakeTimers();
+        try {
+            const resultPromise = firstValueFrom(service.getUserSubscriptions());
+            await vi.runAllTimersAsync();
+            const result = await resultPromise;
+
+            expect(result).toEqual([{ id: 'sub_1', status: 'active', role: 'pro' }]);
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledTimes(2);
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should bound subscription retries when each failed listener emits cached data first', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        let listenerSubscriptionCount = 0;
+        mockCollectionData.mockReturnValue(new Observable((subscriber) => {
+            listenerSubscriptionCount += 1;
+            const version = listenerSubscriptionCount;
+            subscriber.next([{ id: `sub_${version}`, status: 'active', role: 'pro' }]);
+
+            const timeoutID = setTimeout(() => subscriber.error(unavailableError), 1);
+            return () => clearTimeout(timeoutID);
+        }));
+
+        vi.useFakeTimers();
+        try {
+            const emittedIDs: string[] = [];
+            let terminalError: unknown = null;
+            const subscription = service.getUserSubscriptions().subscribe({
+                next: (subscriptions) => {
+                    if (subscriptions[0]?.id) {
+                        emittedIDs.push(subscriptions[0].id);
+                    }
+                },
+                error: (error) => {
+                    terminalError = error;
+                }
+            });
+
+            await vi.advanceTimersByTimeAsync(12000);
+
+            expect(listenerSubscriptionCount).toBe(5);
+            expect(emittedIDs).toEqual(['sub_1', 'sub_2', 'sub_3', 'sub_4', 'sub_5']);
+            expect(terminalError).toBe(unavailableError);
+            subscription.unsubscribe();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should stop retrying a subscription listener when the authenticated user changes', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        const originalUser = mockAuth.currentUser;
+        let listenerSubscriptionCount = 0;
+        mockCollectionData.mockReturnValue(defer(() => {
+            listenerSubscriptionCount += 1;
+            mockAuth.currentUser = {
+                uid: 'different_user_uid',
+                getIdToken: vi.fn().mockResolvedValue('different-token')
+            };
+            return throwError(() => unavailableError);
+        }));
+
+        await expect(firstValueFrom(service.getUserSubscriptions())).rejects.toBe(unavailableError);
+
+        expect(listenerSubscriptionCount).toBe(1);
+        expect(originalUser.getIdToken).not.toHaveBeenCalled();
+    });
+
+    it('should stop a delayed subscription retry when the authenticated user changes during backoff', async () => {
+        const unavailableError = Object.assign(new Error('Service unavailable'), {
+            code: 'unavailable'
+        });
+        let listenerSubscriptionCount = 0;
+        mockCollectionData.mockReturnValue(defer(() => {
+            listenerSubscriptionCount += 1;
+            return throwError(() => unavailableError);
+        }));
+
+        vi.useFakeTimers();
+        try {
+            const resultPromise = firstValueFrom(service.getUserSubscriptions());
+            const resultExpectation = expect(resultPromise).rejects.toBe(unavailableError);
+            await vi.advanceTimersByTimeAsync(0);
+            mockAuth.currentUser = {
+                uid: 'different_user_uid',
+                getIdToken: vi.fn().mockResolvedValue('different-token')
+            };
+
+            await vi.advanceTimersByTimeAsync(750);
+            await resultExpectation;
+
+            expect(listenerSubscriptionCount).toBe(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     describe('appendCheckoutSession', () => {
@@ -237,7 +359,7 @@ describe('AppPaymentService', () => {
             expect(payload.trial_period_days).toBe(14);
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocs).toHaveBeenCalledTimes(1);
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2);
         });
 
         it('should not set trial_period_days when user has paid subscription history', async () => {
@@ -254,7 +376,7 @@ describe('AppPaymentService', () => {
                 }
             } as any;
 
-            mockGetDocs.mockResolvedValueOnce({
+            mockGetDocsFromServer.mockResolvedValueOnce({
                 docs: [{ id: 'sub_existing' }]
             });
 
@@ -283,7 +405,7 @@ describe('AppPaymentService', () => {
                 }
             } as any;
 
-            mockGetDocs.mockRejectedValueOnce(new Error('Firestore unavailable'));
+            mockGetDocsFromServer.mockRejectedValueOnce(new Error('Firestore unavailable'));
 
             await service.appendCheckoutSession(recurringPriceWithTrial);
 
@@ -317,7 +439,7 @@ describe('AppPaymentService', () => {
             expect(payload.trial_period_days).toBeUndefined();
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocs).not.toHaveBeenCalled();
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
         });
 
         it('should not set trial_period_days when metadata.trial_days is invalid', async () => {
@@ -343,7 +465,7 @@ describe('AppPaymentService', () => {
             expect(payload.trial_period_days).toBeUndefined();
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocs).not.toHaveBeenCalled();
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
         });
 
         it('should restore and short-circuit checkout when an existing subscription is linked', async () => {
@@ -359,12 +481,32 @@ describe('AppPaymentService', () => {
             expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
+        it('should not report a restored subscription after the authenticated account changes', async () => {
+            let resolveLinkCheck: ((value: { data: { linked: boolean; role: string } }) => void) | undefined;
+            mockFunctionsService.call.mockImplementationOnce(() => new Promise((resolve) => {
+                resolveLinkCheck = resolve;
+            }));
+
+            const checkoutPromise = service.appendCheckoutSession('price_123');
+            await vi.waitFor(() => expect(mockFunctionsService.call).toHaveBeenCalledWith('linkExistingStripeCustomer'));
+            mockAuth.currentUser = {
+                uid: 'different_user_uid',
+                getIdToken: vi.fn().mockResolvedValue('different-token')
+            };
+            resolveLinkCheck?.({ data: { linked: true, role: 'pro' } });
+
+            await expect(checkoutPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
         it('should exit checkout when user cancels manage-subscription prompt', async () => {
             const dialog = TestBed.inject(MatDialog);
             vi.spyOn(dialog, 'open').mockReturnValue({
                 afterClosed: () => of(false)
             } as any);
-            mockCollectionData.mockReturnValueOnce(of([{ status: 'active' }]));
+            mockGetDocsFromServer.mockResolvedValueOnce({
+                docs: [{ id: 'sub_active', data: () => ({ status: 'active' }) }]
+            });
 
             await service.appendCheckoutSession('price_123');
 
@@ -377,12 +519,83 @@ describe('AppPaymentService', () => {
                 afterClosed: () => of(true)
             } as any);
             const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
-            mockCollectionData.mockReturnValueOnce(of([{ status: 'active' }]));
+            mockGetDocsFromServer.mockResolvedValueOnce({
+                docs: [{ id: 'sub_active', data: () => ({ status: 'active' }) }]
+            });
 
             await service.appendCheckoutSession('price_123');
 
             expect(manageSpy).toHaveBeenCalledTimes(1);
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
             expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('should not open a subscription portal if the account changes while the dialog is open', async () => {
+            const dialog = TestBed.inject(MatDialog);
+            const dialogClosed$ = new Subject<boolean>();
+            const openSpy = vi.spyOn(dialog, 'open').mockReturnValue({
+                afterClosed: () => dialogClosed$.asObservable()
+            } as any);
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+            mockGetDocsFromServer.mockResolvedValueOnce({
+                docs: [{ id: 'sub_active', data: () => ({ status: 'active' }) }]
+            });
+
+            const checkoutPromise = service.appendCheckoutSession('price_123');
+            await vi.waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1));
+            mockAuth.currentUser = {
+                uid: 'different_user_uid',
+                getIdToken: vi.fn().mockResolvedValue('different-token')
+            };
+            dialogClosed$.next(true);
+
+            await expect(checkoutPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
+            expect(manageSpy).not.toHaveBeenCalled();
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('should fail closed when the active-subscription server check is unavailable', async () => {
+            const readError = new Error('Firestore unavailable');
+            mockGetDocsFromServer.mockRejectedValueOnce(readError);
+
+            await expect(service.appendCheckoutSession('price_123')).rejects.toBe(readError);
+
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('should not redirect to an old checkout session after the account changes', async () => {
+            const checkoutSession$ = new Subject<{ url: string }>();
+            mockDocData.mockReturnValueOnce(checkoutSession$.asObservable());
+
+            const checkoutPromise = service.appendCheckoutSession('price_123');
+            await vi.waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1));
+            mockAuth.currentUser = {
+                uid: 'different_user_uid',
+                getIdToken: vi.fn().mockResolvedValue('different-token')
+            };
+            checkoutSession$.next({ url: 'http://stripe.com/old-user-checkout' });
+
+            await expect(checkoutPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
+        });
+
+        it('should not redirect to an old subscription portal after the account changes', async () => {
+            let resolvePortalRequest: ((value: { data: { url: string } }) => void) | undefined;
+            mockFunctionsService.call.mockImplementationOnce(() => new Promise((resolve) => {
+                resolvePortalRequest = resolve;
+            }));
+
+            const portalPromise = service.manageSubscriptions();
+            await vi.waitFor(() => expect(mockFunctionsService.call).toHaveBeenCalledWith(
+                'createPortalLink',
+                { returnUrl: 'http://localhost:4200/subscriptions' }
+            ));
+            mockAuth.currentUser = {
+                uid: 'different_user_uid',
+                getIdToken: vi.fn().mockResolvedValue('different-token')
+            };
+            resolvePortalRequest?.({ data: { url: 'http://stripe.com/old-user-portal' } });
+
+            await expect(portalPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
         });
 
         it('should retry checkout once after stale customer error and then continue', async () => {
@@ -497,27 +710,27 @@ describe('AppPaymentService', () => {
             const hasHistory = await service.hasPaidSubscriptionHistory();
 
             expect(hasHistory).toBe(false);
-            expect(mockGetDocs).not.toHaveBeenCalled();
+            expect(mockGetDocsFromServer).not.toHaveBeenCalled();
         });
 
         it('should return true when at least one subscription document exists', async () => {
-            mockGetDocs.mockResolvedValueOnce({
+            mockGetDocsFromServer.mockResolvedValueOnce({
                 docs: [{ id: 'sub_123' }]
             });
 
             const hasHistory = await service.hasPaidSubscriptionHistory();
 
             expect(hasHistory).toBe(true);
-            expect(mockGetDocs).toHaveBeenCalledTimes(1);
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
             expect(mockLimit).toHaveBeenCalledWith(1);
         });
 
-        it('should return false when the history query fails (fail-open for trial messaging)', async () => {
-            mockGetDocs.mockRejectedValueOnce(new Error('Firestore unavailable'));
+        it('should return unknown when the history query fails so trial messaging stays hidden', async () => {
+            mockGetDocsFromServer.mockRejectedValueOnce(new Error('Firestore unavailable'));
 
             const hasHistory = await service.hasPaidSubscriptionHistory();
 
-            expect(hasHistory).toBe(false);
+            expect(hasHistory).toBeNull();
         });
     });
 

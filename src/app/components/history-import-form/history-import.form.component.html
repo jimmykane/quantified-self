@@ -3,8 +3,8 @@
 <div class="status-container">
   @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
   @if (pendingImportResult()) {
-  <app-status-info type="success" title="Import Queued">
-    {{ pendingImportResult()?.successCount ?? 0 }} activities queued.
+  <app-status-info type="success" title="Import started">
+    {{ pendingImportResult()?.successCount ?? 0 }} activities scheduled.
     {{ estimatedCompletionVerbal }}
     <div style="font-size: 0.9em; opacity: 0.8; margin-top: 4px;">(~{{ processingCapacityPerDay | number }} / day
       capacity)</div>
@@ -40,7 +40,7 @@
 <div class="status-container">
   @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
   <app-status-info type="success" title="Import In Progress">
-    {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities queued from last import.
+    {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities scheduled from the last import.
     Cooldown active for {{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}.
   </app-status-info>
 
@@ -150,18 +150,18 @@
 }
 
 @if (isSleepBackfillVisible) {
-<section class="sleep-backfill-section" [attr.aria-label]="sleepBackfillProviderLabel + ' sleep history backfill'">
+<section class="sleep-backfill-section" [attr.aria-label]="sleepBackfillProviderLabel + ' sleep history import'">
   <div class="sleep-backfill-copy">
     <div class="sleep-backfill-title">Sleep history</div>
     @if (serviceName === serviceNames.GarminAPI) {
     <p>
-      Requests Garmin sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today.
-      Garmin sends records asynchronously, and existing sleep records are updated idempotently.
+      Imports Garmin sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Records may appear
+      gradually over the next few hours.
     </p>
     } @else {
     <p>
-      Queues Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today.
-      Existing sleep records are updated idempotently.
+      Imports Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Existing records are
+      updated instead of duplicated.
     </p>
     }
     <p class="sleep-backfill-note">
@@ -169,7 +169,7 @@
     </p>
     @if (isMissingGarminSleepBackfillPermissions) {
     <p class="sleep-backfill-note">
-      Reconnect Garmin and grant Historical Data Export and Health Export permissions before backfilling sleep.
+      Reconnect Garmin and allow Historical Data Export and Health Export before importing sleep history.
     </p>
     }
     @if (isSleepBackfillCooldownActive && sleepBackfillNextAllowedAtMs) {
@@ -179,7 +179,7 @@
     }
     @if (pendingSleepBackfillResult()) {
     <p class="sleep-backfill-note">
-      {{ sleepBackfillResultVerb }} {{ pendingSleepBackfillResult()?.queued ?? 0 }} sleep windows from
+      Import started for {{ pendingSleepBackfillResult()?.queued ?? 0 }} date ranges from
       {{ pendingSleepBackfillResult()?.startDate | date:'mediumDate' }} to
       {{ pendingSleepBackfillResult()?.endDate | date:'mediumDate' }}.
     </p>
@@ -194,7 +194,7 @@
       } @else {
       <mat-icon aria-hidden="true">bedtime</mat-icon>
       }
-      <span>{{ isSleepBackfillSubmitting() ? 'Queueing...' : 'Backfill Sleep History' }}</span>
+      <span>{{ isSleepBackfillSubmitting() ? 'Starting import...' : 'Import Sleep History' }}</span>
     </span>
   </button>
 </section>

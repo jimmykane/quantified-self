@@ -10,6 +10,7 @@ export interface TrainingExplanationCardViewModel {
   title: string;
   valueText: string;
   description: string;
+  descriptionItems?: readonly string[];
   tone: TrainingExplanationTone;
 }
 export interface TrainingExplanationViewModel {
@@ -38,20 +39,22 @@ export function buildTrainingExplanationViewModel(
 
   if (payload.topContributors.length) {
     const contributors = payload.topContributors.slice(0, 3);
+    const descriptionItems = contributors.map((item) => {
+      const leadingChild = [...item.childComposition]
+        .filter(child => child.loadSharePercent !== null)
+        .sort((left, right) => (right.loadSharePercent || 0) - (left.loadSharePercent || 0))[0];
+      const usesContextFallback = isGenericContributorLabel(item.label);
+      const label = usesContextFallback
+        ? `${leadingChild?.label || 'Activity'} · ${formatShortUtcDate(item.startDayMs)}`
+        : item.label!;
+      return `${label} (${formatNumber(item.loadSharePercent)}%${leadingChild && !usesContextFallback ? `; mostly ${leadingChild.label.toLowerCase()}` : ''})`;
+    });
     cards.push({
       key: 'contributors',
       title: 'Top contributors',
       valueText: `${formatNumber(contributors.reduce((sum, item) => sum + item.loadSharePercent, 0))}% of load`,
-      description: contributors.map((item) => {
-        const leadingChild = [...item.childComposition]
-          .filter(child => child.loadSharePercent !== null)
-          .sort((left, right) => (right.loadSharePercent || 0) - (left.loadSharePercent || 0))[0];
-        const usesContextFallback = isGenericContributorLabel(item.label);
-        const label = usesContextFallback
-          ? `${leadingChild?.label || 'Activity'} · ${formatShortUtcDate(item.startDayMs)}`
-          : item.label!;
-        return `${label} (${formatNumber(item.loadSharePercent)}%${leadingChild && !usesContextFallback ? `; mostly ${leadingChild.label.toLowerCase()}` : ''})`;
-      }).join(' · '),
+      description: descriptionItems.join(' · '),
+      descriptionItems,
       tone: 'neutral',
     });
   }
@@ -114,11 +117,41 @@ function resolveRhythmDriver(current: DerivedTrainingExplanationRhythm[], usual:
   const usualByDiscipline = new Map(usual.map(item => [item.discipline, item]));
   return current.flatMap((item) => {
     const usualItem = usualByDiscipline.get(item.discipline);
-    return usualItem ? [{ current: item, usual: usualItem }] : [];
-  }).sort((left, right) => (
-    Math.abs(right.current.activeDayCount - right.usual.activeDayCount)
-    - Math.abs(left.current.activeDayCount - left.usual.activeDayCount)
-  ))[0] || null;
+    if (!usualItem || !hasObservedRhythm(item, usualItem)) {
+      return [];
+    }
+    return [{ current: item, usual: usualItem }];
+  }).sort((left, right) => {
+    const activeDayDeltaDifference = Math.abs(right.current.activeDayCount - right.usual.activeDayCount)
+      - Math.abs(left.current.activeDayCount - left.usual.activeDayCount);
+    if (activeDayDeltaDifference !== 0) {
+      return activeDayDeltaDifference;
+    }
+
+    const observedActiveDaysDifference = totalObservedActiveDays(right) - totalObservedActiveDays(left);
+    if (observedActiveDaysDifference !== 0) {
+      return observedActiveDaysDifference;
+    }
+
+    const observedSessionsDifference = totalObservedSessions(right) - totalObservedSessions(left);
+    if (observedSessionsDifference !== 0) {
+      return observedSessionsDifference;
+    }
+
+    return left.current.discipline.localeCompare(right.current.discipline);
+  })[0] || null;
+}
+
+function hasObservedRhythm(current: DerivedTrainingExplanationRhythm, usual: DerivedTrainingExplanationRhythm): boolean {
+  return totalObservedActiveDays({ current, usual }) > 0 || totalObservedSessions({ current, usual }) > 0;
+}
+
+function totalObservedActiveDays({ current, usual }: { current: DerivedTrainingExplanationRhythm; usual: DerivedTrainingExplanationRhythm }): number {
+  return current.activeDayCount + usual.activeDayCount;
+}
+
+function totalObservedSessions({ current, usual }: { current: DerivedTrainingExplanationRhythm; usual: DerivedTrainingExplanationRhythm }): number {
+  return current.sessionCount + usual.sessionCount;
 }
 
 function formatLoadDelta(current: number | null, usual: number | null): string {

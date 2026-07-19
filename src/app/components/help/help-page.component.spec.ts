@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { HelpPageComponent } from './help-page.component';
 import { HELP_ACTIONS, HELP_SECTIONS } from '../../shared/help.content';
 
@@ -28,55 +28,88 @@ describe('HelpPageComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should render the hero title and all section titles', () => {
+  it('renders the documentation home with every topic and quick action', () => {
     const title = fixture.debugElement.query(By.css('.hero-title'))?.nativeElement as HTMLElement | undefined;
-    expect(title?.textContent).toContain('Help for AI Insights, setup, uploads, billing, and integrations.');
+    expect(title?.textContent).toContain('How can we help?');
 
-    const renderedTabLabels = fixture.debugElement
-      .queryAll(By.css('.tab-label'))
-      .map(node => `${node.nativeElement.textContent || ''}`.trim());
+    const topicCards = fixture.debugElement.queryAll(By.css('.topic-card'));
+    expect(topicCards).toHaveLength(HELP_SECTIONS.length);
 
     HELP_SECTIONS.forEach(section => {
-      expect(renderedTabLabels.some(label => label.includes(section.title))).toBe(true);
+      expect(topicCards.some(card => card.nativeElement.textContent.includes(section.title))).toBe(true);
     });
+
+    const quickActions = fixture.debugElement.queryAll(By.css('.quick-action'));
+    expect(quickActions).toHaveLength(HELP_ACTIONS.length);
   });
 
-  it('should render all global support actions', () => {
-    const actionButtons = fixture.debugElement.queryAll(By.css('mat-nav-list[aria-label="Support actions"] a'));
-    expect(actionButtons).toHaveLength(HELP_ACTIONS.length);
-
-    HELP_ACTIONS.forEach(action => {
-      const matchingNode = actionButtons.find(node => node.nativeElement.textContent.includes(action.label));
-      expect(matchingNode).toBeTruthy();
-    });
-  });
-
-  it('should switch section and set URL fragment from quick navigation', () => {
-    const targetSectionId = HELP_SECTIONS[1].id;
-    component.onSectionTabChange(1);
-
-    expect(component.selectedSectionId).toBe(targetSectionId);
-    expect(window.location.hash).toBe(`#${targetSectionId}`);
-  });
-
-  it('should render selected section content and switch section by tab index', () => {
-    const sectionCard = fixture.debugElement.query(By.css('#help-section-content'));
-    expect(sectionCard).toBeTruthy();
-    expect(component.selectedSection.id).toBe(HELP_SECTIONS[0].id);
-
-    component.onSectionTabChange(2);
+  it('opens an article from the documentation home and updates the URL fragment', () => {
+    const targetSection = HELP_SECTIONS[2];
+    component.openSection(targetSection.id);
     fixture.detectChanges();
 
-    expect(component.selectedSection.id).toBe(HELP_SECTIONS[2].id);
+    expect(component.selectedSectionId()).toBe(targetSection.id);
+    expect(component.isArticleOpen()).toBe(true);
+    expect(window.location.hash).toBe(`#${targetSection.id}`);
+
     const selectedTitle = fixture.debugElement.query(By.css('#help-section-content mat-card-title'))?.nativeElement as HTMLElement | undefined;
-    expect(selectedTitle?.textContent).toContain(HELP_SECTIONS[2].title);
+    expect(selectedTitle?.textContent).toContain(targetSection.title);
   });
 
-  it('should render deterministic AI FAQ guidance in the AI Insights help section', async () => {
-    component.onSectionTabChange(1);
+  it('returns from an article to the documentation home', () => {
+    component.openSection('uploads-and-imports');
+    component.returnToHelpCenter();
+    fixture.detectChanges();
+
+    expect(component.isArticleOpen()).toBe(false);
+    expect(component.selectedSectionId()).toBeNull();
+    expect(window.location.hash).toBe('');
+    expect(fixture.debugElement.query(By.css('.topic-grid'))).toBeTruthy();
+  });
+
+  it('searches documentation by title and opens the matching guide', () => {
+    component.onSearchQueryChange('connected services');
+    fixture.detectChanges();
+
+    expect(component.searchResults()[0]?.id).toBe('service-connections');
+    expect(fixture.debugElement.queryAll(By.css('.search-result'))).not.toHaveLength(0);
+
+    component.openSection('service-connections');
+    fixture.detectChanges();
+
+    expect(component.selectedSection().title).toBe('Connected Services');
+    expect(component.hasSearchQuery()).toBe(false);
+  });
+
+  it('opens the dedicated Training analysis guide from search', () => {
+    component.onSearchQueryChange('historical benchmark');
+    fixture.detectChanges();
+
+    expect(component.searchResults().map(section => section.id)).toContain('training-analysis');
+
+    component.openSection('training-analysis');
+    fixture.detectChanges();
+
+    expect(component.selectedSection().title).toBe('Training Analysis');
+  });
+
+  it('clears an active search when returning to all documentation', () => {
+    component.openSection('plans-and-billing');
+    component.onSearchQueryChange('billing');
+    fixture.detectChanges();
+
+    component.returnToHelpCenter();
+    fixture.detectChanges();
+
+    expect(component.hasSearchQuery()).toBe(false);
+    expect(fixture.debugElement.query(By.css('.topic-grid'))).toBeTruthy();
+  });
+
+  it('renders deterministic AI FAQ guidance in the AI Insights article', async () => {
+    component.openSection('ai-insights');
     for (let attempt = 0; attempt < 20; attempt += 1) {
       fixture.detectChanges();
-      if (component.renderedSectionContent['ai-insights']) {
+      if (component.renderedSectionContent()['ai-insights']) {
         break;
       }
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -89,8 +122,8 @@ describe('HelpPageComponent', () => {
     expect(sectionCopy?.innerHTML).toContain('deterministic period deltas with likely contributor series');
   });
 
-  it('should render internal links without target blank and external links with target blank', () => {
-    component.onSectionTabChange(0);
+  it('renders internal links without target blank and external links with target blank', () => {
+    component.openSection('getting-started');
     fixture.detectChanges();
 
     const loginLink = fixture.debugElement
@@ -99,38 +132,22 @@ describe('HelpPageComponent', () => {
     expect(loginLink?.attributes['href']).toContain('/login');
     expect(loginLink?.attributes['target']).toBeUndefined();
 
-    const policiesLink = fixture.debugElement
-      .queryAll(By.css('mat-nav-list[aria-label="Support actions"] a'))
-      .find(node => node.nativeElement.textContent.includes('Policies'));
-    expect(policiesLink?.attributes['href']).toContain('/policies');
-    expect(policiesLink?.attributes['target']).toBeUndefined();
-
     const emailLink = fixture.debugElement
-      .queryAll(By.css('mat-nav-list[aria-label="Support actions"] a'))
+      .queryAll(By.css('a'))
       .find(node => node.nativeElement.textContent.includes('Email Support'));
     expect(emailLink?.attributes['href']).toContain('mailto:');
     expect(emailLink?.attributes['target']).toBe('_blank');
 
+    component.returnToHelpCenter();
+    fixture.detectChanges();
     const bugLink = fixture.debugElement
-      .queryAll(By.css('a'))
+      .queryAll(By.css('.quick-action'))
       .find(node => node.nativeElement.textContent.includes('Report a Bug'));
     expect(bugLink?.attributes['href']).toContain('github.com/jimmykane/quantified-self/issues');
     expect(bugLink?.attributes['target']).toBe('_blank');
   });
 
-  it('should preserve route fragments for provider-specific policy links', () => {
-    component.onSectionTabChange(4);
-    fixture.detectChanges();
-
-    const garminPolicyLink = fixture.debugElement
-      .queryAll(By.css('.section-links a'))
-      .find(node => node.nativeElement.textContent.includes('Garmin Data Privacy'));
-
-    expect(garminPolicyLink?.attributes['href']).toContain('/policies#garmin-data');
-    expect(garminPolicyLink?.attributes['target']).toBeUndefined();
-  });
-
-  it('should select section from URL fragment on refresh render', async () => {
+  it('opens the article selected by a URL fragment on initial render', async () => {
     const targetId = HELP_SECTIONS[2].id;
     window.history.replaceState(null, '', `/help#${targetId}`);
     const secondFixture = TestBed.createComponent(HelpPageComponent);
@@ -138,7 +155,8 @@ describe('HelpPageComponent', () => {
     secondFixture.detectChanges();
     await secondFixture.whenStable();
 
-    expect(secondComponent.selectedSectionId).toBe(targetId);
+    expect(secondComponent.selectedSectionId()).toBe(targetId);
+    expect(secondComponent.isArticleOpen()).toBe(true);
 
     secondFixture.destroy();
     window.history.replaceState(null, '', '/help');

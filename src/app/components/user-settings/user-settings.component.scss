@@ -4,10 +4,6 @@
     --section-spacing: 24px;
 }
 
-::ng-deep .qs-form {
-    max-width: 100% !important;
-}
-
 .settings-container {
     display: block;
     min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
@@ -127,89 +123,51 @@
 }
 
 .settings-content {
-    max-width: 1180px;
+    max-width: 760px;
     margin: 0 auto;
-    padding: 20px 40px 32px;
+    padding: 32px 40px;
 }
 
-.settings-workspace {
-    display: grid;
-    grid-template-columns: 216px minmax(0, 1fr);
-    gap: 28px;
-    align-items: start;
+.qs-form {
+    max-width: none;
+    gap: 0;
 }
 
-.mobile-settings-tabs {
-    display: none;
-    width: 100%;
-}
+.settings-page-header {
+    max-width: 760px;
+    margin: 0 0 28px;
 
-.desktop-section-nav {
-    position: sticky;
-    top: calc(var(--qs-effective-top-offset, 0px) + 24px);
-    z-index: 1;
-}
+    h1 {
+        margin: 0 0 6px;
+        color: var(--mat-sys-on-surface);
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.12;
+    }
 
-.desktop-section-nav-title {
-    margin: 0 0 8px;
-    padding-inline-start: 56px;
-    color: var(--mat-sys-on-surface-variant);
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.desktop-section-nav-list {
-    padding: 0;
-}
-
-.desktop-section-nav-item {
-    height: auto;
-    min-height: 64px;
-    padding-block: 8px;
-}
-
-.desktop-section-nav-description {
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.25;
-}
-
-.settings-tab-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-}
-
-.settings-tab-label mat-icon {
-    font-size: 20px;
-    width: 20px;
-    height: 20px;
-}
-
-.workspace-main {
-    min-width: 0;
-}
-
-.settings-tab-panel {
-    display: block;
-    min-width: 0;
-    overflow: hidden;
+    p {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 1rem;
+        line-height: 1.5;
+    }
 }
 
 .settings-panel-section {
     max-width: 760px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 .settings-panel-header {
-    margin-bottom: 16px;
+    margin-bottom: 20px;
+    padding: 0;
 
-    h1 {
-        margin: 0 0 4px;
+    h2 {
+        margin: 0 0 6px;
         color: var(--mat-sys-on-surface);
         font-size: 1.5rem;
         line-height: 1.2;
@@ -224,23 +182,65 @@
     }
 }
 
+.settings-panel-section > mat-divider {
+    display: none;
+}
+
 .settings-panel-body {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding-top: 24px;
+    padding: 20px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 12px;
+    background: var(--mat-sys-surface-container-lowest);
 }
 
 .settings-toggle-block {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+
+    h3 {
+        margin: 0 0 4px;
+        color: var(--mat-sys-on-surface);
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.25;
+    }
 
     p {
         margin: 0;
         color: var(--mat-sys-on-surface-variant);
         font-size: 0.85rem;
         line-height: 1.4;
+    }
+}
+
+.settings-theme-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+    align-items: center;
+    gap: 16px;
+
+    h3 {
+        margin: 0 0 4px;
+        color: var(--mat-sys-on-surface);
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.25;
+    }
+
+    p {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.85rem;
+        line-height: 1.4;
+    }
+
+    mat-form-field {
+        width: 100%;
     }
 }
 
@@ -385,9 +385,13 @@
 
 .qs-form-actions-floating {
     position: fixed;
-    bottom: 40px;
-    right: 40px;
+    right: max(32px, calc((100vw - 760px) / 2));
+    bottom: 32px;
     z-index: 100;
+}
+
+.qs-form-actions-floating button {
+    min-height: 48px;
 }
 
 .mobile-save-bar {
@@ -396,9 +400,9 @@
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 16px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
     background: var(--mat-sys-surface-container-lowest);
-    box-shadow: 0 -4px 20px color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
+    border-top: 1px solid var(--mat-sys-outline-variant);
     z-index: 100;
 }
 
@@ -414,18 +418,17 @@
 }
 
 @include bp.max-768 {
-    .settings-profile-shell,
     .settings-content {
         padding-inline: 16px;
     }
 
     .settings-profile-shell {
-        padding-top: 0;
+        padding: 0;
     }
 
     .settings-content {
         padding-top: 24px;
-        padding-bottom: 80px;
+        padding-bottom: 96px;
     }
 
     .user-profile-header {
@@ -452,52 +455,38 @@
         max-width: 100%;
     }
 
-    .settings-workspace {
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
+    .settings-page-header {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        margin: -1px;
+        padding: 0;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 
-    .desktop-section-nav {
-        display: none;
+    .settings-panel-header {
+        margin-bottom: 16px;
+        padding: 0;
     }
 
-    .mobile-settings-tabs {
-        display: flex;
-        align-self: center;
-        width: fit-content;
-        max-width: 100%;
-        margin-inline: auto;
+    .settings-panel-header h2 {
+        font-size: 1.5rem;
     }
 
-    .settings-tab-label {
-        flex-direction: column;
-        justify-content: center;
-        gap: 2px;
-        text-align: center;
-        white-space: normal;
-        font-size: 0.72rem;
-        line-height: 1.1;
-    }
-
-    .settings-tab-label mat-icon {
-        width: 20px;
-        height: 20px;
-        font-size: 20px;
-    }
-
-    .settings-tab-label > span:last-child {
-        display: block;
-        line-height: 1.1;
-    }
-
-    .settings-panel-header h1 {
-        font-size: 1.35rem;
+    .settings-panel-body {
+        padding: 16px;
     }
 
     .settings-toggle-grid,
     .settings-slider-grid {
         grid-template-columns: 1fr;
+    }
+
+    .settings-theme-control {
+        grid-template-columns: 1fr;
+        align-items: stretch;
     }
 
     .settings-option-block {

@@ -18,7 +18,6 @@ import {
   DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from './dashboard-special-chart-types';
@@ -44,7 +43,6 @@ const SUPPORTED_CHART_TYPES = [
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
-  DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
 ] as const;
 
 describe('dashboard-chart-info.helper', () => {
@@ -71,6 +69,7 @@ describe('dashboard-chart-info.helper', () => {
     expect(formInfo).toContain('CTL');
     expect(formInfo).toContain('ATL');
     expect(formInfo).toContain('same-day');
+    expect(formInfo).toContain('previous CTL');
     expect(acwrInfo).toContain('7 days');
     expect(acwrInfo).toContain('28 days');
     expect(fitnessInfo).toContain('42-day');

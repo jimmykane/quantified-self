@@ -14,7 +14,7 @@ import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workou
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from './components/public-seo/public-seo-pages.content';
 import { routeResolver } from './resolvers/route.resolver';
 
-const HOME_SEO_DESCRIPTION = 'Quantified Self brings Garmin, Suunto, and COROS activity data into one private training dashboard with AI Insights and automatic sync from Garmin or COROS to Suunto.';
+const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, and COROS training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync to Suunto.';
 
 export const routes: Routes = [
   {
@@ -107,12 +107,12 @@ export const routes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.',
+      description: 'Get help with Training analysis, Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Garmin -> Suunto and COROS -> Suunto sync routes, Suunto -> Garmin course delivery, catch-up sync, AI Insights, account setup, uploads, billing, privacy, and troubleshooting in Quantified Self.",
+        "description": "Get help with Training analysis, Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -121,14 +121,15 @@ export const routes: Routes = [
           "url": "https://quantified-self.io"
         },
         "about": [
+          "Training analysis",
           "AI Insights",
           "Account setup",
           "Manual uploads",
           "Membership and billing",
-          "Garmin -> Suunto sync",
-          "COROS -> Suunto sync",
-          "Suunto -> Garmin course delivery",
-          "Catch-up sync",
+          "Garmin to Suunto activity sync",
+          "COROS to Suunto activity sync",
+          "Send Suunto routes to Garmin",
+          "Sync past activities",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
@@ -246,6 +247,11 @@ export const routes: Routes = [
     pathMatch: 'full'
   },
   {
+    path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.trainingAnalysis
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.aiInsights,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.aiInsights
@@ -346,7 +352,14 @@ export const routes: Routes = [
   {
     path: 'training',
     loadChildren: () => import('./modules/training.module').then(module => module.TrainingModule),
-    data: { title: 'Training', animation: 'Training', preload: true },
+    data: {
+      title: 'Training',
+      animation: 'Training',
+      disableRouteAnimation: true,
+      preload: true,
+      description: 'Private training analysis for readiness, load trends, intensity, durability, sleep context, and historical build comparisons.',
+      robots: 'noindex, follow',
+    },
     canMatch: [authGuard, onboardingGuard]
   },
   {
@@ -422,10 +435,10 @@ export const routes: Routes = [
         "operatingSystem": "Web",
         "description": HOME_SEO_DESCRIPTION,
         "featureList": [
-          "AI Insights with chart-backed answers",
-          "Automatic Garmin -> Suunto sync for newly imported Garmin activities",
-          "Automatic COROS -> Suunto sync for newly imported COROS activities",
-          "Manual catch-up sync for events already stored in Quantified Self"
+          "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
+          "Automatic Garmin to Suunto activity sync",
+          "Automatic COROS to Suunto activity sync",
+          "Sync past activities to Suunto by date"
         ],
         "offers": {
           "@type": "Offer",

@@ -10,6 +10,7 @@ describe('public-seo-pages.content', () => {
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
+      trainingAnalysis: 'features/training-analysis',
       aiInsights: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
       fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
@@ -53,6 +54,10 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.featuresHub.intro).toContain('compare recordings');
     expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('sports watch benchmark reports');
 
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('readiness, load trends, intensity, durability, sleep context, and historical build comparisons');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.faqItems.some(item => item.question === 'How is Training different from the Dashboard?')).toBe(true);
+
     expect(PUBLIC_SEO_PAGES.aiInsights.h1).toBe('AI insights for endurance training data');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('chart-backed AI insights');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('Free accounts include');
@@ -84,15 +89,15 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('firmware QA');
 
     expect(PUBLIC_SEO_PAGES.guidesHub.h1).toBe('Training data sync guides');
-    expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Garmin -> Suunto sync');
+    expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Garmin to Suunto activity sync');
     expect(PUBLIC_SEO_PAGES.guidesHub.intro).toContain('centralized Garmin, Suunto, and COROS workout archive');
 
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.h1).toBe('How to sync Garmin data to Suunto automatically');
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps).toHaveLength(4);
 
-    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.h1).toBe('How to sync Suunto routes to Garmin courses');
-    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('COURSE_IMPORT');
-    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('Queue now');
+    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.h1).toBe('How to send Suunto routes to Garmin courses');
+    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('Course Import');
+    expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('send routes already saved');
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.howToSteps).toHaveLength(5);
 
     expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.h1).toBe('Centralize Garmin, Suunto, and COROS workout data');
@@ -110,6 +115,7 @@ describe('public-seo-pages.content', () => {
     ].map(action => action.routerLink);
 
     expect(featureHubLinks).toContain('/features/ai-insights');
+    expect(featureHubLinks).toContain('/features/training-analysis');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');
     expect(featureHubLinks).toContain('/features/workout-file-comparison');
     expect(featureHubLinks).toContain('/features/fit-gpx-tcx-file-analyzer');

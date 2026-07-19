@@ -22,6 +22,11 @@ import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
 } from '../../helpers/echarts-host-controller';
+import {
+  isEChartsMobileTooltipViewport,
+  resolveEChartsTooltipSurfaceConfig,
+  resolveEChartsTooltipTriggerOn,
+} from '../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import type { TrainingDurabilityTrajectoryViewModel } from '../../helpers/training-durability-view.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -44,13 +49,30 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   @Input() trajectory: TrainingDurabilityTrajectoryViewModel | null = null;
   @Input() status: DashboardDerivedMetricStatus = 'missing';
   @Input() darkTheme = false;
-  @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+  public chartDiv: ElementRef<HTMLDivElement> | null = null;
+
+  @ViewChild('chartDiv')
+  private set chartDivQuery(value: ElementRef<HTMLDivElement> | undefined) {
+    const nextChartDiv = value || null;
+    if (this.chartDiv?.nativeElement === nextChartDiv?.nativeElement) {
+      return;
+    }
+    this.chartDiv = nextChartDiv;
+    if (!nextChartDiv) {
+      this.chartHost.dispose();
+      return;
+    }
+    if (this.viewInitialized) {
+      void this.refresh();
+    }
+  }
 
   public isUpdating = true;
   public availabilityText = 'Preparing weekly durability evidence.';
   public chartAriaLabel = 'Twelve-week durability trajectory';
 
   private readonly chartHost: EChartsHostController;
+  private viewInitialized = false;
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
@@ -61,6 +83,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   async ngAfterViewInit(): Promise<void> {
+    this.viewInitialized = true;
     await this.refresh();
   }
 
@@ -71,6 +94,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   ngOnDestroy(): void {
+    this.viewInitialized = false;
     this.chartHost.dispose();
   }
 
@@ -99,12 +123,12 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       this.chartAriaLabel = 'Twelve-week durability trajectory';
       return;
     }
-    const evidenceWeekCount = trajectory.points.length - trajectory.emptyWeekCount;
+    const evidenceWeekCount = trajectory.points.length - trajectory.noEligibleWeekCount;
     const unavailableMetricText = trajectory.unavailableMetricWeekCount
       ? ` · ${trajectory.unavailableMetricWeekCount} with eligible samples but no ${trajectory.metricLabel.toLowerCase()}`
       : '';
-    this.availabilityText = `${evidenceWeekCount} of ${trajectory.points.length} weeks with eligible samples · ${trajectory.emptyWeekCount} empty${unavailableMetricText}`;
-    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week ${trajectory.metricLabel.toLowerCase()} trajectory with eligible activity counts`;
+    this.availabilityText = `${evidenceWeekCount} of ${trajectory.points.length} weeks produced comparable evidence · ${trajectory.noEligibleWeekCount} without an eligible sample${unavailableMetricText}`;
+    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible activity counts, and ${trajectory.metricLabel.toLowerCase()}`;
   }
 
   private buildOption(): ChartOption {
@@ -113,12 +137,13 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       return { animation: false, tooltip: { show: false }, xAxis: [], yAxis: [], series: [] };
     }
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, this.chartDiv.nativeElement.clientWidth || 0);
+    const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const weekLabelFormatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
       timeZone: 'UTC',
     });
-    const maximumSampleCount = Math.max(0, ...trajectory.points.map(point => point.eligibleSampleCount));
+    const maximumSampleCount = Math.max(0, ...trajectory.points.map(point => point.sourceActivityCount));
     return {
       animation: false,
       backgroundColor: 'transparent',
@@ -127,12 +152,16 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       legend: {
         top: 0,
         right: 4,
-        data: [trajectory.metricLabel, 'Eligible samples'],
+        data: [trajectory.metricLabel, trajectory.sourceActivityLabel],
         textStyle: { color: style.textColor },
       },
       tooltip: {
         trigger: 'axis',
+        triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         renderMode: 'html',
+        // This chart is wider than its mobile scroll viewport, so confining the
+        // tooltip to the chart canvas can leave it outside the visible card.
+        ...resolveEChartsTooltipSurfaceConfig(false),
         ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: TrajectoryTooltipParam | TrajectoryTooltipParam[]) => {
           const entries = Array.isArray(params) ? params : [params];
@@ -142,19 +171,28 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
             return '';
           }
           const metricValue = point.value === null
-            ? point.isEmpty ? 'No eligible evidence' : 'Unavailable'
+            ? point.hasEligibleSamples ? 'Unavailable' : 'No comparable sample'
             : `${formatNumber(point.value)}${trajectory.unitLabel}`;
+          const activityRows = [
+            { label: 'Candidates', value: formatActivityCount(point.candidateActivityCount) },
+            ...(trajectory.sourceActivityLabel === 'Candidates'
+              ? []
+              : [{
+                label: trajectory.sourceActivityLabel,
+                value: formatActivityCount(point.sourceActivityCount),
+                markerColor: style.axisColor,
+              }]),
+            { label: 'Eligible', value: formatActivityCount(point.eligibleSampleCount) },
+          ];
           return renderDashboardEChartsTooltipCard(style, {
             title: formatDashboardWeekRangeLabel(point.weekStartDayMs, undefined, 'UTC'),
             rows: [
               { label: trajectory.metricLabel, value: metricValue, markerColor: style.trendLineColor },
-              {
-                label: 'Eligible samples',
-                value: point.eligibleSampleCount
-                  ? `${formatNumber(point.eligibleSampleCount)} activit${point.eligibleSampleCount === 1 ? 'y' : 'ies'}`
-                  : 'Empty week',
-                markerColor: style.axisColor,
-              },
+              ...activityRows,
+              ...point.exclusionReasons.map(exclusion => ({
+                label: exclusion.label,
+                value: formatActivityCount(exclusion.activityCount),
+              })),
             ],
           });
         },
@@ -182,30 +220,42 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
         axisLabel: { color: style.textColor, formatter: (value: number) => `${formatNumber(value)}%` },
       }, {
         type: 'value',
-        name: 'Eligible',
         min: 0,
         max: Math.max(2, maximumSampleCount + 1),
         minInterval: 1,
-        nameTextStyle: { color: style.secondaryTextColor },
         axisLine: { show: false },
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: { color: style.secondaryTextColor, formatter: (value: number) => formatNumber(value) },
       }],
       series: [{
-        name: 'Eligible samples',
+        name: trajectory.sourceActivityLabel,
         type: 'bar',
         yAxisIndex: 1,
         barMaxWidth: 20,
         barMinHeight: 3,
-        data: trajectory.points.map(point => point.eligibleSampleCount),
+        data: trajectory.points.map(point => point.sourceActivityCount),
         itemStyle: { color: style.axisColor, opacity: 0.24 },
         label: {
           show: true,
           position: 'top',
           color: style.secondaryTextColor,
           fontSize: 10,
-          formatter: (params: { value?: number }) => Number(params.value) > 0 ? `${params.value}` : 'Empty',
+          formatter: (params: { dataIndex?: number }) => {
+            const point = Number.isInteger(params.dataIndex)
+              ? trajectory.points[params.dataIndex as number]
+              : null;
+            if (!point) {
+              return '';
+            }
+            if (point.sourceActivityCount > 0) {
+              return `${point.eligibleSampleCount}/${point.sourceActivityCount}`;
+            }
+            if (point.candidateActivityCount > 0) {
+              return trajectory.sourceActivityLabel === 'Power recorded' ? 'No power' : '0 eligible';
+            }
+            return 'No activity';
+          },
         },
         z: 1,
       }, {
@@ -226,4 +276,8 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatActivityCount(value: number): string {
+  return `${formatNumber(value)} activit${value === 1 ? 'y' : 'ies'}`;
 }

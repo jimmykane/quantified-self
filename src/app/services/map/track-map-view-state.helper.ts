@@ -1,5 +1,5 @@
 import { MapStyleName, SUPPORTED_MAP_STYLES } from './map-style.types';
-import { TrackMapPosition } from './track-map.manager';
+import { isValidTrackMapPosition, TrackMapPosition } from './track-map.manager';
 
 export interface TrackMapViewSettingsState {
   showArrows: boolean;
@@ -77,10 +77,7 @@ export function resolveTrackMapInitialCamera(
   positions: Array<Partial<TrackMapPosition> | null | undefined>,
   options: { trackZoom?: number; fallbackZoom?: number } = {},
 ): TrackMapInitialCamera {
-  const position = (positions || []).find((candidate) =>
-    Number.isFinite(candidate?.latitudeDegrees)
-    && Number.isFinite(candidate?.longitudeDegrees)
-  );
+  const position = (positions || []).find(isValidTrackMapPosition);
 
   if (position) {
     return {

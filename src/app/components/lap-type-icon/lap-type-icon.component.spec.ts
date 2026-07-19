@@ -25,4 +25,17 @@ describe('LapTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(LapTypes.position_marked)).toBe('bookmark');
     expect(component.getColumnHeaderIcon(LapTypes.session_end)).toBe('stop_circle');
   });
+
+  it('should return empty initials when the lap type is missing', () => {
+    const component = new LapTypeIconComponent();
+
+    expect(component.getColumnHeaderTextInitials(undefined)).toBe('');
+    expect(component.getColumnHeaderTextInitials(null)).toBe('');
+  });
+
+  it('should return initials for a multi-word lap type', () => {
+    const component = new LapTypeIconComponent();
+
+    expect(component.getColumnHeaderTextInitials('  position   waypoint  ')).toBe('PW');
+  });
 });

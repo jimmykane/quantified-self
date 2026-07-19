@@ -1,12 +1,12 @@
 import { inject, Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs';
-import { map, shareReplay, switchMap, take } from 'rxjs/operators';
+import { combineLatest, firstValueFrom, Observable, of } from 'rxjs';
+import { filter, map, shareReplay, startWith, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Auth, authState, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, linkWithPopup, signInWithCustomToken } from 'app/firebase/auth';
 import type { AuthCredential, AuthProvider, FirebaseUserType } from 'app/firebase/auth';
 import { Firestore, clearIndexedDbPersistence, terminate } from 'app/firebase/firestore';
 import { Privacy, User } from '@sports-alliance/sports-lib';
-import { AppUserService } from '../services/app.user.service';
+import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
 import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
@@ -64,8 +64,42 @@ export class AppAuthService {
    * Get the current user value (snapshot) from the observable
    */
   async getUser(): Promise<User | null> {
-    const user = await this.user$.pipe(take(1)).toPromise();
-    return user || null;
+    const [firebaseUser, appUser, profileReadState] = await firstValueFrom(
+      combineLatest([
+        this.authState$,
+        this.user$.pipe(startWith(null)),
+        this.userService.profileReadState$,
+      ]).pipe(
+        filter(([currentFirebaseUser, currentAppUser, currentProfileReadState]) => {
+          if (!currentFirebaseUser) {
+            return true;
+          }
+
+          const profileStateMatchesUser = 'uid' in currentProfileReadState
+            && currentProfileReadState.uid === currentFirebaseUser.uid;
+          if (profileStateMatchesUser && isActionableProfileReadState(currentProfileReadState)) {
+            return true;
+          }
+
+          return currentProfileReadState.status === 'ready'
+            && currentProfileReadState.uid === currentFirebaseUser.uid
+            && !!currentAppUser
+            && currentAppUser.uid === currentFirebaseUser.uid
+            && !this.userService.hasIncompleteProfileReads(currentFirebaseUser.uid);
+        }),
+        take(1)
+      )
+    );
+
+    const hasActionableProfileFailure = !!firebaseUser
+      && 'uid' in profileReadState
+      && profileReadState.uid === firebaseUser.uid
+      && isActionableProfileReadState(profileReadState);
+    if (!firebaseUser || hasActionableProfileFailure || appUser?.uid !== firebaseUser.uid) {
+      return null;
+    }
+
+    return appUser;
   }
 
   // Get the underlying Firebase Auth instance for modular functions

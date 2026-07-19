@@ -42,6 +42,8 @@ describe('sleep provider mappers', () => {
         expect(result?.session.stages).toHaveLength(2);
         expect(result?.session.score?.value).toBe(88);
         expect(result?.session.vitals?.averageRespirationBrpm).toBe(15);
+        expect(result?.session.vitals?.averageHeartRateBpm).toBeUndefined();
+        expect(result?.session.vitals?.minimumHeartRateBpm).toBeUndefined();
         expect(result?.session.spo2Samples?.[0].value).toBe(95);
     });
 
@@ -88,6 +90,7 @@ describe('sleep provider mappers', () => {
         expect(result?.session.inBedDurationSeconds).toBe(28800);
         expect(result?.session.stageDurationsSeconds[SLEEP_STAGES.Awake]).toBe(720);
         expect(result?.session.vitals?.averageHeartRateBpm).toBe(52);
+        expect(result?.session.vitals?.minimumHeartRateBpm).toBe(45);
         expect(result?.session.vitals?.maxSpo2Percent).toBe(97);
         expect(result?.session.score?.value).toBe(81);
     });
@@ -150,6 +153,7 @@ describe('sleep provider mappers', () => {
         expect(result?.session.durationSeconds).toBe(30600);
         expect(result?.session.stageDurationsSeconds[SLEEP_STAGES.Unknown]).toBe(30600);
         expect(result?.session.vitals?.averageHeartRateBpm).toBe(58);
+        expect(result?.session.vitals?.minimumHeartRateBpm).toBeUndefined();
         expect(result?.session.vitals?.overnightHrvMs).toBe(50);
         expect(result?.session.hrvSamples?.[0].value).toBe(25);
     });
