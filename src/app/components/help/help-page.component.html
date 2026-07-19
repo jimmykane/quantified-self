@@ -1,5 +1,5 @@
 <div class="help-page">
-  <header class="docs-hero">
+  <header class="docs-hero" [class.docs-hero--compact]="isArticleOpen()">
     <p class="mat-label-large">Quantified Self Support</p>
     <h1 class="mat-display-small hero-title">How can we help?</h1>
     <p class="mat-body-large hero-subtitle">Find a guide, solve a problem, or get the right support path.</p>
@@ -184,11 +184,10 @@
             </mat-card-header>
             <mat-card-content>
               <mat-nav-list aria-label="Popular documentation guides">
-                @for (guide of popularGuides(); track guide.section.id) {
-                  <a mat-list-item [routerLink]="[]" [fragment]="guide.section.id" (click)="openSection(guide.section.id)">
-                    <mat-icon matListItemIcon>{{ guide.section.icon }}</mat-icon>
-                    <span matListItemTitle>{{ guide.section.title }}</span>
-                    <span matListItemLine>{{ guide.description }}</span>
+                @for (section of popularSections(); track section.id) {
+                  <a mat-list-item [routerLink]="[]" [fragment]="section.id" (click)="openSection(section.id)">
+                    <mat-icon matListItemIcon>{{ section.icon }}</mat-icon>
+                    <span matListItemTitle>{{ section.title }}</span>
                   </a>
                 }
               </mat-nav-list>

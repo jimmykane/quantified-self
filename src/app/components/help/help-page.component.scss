@@ -14,6 +14,10 @@
   text-align: center;
 }
 
+.docs-hero > .mat-label-large {
+  margin: 0;
+}
+
 .hero-title {
   margin: 0.5rem 0 0.75rem;
   color: var(--mat-sys-primary);
@@ -28,6 +32,21 @@
   width: 100%;
   margin-top: 1.5rem;
   text-align: left;
+}
+
+.docs-hero--compact {
+  max-width: 68rem;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.docs-hero--compact .hero-title,
+.docs-hero--compact .hero-subtitle {
+  display: none;
+}
+
+.docs-hero--compact .help-search {
+  margin-top: 0.5rem;
 }
 
 .quick-actions,
@@ -151,17 +170,6 @@
 
 .popular-guides-card mat-nav-list {
   padding-top: 0;
-}
-
-.popular-guides-card,
-.popular-guides-card mat-nav-list,
-.popular-guides-card [mat-list-item] {
-  min-width: 0;
-}
-
-.popular-guides-card :is([matListItemTitle], [matListItemLine]) {
-  overflow-wrap: anywhere;
-  white-space: normal;
 }
 
 .support-card {

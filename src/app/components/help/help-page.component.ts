@@ -14,11 +14,6 @@ interface HelpActionCard extends HelpAction {
   description: string;
 }
 
-interface PopularHelpGuide {
-  section: HelpSection;
-  description: string;
-}
-
 const HELP_ACTION_DESCRIPTIONS: Record<HelpAction['id'], string> = {
   'email-support': 'Get in touch when you need personal help.',
   'report-bug': 'Share a reproducible problem with the product.',
@@ -32,16 +27,6 @@ const POPULAR_SECTION_IDS: readonly HelpSectionId[] = [
   'ai-insights',
   'troubleshooting',
 ];
-
-const POPULAR_GUIDE_DESCRIPTIONS: Record<HelpSectionId, string> = {
-  'getting-started': 'Set up your account and first activity.',
-  'ai-insights': 'Understand prompts, results, and limits.',
-  'plans-and-billing': 'Manage your plan, limits, and billing.',
-  'uploads-and-imports': 'Import, export, or reprocess a file.',
-  'service-connections': 'Connect Garmin, Suunto, or COROS.',
-  'data-and-privacy': 'Manage your data, consent, and account.',
-  troubleshooting: 'Resolve sign-in, import, or browser issues.',
-};
 
 @Component({
   selector: 'app-help-page',
@@ -77,14 +62,10 @@ export class HelpPageComponent implements OnInit, OnDestroy {
     const sectionId = this.selectedSectionId();
     return this.sections.find(section => section.id === sectionId) ?? this.sections[0];
   });
-  readonly popularGuides = computed<readonly PopularHelpGuide[]>(() =>
+  readonly popularSections = computed(() =>
     POPULAR_SECTION_IDS
       .map(sectionId => this.sections.find(section => section.id === sectionId))
-      .filter((section): section is HelpSection => Boolean(section))
-      .map(section => ({
-        section,
-        description: POPULAR_GUIDE_DESCRIPTIONS[section.id],
-      })),
+      .filter((section): section is HelpSection => Boolean(section)),
   );
 
   ngOnInit(): void {
@@ -98,10 +79,12 @@ export class HelpPageComponent implements OnInit, OnDestroy {
   }
 
   openSection(sectionId: HelpSectionId): void {
+    this.searchQuery.set('');
     this.selectSection(sectionId, true);
   }
 
   returnToHelpCenter(): void {
+    this.searchQuery.set('');
     this.selectedSectionId.set(null);
     this.setHistoryFragment(null);
   }
@@ -109,7 +92,8 @@ export class HelpPageComponent implements OnInit, OnDestroy {
   onSearchQueryChange(query: string): void {
     this.searchQuery.set(query);
     if (query.trim()) {
-      this.returnToHelpCenter();
+      this.selectedSectionId.set(null);
+      this.setHistoryFragment(null);
     }
   }
 

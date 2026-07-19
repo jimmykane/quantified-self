@@ -78,6 +78,19 @@ describe('HelpPageComponent', () => {
     fixture.detectChanges();
 
     expect(component.selectedSection().title).toBe('Connected Services');
+    expect(component.hasSearchQuery()).toBe(false);
+  });
+
+  it('clears an active search when returning to all documentation', () => {
+    component.openSection('plans-and-billing');
+    component.onSearchQueryChange('billing');
+    fixture.detectChanges();
+
+    component.returnToHelpCenter();
+    fixture.detectChanges();
+
+    expect(component.hasSearchQuery()).toBe(false);
+    expect(fixture.debugElement.query(By.css('.topic-grid'))).toBeTruthy();
   });
 
   it('renders deterministic AI FAQ guidance in the AI Insights article', async () => {
