@@ -15,7 +15,7 @@ const BASE64_CHUNK_SIZE = 0x8000;
 const SERVICE_ACTIVITY_UPLOAD_DELAY_MS = 2000;
 const WAITING_FOR_NEXT_UPLOAD_MESSAGE = 'Waiting before next upload...';
 
-type ServiceUploadStatus = 'queued' | 'uploading' | 'success' | 'duplicate' | 'failed';
+type ServiceUploadStatus = 'queued' | 'uploading' | 'processing' | 'success' | 'duplicate' | 'failed';
 
 interface ServiceUploadRow {
   id: string;
@@ -29,11 +29,14 @@ interface ServiceUploadRow {
   progress: number;
   message: string | null;
   jobId?: string;
+  uploadId?: string;
 }
 
 interface ServiceUploadResult {
   success: boolean;
   duplicate: boolean;
+  pending?: boolean;
+  uploadId?: string;
   message?: string;
 }
 
@@ -41,10 +44,12 @@ interface ServiceUploadCallableResponse {
   status?: string;
   code?: string;
   message?: string;
+  uploadId?: string;
   result?: {
     status?: string;
     code?: string;
     message?: string;
+    uploadId?: string;
   };
 }
 
@@ -68,7 +73,11 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   @Input() set serviceName(value: ServiceNames) {
     this._serviceName = value || ServiceNames.SuuntoApp;
     this.destinationName = getProviderDisplayName(this._serviceName, 'destination');
-    this.callableFunction = this._serviceName === ServiceNames.COROSAPI ? 'importActivityToCOROSAPI' : 'importActivityToSuuntoApp';
+    this.callableFunction = this._serviceName === ServiceNames.COROSAPI
+      ? 'importActivityToCOROSAPI'
+      : this._serviceName === ServiceNames.WahooAPI
+        ? 'importActivityToWahooAPI'
+        : 'importActivityToSuuntoApp';
   }
 
   get serviceName(): ServiceNames {
@@ -89,7 +98,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       return '';
     }
 
-    const uploading = rows.filter((row) => row.status === 'uploading' || row.status === 'queued').length;
+    const uploading = rows.filter((row) => row.status === 'uploading' || row.status === 'processing' || row.status === 'queued').length;
     const complete = rows.filter((row) => row.status === 'success' || row.status === 'duplicate').length;
     const failed = rows.filter((row) => row.status === 'failed').length;
     const parts = [`${complete}/${rows.length} done`];
@@ -105,6 +114,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   public readonly statusLabelMap: Record<ServiceUploadStatus, string> = {
     queued: 'Queued',
     uploading: 'Uploading',
+    processing: 'Processing',
     success: 'Uploaded',
     duplicate: 'Already exists',
     failed: 'Failed',
@@ -113,6 +123,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   public readonly statusIconMap: Record<ServiceUploadStatus, string> = {
     queued: 'schedule',
     uploading: 'sync',
+    processing: 'sync',
     success: 'check_circle',
     duplicate: 'info',
     failed: 'error',
@@ -169,6 +180,39 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     await this.processRows(this.failedRows().map((row) => row.id), true);
   }
 
+  async refreshUpload(row: ServiceUploadRow): Promise<void> {
+    if (this.isUploading || row.status !== 'processing' || !row.uploadId || this.serviceName !== ServiceNames.WahooAPI) {
+      return;
+    }
+
+    this.updateRow(row.id, { message: 'Checking Wahoo processing status...' });
+    try {
+      const response = await this.functionsService.call<any, ServiceUploadCallableResponse>(
+        'getWahooAPIWorkoutFileUploadStatus',
+        { uploadId: row.uploadId },
+      );
+      const result = this.toServiceUploadResult(response.data);
+      if (result.pending) {
+        this.updateRow(row.id, { message: result.message || 'Wahoo is still processing the activity.' });
+        return;
+      }
+      if (result.duplicate) {
+        const message = result.message || `Activity already exists in ${this.destinationName}`;
+        this.updateRow(row.id, { status: 'duplicate', progress: 100, message });
+        this.processingService.updateJob(row.jobId || row.id, { status: 'duplicate', progress: 100, details: message });
+        return;
+      }
+      const message = result.message || `Uploaded to ${this.destinationName}`;
+      this.updateRow(row.id, { status: 'success', progress: 100, message });
+      this.processingService.completeJob(row.jobId || row.id, message);
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      this.logger.error(error);
+      this.updateRow(row.id, { status: 'failed', progress: 0, message });
+      this.processingService.failJob(row.jobId || row.id, message);
+    }
+  }
+
   clearRows(): void {
     if (this.isUploading) {
       return;
@@ -204,7 +248,13 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
     const response = await this.functionsService.call<any, ServiceUploadCallableResponse>(
       this.callableFunction,
-      { file: base64String }
+      this.serviceName === ServiceNames.WahooAPI
+        ? {
+          file: base64String,
+          filename: file.name,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }
+        : { file: base64String }
     );
 
     if (file.jobId) {
@@ -213,21 +263,16 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
     this.logger.info(`${this.destinationName} upload response:`, response.data);
 
-    const responseCode = response.data?.code || response.data?.result?.code;
-    const responseMessage = response.data?.message || response.data?.result?.message;
-    if (responseCode === 'ALREADY_EXISTS') {
-      const message = responseMessage || `Activity already exists in ${this.destinationName}`;
+    const result = this.toServiceUploadResult(response.data);
+    if (result.duplicate) {
+      const message = result.message || `Activity already exists in ${this.destinationName}`;
       if (file.jobId) {
         this.processingService.updateJob(file.jobId, { status: 'duplicate', progress: 100, details: message });
       }
       return { success: true, duplicate: true, message };
     }
 
-    return {
-      success: true,
-      duplicate: false,
-      message: responseMessage || `Uploaded to ${this.destinationName}`,
-    };
+    return result;
   }
 
   private async processRows(rowIds: string[], showSummary: boolean): Promise<void> {
@@ -294,6 +339,18 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           message,
         });
         this.processingService.updateJob(jobId, { status: 'duplicate', progress: 100, details: message });
+        return true;
+      }
+
+      if (result.pending) {
+        const message = result.message || `${this.destinationName} is processing the activity.`;
+        this.updateRow(row.id, {
+          status: 'processing',
+          progress: 75,
+          message,
+          uploadId: result.uploadId,
+        });
+        this.processingService.updateJob(jobId, { status: 'processing', progress: 75, details: message });
         return true;
       }
 
@@ -409,12 +466,15 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
     const successfulUploads = rows.filter((row) => row.status === 'success').length;
     const duplicateUploads = rows.filter((row) => row.status === 'duplicate').length;
+    const pendingUploads = rows.filter((row) => row.status === 'processing').length;
     const failedUploads = rows.filter((row) => row.status === 'failed').length;
 
     let message = '';
     if (rows.length === 1) {
       if (duplicateUploads === 1) {
         message = 'Activity already exists';
+      } else if (pendingUploads === 1) {
+        message = `${this.destinationName} is processing the activity`;
       } else if (successfulUploads === 1) {
         message = 'Successfully uploaded';
       } else {
@@ -424,6 +484,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       const parts = [];
       if (successfulUploads > 0) parts.push(`${successfulUploads} successful`);
       if (duplicateUploads > 0) parts.push(`${duplicateUploads} already exist`);
+      if (pendingUploads > 0) parts.push(`${pendingUploads} processing`);
       if (failedUploads > 0) parts.push(`${failedUploads} failed`);
       message = `Processed ${rows.length} files: ${parts.join(', ')}`;
     }
@@ -532,5 +593,29 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     const message = (error as { message?: unknown; error?: unknown } | null)?.message
       || (error as { error?: unknown } | null)?.error;
     return typeof message === 'string' ? message : 'Unknown error';
+  }
+
+  private toServiceUploadResult(response: ServiceUploadCallableResponse | undefined): ServiceUploadResult {
+    const responseCode = response?.code || response?.result?.code;
+    const responseMessage = response?.message || response?.result?.message;
+    const responseStatus = `${response?.status || response?.result?.status || ''}`.trim().toLowerCase();
+    const uploadId = response?.uploadId || response?.result?.uploadId;
+    if (responseCode === 'ALREADY_EXISTS') {
+      return { success: true, duplicate: true, message: responseMessage };
+    }
+    if (responseStatus === 'pending' || responseStatus === 'processing') {
+      return {
+        success: false,
+        duplicate: false,
+        pending: true,
+        uploadId,
+        message: responseMessage,
+      };
+    }
+    return {
+      success: true,
+      duplicate: false,
+      message: responseMessage || `Uploaded to ${this.destinationName}`,
+    };
   }
 }

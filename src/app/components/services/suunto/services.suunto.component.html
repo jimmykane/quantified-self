@@ -151,6 +151,16 @@
         <span>Uploads</span>
       </span>
     </a>
+    <a
+      href=""
+      mat-tab-link
+      [active]="activeProviderTool === 'activity-sync'"
+      (click)="$event.preventDefault(); selectProviderTool('activity-sync')">
+      <span class="provider-tab-label">
+        <mat-icon>published_with_changes</mat-icon>
+        <span>Activity Sync</span>
+      </span>
+    </a>
   </nav>
   <mat-tab-nav-panel #providerToolsPanel class="provider-tools-panel">
     <ng-container *ngTemplateOutlet="providerToolsContent"></ng-container>
@@ -358,6 +368,19 @@
         </app-status-info>
         }
       </section>
+    </section>
+    }
+
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'activity-sync') {
+    <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'activity-sync'">
+      <app-activity-sync-route-control
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [sourceServiceName]="serviceName"
+        [destinationServiceName]="serviceNames.WahooAPI"
+        [sourceConnected]="isServiceConnected"
+        [sourceReconnectRequired]="isReconnectRequired">
+      </app-activity-sync-route-control>
     </section>
     }
   </ng-template>

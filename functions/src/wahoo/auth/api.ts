@@ -13,6 +13,20 @@ export class WahooAPIRequestError extends Error {
   }
 }
 
+export class WahooAPITransportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WahooAPITransportError';
+  }
+}
+
+export type WahooAPIMethod = 'GET' | 'POST' | 'DELETE';
+
+export interface WahooAPIRequestOptions {
+  method?: WahooAPIMethod;
+  form?: URLSearchParams;
+}
+
 function parseResetHeader(value: string | null): number | null {
   if (!value) return null;
   const parsed = Number(value.split(',')[0]?.trim());
@@ -32,8 +46,10 @@ async function parseResponseBody(response: { text(): Promise<string> }): Promise
 export async function requestWahooAPI<T>(
   accessToken: string,
   path: string,
-  method: 'GET' | 'DELETE' = 'GET',
+  methodOrOptions: WahooAPIMethod | WahooAPIRequestOptions = 'GET',
 ): Promise<{ data: T; rateLimit: { limit: string | null; remaining: string | null; resetAfterSeconds: number | null } }> {
+  const options = typeof methodOrOptions === 'string' ? { method: methodOrOptions } : methodOrOptions;
+  const method = options.method || 'GET';
   let response;
   let body: unknown;
   try {
@@ -43,14 +59,16 @@ export async function requestWahooAPI<T>(
         headers: {
           Authorization: `Bearer ${accessToken}`,
           Accept: 'application/json',
+          ...(options.form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
         },
+        body: options.form?.toString(),
         signal,
       });
       return { response: result, body: await parseResponseBody(result) };
     }));
   } catch (error) {
-    if (error instanceof WahooRequestTimeoutError) throw new Error('Wahoo API request timed out.');
-    throw new Error('Wahoo API request failed.');
+    if (error instanceof WahooRequestTimeoutError) throw new WahooAPITransportError('Wahoo API request timed out.');
+    throw new WahooAPITransportError('Wahoo API request failed.');
   }
   const resetAfterSeconds = parseResetHeader(response.headers.get('x-ratelimit-reset'));
   if (!response.ok) {

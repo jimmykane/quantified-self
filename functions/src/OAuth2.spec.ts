@@ -311,7 +311,7 @@ describe('OAuth2', () => {
 
             expect(config).toBeDefined();
             expect(config.tokenCollectionName).toBe('wahooAPIAccessTokens');
-            expect(config.oAuthScopes).toBe('user_read workouts_read offline_data');
+            expect(config.oAuthScopes).toBe('user_read workouts_read workouts_write offline_data');
             expect(config.oauth2Client).toBeDefined();
         });
     });

@@ -45,7 +45,7 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
   get connectionDescription(): string {
     return this.isDisconnectPending
       ? 'Disconnect is pending while Wahoo finishes deauthorization. Imports are paused.'
-      : 'Imports Wahoo-recorded activities and FIT-backed workout history.';
+      : 'Imports Wahoo-recorded activities and can send FIT activities to Wahoo.';
   }
 
   protected override get canDisconnectWithoutProAccess(): boolean {

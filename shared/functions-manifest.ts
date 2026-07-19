@@ -29,6 +29,8 @@ export const FUNCTIONS_MANIFEST = {
     requestAndSetWahooAPIAccessToken: { name: 'requestAndSetWahooAPIAccessToken', region: 'europe-west2' },
     deauthorizeWahooAPI: { name: 'deauthorizeWahooAPI', region: 'europe-west2' },
     addWahooAPIHistoryToQueue: { name: 'addWahooAPIHistoryToQueue', region: 'europe-west2' },
+    importActivityToWahooAPI: { name: 'importActivityToWahooAPI', region: 'europe-west2' },
+    getWahooAPIWorkoutFileUploadStatus: { name: 'getWahooAPIWorkoutFileUploadStatus', region: 'europe-west2' },
 
     // Suunto Functions
     getSuuntoAPIAuthRequestTokenRedirectURI: { name: 'getSuuntoAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },

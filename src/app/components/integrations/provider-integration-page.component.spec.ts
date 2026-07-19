@@ -75,15 +75,17 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
   });
 
-  it('should render Wahoo import and retention boundaries', () => {
+  it('should render Wahoo import, explicit delivery, and retention boundaries', () => {
     const fixture = renderProvider('wahoo');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('Wahoo Integration for Activity History and Training Analysis');
+    expect(text).toContain('Wahoo Integration for Activity Sync and Training Analysis');
     expect(text).toContain('New workout imports');
     expect(text).toContain('Wahoo history import');
     expect(text).toContain('does not delete activities already imported');
-    expect(text).toContain('Uploads, sleep sync, route delivery');
+    expect(text).toContain('Direct FIT delivery');
+    expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');
+    expect(text).toContain('Sleep sync, route delivery');
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {

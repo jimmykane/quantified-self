@@ -22,10 +22,12 @@ describe('integration-pages.content', () => {
     }
   });
 
-  it('documents Wahoo as FIT-backed, import-only, and retained after disconnect', () => {
+  it('documents Wahoo FIT imports, explicit delivery, and retained imported activities after disconnect', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('automatic FIT activity imports');
-    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('import source');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('activity sync to Wahoo');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('accepts FIT activity delivery');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not enabled');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct FIT delivery')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question.includes('disconnecting'))?.answer)
       .toContain('previously imported activities remain');
   });

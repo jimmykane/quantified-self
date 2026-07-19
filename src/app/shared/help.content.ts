@@ -590,7 +590,7 @@ Services opens each provider on a compact connection overview. Choose an action 
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, Garmin to Suunto activity sync, COROS to Suunto activity sync, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin, history imports, uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, activity sync to Suunto and Wahoo, direct FIT delivery to Wahoo, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin, history imports, uploads, and how those workflows connect to the private training dashboard.
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
@@ -692,16 +692,21 @@ See [Policies -> COROS Data](/policies#coros-data) for the provider-specific pri
 
 ## Wahoo
 
-Wahoo is an import-only **Pro** integration. Connect Wahoo from Services to:
+Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 
 - receive new completed Wahoo workouts automatically,
 - import Wahoo workout history for a selected date range,
 - retain the original FIT activity with the imported event for downloads, exports, and reprocessing,
 - analyze Wahoo activities alongside your other activity sources.
+- send a FIT file directly to Wahoo without creating a Quantified Self activity,
+- automatically send new Garmin, COROS, or Suunto activities to Wahoo,
+- or choose a date range to send past Garmin, COROS, or Suunto activities already in Quantified Self to Wahoo.
 
 Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
 
-Disconnecting Wahoo revokes future access and stops new imports. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo uploads, sleep sync, routes, and Wahoo-to-Suunto forwarding are not supported in this release.
+Direct FIT delivery only sends the selected file to Wahoo. It does not create or retain an activity in Quantified Self. Wahoo may process an upload asynchronously; Services keeps the upload status available to refresh. If you connected Wahoo before activity sending was available, reconnect it once to grant workout write access.
+
+Disconnecting Wahoo revokes future access and stops new imports and deliveries. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Sleep sync, routes, plans, and Wahoo-to-another-provider forwarding are not supported in this release.
 
 See [Policies -> Wahoo Data](/policies#wahoo-data) for the provider-specific privacy and retention summary.
 

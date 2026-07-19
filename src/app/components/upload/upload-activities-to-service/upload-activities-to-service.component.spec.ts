@@ -137,6 +137,41 @@ describe('UploadActivitiesToServiceComponent', () => {
         await promise;
     });
 
+    it('should send Wahoo uploads with filename and browser time zone and retain the pending upload id', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'pending', uploadId: 'wahoo-upload-1', message: 'Wahoo is processing the activity.' },
+        });
+        const file = {
+            file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1',
+        };
+
+        const result = await component.processAndUploadFile(file);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'importActivityToWahooAPI',
+            expect.objectContaining({
+                file: expect.any(String),
+                filename: 'activity.fit',
+                timeZone: expect.any(String),
+            }),
+        );
+        expect(result).toEqual({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: 'wahoo-upload-1',
+            message: 'Wahoo is processing the activity.',
+        });
+    });
+
     it('should reject non-fit files', async () => {
         const file = {
             file: new File(['content'], 'test.txt'),

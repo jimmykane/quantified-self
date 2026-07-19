@@ -20,10 +20,13 @@ const {
   mockSetActivitySyncFailedMetadata,
   mockToActivitySyncMetadataError,
   mockUploadActivityFileToSuunto,
+  mockUploadActivityFileToWahoo,
+  mockGetWahooActivityUploadStatus,
   mockHasProAccess,
   mockGetServiceConnectionMeta,
   mockShouldSkipQueueWorkForDeletedUser,
   mockMarkQueueItemSkipped,
+  mockWahooEnabled,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -49,10 +52,13 @@ const {
       normalizedMessage: `${(error as { message?: unknown } | undefined)?.message || error}`,
     })),
     mockUploadActivityFileToSuunto: vi.fn(),
+    mockUploadActivityFileToWahoo: vi.fn(),
+    mockGetWahooActivityUploadStatus: vi.fn(),
     mockHasProAccess: vi.fn(),
     mockGetServiceConnectionMeta: vi.fn(),
     mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
     mockMarkQueueItemSkipped: vi.fn(),
+    mockWahooEnabled: { value: true },
   };
 });
 
@@ -119,6 +125,11 @@ vi.mock('../suunto/activities', () => ({
   uploadActivityFileToSuunto: mockUploadActivityFileToSuunto,
 }));
 
+vi.mock('../wahoo/activities', () => ({
+  uploadActivityFileToWahoo: mockUploadActivityFileToWahoo,
+  getWahooActivityUploadStatus: mockGetWahooActivityUploadStatus,
+}));
+
 vi.mock('../utils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils')>();
   return {
@@ -126,6 +137,10 @@ vi.mock('../utils', async (importOriginal) => {
     hasProAccess: mockHasProAccess,
   };
 });
+
+vi.mock('../config', () => ({
+  config: { wahooapi: { get enabled() { return mockWahooEnabled.value; } } },
+}));
 
 vi.mock('../service-connection-meta', () => ({
   getServiceConnectionMeta: mockGetServiceConnectionMeta,
@@ -175,12 +190,25 @@ describe('activity-sync/process-queue-item', () => {
       uploadId: 'upload-1',
       workoutKey: 'workout-1',
     });
+    mockUploadActivityFileToWahoo.mockResolvedValue({
+      status: 'success',
+      message: 'ok',
+      uploadId: 'wahoo-upload-1',
+      workoutKey: 'wahoo-workout-1',
+    });
+    mockGetWahooActivityUploadStatus.mockResolvedValue({
+      status: 'success',
+      message: 'ok',
+      uploadId: 'wahoo-upload-1',
+      workoutKey: 'wahoo-workout-1',
+    });
     mockUpdateToProcessed.mockResolvedValue(QueueResult.Processed);
     mockDeferQueueItemForPendingDisconnect.mockResolvedValue(QueueResult.Deferred);
     mockMarkQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     mockIncreaseRetryCountForQueueItem.mockResolvedValue(QueueResult.RetryIncremented);
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+    mockWahooEnabled.value = true;
   });
 
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
@@ -200,6 +228,77 @@ describe('activity-sync/process-queue-item', () => {
       resultStatus: 'success',
       successProcessedAt: expect.any(Number),
     }));
+  });
+
+  it('persists a pending Wahoo upload token and retries status checks without posting the FIT file again', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      ref: { update } as any,
+    };
+    mockUploadActivityFileToWahoo.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'processing',
+      uploadId: 'wahoo-upload-1',
+    });
+
+    const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'), expect.objectContaining({
+      filename: 'original.fit',
+    }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ destinationUploadID: 'wahoo-upload-1' }));
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({ code: 'deadline-exceeded' }),
+      1,
+      undefined,
+    );
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1');
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips Wahoo delivery when the saved OAuth grant lacks workout write scope', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(Object.assign(
+      new Error('Reconnect Wahoo and allow workout access.'),
+      { name: 'WahooWorkoutWriteScopeRequiredError', code: 'failed-precondition' },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_write_scope_missing',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('does not attempt Wahoo delivery while its feature gate is disabled', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockWahooEnabled.value = false;
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_unavailable',
+    }));
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
   });
 
   it('retries instead of DLQ when the deletion guard cannot be read', async () => {

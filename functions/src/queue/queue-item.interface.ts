@@ -80,6 +80,9 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
   successProcessedAt?: number;
+  destinationUploadID?: string;
+  destinationWorkoutKey?: string;
+  destinationInfoCode?: string;
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {

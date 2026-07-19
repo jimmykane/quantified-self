@@ -609,11 +609,13 @@ describe('help.content', () => {
     });
   });
 
-  it('documents Wahoo FIT imports, skip rules, and retained imported activities', () => {
+  it('documents Wahoo FIT imports, explicit delivery, skip rules, and retained imported activities', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
     expect(serviceConnectionsSection?.content).toContain('Workouts without a FIT file are skipped');
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
+    expect(serviceConnectionsSection?.content).toContain('send a FIT file directly to Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('Garmin, COROS, or Suunto activities');
     expect(serviceConnectionsSection?.content).toContain('[Wahoo Integration](/integrations/wahoo)');
     expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
       target: '/policies',

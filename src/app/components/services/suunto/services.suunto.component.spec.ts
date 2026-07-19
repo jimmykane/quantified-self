@@ -149,7 +149,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();
-        expect(providerTabs.length).toBe(3);
+        expect(providerTabs.length).toBe(4);
         expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
     });
 
@@ -187,7 +187,7 @@ describe('ServicesSuuntoComponent', () => {
         const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
         const panels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
 
-        expect(panels.length).toBe(3);
+        expect(panels.length).toBe(4);
         expect(panels[0].hidden).toBe(false);
         expect(panels[1].hidden).toBe(true);
         expect(getComputedStyle(panels[1]).display).toBe('none');

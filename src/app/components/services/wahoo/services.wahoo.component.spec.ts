@@ -108,6 +108,18 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.querySelector('.tool-subsection-title')).toBeNull();
   });
 
+  it('offers direct FIT delivery without implying that it creates a Quantified Self activity', () => {
+    component.user = {} as any;
+    component.hasProAccess = true;
+    component.serviceMeta = { connectionState: 'connected' } as any;
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Send FIT Activity to Wahoo');
+    expect(fixture.nativeElement.textContent).toContain('does not create or retain an activity in Quantified Self');
+    expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+  });
+
   it('rejects a denied Wahoo authorization callback instead of reporting a connection', async () => {
     (component as any).route.snapshot.queryParamMap = convertToParamMap({
       state: 'state-1',

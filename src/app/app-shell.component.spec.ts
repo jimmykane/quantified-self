@@ -689,6 +689,7 @@ describe('AppShellComponent', () => {
             shellScroller.scrollLeft = 20;
         }
 
+        // The shell resets only for an actual path change, not a duplicate NavigationEnd.
         (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
         (mockRouter.events as Subject<any>).next(new NavigationEnd(2, '/help', '/help'));
 

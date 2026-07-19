@@ -12,6 +12,7 @@ import { ServicesCorosComponent } from '../components/services/coros/services.co
 import { ServicesWahooComponent } from '../components/services/wahoo/services.wahoo.component';
 import { UploadActivitiesToServiceComponent } from '../components/upload/upload-activities-to-service/upload-activities-to-service.component';
 import { ServiceConnectionStatusComponent } from '../components/services/service-connection-status/service-connection-status.component';
+import { ActivitySyncRouteControlComponent } from '../components/services/activity-sync-route-control/activity-sync-route-control.component';
 
 @NgModule({
     imports: [
@@ -28,6 +29,7 @@ import { ServiceConnectionStatusComponent } from '../components/services/service
         ServicesCorosComponent,
         ServicesWahooComponent,
         ServiceConnectionStatusComponent,
+        ActivitySyncRouteControlComponent,
         HistoryImportFormComponent,
         UploadRoutesToServiceComponent,
         UploadActivitiesToServiceComponent

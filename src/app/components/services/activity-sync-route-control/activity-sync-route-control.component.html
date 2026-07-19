@@ -1,0 +1,78 @@
+<section class="tool-subsection" [class.locked-panel]="!hasProAccess">
+  <div class="tool-subsection-header">
+    <div class="tool-subsection-title">
+      <mat-icon>published_with_changes</mat-icon>
+      <span>Send {{ sourceName }} activities to {{ destinationName }}</span>
+    </div>
+  </div>
+
+  @if (!hasProAccess) {
+  <div class="pro-required-inline">
+    <mat-icon>lock</mat-icon>
+    <span>Activity sync is a Pro feature.</span>
+  </div>
+  } @else if (destinationDisconnectPending) {
+  <app-status-info type="info" title="{{ destinationName }} disconnect pending">
+    Wait for the {{ destinationName }} disconnect to finish before syncing activities.
+  </app-status-info>
+  } @else if (sourceReconnectRequired || destinationReconnectRequired) {
+  <app-status-info type="info" title="Reconnect required">
+    Reconnect {{ sourceReconnectRequired ? sourceName : destinationName }} before syncing activities.
+  </app-status-info>
+  } @else if (!sourceConnected || !destinationConnected) {
+  <app-status-info type="info" title="Connect {{ sourceName }} + {{ destinationName }} first">
+    Connect both services before syncing activities.
+  </app-status-info>
+  } @else if (routeId) {
+  <mat-slide-toggle [checked]="routeEnabled" [disabled]="isSaving || isBackfilling"
+    (change)="onRouteToggle($event.checked)">
+    Automatically send new {{ sourceName }} activities to {{ destinationName }}
+  </mat-slide-toggle>
+
+  @if (destinationServiceName === 'Wahoo API') {
+  <p class="description-text">If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.</p>
+  }
+
+  <mat-divider class="tool-divider"></mat-divider>
+  <div class="tool-section-title">Sync past activities</div>
+  <app-status-info type="info" title="Choose which activities to send">
+    Choose a date range to send {{ sourceName }} activities already in Quantified Self to {{ destinationName }}. This also works when automatic activity sync is off.
+  </app-status-info>
+  <div class="date-fields">
+    <mat-form-field appearance="outline">
+      <mat-label>From</mat-label>
+      <input matInput [matDatepicker]="activitySyncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
+        [ngModelOptions]="{standalone: true}" (click)="activitySyncStartDatePicker.open()">
+      <mat-datepicker-toggle matSuffix [for]="activitySyncStartDatePicker"></mat-datepicker-toggle>
+      <mat-datepicker #activitySyncStartDatePicker></mat-datepicker>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>To</mat-label>
+      <input matInput [matDatepicker]="activitySyncEndDatePicker" [min]="backfillStartDate" [(ngModel)]="backfillEndDate"
+        [ngModelOptions]="{standalone: true}" (click)="activitySyncEndDatePicker.open()">
+      <mat-datepicker-toggle matSuffix [for]="activitySyncEndDatePicker"></mat-datepicker-toggle>
+      <mat-datepicker #activitySyncEndDatePicker></mat-datepicker>
+    </mat-form-field>
+  </div>
+
+  <button mat-flat-button class="qs-mat-primary full-width-action"
+    [disabled]="isBackfilling || isBackfillDateRangeInvalid"
+    (click)="runBackfill($event)">
+    @if (isBackfilling) {
+    <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+    Starting sync...
+    } @else {
+    Sync activities
+    }
+  </button>
+
+  @if (backfillSummary) {
+  <app-status-info type="success" title="Activity sync started">
+    <div>Found: {{ backfillSummary.scanned }} | Scheduled: {{ backfillSummary.queued }}</div>
+    @if (backfillSummary.failedCount > 0) {
+    <div>Could not schedule: {{ backfillSummary.failedCount }}</div>
+    }
+  </app-status-info>
+  }
+  }
+</section>

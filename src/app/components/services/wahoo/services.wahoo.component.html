@@ -83,5 +83,32 @@
     }
   </section>
   }
+
+  @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
+  <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'uploads'">
+    <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
+      <div class="tool-subsection-header">
+        <div class="tool-subsection-title">
+          <mat-icon>cloud_upload</mat-icon>
+          <span>Send FIT Activity to Wahoo</span>
+        </div>
+      </div>
+      <p class="description-text">This sends a FIT file directly to Wahoo. It does not create or retain an activity in Quantified Self.</p>
+      @if (!hasProAccess) {
+      <div class="pro-required-inline" (click)="triggerUpsell()">
+        <mat-icon>lock</mat-icon>
+        <span>Sending activities to Wahoo is a Pro feature.</span>
+      </div>
+      } @else if (isConnectedToService()) {
+      <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-activity-to-service>
+      <app-status-info type="info" title="Wahoo access">
+        If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.
+      </app-status-info>
+      } @else {
+      <app-status-info type="info" title="Connect Account First">Connect Wahoo before sending FIT activities.</app-status-info>
+      }
+    </section>
+  </section>
+  }
   }
 </div>

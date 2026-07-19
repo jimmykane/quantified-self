@@ -36,6 +36,24 @@ describe('Wahoo auth API helpers', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://api.wahooligan.com/v1/permissions', expect.objectContaining({ method: 'DELETE' }));
   });
 
+  it('sends workout file uploads as URL-encoded form data without exposing the bearer token in the body', async () => {
+    fetchMock.mockResolvedValue(response(201, { token: 'upload-token', status: 'pending' }));
+    const form = new URLSearchParams();
+    form.set('workout_file_upload[file]', 'data:application/vnd.ant.fit;base64,RklU');
+    form.set('workout_file_upload[filename]', 'ride.fit');
+
+    await requestWahooAPI('access', '/v1/workout_file_uploads', { method: 'POST', form });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://api.wahooligan.com/v1/workout_file_uploads', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer access',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      body: form.toString(),
+    }));
+  });
+
   it('exposes rate-limit reset information on errors', async () => {
     fetchMock.mockResolvedValue(response(429, { error: 'rate limited' }, { 'x-ratelimit-reset': '300' }));
     await expect(requestWahooAPI('access', '/v1/workouts')).rejects.toMatchObject<WahooAPIRequestError>({

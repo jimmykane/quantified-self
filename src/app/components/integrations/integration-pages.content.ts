@@ -385,18 +385,19 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'wahoo',
     label: 'Wahoo',
     serviceName: ServiceNames.WahooAPI,
-    h1: 'Wahoo Integration for Activity History and Training Analysis',
-    heroCopy: 'Connect Wahoo to Quantified Self to import new Wahoo-recorded workouts, queue FIT-backed history, and analyze Wahoo activities beside Garmin, Suunto, and COROS data.',
+    h1: 'Wahoo Integration for Activity Sync and Training Analysis',
+    heroCopy: 'Connect Wahoo to Quantified Self to import new Wahoo-recorded workouts, queue FIT-backed history, send FIT activities to Wahoo, and analyze Wahoo activities beside Garmin, Suunto, and COROS data.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use the Pro Wahoo connection for automatic workout imports, date-range history imports, original FIT retention, and private multi-provider training analysis.',
+    summary: 'Use the Pro Wahoo connection for automatic workout imports, FIT-backed history, direct FIT delivery, Garmin/COROS/Suunto-to-Wahoo activity sync, and private multi-provider training analysis.',
     highlights: [
       'Automatic Wahoo workout imports',
       'FIT-backed Wahoo history import',
+      'Direct FIT upload and activity sync to Wahoo',
       'Wahoo, Garmin, Suunto, and COROS in one dashboard',
     ],
     syncEyebrow: 'Wahoo Workflows',
-    syncTitle: 'Import Wahoo workouts automatically',
-    syncCopy: 'Authorize Wahoo once and Quantified Self receives completed Wahoo workout summaries through Wahoo webhooks while the connection stays active.',
+    syncTitle: 'Import Wahoo workouts and send FIT activities to Wahoo',
+    syncCopy: 'Authorize Wahoo once to receive completed Wahoo workout summaries, then explicitly choose direct FIT delivery or Garmin, COROS, and Suunto activity sync to Wahoo.',
     syncFlows: [
       {
         icon: 'sync',
@@ -413,10 +414,20 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         title: 'Revision-aware processing',
         copy: 'Duplicate webhook deliveries are safe, and a newer Wahoo workout-summary revision replaces an older queued revision before processing.',
       },
+      {
+        icon: 'upload_file',
+        title: 'Direct FIT delivery',
+        copy: 'Choose a FIT file in Wahoo Services to send it directly to Wahoo. This does not create or retain a Quantified Self activity.',
+      },
+      {
+        icon: 'published_with_changes',
+        title: 'Garmin, COROS, and Suunto to Wahoo sync',
+        copy: 'Connect Wahoo and the source service, then turn on automatic delivery for new activities or choose a date range for activities already stored in Quantified Self.',
+      },
     ],
     toolsEyebrow: 'Wahoo Tools',
-    toolsTitle: 'FIT source files and provider-aware analysis',
-    toolsCopy: 'Wahoo is an import source in this release. Uploads, sleep sync, route delivery, and automatic forwarding to another provider are not enabled.',
+    toolsTitle: 'FIT source files, Wahoo delivery, and provider-aware analysis',
+    toolsCopy: 'Wahoo accepts FIT activity delivery in this release. Sleep sync, route delivery, plans, and automatic forwarding from Wahoo to another provider are not enabled.',
     tools: [
       {
         icon: 'source',
@@ -432,6 +443,11 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         icon: 'security',
         title: 'Server-only OAuth credentials',
         copy: 'Wahoo access and refresh tokens are never readable by the browser; the app displays only a safe connection-state projection.',
+      },
+      {
+        icon: 'sync',
+        title: 'Asynchronous upload status',
+        copy: 'Wahoo can process a FIT upload asynchronously. Quantified Self keeps the Wahoo upload identifier for status checks without posting the same source file again.',
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
@@ -467,9 +483,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         question: 'Is the Wahoo integration available on every plan?',
         answer: 'No. Connecting Wahoo and importing Wahoo activity history are Pro features.',
       },
+      {
+        question: 'Can I send Garmin, COROS, or Suunto activities to Wahoo?',
+        answer: 'Yes. Connect Wahoo and the source service, then use the Activity Sync controls to turn on new activity delivery or choose a date range for already imported FIT-backed activities.',
+      },
     ],
     closingTitle: 'Connect Wahoo and keep completed workouts in context',
-    closingCopy: 'Import Wahoo FIT activities automatically, add the history range you need, and analyze them in the same private archive as your other training data.',
+    closingCopy: 'Import Wahoo FIT activities automatically, send the FIT activities you choose to Wahoo, add the history range you need, and analyze everything in the same private archive.',
   },
 };
 
@@ -514,11 +534,12 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     slug: 'wahoo',
     label: getProviderDisplayName(ServiceNames.WahooAPI, 'source'),
     serviceName: ServiceNames.WahooAPI,
-    subtitle: 'Automatic FIT activity and history import',
-    summary: 'Connect Wahoo to import completed FIT-backed workouts and analyze them beside Garmin, Suunto, and COROS in one private dashboard.',
+    subtitle: 'FIT import, delivery, and activity sync',
+    summary: 'Connect Wahoo to import completed FIT-backed workouts, send FIT activities to Wahoo, and analyze them beside Garmin, Suunto, and COROS in one private dashboard.',
     highlights: [
       'Import new Wahoo workouts automatically',
       'Queue Wahoo history by date range',
+      'Send FIT activities to Wahoo',
       'Retain imported activities after disconnect',
     ],
   },
@@ -633,7 +654,7 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Wahoo Integration',
     preload: true,
     animation: 'Integrations',
-    description: 'Connect Wahoo to Quantified Self for automatic FIT activity imports, date-range history imports, original-file retention, and private multi-provider training analysis.',
+    description: 'Connect Wahoo to Quantified Self for automatic FIT activity imports, direct FIT delivery, Garmin/COROS/Suunto activity sync to Wahoo, date-range history imports, and private multi-provider training analysis.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.wahoo,
       'Connect Wahoo to Quantified Self for automatic FIT activity imports, date-range history imports, original-file retention, and private multi-provider training analysis.',

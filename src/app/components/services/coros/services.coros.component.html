@@ -290,6 +290,13 @@
         }
         }
       </section>
+      <app-activity-sync-route-control
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [sourceServiceName]="serviceName"
+        [destinationServiceName]="serviceNames.WahooAPI"
+        [sourceConnected]="isConnectedToService()">
+      </app-activity-sync-route-control>
     }
   </ng-template>
   }

@@ -642,7 +642,7 @@ describe('HistoryImportFormComponent', () => {
 
             expect(component.isAllowedToDoHistoryImport).toBe(false);
             expect(component.formGroup.disabled).toBe(true);
-            expect(fixture.nativeElement.textContent).toContain('500 activities queued from last import.');
+            expect(fixture.nativeElement.textContent).toContain('500 activities scheduled from the last import.');
             expect(fixture.nativeElement.textContent).toContain('Cooldown active for 1 day.');
             expect(component.nextImportAvailableDate.getTime()).toBeGreaterThan(Date.now());
         });
@@ -685,7 +685,7 @@ describe('HistoryImportFormComponent', () => {
             fixture.detectChanges();
 
             expect(component.isHistoryImportPending()).toBe(true);
-            expect(fixture.nativeElement.textContent).toContain('42 activities queued.');
+            expect(fixture.nativeElement.textContent).toContain('42 activities scheduled.');
             expect(fixture.nativeElement.textContent).toContain('5,000 / day capacity');
         });
     });
