@@ -229,7 +229,9 @@ refresh timer re-evaluates the shared result when a future-dated record becomes 
 48-hour limit,
 or a night leaves the 30-day baseline window; it reschedules after every boundary and caps long browser timers. Both
 live and backend paths reject unknown providers or invalid sleep dates, ignore non-positive physiological samples, and
-discard unusable timezone offsets instead of letting malformed evidence change or break the result.
+discard unusable timezone offsets instead of letting malformed evidence change or break the result. The backend readiness
+projection must include average and minimum sleep HR as well as HRV fields; the shared formula gives average sleep HR
+priority when building the single Overnight HR driver.
 
 ### Settings
 
@@ -410,9 +412,9 @@ repair reuses a compatible Form snapshot seed and the bounded sleep envelope; it
 history scan. Keep the validator shared when the readiness payload evolves so backend freshness cannot call an invalid
 document fresh while the frontend remains indefinitely on Preparing.
 
-The readiness payload also carries `formulaVersion: 2`. This is intentionally independent of the global derived schema:
-changing the current/historical readiness formula invalidates only `training_readiness`, preserving compatible snapshots
-for every unrelated kind.
+The readiness payload also carries `formulaVersion: 3`. This is intentionally independent of the global derived schema:
+changing the current/historical readiness formula or its persisted input projection invalidates only
+`training_readiness`, preserving compatible snapshots for every unrelated kind.
 
 This probe is important in local development and recovery scenarios: opening Training can repair missing or stale
 snapshots even when no new Firestore write arrives.

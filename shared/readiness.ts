@@ -45,7 +45,9 @@ interface WeightedReadinessSignal {
 }
 
 export const READINESS_TOTAL_SIGNAL_COUNT = 4 as const;
-export const READINESS_FORMULA_VERSION = 2 as const;
+// Version 3 adds the average sleep-HR source field to historical readiness builds.
+// It intentionally invalidates only the persisted readiness series, not all derived metrics.
+export const READINESS_FORMULA_VERSION = 3 as const;
 export const READINESS_SLEEP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 export const READINESS_SLEEP_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 export const READINESS_SLEEP_BASELINE_NIGHTS = 14;

@@ -417,6 +417,7 @@ describe('fetchTrainingReadinessSleepDocs', () => {
             'providerFields.suunto.timestamp',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
+            'vitals.averageHeartRateBpm',
             'vitals.minimumHeartRateBpm',
         );
         expect(docs.map(doc => doc.id)).toEqual(['readiness-sleep']);
@@ -624,7 +625,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const staleDay = result.payload.points.find(point => point.dayMs === Date.UTC(2026, 6, 13));
 
         expect(result.payload).toMatchObject({
-            formulaVersion: 2,
+            formulaVersion: 3,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,

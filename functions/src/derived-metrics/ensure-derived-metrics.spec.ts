@@ -201,6 +201,7 @@ describe('decideDerivedMetricsFreshness', () => {
     it('uses the shared readiness contract to reject history from an older formula', () => {
         const asOfDayMs = Date.UTC(2026, 3, 15);
         const legacyPayload = {
+            formulaVersion: 2,
             dayBoundary: 'UTC',
             asOfDayMs,
             generatedAtMs: asOfDayMs + (12 * 60 * 60 * 1000),
@@ -211,13 +212,16 @@ describe('decideDerivedMetricsFreshness', () => {
                 label: 'Mixed',
                 confidence: 'low',
                 availableSignalCount: 1,
+                baselineEvidenceCount: 0,
                 totalSignalCount: 4,
                 form: 4,
                 rampRate: 1,
                 sleepScore: null,
                 latestSleepAtMs: null,
                 hrvRatio: null,
+                averageHeartRateRatio: null,
                 minimumHeartRateRatio: null,
+                overnightHeartRateRatio: null,
             })),
         };
 

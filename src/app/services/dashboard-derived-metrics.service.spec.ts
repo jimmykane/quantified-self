@@ -671,7 +671,7 @@ describe('DashboardDerivedMetricsService', () => {
       overnightHeartRateRatio: null,
     }));
     const payload = {
-      formulaVersion: 2,
+      formulaVersion: 3,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: nowMs,

@@ -175,6 +175,7 @@ const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
     'providerFields.suunto.timestamp',
     'vitals.overnightHrvMs',
     'vitals.averageHrvMs',
+    'vitals.averageHeartRateBpm',
     'vitals.minimumHeartRateBpm',
 ] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;

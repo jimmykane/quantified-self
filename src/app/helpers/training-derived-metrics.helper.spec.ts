@@ -71,7 +71,7 @@ describe('training derived metric normalizers', () => {
       overnightHeartRateRatio: index === 0 ? null : 0.98,
     }));
     const payload = {
-      formulaVersion: 2,
+      formulaVersion: 3,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: asOfDayMs + (12 * 60 * 60 * 1000),
@@ -129,7 +129,7 @@ describe('training derived metric normalizers', () => {
     })).toBeNull();
     expect(resolveTrainingReadinessMetricPayload({
       ...payload,
-      formulaVersion: 1,
+      formulaVersion: 2,
     })).toBeNull();
     expect(resolveTrainingReadinessMetricPayload({
       ...payload,
