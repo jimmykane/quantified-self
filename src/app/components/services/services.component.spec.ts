@@ -248,8 +248,32 @@ describe('ServicesComponent', () => {
 
     it('maps provider overview cards to distinct tools', () => {
         expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes', 'uploads']);
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
+    });
+
+    it('opens the Suunto route and upload cards at their matching tools', () => {
+        component.activeSection = 'suunto';
+        fixture.detectChanges();
+
+        const activePanel = fixture.nativeElement.querySelector('[aria-label="Suunto App"]');
+        const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
+
+        expect(manageButtons).toHaveLength(3);
+        expect(manageButtons[1].textContent?.trim()).toBe('Route sync settings');
+        expect(manageButtons[2].textContent?.trim()).toBe('Upload files');
+
+        manageButtons[1].click();
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('routes');
+        expect(component.managedToolTitle).toBe('Route sync');
+
+        dialogClosed$.next();
+        manageButtons[2].click();
+
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('uploads');
+        expect(component.managedToolTitle).toBe('Upload activities and routes');
     });
 
     it('gives the service tools dialog an accessible close action', () => {
