@@ -73,6 +73,7 @@ import {
   buildTrainingExplanationViewModel,
   type TrainingExplanationViewModel,
 } from '../../helpers/training-explanation-view.helper';
+import { resolveTrainingEventDisplayLabel } from '../../helpers/training-event-label.helper';
 import {
   buildTrainingDurabilityScopeViewModels,
   type TrainingDurabilityScopeViewModel,
@@ -98,6 +99,7 @@ import {
   formatTrainingVisibleDisciplinesAccessibleLabel,
   formatTrainingVisibleDisciplinesCompactLabel,
   formatTrainingVisibleDisciplinesLabel,
+  formatTrainingVisibleDisciplinesScopeLabel,
   resolveTrainingSportVisibility,
   trainingSportVisibilitySelectionKey,
 } from '../../helpers/training-sport-visibility.helper';
@@ -160,6 +162,8 @@ interface TrainingBuildCardViewModel {
   metricRows: TrainingBuildMetricRowViewModel[];
   recovery: TrainingRecoveryViewModel | null;
 }
+
+const TRAINING_DAY_MS = 24 * 60 * 60 * 1000;
 
 interface TrainingBuildMetricRowViewModel {
   label: string;
@@ -262,6 +266,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
   public visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
   public visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
+  public visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(this.visibleDisciplines);
   public isAutomaticSportVisibility = true;
   public isRunningVisible = true;
   public isCyclingVisible = true;
@@ -454,6 +459,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.visibleDisciplinesCompactLabel = formatTrainingVisibleDisciplinesCompactLabel(this.visibleDisciplines);
     this.visibleDisciplinesAccessibleLabel = formatTrainingVisibleDisciplinesAccessibleLabel(this.visibleDisciplines, true);
     this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(this.visibleDisciplines);
+    this.visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(this.visibleDisciplines);
     this.isAutomaticSportVisibility = true;
     this.isRunningVisible = true;
     this.isCyclingVisible = true;
@@ -558,6 +564,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       resolution.isAutomatic,
     );
     this.visibleDisciplinesActivityLabel = formatTrainingVisibleDisciplinesActivityLabel(resolution.disciplines);
+    this.visibleDisciplinesScopeLabel = formatTrainingVisibleDisciplinesScopeLabel(resolution.disciplines);
   }
 
   private reconcilePendingTrainingSportVisibility(): void {
@@ -824,7 +831,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return '';
     }
     if (selection.mode === 'event') {
-      return selection.label || 'Historical event';
+      const eventLabel = resolveTrainingEventDisplayLabel(selection.label);
+      if (eventLabel) {
+        return eventLabel;
+      }
+      const anchorDayMs = selection.windowEndDayMs + TRAINING_DAY_MS;
+      return Number.isFinite(anchorDayMs)
+        ? `Event on ${this.formatTrainingBuildDate(anchorDayMs)}`
+        : 'Historical event';
     }
     return 'Manual historical period';
   }
@@ -833,13 +847,17 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (!Number.isFinite(startDayMs) || !Number.isFinite(endDayMs)) {
       return '';
     }
+    return `${this.formatTrainingBuildDate(startDayMs as number)} – ${this.formatTrainingBuildDate(endDayMs as number)}`;
+  }
+
+  private formatTrainingBuildDate(dayMs: number): string {
     const formatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       timeZone: 'UTC',
     });
-    return `${formatter.format(new Date(startDayMs as number))} – ${formatter.format(new Date(endDayMs as number))}`;
+    return formatter.format(new Date(dayMs));
   }
 
   private refreshDerivedViewModels(): void {

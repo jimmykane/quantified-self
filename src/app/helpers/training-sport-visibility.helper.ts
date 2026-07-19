@@ -23,6 +23,12 @@ const TRAINING_VISIBLE_DISCIPLINE_PRESENTATION: Record<TrainingVisibleDiscipline
   swimming: { label: 'Swimming', details: 'Pool and open-water build, pace, and comparable SWOLF' },
 };
 
+const TRAINING_VISIBLE_DISCIPLINE_SCOPE_LABELS: Record<TrainingVisibleDiscipline, string> = {
+  running: 'Running',
+  cycling: 'Cycling/MTB',
+  swimming: 'Swimming',
+};
+
 export const TRAINING_VISIBLE_DISCIPLINE_OPTIONS: readonly (TrainingVisibleDisciplinePresentation & {
   discipline: TrainingVisibleDiscipline;
 })[] = TRAINING_VISIBLE_DISCIPLINES.map(discipline => ({
@@ -68,6 +74,19 @@ export function formatTrainingVisibleDisciplinesLabel(
   disciplines: readonly TrainingVisibleDiscipline[],
 ): string {
   return disciplines.map(discipline => TRAINING_VISIBLE_DISCIPLINE_PRESENTATION[discipline].label).join(' + ');
+}
+
+export function formatTrainingVisibleDisciplinesScopeLabel(
+  disciplines: readonly TrainingVisibleDiscipline[],
+): string {
+  const labels = disciplines.map(discipline => TRAINING_VISIBLE_DISCIPLINE_SCOPE_LABELS[discipline]);
+  if (labels.length <= 1) {
+    return labels[0] || 'Selected sports';
+  }
+  if (labels.length === 2) {
+    return `${labels[0]} and ${labels[1]}`;
+  }
+  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
 }
 
 export function formatTrainingVisibleDisciplinesCompactLabel(

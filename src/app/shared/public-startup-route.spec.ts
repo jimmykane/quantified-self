@@ -5,7 +5,6 @@ import {
   isPublicContentPath,
   isPublicStartupPath,
   isRouteLoaderSuppressedStartupPath,
-  shouldShowPublicFooter,
   shouldProvideClientHydrationForRuntime,
 } from './public-startup-route';
 
@@ -40,22 +39,12 @@ describe('public-startup-route', () => {
     expect(isPublicStartupPath('/share/unknown/user-1/event-1')).toBe(false);
   });
 
-  it('identifies every public content route used by the shared footer', () => {
+  it('identifies public content routes that can start before browser auth resolves', () => {
     expect(isPublicContentPath('/policies')).toBe(true);
     expect(isPublicContentPath('/releases?view=latest')).toBe(true);
     expect(isPublicContentPath('/training')).toBe(false);
     expect(isPublicContentPath('/dashboard')).toBe(false);
     expect(isPublicContentPath('/login')).toBe(false);
-  });
-
-  it('shows the footer on all non-workspace routes, including not-found pages', () => {
-    expect(shouldShowPublicFooter('/policies')).toBe(true);
-    expect(shouldShowPublicFooter('/an-unknown-page')).toBe(true);
-    expect(shouldShowPublicFooter('/share/event/user-1/event-1')).toBe(true);
-    expect(shouldShowPublicFooter('/training')).toBe(false);
-    expect(shouldShowPublicFooter('/admin/queues/derived-metrics')).toBe(false);
-    expect(shouldShowPublicFooter('/user/user-1/event/event-1')).toBe(false);
-    expect(shouldShowPublicFooter('/login')).toBe(false);
   });
 
   it('does not suppress the route loader for dynamic share startup routes', () => {

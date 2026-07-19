@@ -62,9 +62,13 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-readiness-history > header div > span { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); }
 .training-readiness-history-updating { color: var(--mat-sys-primary); font-size: var(--training-inter-micro-font-size); }
 .training-readiness-trend { display: block; width: 100%; height: auto; margin-top: 8px; overflow: visible; }
-.training-readiness-trend-threshold { stroke: var(--mat-sys-outline-variant); stroke-dasharray: 3 4; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.training-readiness-trend-grid { stroke: var(--mat-sys-outline-variant); stroke-opacity: .72; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.training-readiness-trend-threshold { stroke: var(--mat-sys-primary); stroke-dasharray: 3 4; stroke-opacity: .6; }
+.training-readiness-trend-axis { stroke: var(--mat-sys-outline); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.training-readiness-trend-axis-label { fill: var(--mat-sys-on-surface-variant); font-family: var(--training-numeric-font-family); font-size: 8px; font-weight: 600; }
 .training-readiness-trend-line { fill: none; stroke: var(--mat-sys-primary); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.25; vector-effect: non-scaling-stroke; }
-.training-readiness-trend-point { fill: var(--mat-sys-primary); stroke: var(--qs-glass-panel-bg, var(--mat-sys-surface)); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.training-readiness-trend-point { cursor: help; fill: var(--mat-sys-primary); stroke: var(--qs-glass-panel-bg, var(--mat-sys-surface)); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.training-readiness-trend-point:focus { outline: none; stroke: var(--mat-sys-on-surface); stroke-width: 2.5; }
 .training-readiness-trend-dates, .training-readiness-trend-legend { display: flex; justify-content: space-between; gap: 10px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); }
 .training-readiness-trend-legend { justify-content: flex-start; flex-wrap: wrap; margin-top: 6px; }
 .training-readiness-trend-legend span { padding-right: 9px; border-right: 1px solid var(--mat-sys-outline-variant); }

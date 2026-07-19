@@ -259,17 +259,6 @@ describe('AppShellComponent', () => {
         expect(component.showNavigation()).toBe(true);
     });
 
-    it('shows the shared footer on public content routes only', () => {
-      syncRoute('/help');
-      expect(component.showPublicFooter()).toBe(true);
-
-      syncRoute('/not-found');
-      expect(component.showPublicFooter()).toBe(true);
-
-      syncRoute('/training');
-        expect(component.showPublicFooter()).toBe(false);
-    });
-
     it('should show navigation for free users on dashboard', () => {
         // Mock user as free
         component['currentUser'] = { stripeRole: undefined };

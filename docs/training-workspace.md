@@ -456,6 +456,10 @@ Sport visibility has two modes:
 The action label compacts to one sport, `2 sports`, or `All 3`; its accessible label lists the actual disciplines and
 whether selection is automatic.
 
+The status header names the visible-detail scope (for example, `Cycling/MTB details`) and explicitly says that the
+overall comparison still uses all recorded Training disciplines. This prevents the selected-card preference from being
+mistaken for a filter on the global state, time, sessions, or load explanation.
+
 Visibility affects:
 
 - Best Build cards;
@@ -556,6 +560,11 @@ mislabel a new score as yesterday's. An open Training route schedules a narrow U
 `ramp_rate`, `form_plus_7d`, `freshness_forecast`, and `training_readiness`. Those projection-sensitive kinds can reuse a compatible Form seed and do not
 require an event or activity scan.
 
+The compact chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes remain
+interpretable across days. Each scored SVG point is keyboard focusable and provides a native hover/focus tooltip with
+its UTC date, score, status, confidence, available-signal count, and recovery-baseline-night count. Missing scores have
+no point and therefore remain visible as gaps rather than being interpolated.
+
 #### Recovery remaining
 
 `recovery_now` combines supported imported post-workout recovery estimates. The card counts down using the stored end
@@ -611,6 +620,10 @@ type TrainingBuildBenchmarkSelection =
 The picker shows up to 20 tagged races and up to 100 other historical events. It can filter all history, the latest year,
 or earlier history, and sort by latest, longest, or highest load. Generic `New Event` names are suppressed; date and
 available distance, duration, and TSS provide identity.
+
+The Best Build card shows a meaningful selected-event name when one exists. Default, blank, or timestamp-like event
+names are never repeated as a card heading: event-mode benchmarks instead show `Event on <UTC anchor date>`, while
+manual selections remain labeled as a historical period.
 
 #### Callable validation
 

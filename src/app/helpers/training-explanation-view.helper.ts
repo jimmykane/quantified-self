@@ -3,6 +3,7 @@ import type {
   DerivedTrainingExplanationRhythm,
   DerivedTrainingExplanationSportLoad,
 } from '@shared/derived-metrics';
+import { isGenericTrainingEventLabel } from './training-event-label.helper';
 
 export type TrainingExplanationTone = 'positive' | 'negative' | 'neutral';
 export interface TrainingExplanationCardViewModel {
@@ -43,7 +44,7 @@ export function buildTrainingExplanationViewModel(
       const leadingChild = [...item.childComposition]
         .filter(child => child.loadSharePercent !== null)
         .sort((left, right) => (right.loadSharePercent || 0) - (left.loadSharePercent || 0))[0];
-      const usesContextFallback = isGenericContributorLabel(item.label);
+      const usesContextFallback = isGenericTrainingEventLabel(item.label);
       const label = usesContextFallback
         ? `${leadingChild?.label || 'Activity'} · ${formatShortUtcDate(item.startDayMs)}`
         : item.label!;
@@ -172,8 +173,4 @@ function formatDiscipline(value: string): string { return `${value.charAt(0).toU
 function formatDayCount(value: number): string { return `${formatNumber(value)} ${value === 1 ? 'day' : 'days'}`; }
 function formatShortUtcDate(value: number): string {
   return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(value));
-}
-function isGenericContributorLabel(value: string | null): boolean {
-  const label = `${value || ''}`.trim();
-  return !label || /^new event$/i.test(label) || /^\d{4}-\d{2}-\d{2}t/i.test(label);
 }

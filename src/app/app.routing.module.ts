@@ -13,10 +13,32 @@ import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './
 import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workout-data-comparison-page.content';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from './components/public-seo/public-seo-pages.content';
 import { routeResolver } from './resolvers/route.resolver';
+import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
 const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, and COROS training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync to Suunto.';
 
-export const routes: Routes = [
+const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
+  '',
+  '**',
+  'pricing',
+  'help',
+  'releases',
+  'policies',
+  'tools',
+  'tools/compare',
+  'tools/compare/saved',
+  'integrations',
+  'integrations/garmin',
+  'integrations/suunto',
+  'integrations/coros',
+  'features/workout-data-comparison',
+  ...Object.values(PUBLIC_FEATURE_PATHS),
+  ...Object.values(PUBLIC_GUIDE_PATHS),
+  'share/event/:userID/:eventID',
+  'share/comparison/:userID/:eventID',
+]);
+
+const topLevelRoutes: Routes = [
   {
     path: 'login',
     loadChildren: () => import('./modules/login.module').then(module => module.LoginModule),
@@ -458,6 +480,24 @@ export const routes: Routes = [
       description: 'The Quantified Self page you requested could not be found.',
       robots: 'noindex, follow',
     },
+  },
+];
+
+/**
+ * Public content owns the site footer through this route layout. Keeping
+ * workspace and application flows outside the layout prevents marketing
+ * chrome from being rendered before a private route has resolved.
+ */
+export const publicLayoutRoutes = topLevelRoutes.filter(route =>
+  route.path !== undefined && PUBLIC_LAYOUT_ROUTE_PATHS.has(route.path)
+);
+
+export const routes: Routes = [
+  ...topLevelRoutes.filter(route => !publicLayoutRoutes.includes(route)),
+  {
+    path: '',
+    component: PublicLayoutComponent,
+    children: publicLayoutRoutes,
   },
 ];
 

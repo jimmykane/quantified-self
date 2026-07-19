@@ -4,6 +4,7 @@ import {
   formatTrainingVisibleDisciplinesAccessibleLabel,
   formatTrainingVisibleDisciplinesCompactLabel,
   formatTrainingVisibleDisciplinesLabel,
+  formatTrainingVisibleDisciplinesScopeLabel,
   TRAINING_VISIBLE_DISCIPLINE_OPTIONS,
   resolveTrainingSportVisibility,
 } from './training-sport-visibility.helper';
@@ -39,6 +40,10 @@ describe('resolveTrainingSportVisibility', () => {
       { discipline: 'swimming', label: 'Swimming', details: 'Pool and open-water build, pace, and comparable SWOLF' },
     ]);
     expect(formatTrainingVisibleDisciplinesLabel(['running', 'cycling'])).toBe('Running + Cycling');
+    expect(formatTrainingVisibleDisciplinesScopeLabel(['cycling'])).toBe('Cycling/MTB');
+    expect(formatTrainingVisibleDisciplinesScopeLabel(['running', 'swimming'])).toBe('Running and Swimming');
+    expect(formatTrainingVisibleDisciplinesScopeLabel(['running', 'cycling', 'swimming']))
+      .toBe('Running, Cycling/MTB, and Swimming');
     expect(formatTrainingVisibleDisciplinesActivityLabel(['running'])).toBe('running sessions');
     expect(formatTrainingVisibleDisciplinesActivityLabel(['running', 'cycling']))
       .toBe('running or cycling sessions');

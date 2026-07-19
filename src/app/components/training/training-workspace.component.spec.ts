@@ -206,6 +206,10 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('14/14 days scored');
       expect(panel.textContent).toContain('browser does not load event or activity history');
       expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
+      expect(panel.querySelectorAll('.training-readiness-trend-axis-label')).toHaveLength(4);
+      const readinessPoint = panel.querySelector('.training-readiness-trend-point');
+      expect(readinessPoint?.getAttribute('tabindex')).toBe('0');
+      expect(readinessPoint?.getAttribute('aria-label')).toContain('/100');
       expect(fixture.nativeElement.querySelector('.training-recovery-panel')).toBeNull();
       expect(fixture.nativeElement.querySelectorAll('.training-current-context-grid > article')).toHaveLength(1);
       fixture.destroy();
@@ -548,7 +552,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Running capacity evidence');
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
     expect(element.querySelector('app-power-curve-chart[title="Running Power Curve"]')).toBeNull();
-    expect(element.textContent).toContain('Running, cycling/MTB, and swimming');
+    expect(element.textContent).toContain('Cycling/MTB details · Overall comparison uses all training');
     expect(element.textContent).toContain('All activities with TSS');
     expect(element.textContent).toContain('Intensity chart uses all eligible zone data');
   });
@@ -597,7 +601,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('app-power-curve-chart')).toBeNull();
     expect(element.textContent).not.toContain('Preparing capacity evidence');
     expect(element.textContent).not.toContain('capacity evidence');
-    expect(element.textContent).toContain('Running, cycling/MTB, and swimming');
+    expect(element.textContent).toContain('Swimming details · Overall comparison uses all training');
   });
 
   it('applies a saved visibility result immediately while settings propagation catches up', () => {
@@ -1199,6 +1203,32 @@ describe('TrainingWorkspaceComponent', () => {
       suggestedEvents: [suggestedEvent],
       state: 'ready',
     });
+  });
+
+  it('uses the selected event date when a saved benchmark has only a generic name', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const genericEvent = {
+      selection: {
+        mode: 'event',
+        eventId: 'event-1',
+        label: 'New Event',
+        windowStartDayMs: Date.UTC(2026, 0, 17),
+        windowEndDayMs: Date.UTC(2026, 2, 13),
+      },
+    };
+
+    expect((component as any).formatTrainingBuildReference(genericEvent))
+      .toMatch(/^Event on (Mar 14, 2026|14 Mar 2026)$/);
+    expect((component as any).formatTrainingBuildReference({
+      selection: { ...genericEvent.selection, label: 'Gran Fondo' },
+    })).toBe('Gran Fondo');
   });
 
   it('keeps derived metric listeners active after the initial user change', async () => {

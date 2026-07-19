@@ -13,6 +13,7 @@ import type {
 } from '@shared/derived-metrics';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
+import { resolveTrainingEventDisplayLabel } from '../../helpers/training-event-label.helper';
 import { AppFunctionsService } from '../../services/app.functions.service';
 
 type TrainingBuildReferenceMode = 'event' | 'period';
@@ -267,7 +268,7 @@ export class TrainingBuildBenchmarkDialogComponent {
         ...event,
         isEligible: (event.startDayMs - DAY_MS) < currentStartDayMs,
         detailsText: this.formatEventDetails(event),
-        displayLabel: this.resolveEventDisplayLabel(event.label),
+        displayLabel: resolveTrainingEventDisplayLabel(event.label),
       }));
   }
 
@@ -345,11 +346,6 @@ export class TrainingBuildBenchmarkDialogComponent {
     return `${new Intl.NumberFormat(undefined, {
       maximumFractionDigits: this.data.discipline === 'swimming' ? 0 : 1,
     }).format(fallbackValue)} ${fallbackUnit}`;
-  }
-
-  private resolveEventDisplayLabel(value: string | null): string | null {
-    const label = `${value || ''}`.trim();
-    return label && label.toLocaleLowerCase() !== 'new event' ? label : null;
   }
 
   private refreshDisplayedSuggestedRaces(): void {
