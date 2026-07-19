@@ -284,7 +284,7 @@ export class AppUserService implements OnDestroy {
             uid: firebaseUser.uid,
             code,
           }, error);
-          return NEVER;
+          return of(null);
         })
       );
     }),
@@ -332,7 +332,7 @@ export class AppUserService implements OnDestroy {
             uid: tokenUser.uid,
             code,
           }, error);
-          return NEVER;
+          return of({ user: null, readGeneration: null, publicationGeneration: null });
         })
       );
     }),

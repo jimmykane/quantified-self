@@ -238,7 +238,8 @@ describe('AppUserService', () => {
             const profileReadSpy = vi.spyOn(service, 'getUserByID').mockReturnValue(
                 throwError(() => permissionDeniedError)
             );
-            const subscription = service.user$.subscribe();
+            const emittedUsers: Array<AppUserInterface | null> = [];
+            const subscription = service.user$.subscribe((profileUser) => emittedUsers.push(profileUser));
             const rolePromise = service.getSubscriptionRole();
             const proPromise = service.isPro();
             const paidAccessPromise = service.hasPaidAccess();
@@ -255,6 +256,7 @@ describe('AppUserService', () => {
             });
             expect(service.hasActionableProfileReadFailure()).toBe(true);
             expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+            expect(emittedUsers).toEqual([null]);
             await expect(rolePromise).resolves.toBeNull();
             await expect(proPromise).resolves.toBe(false);
             await expect(paidAccessPromise).resolves.toBe(false);
@@ -373,8 +375,10 @@ describe('AppUserService', () => {
         mockAuth.currentUser.getIdTokenResult.mockRejectedValue(new Error('Malformed token result'));
 
         service = TestBed.inject(AppUserService);
+        const emittedUsers: Array<AppUserInterface | null> = [];
         const emittedErrors: unknown[] = [];
         const subscription = service.user$.subscribe({
+            next: (profileUser) => emittedUsers.push(profileUser),
             error: (error) => emittedErrors.push(error),
         });
 
@@ -383,6 +387,7 @@ describe('AppUserService', () => {
         await Promise.resolve();
 
         expect(emittedErrors).toEqual([]);
+        expect(emittedUsers).toEqual([null]);
         expect(service.hasIncompleteProfileReads('u1')).toBe(true);
         expect(service.profileReadState()).toEqual({
             status: 'error',
