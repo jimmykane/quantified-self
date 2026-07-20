@@ -222,6 +222,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() colorAltitudeByGrade = true;
   @Input() waterMark = '';
   @Input() showActivityNamesInTooltip = false;
+  @Input() showResetChartState = false;
   @Input() zoomBarOverviewData: Array<[number, number]> = [];
   @Input() sharedZoomRange: EventChartRange | null = null;
   @Input() userUnitSettings: UserUnitSettingsInterface | null = null;
@@ -231,6 +232,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Output() selectedRangeChange = new EventEmitter<EventChartRange | null>();
   @Output() zoomRangeChange = new EventEmitter<EventChartRange | null>();
   @Output() overlayDataTypeChange = new EventEmitter<string | null>();
+  @Output() resetChartState = new EventEmitter<void>();
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
   @ViewChild('panelRoot', { static: true }) panelRoot!: ElementRef<HTMLElement>;
@@ -413,6 +415,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     return this.isFullscreen ? 'Exit fullscreen' : 'Open panel fullscreen';
   }
 
+  public get resetChartStateTooltip(): string {
+    return 'Reset zoom or selection';
+  }
+
   public get canSelectOverlay(): boolean {
     return !!this.panel && !this.showZoomBar && this.overlayOptions.length > 0;
   }
@@ -577,6 +583,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   public onOverlayDataTypeSelect(dataType: string | null): void {
     this.overlayDataTypeChange.emit(dataType);
+  }
+
+  public onResetChartState(): void {
+    this.resetChartState.emit();
   }
 
   private queueChartRefresh(source: string): void {
