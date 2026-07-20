@@ -15,7 +15,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { of, Subject } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceNames, User } from '@sports-alliance/sports-lib';
 import { MaterialModule } from '../../modules/material.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconRegistry } from '@angular/material/icon';
@@ -140,8 +140,48 @@ describe('ServicesComponent', () => {
             'garmin',
             'suunto',
             'coros',
+        ]);
+    });
+
+    it('shows the Wahoo connection section only to the rollout user', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+
+        expect(component.serviceSectionOptions.map(section => section.id)).toEqual([
+            'garmin',
+            'suunto',
+            'coros',
             'wahoo',
         ]);
+
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="Wahoo"]')).toBeTruthy();
+    });
+
+    it('removes the Wahoo connection section when the rollout user signs out', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.activeSection = 'wahoo';
+        component.processUser(null, false);
+
+        expect(component.isWahooConnectionRolloutEnabled).toBe(false);
+        expect(component.activeSection).toBe('garmin');
+        expect(component.serviceSectionOptions.map(section => section.id)).toEqual([
+            'garmin',
+            'suunto',
+            'coros',
+        ]);
+    });
+
+    it('keeps Wahoo inaccessible through direct service selection for other users', async () => {
+        component.processUser({ uid: 'another-user' } as User, true);
+
+        await component.selectService('wahoo');
+
+        expect(component.activeSection).toBe('garmin');
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: { serviceName: ServiceNames.GarminAPI },
+            queryParamsHandling: 'merge',
+        });
     });
 
     it('maps the Suunto query parameter to the Suunto panel', () => {
@@ -156,11 +196,10 @@ describe('ServicesComponent', () => {
             .map((link: Element) => link.textContent?.trim());
 
         expect(tabNav).toBeTruthy();
-        expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
         const mobileProviderIcons = tabNav.querySelectorAll('app-service-source-icon');
-        expect(mobileProviderIcons).toHaveLength(4);
-        expect(component.serviceSectionOptions[3].serviceName).toBe(ServiceNames.WahooAPI);
-        expect(mobileProviderIcons[3]?.querySelector('.service-logo')).toBeTruthy();
+        expect(mobileProviderIcons).toHaveLength(3);
+        expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(false);
     });
 
     it('renders the desktop provider selector as a Material button toggle group', () => {
@@ -171,11 +210,10 @@ describe('ServicesComponent', () => {
             .map((label: Element) => label.textContent?.trim());
 
         expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
-        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
         const desktopProviderIcons = providerSelector.querySelectorAll('app-service-source-icon');
-        expect(desktopProviderIcons).toHaveLength(4);
-        expect(component.serviceSectionOptions[3].serviceName).toBe(ServiceNames.WahooAPI);
-        expect(desktopProviderIcons[3]?.querySelector('.service-logo')).toBeTruthy();
+        expect(desktopProviderIcons).toHaveLength(3);
+        expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(false);
     });
 
     it('renders connections without a workspace rail', () => {
@@ -193,13 +231,13 @@ describe('ServicesComponent', () => {
         const garminOverview = servicePanels[0].querySelector('.service-overview');
         const corosOverview = servicePanels[2].querySelector('.service-overview');
 
-        expect(servicePanels.length).toBe(4);
+        expect(servicePanels.length).toBe(3);
         expect(garminOverview).toBeTruthy();
         expect(corosOverview).toBeTruthy();
         expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('[aria-label="suunto app" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('[aria-label="wahoo" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('[aria-label="wahoo" i]')).toBeNull();
 
         component.activeSection = 'coros';
         fixture.detectChanges();

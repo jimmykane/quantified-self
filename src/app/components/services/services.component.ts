@@ -33,6 +33,8 @@ interface ServiceOverviewCard {
   tool: ServiceToolId;
 }
 
+const WAHOO_CONNECTION_ROLLOUT_USER_ID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
+
 @Component({
   selector: 'app-services',
   templateUrl: './services.component.html',
@@ -48,14 +50,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
   public activeSection: ServiceSectionId = 'garmin';
-  public readonly sectionOrder: ServiceSectionId[] = ['garmin', 'suunto', 'coros', 'wahoo'];
+  public isWahooConnectionRolloutEnabled = false;
   public readonly serviceLabelBySection: Record<ServiceSectionId, string> = {
     garmin: getProviderDisplayName(ServiceNames.GarminAPI, 'source'),
     suunto: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     coros: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
     wahoo: getProviderDisplayName(ServiceNames.WahooAPI, 'source'),
   };
-  public readonly serviceSectionOptions: ServiceSectionOption[] = [
+  private readonly defaultServiceSectionOptions: readonly ServiceSectionOption[] = [
     {
       id: 'garmin',
       label: this.serviceLabelBySection.garmin,
@@ -71,12 +73,13 @@ export class ServicesComponent implements OnInit, OnDestroy {
       label: this.serviceLabelBySection.coros,
       serviceName: ServiceNames.COROSAPI,
     },
-    {
-      id: 'wahoo',
-      label: this.serviceLabelBySection.wahoo,
-      serviceName: ServiceNames.WahooAPI,
-    },
   ];
+  private readonly wahooServiceSectionOption: ServiceSectionOption = {
+    id: 'wahoo',
+    label: this.serviceLabelBySection.wahoo,
+    serviceName: ServiceNames.WahooAPI,
+  };
+  public serviceSectionOptions: readonly ServiceSectionOption[] = this.defaultServiceSectionOptions;
   public readonly serviceOverviewCardsBySection: Record<ServiceSectionId, readonly ServiceOverviewCard[]> = {
     garmin: [
       {
@@ -228,7 +231,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       // Note: isPro check is async, so we might want to skip it if we just got it from resolver?
       // For simplicity, we can just re-run standard check if it's an update event.
       // But efficiently:
-      if (!this.user || (user && user.uid !== this.user.uid)) {
+      if (!this.user || user?.uid !== this.user.uid) {
         const isPro = await this.userService.isPro();
         const isAdmin = await this.userService.isAdmin();
         this.isAdmin = isAdmin;
@@ -237,14 +240,15 @@ export class ServicesComponent implements OnInit, OnDestroy {
     }));
 
     this.routeSubscription = this.route.queryParamMap.subscribe(params => {
-      this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
+      this.activeSection = this.getAccessibleSection(this.getSectionFromServiceName(params.get('serviceName')));
     });
   }
 
   async selectService(section: ServiceSectionId) {
-    this.activeSection = section;
+    const accessibleSection = this.getAccessibleSection(section);
+    this.activeSection = accessibleSection;
 
-    const serviceName = this.serviceNameBySection[section];
+    const serviceName = this.serviceNameBySection[accessibleSection];
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { serviceName: serviceName },
@@ -253,7 +257,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   public openServiceTools(section: ServiceSectionId, card: ServiceOverviewCard): void {
-    if (!this.serviceToolsDialog || this.serviceToolsDialogRef) {
+    if ((section === 'wahoo' && !this.isWahooConnectionRolloutEnabled)
+      || !this.serviceToolsDialog || this.serviceToolsDialogRef) {
       return;
     }
 
@@ -286,18 +291,22 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   processUser(user: User | null, isPro: boolean) {
     if (!user) {
+      this.updateWahooConnectionRollout(null);
       this.isLoading = false;
       this.snackBar.open('You must login if you want to use the service features', 'OK', {
         duration: undefined,
       });
-      return
+      return;
     }
     this.user = user;
+    this.updateWahooConnectionRollout(user);
 
     this.hasProAccess = isPro;
 
     // Initial check from snapshot if not already set by subscription
-    this.activeSection = this.getSectionFromServiceName(this.route.snapshot.queryParamMap.get('serviceName'));
+    this.activeSection = this.getAccessibleSection(
+      this.getSectionFromServiceName(this.route.snapshot.queryParamMap.get('serviceName'))
+    );
     this.isLoading = false;
   }
 
@@ -325,5 +334,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
       return 'wahoo';
     }
     return 'garmin';
+  }
+
+  private updateWahooConnectionRollout(user: User | null): void {
+    this.isWahooConnectionRolloutEnabled = user?.uid === WAHOO_CONNECTION_ROLLOUT_USER_ID;
+    this.serviceSectionOptions = this.isWahooConnectionRolloutEnabled
+      ? [...this.defaultServiceSectionOptions, this.wahooServiceSectionOption]
+      : this.defaultServiceSectionOptions;
+    this.activeSection = this.getAccessibleSection(this.activeSection);
+  }
+
+  private getAccessibleSection(section: ServiceSectionId): ServiceSectionId {
+    return section === 'wahoo' && !this.isWahooConnectionRolloutEnabled ? 'garmin' : section;
   }
 }
