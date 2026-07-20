@@ -116,11 +116,11 @@ describe('AppShareService', () => {
     expect(watermark?.textContent).not.toContain('quantified-self.io');
   });
 
-  it('retries with lightweight options when source decode fails', async () => {
+  it('retries with lightweight options when rendering times out', async () => {
     const source = document.createElement('div');
     mocks.toBlob
       .mockImplementationOnce(async () => {
-        throw new Error('The source image cannot be decoded.');
+        throw new Error('Image rendering timed out after 15000ms.');
       })
       .mockResolvedValueOnce(new Blob(['abc'], { type: 'image/png' }));
 
@@ -135,6 +135,33 @@ describe('AppShareService', () => {
 
     expect(result).toContain('data:image/png;base64,');
     expect(mocks.toBlob).toHaveBeenCalledTimes(2);
+    expect(mocks.toBlob.mock.calls[1][1]).toEqual(expect.objectContaining({
+      scale: 1,
+      width: 720,
+      embedFonts: false,
+      fast: true,
+    }));
+  });
+
+  it('retries a chart image with lightweight options when source decoding fails', async () => {
+    const source = document.createElement('div');
+    source.style.width = '900px';
+    mocks.toBlob
+      .mockImplementationOnce(async () => {
+        throw new Error('The source image cannot be decoded.');
+      })
+      .mockResolvedValueOnce(new Blob(['abc'], { type: 'image/png' }));
+
+    const result = await service.renderElementAsImageBlob(source, { width: 900 });
+
+    expect(result.type).toBe('image/png');
+    expect(mocks.toBlob).toHaveBeenCalledTimes(2);
+    expect(mocks.toBlob.mock.calls[1][1]).toEqual(expect.objectContaining({
+      scale: 1,
+      width: 720,
+      embedFonts: false,
+      fast: true,
+    }));
   });
 
   it('copies a rendered element image blob to the clipboard', async () => {

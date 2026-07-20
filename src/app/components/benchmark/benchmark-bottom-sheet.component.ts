@@ -271,7 +271,7 @@ export class BenchmarkBottomSheetComponent {
       width: 1080,
       embedFonts: true,
       fast: isMobile,
-      renderTimeoutMs: isMobile ? 10000 : 15000,
+      renderTimeoutMs: 15000,
       watermark: {
         brand: customBrandText,
         timestamp: this.formatShareDate(this.shareTimestamp),

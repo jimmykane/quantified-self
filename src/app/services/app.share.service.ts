@@ -69,14 +69,14 @@ export class AppShareService {
       const wrapper = this.attachExportClone(clone, exportWidth);
 
       try {
-        return await this.renderCloneToBlob(clone, {
+        return await this.renderCloneToBlobWithFallback(clone, {
           scale,
           width: options.width,
           embedFonts,
           fast,
           renderTimeoutMs,
           backgroundColor: options.backgroundColor ?? 'transparent',
-        });
+        }, exportWidth);
       } finally {
         this.removeExportWrapper(wrapper);
       }
@@ -129,55 +129,19 @@ export class AppShareService {
       const wrapper = this.attachExportClone(clone, exportWidth);
 
       try {
-        const primaryDataUrl = await this.renderCloneToDataUrl(clone, {
+        const imageBlob = await this.renderCloneToBlobWithFallback(clone, {
           scale,
           width: options.width,
           embedFonts,
           fast,
           renderTimeoutMs,
-        });
-        return primaryDataUrl;
-      } catch (error) {
-        if (!this.isSourceDecodeError(error)) {
-          throw error;
-        }
-
-        // Retry once with reduced complexity for mobile decoders.
-        const watermark = clone.querySelector('.benchmark-watermark');
-        if (watermark) {
-          watermark.remove();
-        }
-        const fallbackWidth = Number.isFinite(options.width) ? Math.min(options.width!, 720) : Math.min(exportWidth, 720);
-
-        return this.renderCloneToDataUrl(clone, {
-          scale: 1,
-          width: fallbackWidth,
-          embedFonts: true,
-          fast: true,
-          renderTimeoutMs,
-        });
+          backgroundColor: 'transparent',
+        }, exportWidth, () => clone.querySelector('.benchmark-watermark')?.remove());
+        return this.blobToDataUrl(imageBlob);
       } finally {
         this.removeExportWrapper(wrapper);
       }
     });
-  }
-
-  private async renderCloneToDataUrl(
-    clone: HTMLElement,
-    options: {
-      scale: number;
-      width?: number;
-      embedFonts: boolean;
-      fast: boolean;
-      renderTimeoutMs: number;
-    }
-  ): Promise<string> {
-    const imageBlob = await this.renderCloneToBlob(clone, {
-      ...options,
-      backgroundColor: 'transparent',
-    });
-
-    return this.blobToDataUrl(imageBlob);
   }
 
   private async renderCloneToBlob(
@@ -206,6 +170,37 @@ export class AppShareService {
       options.renderTimeoutMs,
       `Image rendering timed out after ${options.renderTimeoutMs}ms.`
     );
+  }
+
+  private async renderCloneToBlobWithFallback(
+    clone: HTMLElement,
+    options: {
+      scale: number;
+      width?: number;
+      embedFonts: boolean;
+      fast: boolean;
+      renderTimeoutMs: number;
+      backgroundColor: string;
+    },
+    exportWidth: number,
+    beforeFallback?: () => void,
+  ): Promise<Blob> {
+    try {
+      return await this.renderCloneToBlob(clone, options);
+    } catch (error) {
+      if (!this.isRecoverableRenderError(error)) {
+        throw error;
+      }
+
+      beforeFallback?.();
+      return this.renderCloneToBlob(clone, {
+        ...options,
+        scale: 1,
+        width: Math.min(options.width ?? exportWidth, 720),
+        embedFonts: false,
+        fast: true,
+      });
+    }
   }
 
   private async waitForIdle(): Promise<void> {
@@ -382,8 +377,8 @@ export class AppShareService {
     apply(targetEl);
   }
 
-  private isSourceDecodeError(error: unknown): boolean {
+  private isRecoverableRenderError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
-    return /source image cannot be decoded/i.test(error.message);
+    return /source image cannot be decoded|image rendering timed out/i.test(error.message);
   }
 }

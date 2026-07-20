@@ -2775,7 +2775,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         width: exportWidth,
         embedFonts: true,
         fast: this.isMobile,
-        renderTimeoutMs: this.isMobile ? 10000 : 15000,
+        renderTimeoutMs: 15000,
         exportClassName: EVENT_CHART_IMAGE_EXPORT_CLASS,
         backgroundColor: this.darkTheme ? '#121212' : '#ffffff',
       });
