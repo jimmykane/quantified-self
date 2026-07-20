@@ -70,6 +70,20 @@ describe('EventCardLapsComponent', () => {
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0].Duration).toBe('0:12.85');
     });
 
+    it('should format durations from cached lap data without the stopwatch formatter', () => {
+        const activity = createActivity([{
+            ...createRenderableLap(LapTypes.Manual),
+            getDuration: () => ({
+                getValue: () => 12.85,
+            }),
+        } as unknown as LapInterface]);
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data[0].Duration).toBe('0:12.85');
+    });
+
     it('should exclude session end laps from the rendered lap tables', () => {
         const activity = createActivity([
             { type: LapTypes.session_end } as LapInterface,
@@ -94,6 +108,25 @@ describe('EventCardLapsComponent', () => {
 
         expect(component.availableLapTypes).toEqual([]);
         fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
+    });
+
+    it('should hide the section when a lap type has no table rows', () => {
+        const lap = createRenderableLap(LapTypes.Manual);
+        const activity = {
+            type: 'Running',
+            getID: () => 'activity-1',
+            getLaps: vi.fn()
+                .mockReturnValueOnce([lap])
+                .mockReturnValueOnce([]),
+        } as unknown as ActivityInterface;
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        expect(component.availableLapTypes).toEqual([]);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('mat-divider')).toBeNull();
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
     });
 
