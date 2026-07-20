@@ -66,7 +66,7 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 2. Publish the required sports-lib version before making the application depend on it. Do not leave an application lockfile pointing at an unpublished package version.
 3. Add provider labels, source/destination branding, and icon keys to `shared/provider-presentation.ts`. Use source attribution for imported data and destination branding for connection or sending surfaces.
 4. Add Function names and the correct region to `shared/functions-manifest.ts`; export every deployed entry point from `functions/src/index.ts`.
-5. Add the environment configuration behind a safe feature gate in `functions/src/config.ts`. Update the configuration table in `README.md` with names only—never values, secrets, or production URLs.
+5. Add the environment configuration in `functions/src/config.ts`. Match established providers by requiring credentials when the integration runs; add a feature gate only when an explicitly approved staged rollout or operational requirement needs one. Update the configuration table in `README.md` with names only—never values, secrets, or production URLs.
 6. Add approved SVG assets and register them through the existing icon/presentation path. Confirm partner brand requirements before release.
 7. Add or update Firestore indexes, Rules, Storage Rules, TTL policies, and Firebase configuration only when the provider data model needs them.
 
@@ -263,7 +263,7 @@ Add deterministic tests next to the code being changed. The minimum set for an a
 
 | Area             | Required assertions                                                                                                                                                                             |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared contracts | Service enum/metadata, provider presentation, source icon, function manifest, and config feature gate.                                                                                          |
+| Shared contracts | Service enum/metadata, provider presentation, source icon, function manifest, and required configuration validation (plus any explicitly approved rollout gate).                                  |
 | OAuth            | State binding, approved redirect, explicit provider denial, incomplete callback, token refresh/rotation, stable identity, mapping conflict, and disconnect after entitlement expiry.            |
 | API boundary     | Request timeout, input normalization, pagination, rate-limit mapping, secret redaction, and no unsafe retry behavior.                                                                           |
 | Webhook/history  | Authentication, entitlement/connection/deletion rejection, deterministic IDs, duplicate delivery, out-of-order or newer revision, date boundaries, skip rules, and lease contention.            |
@@ -300,10 +300,10 @@ Run commands from the appropriate checked-out worktree. Do not deploy, publish, 
 
 1. Verify the provider agreement, production review, privacy terms, allowed scopes, redirect URIs, webhook registration, exact file hosts, and brand assets.
 2. Publish required shared-library changes first, then update application lockfiles to the published version and verify a clean install resolves it.
-3. Add production configuration through the approved secret/configuration process. Keep the feature gate disabled until all code, Rules, indexes, TTL policy, queues, and hosting artifacts are ready.
+3. Add production configuration through the approved secret/configuration process. If an explicitly approved staged rollout uses a feature gate, keep it disabled until all code, Rules, indexes, TTL policy, queues, and hosting artifacts are ready.
 4. Deploy through the normal release workflow in dependency order. Exercise sandbox or test-account OAuth, webhook, history, revision deduplication, rate limiting, disconnect, expired entitlement, and account deletion.
-5. Watch the operational signals above before broad enablement. Enable gradually when the provider supports a staged rollout.
-6. Define rollback before launch. A feature gate should stop new connections, webhooks, and history requests without deleting existing user data or blocking disconnect. Decide whether accepted queue work drains and document that behavior.
+5. Watch the operational signals above before broad enablement. Enable gradually only when the provider has an intentionally implemented staged rollout.
+6. Define rollback before launch. If an approved feature gate exists, it should stop new connections, webhooks, and history requests without deleting existing user data or blocking disconnect. Decide whether accepted queue work drains and document that behavior.
 
 ## 13. Pitfalls to avoid
 
@@ -334,7 +334,7 @@ Use this checklist in every provider integration PR or implementation handoff:
 - [ ] Worker validates external files, retains originals, uses deterministic event IDs, and sanitizes writes/errors.
 - [ ] Queue dispatch, TTL, retry/DLQ, and scheduled safety net are wired.
 - [ ] Disconnect, entitlement, pending retry, account deletion, and recursive cleanup cover every owned collection.
-- [ ] Firestore/Storage Rules, indexes, TTL, configuration, and feature gate are reviewed.
+- [ ] Firestore/Storage Rules, indexes, TTL, configuration, and any approved feature gate are reviewed.
 - [ ] Services UI, accessibility, icons, source/destination labels, Help, Policies, public integration page, metadata, sitemap, and internal links are updated as applicable.
 - [ ] Admin queue stats, DLQ analysis, user filtering/enrichment, and logos are updated.
 - [ ] Unit, Rules, frontend, admin, shared-library, and build verification passed.

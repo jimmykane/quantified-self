@@ -50,10 +50,6 @@ export const wahooAPIWebhook = functions.region('europe-west2').runWith({
     res.status(415).send();
     return;
   }
-  if (!config.wahooapi.enabled) {
-    res.status(503).send();
-    return;
-  }
   const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
   if (!secureTokenMatches(body.webhook_token, config.wahooapi.webhook_token)) {
     logger.warn('Rejected Wahoo webhook with an invalid token');

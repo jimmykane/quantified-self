@@ -29,7 +29,6 @@ import { uploadActivityFileToSuunto } from '../suunto/activities';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from '../wahoo/activities';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
-import { config } from '../config';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
@@ -216,10 +215,6 @@ async function getDestinationConnectionStatus(userID: string, destinationService
     }
 }
 
-function isDestinationFeatureEnabled(destinationServiceName: ServiceNames): boolean {
-    return destinationServiceName !== ServiceNames.WahooAPI || config.wahooapi.enabled;
-}
-
 async function downloadOriginalFile(queueItem: ActivitySyncQueueItemInterface): Promise<Buffer> {
     const originalPath = `${queueItem.originalFile?.path || ''}`.trim();
     if (!originalPath) {
@@ -400,18 +395,6 @@ export async function processActivitySyncQueueItem(
             });
             return updateToProcessed(queueItem, bulkWriter, {
                 skippedReason: 'no_pro_access',
-                resultStatus: 'skipped',
-            });
-        }
-
-        if (!isDestinationFeatureEnabled(queueItem.destinationServiceName)) {
-            await setActivitySyncSkippedMetadata({
-                ...routeMeta,
-                skippedReason: 'destination_unavailable',
-                detail: 'The destination integration is not enabled.',
-            });
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'destination_unavailable',
                 resultStatus: 'skipped',
             });
         }

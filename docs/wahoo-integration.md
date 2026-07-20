@@ -19,7 +19,7 @@ Workouts without an available FIT file are skipped. Wahoo records identified as 
 
 ## Data flow
 
-1. The Pro user starts OAuth from **Services**. Callable Functions enforce authentication, App Check, the Wahoo feature gate, and Pro access.
+1. The Pro user starts OAuth from **Services**. Callable Functions enforce authentication, App Check, and Pro access.
 2. The backend exchanges the code, reads the stable Wahoo user ID, atomically assigns its one-to-one Firebase mapping, removes any previous local owner token, and stores rotating credentials in the server-only `wahooAPIAccessTokens` collection.
 3. Wahoo posts completed workout summaries to `wahooAPIWebhook`. The shared webhook token, direct user mapping, active connection, deletion guard, pending-disconnect state, and current Pro access are checked before queueing.
 4. History imports use the same queue path. A per-user lease prevents overlapping history requests, pages stop once the selected start date is reached, and Wahoo rate-limit reset metadata is returned on HTTP 429.
@@ -32,7 +32,7 @@ Webhook delivery and history are idempotent. The deterministic queue and event I
 
 ## Configuration
 
-The integration is off unless `WAHOOAPI_ENABLED=true`. When enabled, Functions require:
+Functions require:
 
 - `WAHOOAPI_CLIENT_ID`
 - `WAHOOAPI_CLIENT_SECRET`
@@ -57,9 +57,7 @@ Configure the deployed webhook URL and the same high-entropy webhook token in th
 1. Publish `@sports-alliance/sports-lib` 17.2.0 and verify both application lockfiles resolve the published artifact and integrity before running `npm ci` in release automation.
 2. Complete Wahoo's production-app review and approve the final Wahoo brand asset and consumer-facing copy.
 3. Register every production OAuth redirect URI and configure the production webhook URL/token in the Wahoo developer portal.
-4. Set the production credentials and exact FIT-file host allowlist, leaving `WAHOOAPI_ENABLED=false` until all prerequisites are verified.
+4. Set the production credentials and exact FIT-file host allowlist.
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
 6. Exercise sandbox OAuth with the write scope, webhook, edited-workout deduplication, history pagination/rate limiting, direct FIT delivery, each source-to-Wahoo route, duplicate uploads, asynchronous upload polling, disconnect, expired-Pro enforcement, and account deletion with test accounts.
 7. Monitor callable/webhook error rates, queue age/retries, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures before enabling broadly.
-
-Rollback is the feature gate: set `WAHOOAPI_ENABLED=false` to stop new connections, webhooks, history imports, direct uploads, and Wahoo-destination activity delivery while retaining already imported events. Disconnect stays available.

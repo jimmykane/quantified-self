@@ -32,7 +32,6 @@ describe('config.ts', () => {
             WAHOOAPI_CLIENT_ID: 'wahoo-id',
             WAHOOAPI_CLIENT_SECRET: 'wahoo-secret',
             WAHOOAPI_WEBHOOK_TOKEN: 'wahoo-webhook-secret',
-            WAHOOAPI_ENABLED: 'true',
         });
         delete process.env.GCLOUD_PROJECT; // force fallback to admin.instanceId
     });
@@ -53,7 +52,6 @@ describe('config.ts', () => {
             client_id: 'wahoo-id',
             client_secret: 'wahoo-secret',
             webhook_token: 'wahoo-webhook-secret',
-            enabled: true,
             allowed_file_hosts: ['cdn.wahooligan.com'],
         }));
 
@@ -70,15 +68,17 @@ describe('config.ts', () => {
         expect(config.debug.bucketName).toBe('quantified-self-io-debug-files');
     });
 
-    it('can keep Wahoo disabled without provisioning production credentials', async () => {
-        process.env.WAHOOAPI_ENABLED = 'false';
+    it('requires Wahoo credentials like other provider integrations', async () => {
         delete process.env.WAHOOAPI_CLIENT_ID;
-        delete process.env.WAHOOAPI_CLIENT_SECRET;
-        delete process.env.WAHOOAPI_WEBHOOK_TOKEN;
         const { config } = await import('./config');
 
-        expect(config.wahooapi.enabled).toBe(false);
-        expect(config.wahooapi.client_id).toBe('');
+        expect(() => config.wahooapi.client_id).toThrow(/Missing required environment variable: WAHOOAPI_CLIENT_ID/);
+    });
+
+    it('exposes no Wahoo feature gate configuration', async () => {
+        const { config } = await import('./config');
+
+        expect(config.wahooapi).not.toHaveProperty('enabled');
     });
 
     it('throws when a required env var is missing', async () => {

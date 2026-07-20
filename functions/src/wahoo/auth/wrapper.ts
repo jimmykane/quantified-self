@@ -9,20 +9,12 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
 } from '../../OAuth2';
-import { config } from '../../config';
 import { SERVICE_NAME } from '../constants';
 import { getWahooErrorLogDetails } from '../error-details';
-
-function assertWahooEnabled(): void {
-  if (!config.wahooapi.enabled) {
-    throw new HttpsError('unavailable', 'Wahoo integration is not enabled.');
-  }
-}
 
 async function requireWahooConnectAccess(request: { auth?: { uid: string } | null }): Promise<string> {
   enforceAppCheck(request as any);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
-  assertWahooEnabled();
   if (!(await hasServiceOAuthConnectAccess(request.auth.uid, SERVICE_NAME))) {
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

@@ -25,7 +25,6 @@ interface WahooApiConfig {
     client_id: string;
     client_secret: string;
     webhook_token: string;
-    enabled: boolean;
     allowed_file_hosts: string[];
 }
 
@@ -88,12 +87,10 @@ export const config: AppConfig = {
         };
     },
     get wahooapi() {
-        const enabled = process.env.WAHOOAPI_ENABLED === 'true';
         return {
-            client_id: enabled ? getEnvVar('WAHOOAPI_CLIENT_ID') : (process.env.WAHOOAPI_CLIENT_ID || ''),
-            client_secret: enabled ? getEnvVar('WAHOOAPI_CLIENT_SECRET') : (process.env.WAHOOAPI_CLIENT_SECRET || ''),
-            webhook_token: enabled ? getEnvVar('WAHOOAPI_WEBHOOK_TOKEN') : (process.env.WAHOOAPI_WEBHOOK_TOKEN || ''),
-            enabled,
+            client_id: getEnvVar('WAHOOAPI_CLIENT_ID'),
+            client_secret: getEnvVar('WAHOOAPI_CLIENT_SECRET'),
+            webhook_token: getEnvVar('WAHOOAPI_WEBHOOK_TOKEN'),
             allowed_file_hosts: (process.env.WAHOOAPI_ALLOWED_FILE_HOSTS || 'cdn.wahooligan.com')
                 .split(',')
                 .map((host) => host.trim().toLowerCase())

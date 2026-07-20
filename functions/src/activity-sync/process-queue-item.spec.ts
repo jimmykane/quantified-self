@@ -27,7 +27,6 @@ const {
   mockShouldSkipQueueWorkForDeletedUser,
   mockMarkQueueItemSkipped,
   mockUpdateQueueItemIfUserActive,
-  mockWahooEnabled,
 } = vi.hoisted(() => {
   const mockTokenGet = vi.fn();
   const mockDownload = vi.fn();
@@ -60,7 +59,6 @@ const {
     mockShouldSkipQueueWorkForDeletedUser: vi.fn(),
     mockMarkQueueItemSkipped: vi.fn(),
     mockUpdateQueueItemIfUserActive: vi.fn(),
-    mockWahooEnabled: { value: true },
   };
 });
 
@@ -140,10 +138,6 @@ vi.mock('../utils', async (importOriginal) => {
   };
 });
 
-vi.mock('../config', () => ({
-  config: { wahooapi: { get enabled() { return mockWahooEnabled.value; } } },
-}));
-
 vi.mock('../service-connection-meta', () => ({
   getServiceConnectionMeta: mockGetServiceConnectionMeta,
 }));
@@ -219,7 +213,6 @@ describe('activity-sync/process-queue-item', () => {
     mockMoveToDeadLetterQueue.mockResolvedValue(QueueResult.MovedToDLQ);
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
     mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
-    mockWahooEnabled.value = true;
   });
 
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
@@ -320,23 +313,6 @@ describe('activity-sync/process-queue-item', () => {
       skippedReason: 'destination_write_scope_missing',
     }));
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
-  });
-
-  it('does not attempt Wahoo delivery while its feature gate is disabled', async () => {
-    const queueItem: ActivitySyncQueueItemInterface = {
-      ...baseQueueItem,
-      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
-      destinationServiceName: ServiceNames.WahooAPI,
-    };
-    mockWahooEnabled.value = false;
-
-    const result = await processActivitySyncQueueItem(queueItem);
-
-    expect(result).toBe(QueueResult.Processed);
-    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
-      skippedReason: 'destination_unavailable',
-    }));
-    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
   });
 
   it('retries instead of DLQ when the deletion guard cannot be read', async () => {

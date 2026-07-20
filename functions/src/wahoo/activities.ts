@@ -4,7 +4,6 @@ import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ServiceNames, WahooAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { config } from '../config';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import {
   getUserDeletionGuardState,
@@ -259,12 +258,6 @@ export async function getWahooActivityUploadStatus(
   });
 }
 
-function assertWahooActivityUploadsEnabled(): void {
-  if (!config.wahooapi.enabled) {
-    throw new HttpsError('unavailable', 'Wahoo integration is not enabled.');
-  }
-}
-
 function toUploadBuffer(value: unknown): Buffer {
   if (typeof value !== 'string' || value.length === 0) {
     throw new HttpsError('invalid-argument', 'File content missing.');
@@ -284,7 +277,6 @@ function toUploadBuffer(value: unknown): Buffer {
 async function requireWahooActivityUploadAccess(request: { auth?: { uid: string } | null }): Promise<string> {
   enforceAppCheck(request as any);
   if (!request.auth) throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-  assertWahooActivityUploadsEnabled();
   if (!(await hasProAccess(request.auth.uid))) {
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

@@ -9,7 +9,6 @@ import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, generateIDFromParts, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
-import { config } from '../config';
 import { requestWahooAPI, WahooAPIRequestError } from './auth/api';
 import { SERVICE_NAME, WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { upsertWahooWorkoutQueueItem } from './queue-store';
@@ -234,7 +233,6 @@ export const addWahooAPIHistoryToQueue = onCall({
 }, async (request): Promise<{ result: string; stats: WahooHistoryImportResult }> => {
   enforceAppCheck(request);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
-  if (!config.wahooapi.enabled) throw new HttpsError('failed-precondition', 'Wahoo integration is not enabled.');
   if (!(await hasProAccess(request.auth.uid))) throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   const { startDate: startValue, endDate: endValue } = request.data as HistoryToQueueRequest;
   const startDate = new Date(startValue);
