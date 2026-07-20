@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
-import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, EventInterface, LapInterface } from '@sports-alliance/sports-lib';
 import { DataTableAbstractDirective, StatRowElement } from '../../data-table/data-table-abstract.directive';
 import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -68,18 +67,23 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       return;
     }
 
+    const lapTypesWithData = new Set<LapTypes>();
+
     this.selectedActivities.forEach(activity => {
       this.availableLapTypes.forEach(lapType => {
         const data = this.generateLapData(activity, lapType);
         const key = this.getKey(activity, lapType);
 
         if (data.length > 0) {
+          lapTypesWithData.add(lapType);
           const dataSource = new MatTableDataSource(data);
           this.dataSourcesMap.set(key, dataSource);
           this.columnsMap.set(key, this.calculateColumns(dataSource));
         }
       });
     });
+
+    this.availableLapTypes = this.availableLapTypes.filter(lapType => lapTypesWithData.has(lapType));
   }
 
   private getKey(activity: ActivityInterface, lapType: LapTypes): string {
@@ -94,13 +98,33 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         ...statRowElement,
         '#': index + 1,
         Type: lap.type,
-        Duration: lap.getDuration().getDisplayValue(false, true, true),
+        Duration: this.getLapDurationDisplayValue(lap),
         'Maximum Heart Rate': maxHR ? `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '',
       };
 
       lapDataArray.push(row);
       return lapDataArray;
     }, []);
+  }
+
+  private getLapDurationDisplayValue(lap: LapInterface): string {
+    const duration = lap.getDuration();
+    const stopwatchDuration = duration as typeof duration & {
+      getStopwatchDisplayValue?: () => string;
+    };
+
+    if (typeof stopwatchDuration.getStopwatchDisplayValue === 'function') {
+      return stopwatchDuration.getStopwatchDisplayValue();
+    }
+
+    const centiseconds = Math.round(duration.getValue() * 100);
+    const sign = centiseconds < 0 ? '-' : '';
+    const absoluteCentiseconds = Math.abs(centiseconds);
+    const minutes = Math.floor(absoluteCentiseconds / 6000);
+    const seconds = Math.floor((absoluteCentiseconds % 6000) / 100);
+    const fraction = (absoluteCentiseconds % 100).toString().padStart(2, '0');
+
+    return `${sign}${minutes}:${seconds.toString().padStart(2, '0')}.${fraction}`;
   }
 
   private calculateColumns(dataSource: MatTableDataSource<LapTableRow>): string[] {

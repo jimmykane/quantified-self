@@ -50,9 +50,11 @@
           [waterMark]="waterMarkText"
           [sharedZoomRange]="zoomRange"
           [showActivityNamesInTooltip]="showActivityNamesInTooltip"
+          [showResetChartState]="hasResettableChartState"
           (zoomRangeChange)="onZoomRangeChange($event)"
           (previewRangeChange)="onPreviewSelectedRangeChange($event)"
           (selectedRangeChange)="onSelectedRangeChange($event)"
+          (resetChartState)="onResetChartStateRequested()"
           (overlayDataTypeChange)="onPanelOverlayDataTypeChange(panelView.panel.dataType, $event)"
           (cursorPositionChange)="onPanelCursorPositionChange($event)">
         </app-event-card-chart-panel>

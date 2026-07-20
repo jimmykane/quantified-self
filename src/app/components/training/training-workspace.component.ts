@@ -62,6 +62,7 @@ import {
   type TrainingWindowComparison,
   resolveTrainingComparisonState,
 } from '../../helpers/training-analysis.helper';
+import { resolveTrainingStateInfoTooltip } from '../../helpers/training-state.helper';
 import {
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
 } from '../../helpers/dashboard-recovery-now.helper';
@@ -131,6 +132,8 @@ interface TrainingMixZoneViewModel {
 interface TrainingStatusViewModel {
   stateLabel: string;
   stateCaption: string;
+  stateInfoTooltip: string;
+  stateUpdateText: string | null;
   volumeText: string;
   volumeCaption: string;
   sessionsText: string;
@@ -215,6 +218,8 @@ function createEmptyTrainingStatusViewModel(): TrainingStatusViewModel {
   return {
     stateLabel: 'Awaiting data',
     stateCaption: 'No current load signals',
+    stateInfoTooltip: resolveTrainingStateInfoTooltip({ form: null, rampRate: null, fitness: null, fatigue: null }),
+    stateUpdateText: null,
     volumeText: '--',
     volumeCaption: 'Preparing your training comparison…',
     sessionsText: '--',
@@ -863,20 +868,23 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private refreshDerivedViewModels(): void {
     const nowMs = Date.now();
     const formPoints = this.derivedState.formPoints;
-    const currentFormNow = resolveDashboardFormNowContextFromPoints(formPoints, nowMs)
+    const formNowFromSeries = resolveDashboardFormNowContextFromPoints(formPoints, nowMs);
+    const rampRateFromSeries = resolveDashboardRampRateContextFromPoints(formPoints, nowMs);
+    const currentFormNow = formNowFromSeries
       || this.derivedState.formNow;
-    const currentRampRate = resolveDashboardRampRateContextFromPoints(formPoints, nowMs)
+    const currentRampRate = rampRateFromSeries
       || this.derivedState.rampRate;
     const currentFitness = resolveDashboardFitnessCtlContext(formPoints, nowMs);
     const currentFatigue = resolveDashboardFatigueAtlContext(formPoints, nowMs);
+    const stateSignals = {
+      form: currentFormNow?.value ?? null,
+      rampRate: currentRampRate?.rampRate ?? null,
+      fitness: currentFitness?.value ?? null,
+      fatigue: currentFatigue?.value ?? null,
+    };
     const analysis = buildTrainingAnalysis({
       disciplines: this.derivedState.trainingSummary?.disciplines || [],
-      stateSignals: {
-        form: currentFormNow?.value ?? null,
-        rampRate: currentRampRate?.rampRate ?? null,
-        fitness: currentFitness?.value ?? null,
-        fatigue: currentFatigue?.value ?? null,
-      },
+      stateSignals,
     });
     const forecastPoints = this.derivedState.freshnessForecast?.points || [];
     const latestCurrentPoint = [...forecastPoints].reverse().find(point => !point.isForecast);
@@ -888,7 +896,17 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       analysis.activities.current,
       analysis.activities.baseline,
     );
-    this.trainingStatus = this.buildTrainingStatus(analysis, this.trainingComparisonState);
+    const stateSignalStatuses = [
+      formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
+      rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
+    ];
+    const isTrainingStateUpdating = stateSignalStatuses.some(isDerivedMetricPendingStatus);
+    this.trainingStatus = this.buildTrainingStatus(
+      analysis,
+      this.trainingComparisonState,
+      isTrainingStateUpdating,
+      resolveTrainingStateInfoTooltip(stateSignals),
+    );
     this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
     this.refreshTrainingRecoveryEstimate();
     this.trainingRecovery = this.buildTrainingRecoveryViewModel(
@@ -1668,10 +1686,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private buildTrainingStatus(
     analysis: TrainingAnalysis,
     comparisonState: TrainingComparisonState,
+    isStateUpdating: boolean,
+    stateInfoTooltip: string,
   ): TrainingStatusViewModel {
     const currentState = {
       stateLabel: analysis.state.label || 'Awaiting data',
       stateCaption: analysis.state.caption || 'No current load signals',
+      stateInfoTooltip,
+      stateUpdateText: isStateUpdating
+        ? (analysis.state.label ? 'Updating from the latest completed TSS calculation…' : 'Calculating current TSS state…')
+        : null,
     };
     if (comparisonState === 'preparing') {
       return {

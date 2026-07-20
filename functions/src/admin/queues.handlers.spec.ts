@@ -15,6 +15,9 @@ import {
     mockTransactionGet,
     mockTransactionSet,
 } from './test-utils/admin-test-harness';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
+
+const HISTORICAL_SPORTS_LIB_REPARSE_TARGET_VERSION = '0.0.1';
 
 function createUserDeletionGuardCollectionMock(collectionName: string) {
     if (collectionName === 'users' || collectionName === 'userDeletionTombstones') {
@@ -368,7 +371,7 @@ describe('getQueueStats Cloud Function', () => {
         });
         expect(result.reparse).toEqual(expect.objectContaining({
             queuePending: 10,
-            targetSportsLibVersion: '17.1.2',
+            targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
             jobs: {
                 total: 5,
                 pending: 5,
@@ -469,7 +472,7 @@ describe('getQueueStats Cloud Function', () => {
                 status: 'failed',
                 uid: 'uid-current',
                 eventId: 'event-current',
-                targetSportsLibVersion: '17.1.2',
+                targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
                 lastError: 'Current parser failure',
                 updatedAt: 300,
             }),
@@ -481,7 +484,7 @@ describe('getQueueStats Cloud Function', () => {
                     status: 'failed',
                     uid: 'uid-historical',
                     eventId: 'event-historical',
-                    targetSportsLibVersion: '17.1.1',
+                    targetSportsLibVersion: HISTORICAL_SPORTS_LIB_REPARSE_TARGET_VERSION,
                     lastError: 'Old rollout mismatch',
                     updatedAt: 200,
                 }),
@@ -492,8 +495,8 @@ describe('getQueueStats Cloud Function', () => {
                     status: 'superseded',
                     uid: 'uid-superseded',
                     eventId: 'event-superseded',
-                    targetSportsLibVersion: '17.1.1',
-                    supersededBySportsLibVersion: '17.1.2',
+                    targetSportsLibVersion: HISTORICAL_SPORTS_LIB_REPARSE_TARGET_VERSION,
+                    supersededBySportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
                     updatedAt: 100,
                 }),
             },
@@ -528,7 +531,7 @@ describe('getQueueStats Cloud Function', () => {
             expect.objectContaining({
                 jobId: 'superseded-job',
                 outcome: 'superseded',
-                supersededBySportsLibVersion: '17.1.2',
+                supersededBySportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
             }),
         ]);
     });
@@ -1570,7 +1573,7 @@ describe('getQueueStats Cloud Function', () => {
                             data: () => ({
                                 status: 'failed',
                                 uid: 'uid-1',
-                                targetSportsLibVersion: '17.1.1',
+                                targetSportsLibVersion: HISTORICAL_SPORTS_LIB_REPARSE_TARGET_VERSION,
                             }),
                         }),
                         set: jobSet,
@@ -1581,7 +1584,7 @@ describe('getQueueStats Cloud Function', () => {
         });
 
         await expect((retrySportsLibReparseHeavyJob as any)(getAdminRequest({ jobId: 'job-old' })))
-            .rejects.toThrow('targets historical sports-lib version 17.1.1');
+            .rejects.toThrow(`targets historical sports-lib version ${HISTORICAL_SPORTS_LIB_REPARSE_TARGET_VERSION}`);
 
         expect(jobSet).not.toHaveBeenCalled();
         expect(mockEnqueueSportsLibReparseHeavyTask).not.toHaveBeenCalled();

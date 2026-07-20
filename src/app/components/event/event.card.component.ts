@@ -88,7 +88,7 @@ export class EventCardComponent implements OnInit {
 
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
-    hasVisibleEventLaps(this.event()?.getActivities() ?? [])
+    hasVisibleEventLaps(this.selectedActivitiesInstant())
   );
 
   public hasJumpsFlag = computed(() =>

@@ -704,6 +704,23 @@ describe('EventCardChartPanelComponent', () => {
     expect(fixture.nativeElement.querySelector('.event-chart-panel__fullscreen-button')).toBeNull();
   });
 
+  it('shows a contextual reset control only while chart state is active', async () => {
+    await renderComponent();
+
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__reset-button')).toBeNull();
+
+    const resetSpy = vi.spyOn(component.resetChartState, 'emit');
+    component.showResetChartState = true;
+    fixture.detectChanges();
+
+    const resetButton = fixture.nativeElement.querySelector('.event-chart-panel__reset-button') as HTMLButtonElement;
+    expect(resetButton).not.toBeNull();
+
+    resetButton.click();
+
+    expect(resetSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('toggles fullscreen on the current panel only', async () => {
     await renderComponent();
 

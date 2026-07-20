@@ -2,6 +2,8 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -1164,6 +1166,16 @@ describe('EventCardChartComponent', () => {
     expect(component.zoomRange).toBeNull();
     expect(component.previewSelectedRange).toBeNull();
     expect(component.selectedRange).toBeNull();
+  });
+
+  it('passes contextual reset state to each data chart panel', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/event/chart/event.card.chart.component.html'),
+      'utf8'
+    );
+
+    expect(template).toContain('[showResetChartState]="hasResettableChartState"');
+    expect(template).toContain('(resetChartState)="onResetChartStateRequested()"');
   });
 
   it('exposes branded watermark text when provided', () => {
