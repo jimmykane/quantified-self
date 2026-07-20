@@ -39,6 +39,14 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-state-value-row { gap: 4px; }
 .training-state-info-button { width: 20px; min-width: 20px; height: 20px; min-height: 20px; line-height: 20px; flex: 0 0 auto; padding: 0; display: inline-flex; align-items: center; justify-content: center; --mdc-icon-button-state-layer-size: 20px; }
 .training-state-info-button mat-icon { width: 16px; height: 16px; line-height: 16px; font-size: 16px; color: var(--mat-sys-on-surface-variant); }
+.training-state-details-content { box-sizing: border-box; display: grid; gap: 10px; max-width: min(340px, calc(100vw - 32px)); min-width: min(280px, calc(100vw - 32px)); padding: 12px 14px; }
+.training-state-details-dialog-content .training-state-details-content { max-width: 100%; min-width: 0; width: 100%; }
+.training-state-details-heading { color: var(--mat-sys-on-surface); font: var(--mat-sys-title-small); letter-spacing: 0; }
+.training-state-details-description, .training-state-details-note { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); letter-spacing: 0; line-height: 1.35; margin: 0; }
+.training-state-details-list { display: grid; gap: 7px; margin: 0; }
+.training-state-details-row { align-items: baseline; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto; }
+.training-state-details-row dt { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-medium); letter-spacing: 0; min-width: 0; }
+.training-state-details-row dd { color: var(--mat-sys-on-surface); font: var(--mat-sys-body-medium); font-variant-numeric: tabular-nums; font-weight: 500; letter-spacing: 0; margin: 0; max-width: 14ch; min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .training-state-caption, .training-comparison-panel > span:last-child, .training-mix-panel dd span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-body-font-size); line-height: 1.3; }
 .training-state-update { color: var(--mat-sys-primary); font-size: var(--training-inter-fine-font-size); line-height: 1.3; }
 .training-readiness-panel { min-width: 0; padding: 20px; }

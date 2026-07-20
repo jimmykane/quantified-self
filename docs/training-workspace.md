@@ -525,6 +525,11 @@ mark the TSS/load chart as building while the snapshot service retains the prior
 State card keeps the last complete label for continuity, but adds **Updating from the latest completed TSS calculation…**
 so it is never mistaken for a new result.
 
+This follows the Dashboard KPI interaction pattern: the same structured State explanation opens in a `qs-menu-panel`
+Material menu on larger viewports and a viewport-bounded Material dialog at `767px` and below. Do not use `MatTooltip`
+for this multi-value explanation; it is hard to read and can be clipped or rendered as an opaque transient bubble on
+mobile.
+
 #### Readiness today
 
 Training renders one wide Readiness card instead of separate top-level readiness and sleep cards. The current result is

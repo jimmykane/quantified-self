@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, NgZone, OnDestroy, OnInit, Optional, computed } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, NgZone, OnDestroy, OnInit, Optional, Signal, TemplateRef, ViewChild, computed, signal } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { AppThemes, DataDistance, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import type {
   DashboardTrainingBuildComparisonDiscipline,
@@ -62,7 +65,7 @@ import {
   type TrainingWindowComparison,
   resolveTrainingComparisonState,
 } from '../../helpers/training-analysis.helper';
-import { resolveTrainingStateInfoTooltip } from '../../helpers/training-state.helper';
+import { buildTrainingStateInfo, type TrainingStateInfo } from '../../helpers/training-state.helper';
 import {
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
 } from '../../helpers/dashboard-recovery-now.helper';
@@ -132,7 +135,7 @@ interface TrainingMixZoneViewModel {
 interface TrainingStatusViewModel {
   stateLabel: string;
   stateCaption: string;
-  stateInfoTooltip: string;
+  stateInfo: TrainingStateInfo;
   stateUpdateText: string | null;
   volumeText: string;
   volumeCaption: string;
@@ -218,7 +221,7 @@ function createEmptyTrainingStatusViewModel(): TrainingStatusViewModel {
   return {
     stateLabel: 'Awaiting data',
     stateCaption: 'No current load signals',
-    stateInfoTooltip: resolveTrainingStateInfoTooltip({ form: null, rampRate: null, fitness: null, fatigue: null }),
+    stateInfo: buildTrainingStateInfo({ form: null, rampRate: null, fitness: null, fatigue: null }),
     stateUpdateText: null,
     volumeText: '--',
     volumeCaption: 'Preparing your training comparison…',
@@ -284,6 +287,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   };
   public trainingRecoveryHistoryExpanded = false;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+  public readonly useTrainingStateDetailsDialog: Signal<boolean>;
 
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
@@ -302,6 +306,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private trainingBuildBenchmarkDialogRef: MatDialogRef<TrainingBuildBenchmarkDialogComponent> | null = null;
   private trainingBuildBenchmarkDialogDiscipline: DerivedTrainingDiscipline | null = null;
   private trainingSportVisibilityDialogRef: MatDialogRef<TrainingSportVisibilityDialogComponent> | null = null;
+  private trainingStateDetailsDialogRef: MatDialogRef<unknown> | null = null;
+
+  @ViewChild('trainingStateDetailsDialogTemplate') private trainingStateDetailsDialogTemplate?: TemplateRef<unknown>;
 
   constructor(
     private readonly authService: AppAuthService,
@@ -312,7 +319,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     private readonly changeDetector: ChangeDetectorRef,
     @Optional() private readonly ngZone: NgZone | null = null,
     @Optional() private readonly analyticsService: AppAnalyticsService | null = null,
-  ) {}
+    @Optional() breakpointObserver: BreakpointObserver | null = null,
+  ) {
+    this.useTrainingStateDetailsDialog = breakpointObserver
+      ? toSignal(breakpointObserver.observe('(max-width: 767px)').pipe(map(state => state.matches)), { initialValue: false })
+      : signal(false);
+  }
 
   ngOnInit(): void {
     this.ngZone?.runOutsideAngular(() => {
@@ -374,6 +386,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.trainingStateDetailsDialogRef?.close();
     this.clearTrainingReadinessSleepRefreshTimer();
     this.clearTrainingReadinessDayRolloverTimer();
     this.dataSubscriptions.unsubscribe();
@@ -389,6 +402,27 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   public toggleTrainingRecoveryHistory(): void {
     this.trainingRecoveryHistoryExpanded = !this.trainingRecoveryHistoryExpanded;
+  }
+
+  public openTrainingStateDetailsDialog(event: MouseEvent): void {
+    event.stopPropagation();
+    if (!this.trainingStateDetailsDialogTemplate || this.trainingStateDetailsDialogRef) {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(this.trainingStateDetailsDialogTemplate, {
+      ariaLabel: 'Training state details',
+      autoFocus: false,
+      maxWidth: '340px',
+      restoreFocus: true,
+      width: 'calc(100vw - 32px)',
+    });
+    this.trainingStateDetailsDialogRef = dialogRef;
+    dialogRef.afterClosed().subscribe(() => {
+      if (this.trainingStateDetailsDialogRef === dialogRef) {
+        this.trainingStateDetailsDialogRef = null;
+      }
+    });
   }
 
   private formatNumber(value: number | null | undefined, fractionDigits = 1, signed = false): string {
@@ -901,11 +935,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
     ];
     const isTrainingStateUpdating = stateSignalStatuses.some(isDerivedMetricPendingStatus);
+    const stateInfo = buildTrainingStateInfo(stateSignals);
     this.trainingStatus = this.buildTrainingStatus(
       analysis,
       this.trainingComparisonState,
       isTrainingStateUpdating,
-      resolveTrainingStateInfoTooltip(stateSignals),
+      stateInfo,
     );
     this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
     this.refreshTrainingRecoveryEstimate();
@@ -1687,12 +1722,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     analysis: TrainingAnalysis,
     comparisonState: TrainingComparisonState,
     isStateUpdating: boolean,
-    stateInfoTooltip: string,
+    stateInfo: TrainingStateInfo,
   ): TrainingStatusViewModel {
     const currentState = {
       stateLabel: analysis.state.label || 'Awaiting data',
       stateCaption: analysis.state.caption || 'No current load signals',
-      stateInfoTooltip,
+      stateInfo,
       stateUpdateText: isStateUpdating
         ? (analysis.state.label ? 'Updating from the latest completed TSS calculation…' : 'Calculating current TSS state…')
         : null,

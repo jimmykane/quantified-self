@@ -55,18 +55,29 @@
           </div>
           <div class="training-state-value-row">
             <strong>{{ trainingStatus.stateLabel }}</strong>
-            <button
-              mat-icon-button
-              type="button"
-              class="title-info-button training-state-info-button"
-              appHapticTap
-              appTooltipTap
-              [matTooltip]="trainingStatus.stateInfoTooltip"
-              matTooltipPosition="below"
-              [attr.aria-label]="'How ' + trainingStatus.stateLabel + ' is calculated'"
-            >
-              <mat-icon aria-hidden="true">info</mat-icon>
-            </button>
+            @if (useTrainingStateDetailsDialog()) {
+              <button
+                mat-icon-button
+                type="button"
+                class="title-info-button training-state-info-button"
+                appHapticTap
+                (click)="openTrainingStateDetailsDialog($event)"
+                [attr.aria-label]="'How ' + trainingStatus.stateLabel + ' is calculated'"
+              >
+                <mat-icon aria-hidden="true">info</mat-icon>
+              </button>
+            } @else {
+              <button
+                mat-icon-button
+                type="button"
+                class="title-info-button training-state-info-button"
+                appHapticTap
+                [matMenuTriggerFor]="trainingStateDetailsMenu"
+                [attr.aria-label]="'How ' + trainingStatus.stateLabel + ' is calculated'"
+              >
+                <mat-icon aria-hidden="true">info</mat-icon>
+              </button>
+            }
           </div>
           <span class="training-state-caption">{{ trainingStatus.stateCaption }}</span>
           @if (trainingStatus.stateUpdateText) {
@@ -739,3 +750,29 @@
     </section>
   }
 </main>
+
+<ng-template #trainingStateDetailsContent>
+  <section class="training-state-details-content" aria-label="Training state details">
+    <div class="training-state-details-heading">{{ trainingStatus.stateLabel }} state</div>
+    <p class="training-state-details-description">{{ trainingStatus.stateInfo.description }}</p>
+    <dl class="training-state-details-list">
+      @for (row of trainingStatus.stateInfo.rows; track row.label) {
+        <div class="training-state-details-row">
+          <dt>{{ row.label }}</dt>
+          <dd><app-training-metric-text [text]="row.value"></app-training-metric-text></dd>
+        </div>
+      }
+    </dl>
+    <p class="training-state-details-note">{{ trainingStatus.stateInfo.note }}</p>
+  </section>
+</ng-template>
+
+<mat-menu #trainingStateDetailsMenu="matMenu" class="qs-menu-panel training-state-details-menu" xPosition="after" yPosition="below">
+  <ng-container [ngTemplateOutlet]="trainingStateDetailsContent"></ng-container>
+</mat-menu>
+
+<ng-template #trainingStateDetailsDialogTemplate>
+  <div class="training-state-details-dialog-content">
+    <ng-container [ngTemplateOutlet]="trainingStateDetailsContent"></ng-container>
+  </div>
+</ng-template>

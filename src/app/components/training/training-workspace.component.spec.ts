@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatMenuModule } from '@angular/material/menu';
 import { concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -30,6 +31,7 @@ describe('TrainingWorkspaceComponent', () => {
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
+      imports: [MatMenuModule],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
   });
@@ -144,8 +146,8 @@ describe('TrainingWorkspaceComponent', () => {
       expect(statePanel.textContent).toContain('Updating from the latest completed TSS calculation');
       const infoButton = statePanel.querySelector('.training-state-info-button');
       expect(infoButton?.getAttribute('aria-label')).toBe('How Building is calculated');
-      expect(fixture.componentInstance.trainingStatus.stateInfoTooltip).toContain('CTL minus ATL');
-      expect(fixture.componentInstance.trainingStatus.stateInfoTooltip).toContain('Form +4 (CTL 102 − ATL 98)');
+      expect(fixture.componentInstance.trainingStatus.stateInfo.tooltip).toContain('CTL minus ATL');
+      expect(fixture.componentInstance.trainingStatus.stateInfo.tooltip).toContain('Form +4 (CTL 102 − ATL 98)');
       fixture.destroy();
     } finally {
       vi.useRealTimers();
@@ -745,6 +747,32 @@ describe('TrainingWorkspaceComponent', () => {
       action: 'cleared',
       discipline: 'cycling',
     });
+  });
+
+  it('opens Training state details in a viewport-bounded dialog for mobile', () => {
+    const dialogRef = { afterClosed: () => of(undefined) };
+    const dialog = { open: vi.fn(() => dialogRef) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    (component as any).trainingStateDetailsDialogTemplate = {};
+    const stopPropagation = vi.fn();
+
+    component.openTrainingStateDetailsDialog({ stopPropagation } as unknown as MouseEvent);
+
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      ariaLabel: 'Training state details',
+      autoFocus: false,
+      maxWidth: '340px',
+      restoreFocus: true,
+      width: 'calc(100vw - 32px)',
+    }));
   });
 
   it('records only the non-identifying benchmark configuration after a saved selection', () => {
