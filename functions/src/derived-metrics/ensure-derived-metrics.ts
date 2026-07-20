@@ -5,6 +5,7 @@ import { enforceAppCheck } from '../utils';
 import {
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRIC_KINDS,
+    DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
@@ -389,6 +390,12 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
 ): boolean {
     if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
         return normalizeDerivedTrainingReadinessMetricPayload(payload) !== null;
+    }
+    if (metricKind === DERIVED_METRIC_KINDS.TrainingBuildComparison) {
+        const source = payload && typeof payload === 'object' && !Array.isArray(payload)
+            ? payload as Record<string, unknown>
+            : null;
+        return source?.recoveryVersion === DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION;
     }
     return true;
 }

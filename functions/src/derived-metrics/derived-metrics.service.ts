@@ -43,6 +43,7 @@ import {
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
+    DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
     DERIVED_METRICS_ENTRY_TYPES,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
@@ -160,6 +161,7 @@ const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
     'timezoneOffsetSeconds',
     'durationSeconds',
     'isNap',
+    'providerFields.suunto.timestamp',
     'vitals.overnightHrvMs',
     'vitals.averageHrvMs',
 ] as const;
@@ -2954,6 +2956,29 @@ function resolveLocalClockMinutes(startTimeMs: number, timezoneOffsetSeconds: nu
     return Math.floor(localTimeOfDayMs / (60 * 1000));
 }
 
+function resolveTrainingSleepTimezoneOffsetSeconds(
+    data: Record<string, unknown>,
+    provider: SleepProvider,
+): number | null {
+    const explicitOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
+    if (
+        explicitOffsetSeconds !== null
+        && Math.abs(explicitOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
+    ) {
+        return explicitOffsetSeconds;
+    }
+    if (provider !== SLEEP_PROVIDERS.SuuntoApp) {
+        return null;
+    }
+    const providerFields = data.providerFields && typeof data.providerFields === 'object' && !Array.isArray(data.providerFields)
+        ? data.providerFields as Record<string, unknown>
+        : {};
+    const suuntoFields = providerFields.suunto && typeof providerFields.suunto === 'object' && !Array.isArray(providerFields.suunto)
+        ? providerFields.suunto as Record<string, unknown>
+        : {};
+    return parseDateTimeOffsetSeconds(suuntoFields.timestamp);
+}
+
 function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
@@ -2986,11 +3011,7 @@ function resolveTrainingSleepNights(
         ) {
             return;
         }
-        const rawTimezoneOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
-        const timezoneOffsetSeconds = rawTimezoneOffsetSeconds !== null
-            && Math.abs(rawTimezoneOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
-            ? rawTimezoneOffsetSeconds
-            : null;
+        const timezoneOffsetSeconds = resolveTrainingSleepTimezoneOffsetSeconds(data, provider);
         const localStartTimeMs = startTimeMs + ((timezoneOffsetSeconds || 0) * 1000);
         if (
             !Number.isFinite(localStartTimeMs)
@@ -3143,17 +3164,7 @@ function resolveTrainingReadinessSleepDayMs(
             ? resolveSleepDateDayMs(endDate.toISOString().slice(0, 10))
             : null;
     }
-    const explicitOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
-    const providerFields = data.providerFields && typeof data.providerFields === 'object' && !Array.isArray(data.providerFields)
-        ? data.providerFields as Record<string, unknown>
-        : {};
-    const suuntoFields = providerFields.suunto && typeof providerFields.suunto === 'object' && !Array.isArray(providerFields.suunto)
-        ? providerFields.suunto as Record<string, unknown>
-        : {};
-    const offsetSeconds = explicitOffsetSeconds !== null
-        && Math.abs(explicitOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
-        ? explicitOffsetSeconds
-        : parseDateTimeOffsetSeconds(suuntoFields.timestamp);
+    const offsetSeconds = resolveTrainingSleepTimezoneOffsetSeconds(data, provider);
     const localEndTimeMs = offsetSeconds === null
         ? endTimeMs
         : endTimeMs + (offsetSeconds * 1000);
@@ -3536,6 +3547,7 @@ export function buildTrainingBuildComparisonMetricPayload(
     return {
         sourceEventCount: activities.filter(isClassifiedTrainingActivitySource).length,
         payload: {
+            recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             excludesMergedEvents: true,

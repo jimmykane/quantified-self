@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION } from '@shared/derived-metrics';
 import {
   resolveDashboardEasyPercentContext,
   resolveDashboardEfficiencyDelta4wContext,
@@ -420,6 +421,7 @@ describe('dashboard-derived-metrics.helper', () => {
       medianSwolfChange: null,
     };
     const payload = {
+      recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
       dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
       excludesMergedEvents: true,
@@ -482,6 +484,10 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(context?.disciplines[1].suggestedEvents).toEqual([]);
     expect(context?.recovery.current.periodDays).toBe(28);
     expect(context?.disciplines[0].recovery?.reference.periodDays).toBe(84);
+    expect(resolveDashboardTrainingBuildComparisonContext({
+      ...payload,
+      recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION - 1,
+    })).toBeNull();
 
     for (const provider of ['GarminAPI', 'COROSAPI', 'SuuntoApp']) {
       Object.assign(payload.recovery.current, {

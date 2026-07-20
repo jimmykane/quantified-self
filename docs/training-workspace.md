@@ -598,11 +598,17 @@ Comparative deltas require the same provider and sufficient coverage in both win
 nights and at least half of each window (`14/28` and `42/84` for the normal comparison). Bedtime regularity requires a
 usable timezone; the builder must not fabricate local bedtime from UTC timestamps. Garmin normally supplies this as
 `startTimeOffsetInSeconds`, while COROS can supply explicit offsets or its start/end timezone fields, and Suunto can
-supply an offset-bearing sleep timestamp. Any provider can omit that evidence, and older backfilled records can predate
-offset persistence. Those nights still contribute valid duration and overnight HRV when available, but not bedtime
-variation. The frontend must therefore accept a missing bedtime variation independently of total recorded-night count.
-It renders only the missing metric as unavailable, explains the local-time or HRV evidence requirement, and keeps other
-valid recovery metrics visible. Comparison copy must not imply that every metric is available.
+supply an offset-bearing sleep timestamp. The build-comparison projection includes that historical Suunto timestamp and
+prefers a valid normalized `timezoneOffsetSeconds` before falling back to its embedded offset. Any provider can omit that
+evidence, and older backfilled records can predate offset persistence. Those nights still contribute valid duration and
+overnight HRV when available, but not bedtime variation. The frontend must therefore accept a missing bedtime variation
+independently of total recorded-night count. It renders only the missing metric as unavailable, explains the local-time
+or HRV evidence requirement, and keeps other valid recovery metrics visible. Comparison copy must not imply that every
+metric is available.
+
+`training_build_comparison.payload.recoveryVersion` tracks this recovery interpretation independently of the global
+derived-metric schema. When it changes, both the frontend normalizer and backend freshness gate request only a new
+build-comparison snapshot, leaving unrelated derived metrics fresh.
 Provider mappers preserve null or blank timezone fields as missing rather than coercing them to UTC; COROS can still fall
 back from a missing explicit offset to its start/end timezone fields.
 

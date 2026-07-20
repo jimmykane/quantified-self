@@ -31,6 +31,7 @@ import type {
 import { normalizeSleepProvider } from '@shared/sleep';
 import {
   DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES,
+  DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS,
   DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
   DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
@@ -946,7 +947,8 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
   const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
   const recovery = resolveDashboardTrainingRecoveryComparison(raw.recovery);
   if (
-    raw.dayBoundary !== 'UTC'
+    raw.recoveryVersion !== DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION
+    || raw.dayBoundary !== 'UTC'
     || raw.excludesMergedEvents !== true
     || asOfDayMs === null
     || resolveUtcDayStartMs(asOfDayMs) !== asOfDayMs

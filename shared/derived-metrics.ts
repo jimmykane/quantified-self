@@ -722,6 +722,9 @@ export const DERIVED_TRAINING_RECOVERY_MIN_COMPARABLE_COVERAGE = 0.5;
 export const DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS = 60 * 60;
 export const DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS = 16 * 60 * 60;
 export const DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES = 12 * 60;
+// Increment only when the persisted recovery-context calculation changes. This
+// lets Training rebuild the affected snapshot without invalidating unrelated metrics.
+export const DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION = 2;
 
 export function getDerivedTrainingRecoveryMinimumComparableNights(expectedNightCount: number): number {
   const normalizedExpectedNightCount = Number.isFinite(expectedNightCount)
@@ -782,6 +785,7 @@ export interface DerivedTrainingBuildDurabilityComparison {
 }
 
 export interface DerivedTrainingBuildComparisonMetricPayload {
+  recoveryVersion: number;
   dayBoundary: 'UTC';
   asOfDayMs: number;
   excludesMergedEvents: boolean;
