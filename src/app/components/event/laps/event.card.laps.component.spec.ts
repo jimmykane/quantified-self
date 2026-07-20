@@ -28,6 +28,7 @@ function createRenderableLap(type: LapTypes): LapInterface {
         getStat: () => undefined,
         getDuration: () => ({
             getDisplayValue: () => '00:10',
+            getStopwatchDisplayValue: () => '0:12.85',
         }),
     } as unknown as LapInterface;
 }
@@ -66,7 +67,7 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
 
         expect(component.availableLapTypes).toEqual([LapTypes.Manual]);
-        expect(component.getDataSource(activity, LapTypes.Manual)).toBeTruthy();
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data[0].Duration).toBe('0:12.85');
     });
 
     it('should exclude session end laps from the rendered lap tables', () => {

@@ -94,7 +94,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         ...statRowElement,
         '#': index + 1,
         Type: lap.type,
-        Duration: lap.getDuration().getDisplayValue(false, true, true),
+        Duration: lap.getDuration().getStopwatchDisplayValue(),
         'Maximum Heart Rate': maxHR ? `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '',
       };
 
