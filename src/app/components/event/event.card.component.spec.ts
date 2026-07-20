@@ -657,6 +657,24 @@ describe('EventCardComponent', () => {
             expect(fixture.nativeElement.querySelector('app-event-card-swim-lengths')).toBeNull();
         });
 
+        it('should compute hasLapsFlag from selected activities only', () => {
+            const activityWithoutLaps = {
+                ...activityWithData,
+                getID: () => 'act-without-laps',
+                getLaps: () => [],
+            } as unknown as ActivityInterface;
+            component.event.set({
+                ...eventWithData,
+                getActivities: () => [activityWithData, activityWithoutLaps],
+            } as unknown as EventInterface);
+            component.selectedActivitiesInstant.set([activityWithoutLaps]);
+
+            fixture.detectChanges();
+
+            expect(component.hasLapsFlag()).toBe(false);
+            expect(fixture.nativeElement.querySelector('app-event-card-laps')).toBeNull();
+        });
+
         it('should compute hasLapsFlag as false when only session end laps exist', () => {
             const sessionEndOnlyActivity = {
                 ...activityWithData,
