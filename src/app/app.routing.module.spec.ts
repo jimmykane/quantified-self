@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { routes } from './app.routing.module';
+import { routes as appRoutes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.content';
+
+const publicLayoutRoute = appRoutes.find(route => route.path === '' && Array.isArray(route.children));
+const routes = [
+  ...appRoutes.filter(route => route !== publicLayoutRoute),
+  ...(publicLayoutRoute?.children || []),
+];
 
 describe('AppRoutingModule routes', () => {
   it('should define a public help route with help metadata', () => {
