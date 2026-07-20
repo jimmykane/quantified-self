@@ -261,6 +261,19 @@ mat-icon {
     height: 20px;
 }
 
+.activity-sync-provider-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.activity-sync-provider-icons mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
 .tool-subsection-meta {
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.8rem;

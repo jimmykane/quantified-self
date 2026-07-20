@@ -22,6 +22,8 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() showTooltip = true;
     @Input() showText = false;
     @Input() suppressedTextLabels: readonly string[] = [];
+    @Input() iconWidth: number | null = null;
+    @Input() iconHeight = 20;
 
     serviceName: ServiceNames | null = null;
     serviceLogo: string | null = null;

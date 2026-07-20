@@ -17,6 +17,8 @@
             <span class="provider-selector__option">
               <app-service-source-icon
                 [sourceServiceName]="section.serviceName"
+                [iconWidth]="72"
+                [iconHeight]="24"
                 [showTooltip]="false">
               </app-service-source-icon>
               <span class="provider-selector__name">{{ section.label }}</span>
@@ -43,7 +45,15 @@
             mat-tab-link
             [active]="activeSection === section.id"
             (click)="$event.preventDefault(); selectService(section.id)">
-            {{ section.label }}
+            <span class="provider-selector__mobile-option">
+              <app-service-source-icon
+                [sourceServiceName]="section.serviceName"
+                [iconWidth]="36"
+                [iconHeight]="18"
+                [showTooltip]="false">
+              </app-service-source-icon>
+              <span>{{ section.label }}</span>
+            </span>
           </a>
           }
         </nav>

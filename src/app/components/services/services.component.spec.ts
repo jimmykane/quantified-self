@@ -157,6 +157,10 @@ describe('ServicesComponent', () => {
 
         expect(tabNav).toBeTruthy();
         expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        const mobileProviderIcons = tabNav.querySelectorAll('app-service-source-icon');
+        expect(mobileProviderIcons).toHaveLength(4);
+        expect(component.serviceSectionOptions[3].serviceName).toBe(ServiceNames.WahooAPI);
+        expect(mobileProviderIcons[3]?.querySelector('.service-logo')).toBeTruthy();
     });
 
     it('renders the desktop provider selector as a Material button toggle group', () => {
@@ -168,6 +172,10 @@ describe('ServicesComponent', () => {
 
         expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
         expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        const desktopProviderIcons = providerSelector.querySelectorAll('app-service-source-icon');
+        expect(desktopProviderIcons).toHaveLength(4);
+        expect(component.serviceSectionOptions[3].serviceName).toBe(ServiceNames.WahooAPI);
+        expect(desktopProviderIcons[3]?.querySelector('.service-logo')).toBeTruthy();
     });
 
     it('renders connections without a workspace rail', () => {

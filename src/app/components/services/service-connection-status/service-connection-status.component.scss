@@ -30,6 +30,13 @@
     min-width: 0;
 }
 
+.service-connection-status__provider-icon {
+    flex: 0 0 auto;
+    width: 72px;
+    height: 24px;
+    margin-top: 2px;
+}
+
 .service-connection-status__copy {
     display: grid;
     flex: 1 1 auto;
@@ -124,6 +131,11 @@
 
     .service-connection-status__copy {
         grid-column: 1;
+    }
+
+    .service-connection-status__provider-icon {
+        grid-column: 1;
+        width: 64px;
     }
 
     .service-connection-status__chips,

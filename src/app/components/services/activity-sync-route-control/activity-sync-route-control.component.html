@@ -1,7 +1,21 @@
 <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
   <div class="tool-subsection-header">
     <div class="tool-subsection-title">
-      <mat-icon>published_with_changes</mat-icon>
+      <span class="activity-sync-provider-icons" aria-hidden="true">
+        <app-service-source-icon
+          [sourceServiceName]="sourceServiceName"
+          [iconWidth]="32"
+          [iconHeight]="18"
+          [showTooltip]="false">
+        </app-service-source-icon>
+        <mat-icon>arrow_forward</mat-icon>
+        <app-service-source-icon
+          [sourceServiceName]="destinationServiceName"
+          [iconWidth]="32"
+          [iconHeight]="18"
+          [showTooltip]="false">
+        </app-service-source-icon>
+      </span>
       <span>Send {{ sourceName }} activities to {{ destinationName }}</span>
     </div>
   </div>

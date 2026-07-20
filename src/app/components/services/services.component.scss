@@ -56,10 +56,6 @@
     font-weight: 600;
 }
 
-.provider-selector__option app-service-source-icon {
-    transform: scale(3);
-}
-
 .provider-selector__name {
     position: absolute;
     width: 1px;
@@ -90,6 +86,12 @@
 
 .provider-selector--mobile {
     display: none;
+}
+
+.provider-selector__mobile-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .services-workspace-main {
@@ -221,6 +223,11 @@
     .provider-selector--mobile {
         display: flex;
         margin-bottom: 16px;
+    }
+
+    .provider-selector__mobile-option {
+        gap: 4px;
+        font-size: 0.82rem;
     }
 
     .service-tools-dialog__content {

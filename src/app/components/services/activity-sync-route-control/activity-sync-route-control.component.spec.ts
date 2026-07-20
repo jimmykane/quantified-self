@@ -71,6 +71,14 @@ describe('ActivitySyncRouteControlComponent', () => {
     expect(component.canUseRoute).toBe(true);
   });
 
+  it('shows source and destination provider icons for Wahoo activity sync', () => {
+    fixture.detectChanges();
+
+    const providerIcons = fixture.nativeElement.querySelectorAll('.activity-sync-provider-icons app-service-source-icon');
+
+    expect(providerIcons).toHaveLength(2);
+  });
+
   it('writes the specific route setting and analytics event when automatic delivery is enabled', async () => {
     await component.onRouteToggle(true);
 

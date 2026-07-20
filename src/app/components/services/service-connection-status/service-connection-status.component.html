@@ -7,6 +7,13 @@
   [attr.aria-label]="serviceLabel + ' connection status'">
   <div class="service-connection-status__content">
     <div class="service-connection-status__summary">
+      @if (providerIcon) {
+      <mat-icon
+        class="service-connection-status__provider-icon"
+        [svgIcon]="providerIcon"
+        aria-hidden="true">
+      </mat-icon>
+      }
       <div class="service-connection-status__copy">
         <span class="service-connection-status__label">{{ serviceLabel }}</span>
         <span class="service-connection-status__state">

@@ -18,6 +18,7 @@
   @if (showConnectionSummary) {
   <app-service-connection-status
     serviceLabel="Garmin Connect"
+    providerIcon="garmin"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"

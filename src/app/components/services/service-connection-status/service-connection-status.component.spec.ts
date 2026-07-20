@@ -4,8 +4,10 @@ import { resolve } from 'node:path';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
+import { MatIconRegistry } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { describe, expect, it, beforeEach } from 'vitest';
+import { of } from 'rxjs';
 import { ServiceConnectionStatusComponent } from './service-connection-status.component';
 
 describe('ServiceConnectionStatusComponent', () => {
@@ -20,6 +22,18 @@ describe('ServiceConnectionStatusComponent', () => {
                 MatDividerModule,
                 MatIconModule,
                 MatProgressBarModule,
+            ],
+            providers: [
+                {
+                    provide: MatIconRegistry,
+                    useValue: {
+                        getDefaultFontSetClass: () => ['material-icons'],
+                        getNamedSvgIcon: () => {
+                            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                            return of(svg);
+                        },
+                    },
+                },
             ],
         }).compileComponents();
 
@@ -59,6 +73,16 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(fixture.nativeElement.textContent).toContain('PRO');
         expect(fixture.nativeElement.querySelector('mat-progress-bar')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('mat-divider')).toBeTruthy();
+    });
+
+    it('renders the supplied provider logo next to the connection state', () => {
+        component.serviceLabel = 'Wahoo';
+        component.providerIcon = 'wahoo';
+        fixture.detectChanges();
+
+        const providerIcon = fixture.nativeElement.querySelector('.service-connection-status__provider-icon');
+
+        expect(providerIcon).toBeTruthy();
     });
 
     it('uses the app success green for connected status text', () => {
