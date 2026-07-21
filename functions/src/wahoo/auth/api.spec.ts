@@ -62,6 +62,18 @@ describe('Wahoo auth API helpers', () => {
     });
   });
 
+  it('retains the parsed provider error body for safe caller diagnostics', async () => {
+    const body = { errors: { workout_file_upload: ['already exists'] } };
+    fetchMock.mockResolvedValue(response(422, body));
+
+    const error = await requestWahooAPI('access', '/v1/workout_file_uploads', 'POST').catch((requestError) => requestError);
+    expect(error).toMatchObject<WahooAPIRequestError>({
+      statusCode: 422,
+      responseBody: body,
+    });
+    expect(Object.keys(error)).not.toContain('responseBody');
+  });
+
   it('aborts a stalled API request at the provider deadline', async () => {
     vi.useFakeTimers();
     fetchMock.mockImplementation((_url: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {

@@ -3,13 +3,22 @@ import { WAHOO_API_BASE_URL, WAHOO_API_REQUEST_TIMEOUT_MS } from '../constants';
 import { WahooRequestTimeoutError, withWahooRequestTimeout } from '../request-timeout';
 
 export class WahooAPIRequestError extends Error {
+  public readonly responseBody!: unknown;
+
   constructor(
     message: string,
     public readonly statusCode: number,
     public readonly resetAfterSeconds: number | null = null,
+    responseBody: unknown = null,
   ) {
     super(message);
     this.name = 'WahooAPIRequestError';
+    Object.defineProperty(this, 'responseBody', {
+      value: responseBody,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
   }
 }
 
@@ -76,6 +85,7 @@ export async function requestWahooAPI<T>(
       `Wahoo API ${method} ${path} failed with ${response.status}`,
       response.status,
       resetAfterSeconds,
+      body,
     );
   }
   return {

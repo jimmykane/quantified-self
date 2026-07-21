@@ -1,6 +1,7 @@
 'use strict';
 
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ServiceNames, WahooAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -17,6 +18,12 @@ import {
   WAHOO_API_WORKOUTS_WRITE_SCOPE,
 } from './constants';
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
+import {
+  getWahooErrorLogDetails,
+  getWahooProviderErrorMessage,
+  isWahooDuplicateError,
+  isWahooDuplicateMessage,
+} from './error-details';
 
 const MAX_ACTIVITY_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_UPLOAD_BYTES / 3) * 4 + 4;
@@ -27,6 +34,7 @@ interface WahooWorkoutFileUploadPayload {
   status?: unknown;
   workout_id?: unknown;
   workout_summary_id?: unknown;
+  error?: unknown;
 }
 
 export interface WahooActivityUploadResult {
@@ -71,7 +79,20 @@ function getStatus(payload: WahooWorkoutFileUploadPayload): string {
   return `${payload.status || ''}`.trim().toLowerCase();
 }
 
-function toWahooActivityUploadResult(payload: WahooWorkoutFileUploadPayload): WahooActivityUploadResult {
+function toDuplicateWahooActivityUploadResult(payload: WahooWorkoutFileUploadPayload): WahooActivityUploadResult {
+  return {
+    status: 'duplicate',
+    code: 'ALREADY_EXISTS',
+    message: 'Activity already exists in Wahoo.',
+    uploadId: normalizeIdentifier(payload.token),
+    workoutKey: normalizeIdentifier(payload.workout_id || payload.workout_summary_id),
+  };
+}
+
+function toWahooActivityUploadResult(
+  payload: WahooWorkoutFileUploadPayload,
+  operation: 'upload' | 'status',
+): WahooActivityUploadResult {
   const status = getStatus(payload);
   const uploadId = normalizeIdentifier(payload.token);
   const workoutKey = normalizeIdentifier(payload.workout_id || payload.workout_summary_id);
@@ -85,18 +106,26 @@ function toWahooActivityUploadResult(payload: WahooWorkoutFileUploadPayload): Wa
     };
   }
 
-  if (status === 'duplicate') {
-    return {
-      status: 'duplicate',
-      code: 'ALREADY_EXISTS',
-      message: 'Activity already exists in Wahoo.',
-      uploadId,
-      workoutKey,
-    };
+  const providerMessage = getWahooProviderErrorMessage(payload.error);
+  if (status === 'duplicate' || (status === 'error' && isWahooDuplicateMessage(providerMessage))) {
+    logger.info('Wahoo reported a duplicate activity upload', {
+      operation,
+      status,
+      ...(providerMessage ? { providerMessage } : {}),
+    });
+    return toDuplicateWahooActivityUploadResult(payload);
   }
 
   if (status === 'error' || status === 'failed') {
-    throw new HttpsError('internal', 'Wahoo could not process this activity.');
+    logger.warn('Wahoo could not process an activity upload', {
+      operation,
+      status,
+      ...(providerMessage ? { providerMessage } : {}),
+    });
+    const message = providerMessage
+      ? `Wahoo could not process this activity: ${providerMessage}`
+      : 'Wahoo could not process this activity.';
+    throw new HttpsError('failed-precondition', message);
   }
 
   if (!uploadId) {
@@ -158,7 +187,11 @@ function toWahooHttpsError(error: unknown): never {
   if (error.statusCode >= 500) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
   }
-  throw new HttpsError('internal', 'Wahoo rejected the activity upload.');
+  const providerMessage = getWahooProviderErrorMessage(error);
+  throw new HttpsError(
+    'failed-precondition',
+    providerMessage ? `Wahoo rejected the activity upload: ${providerMessage}` : 'Wahoo rejected the activity upload.',
+  );
 }
 
 async function withWahooWorkoutWriteToken<T>(
@@ -202,14 +235,20 @@ async function withWahooWorkoutWriteToken<T>(
     return await execute(false);
   } catch (error) {
     if (error instanceof WahooAPIRequestError && error.statusCode === 401) {
-      try {
-        return await execute(true);
-      } catch (retryError) {
-        return toWahooHttpsError(retryError);
-      }
+      return execute(true);
     }
-    return toWahooHttpsError(error);
+    throw error;
   }
+}
+
+function logWahooActivityUploadRequestError(error: unknown, operation: 'upload' | 'status'): void {
+  if (!(error instanceof WahooAPIRequestError)) return;
+  const logDetails = getWahooErrorLogDetails(error);
+  if (isWahooDuplicateError(error)) {
+    logger.info('Wahoo identified the activity upload as a duplicate', { operation, ...logDetails });
+    return;
+  }
+  logger.warn('Wahoo activity upload request failed', { operation, ...logDetails });
 }
 
 export async function uploadActivityFileToWahoo(
@@ -224,20 +263,28 @@ export async function uploadActivityFileToWahoo(
     throw new HttpsError('invalid-argument', 'Cannot upload activity because the size is greater than 20MB.');
   }
 
-  return withWahooWorkoutWriteToken(userID, async (accessToken) => {
-    const form = new URLSearchParams();
-    form.set('workout_file_upload[file]', `data:application/vnd.fit;base64,${fileBuffer.toString('base64')}`);
-    const filename = normalizeFilename(options.filename);
-    const timeZone = normalizeTimeZone(options.timeZone);
-    if (filename) form.set('workout_file_upload[filename]', filename);
-    if (timeZone) form.set('workout_file_upload[time_zone]', timeZone);
-    const { data } = await requestWahooAPI<WahooWorkoutFileUploadPayload>(
-      accessToken,
-      '/v1/workout_file_uploads',
-      { method: 'POST', form },
-    );
-    return toWahooActivityUploadResult(data || {});
-  });
+  try {
+    return await withWahooWorkoutWriteToken(userID, async (accessToken) => {
+      const form = new URLSearchParams();
+      form.set('workout_file_upload[file]', `data:application/vnd.fit;base64,${fileBuffer.toString('base64')}`);
+      const filename = normalizeFilename(options.filename);
+      const timeZone = normalizeTimeZone(options.timeZone);
+      if (filename) form.set('workout_file_upload[filename]', filename);
+      if (timeZone) form.set('workout_file_upload[time_zone]', timeZone);
+      const { data } = await requestWahooAPI<WahooWorkoutFileUploadPayload>(
+        accessToken,
+        '/v1/workout_file_uploads',
+        { method: 'POST', form },
+      );
+      return toWahooActivityUploadResult(data || {}, 'upload');
+    });
+  } catch (error) {
+    logWahooActivityUploadRequestError(error, 'upload');
+    if (isWahooDuplicateError(error)) {
+      return toDuplicateWahooActivityUploadResult({});
+    }
+    return toWahooHttpsError(error);
+  }
 }
 
 export async function getWahooActivityUploadStatus(
@@ -249,13 +296,18 @@ export async function getWahooActivityUploadStatus(
     throw new HttpsError('invalid-argument', 'Invalid Wahoo upload identifier.');
   }
 
-  return withWahooWorkoutWriteToken(userID, async (accessToken) => {
-    const { data } = await requestWahooAPI<WahooWorkoutFileUploadPayload>(
-      accessToken,
-      `/v1/workout_file_uploads/${encodeURIComponent(token)}`,
-    );
-    return toWahooActivityUploadResult({ ...(data || {}), token: data?.token || token });
-  });
+  try {
+    return await withWahooWorkoutWriteToken(userID, async (accessToken) => {
+      const { data } = await requestWahooAPI<WahooWorkoutFileUploadPayload>(
+        accessToken,
+        `/v1/workout_file_uploads/${encodeURIComponent(token)}`,
+      );
+      return toWahooActivityUploadResult({ ...(data || {}), token: data?.token || token }, 'status');
+    });
+  } catch (error) {
+    logWahooActivityUploadRequestError(error, 'status');
+    return toWahooHttpsError(error);
+  }
 }
 
 function toUploadBuffer(value: unknown): Buffer {
@@ -275,7 +327,7 @@ function toUploadBuffer(value: unknown): Buffer {
 }
 
 async function requireWahooActivityUploadAccess(request: { auth?: { uid: string } | null }): Promise<string> {
-  enforceAppCheck(request as any);
+  enforceAppCheck(request as unknown as Parameters<typeof enforceAppCheck>[0]);
   if (!request.auth) throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   if (!(await hasProAccess(request.auth.uid))) {
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);

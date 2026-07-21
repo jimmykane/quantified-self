@@ -8,6 +8,19 @@ const mocks = vi.hoisted(() => {
   const getUserDeletionGuardState = vi.fn();
   const tokenRefGet = vi.fn();
   const tokenQueryGet = vi.fn();
+  const loggerInfo = vi.fn();
+  const loggerWarn = vi.fn();
+  const WahooAPIRequestError = class WahooAPIRequestError extends Error {
+    constructor(
+      _message: string,
+      public statusCode: number,
+      _resetAfterSeconds: number | null = null,
+      public responseBody: unknown = null,
+    ) {
+      super(_message);
+      void _resetAfterSeconds;
+    }
+  };
   const tokenRef = { get: tokenRefGet };
   return {
     requestWahooAPI,
@@ -17,6 +30,9 @@ const mocks = vi.hoisted(() => {
     tokenRefGet,
     tokenQueryGet,
     tokenRef,
+    loggerInfo,
+    loggerWarn,
+    WahooAPIRequestError,
   };
 });
 
@@ -40,16 +56,18 @@ vi.mock('../shared/user-deletion-guard', () => ({
   getUserDeletionGuardState: mocks.getUserDeletionGuardState,
   UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {},
 }));
+vi.mock('firebase-functions/logger', () => ({
+  info: mocks.loggerInfo,
+  warn: mocks.loggerWarn,
+}));
 vi.mock('./auth/api', () => ({
   requestWahooAPI: mocks.requestWahooAPI,
-  WahooAPIRequestError: class WahooAPIRequestError extends Error {
-    constructor(_message: string, public statusCode: number) { super(_message); }
-  },
+  WahooAPIRequestError: mocks.WahooAPIRequestError,
   WahooAPITransportError: class WahooAPITransportError extends Error {},
 }));
 
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from './activities';
-import { WahooAPITransportError } from './auth/api';
+import { WahooAPIRequestError, WahooAPITransportError } from './auth/api';
 
 describe('Wahoo activity uploads', () => {
   beforeEach(() => {
@@ -96,6 +114,72 @@ describe('Wahoo activity uploads', () => {
       uploadId: 'upload-2',
       workoutKey: '42',
     });
+    expect(mocks.loggerInfo).toHaveBeenCalledWith(
+      'Wahoo reported a duplicate activity upload',
+      expect.objectContaining({ operation: 'upload', status: 'duplicate' }),
+    );
+  });
+
+  it('treats an asynchronous Wahoo error marked as duplicate as an existing activity', async () => {
+    mocks.requestWahooAPI.mockResolvedValue({
+      data: { token: 'upload-3', status: 'error', error: 'This workout file is a duplicate.' },
+    });
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT'))).resolves.toEqual({
+      status: 'duplicate',
+      code: 'ALREADY_EXISTS',
+      message: 'Activity already exists in Wahoo.',
+      uploadId: 'upload-3',
+      workoutKey: undefined,
+    });
+  });
+
+  it('maps an HTTP duplicate response to an existing activity and logs the safe provider reason', async () => {
+    mocks.requestWahooAPI.mockRejectedValue(new WahooAPIRequestError(
+      'Wahoo API POST /v1/workout_file_uploads failed with 422',
+      422,
+      null,
+      { errors: { workout_file_upload: ['already exists'] } },
+    ));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT'))).resolves.toEqual({
+      status: 'duplicate',
+      code: 'ALREADY_EXISTS',
+      message: 'Activity already exists in Wahoo.',
+      uploadId: undefined,
+      workoutKey: undefined,
+    });
+    expect(mocks.loggerInfo).toHaveBeenCalledWith(
+      'Wahoo identified the activity upload as a duplicate',
+      expect.objectContaining({
+        operation: 'upload',
+        statusCode: 422,
+        providerMessage: 'already exists',
+      }),
+    );
+  });
+
+  it('logs and returns a bounded provider reason for a non-duplicate Wahoo rejection', async () => {
+    mocks.requestWahooAPI.mockRejectedValue(new WahooAPIRequestError(
+      'Wahoo API POST /v1/workout_file_uploads failed with 422',
+      422,
+      null,
+      { error: 'FIT file is malformed' },
+    ));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'Wahoo rejected the activity upload: FIT file is malformed',
+      });
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      'Wahoo activity upload request failed',
+      expect.objectContaining({
+        operation: 'upload',
+        statusCode: 422,
+        providerMessage: 'FIT file is malformed',
+      }),
+    );
   });
 
   it('checks the persisted Wahoo upload token instead of posting a FIT file again', async () => {
