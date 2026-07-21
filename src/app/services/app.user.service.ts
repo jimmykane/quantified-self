@@ -128,6 +128,7 @@ export interface ActivitySyncBackfillFailedEvent {
 
 export interface ActivitySyncBackfillSummary {
   scanned: number;
+  sourceActivityCount?: number;
   queued: number;
   skippedByReason: Record<string, number>;
   failedCount: number;

@@ -210,6 +210,7 @@ describe('activity-sync/backfill callable', () => {
 
     expect(response).toEqual({
       scanned: 0,
+      sourceActivityCount: 0,
       queued: 0,
       skippedByReason: {},
       failedCount: 0,
@@ -356,10 +357,12 @@ describe('activity-sync/backfill callable', () => {
 
     expect(response).toEqual({
       scanned: 4,
+      sourceActivityCount: 3,
       queued: 1,
       skippedByReason: {
         already_synced: 1,
         missing_original_files: 1,
+        not_imported_from_source: 1,
       },
       failedCount: 0,
       failedEvents: [],
@@ -453,6 +456,7 @@ describe('activity-sync/backfill callable', () => {
 
     expect(response).toEqual({
       scanned: 2,
+      sourceActivityCount: 2,
       queued: 1,
       skippedByReason: {},
       failedCount: 1,

@@ -35,6 +35,7 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
   public backfillStartDate = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
   public backfillEndDate = new Date();
   public backfillSummary: ActivitySyncBackfillSummary | null = null;
+  public backfillSummaryReasonText: string | null = null;
 
   private destinationConnectionSubscription: Subscription | null = null;
 
@@ -138,19 +139,47 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
         this.backfillEndDate,
       );
       this.backfillSummary = summary;
+      this.backfillSummaryReasonText = this.getBackfillSummaryReasonText(summary);
       this.analyticsService.logActivitySyncRouteBackfill(this.routeId, {
         scanned: summary.scanned,
         queued: summary.queued,
         failedCount: summary.failedCount,
       });
       const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Activity sync started for ${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'}.${failureSuffix}`, undefined, { duration: 4500 });
+      this.snackBar.open(`${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'} scheduled for syncing to ${this.destinationName}.${failureSuffix}`, undefined, { duration: 4500 });
     } catch (error: any) {
       this.logger.error(error);
       this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
     } finally {
       this.isBackfilling = false;
     }
+  }
+
+  private getBackfillSummaryReasonText(summary: ActivitySyncBackfillSummary): string | null {
+    const skippedByReason = summary.skippedByReason || {};
+    const messages: string[] = [];
+    const notImportedCount = Number(skippedByReason.not_imported_from_source || 0);
+    if (notImportedCount > 0) {
+      messages.push(`${notImportedCount} ${notImportedCount === 1 ? 'was' : 'were'} not imported from ${this.sourceName}`);
+    }
+    const alreadyPendingCount = Number(skippedByReason.already_pending || 0);
+    if (alreadyPendingCount > 0) {
+      messages.push(`${alreadyPendingCount} ${alreadyPendingCount === 1 ? 'is' : 'are'} already queued`);
+    }
+    const alreadySyncedCount = Number(skippedByReason.already_synced || 0);
+    if (alreadySyncedCount > 0) {
+      messages.push(`${alreadySyncedCount} ${alreadySyncedCount === 1 ? 'was' : 'were'} already sent to ${this.destinationName}`);
+    }
+    const missingOriginalFilesCount = Number(skippedByReason.missing_original_files || 0);
+    if (missingOriginalFilesCount > 0) {
+      messages.push(`${missingOriginalFilesCount} ${missingOriginalFilesCount === 1 ? 'has' : 'have'} no retained original file`);
+    }
+    const unsupportedOriginalFileCount = Number(skippedByReason.unsupported_original_file || 0);
+    if (unsupportedOriginalFileCount > 0) {
+      messages.push(`${unsupportedOriginalFileCount} ${unsupportedOriginalFileCount === 1 ? 'has' : 'have'} no supported activity file`);
+    }
+
+    return messages.length > 0 ? `Not newly scheduled: ${messages.join('; ')}.` : null;
   }
 
   private watchDestinationConnection(): void {

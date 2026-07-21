@@ -50,7 +50,7 @@
   <mat-divider></mat-divider>
   <div class="activity-sync-route-control__section-title">Sync past activities</div>
   <app-status-info type="info" title="Choose which activities to send">
-    Choose a date range to send {{ sourceName }} activities already in Quantified Self to {{ destinationName }}. This also works when automatic activity sync is off.
+    Choose a date range to schedule {{ sourceName }} activities previously imported into Quantified Self for {{ destinationName }}. Activities already queued or delivered are not duplicated; automatic sync can stay off.
   </app-status-info>
   <div class="activity-sync-route-control__date-fields">
     <mat-form-field appearance="outline">
@@ -76,16 +76,23 @@
     <span class="activity-sync-route-control__action-content">
       @if (isBackfilling) {
       <mat-spinner diameter="18" class="qs-spinner-accent"></mat-spinner>
-      <span>Starting sync…</span>
+      <span>Scheduling activities…</span>
       } @else {
-      <span>Sync activities</span>
+      <span>Schedule activities</span>
       }
     </span>
   </button>
 
   @if (backfillSummary) {
-  <app-status-info type="success" title="Activity sync started">
-    <div>Found: {{ backfillSummary.scanned }} | Scheduled: {{ backfillSummary.queued }}</div>
+  <app-status-info type="success" title="Activity sync scheduling complete">
+    <div>Events in selected dates: {{ backfillSummary.scanned }}</div>
+    @if (backfillSummary.sourceActivityCount !== undefined) {
+    <div>Imported from {{ sourceName }}: {{ backfillSummary.sourceActivityCount }}</div>
+    }
+    <div>Newly scheduled: {{ backfillSummary.queued }}</div>
+    @if (backfillSummaryReasonText) {
+    <div class="activity-sync-route-control__summary-detail">{{ backfillSummaryReasonText }}</div>
+    }
     @if (backfillSummary.failedCount > 0) {
     <div>Could not schedule: {{ backfillSummary.failedCount }}</div>
     }

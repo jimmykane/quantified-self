@@ -102,7 +102,30 @@ describe('ActivitySyncRouteControlComponent', () => {
 
     expect(action.getAttribute('aria-busy')).toBe('true');
     expect(content.querySelector('mat-spinner')).not.toBeNull();
-    expect(content.textContent.trim()).toBe('Starting sync…');
+    expect(content.textContent.trim()).toBe('Scheduling activities…');
+  });
+
+  it('explains which selected events were newly scheduled', async () => {
+    userService.backfillActivitySyncRouteForCurrentUser.mockResolvedValueOnce({
+      scanned: 5,
+      sourceActivityCount: 3,
+      queued: 2,
+      skippedByReason: {
+        not_imported_from_source: 2,
+        already_pending: 1,
+      },
+      failedCount: 0,
+      failedEvents: [],
+    });
+
+    await component.runBackfill({ preventDefault: vi.fn() } as unknown as Event);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Events in selected dates: 5');
+    expect(text).toContain('Imported from Garmin: 3');
+    expect(text).toContain('Newly scheduled: 2');
+    expect(text).toContain('Not newly scheduled: 2 were not imported from Garmin; 1 is already queued.');
   });
 
   it('writes the specific route setting and analytics event when automatic delivery is enabled', async () => {

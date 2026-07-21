@@ -91,6 +91,11 @@
   flex: 0 0 auto;
 }
 
+.activity-sync-route-control__summary-detail {
+  margin-top: 4px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .activity-sync-route-control--locked {
   cursor: pointer;
 }
