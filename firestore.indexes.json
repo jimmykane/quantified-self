@@ -199,109 +199,6 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "wahooAPIWorkoutQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "dispatchedToCloudTask",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "retryCount",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "wahooAPIAccessTokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "disconnectManualReviewRequired",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "disconnectNextAttemptAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "wahooAPIWorkoutQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "dateCreated",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "wahooAPIWorkoutQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "processedAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "wahooAPIWorkoutQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "retryCount",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
@@ -823,25 +720,6 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "routes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "previewReady",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "importedAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "routeDeliverySyncQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -894,6 +772,25 @@
         {
           "fieldPath": "__name__",
           "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "routes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "previewReady",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "importedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
         }
       ],
       "density": "SPARSE_ALL"
@@ -1369,6 +1266,109 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "wahooAPIAccessTokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "disconnectManualReviewRequired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "disconnectNextAttemptAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "wahooAPIWorkoutQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "dispatchedToCloudTask",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "retryCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "wahooAPIWorkoutQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateCreated",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "wahooAPIWorkoutQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "processedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "wahooAPIWorkoutQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "retryCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     }
   ],
   "fieldOverrides": [
@@ -1431,25 +1431,6 @@
     },
     {
       "collectionGroup": "COROSAPIWorkoutQueue",
-      "fieldPath": "expireAt",
-      "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "wahooAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": [
@@ -1908,6 +1889,25 @@
     },
     {
       "collectionGroup": "userDeletionTombstones",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "wahooAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": [
