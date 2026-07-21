@@ -594,7 +594,7 @@ The public [Integrations hub](/integrations) links to focused [Garmin Integratio
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
-The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
+The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
 
@@ -697,15 +697,24 @@ Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
 - receive new completed Wahoo workouts automatically,
 - import Wahoo workout history for a selected date range,
 - retain the original FIT activity with the imported event for downloads, exports, and reprocessing,
-- analyze Wahoo activities alongside your other activity sources.
+- analyze Wahoo activities alongside your other activity sources,
 - send a FIT file directly to Wahoo without creating a Quantified Self activity,
 - automatically send new Garmin, COROS, or Suunto activities to Wahoo,
-- or choose a date range to send past Garmin, COROS, or Suunto activities already in Quantified Self to Wahoo.
+- or choose a date range to send past Garmin, COROS, or Suunto activities already in Quantified Self to Wahoo,
 - automatically send new Wahoo activities to Suunto, or choose a date range to send past retained Wahoo activities to Suunto.
 
 Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
 
 Direct FIT delivery only sends the selected file to Wahoo. It does not create or retain an activity in Quantified Self. Wahoo may process an upload asynchronously; Services keeps the upload status available to refresh. If you connected Wahoo before activity sending was available, reconnect it once to grant workout write access.
+
+Wahoo to Suunto activity sync requires:
+
+- you must connect both Wahoo and Suunto,
+- turn on automatic activity sync in Wahoo Services,
+- keep both service connections active,
+- and use Wahoo activities with a retained original FIT file.
+
+Automatic sync runs only for newly imported eligible Wahoo activities. **Sync past activities** in Wahoo Services sends retained Wahoo FIT activities from the date range you choose to Suunto. You can sync past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
 
 Disconnecting Wahoo revokes future access and stops new imports and deliveries. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo-to-Suunto is the only Wahoo-origin provider-to-provider activity route in this release; sleep sync, routes, plans, and other Wahoo forwarding are not supported.
 
@@ -724,6 +733,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
       { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
       { label: 'Garmin to Suunto Guide', icon: 'sync_alt', kind: 'route', target: '/guides/sync-garmin-to-suunto' },
       { label: 'COROS to Suunto Guide', icon: 'published_with_changes', kind: 'route', target: '/guides/sync-coros-to-suunto' },
+      { label: 'Wahoo to Suunto Guide', icon: 'directions_bike', kind: 'route', target: '/guides/sync-wahoo-to-suunto' },
       { label: 'Suunto Routes to Garmin Guide', icon: 'route', kind: 'route', target: '/guides/sync-suunto-routes-to-garmin-courses' },
       { label: 'Centralize Workout Data', icon: 'hub', kind: 'route', target: '/guides/centralize-garmin-suunto-coros-workout-data' },
       { label: 'Garmin Integration', icon: 'sync_alt', kind: 'route', target: '/integrations/garmin' },

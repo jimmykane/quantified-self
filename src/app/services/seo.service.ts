@@ -176,6 +176,7 @@ export class SeoService implements OnDestroy {
                     "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
                     "Automatic Garmin to Suunto activity sync",
                     "Automatic COROS to Suunto activity sync",
+                    "Automatic Wahoo to Suunto activity sync",
                     "Sync past activities to Suunto by date"
                 ],
                 "offers": {

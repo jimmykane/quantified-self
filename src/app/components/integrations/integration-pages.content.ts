@@ -489,12 +489,16 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         answer: 'No. Connecting Wahoo and importing Wahoo activity history are Pro features.',
       },
       {
+        question: 'Can I sync Wahoo activities to Suunto automatically?',
+        answer: 'Yes. Connect Wahoo and Suunto, turn on automatic activity sync in Wahoo Services, and newly imported eligible Wahoo FIT activities can be sent to Suunto. Use Sync past activities for retained Wahoo FIT activities already in Quantified Self.',
+      },
+      {
         question: 'Can I send Garmin, COROS, or Suunto activities to Wahoo?',
         answer: 'Yes. Connect Wahoo and the source service, then use the Activity Sync controls to turn on new activity delivery or choose a date range for already imported FIT-backed activities.',
       },
     ],
     closingTitle: 'Connect Wahoo and keep completed workouts in context',
-    closingCopy: 'Import Wahoo FIT activities automatically, send the FIT activities you choose to Wahoo, add the history range you need, and analyze everything in the same private archive.',
+    closingCopy: 'Import Wahoo FIT activities automatically, sync eligible retained Wahoo activities to Suunto, send the FIT activities you choose to Wahoo, add the history range you need, and analyze everything in the same private archive.',
   },
 };
 

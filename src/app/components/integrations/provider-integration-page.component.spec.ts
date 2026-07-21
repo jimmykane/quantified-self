@@ -82,6 +82,7 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('Wahoo Integration for Activity Sync and Training Analysis');
     expect(text).toContain('New workout imports');
     expect(text).toContain('Wahoo history import');
+    expect(text).toContain('Can I sync Wahoo activities to Suunto automatically?');
     expect(text).toContain('does not delete activities already imported');
     expect(text).toContain('Direct FIT delivery');
     expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');

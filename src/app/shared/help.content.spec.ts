@@ -428,7 +428,7 @@ describe('help.content', () => {
     });
   });
 
-  it('should document Garmin and COROS activity sync to Suunto in plain language', () => {
+  it('should document Garmin, COROS, and Wahoo activity sync to Suunto in plain language', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('Integrations hub');
@@ -444,6 +444,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('[Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');
     expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
@@ -494,6 +495,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Sync past activities** is available in COROS Services');
     expect(serviceConnectionsSection?.content).toContain('sync past activities while automatic activity sync is off');
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic COROS to Suunto activity sync');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo to Suunto activity sync requires');
+    expect(serviceConnectionsSection?.content).toContain('turn on automatic activity sync in Wahoo Services');
+    expect(serviceConnectionsSection?.content).toContain('use Wahoo activities with a retained original FIT file');
+    expect(serviceConnectionsSection?.content).toContain('Automatic sync runs only for newly imported eligible Wahoo activities');
+    expect(serviceConnectionsSection?.content).toContain('**Sync past activities** in Wahoo Services');
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Integrations',
       icon: 'hub',
@@ -547,6 +553,12 @@ describe('help.content', () => {
       icon: 'published_with_changes',
       kind: 'route',
       target: '/guides/sync-coros-to-suunto',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Wahoo to Suunto Guide',
+      icon: 'directions_bike',
+      kind: 'route',
+      target: '/guides/sync-wahoo-to-suunto',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Centralize Workout Data',
@@ -617,6 +629,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('send a FIT file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('Garmin, COROS, or Suunto activities');
     expect(serviceConnectionsSection?.content).toContain('automatically send new Wahoo activities to Suunto');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo-to-Suunto is the only Wahoo-origin provider-to-provider activity route');
+    expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
+      target: '/guides/sync-wahoo-to-suunto',
+    }));
     expect(serviceConnectionsSection?.content).toContain('[Wahoo Integration](/integrations/wahoo)');
     expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
       target: '/policies',

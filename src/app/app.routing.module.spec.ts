@@ -21,7 +21,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Training analysis, Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -37,6 +37,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Training analysis');
     expect(helpAbout).toContain('Garmin to Suunto activity sync');
     expect(helpAbout).toContain('COROS to Suunto activity sync');
+    expect(helpAbout).toContain('Wahoo to Suunto activity sync');
     expect(helpAbout).toContain('Send Suunto routes to Garmin');
     expect(helpAbout).toContain('Sync past activities');
   });
@@ -324,12 +325,16 @@ describe('AppRoutingModule routes', () => {
         h1: 'How to sync COROS workouts to Suunto automatically',
       },
       {
+        path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
+        h1: 'How to sync Wahoo activities to Suunto automatically',
+      },
+      {
         path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
         h1: 'How to send Suunto routes to Garmin courses',
       },
       {
         path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
-        h1: 'Centralize Garmin, Suunto, and COROS workout data',
+        h1: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data',
       },
     ];
 

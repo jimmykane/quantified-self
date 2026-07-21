@@ -134,6 +134,7 @@ describe('SeoService', () => {
         expect(mockScript.textContent).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
         expect(mockScript.textContent).toContain('Garmin to Suunto activity sync');
         expect(mockScript.textContent).toContain('COROS to Suunto activity sync');
+        expect(mockScript.textContent).toContain('Wahoo to Suunto activity sync');
         expect(mockScript.textContent).toContain('Sync past activities to Suunto by date');
     });
 

@@ -30,6 +30,7 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not enabled');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct FIT delivery')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Wahoo to Suunto sync')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.some(item => item.question === 'Can I sync Wahoo activities to Suunto automatically?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question.includes('disconnecting'))?.answer)
       .toContain('previously imported activities remain');
   });

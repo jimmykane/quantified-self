@@ -69,8 +69,8 @@ export const COMPARISON_SEARCH_INTENT_ITEMS: readonly ComparisonFeatureItem[] = 
   },
   {
     icon: 'sync_alt',
-    title: 'Garmin and COROS to Suunto sync context',
-    copy: 'Connect your services once and automatically send new Garmin or COROS activities to Suunto. You can also choose a date range to sync past activities.',
+    title: 'Garmin, COROS, and Wahoo to Suunto sync context',
+    copy: 'Connect your services once and automatically send new Garmin, COROS, or eligible Wahoo FIT activities to Suunto. You can also choose a date range to sync past activities.',
   },
   {
     icon: 'hub',
@@ -147,6 +147,7 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
       'Private Garmin training dashboard',
       'Garmin to Suunto activity sync',
       'COROS to Suunto activity sync',
+      'Wahoo to Suunto activity sync',
     ],
     mainEntity: [
       {
