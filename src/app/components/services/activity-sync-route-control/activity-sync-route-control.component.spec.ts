@@ -93,6 +93,18 @@ describe('ActivitySyncRouteControlComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Send Garmin activities to Wahoo');
   });
 
+  it('keeps the backfill loading spinner and label in one accessible button row', () => {
+    component.isBackfilling = true;
+    fixture.detectChanges();
+
+    const action = fixture.nativeElement.querySelector('.activity-sync-route-control__action');
+    const content = fixture.nativeElement.querySelector('.activity-sync-route-control__action-content');
+
+    expect(action.getAttribute('aria-busy')).toBe('true');
+    expect(content.querySelector('mat-spinner')).not.toBeNull();
+    expect(content.textContent.trim()).toBe('Starting sync…');
+  });
+
   it('writes the specific route setting and analytics event when automatic delivery is enabled', async () => {
     await component.onRouteToggle(true);
 

@@ -71,13 +71,16 @@
 
   <button mat-flat-button class="qs-mat-primary activity-sync-route-control__action"
     [disabled]="isBackfilling || isBackfillDateRangeInvalid"
+    [attr.aria-busy]="isBackfilling"
     (click)="runBackfill($event)">
-    @if (isBackfilling) {
-    <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-    Starting sync...
-    } @else {
-    Sync activities
-    }
+    <span class="activity-sync-route-control__action-content">
+      @if (isBackfilling) {
+      <mat-spinner diameter="18" class="qs-spinner-accent"></mat-spinner>
+      <span>Starting sync…</span>
+      } @else {
+      <span>Sync activities</span>
+      }
+    </span>
   </button>
 
   @if (backfillSummary) {

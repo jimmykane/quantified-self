@@ -75,15 +75,20 @@
 }
 
 .activity-sync-route-control__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 100%;
 }
 
-.activity-sync-route-control__action mat-spinner {
+.activity-sync-route-control__action-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+}
+
+.activity-sync-route-control__action-content mat-spinner {
+  display: block;
   flex: 0 0 auto;
-  margin-right: 8px;
 }
 
 .activity-sync-route-control--locked {
