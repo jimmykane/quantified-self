@@ -43,21 +43,36 @@ function toFileExtension(path?: string): string {
     return path.slice(lastDotIndex + 1).toLowerCase();
 }
 
-function toOriginalFileForQueue(sourceFile: EnqueueActivitySyncOriginalFileMetadata, extension: string): ActivitySyncOriginalFileMetadata {
-    const startDateValue = sourceFile.startDate as unknown;
-    const startDateEpochMs = startDateValue instanceof Date
-        ? startDateValue.getTime()
-        : Number.isFinite(Number(startDateValue))
-            ? Number(startDateValue)
-            : undefined;
+function toStartDateEpochMs(value: unknown): number | undefined {
+    if (value instanceof Date) {
+        return value.getTime();
+    }
 
-    return {
+    if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+        const timestampMs = ((value as { toMillis: () => unknown }).toMillis)();
+        return Number.isFinite(Number(timestampMs)) ? Number(timestampMs) : undefined;
+    }
+
+    return Number.isFinite(Number(value)) ? Number(value) : undefined;
+}
+
+function toOriginalFileForQueue(sourceFile: EnqueueActivitySyncOriginalFileMetadata, extension: string): ActivitySyncOriginalFileMetadata {
+    const startDateEpochMs = toStartDateEpochMs(sourceFile.startDate);
+
+    const queueFile: ActivitySyncOriginalFileMetadata = {
         path: `${sourceFile.path || ''}`,
-        bucket: sourceFile.bucket,
-        startDate: startDateEpochMs,
-        originalFilename: sourceFile.originalFilename,
         extension,
     };
+    if (sourceFile.bucket) {
+        queueFile.bucket = sourceFile.bucket;
+    }
+    if (startDateEpochMs !== undefined) {
+        queueFile.startDate = startDateEpochMs;
+    }
+    if (sourceFile.originalFilename) {
+        queueFile.originalFilename = sourceFile.originalFilename;
+    }
+    return queueFile;
 }
 
 function getRoutesForSource(

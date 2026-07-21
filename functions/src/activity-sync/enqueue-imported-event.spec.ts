@@ -106,6 +106,30 @@ describe('activity-sync/enqueue-imported-event', () => {
     }));
   });
 
+  it('omits undefined optional original file fields from the queue payload', async () => {
+    const result = await enqueueActivitySyncJobsForImportedEvent({
+      userID: 'user-1',
+      eventID: 'event-with-minimal-file',
+      sourceServiceName: ServiceNames.GarminAPI,
+      sourceActivityID: 'garmin-activity-1',
+      routeIdFilter: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      originalFiles: [{
+        path: 'users/user-1/events/event-with-minimal-file/original.fit',
+        startDate: { toMillis: () => 1784619857072 },
+      }],
+    });
+
+    expect(result).toEqual({ queued: 1, skippedByReason: {} });
+    const queuedOriginalFile = mockEnqueueActivitySyncQueueItem.mock.calls[0][0].originalFile;
+    expect(queuedOriginalFile).toEqual({
+      path: 'users/user-1/events/event-with-minimal-file/original.fit',
+      startDate: 1784619857072,
+      extension: 'fit',
+    });
+    expect(queuedOriginalFile).not.toHaveProperty('bucket');
+    expect(queuedOriginalFile).not.toHaveProperty('originalFilename');
+  });
+
   it('queues COROS->Suunto route when source event comes from COROS and FIT original exists', async () => {
     const result = await enqueueActivitySyncJobsForImportedEvent({
       userID: 'user-1',
