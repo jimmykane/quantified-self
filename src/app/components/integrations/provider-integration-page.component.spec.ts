@@ -86,7 +86,7 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('does not delete activities already imported');
     expect(text).toContain('Direct FIT delivery');
     expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');
-    expect(text).toContain('Sleep sync, route delivery');
+    expect(text).toContain('sleep sync, route delivery');
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {
