@@ -49,17 +49,6 @@ function isNewerRevision(
       && existingSummaryID !== incomingSummaryID);
 }
 
-function processingLeaseFields(
-  existing: Partial<WahooAPIWorkoutQueueItemInterface> | null,
-  now: number,
-): Pick<WahooAPIWorkoutQueueItemInterface, 'processingOwner' | 'processingRevision' | 'processingLeaseExpiresAt'> | Record<string, never> {
-  const processingOwner = `${existing?.processingOwner || ''}`.trim();
-  const processingRevision = `${existing?.processingRevision || ''}`.trim();
-  const processingLeaseExpiresAt = Number(existing?.processingLeaseExpiresAt || 0);
-  if (!processingOwner || !processingRevision || processingLeaseExpiresAt <= now) return {};
-  return { processingOwner, processingRevision, processingLeaseExpiresAt };
-}
-
 function clearProcessingLeaseUpdate(): Record<string, admin.firestore.FieldValue> {
   return {
     processingOwner: admin.firestore.FieldValue.delete(),
@@ -93,6 +82,9 @@ export async function upsertWahooWorkoutQueueItem(
       return { queued: false, dateCreated: Number(existing.dateCreated || now) };
     }
 
+    // A newer summary supersedes any in-flight worker for the older revision.
+    // `set` replaces the document, intentionally clearing its processing lease
+    // so the task for this latest revision can claim it immediately.
     transaction.set(ref, {
       ...input,
       dateCreated: now,
@@ -101,7 +93,6 @@ export async function upsertWahooWorkoutQueueItem(
       totalRetryCount: 0,
       dispatchedToCloudTask: null,
       expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-      ...processingLeaseFields(existing, now),
     });
     return { queued: true, dateCreated: now };
   });

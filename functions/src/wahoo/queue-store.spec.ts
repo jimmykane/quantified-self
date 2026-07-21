@@ -128,7 +128,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalledWith(mocks.ref, { FITFileURI: input.FITFileURI });
   });
 
-  it('preserves an active processing lease when a newer summary arrives', async () => {
+  it('invalidates an older worker lease when a newer summary arrives', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({
@@ -142,12 +142,13 @@ describe('upsertWahooWorkoutQueueItem', () => {
 
     await upsertWahooWorkoutQueueItem(input, 'deferred');
 
-    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+    const queuePayload = mocks.transactionSet.mock.calls[0][1];
+    expect(queuePayload).toEqual(expect.objectContaining({
       summaryUpdatedAt: input.summaryUpdatedAt,
-      processingOwner: 'older-worker',
-      processingRevision: '2026-07-18T09:00:00.000Z',
-      processingLeaseExpiresAt: expect.any(Number),
     }));
+    expect(queuePayload).not.toHaveProperty('processingOwner');
+    expect(queuePayload).not.toHaveProperty('processingRevision');
+    expect(queuePayload).not.toHaveProperty('processingLeaseExpiresAt');
   });
 
   it('does not requeue an older duplicate but refreshes its pending signed URL', async () => {

@@ -21,6 +21,8 @@ import {
   completeWahooWorkoutQueueRevision,
   failWahooWorkoutQueueRevision,
   isClaimedWahooWorkoutQueueRevisionCurrent,
+  type WahooQueueClaimResult,
+  WahooQueueRevisionBusyError,
 } from './queue-store';
 
 function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
@@ -40,7 +42,18 @@ export async function processWahooWorkoutQueueItem(
     return deferQueueItemForPendingDisconnect(queueItem);
   }
   const processingOwner = crypto.randomUUID();
-  const claimResult = await claimWahooWorkoutQueueRevision(queueItem, processingOwner);
+  let claimResult: WahooQueueClaimResult;
+  try {
+    claimResult = await claimWahooWorkoutQueueRevision(queueItem, processingOwner);
+  } catch (error) {
+    if (error instanceof WahooQueueRevisionBusyError) {
+      logger.info('Skipped duplicate Wahoo task while another worker owns the current revision', {
+        queueItemId: queueItem.id,
+      });
+      return QueueResult.Processed;
+    }
+    throw error;
+  }
   if (claimResult === 'superseded') return QueueResult.Processed;
   try {
     const tokenSnapshot = await admin.firestore()

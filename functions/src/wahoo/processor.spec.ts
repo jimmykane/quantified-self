@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   isCurrentRevision: vi.fn().mockResolvedValue(true),
   completeRevision: vi.fn().mockResolvedValue('processed'),
   failRevision: vi.fn().mockResolvedValue('retry'),
+  WahooQueueRevisionBusyError: class WahooQueueRevisionBusyError extends Error {},
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -51,6 +52,7 @@ vi.mock('./queue-store', () => ({
   isClaimedWahooWorkoutQueueRevisionCurrent: mocks.isCurrentRevision,
   completeWahooWorkoutQueueRevision: mocks.completeRevision,
   failWahooWorkoutQueueRevision: mocks.failRevision,
+  WahooQueueRevisionBusyError: mocks.WahooQueueRevisionBusyError,
 }));
 
 import { processWahooWorkoutQueueItem } from './processor';
@@ -172,5 +174,13 @@ describe('processWahooWorkoutQueueItem', () => {
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
     expect(mocks.downloadFIT).not.toHaveBeenCalled();
     expect(mocks.completeRevision).not.toHaveBeenCalled();
+  });
+
+  it('acks a duplicate task while another worker owns the current revision', async () => {
+    mocks.claimRevision.mockRejectedValue(new mocks.WahooQueueRevisionBusyError('queue-1'));
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+    expect(mocks.downloadFIT).not.toHaveBeenCalled();
+    expect(mocks.failRevision).not.toHaveBeenCalled();
   });
 });
