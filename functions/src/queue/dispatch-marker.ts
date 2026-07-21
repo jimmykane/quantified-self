@@ -17,6 +17,7 @@ export enum QueueDispatchMarkerResult {
 export enum QueueItemUserGuardedUpdateResult {
     Updated = 'updated',
     SkippedDeletedUser = 'skipped_deleted_user',
+    NotCurrent = 'not_current',
 }
 
 export interface UpdateQueueItemIfUserActiveParams {
@@ -27,6 +28,11 @@ export interface UpdateQueueItemIfUserActiveParams {
     updateData: Record<string, unknown>;
     logPrefix: string;
     actionDescription: string;
+    /**
+     * Optional optimistic-concurrency guard for a queue item that can be
+     * replaced by a newer provider revision between enqueue and marker write.
+     */
+    isCurrent?: (queueItem: Record<string, unknown>) => boolean;
 }
 
 export interface MarkQueueItemDispatchedIfUserActiveParams {
@@ -75,6 +81,19 @@ export async function updateQueueItemIfUserActive(
                 `[${params.logPrefix}] Skipping ${params.actionDescription} for queue item ${params.queueItemId} because user ${params.userID} is missing or deletion is in progress.`,
             );
             return QueueItemUserGuardedUpdateResult.SkippedDeletedUser;
+        }
+
+        if (params.isCurrent) {
+            const queueItemSnapshot = await transaction.get(params.queueItemDocument);
+            const currentQueueItem = queueItemSnapshot.exists
+                ? queueItemSnapshot.data() as Record<string, unknown>
+                : null;
+            if (!currentQueueItem || !params.isCurrent(currentQueueItem)) {
+                logger.info(
+                    `[${params.logPrefix}] Skipping ${params.actionDescription} for stale queue item ${params.queueItemId}.`,
+                );
+                return QueueItemUserGuardedUpdateResult.NotCurrent;
+            }
         }
 
         await Promise.resolve(transaction.update(params.queueItemDocument, params.updateData));

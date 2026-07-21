@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   disconnectPending: vi.fn(),
   resolveEventID: vi.fn(),
   setEvent: vi.fn(),
+  hasProAccess: vi.fn(),
   markSkipped: vi.fn().mockResolvedValue('skipped'),
   deferPending: vi.fn().mockResolvedValue('deferred'),
   retry: vi.fn().mockResolvedValue('retry'),
@@ -17,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   isCurrentRevision: vi.fn().mockResolvedValue(true),
   completeRevision: vi.fn().mockResolvedValue('processed'),
   failRevision: vi.fn().mockResolvedValue('retry'),
-  WahooQueueRevisionBusyError: class WahooQueueRevisionBusyError extends Error {},
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -41,7 +41,7 @@ vi.mock('./file-download', () => ({ downloadWahooFITFile: mocks.downloadFIT }));
 vi.mock('../queue/user-deletion-skip', () => ({ shouldSkipQueueWorkForDeletedUser: mocks.deletionSkip }));
 vi.mock('../service-disconnect-pending', () => ({ isServiceDisconnectPendingForUser: mocks.disconnectPending }));
 vi.mock('../queue/provider-event-id', () => ({ resolveProviderImportEventID: mocks.resolveEventID }));
-vi.mock('../utils', () => ({ setEvent: mocks.setEvent }));
+vi.mock('../utils', () => ({ hasProAccess: mocks.hasProAccess, setEvent: mocks.setEvent }));
 vi.mock('../queue-utils', () => ({
   markQueueItemSkipped: mocks.markSkipped,
   deferQueueItemForPendingDisconnect: mocks.deferPending,
@@ -52,7 +52,6 @@ vi.mock('./queue-store', () => ({
   isClaimedWahooWorkoutQueueRevisionCurrent: mocks.isCurrentRevision,
   completeWahooWorkoutQueueRevision: mocks.completeRevision,
   failWahooWorkoutQueueRevision: mocks.failRevision,
-  WahooQueueRevisionBusyError: mocks.WahooQueueRevisionBusyError,
 }));
 
 import { processWahooWorkoutQueueItem } from './processor';
@@ -85,6 +84,7 @@ describe('processWahooWorkoutQueueItem', () => {
     mocks.parseFIT.mockResolvedValue({ startDate: new Date('2026-07-18T09:00:00.000Z'), name: '' });
     mocks.resolveEventID.mockResolvedValue('event-1');
     mocks.setEvent.mockResolvedValue(undefined);
+    mocks.hasProAccess.mockResolvedValue(true);
     mocks.claimRevision.mockResolvedValue('claimed');
     mocks.isCurrentRevision.mockResolvedValue(true);
     mocks.completeRevision.mockResolvedValue('processed');
@@ -143,6 +143,18 @@ describe('processWahooWorkoutQueueItem', () => {
     });
   });
 
+  it('does not import a queued workout after Pro access expires', async () => {
+    mocks.hasProAccess.mockResolvedValue(false);
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+    expect(mocks.tokenGet).not.toHaveBeenCalled();
+    expect(mocks.downloadFIT).not.toHaveBeenCalled();
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'pro_access_required',
+    });
+  });
+
   it('releases the claimed revision through retry handling when the token read fails', async () => {
     mocks.tokenGet.mockRejectedValue(new Error('firestore unavailable'));
 
@@ -177,7 +189,7 @@ describe('processWahooWorkoutQueueItem', () => {
   });
 
   it('acks a duplicate task while another worker owns the current revision', async () => {
-    mocks.claimRevision.mockRejectedValue(new mocks.WahooQueueRevisionBusyError('queue-1'));
+    mocks.claimRevision.mockResolvedValue('busy');
 
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
     expect(mocks.downloadFIT).not.toHaveBeenCalled();

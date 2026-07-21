@@ -148,7 +148,7 @@ Queue items generally need:
 - `processed`, `retryCount`, `dateCreated`, dispatch marker, result/error fields, and TTL expiry;
 - lease owner, lease expiry, and revision claim fields where the provider can update the same activity.
 
-Use a transaction for an upsert that can race with another webhook or history page. Claim a revision before processing it. A worker that discovers its queue snapshot was superseded must acknowledge only its own work and leave the newer revision intact.
+Use a transaction for an upsert that can race with another webhook or history page. Claim a revision before processing it. A newer revision must invalidate an older lease, and a worker that discovers its queue snapshot was superseded must acknowledge only its own work and leave the newer revision intact. Reuse the shared workout-dispatch recovery and post-enqueue marker helpers; a provider-specific marker write must also prove its queue revision is still current so a stale webhook cannot mark a newer revision as dispatched.
 
 ### Outbound activity delivery
 

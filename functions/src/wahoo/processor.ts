@@ -12,7 +12,7 @@ import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
-import { setEvent } from '../utils';
+import { hasProAccess, setEvent } from '../utils';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { downloadWahooFITFile } from './file-download';
 import { getWahooErrorLogDetails, getWahooRetryError } from './error-details';
@@ -22,7 +22,6 @@ import {
   failWahooWorkoutQueueRevision,
   isClaimedWahooWorkoutQueueRevisionCurrent,
   type WahooQueueClaimResult,
-  WahooQueueRevisionBusyError,
 } from './queue-store';
 
 function toArrayBuffer(payload: Uint8Array): ArrayBuffer {
@@ -42,20 +41,21 @@ export async function processWahooWorkoutQueueItem(
     return deferQueueItemForPendingDisconnect(queueItem);
   }
   const processingOwner = crypto.randomUUID();
-  let claimResult: WahooQueueClaimResult;
-  try {
-    claimResult = await claimWahooWorkoutQueueRevision(queueItem, processingOwner);
-  } catch (error) {
-    if (error instanceof WahooQueueRevisionBusyError) {
-      logger.info('Skipped duplicate Wahoo task while another worker owns the current revision', {
-        queueItemId: queueItem.id,
-      });
-      return QueueResult.Processed;
-    }
-    throw error;
-  }
+  const claimResult: WahooQueueClaimResult = await claimWahooWorkoutQueueRevision(queueItem, processingOwner);
   if (claimResult === 'superseded') return QueueResult.Processed;
+  if (claimResult === 'busy') {
+    logger.info('Skipped duplicate Wahoo task while another worker owns the current revision', {
+      queueItemId: queueItem.id,
+    });
+    return QueueResult.Processed;
+  }
   try {
+    if (!(await hasProAccess(userID))) {
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
+        resultStatus: 'skipped',
+        skippedReason: 'pro_access_required',
+      });
+    }
     const tokenSnapshot = await admin.firestore()
       .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
       .doc(userID)

@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => {
       update: transactionUpdate,
       delete: transactionDelete,
     })),
-    enqueueWorkoutTask: vi.fn().mockResolvedValue(true),
+    enqueueWorkoutTaskWithDispatchRecovery: vi.fn().mockResolvedValue(true),
+    markWorkoutTaskDispatchedWithRetry: vi.fn(async ({ markDispatched }: { markDispatched: () => Promise<boolean> }) => markDispatched()),
     guardedUpdate: vi.fn().mockResolvedValue('updated'),
     deletionGuard: vi.fn().mockResolvedValue({ userExists: true, deletionInProgress: false, shouldSkip: false }),
   };
@@ -38,7 +39,10 @@ vi.mock('firebase-admin', () => ({
   }),
 }));
 
-vi.mock('../shared/cloud-tasks', () => ({ enqueueWorkoutTask: mocks.enqueueWorkoutTask }));
+vi.mock('../shared/cloud-tasks', () => ({
+  enqueueWorkoutTaskWithDispatchRecovery: mocks.enqueueWorkoutTaskWithDispatchRecovery,
+  markWorkoutTaskDispatchedWithRetry: mocks.markWorkoutTaskDispatchedWithRetry,
+}));
 vi.mock('../shared/ttl-config', () => ({
   getExpireAtTimestamp: () => new Date('2026-08-01T00:00:00.000Z'),
   TTL_CONFIG: { QUEUE_ITEM_IN_DAYS: 7 },
@@ -57,7 +61,6 @@ import {
   completeWahooWorkoutQueueRevision,
   failWahooWorkoutQueueRevision,
   upsertWahooWorkoutQueueItem,
-  WahooQueueRevisionBusyError,
 } from './queue-store';
 
 const input = {
@@ -75,7 +78,8 @@ describe('upsertWahooWorkoutQueueItem', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.deletionGuard.mockResolvedValue({ userExists: true, deletionInProgress: false, shouldSkip: false });
-    mocks.enqueueWorkoutTask.mockResolvedValue(true);
+    mocks.enqueueWorkoutTaskWithDispatchRecovery.mockResolvedValue(true);
+    mocks.markWorkoutTaskDispatchedWithRetry.mockImplementation(async ({ markDispatched }) => markDispatched());
     mocks.guardedUpdate.mockResolvedValue('updated');
   });
 
@@ -89,7 +93,23 @@ describe('upsertWahooWorkoutQueueItem', () => {
       retryCount: 0,
       expireAt: new Date('2026-08-01T00:00:00.000Z'),
     }));
-    expect(mocks.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.WahooAPI, 'queue-1', expect.any(Number));
+    expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).toHaveBeenCalledWith(expect.objectContaining({
+      serviceName: ServiceNames.WahooAPI,
+      queueItem: expect.objectContaining({
+        id: 'queue-1',
+        dateCreated: expect.any(Number),
+      }),
+      advanceDispatchRecoveryGeneration: expect.any(Function),
+    }));
+    const markerParams = mocks.guardedUpdate.mock.calls[0][0];
+    expect(markerParams.isCurrent({ ...input, processed: false, dispatchedToCloudTask: null })).toBe(true);
+    expect(markerParams.isCurrent({
+      ...input,
+      workoutSummaryID: 'summary-2',
+      summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+      processed: false,
+      dispatchedToCloudTask: null,
+    })).toBe(false);
   });
 
   it('resets a processed item when Wahoo sends a newer summary revision', async () => {
@@ -105,7 +125,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
       processed: false,
       dispatchedToCloudTask: null,
     }));
-    expect(mocks.enqueueWorkoutTask).not.toHaveBeenCalled();
+    expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
   });
 
   it('treats a different summary ID at the same timestamp as a newer revision', async () => {
@@ -164,7 +184,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
 
     await expect(upsertWahooWorkoutQueueItem(input, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
     expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, { FITFileURI: input.FITFileURI });
-    expect(mocks.enqueueWorkoutTask).not.toHaveBeenCalled();
+    expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
   });
 
   it('does not create queue state once account deletion has started', async () => {
@@ -172,10 +192,10 @@ describe('upsertWahooWorkoutQueueItem', () => {
 
     await expect(upsertWahooWorkoutQueueItem(input, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
     expect(mocks.transactionSet).not.toHaveBeenCalled();
-    expect(mocks.enqueueWorkoutTask).not.toHaveBeenCalled();
+    expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
   });
 
-  it('rejects a concurrent worker while the current revision lease is active', async () => {
+  it('returns a normal busy outcome while the current revision lease is active', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({
@@ -186,8 +206,42 @@ describe('upsertWahooWorkoutQueueItem', () => {
     });
 
     await expect(claimWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-2'))
-      .rejects.toBeInstanceOf(WahooQueueRevisionBusyError);
+      .resolves.toBe('busy');
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('lets the latest revision claim immediately after replacing an older worker lease', async () => {
+    const latestRevision = {
+      ...input,
+      workoutSummaryID: 'summary-2',
+      summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+    };
+    mocks.transactionGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          ...input,
+          processed: false,
+          processingOwner: 'older-worker',
+          processingLeaseExpiresAt: Date.now() + 60_000,
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ ...latestRevision, processed: false, dispatchedToCloudTask: null }),
+      });
+
+    await upsertWahooWorkoutQueueItem(latestRevision, 'deferred');
+    await expect(claimWahooWorkoutQueueRevision({ ...latestRevision, ref: mocks.ref } as any, 'latest-worker'))
+      .resolves.toBe('claimed');
+
+    const latestPayload = mocks.transactionSet.mock.calls[0][1];
+    expect(latestPayload).not.toHaveProperty('processingOwner');
+    expect(latestPayload).not.toHaveProperty('processingLeaseExpiresAt');
+    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+      processingOwner: 'latest-worker',
+      processingRevision: latestRevision.summaryUpdatedAt,
+    }));
   });
 
   it('releases an older worker lease without completing a newer revision', async () => {

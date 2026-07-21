@@ -36,6 +36,41 @@ interface EnqueueWorkoutTaskOptions {
     recoveryTaskKey?: number | string;
 }
 
+export interface WorkoutTaskDispatchItem {
+    id: string;
+    dateCreated: number;
+    retryCount?: number;
+    totalRetryCount?: number;
+    dispatchRecoveryGeneration?: number;
+}
+
+export interface EnqueueWorkoutTaskWithDispatchRecoveryParams<T extends WorkoutTaskDispatchItem> {
+    serviceName: ServiceNames;
+    queueItem: T;
+    advanceDispatchRecoveryGeneration: (queueItem: T) => Promise<WorkoutTaskDispatchItem | null>;
+    scheduleDelaySeconds?: number;
+    /**
+     * Allows legacy dispatchers to preserve their existing enqueue seam while
+     * sharing the recovery algorithm. New callers should use the default.
+     */
+    enqueueTask?: (
+        serviceName: ServiceNames,
+        queueItemId: string,
+        dateCreated: number,
+        scheduleDelaySeconds?: number,
+        options?: EnqueueWorkoutTaskOptions,
+    ) => Promise<boolean>;
+}
+
+export interface MarkWorkoutTaskDispatchedWithRetryParams {
+    serviceName: ServiceNames;
+    queueItemId: string;
+    markDispatched: () => Promise<boolean>;
+}
+
+const POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS = 3;
+const POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS = 25;
+
 function getCloudTasksClient(): v2beta3.CloudTasksClient {
     if (!_cloudTasksClient) {
         _cloudTasksClient = new v2beta3.CloudTasksClient();
@@ -287,6 +322,120 @@ export async function enqueueWorkoutTask(
 
     logger.warn(`[Dispatcher] Recovery task name for ${serviceName}:${queueItemId} is reserved but no live recovery task was found; leaving dispatch marker unchanged.`);
     return false;
+}
+
+function workoutTaskRetryGeneration(queueItem: Pick<WorkoutTaskDispatchItem, 'totalRetryCount' | 'retryCount'>): number {
+    if (typeof queueItem.totalRetryCount === 'number' && Number.isFinite(queueItem.totalRetryCount)) {
+        return Math.max(0, Math.floor(queueItem.totalRetryCount));
+    }
+    if (typeof queueItem.retryCount === 'number' && Number.isFinite(queueItem.retryCount)) {
+        return Math.max(0, Math.floor(queueItem.retryCount));
+    }
+    return 0;
+}
+
+function workoutTaskDispatchRecoveryGeneration(queueItem: Pick<WorkoutTaskDispatchItem, 'dispatchRecoveryGeneration'>): number {
+    return typeof queueItem.dispatchRecoveryGeneration === 'number' && Number.isFinite(queueItem.dispatchRecoveryGeneration)
+        ? Math.max(0, Math.floor(queueItem.dispatchRecoveryGeneration))
+        : 0;
+}
+
+function workoutTaskRecoveryKey(queueItem: WorkoutTaskDispatchItem): number | string {
+    const retryGeneration = workoutTaskRetryGeneration(queueItem);
+    const dispatchGeneration = workoutTaskDispatchRecoveryGeneration(queueItem);
+    return dispatchGeneration > 0 ? `${retryGeneration}-${dispatchGeneration}` : retryGeneration;
+}
+
+/**
+ * Dispatch a durable workout queue item while recovering from Cloud Tasks'
+ * temporary task-name reservation. The queue-specific callback advances a
+ * persistent recovery generation only when the item is still current.
+ */
+export async function enqueueWorkoutTaskWithDispatchRecovery<T extends WorkoutTaskDispatchItem>(
+    params: EnqueueWorkoutTaskWithDispatchRecoveryParams<T>,
+): Promise<boolean> {
+    const enqueueTask = params.enqueueTask || enqueueWorkoutTask;
+    const taskCreated = await enqueueTask(
+        params.serviceName,
+        params.queueItem.id,
+        params.queueItem.dateCreated,
+        params.scheduleDelaySeconds,
+        { recoveryTaskKey: workoutTaskRecoveryKey(params.queueItem) },
+    );
+    if (taskCreated) return true;
+
+    const nextQueueItem = await params.advanceDispatchRecoveryGeneration(params.queueItem);
+    if (!nextQueueItem) {
+        logger.info(`[Dispatcher] Could not advance dispatch recovery generation for ${params.serviceName}:${params.queueItem.id}; leaving dispatch marker unchanged.`);
+        return false;
+    }
+
+    logger.warn(`[Dispatcher] Advanced dispatch recovery generation for ${params.serviceName}:${params.queueItem.id} to ${nextQueueItem.dispatchRecoveryGeneration}; retrying deterministic Cloud Task enqueue.`);
+    return enqueueTask(
+        params.serviceName,
+        nextQueueItem.id,
+        nextQueueItem.dateCreated,
+        params.scheduleDelaySeconds,
+        { recoveryTaskKey: workoutTaskRecoveryKey(nextQueueItem) },
+    );
+}
+
+function getRetryableDispatchMarkerCause(error: unknown): unknown {
+    if (error instanceof Error && error.name === 'UserDeletionGuardReadError' && 'originalError' in error) {
+        return (error as Error & { originalError: unknown }).originalError;
+    }
+    return error;
+}
+
+function isRetryableFirestoreDispatchMarkerError(error: unknown): boolean {
+    const cause = getRetryableDispatchMarkerCause(error);
+    const code = (cause as { code?: unknown } | null | undefined)?.code;
+    const details = `${(cause as { details?: unknown } | null | undefined)?.details || ''}`.toLowerCase();
+    const message = `${(cause as { message?: unknown } | null | undefined)?.message || ''}`.toLowerCase();
+    const normalizedCode = typeof code === 'string' ? code.toLowerCase() : code;
+
+    return normalizedCode === 10
+        || normalizedCode === 14
+        || normalizedCode === 4
+        || normalizedCode === 'aborted'
+        || normalizedCode === 'unavailable'
+        || normalizedCode === 'deadline-exceeded'
+        || details.includes('too much contention')
+        || message.includes('too much contention');
+}
+
+function waitForDispatchMarkerRetry(attempt: number): Promise<void> {
+    const delayMs = (POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS * attempt)
+        + Math.floor(Math.random() * POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS);
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+/**
+ * A task can be accepted before its Firestore dispatch marker is persisted.
+ * Retry only transient marker writes; the caller decides whether its queue
+ * item is still current before each write.
+ */
+export async function markWorkoutTaskDispatchedWithRetry(
+    params: MarkWorkoutTaskDispatchedWithRetryParams,
+): Promise<boolean> {
+    for (let attempt = 1; attempt <= POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS; attempt++) {
+        try {
+            return await params.markDispatched();
+        } catch (error) {
+            if (!isRetryableFirestoreDispatchMarkerError(error)) throw error;
+
+            if (attempt < POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS) {
+                logger.warn(`[Dispatcher] Retryable dispatch marker write failure after Cloud Task enqueue for ${params.serviceName}:${params.queueItemId}; retrying marker write (${attempt}/${POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS}).`, error);
+                await waitForDispatchMarkerRetry(attempt);
+                continue;
+            }
+
+            logger.warn(`[Dispatcher] Retryable dispatch marker write failure after Cloud Task enqueue for ${params.serviceName}:${params.queueItemId}; leaving marker untouched because the task was already accepted.`, error);
+            return true;
+        }
+    }
+
+    return true;
 }
 
 /**

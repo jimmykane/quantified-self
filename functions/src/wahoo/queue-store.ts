@@ -1,6 +1,9 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { enqueueWorkoutTask } from '../shared/cloud-tasks';
+import {
+  enqueueWorkoutTaskWithDispatchRecovery,
+  markWorkoutTaskDispatchedWithRetry,
+} from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { MAX_RETRY_COUNT } from '../shared/queue-config';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
@@ -10,16 +13,9 @@ import { QueueResult } from '../queue-utils';
 import { SERVICE_NAME, WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from './constants';
 
 export type WahooQueueDispatchMode = 'immediate' | 'deferred';
-export type WahooQueueClaimResult = 'claimed' | 'superseded';
+export type WahooQueueClaimResult = 'claimed' | 'superseded' | 'busy';
 
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
-
-export class WahooQueueRevisionBusyError extends Error {
-  constructor(queueItemID: string) {
-    super(`Wahoo queue item ${queueItemID} is already being processed.`);
-    this.name = 'WahooQueueRevisionBusyError';
-  }
-}
 
 function revisionTime(value: unknown): number {
   const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -55,6 +51,53 @@ function clearProcessingLeaseUpdate(): Record<string, admin.firestore.FieldValue
     processingRevision: admin.firestore.FieldValue.delete(),
     processingLeaseExpiresAt: admin.firestore.FieldValue.delete(),
   };
+}
+
+function wahooDispatchRecoveryGeneration(
+  queueItem: Pick<WahooAPIWorkoutQueueItemInterface, 'dispatchRecoveryGeneration'>,
+): number {
+  return typeof queueItem.dispatchRecoveryGeneration === 'number' && Number.isFinite(queueItem.dispatchRecoveryGeneration)
+    ? Math.max(0, Math.floor(queueItem.dispatchRecoveryGeneration))
+    : 0;
+}
+
+async function advanceWahooWorkoutQueueDispatchRecoveryGeneration(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItem: WahooAPIWorkoutQueueItemInterface,
+): Promise<WahooAPIWorkoutQueueItemInterface | null> {
+  const db = admin.firestore();
+  const attemptedGeneration = wahooDispatchRecoveryGeneration(queueItem);
+  return db.runTransaction(async (transaction) => {
+    let deletionGuard;
+    try {
+      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, queueItem.firebaseUserID!);
+    } catch (error) {
+      throw new UserDeletionGuardReadError(queueItem.firebaseUserID!, 'wahoo_queue_dispatch_recovery_generation', error);
+    }
+    if (deletionGuard.shouldSkip) return null;
+
+    const snapshot = await transaction.get(queueItemDocument);
+    if (!snapshot.exists) return null;
+    const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
+    if (!hasSameRevision(current, queueItem)
+      || (current as { processed?: boolean }).processed === true
+      || current.dispatchedToCloudTask !== null && current.dispatchedToCloudTask !== undefined) {
+      return null;
+    }
+
+    const currentGeneration = wahooDispatchRecoveryGeneration(current as WahooAPIWorkoutQueueItemInterface);
+    if (currentGeneration > attemptedGeneration) {
+      return Object.assign({}, queueItem, current, { id: queueItem.id, ref: queueItemDocument }) as WahooAPIWorkoutQueueItemInterface;
+    }
+
+    const nextGeneration = Math.max(currentGeneration, attemptedGeneration) + 1;
+    transaction.update(queueItemDocument, { dispatchRecoveryGeneration: nextGeneration });
+    return Object.assign({}, queueItem, current, {
+      id: queueItem.id,
+      ref: queueItemDocument,
+      dispatchRecoveryGeneration: nextGeneration,
+    }) as WahooAPIWorkoutQueueItemInterface;
+  });
 }
 
 export async function upsertWahooWorkoutQueueItem(
@@ -99,21 +142,41 @@ export async function upsertWahooWorkoutQueueItem(
 
   if (!result.queued || dispatchMode === 'deferred') return { ref, queued: result.queued };
 
-  const taskCreated = await enqueueWorkoutTask(SERVICE_NAME, input.id, result.dateCreated);
+  const queueItemForDispatch = {
+    ...input,
+    ref,
+    dateCreated: result.dateCreated,
+    processed: false,
+    retryCount: 0,
+    totalRetryCount: 0,
+    dispatchedToCloudTask: null,
+  } as WahooAPIWorkoutQueueItemInterface;
+  const taskCreated = await enqueueWorkoutTaskWithDispatchRecovery({
+    serviceName: SERVICE_NAME,
+    queueItem: queueItemForDispatch,
+    advanceDispatchRecoveryGeneration: (queueItem) => advanceWahooWorkoutQueueDispatchRecoveryGeneration(ref, queueItem),
+  });
   if (!taskCreated) {
     logger.warn('Wahoo queue item remains available for scheduled dispatch', { queueItemId: input.id });
     return { ref, queued: true };
   }
-  const markerResult = await updateQueueItemIfUserActive({
-    queueItemDocument: ref,
+  const markerWritten = await markWorkoutTaskDispatchedWithRetry({
+    serviceName: SERVICE_NAME,
     queueItemId: input.id,
-    userID: input.firebaseUserID!,
-    phase: 'wahoo_queue_dispatch_marker',
-    updateData: { dispatchedToCloudTask: Date.now() },
-    logPrefix: 'WahooQueue',
-    actionDescription: 'Cloud Task dispatch marker',
+    markDispatched: async () => (await updateQueueItemIfUserActive({
+      queueItemDocument: ref,
+      queueItemId: input.id,
+      userID: input.firebaseUserID!,
+      phase: 'wahoo_queue_dispatch_marker',
+      updateData: { dispatchedToCloudTask: Date.now() },
+      logPrefix: 'WahooQueue',
+      actionDescription: 'Cloud Task dispatch marker',
+      isCurrent: (current) => current.processed !== true
+        && current.dispatchedToCloudTask === null
+        && hasSameRevision(current as Partial<WahooAPIWorkoutQueueItemInterface>, queueItemForDispatch),
+    })) === QueueItemUserGuardedUpdateResult.Updated,
   });
-  return { ref, queued: markerResult === QueueItemUserGuardedUpdateResult.Updated };
+  return { ref, queued: markerWritten };
 }
 
 export async function claimWahooWorkoutQueueRevision(
@@ -137,7 +200,7 @@ export async function claimWahooWorkoutQueueRevision(
     const activeOwner = `${current.processingOwner || ''}`.trim();
     const leaseExpiresAt = Number(current.processingLeaseExpiresAt || 0);
     if (activeOwner && activeOwner !== processingOwner && leaseExpiresAt > now) {
-      throw new WahooQueueRevisionBusyError(queueItem.id);
+      return 'busy';
     }
 
     transaction.update(queueItem.ref!, {
