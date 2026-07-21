@@ -19,7 +19,10 @@ import {
   resolveDashboardRampRateContextFromPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
-import { DASHBOARD_FORM_CHART_TYPE } from '../../helpers/dashboard-special-chart-types';
+import {
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+} from '../../helpers/dashboard-special-chart-types';
 import {
   buildTrainingCapacityViewModels,
   type TrainingCapacityDisciplineViewModel,
@@ -267,6 +270,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
   public readonly loadTrajectoryInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FORM_CHART_TYPE);
+  public readonly freshnessForecastInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE);
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
   public capacityDisciplines: TrainingCapacityDisciplineViewModel[] = [];
   public trainingBuildCards: TrainingBuildCardViewModel[] = [];

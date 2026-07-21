@@ -679,7 +679,9 @@ describe('SummariesComponent', () => {
 
     const nativeElement = fixture.nativeElement as HTMLElement;
     expect(nativeElement.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('/100');
-    expect(nativeElement.querySelector('.dashboard-current-state-primary small')?.textContent).toContain('High confidence · 4/4 signals');
+    expect(nativeElement.querySelector('.dashboard-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
+    expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
+      .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
     expect(nativeElement.querySelector('dd[data-tone="positive"]')?.textContent).toContain('+10%');
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');

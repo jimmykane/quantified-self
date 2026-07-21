@@ -123,6 +123,7 @@
             <div>
               <span class="training-metric-label">Current context</span>
               <h3 id="training-readiness-title">Readiness today</h3>
+              <p class="training-readiness-method">Load + recorded recovery · Freshness stays TSS-only.</p>
             </div>
             @if (trainingReadiness.state === 'ready') {
               <div class="training-readiness-summary" aria-label="Current readiness signal summary">
@@ -449,7 +450,7 @@
         }
         @if (derivedState.freshnessForecastStatus === 'ready' || derivedState.freshnessForecast?.points?.length) {
           <article class="training-chart-panel qs-glass-card-panel">
-            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()"></app-freshness-forecast-chart>
+            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="freshnessForecastInfoTooltip"></app-freshness-forecast-chart>
           </article>
         } @else {
           <article class="training-chart-state training-chart-state-forecast qs-glass-card-panel" role="status">

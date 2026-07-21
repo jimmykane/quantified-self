@@ -79,11 +79,13 @@ describe('TrainingWorkspaceComponent', () => {
     expect(feedbackAction?.getAttribute('target')).toBe('_blank');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     expect(element.textContent).toContain('Compared with your usual 28 days');
+    expect(element.querySelector('.training-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(element.textContent).toContain('What drove this');
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
     expect(element.textContent).toContain('Settings vs recent evidence');
     expect(element.querySelector('app-tile-chart')).toBeNull();
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running, cycling or swimming sessions in the last 28 days.');

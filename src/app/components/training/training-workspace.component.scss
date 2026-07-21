@@ -52,6 +52,7 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-readiness-panel { min-width: 0; padding: 20px; }
 .training-readiness-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .training-readiness-header h3 { margin-top: 4px; }
+.training-readiness-method { margin: 5px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); line-height: 1.35; }
 .training-readiness-summary { flex: 0 0 auto; text-align: right; }
 .training-readiness-summary strong, .training-readiness-summary span { display: block; }
 .training-readiness-summary strong { font-size: 25px; line-height: 1; }

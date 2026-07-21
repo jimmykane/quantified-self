@@ -51,6 +51,7 @@ describe('dashboard-kpi-explanation.helper', () => {
     expect(explanation.rows).toContainEqual({ label: 'Fitness (CTL)', value: '97' });
     expect(explanation.rows).toContainEqual({ label: 'Fatigue (ATL)', value: '102' });
     expect(explanation.rows).toContainEqual({ label: 'Model basis', value: 'UTC daily TSS; zero-load decay through today' });
+    expect(explanation.rows).toContainEqual({ label: 'Recovery context', value: 'Not included; see Today Readiness' });
   });
 
   it('shows the Form calculation and zero-load convention in KPI details', () => {

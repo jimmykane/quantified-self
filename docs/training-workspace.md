@@ -560,6 +560,12 @@ mixed, or strained and directs attention to the drivers rather than choosing a w
 failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
 failure remains visible only while it is still eligible; load-only readiness remains available afterward.
 
+Readiness is the recovery-aware companion to the load model, not a replacement for it. It adds recorded sleep, HRV, and
+overnight heart-rate evidence to the Form/ramp driver when those signals are available. Form/Freshness, CTL, ATL, Ramp,
+Load Status, and the zero-load forecast remain deliberately TSS-only; recovery evidence never changes their values or
+the Training state. The UI calls this distinction out in the Readiness header and in the Form/Freshness information
+controls so athletes do not interpret a sleep change as a recalculation of training load.
+
 The same card plots a backend-derived 14-day series. `training_readiness` declares only `formDocs` and
 `trainingReadinessSleepDocs`; it never declares activities or settings. On a readiness-only refresh, the worker accepts a
 schema-compatible Form snapshot seed, avoids a full event scan, and queries a bounded sleep-end envelope covering every
@@ -752,7 +758,10 @@ rates, so TSB and Ramp Rate can change without a new workout. CTL, ATL, Form Now
 this one current-day Form series. Ramp Rate is `CTL(today) - CTL(today - 7 UTC days)`. The last real workout’s TSS is
 shown separately and is never replaced by an assumed zero.
 
-The forecast is a scenario with zero future load, not a prediction of what the athlete will actually do.
+The forecast is a scenario with zero future load, not a prediction of what the athlete will actually do. All of these
+load metrics are intentionally independent of sleep, HRV, overnight heart rate, and imported recovery timers. Those
+signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
+state.
 
 ### 5. Training Mix
 
