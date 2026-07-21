@@ -210,12 +210,24 @@
       [hidden]="activeProviderTool !== 'auto-sync'"
       [class.locked-panel]="!hasProAccess"
         (click)="!hasProAccess && triggerUpsell()">
-        @if (!showOnlyActiveProviderTool) {
-          <div class="tool-subsection-title">
-            <mat-icon>published_with_changes</mat-icon>
-            <span>Send COROS activities to Suunto</span>
-          </div>
-        }
+        <div class="tool-subsection-title">
+          <span class="activity-sync-provider-icons" aria-hidden="true">
+            <app-service-source-icon
+              [sourceServiceName]="serviceName"
+              [iconWidth]="32"
+              [iconHeight]="18"
+              [showTooltip]="false">
+            </app-service-source-icon>
+            <mat-icon>arrow_forward</mat-icon>
+            <app-service-source-icon
+              [sourceServiceName]="serviceNames.SuuntoApp"
+              [iconWidth]="32"
+              [iconHeight]="18"
+              [showTooltip]="false">
+            </app-service-source-icon>
+          </span>
+          <span>Send COROS activities to Suunto</span>
+        </div>
         @if (!hasProAccess) {
         <div class="pro-required-inline">
           <mat-icon>lock</mat-icon>

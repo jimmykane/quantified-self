@@ -153,7 +153,8 @@ describe('ServicesCorosComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-panel')).toBeNull();
         expect(toolPanels).toHaveLength(1);
         expect(toolPanels[0].hidden).toBe(false);
-        expect(toolPanels[0].querySelector('.tool-subsection-title')).toBeNull();
+        expect(toolPanels[0].querySelector('.tool-subsection-title')?.textContent)
+            .toContain('Send COROS activities to Suunto');
         expect(toolPanels[0].textContent).toContain('Sending COROS activities to Suunto is a Pro feature.');
     });
 

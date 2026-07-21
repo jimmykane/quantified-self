@@ -71,12 +71,15 @@ describe('ActivitySyncRouteControlComponent', () => {
     expect(component.canUseRoute).toBe(true);
   });
 
-  it('shows source and destination provider icons for Wahoo activity sync', () => {
+  it('shows a clear route header and both date fields for Wahoo activity sync', () => {
     fixture.detectChanges();
 
-    const providerIcons = fixture.nativeElement.querySelectorAll('.activity-sync-provider-icons app-service-source-icon');
+    const providerIcons = fixture.nativeElement.querySelectorAll('.activity-sync-route-control__provider-icons app-service-source-icon');
+    const dateFields = fixture.nativeElement.querySelectorAll('.activity-sync-route-control__date-fields mat-form-field');
 
     expect(providerIcons).toHaveLength(2);
+    expect(dateFields).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('Send Garmin activities to Wahoo');
   });
 
   it('writes the specific route setting and analytics event when automatic delivery is enabled', async () => {

@@ -1,18 +1,18 @@
-<section class="tool-subsection" [class.locked-panel]="!hasProAccess">
-  <div class="tool-subsection-header">
-    <div class="tool-subsection-title">
-      <span class="activity-sync-provider-icons" aria-hidden="true">
+<section class="activity-sync-route-control" [class.activity-sync-route-control--locked]="!hasProAccess">
+  <div class="activity-sync-route-control__header">
+    <div class="activity-sync-route-control__title">
+      <span class="activity-sync-route-control__provider-icons" aria-hidden="true">
         <app-service-source-icon
           [sourceServiceName]="sourceServiceName"
-          [iconWidth]="32"
-          [iconHeight]="18"
+          [iconWidth]="36"
+          [iconHeight]="20"
           [showTooltip]="false">
         </app-service-source-icon>
         <mat-icon>arrow_forward</mat-icon>
         <app-service-source-icon
           [sourceServiceName]="destinationServiceName"
-          [iconWidth]="32"
-          [iconHeight]="18"
+          [iconWidth]="36"
+          [iconHeight]="20"
           [showTooltip]="false">
         </app-service-source-icon>
       </span>
@@ -38,21 +38,21 @@
     Connect both services before syncing activities.
   </app-status-info>
   } @else if (routeId) {
-  <mat-slide-toggle [checked]="routeEnabled" [disabled]="isSaving || isBackfilling"
+  <mat-slide-toggle class="activity-sync-route-control__toggle" [checked]="routeEnabled" [disabled]="isSaving || isBackfilling"
     (change)="onRouteToggle($event.checked)">
     Automatically send new {{ sourceName }} activities to {{ destinationName }}
   </mat-slide-toggle>
 
   @if (destinationServiceName === 'Wahoo API') {
-  <p class="description-text">If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.</p>
+  <p class="activity-sync-route-control__description">If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.</p>
   }
 
-  <mat-divider class="tool-divider"></mat-divider>
-  <div class="tool-section-title">Sync past activities</div>
+  <mat-divider></mat-divider>
+  <div class="activity-sync-route-control__section-title">Sync past activities</div>
   <app-status-info type="info" title="Choose which activities to send">
     Choose a date range to send {{ sourceName }} activities already in Quantified Self to {{ destinationName }}. This also works when automatic activity sync is off.
   </app-status-info>
-  <div class="date-fields">
+  <div class="activity-sync-route-control__date-fields">
     <mat-form-field appearance="outline">
       <mat-label>From</mat-label>
       <input matInput [matDatepicker]="activitySyncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
@@ -69,7 +69,7 @@
     </mat-form-field>
   </div>
 
-  <button mat-flat-button class="qs-mat-primary full-width-action"
+  <button mat-flat-button class="qs-mat-primary activity-sync-route-control__action"
     [disabled]="isBackfilling || isBackfillDateRangeInvalid"
     (click)="runBackfill($event)">
     @if (isBackfilling) {

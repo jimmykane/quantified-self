@@ -15,6 +15,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 @Component({
   selector: 'app-activity-sync-route-control',
   templateUrl: './activity-sync-route-control.component.html',
+  styleUrls: ['./activity-sync-route-control.component.css'],
   standalone: false,
 })
 export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
