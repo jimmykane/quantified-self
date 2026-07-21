@@ -31,8 +31,16 @@
         <div class="connection-account-info">
           <mat-icon class="connected-account-icon">account_circle</mat-icon>
           <div class="connected-account-copy">
-            <div class="connected-account-title">Wahoo account connected</div>
+            @if (wahooAccountId()) {
+            <div class="connected-account-title">Wahoo account ID: {{ wahooAccountId() }}</div>
             <div class="connected-account-line">OAuth credentials are stored securely on the server.</div>
+            } @else if (isLoadingWahooAccountId()) {
+            <div class="connected-account-title">Loading Wahoo account ID…</div>
+            <div class="connected-account-line">OAuth credentials stay securely on the server.</div>
+            } @else {
+            <div class="connected-account-title">Wahoo account ID unavailable</div>
+            <div class="connected-account-line">Reconnect Wahoo if this account ID remains unavailable.</div>
+            }
           </div>
         </div>
         <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"

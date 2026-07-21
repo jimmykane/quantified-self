@@ -369,7 +369,9 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
         }
       }
       await clearServiceDisconnectPending(userID, serviceName);
-      const didMarkConnected = await markServiceConnected(userID, serviceName);
+      const didMarkConnected = serviceName === ServiceNames.WahooAPI && uniqueId
+        ? await markServiceConnected(userID, serviceName, uniqueId)
+        : await markServiceConnected(userID, serviceName);
       if (!didMarkConnected) {
         logger.warn(`Skipping duplicate cleanup for ${serviceName} OAuth callback for user ${userID} because the user is missing or deletion is in progress after token persistence.`);
         throw new OAuthServiceConnectionSkippedForDeletedUserError(userID, serviceName, `oauth_mark_connected:${serviceName}`);

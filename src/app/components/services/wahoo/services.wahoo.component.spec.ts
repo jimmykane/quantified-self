@@ -9,6 +9,7 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppFileService } from '../../../services/app.file.service';
+import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -18,16 +19,19 @@ describe('ServicesWahooComponent', () => {
   let fixture: ComponentFixture<ServicesWahooComponent>;
   let component: ServicesWahooComponent;
   let userService: { requestAndSetCurrentUserWahooAPIAccessToken: ReturnType<typeof vi.fn> };
+  let functionsService: { call: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     userService = {
       requestAndSetCurrentUserWahooAPIAccessToken: vi.fn().mockResolvedValue(undefined),
     };
+    functionsService = { call: vi.fn().mockResolvedValue({ data: { providerUserId: null } }) };
     await TestBed.configureTestingModule({
       declarations: [ServicesWahooComponent],
       providers: [
         { provide: HttpClient, useValue: {} },
         { provide: AppFileService, useValue: {} },
+        { provide: AppFunctionsService, useValue: functionsService },
         { provide: AppEventService, useValue: {} },
         { provide: AppAuthService, useValue: {} },
         { provide: AppUserService, useValue: userService },
@@ -58,6 +62,28 @@ describe('ServicesWahooComponent', () => {
     expect(component.isDisconnectPending).toBe(true);
     expect(component.isConnectedToService()).toBe(false);
     expect(component.connectionDescription).toContain('Disconnect is pending');
+  });
+
+  it('shows the safe Wahoo account ID instead of a generic connected label', () => {
+    component.serviceMeta = { connectionState: 'connected', providerUserId: '60462' } as any;
+    (component as any).onServiceDataChanged();
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Wahoo account ID: 60462');
+    expect(fixture.nativeElement.textContent).not.toContain('Wahoo account connected');
+    expect(functionsService.call).not.toHaveBeenCalled();
+  });
+
+  it('hydrates an existing connection account ID from the server-only token record once', async () => {
+    functionsService.call.mockResolvedValue({ data: { providerUserId: '60462' } });
+    component.serviceMeta = { connectionState: 'connected' } as any;
+
+    (component as any).onServiceDataChanged();
+    await vi.waitFor(() => expect(component.wahooAccountId()).toBe('60462'));
+
+    expect(functionsService.call).toHaveBeenCalledWith('getWahooAPIConnectionAccount');
+    expect(component.isLoadingWahooAccountId()).toBe(false);
   });
 
   it('allows disconnect after Pro access ends while keeping connect Pro-only', () => {

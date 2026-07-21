@@ -27,6 +27,7 @@ const {
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
     mockArchiveOrphanedServiceToken,
+    mockGetWahooUserID,
     mockMarkServiceConnected,
     mockClearServiceDisconnectPending,
     mockResumeServiceDisconnectRetryAfterRecoveryFailure,
@@ -42,6 +43,7 @@ const {
         shouldSkip: false,
     }),
     mockArchiveOrphanedServiceToken: vi.fn().mockResolvedValue(undefined),
+    mockGetWahooUserID: vi.fn().mockResolvedValue('60462'),
     mockMarkServiceConnected: vi.fn().mockResolvedValue(true),
     mockClearServiceDisconnectPending: vi.fn().mockResolvedValue(undefined),
     mockResumeServiceDisconnectRetryAfterRecoveryFailure: vi.fn().mockResolvedValue(true),
@@ -169,6 +171,7 @@ vi.mock('firebase-admin', () => {
 vi.mock('firebase-admin/firestore', () => ({
     FieldValue: {
         delete: mockFieldValueDelete,
+        serverTimestamp: vi.fn(() => 'server-timestamp-sentinel'),
     },
 }));
 
@@ -197,6 +200,11 @@ vi.mock('./request-helper', () => ({
     get: vi.fn(() => Promise.resolve({})),
     post: vi.fn(() => Promise.resolve({})),
     delete: vi.fn(() => Promise.resolve({})),
+}));
+
+vi.mock('./wahoo/auth/api', () => ({
+    getWahooUserID: mockGetWahooUserID,
+    deauthorizeWahooUser: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./service-connection-meta', () => ({
@@ -277,6 +285,7 @@ describe('OAuth2', () => {
         });
         installDefaultRunTransactionMock();
         mockArchiveOrphanedServiceToken.mockReset().mockResolvedValue(undefined);
+        mockGetWahooUserID.mockReset().mockResolvedValue('60462');
         mockMarkServiceConnected.mockReset().mockResolvedValue(true);
         mockClearServiceDisconnectPending.mockReset().mockResolvedValue(undefined);
         mockResumeServiceDisconnectRetryAfterRecoveryFailure.mockReset().mockResolvedValue(true);
@@ -1339,6 +1348,20 @@ describe('OAuth2', () => {
             expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
+        });
+
+        it('stores the Wahoo provider account ID in safe connection metadata after OAuth', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            mockDelete.mockResolvedValue({});
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { access_token: 'mock-token', refresh_token: 'mock-refresh-token' },
+                expired: () => false,
+            } as any);
+            mockGetWahooUserID.mockResolvedValueOnce('60462');
+
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.WahooAPI, redirectUri, code);
+
+            expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.WahooAPI, '60462');
         });
 
         it('immediately deauthorizes manual-review OAuth recovery for non-Pro users without marking connected', async () => {

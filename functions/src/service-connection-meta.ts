@@ -129,9 +129,15 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
   return true;
 }
 
-export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<boolean> {
+export async function markServiceConnected(
+  userID: string,
+  serviceName: ServiceNames,
+  providerUserId?: string | null,
+): Promise<boolean> {
+  const normalizedProviderUserId = `${providerUserId || ''}`.trim();
   return setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
+    ...(normalizedProviderUserId ? { providerUserId: normalizedProviderUserId } : {}),
     lastAuthFailureCode: FieldValue.delete(),
     lastAuthFailureMessage: FieldValue.delete(),
     lastDisconnectedAt: FieldValue.delete(),
@@ -146,6 +152,24 @@ export async function markServiceConnected(userID: string, serviceName: ServiceN
   });
 }
 
+/**
+ * Stores only the provider's stable display identifier in the browser-readable
+ * service metadata. OAuth tokens remain in their server-only token collection.
+ */
+export async function setServiceConnectionProviderUserId(
+  userID: string,
+  serviceName: ServiceNames,
+  providerUserId: string | null | undefined,
+): Promise<boolean> {
+  const normalizedProviderUserId = `${providerUserId || ''}`.trim();
+  if (!normalizedProviderUserId) {
+    return false;
+  }
+  return setServiceMetaIfUserActive(userID, serviceName, {
+    providerUserId: normalizedProviderUserId,
+  });
+}
+
 export async function clearServiceConnectionState(
   userID: string,
   serviceName: ServiceNames,
@@ -153,6 +177,7 @@ export async function clearServiceConnectionState(
 ): Promise<void> {
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: FieldValue.delete(),
+    providerUserId: FieldValue.delete(),
     lastAuthFailureCode: FieldValue.delete(),
     lastAuthFailureMessage: FieldValue.delete(),
     lastDisconnectedAt: FieldValue.delete(),

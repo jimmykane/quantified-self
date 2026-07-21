@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
@@ -7,9 +7,14 @@ import { SERVICE_CONNECTION_STATES, isDisconnectPendingServiceConnection } from 
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppFileService } from '../../../services/app.file.service';
+import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
+
+interface WahooConnectionAccountResponse {
+  providerUserId: string | null;
+}
 
 @Component({
   selector: 'app-services-wahoo',
@@ -19,6 +24,11 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 })
 export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
   public serviceName = ServiceNames.WahooAPI;
+  public readonly wahooAccountId = signal<string | null>(null);
+  public readonly isLoadingWahooAccountId = signal(false);
+
+  private readonly functionsService = inject(AppFunctionsService);
+  private wahooAccountIdHydrationAttempted = false;
 
   constructor(
     protected http: HttpClient,
@@ -48,6 +58,30 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
       : 'Imports Wahoo-recorded activities and can send FIT activities to Wahoo.';
   }
 
+  protected override onServiceDataChanged(): void {
+    const providerUserId = `${this.serviceMeta?.providerUserId || ''}`.trim();
+    if (!this.isConnectedToService()) {
+      this.wahooAccountId.set(null);
+      this.isLoadingWahooAccountId.set(false);
+      this.wahooAccountIdHydrationAttempted = false;
+      return;
+    }
+
+    if (providerUserId) {
+      this.wahooAccountId.set(providerUserId);
+      this.isLoadingWahooAccountId.set(false);
+      return;
+    }
+
+    if (this.wahooAccountIdHydrationAttempted) {
+      return;
+    }
+
+    this.wahooAccountIdHydrationAttempted = true;
+    this.isLoadingWahooAccountId.set(true);
+    void this.hydrateWahooAccountId();
+  }
+
   protected override get canDisconnectWithoutProAccess(): boolean {
     return true;
   }
@@ -63,5 +97,21 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
     if (authorizationError) throw new Error('Wahoo authorization was not completed.');
     if (!state || !code) throw new Error('Wahoo authorization callback is missing state or code.');
     await this.userService.requestAndSetCurrentUserWahooAPIAccessToken(state, code);
+  }
+
+  private async hydrateWahooAccountId(): Promise<void> {
+    try {
+      const response = await this.functionsService.call<void, WahooConnectionAccountResponse>(
+        'getWahooAPIConnectionAccount',
+      );
+      const providerUserId = `${response.data?.providerUserId || ''}`.trim();
+      if (providerUserId) {
+        this.wahooAccountId.set(providerUserId);
+      }
+    } catch (error) {
+      this.logger.error('Could not load the Wahoo account ID.', error);
+    } finally {
+      this.isLoadingWahooAccountId.set(false);
+    }
   }
 }

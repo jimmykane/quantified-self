@@ -76,6 +76,7 @@ export {
   getWahooAPIAuthRequestTokenRedirectURI,
   requestAndSetWahooAPIAccessToken,
   deauthorizeWahooAPI,
+  getWahooAPIConnectionAccount,
 } from './wahoo/auth/wrapper';
 
 // Suunto Auth

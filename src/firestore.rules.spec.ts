@@ -193,7 +193,10 @@ describe('Firestore Security Rules', () => {
 
         it('allows the owner to read only the safe Wahoo connection metadata projection', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
-                await context.firestore().doc(`users/${userId}/meta/Wahoo API`).set({ connectionState: 'connected' });
+                await context.firestore().doc(`users/${userId}/meta/Wahoo API`).set({
+                    connectionState: 'connected',
+                    providerUserId: '60462',
+                });
             });
             const db = testEnv.authenticatedContext(userId).firestore();
             await assertSucceeds(db.doc(`users/${userId}/meta/Wahoo API`).get());

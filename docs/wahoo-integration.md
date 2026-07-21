@@ -43,7 +43,7 @@ Configure the deployed webhook URL and the same high-entropy webhook token in th
 
 ## Security and lifecycle controls
 
-- Browser clients can read only the safe connection state under `users/{uid}/meta/Wahoo API`; access and refresh tokens and direct user mappings are server-only in Firestore Rules.
+- Browser clients can read only the safe connection state and display-only Wahoo account ID under `users/{uid}/meta/Wahoo API`; access and refresh tokens and direct user mappings are server-only in Firestore Rules. Existing connections recover the ID through an authenticated, App Check-protected callable that returns that identifier only.
 - `workouts_write` is enforced immediately before each outbound Wahoo request. Connections created before delivery support must be reauthorized to receive the new scope; read-only imports remain available until then.
 - Outbound upload requests are URL-encoded, carry the FIT as Wahoo's documented base64 data value, and never log the source file, bearer token, or upload form body. Wahoo's asynchronous upload token—not the FIT payload—is persisted on a route queue item.
 - File downloads reject non-HTTPS URLs, credentials in URLs, IP literals, local hostnames, unapproved redirect targets, payloads over 20 MB, non-FIT content, and responses that exceed the bounded request deadline. Wahoo JSON API requests use a separate bounded deadline.

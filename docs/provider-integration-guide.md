@@ -80,7 +80,7 @@ OAuth is a server-owned integration. The browser starts and completes the user e
 2. The backend creates signed state that binds the request to the Firebase user and redirect URI.
 3. The provider redirects back with either a code or an explicit authorization error. Handle both; do not report a successful connection when access was denied or state/code is incomplete.
 4. The backend exchanges the code, fetches the stable provider user identity, verifies entitlement and feature state, and stores credentials only in a server-owned token tree.
-5. The browser reads a safe connection-state projection only. It should display connected, reconnect-required, or disconnect-pending status without exposing credentials.
+5. The browser reads a safe connection-state projection only. It should display connected, reconnect-required, or disconnect-pending status without exposing credentials. A stable provider account ID may be included for display, but tokens and refresh credentials must never be projected.
 
 ### Identity rules
 
