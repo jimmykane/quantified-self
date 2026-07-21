@@ -18,6 +18,9 @@ process.env.GARMINHEALTHAPI_CONSUMER_KEY = 'test-garmin-consumer-key';
 process.env.GARMINHEALTHAPI_CONSUMER_SECRET = 'test-garmin-consumer-secret';
 process.env.GARMINAPI_CLIENT_ID = 'test-garmin-client-id';
 process.env.GARMINAPI_CLIENT_SECRET = 'test-garmin-consumer-secret';
+process.env.WAHOOAPI_CLIENT_ID = 'test-wahoo-client-id';
+process.env.WAHOOAPI_CLIENT_SECRET = 'test-wahoo-client-secret';
+process.env.WAHOOAPI_WEBHOOK_TOKEN = 'test-wahoo-webhook-token';
 
 // Mock firebase-functions - this will be hoisted
 vi.mock('firebase-functions/v1', () => {
