@@ -41,6 +41,83 @@ const hoisted = vi.hoisted(() => {
     const buildRouteDeliverySourceRevisionKeyForRouteSource = vi.fn(() => 'revision-key');
     const markServiceConnected = vi.fn(async () => true);
     const requestGet = vi.fn(async () => []);
+    const googleAuthGetAccessToken = vi.fn(async () => 'test-access-token');
+    const googleAuthGetProjectId = vi.fn(async () => 'test-project');
+    const googleAuthConstructor = vi.fn(() => ({
+        getAccessToken: googleAuthGetAccessToken,
+        getProjectId: googleAuthGetProjectId,
+    }));
+
+    function toFirestoreRestValue(value: unknown): Record<string, unknown> {
+        if (value === null || value === undefined) {
+            return { nullValue: null };
+        }
+        if (typeof value === 'string') {
+            return { stringValue: value };
+        }
+        if (typeof value === 'boolean') {
+            return { booleanValue: value };
+        }
+        if (typeof value === 'number') {
+            return Number.isInteger(value)
+                ? { integerValue: `${value}` }
+                : { doubleValue: value };
+        }
+        if (Array.isArray(value)) {
+            return {
+                arrayValue: {
+                    values: value.map(item => toFirestoreRestValue(item)),
+                },
+            };
+        }
+        if (value instanceof Date) {
+            return { timestampValue: value.toISOString() };
+        }
+        if (value && typeof value === 'object') {
+            return {
+                mapValue: {
+                    fields: toFirestoreRestFields(value as Record<string, unknown>),
+                },
+            };
+        }
+        return { stringValue: `${value}` };
+    }
+
+    function toFirestoreRestFields(data: Record<string, unknown>): Record<string, Record<string, unknown>> {
+        return Object.entries(data).reduce<Record<string, Record<string, unknown>>>((accumulator, [key, value]) => {
+            accumulator[key] = toFirestoreRestValue(value);
+            return accumulator;
+        }, {});
+    }
+
+    const fetchMock = vi.fn(async (input: string) => {
+        const url = new URL(`${input}`);
+        const [, rawPath = ''] = url.pathname.split('/documents/');
+        const path = decodeURIComponent(rawPath);
+        const data = pitrDocs.get(path);
+        if (!data) {
+            return {
+                ok: false,
+                status: 404,
+                statusText: 'Not Found',
+                json: async () => ({
+                    error: {
+                        code: 404,
+                        message: 'not found',
+                    },
+                }),
+            };
+        }
+        return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({
+                name: `projects/test-project/databases/(default)/documents/${path}`,
+                fields: toFirestoreRestFields(data),
+            }),
+        };
+    });
 
     class FakeDocRef {
         path: string;
@@ -219,6 +296,7 @@ const hoisted = vi.hoisted(() => {
         },
         Timestamp: {
             fromMillis: timestampFromMillis,
+            fromDate: (date: Date) => ({ date, toDate: () => date, toMillis: () => date.getTime() }),
         },
     });
 
@@ -250,6 +328,10 @@ const hoisted = vi.hoisted(() => {
         buildRouteDeliverySourceRevisionKeyForRouteSource,
         markServiceConnected,
         requestGet,
+        googleAuthGetAccessToken,
+        googleAuthGetProjectId,
+        googleAuthConstructor,
+        fetchMock,
         makeMetaDoc,
         makeServiceMetaDoc,
         collection,
@@ -270,6 +352,10 @@ vi.mock('firebase-functions/logger', () => ({
     info: hoisted.loggerInfo,
     warn: hoisted.loggerWarn,
     error: hoisted.loggerError,
+}));
+
+vi.mock('google-auth-library', () => ({
+    GoogleAuth: hoisted.googleAuthConstructor,
 }));
 
 vi.mock('../shared/user-deletion-guard', () => ({
@@ -379,12 +465,15 @@ function addAffectedMeta(uid: string, providerUserId = 'suuntoUser'): void {
 describe('recover-suunto-outage script helpers', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.stubGlobal('fetch', hoisted.fetchMock);
         hoisted.adminApps.length = 0;
         hoisted.metaDocs.length = 0;
         hoisted.currentDocs.clear();
         hoisted.pitrDocs.clear();
         hoisted.directSets.length = 0;
         hoisted.transactionSets.length = 0;
+        hoisted.googleAuthGetAccessToken.mockResolvedValue('test-access-token');
+        hoisted.googleAuthGetProjectId.mockResolvedValue('test-project');
         hoisted.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -555,12 +644,15 @@ describe('recover-suunto-outage script helpers', () => {
 describe('recover-suunto-outage restore flow', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.stubGlobal('fetch', hoisted.fetchMock);
         hoisted.adminApps.length = 0;
         hoisted.metaDocs.length = 0;
         hoisted.currentDocs.clear();
         hoisted.pitrDocs.clear();
         hoisted.directSets.length = 0;
         hoisted.transactionSets.length = 0;
+        hoisted.googleAuthGetAccessToken.mockResolvedValue('test-access-token');
+        hoisted.googleAuthGetProjectId.mockResolvedValue('test-project');
         hoisted.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -629,6 +721,14 @@ describe('recover-suunto-outage restore flow', () => {
                 },
             }),
         ]));
+        expect(hoisted.fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('suuntoAppAccessTokens/u1/tokens/suuntoUser?readTime=2026-07-20T10%3A28%3A00Z'),
+            expect.objectContaining({
+                headers: {
+                    Authorization: 'Bearer test-access-token',
+                },
+            }),
+        );
         expect(hoisted.markServiceConnected).toHaveBeenCalledWith('u1', ServiceNames.SuuntoApp);
     });
 
@@ -815,12 +915,15 @@ describe('recover-suunto-outage restore flow', () => {
 describe('recover-suunto-outage source backfill flow', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.stubGlobal('fetch', hoisted.fetchMock);
         hoisted.adminApps.length = 0;
         hoisted.metaDocs.length = 0;
         hoisted.currentDocs.clear();
         hoisted.pitrDocs.clear();
         hoisted.directSets.length = 0;
         hoisted.transactionSets.length = 0;
+        hoisted.googleAuthGetAccessToken.mockResolvedValue('test-access-token');
+        hoisted.googleAuthGetProjectId.mockResolvedValue('test-project');
         hoisted.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,

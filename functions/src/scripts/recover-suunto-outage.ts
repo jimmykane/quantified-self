@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { GoogleAuth } from 'google-auth-library';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
     ACTIVITY_SYNC_ROUTE_IDS,
@@ -42,6 +43,39 @@ const DRY_RUN_TOKEN_EXPIRY_SAFETY_MS = 5 * 60 * 1000;
 const DEFAULT_PAGE_SIZE = 200;
 const DIRECT_META_READ_BATCH_SIZE = 300;
 const LOG_PREFIX = '[suunto-outage-recovery]';
+const FIRESTORE_REST_SCOPE = 'https://www.googleapis.com/auth/datastore';
+
+let firestoreRestAuth: GoogleAuth | null = null;
+let firestoreRestProjectID: Promise<string> | null = null;
+
+interface HistoricalDocumentSnapshot {
+    exists: boolean;
+    data(): Record<string, unknown> | undefined;
+}
+
+interface FirestoreRestDocument {
+    name?: string;
+    fields?: Record<string, FirestoreRestValue>;
+    createTime?: string;
+    updateTime?: string;
+}
+
+interface FirestoreRestValue {
+    nullValue?: null | string;
+    booleanValue?: boolean;
+    integerValue?: string | number;
+    doubleValue?: number | string;
+    timestampValue?: string;
+    stringValue?: string;
+    bytesValue?: string;
+    referenceValue?: string;
+    arrayValue?: {
+        values?: FirestoreRestValue[];
+    };
+    mapValue?: {
+        fields?: Record<string, FirestoreRestValue>;
+    };
+}
 
 const SUUNTO_ACTIVITY_SYNC_ROUTE_IDS: ActivitySyncRouteId[] = [
     ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
@@ -507,15 +541,131 @@ function incrementSkipped(summary: SuuntoOutageRecoverySummary, reason: string):
     summary.skipped[reason] = (summary.skipped[reason] || 0) + 1;
 }
 
+function getFirestoreRestAuth(): GoogleAuth {
+    if (!firestoreRestAuth) {
+        firestoreRestAuth = new GoogleAuth({
+            scopes: [FIRESTORE_REST_SCOPE],
+        });
+    }
+    return firestoreRestAuth;
+}
+
+async function getFirestoreRestProjectID(): Promise<string> {
+    if (!firestoreRestProjectID) {
+        firestoreRestProjectID = (async () => {
+            const explicitProjectID = process.env.GCLOUD_PROJECT
+                || process.env.GCP_PROJECT
+                || admin.app().options.projectId;
+            if (explicitProjectID) {
+                return explicitProjectID;
+            }
+            return getFirestoreRestAuth().getProjectId();
+        })();
+    }
+    return firestoreRestProjectID;
+}
+
+function firestoreDocumentReadTime(readTimeMs: number): string {
+    const roundedToWholeMinuteMs = Math.floor(readTimeMs / (60 * 1000)) * 60 * 1000;
+    return new Date(roundedToWholeMinuteMs).toISOString().replace('.000Z', 'Z');
+}
+
+function encodeFirestoreDocumentPath(path: string): string {
+    return path
+        .split('/')
+        .map(segment => encodeURIComponent(segment))
+        .join('/');
+}
+
+function firestoreRestValueToJS(value: FirestoreRestValue | undefined): unknown {
+    if (!value || typeof value !== 'object') {
+        return undefined;
+    }
+    if ('nullValue' in value) {
+        return null;
+    }
+    if ('booleanValue' in value) {
+        return value.booleanValue === true;
+    }
+    if ('integerValue' in value) {
+        const integerValue = Number(value.integerValue);
+        return Number.isSafeInteger(integerValue) ? integerValue : value.integerValue;
+    }
+    if ('doubleValue' in value) {
+        return Number(value.doubleValue);
+    }
+    if ('timestampValue' in value) {
+        return admin.firestore.Timestamp.fromDate(new Date(`${value.timestampValue}`));
+    }
+    if ('stringValue' in value) {
+        return value.stringValue || '';
+    }
+    if ('bytesValue' in value) {
+        return value.bytesValue || '';
+    }
+    if ('referenceValue' in value) {
+        return value.referenceValue || '';
+    }
+    if ('arrayValue' in value) {
+        return (value.arrayValue?.values || []).map(item => firestoreRestValueToJS(item));
+    }
+    if ('mapValue' in value) {
+        return firestoreRestFieldsToJS(value.mapValue?.fields || {});
+    }
+    return undefined;
+}
+
+function firestoreRestFieldsToJS(fields: Record<string, FirestoreRestValue>): Record<string, unknown> {
+    return Object.entries(fields).reduce<Record<string, unknown>>((accumulator, [key, value]) => {
+        accumulator[key] = firestoreRestValueToJS(value);
+        return accumulator;
+    }, {});
+}
+
 async function getDocumentAtReadTime(
     ref: admin.firestore.DocumentReference,
     readTimeMs: number,
-): Promise<admin.firestore.DocumentSnapshot> {
-    const db = admin.firestore();
-    const [snapshot] = await db.getAll(ref, {
-        readTime: admin.firestore.Timestamp.fromMillis(readTimeMs),
-    } as unknown as admin.firestore.ReadOptions);
-    return snapshot;
+): Promise<HistoricalDocumentSnapshot> {
+    const auth = getFirestoreRestAuth();
+    const accessToken = await auth.getAccessToken();
+    if (!accessToken) {
+        throw new Error('Could not obtain Google access token for Firestore PITR read.');
+    }
+
+    const projectID = await getFirestoreRestProjectID();
+    const readTime = firestoreDocumentReadTime(readTimeMs);
+    const encodedPath = encodeFirestoreDocumentPath(ref.path);
+    const response = await fetch(
+        `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectID)}/databases/(default)/documents/${encodedPath}?readTime=${encodeURIComponent(readTime)}`,
+        {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        },
+    );
+    let payload: FirestoreRestDocument | { error?: { code?: number; message?: string; status?: string } };
+    try {
+        payload = await response.json() as FirestoreRestDocument | { error?: { code?: number; message?: string; status?: string } };
+    } catch {
+        payload = {};
+    }
+    if (!response.ok) {
+        const error = (payload as { error?: { code?: number; message?: string; status?: string } }).error;
+        if (response.status === 404 || error?.code === 404) {
+            return {
+                exists: false,
+                data: () => undefined,
+            };
+        }
+        throw new Error(`Firestore PITR read failed for ${ref.path} at ${readTime}: ${error?.message || response.statusText || response.status}`);
+    }
+
+    const document = payload as FirestoreRestDocument;
+    const data = firestoreRestFieldsToJS(document.fields || {});
+    return {
+        exists: true,
+        data: () => data,
+    };
 }
 
 function affectedMetaCandidateFromSnapshot(doc: admin.firestore.DocumentSnapshot, options: ScriptOptions): AffectedMetaCandidate | null {
@@ -887,7 +1037,7 @@ async function runRestoreForTarget(
         logger.info(`${LOG_PREFIX} ${execute ? 'Restoring' : 'Would restore'} Suunto token.`, {
             uid: target.uid,
             providerUserId: target.providerUserId,
-            restoreReadTime: new Date(target.restoreReadTimeMs).toISOString(),
+            restoreReadTime: firestoreDocumentReadTime(target.restoreReadTimeMs),
         });
 
         if (execute) {
