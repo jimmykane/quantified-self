@@ -43,6 +43,7 @@
     "export-users": "ts-node src/scripts/export-users.ts",
     "cleanup-firestore": "ts-node -r dotenv/config src/scripts/cleanup-firestore.ts",
     "cleanup-orphaned-users": "ts-node -r dotenv/config src/scripts/cleanup-orphaned-users.ts",
+    "recover-suunto-outage": "ts-node -r dotenv/config src/scripts/recover-suunto-outage.ts",
     "reparse-sports-lib-events": "ts-node -r dotenv/config src/scripts/reparse-sports-lib-events.ts",
     "migrate-storage-users-bucket": "ts-node -r dotenv/config src/scripts/migrate-storage-users-bucket.ts",
     "backfill-sports-lib-processing-code": "ts-node -r dotenv/config src/scripts/backfill-sports-lib-processing-code.ts",
