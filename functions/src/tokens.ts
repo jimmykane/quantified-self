@@ -14,6 +14,7 @@ import {
   handleTerminalServiceAuthFailure,
   TerminalServiceAuthError,
   TerminalServiceAuthFailureResolution,
+  type RefreshFailureDetails,
 } from './service-auth-lifecycle';
 import { getUserDeletionGuardState } from './shared/user-deletion-guard';
 import { isServiceDisconnectPendingForUser } from './service-disconnect-pending';
@@ -78,6 +79,20 @@ interface GetTokenDataOptions {
 
 function getFirebaseUserIDForTokenDocument(doc: QueryDocumentSnapshot | DocumentSnapshot): string | null {
   return doc.ref.parent.parent?.id || null;
+}
+
+function shouldTreatRefreshFailureAsTerminal(
+  serviceName: ServiceNames,
+  failure: RefreshFailureDetails,
+): boolean {
+  // Temporary Suunto policy: during the July 2026 outage Suunto returned false
+  // 400 invalid_grant responses, then accepted the same refresh token later.
+  // TODO: Revert this provider-specific downgrade once Suunto patches this.
+  if (serviceName === ServiceNames.SuuntoApp && failure.isInvalidGrant && failure.statusCode !== 401) {
+    return false;
+  }
+
+  return failure.isTerminalAuthFailure;
 }
 
 async function assertTokenUseAllowedForUser(
@@ -206,6 +221,7 @@ export async function getTokenData(
   } catch (e: any) {
     const failure = extractRefreshFailureDetails(e);
     const recoverTerminalAuthFailure = options.recoverTerminalAuthFailure !== false;
+    const isTerminalAuthFailure = shouldTreatRefreshFailureAsTerminal(serviceName, failure);
 
     if (failure.isTransientError && serviceName === ServiceNames.WahooAPI) {
       logger.warn(`Token refresh for user ${doc.id} failed`, getWahooErrorLogDetails(e));
@@ -218,7 +234,11 @@ export async function getTokenData(
       logger.error(`Could not refresh token for user ${doc.id}`, e);
     }
 
-    if (failure.isTerminalAuthFailure) {
+    if (failure.isTerminalAuthFailure && !isTerminalAuthFailure) {
+      logger.warn(`Treating ${serviceName} invalid_grant for token ${doc.id} as retryable while waiting for the provider fix; preserving local token.`);
+    }
+
+    if (isTerminalAuthFailure) {
       if (recoverTerminalAuthFailure) {
         const resolution: TerminalServiceAuthFailureResolution = await handleTerminalServiceAuthFailure(
           doc,

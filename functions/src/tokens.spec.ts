@@ -533,13 +533,27 @@ describe('tokens', () => {
             expect(handleTerminalServiceAuthFailure).toHaveBeenCalled();
         });
 
-        it('should delegate invalid_grant errors to the terminal auth lifecycle', async () => {
+        it('should treat Suunto 400 invalid_grant refresh errors as retryable while preserving the token', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('invalid_grant');
             error.statusCode = 400;
             mockToken.refresh.mockRejectedValue(error);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toThrow('invalid_grant');
+
+            expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+        });
+
+        it('should delegate non-Suunto invalid_grant errors to the terminal auth lifecycle', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('invalid_grant');
+            error.statusCode = 400;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.GarminAPI, false))
                 .rejects.toMatchObject({
                     name: 'TerminalServiceAuthError',
                     dlqContext: 'INVALID_GRANT',
@@ -550,8 +564,8 @@ describe('tokens', () => {
 
         it('should retry once with a newer stored snapshot when terminal auth cleanup reports the token was superseded', async () => {
             mockToken.expired.mockReturnValue(true);
-            const error: any = new Error('invalid_grant');
-            error.statusCode = 400;
+            const error: any = new Error('Unauthorized');
+            error.statusCode = 401;
 
             const replacementDoc = {
                 id: 'user-123',
@@ -596,7 +610,7 @@ describe('tokens', () => {
             expect(replacementDoc.ref.update).toHaveBeenCalled();
         });
 
-        it('should detect invalid_grant from nested provider payloads', async () => {
+        it('should keep Suunto nested invalid_grant provider payloads retryable', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('Response Error: 400 Bad Request');
             error.statusCode = 400;
@@ -609,6 +623,26 @@ describe('tokens', () => {
             mockToken.refresh.mockRejectedValue(error);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toThrow('Response Error: 400 Bad Request');
+
+            expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
+            expect(mockDoc.ref.update).not.toHaveBeenCalled();
+            expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+        });
+
+        it('should detect non-Suunto invalid_grant from nested provider payloads as terminal', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('Response Error: 400 Bad Request');
+            error.statusCode = 400;
+            error.data = {
+                payload: {
+                    error: 'invalid_grant',
+                    error_description: 'User no longer active/connected with the partner',
+                },
+            };
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.GarminAPI, false))
                 .rejects.toMatchObject({
                     name: 'TerminalServiceAuthError',
                     providerErrorCode: 'invalid_grant',
