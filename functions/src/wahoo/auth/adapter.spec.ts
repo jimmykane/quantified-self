@@ -22,6 +22,10 @@ const deletionGuardMocks = vi.hoisted(() => ({
   getStateInTransaction: vi.fn(),
 }));
 
+const firestoreFieldValueMocks = vi.hoisted(() => ({
+  serverTimestamp: vi.fn(() => 'server-timestamp'),
+}));
+
 vi.mock('./api');
 vi.mock('./auth', () => ({ WahooAPIAuth: vi.fn() }));
 vi.mock('../../shared/user-deletion-guard', () => ({
@@ -33,9 +37,13 @@ vi.mock('firebase-admin', () => ({
     collection: () => ({ doc: () => firestoreMocks.mappingRef }),
     collectionGroup: () => ({ where: () => ({ where: () => ({}) }) }),
     runTransaction: firestoreMocks.runTransaction,
-  }), {
-    FieldValue: { serverTimestamp: () => 'server-timestamp' },
-  }),
+  }), {}),
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    serverTimestamp: firestoreFieldValueMocks.serverTimestamp,
+  },
 }));
 
 describe('WahooAuthAdapter', () => {

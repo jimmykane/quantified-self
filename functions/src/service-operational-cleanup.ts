@@ -212,20 +212,16 @@ function failedJobSourceCollection(data: Record<string, unknown>): string | null
   return null;
 }
 
-function tokenSnapshotHasServiceName(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
-  const data = doc.data() as Record<string, unknown>;
-  return asNonEmptyString(data.serviceName) === serviceName;
-}
-
 async function hasConnectedTokenForProviderUser(
   db: admin.firestore.Firestore,
   config: ProviderOperationalCleanupConfig,
 ): Promise<boolean> {
   const snapshot = await db.collectionGroup('tokens')
     .where(config.providerUserIdField, '==', config.providerUserId)
+    .where('serviceName', '==', config.serviceName)
     .get();
 
-  return snapshot.docs.some((doc) => tokenSnapshotHasServiceName(doc, config.serviceName));
+  return !snapshot.empty;
 }
 
 function shouldDeleteOperationalDoc(

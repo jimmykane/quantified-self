@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { AccessToken, AuthorizationCode } from 'simple-oauth2';
 import {
   Auth2ServiceTokenInterface,
@@ -85,7 +86,7 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
         firebaseUserID: userId,
         wahooUserID: externalUserId,
         serviceName: this.serviceName,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
       return existingOwner && existingOwner !== userId ? existingOwner : undefined;
     });

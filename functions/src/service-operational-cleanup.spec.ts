@@ -10,6 +10,7 @@ interface FirestoreDocMock {
 const {
   mockCollection,
   mockCollectionGroup,
+  mockCollectionGroupWhere,
   mockRecursiveDelete,
   mockMappingDelete,
   mockRunTransaction,
@@ -83,15 +84,27 @@ const {
     return firstAttempt.result;
   });
 
-  const mockCollectionGroup = vi.fn(() => ({
-    where: vi.fn(() => ({
-      get: vi.fn().mockResolvedValue(buildSnapshot(activeTokenDocs)),
-    })),
-  }));
+  const mockCollectionGroupWhere = vi.fn();
+  const mockCollectionGroup = vi.fn(() => {
+    const predicates: Array<{ fieldName: string; value: string }> = [];
+    const query = {
+      where: (fieldName: string, _operator: string, value: string) => {
+        mockCollectionGroupWhere(fieldName, _operator, value);
+        predicates.push({ fieldName, value });
+        return query;
+      },
+      get: vi.fn().mockImplementation(() => Promise.resolve(buildSnapshot(activeTokenDocs.filter((doc) => {
+        const data = doc.data();
+        return predicates.every(({ fieldName, value }) => data[fieldName] === value);
+      })))),
+    };
+    return query;
+  });
 
   return {
     mockCollection,
     mockCollectionGroup,
+    mockCollectionGroupWhere,
     mockRecursiveDelete,
     mockMappingDelete,
     mockRunTransaction,
@@ -241,7 +254,7 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
   it('preserves provider-only docs when an active connection still owns the provider id', async () => {
     activeTokenDocs.push({
       id: 'active-token',
-      data: () => ({ serviceName: ServiceNames.SuuntoApp }),
+      data: () => ({ serviceName: ServiceNames.SuuntoApp, userName: 'suunto-user' }),
       ref: {
         parent: {
           parent: {
@@ -286,7 +299,7 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
   it('does not preserve provider-only docs for token snapshots without serviceName', async () => {
     activeTokenDocs.push({
       id: 'token-without-service-name',
-      data: () => ({}),
+      data: () => ({ userName: 'suunto-user' }),
       ref: {
         parent: {
           parent: {
@@ -401,6 +414,18 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
       skippedForActiveConnection: false,
     });
     expect(mockMappingDelete).toHaveBeenCalledOnce();
+    expect(mockCollectionGroupWhere).toHaveBeenNthCalledWith(
+      1,
+      'wahooUserID',
+      '==',
+      'wahoo-user',
+    );
+    expect(mockCollectionGroupWhere).toHaveBeenNthCalledWith(
+      2,
+      'serviceName',
+      '==',
+      ServiceNames.WahooAPI,
+    );
   });
 
   it('preserves a Wahoo mapping transferred to another Firebase user while cleanup is in flight', async () => {

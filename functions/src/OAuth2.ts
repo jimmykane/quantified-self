@@ -2,6 +2,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
   Auth2ServiceTokenInterface,
@@ -142,8 +143,8 @@ async function cleanupOAuthFlowContext(
   }
 
   await tokenRootRef.update({
-    state: admin.firestore.FieldValue.delete(),
-    codeVerifier: admin.firestore.FieldValue.delete(),
+    state: FieldValue.delete(),
+    codeVerifier: FieldValue.delete(),
   });
 }
 

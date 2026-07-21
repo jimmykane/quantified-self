@@ -33,6 +33,30 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps Wahoo token cleanup and duplicate-account queries deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'tokens',
+            queryScope: 'COLLECTION_GROUP',
+            fields: [
+                {
+                    fieldPath: 'wahooUserID',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'serviceName',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps Wahoo pending-disconnect retries deployable', () => {
         const config = loadFirestoreIndexes();
 

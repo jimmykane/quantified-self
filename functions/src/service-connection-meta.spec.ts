@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
     shouldSkip: false,
   }),
   runTransaction: vi.fn(),
+  fieldValueDelete: vi.fn(() => 'delete-sentinel'),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -54,17 +55,19 @@ vi.mock('firebase-admin', () => {
       })),
     })),
     runTransaction: hoisted.runTransaction,
-  }), {
-    FieldValue: {
-      delete: vi.fn(() => 'delete-sentinel'),
-    },
-  });
+  }), {});
 
   return {
     default: { firestore },
     firestore,
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    delete: hoisted.fieldValueDelete,
+  },
+}));
 
 import * as logger from 'firebase-functions/logger';
 import {

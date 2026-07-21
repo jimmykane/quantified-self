@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
@@ -131,17 +132,17 @@ export async function mirrorServiceDisconnectPendingToUserMeta(
 export async function markServiceConnected(userID: string, serviceName: ServiceNames): Promise<boolean> {
   return setServiceMetaIfUserActive(userID, serviceName, {
     connectionState: SERVICE_CONNECTION_STATES.Connected,
-    lastAuthFailureCode: admin.firestore.FieldValue.delete(),
-    lastAuthFailureMessage: admin.firestore.FieldValue.delete(),
-    lastDisconnectedAt: admin.firestore.FieldValue.delete(),
-    disconnectReason: admin.firestore.FieldValue.delete(),
-    disconnectAttemptCount: admin.firestore.FieldValue.delete(),
-    disconnectNextAttemptAt: admin.firestore.FieldValue.delete(),
-    disconnectLastAttemptAt: admin.firestore.FieldValue.delete(),
-    disconnectRetryExpiresAt: admin.firestore.FieldValue.delete(),
-    disconnectLastStatusCode: admin.firestore.FieldValue.delete(),
-    disconnectLastErrorMessage: admin.firestore.FieldValue.delete(),
-    disconnectManualReviewRequired: admin.firestore.FieldValue.delete(),
+    lastAuthFailureCode: FieldValue.delete(),
+    lastAuthFailureMessage: FieldValue.delete(),
+    lastDisconnectedAt: FieldValue.delete(),
+    disconnectReason: FieldValue.delete(),
+    disconnectAttemptCount: FieldValue.delete(),
+    disconnectNextAttemptAt: FieldValue.delete(),
+    disconnectLastAttemptAt: FieldValue.delete(),
+    disconnectRetryExpiresAt: FieldValue.delete(),
+    disconnectLastStatusCode: FieldValue.delete(),
+    disconnectLastErrorMessage: FieldValue.delete(),
+    disconnectManualReviewRequired: FieldValue.delete(),
   });
 }
 
@@ -151,18 +152,17 @@ export async function clearServiceConnectionState(
   options: ClearServiceConnectionStateOptions = {},
 ): Promise<void> {
   const didWrite = await setServiceMetaIfUserActive(userID, serviceName, {
-    connectionState: admin.firestore.FieldValue.delete(),
-    lastAuthFailureCode: admin.firestore.FieldValue.delete(),
-    lastAuthFailureMessage: admin.firestore.FieldValue.delete(),
-    lastDisconnectedAt: admin.firestore.FieldValue.delete(),
-    disconnectReason: admin.firestore.FieldValue.delete(),
-    disconnectAttemptCount: admin.firestore.FieldValue.delete(),
-    disconnectNextAttemptAt: admin.firestore.FieldValue.delete(),
-    disconnectLastAttemptAt: admin.firestore.FieldValue.delete(),
-    disconnectRetryExpiresAt: admin.firestore.FieldValue.delete(),
-    disconnectLastStatusCode: admin.firestore.FieldValue.delete(),
-    disconnectLastErrorMessage: admin.firestore.FieldValue.delete(),
-    disconnectManualReviewRequired: admin.firestore.FieldValue.delete(),
+    connectionState: FieldValue.delete(),
+    lastAuthFailureCode: FieldValue.delete(),
+    lastAuthFailureMessage: FieldValue.delete(),
+    lastDisconnectedAt: FieldValue.delete(),
+    disconnectReason: FieldValue.delete(),
+    disconnectAttemptCount: FieldValue.delete(),
+    disconnectNextAttemptAt: FieldValue.delete(),
+    disconnectRetryExpiresAt: FieldValue.delete(),
+    disconnectLastStatusCode: FieldValue.delete(),
+    disconnectLastErrorMessage: FieldValue.delete(),
+    disconnectManualReviewRequired: FieldValue.delete(),
   });
   if (!didWrite || !options.restorePendingDisconnectActivitySyncRoutes) {
     return;

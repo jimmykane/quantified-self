@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceTokenRootDocumentRef } from './service-token-store';
@@ -43,15 +44,15 @@ export type {
 
 function buildPendingDisconnectFieldDeletes(): Record<string, admin.firestore.FieldValue> {
   return {
-    disconnectState: admin.firestore.FieldValue.delete(),
-    disconnectReason: admin.firestore.FieldValue.delete(),
-    disconnectAttemptCount: admin.firestore.FieldValue.delete(),
-    disconnectNextAttemptAt: admin.firestore.FieldValue.delete(),
-    disconnectLastAttemptAt: admin.firestore.FieldValue.delete(),
-    disconnectRetryExpiresAt: admin.firestore.FieldValue.delete(),
-    disconnectLastStatusCode: admin.firestore.FieldValue.delete(),
-    disconnectLastErrorMessage: admin.firestore.FieldValue.delete(),
-    disconnectManualReviewRequired: admin.firestore.FieldValue.delete(),
+    disconnectState: FieldValue.delete(),
+    disconnectReason: FieldValue.delete(),
+    disconnectAttemptCount: FieldValue.delete(),
+    disconnectNextAttemptAt: FieldValue.delete(),
+    disconnectLastAttemptAt: FieldValue.delete(),
+    disconnectRetryExpiresAt: FieldValue.delete(),
+    disconnectLastStatusCode: FieldValue.delete(),
+    disconnectLastErrorMessage: FieldValue.delete(),
+    disconnectManualReviewRequired: FieldValue.delete(),
   };
 }
 

@@ -20,6 +20,9 @@ const mockAdd = vi.fn().mockResolvedValue({ id: 'new-doc-id' });
 const mockBatchCommit = vi.fn().mockResolvedValue({});
 const mockRecursiveDelete = vi.fn().mockResolvedValue({});
 const mockRunTransaction = vi.fn();
+const { mockFieldValueDelete } = vi.hoisted(() => ({
+    mockFieldValueDelete: vi.fn().mockReturnValue('delete-sentinel'),
+}));
 const {
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
@@ -152,11 +155,7 @@ vi.mock('firebase-admin', () => {
         batch: batch,
         recursiveDelete: mockRecursiveDelete,
         runTransaction: mockRunTransaction,
-    }), {
-        FieldValue: {
-            delete: vi.fn().mockReturnValue('delete-sentinel'),
-        },
-    });
+    }), {});
     return {
         default: {
             firestore,
@@ -166,6 +165,12 @@ vi.mock('firebase-admin', () => {
         firestore,
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        delete: mockFieldValueDelete,
+    },
+}));
 
 // Mock tokens
 vi.mock('./tokens', () => ({

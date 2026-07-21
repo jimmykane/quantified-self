@@ -14,15 +14,13 @@ const hoisted = vi.hoisted(() => ({
   releaseQueueItemsDeferredForPendingDisconnect: vi.fn(),
   loggerError: vi.fn(),
   loggerWarn: vi.fn(),
+  fieldValueDelete: vi.fn(() => 'DELETE_SENTINEL'),
 }));
 
 vi.mock('firebase-admin', () => {
   const firestore = Object.assign(() => ({
     runTransaction: hoisted.runTransaction,
   }), {
-    FieldValue: {
-      delete: vi.fn(() => 'DELETE_SENTINEL'),
-    },
     Timestamp: {
       fromMillis: vi.fn((value: number) => ({ toMillis: () => value })),
     },
@@ -33,6 +31,12 @@ vi.mock('firebase-admin', () => {
     firestore,
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    delete: hoisted.fieldValueDelete,
+  },
+}));
 
 vi.mock('firebase-functions/logger', () => ({
   error: hoisted.loggerError,
