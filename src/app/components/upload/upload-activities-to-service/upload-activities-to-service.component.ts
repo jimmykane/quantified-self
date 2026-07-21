@@ -1,4 +1,4 @@
-import { Component, computed, inject, Input, signal } from '@angular/core';
+import { Component, computed, inject, Input, OnDestroy, signal } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { Auth } from 'app/firebase/auth';
@@ -13,6 +13,7 @@ import { getProviderDisplayName } from '@shared/provider-presentation';
 const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES = 20 * 1024 * 1024;
 const BASE64_CHUNK_SIZE = 0x8000;
 const SERVICE_ACTIVITY_UPLOAD_DELAY_MS = 2000;
+const WAHOO_STATUS_POLL_DELAY_MS = 2000;
 const WAITING_FOR_NEXT_UPLOAD_MESSAGE = 'Waiting before next upload...';
 
 type ServiceUploadStatus = 'queued' | 'uploading' | 'processing' | 'success' | 'duplicate' | 'failed';
@@ -60,7 +61,7 @@ interface ServiceUploadCallableResponse {
   standalone: false
 })
 
-export class UploadActivitiesToServiceComponent extends UploadAbstractDirective {
+export class UploadActivitiesToServiceComponent extends UploadAbstractDirective implements OnDestroy {
   public data = inject(MAT_DIALOG_DATA, { optional: true });
   public dialogRef = inject(MatDialogRef<UploadActivitiesToServiceComponent>, { optional: true });
   private auth = inject(Auth);
@@ -68,6 +69,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private functionsService = inject(AppFunctionsService);
   private rowIdCounter = 0;
+  private readonly wahooStatusPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly wahooStatusChecksInProgress = new Set<string>();
   private _serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   @Input() set serviceName(value: ServiceNames) {
@@ -87,6 +90,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   public destinationName = getProviderDisplayName(ServiceNames.SuuntoApp, 'destination');
   public callableFunction: FunctionName = 'importActivityToSuuntoApp';
   public uploadDelayMs = SERVICE_ACTIVITY_UPLOAD_DELAY_MS;
+  public wahooStatusPollDelayMs = WAHOO_STATUS_POLL_DELAY_MS;
   public readonly displayedColumns = ['file', 'status', 'attempts', 'message', 'actions'];
   public readonly uploadRows = signal<ServiceUploadRow[]>([]);
   public readonly hasRows = computed(() => this.uploadRows().length > 0);
@@ -136,6 +140,10 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     }
   }
 
+  ngOnDestroy(): void {
+    this.clearAllWahooStatusPolls();
+  }
+
   async getFiles(event: any): Promise<void> {
     event.stopPropagation();
     event.preventDefault();
@@ -181,10 +189,15 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   async refreshUpload(row: ServiceUploadRow): Promise<void> {
-    if (this.isUploading || row.status !== 'processing' || !row.uploadId || this.serviceName !== ServiceNames.WahooAPI) {
+    if (row.status !== 'processing'
+      || !row.uploadId
+      || this.serviceName !== ServiceNames.WahooAPI
+      || this.wahooStatusChecksInProgress.has(row.id)) {
       return;
     }
 
+    this.clearWahooStatusPoll(row.id);
+    this.wahooStatusChecksInProgress.add(row.id);
     this.updateRow(row.id, { message: 'Checking Wahoo processing status...' });
     try {
       const response = await this.functionsService.call<any, ServiceUploadCallableResponse>(
@@ -194,22 +207,28 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       const result = this.toServiceUploadResult(response.data);
       if (result.pending) {
         this.updateRow(row.id, { message: result.message || 'Wahoo is still processing the activity.' });
+        this.scheduleWahooStatusPoll(row.id);
         return;
       }
       if (result.duplicate) {
         const message = result.message || `Activity already exists in ${this.destinationName}`;
         this.updateRow(row.id, { status: 'duplicate', progress: 100, message });
         this.processingService.updateJob(row.jobId || row.id, { status: 'duplicate', progress: 100, details: message });
+        this.clearWahooStatusPoll(row.id);
         return;
       }
       const message = result.message || `Uploaded to ${this.destinationName}`;
       this.updateRow(row.id, { status: 'success', progress: 100, message });
       this.processingService.completeJob(row.jobId || row.id, message);
+      this.clearWahooStatusPoll(row.id);
     } catch (error) {
       const message = this.getErrorMessage(error);
       this.logger.error(error);
       this.updateRow(row.id, { status: 'failed', progress: 0, message });
       this.processingService.failJob(row.jobId || row.id, message);
+      this.clearWahooStatusPoll(row.id);
+    } finally {
+      this.wahooStatusChecksInProgress.delete(row.id);
     }
   }
 
@@ -218,6 +237,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       return;
     }
 
+    this.clearAllWahooStatusPolls();
     this.uploadRows.set([]);
   }
 
@@ -351,6 +371,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           uploadId: result.uploadId,
         });
         this.processingService.updateJob(jobId, { status: 'processing', progress: 75, details: message });
+        this.scheduleWahooStatusPoll(row.id);
         return true;
       }
 
@@ -424,6 +445,36 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private updateRow(rowId: string, updates: Partial<Omit<ServiceUploadRow, 'id' | 'file'>>): void {
     this.uploadRows.update((rows) => rows.map((row) => row.id === rowId ? { ...row, ...updates } : row));
+  }
+
+  private scheduleWahooStatusPoll(rowId: string): void {
+    const row = this.findRow(rowId);
+    if (this.serviceName !== ServiceNames.WahooAPI || row?.status !== 'processing' || !row.uploadId) {
+      return;
+    }
+
+    this.clearWahooStatusPoll(rowId);
+    const timer = setTimeout(() => {
+      this.wahooStatusPollTimers.delete(rowId);
+      const currentRow = this.findRow(rowId);
+      if (currentRow) {
+        void this.refreshUpload(currentRow);
+      }
+    }, this.wahooStatusPollDelayMs);
+    this.wahooStatusPollTimers.set(rowId, timer);
+  }
+
+  private clearWahooStatusPoll(rowId: string): void {
+    const timer = this.wahooStatusPollTimers.get(rowId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.wahooStatusPollTimers.delete(rowId);
+    }
+  }
+
+  private clearAllWahooStatusPolls(): void {
+    this.wahooStatusPollTimers.forEach((timer) => clearTimeout(timer));
+    this.wahooStatusPollTimers.clear();
   }
 
   private findRow(rowId: string): ServiceUploadRow | undefined {

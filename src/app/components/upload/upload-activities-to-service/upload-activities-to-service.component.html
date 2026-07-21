@@ -3,7 +3,8 @@
     ondragenter="event.stopPropagation(); event.preventDefault();"
     ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
     ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-    <button mat-flat-button class="qs-mat-primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
+    <button mat-flat-button type="button" class="qs-mat-primary service-upload-button" (click)="inputFile.click()"
+      [disabled]="!hasProAccess || isUploading">
       <span class="upload-button-content">
         @if (isUploading) {
         <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
