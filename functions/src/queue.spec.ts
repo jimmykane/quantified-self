@@ -943,6 +943,56 @@ describe('queue', () => {
             expect(updateRaced).not.toHaveBeenCalled();
         });
 
+        it('does not mark a newer Wahoo revision with an older scheduled task', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const staleRevision = {
+                dateCreated: Date.now(),
+                firebaseUserID: 'wahoo-user',
+                wahooUserID: 'wahoo-provider-user',
+                workoutID: 'workout-1',
+                workoutSummaryID: 'summary-1',
+                summaryUpdatedAt: '2026-07-18T10:00:00.000Z',
+                FITFileURI: 'https://cdn.wahooligan.com/summary-1.fit',
+                starts: '2026-07-18T09:00:00.000Z',
+                processed: false,
+                retryCount: 0,
+                dispatchedToCloudTask: null,
+            };
+            const latestRevision = {
+                ...staleRevision,
+                workoutSummaryID: 'summary-2',
+                summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+                FITFileURI: 'https://cdn.wahooligan.com/summary-2.fit',
+            };
+            const update = vi.fn().mockResolvedValue(undefined);
+            const wahooRef = {
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => latestRevision }),
+                update,
+                parent: { id: 'wahooAPIWorkoutQueue' },
+            };
+            vi.mocked(admin.firestore().collection('any').get).mockResolvedValue({
+                docs: [{ id: 'wahoo-queue-1', ref: wahooRef, data: () => staleRevision }] as any,
+                size: 1,
+                empty: false,
+                isEqual: vi.fn(),
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.WahooAPI);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(
+                ServiceNames.WahooAPI,
+                'wahoo-queue-1',
+                staleRevision.dateCreated,
+                0,
+                { recoveryTaskKey: 0 },
+            );
+            expect(update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
         it('should treat missing dispatch marker docs as success when scheduled dispatch races with DLQ move', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);

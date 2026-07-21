@@ -354,9 +354,10 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
         doc.id,
         serviceName,
         dispatchContext.firebaseUserID,
+        queueItemForDispatch,
       );
       if (!didMarkDispatched) {
-        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because it is no longer current or the owning user is missing or deletion is in progress.`);
         return false;
       }
       return true;
@@ -942,8 +943,12 @@ async function markWorkoutQueueItemDispatched(
   queueItemId: string,
   serviceName: ServiceNames,
   firebaseUserID: string,
+  queueItem?: QueueItemInterface,
 ): Promise<boolean> {
   try {
+    const isCurrent = queueItem && serviceName === ServiceNames.WahooAPI
+      ? createWahooQueueRevisionCurrentGuard(queueItem)
+      : undefined;
     const result = await markQueueItemDispatchedIfUserActive({
       queueItemDocument,
       queueItemId,
@@ -951,6 +956,7 @@ async function markWorkoutQueueItemDispatched(
       phase: `workout_queue_dispatch_marker:${serviceName}`,
       dispatchedAtMs: Date.now(),
       logPrefix: 'WorkoutQueue',
+      isCurrent,
     });
     return result === QueueDispatchMarkerResult.Marked;
   } catch (error) {
@@ -972,6 +978,7 @@ async function markWorkoutQueueItemDispatchedAfterTaskEnqueue(
   queueItemId: string,
   serviceName: ServiceNames,
   firebaseUserID: string,
+  queueItem?: QueueItemInterface,
 ): Promise<boolean> {
   return markWorkoutTaskDispatchedWithRetry({
     serviceName,
@@ -981,8 +988,19 @@ async function markWorkoutQueueItemDispatchedAfterTaskEnqueue(
       queueItemId,
       serviceName,
       firebaseUserID,
+      queueItem,
     ),
   });
+}
+
+function createWahooQueueRevisionCurrentGuard(
+  queueItem: QueueItemInterface,
+): (currentQueueItem: Record<string, unknown>) => boolean {
+  const wahooQueueItem = queueItem as Partial<WahooAPIWorkoutQueueItemInterface>;
+  return (currentQueueItem) => currentQueueItem.processed !== true
+    && currentQueueItem.dispatchedToCloudTask === null
+    && currentQueueItem.workoutSummaryID === wahooQueueItem.workoutSummaryID
+    && currentQueueItem.summaryUpdatedAt === wahooQueueItem.summaryUpdatedAt;
 }
 
 async function backfillWorkoutQueueFirebaseUserID(
@@ -1288,6 +1306,7 @@ async function handleDuplicateProviderWebhookQueueItem(
       queuePayload.id,
       serviceName,
       duplicateDispatchContext.firebaseUserID,
+      queueItemForDuplicateDispatch,
     );
     if (!didMarkDuplicateDispatched) {
       throw new ProviderQueueUserDeletedOrDeletingError(
@@ -1344,6 +1363,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
         queueItem.id,
         serviceName,
         dispatchContext.firebaseUserID,
+        queuePayload,
       );
       if (!didMarkDispatched) {
         throw new ProviderQueueUserDeletedOrDeletingError(

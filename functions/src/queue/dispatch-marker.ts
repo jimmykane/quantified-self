@@ -42,6 +42,7 @@ export interface MarkQueueItemDispatchedIfUserActiveParams {
     phase: string;
     dispatchedAtMs: number;
     logPrefix: string;
+    isCurrent?: UpdateQueueItemIfUserActiveParams['isCurrent'];
 }
 
 export async function markQueueItemDispatchedIfUserActive(
@@ -57,6 +58,7 @@ export async function markQueueItemDispatchedIfUserActive(
         },
         logPrefix: params.logPrefix,
         actionDescription: 'dispatch marker write',
+        isCurrent: params.isCurrent,
     });
 
     return result === QueueItemUserGuardedUpdateResult.Updated

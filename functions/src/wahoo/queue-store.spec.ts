@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
 const mocks = vi.hoisted(() => {
   const transactionGet = vi.fn();
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => {
     refGet,
     ref,
     failedRef,
+    recursiveDelete: vi.fn().mockResolvedValue(undefined),
     runTransaction: vi.fn(async (runner: any) => runner({
       get: transactionGet,
       set: transactionSet,
@@ -27,6 +29,7 @@ const mocks = vi.hoisted(() => {
     markWorkoutTaskDispatchedWithRetry: vi.fn(async ({ markDispatched }: { markDispatched: () => Promise<boolean> }) => markDispatched()),
     guardedUpdate: vi.fn().mockResolvedValue('updated'),
     deletionGuard: vi.fn().mockResolvedValue({ userExists: true, deletionInProgress: false, shouldSkip: false }),
+    markQueueItemDeletedForUserCleanup: vi.fn().mockResolvedValue(true),
   };
 });
 
@@ -34,6 +37,7 @@ vi.mock('firebase-admin', () => ({
   firestore: Object.assign(() => ({
     collection: (name: string) => ({ doc: () => name === 'failed_jobs' ? mocks.failedRef : mocks.ref }),
     runTransaction: mocks.runTransaction,
+    recursiveDelete: mocks.recursiveDelete,
   }), {
     FieldValue: { delete: () => 'delete-sentinel' },
   }),
@@ -54,6 +58,10 @@ vi.mock('../shared/user-deletion-guard', () => ({
 vi.mock('../queue/dispatch-marker', () => ({
   updateQueueItemIfUserActive: mocks.guardedUpdate,
   QueueItemUserGuardedUpdateResult: { Updated: 'updated' },
+}));
+vi.mock('../queue/cleanup-tombstone', () => ({
+  markQueueItemDeletedForUserCleanup: mocks.markQueueItemDeletedForUserCleanup,
+  QUEUE_CLEANUP_TOMBSTONE_REASONS: { UserDeletionGuard: 'user_deletion_guard' },
 }));
 
 import {
@@ -81,6 +89,8 @@ describe('upsertWahooWorkoutQueueItem', () => {
     mocks.enqueueWorkoutTaskWithDispatchRecovery.mockResolvedValue(true);
     mocks.markWorkoutTaskDispatchedWithRetry.mockImplementation(async ({ markDispatched }) => markDispatched());
     mocks.guardedUpdate.mockResolvedValue('updated');
+    mocks.recursiveDelete.mockResolvedValue(undefined);
+    mocks.markQueueItemDeletedForUserCleanup.mockResolvedValue(true);
   });
 
   it('queues a new revision and dispatches immediate webhook work', async () => {
@@ -193,6 +203,25 @@ describe('upsertWahooWorkoutQueueItem', () => {
     await expect(upsertWahooWorkoutQueueItem(input, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
     expect(mocks.transactionSet).not.toHaveBeenCalled();
     expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
+  });
+
+  it('recursively removes a queue item when deletion starts during dispatch recovery', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: false });
+
+    await upsertWahooWorkoutQueueItem(input, 'immediate');
+    const dispatchParams = mocks.enqueueWorkoutTaskWithDispatchRecovery.mock.calls[0][0] as {
+      queueItem: WahooAPIWorkoutQueueItemInterface;
+      advanceDispatchRecoveryGeneration: (queueItem: WahooAPIWorkoutQueueItemInterface) => Promise<WahooAPIWorkoutQueueItemInterface | null>;
+    };
+    mocks.deletionGuard.mockResolvedValueOnce({ userExists: true, deletionInProgress: true, shouldSkip: true });
+
+    await expect(dispatchParams.advanceDispatchRecoveryGeneration(dispatchParams.queueItem)).resolves.toBeNull();
+    expect(mocks.markQueueItemDeletedForUserCleanup).toHaveBeenCalledWith(
+      'wahooAPIWorkoutQueue',
+      'queue-1',
+      'user_deletion_guard',
+    );
+    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.ref);
   });
 
   it('returns a normal busy outcome while the current revision lease is active', async () => {

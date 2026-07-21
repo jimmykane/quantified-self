@@ -7,6 +7,10 @@ import {
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { MAX_RETRY_COUNT } from '../shared/queue-config';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
+import {
+  markQueueItemDeletedForUserCleanup,
+  QUEUE_CLEANUP_TOMBSTONE_REASONS,
+} from '../queue/cleanup-tombstone';
 import { updateQueueItemIfUserActive, QueueItemUserGuardedUpdateResult } from '../queue/dispatch-marker';
 import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { QueueResult } from '../queue-utils';
@@ -61,43 +65,77 @@ function wahooDispatchRecoveryGeneration(
     : 0;
 }
 
+async function deleteWahooWorkoutQueueItemBeforeDispatch(
+  queueItemDocument: admin.firestore.DocumentReference,
+  queueItemID: string,
+): Promise<void> {
+  try {
+    const tombstoneWritten = await markQueueItemDeletedForUserCleanup(
+      WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+      queueItemID,
+      QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
+    );
+    if (!tombstoneWritten) {
+      logger.error(`Failed to write cleanup tombstone for Wahoo queue item ${queueItemID}; leaving item in place to avoid missing-doc Cloud Task retries.`);
+      return;
+    }
+    await admin.firestore().recursiveDelete(queueItemDocument);
+    logger.info(`Deleted Wahoo queue item ${queueItemID} before dispatch recovery because the owning user is missing or deletion is in progress.`);
+  } catch (error) {
+    logger.error(`Failed to delete Wahoo queue item ${queueItemID} before dispatch recovery after the user deletion guard tripped.`, error);
+  }
+}
+
 async function advanceWahooWorkoutQueueDispatchRecoveryGeneration(
   queueItemDocument: admin.firestore.DocumentReference,
   queueItem: WahooAPIWorkoutQueueItemInterface,
 ): Promise<WahooAPIWorkoutQueueItemInterface | null> {
   const db = admin.firestore();
   const attemptedGeneration = wahooDispatchRecoveryGeneration(queueItem);
-  return db.runTransaction(async (transaction) => {
+  const result = await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, queueItem.firebaseUserID!);
     } catch (error) {
       throw new UserDeletionGuardReadError(queueItem.firebaseUserID!, 'wahoo_queue_dispatch_recovery_generation', error);
     }
-    if (deletionGuard.shouldSkip) return null;
+    if (deletionGuard.shouldSkip) return { status: 'skipped_deleted_user' as const };
 
     const snapshot = await transaction.get(queueItemDocument);
-    if (!snapshot.exists) return null;
+    if (!snapshot.exists) return { status: 'not_current' as const };
     const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
     if (!hasSameRevision(current, queueItem)
       || (current as { processed?: boolean }).processed === true
       || current.dispatchedToCloudTask !== null && current.dispatchedToCloudTask !== undefined) {
-      return null;
+      return { status: 'not_current' as const };
     }
 
     const currentGeneration = wahooDispatchRecoveryGeneration(current as WahooAPIWorkoutQueueItemInterface);
     if (currentGeneration > attemptedGeneration) {
-      return Object.assign({}, queueItem, current, { id: queueItem.id, ref: queueItemDocument }) as WahooAPIWorkoutQueueItemInterface;
+      return {
+        status: 'advanced' as const,
+        queueItem: Object.assign({}, queueItem, current, { id: queueItem.id, ref: queueItemDocument }) as WahooAPIWorkoutQueueItemInterface,
+      };
     }
 
     const nextGeneration = Math.max(currentGeneration, attemptedGeneration) + 1;
     transaction.update(queueItemDocument, { dispatchRecoveryGeneration: nextGeneration });
-    return Object.assign({}, queueItem, current, {
-      id: queueItem.id,
-      ref: queueItemDocument,
-      dispatchRecoveryGeneration: nextGeneration,
-    }) as WahooAPIWorkoutQueueItemInterface;
+    return {
+      status: 'advanced' as const,
+      queueItem: Object.assign({}, queueItem, current, {
+        id: queueItem.id,
+        ref: queueItemDocument,
+        dispatchRecoveryGeneration: nextGeneration,
+      }) as WahooAPIWorkoutQueueItemInterface,
+    };
   });
+
+  if (result.status === 'skipped_deleted_user') {
+    await deleteWahooWorkoutQueueItemBeforeDispatch(queueItemDocument, queueItem.id);
+    return null;
+  }
+  if (result.status === 'not_current') return null;
+  return result.queueItem;
 }
 
 export async function upsertWahooWorkoutQueueItem(
