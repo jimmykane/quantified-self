@@ -300,7 +300,7 @@ describe('ServicesComponent', () => {
         expect(component.serviceOverviewCardsBySection.suunto[2].description)
             .toBe('Send FIT activity files or GPX route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads']);
+        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
     });
 
     it('opens the Suunto route and upload cards at their matching tools', () => {

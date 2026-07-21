@@ -27,7 +27,7 @@ The current providers are intentionally not identical:
 | Garmin   | Activity and sleep import, route delivery, and activity sync to Suunto/Wahoo | Garmin Connect is the destination label; its permissions and asynchronous history delivery need dedicated handling. |
 | Suunto   | Activity, sleep, and route import; route/activity destination workflows | Supports both import and destination workflows, including activity delivery to Wahoo.                               |
 | COROS    | Activity and sleep import, activity upload, and activity sync to Suunto/Wahoo | History range and partner API constraints differ from Garmin and Suunto.                                            |
-| Wahoo    | Pro-only activity import through webhook/history and FIT activity delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; it accepts direct FIT and selected source-event delivery.     |
+| Wahoo    | Pro-only activity import through webhook/history and FIT activity delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained Wahoo FITs can sync to Suunto, while Wahoo also accepts direct and selected source-event delivery. |
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
@@ -154,7 +154,7 @@ Use a transaction for an upsert that can race with another webhook or history pa
 
 When a provider accepts activities, use the shared `activity-sync` route model rather than adding a provider-specific fan-out path. Define an explicit `source -> destination` route in `shared/activity-sync-routes.ts`, enable it only from Services, and route historical delivery through the existing date-range backfill callable.
 
-- Make directions explicit. A provider can be a destination without being a source; do not create reverse routes merely because both APIs exist. Wahoo deliberately has Garmin/COROS/Suunto -> Wahoo routes but no Wahoo-origin route, which prevents import/delivery loops.
+- Make directions explicit. A provider can be a destination without being a source; do not create reverse routes merely because both APIs exist. Wahoo has a deliberate Wahoo -> Suunto route because its import path retains native Wahoo FIT files, while Wahoo does not disclose workout summaries that it identifies as third-party-app activity. Document the partner behavior that prevents a reciprocal Wahoo import loop instead of assuming every provider has that protection.
 - Deliver the retained original only when its format is accepted by the destination. Do not silently transcode or use a derived event unless the product contract explicitly covers it.
 - Recheck source and destination connection, entitlement, disconnect-pending, reconnect-required, deletion, and feature-gate state in the worker. A route setting is not an authorization grant.
 - Persist a provider-issued asynchronous upload/job identifier before retrying. Subsequent retries must poll that identifier, not repost the original file, otherwise a timeout can create duplicate activities.

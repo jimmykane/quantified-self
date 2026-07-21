@@ -6,6 +6,7 @@ export const ACTIVITY_SYNC_ROUTE_IDS = {
     GarminAPI_to_WahooAPI: 'GarminAPI_to_WahooAPI',
     COROSAPI_to_WahooAPI: 'COROSAPI_to_WahooAPI',
     SuuntoApp_to_WahooAPI: 'SuuntoApp_to_WahooAPI',
+    WahooAPI_to_SuuntoApp: 'WahooAPI_to_SuuntoApp',
 } as const;
 
 export type ActivitySyncRouteId = typeof ACTIVITY_SYNC_ROUTE_IDS[keyof typeof ACTIVITY_SYNC_ROUTE_IDS];
@@ -46,6 +47,12 @@ export const ACTIVITY_SYNC_ROUTES: Record<ActivitySyncRouteId, ActivitySyncRoute
         id: ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
         sourceServiceName: ServiceNames.SuuntoApp,
         destinationServiceName: ServiceNames.WahooAPI,
+        supportedFileExtensions: ['fit'],
+    },
+    [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: {
+        id: ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp,
+        sourceServiceName: ServiceNames.WahooAPI,
+        destinationServiceName: ServiceNames.SuuntoApp,
         supportedFileExtensions: ['fit'],
     },
 };

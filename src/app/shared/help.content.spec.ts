@@ -616,6 +616,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('Garmin, COROS, or Suunto activities');
+    expect(serviceConnectionsSection?.content).toContain('automatically send new Wahoo activities to Suunto');
     expect(serviceConnectionsSection?.content).toContain('[Wahoo Integration](/integrations/wahoo)');
     expect(serviceConnectionsSection?.links).toContainEqual(expect.objectContaining({
       target: '/policies',

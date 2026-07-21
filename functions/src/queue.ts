@@ -33,7 +33,7 @@ import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
-import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
+import { enqueueActivitySyncAfterEventPersistence } from './activity-sync/enqueue-after-event-persistence';
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from './shared/user-deletion-guard';
@@ -66,33 +66,6 @@ export {
   isProviderQueueUserDeletedOrDeletingError,
   isProviderQueueUserNotConnectedError,
 } from './queue/provider-queue-errors';
-
-async function enqueueActivitySyncBestEffort(
-  parentID: string,
-  eventID: string,
-  sourceServiceName: ServiceNames,
-  sourceActivityID: string,
-  setEventResult: unknown
-): Promise<boolean> {
-  if (await shouldSkipQueueWorkForDeletedUser(parentID, sourceServiceName, eventID, 'before_activity_sync_enqueue')) {
-    return true;
-  }
-
-  try {
-    const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
-    const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
-    await enqueueActivitySyncJobsForImportedEvent({
-      userID: parentID,
-      eventID: activitySyncEventID,
-      sourceServiceName,
-      sourceActivityID,
-      originalFiles: activitySyncOriginalFiles,
-    });
-  } catch (activitySyncError) {
-    logger.error(`[ActivitySync] Failed to enqueue post-import sync for ${sourceServiceName} event ${eventID} and user ${parentID}. Import remains successful.`, activitySyncError);
-  }
-  return false;
-}
 
 function markWorkoutQueueItemSkippedForDeletedUser(
   queueItem: QueueItemInterface,
@@ -740,7 +713,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
+              userID: parentID,
+              eventID: deterministicID,
+              sourceServiceName: ServiceNames.COROSAPI,
+              sourceActivityID: corosWorkoutQueueItem.workoutID,
+              setEventResult,
+            });
             if (skippedAfterDeletionStarted) {
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
             }
@@ -759,7 +738,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
+              userID: parentID,
+              eventID: deterministicID,
+              sourceServiceName: ServiceNames.SuuntoApp,
+              sourceActivityID: suuntoWorkoutQueueItem.workoutID,
+              setEventResult,
+            });
             if (skippedAfterDeletionStarted) {
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
             }

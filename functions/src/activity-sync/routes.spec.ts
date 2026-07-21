@@ -21,9 +21,16 @@ describe('activity-sync Wahoo route registry', () => {
     }
   });
 
-  it('does not register Wahoo as an activity-sync source, preventing outbound delivery loops', () => {
-    const wahooServiceName = ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI].destinationServiceName;
-    expect(Object.values(ACTIVITY_SYNC_ROUTES)
-      .some((route) => route.sourceServiceName === wahooServiceName)).toBe(false);
+  it('registers Wahoo FIT delivery to Suunto', () => {
+    const route = ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp];
+
+    expect(route.sourceServiceName).toBe(
+      ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI].destinationServiceName,
+    );
+    expect(route.destinationServiceName).toBe(
+      ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp].destinationServiceName,
+    );
+    expect(route.supportedFileExtensions).toEqual(['fit']);
+    expect(getActivitySyncRouteId(route.sourceServiceName, route.destinationServiceName)).toBe(route.id);
   });
 });

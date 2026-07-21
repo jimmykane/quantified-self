@@ -22,12 +22,14 @@ describe('integration-pages.content', () => {
     }
   });
 
-  it('documents Wahoo FIT imports, explicit delivery, and retained imported activities after disconnect', () => {
+  it('documents Wahoo FIT imports, Wahoo-to-Suunto sync, explicit delivery, and retained imported activities after disconnect', () => {
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('automatic FIT activity imports');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('activity sync to Wahoo');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('Wahoo-to-Suunto activity sync');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('accepts FIT activity delivery');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not enabled');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct FIT delivery')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Wahoo to Suunto sync')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question.includes('disconnecting'))?.answer)
       .toContain('previously imported activities remain');
   });

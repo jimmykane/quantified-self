@@ -80,7 +80,7 @@ describe('HomeComponent', () => {
         expect(heroText).toContain('One Dashboard. Every Activity.');
         expect(heroText).toContain('Bring Garmin, Suunto, COROS, and Wahoo activity data into one private training dashboard.');
         expect(heroText).toContain('Review readiness, load, intensity, durability, and sleep context');
-        expect(heroText).toContain('keep Garmin or COROS activities syncing to Suunto');
+        expect(heroText).toContain('keep supported activities syncing between connected services');
         expect(heroText).not.toContain('AI Insights');
         expect(heroText).not.toContain('chart-backed answers');
         expect(aiSectionText).toContain('AI Insights');
@@ -137,7 +137,7 @@ describe('HomeComponent', () => {
         );
 
         expect(integrationCards.length).toBe(5);
-        expect(text).toContain('Automatically send new Garmin and COROS activities to Suunto');
+        expect(text).toContain('Automatically send new Garmin, COROS, or Wahoo activities to Suunto');
         expect(text).toContain('Automatic Sync for All Services');
         expect(text).toContain('Automatic Sync Between Services');
         expect(fixture.nativeElement.querySelector('mat-icon[svgIcon="wahoo"], mat-icon[ng-reflect-svg-icon="wahoo"]')).toBeTruthy();

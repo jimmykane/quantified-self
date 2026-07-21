@@ -71,6 +71,17 @@ describe('ActivitySyncRouteControlComponent', () => {
     expect(component.canUseRoute).toBe(true);
   });
 
+  it('resolves the Wahoo to Suunto route through the same control', () => {
+    component.sourceServiceName = ServiceNames.WahooAPI;
+    component.destinationServiceName = ServiceNames.SuuntoApp;
+    component.ngOnChanges();
+
+    expect(component.routeId).toBe(ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp);
+    expect(component.sourceName).toBe('Wahoo');
+    expect(component.destinationName).toBe('Suunto App');
+    expect(component.canUseRoute).toBe(true);
+  });
+
   it('shows a clear route header and both date fields for Wahoo activity sync', () => {
     fixture.detectChanges();
 

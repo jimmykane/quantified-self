@@ -13,6 +13,8 @@ import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
 import { hasProAccess, setEvent } from '../utils';
+import { enqueueActivitySyncAfterEventPersistence } from '../activity-sync/enqueue-after-event-persistence';
+import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { downloadWahooFITFile } from './file-download';
 import { getWahooErrorLogDetails, getWahooRetryError } from './error-details';
@@ -101,13 +103,26 @@ export async function processWahooWorkoutQueueItem(
       queueItem.edited,
       queueItem.fitnessAppID,
     );
-    await setEvent(
+    const setEventResult = await setEvent(
       userID,
       eventID,
       event,
       metadata,
       { data: fitFile, extension: 'fit', startDate: event.startDate },
     );
+    const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
+      userID,
+      eventID,
+      sourceServiceName: ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp].sourceServiceName,
+      sourceActivityID: queueItem.workoutID,
+      setEventResult,
+    });
+    if (skippedAfterDeletionStarted) {
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
+        resultStatus: 'skipped',
+        skippedReason: 'user_deleted_or_deleting',
+      });
+    }
     return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
   } catch (error) {
     logger.error('Wahoo activity processing failed', {

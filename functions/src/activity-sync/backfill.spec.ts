@@ -236,6 +236,24 @@ describe('activity-sync/backfill callable', () => {
     expect(mockIsActivitySyncRouteUserAllowlisted).toHaveBeenCalledWith(route.id, 'user-1');
   });
 
+  it('accepts Wahoo -> Suunto as a supported backfill route', async () => {
+    const route = ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp];
+
+    const response = await invokeBackfill({
+      app: { appId: 'test-app' },
+      auth: { uid: 'user-1' },
+      data: {
+        sourceServiceName: route.sourceServiceName,
+        destinationServiceName: route.destinationServiceName,
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2026-01-31T23:59:59.000Z',
+      },
+    });
+
+    expect(response).toMatchObject({ scanned: 0, queued: 0, failedCount: 0 });
+    expect(mockIsActivitySyncRouteUserAllowlisted).toHaveBeenCalledWith(route.id, 'user-1');
+  });
+
   it('scans events in date range, queues eligible items, and skips unsupported cases without source downloads', async () => {
     const route = ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp];
     const sourceServiceName = route.sourceServiceName;

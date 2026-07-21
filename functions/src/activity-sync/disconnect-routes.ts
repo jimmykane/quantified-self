@@ -4,6 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
+import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { disableActivitySyncRoutesForDisconnectedService } from './route-cleanup';
 
 const REGION = 'europe-west2';
@@ -38,4 +39,11 @@ export const disableActivitySyncRoutesOnCOROSTokenRootDelete = onDocumentDeleted
   region: REGION,
 }, async (event) => {
   await handleServiceTokenRootDisconnected(event.params.uid, ServiceNames.COROSAPI);
+});
+
+export const disableActivitySyncRoutesOnWahooTokenRootDelete = onDocumentDeleted({
+  document: `${WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
+  region: REGION,
+}, async (event) => {
+  await handleServiceTokenRootDisconnected(event.params.uid, ServiceNames.WahooAPI);
 });

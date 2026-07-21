@@ -161,6 +161,23 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
   });
 
+  it('renders the shared Wahoo-to-Suunto activity sync control in the focused activity sync tool', () => {
+    component.user = {} as any;
+    component.hasProAccess = true;
+    component.serviceMeta = { connectionState: 'connected' } as any;
+    component.showAdvancedTools = true;
+    component.showConnectionSummary = false;
+    component.showOnlyActiveProviderTool = true;
+    component.activeProviderTool = 'auto-sync';
+
+    fixture.detectChanges();
+
+    const routeControl = fixture.nativeElement.querySelector('app-activity-sync-route-control');
+    expect(routeControl).toBeTruthy();
+    expect(routeControl.sourceServiceName).toBe(ServiceNames.WahooAPI);
+    expect(routeControl.destinationServiceName).toBe(ServiceNames.SuuntoApp);
+  });
+
   it('rejects a denied Wahoo authorization callback instead of reporting a connection', async () => {
     (component as any).route.snapshot.queryParamMap = convertToParamMap({
       state: 'state-1',

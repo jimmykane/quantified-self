@@ -119,5 +119,17 @@
     </section>
   </section>
   }
+
+  @if (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync') {
+  <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'auto-sync'">
+    <app-activity-sync-route-control
+      [user]="user"
+      [hasProAccess]="hasProAccess"
+      [sourceServiceName]="serviceName"
+      [destinationServiceName]="serviceNames.SuuntoApp"
+      [sourceConnected]="isConnectedToService()">
+    </app-activity-sync-route-control>
+  </section>
+  }
   }
 </div>

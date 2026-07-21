@@ -168,6 +168,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
         actionLabel: 'Send FIT activity',
         tool: 'uploads',
       },
+      {
+        title: 'Send activities to Suunto',
+        description: 'Automatically send new Wahoo activities to Suunto, or sync past activities by date.',
+        detail: 'Automatic and past activity sync',
+        icon: 'published_with_changes',
+        actionLabel: 'Activity sync settings',
+        tool: 'auto-sync',
+      },
     ],
   };
   public serviceNames = ServiceNames;

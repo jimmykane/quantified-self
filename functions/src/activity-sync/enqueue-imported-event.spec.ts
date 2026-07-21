@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
+import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { OriginalFileMetaData } from '../../../shared/app-event.interface';
 
 const fitOriginalFile = (path: string): OriginalFileMetaData => ({
@@ -162,6 +162,35 @@ describe('activity-sync/enqueue-imported-event', () => {
       routeId: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp,
       userID: 'user-1',
       eventID: 'event-coros-1',
+      manual: false,
+    }));
+  });
+
+  it('queues Wahoo->Suunto route when a retained Wahoo FIT is imported', async () => {
+    const result = await enqueueActivitySyncJobsForImportedEvent({
+      userID: 'user-1',
+      eventID: 'event-wahoo-1',
+      sourceServiceName: ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp].sourceServiceName,
+      sourceActivityID: 'wahoo-workout-1',
+      originalFiles: [
+        fitOriginalFile('users/user-1/events/event-wahoo-1/original.fit'),
+      ],
+    });
+
+    expect(result).toEqual({ queued: 1, skippedByReason: {} });
+    expect(mockIsActivitySyncRouteEnabledForUser).toHaveBeenCalledWith(
+      'user-1',
+      ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp,
+    );
+    expect(mockEnqueueActivitySyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-wahoo-1',
+      sourceActivityID: 'wahoo-workout-1',
+      originalFile: expect.objectContaining({
+        path: 'users/user-1/events/event-wahoo-1/original.fit',
+        extension: 'fit',
+      }),
       manual: false,
     }));
   });

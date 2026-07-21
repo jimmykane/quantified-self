@@ -9,6 +9,7 @@ describe('activity-sync/allowlist', () => {
     expect(getActivitySyncRouteAllowlistConfigError(ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI)).toBeNull();
     expect(getActivitySyncRouteAllowlistConfigError(ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI)).toBeNull();
     expect(getActivitySyncRouteAllowlistConfigError(ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI)).toBeNull();
+    expect(getActivitySyncRouteAllowlistConfigError(ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp)).toBeNull();
   });
 
   it('allows any non-empty uid when route allowlist is empty (gate disabled)', () => {
@@ -22,6 +23,10 @@ describe('activity-sync/allowlist', () => {
     )).toBe(true);
     expect(isActivitySyncRouteUserAllowlisted(
       ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      'any-user-id',
+    )).toBe(true);
+    expect(isActivitySyncRouteUserAllowlisted(
+      ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp,
       'any-user-id',
     )).toBe(true);
   });

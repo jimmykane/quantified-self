@@ -159,6 +159,7 @@ export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
   disableActivitySyncRoutesOnCOROSTokenRootDelete,
+  disableActivitySyncRoutesOnWahooTokenRootDelete,
 } from './activity-sync/disconnect-routes';
 
 // Tokens

@@ -115,6 +115,7 @@ import {
   disableActivitySyncRoutesOnCOROSTokenRootDelete,
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
+  disableActivitySyncRoutesOnWahooTokenRootDelete,
 } from './disconnect-routes';
 import {
   disableActivitySyncRoutesForDisconnectedService,
@@ -189,6 +190,9 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: {
             enabled: false,
           },
+          [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: {
+            enabled: false,
+          },
         },
         routeDeliverySyncRoutes: {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: {
@@ -213,6 +217,23 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI]: {
             enabled: false,
           },
+        },
+      },
+    }, { merge: true });
+  });
+
+  it('disables every Wahoo activity-sync route when Wahoo token root is deleted', async () => {
+    await (disableActivitySyncRoutesOnWahooTokenRootDelete as unknown as (event: unknown) => Promise<void>)({
+      params: { uid: 'user-1' },
+    });
+
+    expect(mockSettingsSet).toHaveBeenCalledWith(expect.any(Object), {
+      serviceSyncSettings: {
+        activitySyncRoutes: {
+          [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: { enabled: false },
+          [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI]: { enabled: false },
+          [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
+          [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: { enabled: false },
         },
       },
     }, { merge: true });
@@ -300,6 +321,7 @@ describe('activity-sync/disconnect-routes', () => {
           [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: { enabled: false },
           [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
+          [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: { enabled: false },
         },
         routeDeliverySyncRoutes: {
           [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: false },

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 
 const mocks = vi.hoisted(() => ({
   tokenGet: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   isCurrentRevision: vi.fn().mockResolvedValue(true),
   completeRevision: vi.fn().mockResolvedValue('processed'),
   failRevision: vi.fn().mockResolvedValue('retry'),
+  enqueueActivitySyncAfterEventPersistence: vi.fn(),
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -42,6 +44,9 @@ vi.mock('../queue/user-deletion-skip', () => ({ shouldSkipQueueWorkForDeletedUse
 vi.mock('../service-disconnect-pending', () => ({ isServiceDisconnectPendingForUser: mocks.disconnectPending }));
 vi.mock('../queue/provider-event-id', () => ({ resolveProviderImportEventID: mocks.resolveEventID }));
 vi.mock('../utils', () => ({ hasProAccess: mocks.hasProAccess, setEvent: mocks.setEvent }));
+vi.mock('../activity-sync/enqueue-after-event-persistence', () => ({
+  enqueueActivitySyncAfterEventPersistence: mocks.enqueueActivitySyncAfterEventPersistence,
+}));
 vi.mock('../queue-utils', () => ({
   markQueueItemSkipped: mocks.markSkipped,
   deferQueueItemForPendingDisconnect: mocks.deferPending,
@@ -83,7 +88,14 @@ describe('processWahooWorkoutQueueItem', () => {
     mocks.downloadFIT.mockResolvedValue(Buffer.from('valid-fit'));
     mocks.parseFIT.mockResolvedValue({ startDate: new Date('2026-07-18T09:00:00.000Z'), name: '' });
     mocks.resolveEventID.mockResolvedValue('event-1');
-    mocks.setEvent.mockResolvedValue(undefined);
+    mocks.setEvent.mockResolvedValue({
+      eventID: 'event-1',
+      savedOriginalFiles: [{
+        path: 'users/firebase-1/events/event-1/original.fit',
+        startDate: new Date('2026-07-18T09:00:00.000Z'),
+      }],
+    });
+    mocks.enqueueActivitySyncAfterEventPersistence.mockResolvedValue(false);
     mocks.hasProAccess.mockResolvedValue(true);
     mocks.claimRevision.mockResolvedValue('claimed');
     mocks.isCurrentRevision.mockResolvedValue(true);
@@ -118,7 +130,30 @@ describe('processWahooWorkoutQueueItem', () => {
       }),
       expect.objectContaining({ extension: 'fit' }),
     );
+    expect(mocks.enqueueActivitySyncAfterEventPersistence).toHaveBeenCalledWith({
+      userID: 'firebase-1',
+      eventID: 'event-1',
+      sourceServiceName: ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp].sourceServiceName,
+      sourceActivityID: 'workout-1',
+      setEventResult: expect.objectContaining({
+        eventID: 'event-1',
+        savedOriginalFiles: [expect.objectContaining({
+          path: 'users/firebase-1/events/event-1/original.fit',
+        })],
+      }),
+    });
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
+  });
+
+  it('does not queue activity delivery when deletion starts after the activity was stored', async () => {
+    mocks.enqueueActivitySyncAfterEventPersistence.mockResolvedValue(true);
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'user_deleted_or_deleting',
+    });
   });
 
   it('does not write if deletion starts after the FIT file was parsed', async () => {

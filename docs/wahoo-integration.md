@@ -1,6 +1,6 @@
 # Wahoo Integration
 
-Wahoo is a Pro-only activity integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, and can deliver FIT activities to Wahoo. It does not send plans, routes, sleep, or other data to Wahoo.
+Wahoo is a Pro-only activity integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, can send retained Wahoo FIT activities to Suunto, and can deliver FIT activities to Wahoo. It does not send plans, routes, sleep, or other non-activity data.
 
 This is the Wahoo-specific architecture and release record. For the reusable implementation process, lifecycle requirements, operational checklist, and provider-wide pitfalls, see the [provider integration implementation guide](provider-integration-guide.md).
 
@@ -11,7 +11,8 @@ This is the Wahoo-specific architecture and release record. For the reusable imp
 - New and updated completed workouts from `workout_summary` webhooks.
 - Manual history import from the descending, paginated `GET /v1/workouts` endpoint.
 - FIT parsing through `@sports-alliance/sports-lib`, stable event IDs based on the Wahoo workout ID, and original FIT-file retention with the imported event.
-- FIT activity delivery from Garmin, COROS, and Suunto imported events through the shared activity-sync queue. Wahoo is never an activity-sync source, so activity delivery cannot loop back into Wahoo import.
+- FIT activity delivery from Wahoo imported events to Suunto through the shared activity-sync queue, with automatic delivery for new imports and date-range backfill for retained FIT files.
+- FIT activity delivery to Wahoo from Garmin, COROS, and Suunto imported events through the shared activity-sync queue.
 - Direct, user-selected FIT-file delivery from Wahoo Services. This sends the file only to Wahoo; it does not create or retain a Quantified Self event.
 - Disconnect through `DELETE /v1/permissions`, followed by recursive local token, queue, mapping, and pending-state cleanup.
 
@@ -24,9 +25,10 @@ Workouts without an available FIT file are skipped. Wahoo records identified as 
 3. Wahoo posts completed workout summaries to `wahooAPIWebhook`. The shared webhook token, direct user mapping, active connection, deletion guard, pending-disconnect state, and current Pro access are checked before queueing.
 4. History imports use the same queue path. A per-user lease prevents overlapping history requests, pages stop once the selected start date is reached, and Wahoo rate-limit reset metadata is returned on HTTP 429.
 5. Immediate Cloud Tasks and the scheduled dispatcher both process `wahooAPIWorkoutQueue`. A revision-scoped processing lease serializes updates to the same workout. A newer revision atomically clears an older lease, and stale workers acknowledge only their own snapshot without completing or overwriting the newer revision. The worker rechecks Pro access, deletion, and disconnect state, downloads only allowlisted HTTPS FIT URLs with a bounded request deadline, validates size and FIT magic bytes, parses the event, rechecks deletion immediately before persistence, and retains the original FIT file.
-6. For Garmin, COROS, and Suunto activity-sync routes whose destination is Wahoo, the shared worker downloads the already retained original FIT, creates the documented URL-encoded `POST /v1/workout_file_uploads` payload (`file`, optional `filename`, and optional `time_zone`), persists Wahoo's upload token before retrying, and polls `GET /v1/workout_file_uploads/:token` until it reaches `complete`, `duplicate`, or an error. The worker does not post the FIT again after an asynchronous upload has started.
-7. Direct FIT delivery uses the same Wahoo upload helper and bounded status callable, but no event or source file is persisted by Quantified Self.
-8. Queue documents expire through the shared queue TTL policy. Disconnect and account deletion write cleanup tombstones before recursively removing matching operational documents.
+6. After a Wahoo FIT event is persisted, the common activity-sync handoff queues an enabled Wahoo-to-Suunto route from that retained original FIT. The same route supports manual date-range backfill. Wahoo excludes workout summaries created by third-party fitness applications, so activities that Quantified Self or Suunto previously sent to Wahoo are not imported back through this source flow.
+7. For Garmin, COROS, and Suunto activity-sync routes whose destination is Wahoo, the shared worker downloads the already retained original FIT, creates the documented URL-encoded `POST /v1/workout_file_uploads` payload (`file`, optional `filename`, and optional `time_zone`), persists Wahoo's upload token before retrying, and polls `GET /v1/workout_file_uploads/:token` until it reaches `complete`, `duplicate`, or an error. The worker does not post the FIT again after an asynchronous upload has started.
+8. Direct FIT delivery uses the same Wahoo upload helper and bounded status callable, but no event or source file is persisted by Quantified Self.
+9. Queue documents expire through the shared queue TTL policy. Disconnect and account deletion write cleanup tombstones before recursively removing matching operational documents.
 
 Webhook delivery and history are idempotent. The deterministic queue and event IDs use the Wahoo user and workout IDs; a newer workout-summary revision reopens the same queue item instead of creating a duplicate event.
 
@@ -59,5 +61,5 @@ Configure the deployed webhook URL and the same high-entropy webhook token in th
 3. Register every production OAuth redirect URI and configure the production webhook URL/token in the Wahoo developer portal.
 4. Set the production credentials and exact FIT-file host allowlist.
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
-6. Exercise sandbox OAuth with the write scope, webhook, edited-workout deduplication, history pagination/rate limiting, direct FIT delivery, each source-to-Wahoo route, duplicate uploads, asynchronous upload polling, disconnect, expired-Pro enforcement, and account deletion with test accounts.
+6. Exercise sandbox OAuth with the write scope, webhook, edited-workout deduplication, history pagination/rate limiting, automatic and manual Wahoo-to-Suunto delivery, direct FIT delivery, each source-to-Wahoo route, duplicate uploads, asynchronous upload polling, disconnect, expired-Pro enforcement, and account deletion with test accounts.
 7. Monitor callable/webhook error rates, queue age/retries, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures before enabling broadly.
