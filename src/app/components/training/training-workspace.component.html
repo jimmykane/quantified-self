@@ -108,14 +108,6 @@
             <span>{{ trainingStatus.sessionsCaption }}</span>
           </article>
         }
-        @if (trainingRecoveryEstimate; as estimate) {
-          <article class="training-comparison-panel training-recovery-estimate-panel qs-glass-card-panel">
-            <span class="training-metric-label">Recovery remaining</span>
-            <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
-            <span>{{ estimate.detailText }}</span>
-            @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
-          </article>
-        }
       </div>
       <div class="training-current-context-grid">
         <article class="training-readiness-panel qs-glass-card-panel" aria-labelledby="training-readiness-title">
@@ -123,7 +115,7 @@
             <div>
               <span class="training-metric-label">Current context</span>
               <h3 id="training-readiness-title">Readiness today</h3>
-              <p class="training-readiness-method">Load + recorded recovery · Freshness stays TSS-only.</p>
+              <p class="training-readiness-method">Load + sleep signals · Freshness stays TSS-only.</p>
             </div>
             @if (trainingReadiness.state === 'ready') {
               <div class="training-readiness-summary" aria-label="Current readiness signal summary">
@@ -228,6 +220,20 @@
                 </div>
               }
             </dl>
+          }
+          @if (trainingRecoveryEstimate; as estimate) {
+            <aside class="training-readiness-imported-recovery" aria-label="Imported recovery estimate">
+              <mat-icon aria-hidden="true">timer</mat-icon>
+              <div class="training-readiness-imported-recovery-copy">
+                <span class="training-metric-label">Imported recovery estimate</span>
+                <div class="training-readiness-imported-recovery-value">
+                  <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
+                  <span>remaining</span>
+                </div>
+                <p>{{ estimate.detailText }}</p>
+              </div>
+              @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
+            </aside>
           }
           <p class="training-readiness-source">{{ trainingReadiness.sourceText }}</p>
 

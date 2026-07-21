@@ -40,6 +40,10 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       formPoints: [],
+      recoveryNow: {
+        totalSeconds: 7_200,
+        endTimeMs: Date.now(),
+      },
       formStatus: 'ready', recoveryNowStatus: 'ready', acwrStatus: 'ready', rampRateStatus: 'ready',
       monotonyStrainStatus: 'ready', formNowStatus: 'ready', formPlus7dStatus: 'ready',
       easyPercentStatus: 'ready', hardPercentStatus: 'ready', efficiencyDelta4wStatus: 'ready',
@@ -86,6 +90,10 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Settings vs recent evidence');
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
+    const importedRecovery = element.querySelector('.training-readiness-imported-recovery');
+    expect(importedRecovery?.textContent).toContain('Imported recovery estimate');
+    expect(importedRecovery?.textContent).toContain('separate from Readiness and Freshness');
+    expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running, cycling or swimming sessions in the last 28 days.');

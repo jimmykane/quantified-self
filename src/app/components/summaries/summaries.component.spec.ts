@@ -651,6 +651,7 @@ describe('SummariesComponent', () => {
     vi.setSystemTime(new Date(nowMs));
     (component as any).derivedFormNowContext = { value: 12, latestDayMs: nowMs };
     (component as any).derivedRampRateContext = { rampRate: 1, latestDayMs: nowMs };
+    (component as any).derivedRecoveryNowContext = { totalSeconds: 7_200, endTimeMs: nowMs };
     (component as any).readinessSleepSessions = [
       ...Array.from({ length: 5 }, (_, index) => ({
         id: `baseline-${index}`,
@@ -680,6 +681,8 @@ describe('SummariesComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     expect(nativeElement.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('/100');
     expect(nativeElement.querySelector('.dashboard-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
+    expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
+      .toContain('2h 00m remaining · separate from score');
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
     expect(nativeElement.querySelector('dd[data-tone="positive"]')?.textContent).toContain('+10%');

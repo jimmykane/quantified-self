@@ -54,6 +54,12 @@
   font-size: 1.05rem;
 }
 
+.dashboard-readiness-imported-recovery {
+  border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  margin-top: 0.35rem;
+  padding-top: 0.45rem;
+}
+
 .dashboard-current-state-row dl {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

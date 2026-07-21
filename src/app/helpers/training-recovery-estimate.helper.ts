@@ -23,7 +23,7 @@ export function buildTrainingRecoveryEstimateViewModel(
 
   return {
     valueText: formatSleepDuration(remainingSeconds),
-    detailText: 'Imported post-workout estimate; it is not readiness and does not change your Training state',
+    detailText: 'Active post-workout timer. It is separate from Readiness and Freshness.',
     isUpdating: status !== 'ready' && status !== 'failed',
   };
 }

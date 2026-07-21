@@ -586,10 +586,13 @@ no point and therefore remain visible as gaps rather than being interpolated.
 
 #### Recovery remaining
 
-`recovery_now` combines supported imported post-workout recovery estimates. The card counts down using the stored end
-time. It is explicitly labeled as an imported estimate, not readiness, and does not change the Training state. The
-worker scans a bounded 16-day event window; no events in that window is a valid empty result for new or inactive users
-and is logged as informational rather than a warning.
+`recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as one compact
+row inside Readiness, with its live countdown and explicit separation from the Readiness score and Freshness/Form. It
+replaces the former top-level status tile so the same timer is not presented twice. Dashboard Today shows the same active
+countdown as an imported estimate beneath its score. The timer uses the stored end time, is contextual rather than a
+second recovery model, and never changes Readiness, Freshness, or the Training state. The worker scans a bounded 16-day
+event window; no events in that window is a valid empty result for new or inactive users and is logged as informational
+rather than a warning.
 
 #### Recovery history
 

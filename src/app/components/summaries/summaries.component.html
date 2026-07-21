@@ -42,10 +42,10 @@
         <strong>{{ dashboardTodayReadiness.label }}</strong>
         <b>{{ dashboardTodayReadiness.scoreText }}</b>
       </div>
-      <small class="dashboard-readiness-method">Load + recorded recovery · Freshness stays TSS-only</small>
+      <small class="dashboard-readiness-method">Load + sleep signals · Freshness stays TSS-only</small>
       <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
       @if (dashboardTodayReadiness.recoveryText !== '--') {
-      <small>Imported recovery · {{ dashboardTodayReadiness.recoveryText }}</small>
+      <small class="dashboard-readiness-imported-recovery">Imported recovery estimate · {{ dashboardTodayReadiness.recoveryText }} remaining · separate from score</small>
       }
     </div>
     <dl>
