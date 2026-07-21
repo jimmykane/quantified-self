@@ -133,6 +133,7 @@ const hoisted = vi.hoisted(() => {
         return {
             id: SUUNTO_SERVICE_NAME,
             ref,
+            exists: true,
             data: () => data,
         };
     }
@@ -144,6 +145,7 @@ const hoisted = vi.hoisted(() => {
         return {
             id: serviceName,
             ref,
+            exists: true,
             data: () => data,
         };
     }
@@ -188,9 +190,19 @@ const hoisted = vi.hoisted(() => {
         };
         return callback(transaction);
     });
-    const getAll = vi.fn(async (ref: FakeDocRef) => [
-        makeSnapshot(ref, pitrDocs.get(ref.path)),
-    ]);
+    const getAll = vi.fn(async (...args: any[]) => {
+        const maybeOptions = args[args.length - 1];
+        const hasReadOptions = maybeOptions && typeof maybeOptions === 'object' && !('path' in maybeOptions);
+        const refs = (hasReadOptions ? args.slice(0, -1) : args) as FakeDocRef[];
+        const usePitr = Boolean(hasReadOptions && 'readTime' in maybeOptions);
+        return refs.map((ref) => {
+            const metaDoc = metaDocs.find(doc => doc.ref.path === ref.path);
+            const data = usePitr
+                ? pitrDocs.get(ref.path)
+                : (currentDocs.get(ref.path) || metaDoc?.data());
+            return makeSnapshot(ref, data);
+        });
+    });
     const firestoreFn = vi.fn(() => ({
         collection,
         collectionGroup,
@@ -647,6 +659,34 @@ describe('recover-suunto-outage restore flow', () => {
         expect(summary.affectedCandidates).toBe(2);
         expect(summary.tokenRestore.restored).toBe(2);
         expect(hoisted.collectionGroup).toHaveBeenCalledWith('meta');
+    });
+
+    it('reads explicit user meta directly so targeted recovery does not need the global meta collection-group index', async () => {
+        addAffectedMeta('u1', 'suuntoUser1');
+        addAffectedMeta('u2', 'suuntoUser2');
+        for (const [uid, providerUserId] of [
+            ['u1', 'suuntoUser1'],
+            ['u2', 'suuntoUser2'],
+        ]) {
+            hoisted.pitrDocs.set(suuntoTokenPath(uid, providerUserId), {
+                serviceName: ServiceNames.SuuntoApp,
+                userName: providerUserId,
+            });
+        }
+
+        const summary = await runSuuntoOutageRecoveryScript([
+            '--apply',
+            '--stage=restore',
+            '--uids=u1,u2',
+            '--start',
+            incidentStart,
+            '--end',
+            incidentEnd,
+        ]);
+
+        expect(summary.affectedCandidates).toBe(2);
+        expect(summary.tokenRestore.restored).toBe(2);
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
     it('keeps paginating when full pages contain filtered non-Suunto meta docs', async () => {

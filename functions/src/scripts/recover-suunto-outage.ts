@@ -40,6 +40,7 @@ const DEFAULT_RESTORE_READ_OFFSET_MINUTES = 2;
 const DEFAULT_RECONNECTION_GRACE_MS = 60 * 1000;
 const DRY_RUN_TOKEN_EXPIRY_SAFETY_MS = 5 * 60 * 1000;
 const DEFAULT_PAGE_SIZE = 200;
+const DIRECT_META_READ_BATCH_SIZE = 300;
 const LOG_PREFIX = '[suunto-outage-recovery]';
 
 const SUUNTO_ACTIVITY_SYNC_ROUTE_IDS: ActivitySyncRouteId[] = [
@@ -517,7 +518,78 @@ async function getDocumentAtReadTime(
     return snapshot;
 }
 
+function affectedMetaCandidateFromSnapshot(doc: admin.firestore.DocumentSnapshot, options: ScriptOptions): AffectedMetaCandidate | null {
+    if (!doc.exists || !SUUNTO_SERVICE_IDENTIFIERS.has(doc.id)) {
+        return null;
+    }
+
+    const uid = doc.ref.parent.parent?.id || null;
+    if (!uid || !uidAllowed(uid, options)) {
+        return null;
+    }
+    const data = doc.data() as Record<string, unknown>;
+    const failureCode = normalizeString(data.lastAuthFailureCode);
+    const failureMessage = normalizeString(data.lastAuthFailureMessage);
+    if (!includesInvalidGrant(failureCode, failureMessage)) {
+        return null;
+    }
+    const lastDisconnectedAtMs = toEpochMs(data.lastDisconnectedAt);
+    if (lastDisconnectedAtMs === null) {
+        return null;
+    }
+
+    return {
+        uid,
+        metaPath: doc.ref.path,
+        lastDisconnectedAtMs,
+        providerUserId: extractSuuntoProviderUserIdFromAuthFailure(failureCode, failureMessage),
+        failureCode,
+        failureMessage,
+    };
+}
+
+async function getAffectedMetaCandidatesForExplicitUsers(options: ScriptOptions): Promise<AffectedMetaCandidate[] | null> {
+    const uids = Array.from(new Set(options.uid ? [options.uid] : (options.uids || [])));
+    if (uids.length === 0) {
+        return null;
+    }
+
+    const db = admin.firestore();
+    const refs = uids.flatMap(uid => (
+        Array.from(SUUNTO_SERVICE_IDENTIFIERS).map(serviceIdentifier => (
+            db.collection('users').doc(uid).collection('meta').doc(serviceIdentifier)
+        ))
+    ));
+    const candidates: AffectedMetaCandidate[] = [];
+    const seenPaths = new Set<string>();
+
+    for (let index = 0; index < refs.length; index += DIRECT_META_READ_BATCH_SIZE) {
+        const snapshots = await db.getAll(...refs.slice(index, index + DIRECT_META_READ_BATCH_SIZE));
+        for (const doc of snapshots) {
+            if (seenPaths.has(doc.ref.path)) {
+                continue;
+            }
+            seenPaths.add(doc.ref.path);
+            const candidate = affectedMetaCandidateFromSnapshot(doc, options);
+            if (!candidate) {
+                continue;
+            }
+            candidates.push(candidate);
+            if (candidates.length >= options.limit) {
+                return candidates;
+            }
+        }
+    }
+
+    return candidates;
+}
+
 async function getAffectedMetaCandidates(options: ScriptOptions): Promise<AffectedMetaCandidate[]> {
+    const explicitUserCandidates = await getAffectedMetaCandidatesForExplicitUsers(options);
+    if (explicitUserCandidates) {
+        return explicitUserCandidates;
+    }
+
     const candidates: AffectedMetaCandidate[] = [];
     let cursor: admin.firestore.QueryDocumentSnapshot | undefined;
 
@@ -536,31 +608,11 @@ async function getAffectedMetaCandidates(options: ScriptOptions): Promise<Affect
         }
 
         for (const doc of snapshot.docs) {
-            if (!SUUNTO_SERVICE_IDENTIFIERS.has(doc.id)) {
+            const candidate = affectedMetaCandidateFromSnapshot(doc, options);
+            if (!candidate) {
                 continue;
             }
-            const uid = doc.ref.parent.parent?.id || null;
-            if (!uid || !uidAllowed(uid, options)) {
-                continue;
-            }
-            const data = doc.data() as Record<string, unknown>;
-            const failureCode = normalizeString(data.lastAuthFailureCode);
-            const failureMessage = normalizeString(data.lastAuthFailureMessage);
-            if (!includesInvalidGrant(failureCode, failureMessage)) {
-                continue;
-            }
-            const lastDisconnectedAtMs = toEpochMs(data.lastDisconnectedAt);
-            if (lastDisconnectedAtMs === null) {
-                continue;
-            }
-            candidates.push({
-                uid,
-                metaPath: doc.ref.path,
-                lastDisconnectedAtMs,
-                providerUserId: extractSuuntoProviderUserIdFromAuthFailure(failureCode, failureMessage),
-                failureCode,
-                failureMessage,
-            });
+            candidates.push(candidate);
             if (candidates.length >= options.limit) {
                 break;
             }
