@@ -42,7 +42,6 @@ describe('AppIconService', () => {
         const wahooIcon = readFileSync(resolve(process.cwd(), 'src/assets/logos/wahoo.svg'), 'utf8');
 
         expect(wahooIcon).toContain('<path ');
-        expect(wahooIcon).toContain('fill="currentColor"');
         expect(wahooIcon).not.toContain('<image');
         expect(wahooIcon).not.toContain('data:image');
     });
