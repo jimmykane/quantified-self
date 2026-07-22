@@ -144,7 +144,7 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Send FIT Activity to Wahoo');
     expect(fixture.nativeElement.textContent).toContain('does not create or retain an activity in Quantified Self');
     expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
-    expect(fixture.nativeElement.textContent).toContain('Send FIT Route to Wahoo');
+    expect(fixture.nativeElement.textContent).toContain('Send Route to Wahoo');
     expect(fixture.nativeElement.textContent).toContain('does not create or retain a route in Quantified Self');
     expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
   });
@@ -163,7 +163,7 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.querySelector('.provider-tool-panel')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
-    expect(fixture.nativeElement.textContent).toContain('Wahoo accepts FIT course or route files only');
+    expect(fixture.nativeElement.textContent).toContain('GPX routes to FIT before sending');
   });
 
   it('renders the shared Wahoo-to-Suunto activity sync control in the focused activity sync tool', () => {

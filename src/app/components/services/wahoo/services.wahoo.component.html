@@ -122,10 +122,10 @@
       <div class="tool-subsection-header">
         <div class="tool-subsection-title">
           <mat-icon>route</mat-icon>
-          <span>Send FIT Route to Wahoo</span>
+          <span>Send Route to Wahoo</span>
         </div>
       </div>
-      <p class="description-text">This sends a FIT course or route directly to Wahoo. It does not create or retain a route in Quantified Self.</p>
+      <p class="description-text">This sends a GPX or FIT course or route directly to Wahoo. GPX routes are converted to FIT before sending. It does not create or retain a route in Quantified Self.</p>
       @if (!hasProAccess) {
       <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
         <mat-icon>lock</mat-icon>
@@ -134,10 +134,10 @@
       } @else if (isConnectedToService()) {
       <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-route-to-service>
       <app-status-info type="info" title="Wahoo route access">
-        If Wahoo was connected before route sending was available, reconnect it once to grant route access. Wahoo accepts FIT course or route files only.
+        If Wahoo was connected before route sending was available, reconnect it once to grant route access. Wahoo receives a FIT course; Quantified Self converts selected GPX routes to FIT before sending.
       </app-status-info>
       } @else {
-      <app-status-info type="info" title="Connect Account First">Connect Wahoo before sending FIT routes.</app-status-info>
+      <app-status-info type="info" title="Connect Account First">Connect Wahoo before sending GPX or FIT routes.</app-status-info>
       }
     </section>
   </section>

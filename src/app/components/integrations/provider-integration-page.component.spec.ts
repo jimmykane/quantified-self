@@ -84,9 +84,9 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('Wahoo history import');
     expect(text).toContain('Can I sync Wahoo activities to Suunto automatically?');
     expect(text).toContain('does not delete activities already imported');
-    expect(text).toContain('Direct FIT delivery');
+    expect(text).toContain('Direct GPX/FIT course/route delivery');
     expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');
-    expect(text).toContain('sleep sync, route delivery');
+    expect(text).toContain('sleep sync, plans, and other Wahoo forwarding are not enabled');
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {

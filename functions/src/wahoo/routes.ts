@@ -10,6 +10,7 @@ import {
   DataDistance,
   RouteFileInterface,
   ServiceNames,
+  SportsLib,
   WahooAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 
@@ -35,6 +36,8 @@ import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicate
 const MAX_BASE64_ROUTE_UPLOAD_LENGTH = Math.ceil(MAX_ROUTE_UPLOAD_BYTES / 3) * 4 + 4;
 const MAX_FILENAME_LENGTH = 200;
 const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
+
+type WahooRouteInputFormat = 'fit' | 'gpx';
 
 interface WahooRouteRecord {
   id?: unknown;
@@ -89,10 +92,19 @@ function hasScope(scope: unknown, requiredScope: string): boolean {
     .some((value) => value.trim() === requiredScope);
 }
 
-function normalizeFilename(value: unknown): string {
+function normalizeWahooFitFilename(value: unknown): string {
   const normalized = `${value || ''}`.trim().replace(/[\\/]/g, '_').slice(0, MAX_FILENAME_LENGTH);
   if (!normalized) return 'route.fit';
-  return normalized.toLowerCase().endsWith('.fit') ? normalized : `${normalized}.fit`;
+  if (normalized.toLowerCase().endsWith('.fit')) return normalized;
+  const filenameWithoutExtension = normalized.replace(/\.[^./]+$/, '');
+  return `${filenameWithoutExtension || 'route'}.fit`;
+}
+
+function getWahooRouteInputFormat(filename: unknown): WahooRouteInputFormat {
+  const normalized = `${filename || ''}`.trim().toLowerCase();
+  if (!normalized || normalized.endsWith('.fit')) return 'fit';
+  if (normalized.endsWith('.gpx')) return 'gpx';
+  throw new HttpsError('invalid-argument', 'Wahoo routes must be FIT or GPX files.');
 }
 
 function toUploadBuffer(value: unknown): Buffer {
@@ -250,11 +262,11 @@ export function buildWahooRoutePayload(
 ): WahooRoutePayload {
   const startPoint = getRouteStartPoint(routeFile);
   if (!startPoint) {
-    throw new HttpsError('invalid-argument', 'This FIT route is missing a valid starting coordinate.');
+    throw new HttpsError('invalid-argument', 'This route is missing a valid starting coordinate.');
   }
   const distance = getRouteMetric(routeFile, DataDistance.type);
   if (distance === null || distance <= 0) {
-    throw new HttpsError('invalid-argument', 'This FIT route is missing distance data required by Wahoo.');
+    throw new HttpsError('invalid-argument', 'This route is missing distance data required by Wahoo.');
   }
   const routeName = `${routeFile.name || ''}`.trim() || 'Quantified Self route';
   const ascent = getRouteMetric(routeFile, DataAscent.type) ?? 0;
@@ -262,7 +274,7 @@ export function buildWahooRoutePayload(
 
   return {
     externalId: createExternalId(userID, fileBuffer),
-    filename: normalizeFilename(filename),
+    filename: normalizeWahooFitFilename(filename),
     name: routeName.slice(0, 200),
     workoutTypeFamilyId: getWorkoutTypeFamilyId(routeFile),
     startLatitude: startPoint.latitude,
@@ -363,22 +375,45 @@ function toWahooRouteHttpsError(error: unknown): never {
   );
 }
 
-async function parseWahooFitRoute(fileBuffer: Buffer): Promise<RouteFileInterface> {
+async function parseWahooRoute(
+  fileBuffer: Buffer,
+  inputFormat: WahooRouteInputFormat,
+): Promise<RouteFileInterface> {
   try {
-    const routeFile = await parseRoutePayload(fileBuffer, 'fit');
+    const routeFile = await parseRoutePayload(fileBuffer, inputFormat);
     if (!routeFile.hasRoutes()) {
-      throw new RouteProcessingHttpStatusError(400, 'No routes found in FIT file.');
+      throw new RouteProcessingHttpStatusError(400, `No routes found in ${inputFormat.toUpperCase()} file.`);
     }
     return routeFile as RouteFileInterface;
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    throw new HttpsError('invalid-argument', getRouteParsingFailureMessage(error, 'fit'));
+    throw new HttpsError('invalid-argument', getRouteParsingFailureMessage(error, inputFormat));
   }
 }
 
-export async function uploadFitRouteToWahoo(
+async function convertWahooGpxRouteToFit(routeFile: RouteFileInterface): Promise<Buffer> {
+  try {
+    const fitBuffer = Buffer.from(await SportsLib.exportRoutesToFit(routeFile));
+    if (fitBuffer.length === 0) {
+      throw new Error('Generated FIT route is empty.');
+    }
+    if (fitBuffer.length > MAX_ROUTE_UPLOAD_BYTES) {
+      throw new HttpsError('invalid-argument', 'Cannot upload route because the converted FIT file is greater than 20MB.');
+    }
+    return fitBuffer;
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError(
+      'invalid-argument',
+      'This GPX route could not be converted to a FIT course for Wahoo. It must contain exactly one route with valid coordinates.',
+    );
+  }
+}
+
+async function uploadWahooRoute(
   userID: string,
   fileBuffer: Buffer,
+  inputFormat: WahooRouteInputFormat,
   filename?: unknown,
 ): Promise<WahooRouteUploadResult> {
   if (fileBuffer.length === 0) {
@@ -390,9 +425,12 @@ export async function uploadFitRouteToWahoo(
 
   try {
     return await withWahooRouteAccessToken(userID, async (accessToken) => {
-      const routeFile = await parseWahooFitRoute(fileBuffer);
+      const routeFile = await parseWahooRoute(fileBuffer, inputFormat);
+      const fitBuffer = inputFormat === 'gpx'
+        ? await convertWahooGpxRouteToFit(routeFile)
+        : fileBuffer;
       const payload = buildWahooRoutePayload(userID, fileBuffer, routeFile, filename);
-      const form = buildWahooRouteForm(fileBuffer, payload);
+      const form = buildWahooRouteForm(fitBuffer, payload);
       await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_lookup');
       const existingRoute = await findWahooRouteByExternalId(accessToken, payload.externalId);
       const existingRouteId = getProviderRouteId(existingRoute);
@@ -431,6 +469,27 @@ export async function uploadFitRouteToWahoo(
   }
 }
 
+/**
+ * Sends a user-selected FIT or GPX route to Wahoo. GPX is converted to a FIT
+ * course in memory because the Wahoo route endpoint accepts FIT payloads.
+ */
+export async function uploadRouteToWahoo(
+  userID: string,
+  fileBuffer: Buffer,
+  filename?: unknown,
+): Promise<WahooRouteUploadResult> {
+  return uploadWahooRoute(userID, fileBuffer, getWahooRouteInputFormat(filename), filename);
+}
+
+/** @deprecated Use uploadRouteToWahoo for user-selected files. */
+export async function uploadFitRouteToWahoo(
+  userID: string,
+  fileBuffer: Buffer,
+  filename?: unknown,
+): Promise<WahooRouteUploadResult> {
+  return uploadWahooRoute(userID, fileBuffer, 'fit', filename);
+}
+
 async function requireWahooRouteUploadAccess(request: { auth?: { uid: string } | null }): Promise<string> {
   enforceAppCheck(request as Parameters<typeof enforceAppCheck>[0]);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
@@ -448,5 +507,5 @@ export const importRouteToWahooAPI = onCall({
   const userID = await requireWahooRouteUploadAccess(request);
   const payload = request.data as WahooRouteUploadRequest;
   const fileBuffer = toUploadBuffer(payload?.file);
-  return uploadFitRouteToWahoo(userID, fileBuffer, payload?.filename);
+  return uploadRouteToWahoo(userID, fileBuffer, payload?.filename);
 });

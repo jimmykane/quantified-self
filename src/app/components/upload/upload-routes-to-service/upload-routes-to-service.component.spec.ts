@@ -244,10 +244,12 @@ describe('UploadRoutesToServiceComponent', () => {
         });
     });
 
-    it('rejects GPX files for Wahoo route upload', async () => {
-        component.serviceName = ServiceNames.WahooAPI;
-        const file = {
-            file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
+    it('uploads a GPX route to Wahoo for server-side FIT conversion', async () => {
+      component.serviceName = ServiceNames.WahooAPI;
+      const file = {
+            file: Object.assign(new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }), {
+                arrayBuffer: () => Promise.resolve(Uint8Array.from([60, 103, 112, 120, 47, 62]).buffer),
+            }),
             filename: 'route',
             extension: 'gpx',
             data: null,
@@ -256,8 +258,19 @@ describe('UploadRoutesToServiceComponent', () => {
             status: UPLOAD_STATUS.PROCESSING,
         };
 
-        await expect(component.processAndUploadFile(file)).rejects.toThrow('Only FIT route files are supported by Wahoo.');
-        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        await component.processAndUploadFile(file);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToWahooAPI', {
+            file: 'PGdweC8+',
+            filename: 'route.gpx',
+        });
+    });
+
+    it('accepts GPX and FIT routes for Wahoo', () => {
+        component.serviceName = ServiceNames.WahooAPI;
+
+        expect(component.fileAccept).toBe('.fit,.gpx');
+        expect(component.uploadPrompt).toBe('Open or drag and drop GPX or FIT route files');
     });
 
     it('shows Wahoo route rejection details to the user', async () => {

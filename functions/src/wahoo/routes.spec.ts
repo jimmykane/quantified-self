@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   const isDisconnectPendingForUser = vi.fn();
   const getUserDeletionGuardState = vi.fn();
   const parseRoutePayload = vi.fn();
+  const exportRoutesToFit = vi.fn();
   const tokenRefGet = vi.fn();
   const tokenQueryGet = vi.fn();
   const loggerWarn = vi.fn();
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => {
     isDisconnectPendingForUser,
     getUserDeletionGuardState,
     parseRoutePayload,
+    exportRoutesToFit,
     tokenRefGet,
     tokenQueryGet,
     tokenRef,
@@ -73,9 +75,16 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 vi.mock('../routes/route-processing', () => ({
   parseRoutePayload: mocks.parseRoutePayload,
-  getRouteParsingFailureMessage: (error: unknown) => error instanceof Error ? error.message : 'Could not read this FIT route file.',
+  getRouteParsingFailureMessage: (error: unknown, fileType: string) => error instanceof Error ? error.message : `Could not read this ${fileType.toUpperCase()} route file.`,
   RouteProcessingHttpStatusError: class RouteProcessingHttpStatusError extends Error {},
 }));
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+  return {
+    ...actual,
+    SportsLib: { exportRoutesToFit: mocks.exportRoutesToFit },
+  };
+});
 vi.mock('firebase-functions/logger', () => ({ warn: mocks.loggerWarn }));
 vi.mock('./auth/api', () => ({
   requestWahooAPI: mocks.requestWahooAPI,
@@ -83,7 +92,7 @@ vi.mock('./auth/api', () => ({
   WahooAPITransportError: class WahooAPITransportError extends Error {},
 }));
 
-import { uploadFitRouteToWahoo } from './routes';
+import { uploadFitRouteToWahoo, uploadRouteToWahoo } from './routes';
 import { WahooAPIRequestError } from './auth/api';
 
 function routeFile(overrides: Partial<Record<string, unknown>> = {}) {
@@ -118,6 +127,7 @@ describe('Wahoo route uploads', () => {
       scope: 'user_read workouts_read workouts_write routes_read routes_write offline_data',
     });
     mocks.parseRoutePayload.mockResolvedValue(routeFile());
+    mocks.exportRoutesToFit.mockResolvedValue(Uint8Array.from([70, 73, 84]).buffer);
   });
 
   it('uses the shared high-memory route-processing runtime', () => {
@@ -157,6 +167,57 @@ describe('Wahoo route uploads', () => {
     expect(request.form.get('route[distance]')).toBe('12345');
     expect(request.form.get('route[ascent]')).toBe('321');
     expect(request.form.get('route[descent]')).toBe('275');
+    expect(mocks.exportRoutesToFit).not.toHaveBeenCalled();
+  });
+
+  it('converts a GPX route to FIT before creating an idempotent Wahoo route', async () => {
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { id: 42 } });
+
+    await expect(uploadRouteToWahoo('user-1', Buffer.from('<gpx/>'), 'morning.gpx')).resolves.toEqual({
+      status: 'success',
+      providerRouteId: '42',
+      message: 'Route uploaded to Wahoo.',
+    });
+
+    expect(mocks.parseRoutePayload).toHaveBeenCalledWith(Buffer.from('<gpx/>'), 'gpx');
+    expect(mocks.exportRoutesToFit).toHaveBeenCalledWith(expect.objectContaining({ name: 'Morning ride' }));
+
+    const [, uploadPath, request] = mocks.requestWahooAPI.mock.calls[1];
+    expect(uploadPath).toBe('/v1/routes');
+    expect(request.form.get('route[file]')).toBe('data:application/vnd.fit;base64,RklU');
+    expect(request.form.get('route[filename]')).toBe('morning.fit');
+  });
+
+  it('rejects unsupported Wahoo route file types before looking up a token', async () => {
+    await expect(uploadRouteToWahoo('user-1', Buffer.from('TCX'), 'route.tcx'))
+      .rejects.toMatchObject({ code: 'invalid-argument', message: 'Wahoo routes must be FIT or GPX files.' });
+    expect(mocks.getTokenData).not.toHaveBeenCalled();
+    expect(mocks.parseRoutePayload).not.toHaveBeenCalled();
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('returns a clear validation error when a GPX route cannot be converted to a FIT course', async () => {
+    mocks.exportRoutesToFit.mockRejectedValue(new Error('multiple routes'));
+
+    await expect(uploadRouteToWahoo('user-1', Buffer.from('<gpx/>'), 'route.gpx'))
+      .rejects.toMatchObject({
+        code: 'invalid-argument',
+        message: expect.stringContaining('could not be converted'),
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('rejects a converted GPX FIT payload over the Wahoo route size limit', async () => {
+    mocks.exportRoutesToFit.mockResolvedValue(new ArrayBuffer((20 * 1024 * 1024) + 1));
+
+    await expect(uploadRouteToWahoo('user-1', Buffer.from('<gpx/>'), 'route.gpx'))
+      .rejects.toMatchObject({
+        code: 'invalid-argument',
+        message: 'Cannot upload route because the converted FIT file is greater than 20MB.',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
   it('updates the route owned by this app when its external id already exists', async () => {

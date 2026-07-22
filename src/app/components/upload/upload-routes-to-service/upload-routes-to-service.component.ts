@@ -45,16 +45,16 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     return this._serviceName;
   }
 
-  get acceptsFitRoutes(): boolean {
+  get acceptsWahooRoutes(): boolean {
     return this.serviceName === ServiceNames.WahooAPI;
   }
 
   get fileAccept(): string {
-    return this.acceptsFitRoutes ? '.fit' : '.gpx';
+    return this.acceptsWahooRoutes ? '.fit,.gpx' : '.gpx';
   }
 
   get uploadPrompt(): string {
-    return this.acceptsFitRoutes ? 'Open or drag and drop FIT route files' : 'Open or drag and drop GPX route files';
+    return this.acceptsWahooRoutes ? 'Open or drag and drop GPX or FIT route files' : 'Open or drag and drop GPX route files';
   }
 
   constructor() {
@@ -66,8 +66,8 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
 
   async processAndUploadFile(file: FileInterface) {
     this.analyticsService.logEvent('upload_route_to_service', { service: this.serviceName });
-    if (this.acceptsFitRoutes) {
-      return this.processAndUploadWahooFitRoute(file);
+    if (this.acceptsWahooRoutes) {
+      return this.processAndUploadWahooRoute(file);
     }
 
     return new Promise((resolve, reject) => {
@@ -141,9 +141,9 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     })
   }
 
-  private async processAndUploadWahooFitRoute(file: FileInterface): Promise<boolean> {
-    if (file.extension.toLowerCase() !== 'fit') {
-      throw new Error('Only FIT route files are supported by Wahoo.');
+  private async processAndUploadWahooRoute(file: FileInterface): Promise<boolean> {
+    if (!['fit', 'gpx'].includes(file.extension.toLowerCase())) {
+      throw new Error('Only GPX or FIT route files are supported by Wahoo.');
     }
     if (!this.auth.currentUser) {
       throw new Error('User not logged in');
@@ -187,10 +187,10 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   private readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader();
-      fileReader.onerror = () => reject(new Error('Could not read the FIT route file.'));
+      fileReader.onerror = () => reject(new Error('Could not read the Wahoo route file.'));
       fileReader.onload = () => {
         if (!(fileReader.result instanceof ArrayBuffer)) {
-          reject(new Error('Could not read the FIT route file.'));
+          reject(new Error('Could not read the Wahoo route file.'));
           return;
         }
         resolve(fileReader.result);
