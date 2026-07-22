@@ -650,6 +650,36 @@ describe('activity-sync/process-queue-item', () => {
     );
   });
 
+  it('marks processed as skipped when Wahoo detects deletion during destination upload', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(Object.assign(new Error('deleted during Wahoo upload'), {
+      name: 'WahooActivityUploadSkippedForDeletedUserError',
+      code: 'user_deleted_or_deleting',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'), expect.objectContaining({
+      filename: 'original.fit',
+    }));
+    expect(mockSetActivitySyncFailedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMarkQueueItemSkipped).toHaveBeenCalledWith(
+      queueItem,
+      undefined,
+      'user_deleted_or_deleting',
+      expect.objectContaining({
+        skippedContext: 'USER_DELETION_GUARD',
+      }),
+    );
+  });
+
   it('increments retry for transient upload failures with numeric gRPC code', async () => {
     mockUploadActivityFileToSuunto.mockRejectedValue({ code: 14, message: 'service unavailable' });
 

@@ -148,6 +148,7 @@ function isAccountDeletionSkipError(error: unknown): boolean {
         && (
             error.name === 'TokenRefreshSkippedForDeletedUserError'
             || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
+            || error.name === 'WahooActivityUploadSkippedForDeletedUserError'
         );
 }
 
