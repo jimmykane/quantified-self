@@ -724,7 +724,7 @@ export const DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS = 16 * 60 * 60;
 export const DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES = 12 * 60;
 // Increment only when the persisted recovery-context calculation changes. This
 // lets Training rebuild the affected snapshot without invalidating unrelated metrics.
-export const DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION = 2;
+export const DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION = 3;
 
 export function getDerivedTrainingRecoveryMinimumComparableNights(expectedNightCount: number): number {
   const normalizedExpectedNightCount = Number.isFinite(expectedNightCount)
@@ -747,6 +747,8 @@ export interface DerivedTrainingRecoveryWindow {
   expectedNightCount: number;
   coverage: DerivedTrainingRecoveryCoverage;
   averageSleepSeconds: number | null;
+  typicalLocalStartMinutes: number | null;
+  typicalLocalEndMinutes: number | null;
   bedtimeVariationMinutes: number | null;
   medianOvernightHrvMs: number | null;
   overnightHrvNightCount: number;

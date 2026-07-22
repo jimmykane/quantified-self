@@ -996,6 +996,42 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(result.payload.recovery.current.bedtimeVariationMinutes).toBe(120);
     });
 
+    it('derives a typical local sleep window only from complete local start and end evidence', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const dayMs = 24 * 60 * 60 * 1000;
+        const firstSleepDayMs = Date.UTC(2026, 5, 25);
+        const sleepDocs = Array.from({ length: 6 }, (_, index) => {
+            const sleepDayMs = firstSleepDayMs + (index * dayMs);
+            const hasCompleteLocalWindow = index < 5;
+            return {
+                id: `local-window-${index}`,
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (90 * 60 * 1000),
+                    ...(hasCompleteLocalWindow ? { endTimeMs: sleepDayMs + ((6 * 60 + 45) * 60 * 1000) } : {}),
+                    durationSeconds: 8 * 3600,
+                    timezoneOffsetSeconds: 0,
+                    isNap: false,
+                    vitals: {},
+                }),
+            };
+        });
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs as any,
+        );
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 6,
+            typicalLocalStartMinutes: (22 * 60) + 30,
+            typicalLocalEndMinutes: (6 * 60) + 45,
+        });
+    });
+
     it('keeps malformed finite timestamps and timezone offsets from poisoning bedtime variation', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const dayMs = 24 * 60 * 60 * 1000;

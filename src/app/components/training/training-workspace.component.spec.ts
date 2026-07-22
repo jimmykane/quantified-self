@@ -917,13 +917,13 @@ describe('TrainingWorkspaceComponent', () => {
       current: {
         periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
         recordedNightCount: 20, expectedNightCount: 28, coverage: 'sufficient',
-        averageSleepSeconds: 8 * 3600, bedtimeVariationMinutes: 30,
+        averageSleepSeconds: 8 * 3600, typicalLocalStartMinutes: 22 * 60, typicalLocalEndMinutes: 6 * 60, bedtimeVariationMinutes: 30,
         medianOvernightHrvMs: 60, overnightHrvNightCount: 20,
       },
       reference: {
         periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
         recordedNightCount: 50, expectedNightCount: 84, coverage: 'sufficient',
-        averageSleepSeconds: 7 * 3600, bedtimeVariationMinutes: 45,
+        averageSleepSeconds: 7 * 3600, typicalLocalStartMinutes: (22 * 60) + 15, typicalLocalEndMinutes: (6 * 60) + 15, bedtimeVariationMinutes: 45,
         medianOvernightHrvMs: 50, overnightHrvNightCount: 50,
       },
     };
@@ -932,6 +932,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryView.compactText).toBe('Sleep 1h 00m longer per night · Overnight HRV +10 ms');
     expect(recoveryView.metricRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Sleep / night', currentText: '8h 00m', deltaText: '+1h 00m', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Typical sleep window', currentText: '22:00–06:00', referenceText: '22:15–06:15', deltaText: '15m earlier', deltaTone: 'neutral' }),
       expect.objectContaining({ label: 'Recorded nights', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Bedtime variation', deltaText: '15m steadier', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Overnight HRV', deltaText: '+10 ms', deltaTone: 'positive' }),
@@ -954,7 +955,7 @@ describe('TrainingWorkspaceComponent', () => {
       'Recorded sleep coverage supports comparison where matching metrics are available.',
     );
     expect(missingBedtimeRecoveryView.sourceText).toContain(
-      'Bedtime variation needs at least five nights that include local-time data.',
+      'Bedtime variation and the typical sleep window need at least five nights with local start and end times.',
     );
     expect(missingBedtimeRecoveryView.sourceText).not.toContain('Overnight HRV needs');
 
@@ -1224,13 +1225,13 @@ describe('TrainingWorkspaceComponent', () => {
             current: {
               periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
               recordedNightCount: 78, expectedNightCount: 84, coverage: 'sufficient',
-              averageSleepSeconds: 31_200, bedtimeVariationMinutes: 36,
+              averageSleepSeconds: 31_200, typicalLocalStartMinutes: 1_380, typicalLocalEndMinutes: 420, bedtimeVariationMinutes: 36,
               medianOvernightHrvMs: 33, overnightHrvNightCount: 78,
             },
             reference: {
               periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
               recordedNightCount: 78, expectedNightCount: 84, coverage: 'sufficient',
-              averageSleepSeconds: 32_400, bedtimeVariationMinutes: 35,
+              averageSleepSeconds: 32_400, typicalLocalStartMinutes: 1_365, typicalLocalEndMinutes: 405, bedtimeVariationMinutes: 35,
               medianOvernightHrvMs: 30, overnightHrvNightCount: 78,
             },
           },

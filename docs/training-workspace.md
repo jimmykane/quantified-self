@@ -601,7 +601,7 @@ The expandable Recovery history inside Readiness uses:
 - Current: the current 28-day window.
 - Reference: the immediately preceding 84-day window.
 - Main overnight sleep only; naps excluded.
-- Metrics: average sleep per night, recorded-night coverage, bedtime variation, and median overnight HRV.
+- Metrics: average sleep per night, a typical local sleep window, recorded-night coverage, bedtime variation, and median overnight HRV.
 
 Comparative deltas require the same provider and sufficient coverage in both windows. The minimum is at least seven
 nights and at least half of each window (`14/28` and `42/84` for the normal comparison). Bedtime regularity requires a
@@ -610,10 +610,13 @@ usable timezone; the builder must not fabricate local bedtime from UTC timestamp
 supply an offset-bearing sleep timestamp. The build-comparison projection includes that historical Suunto timestamp and
 prefers a valid normalized `timezoneOffsetSeconds` before falling back to its embedded offset. Any provider can omit that
 evidence, and older backfilled records can predate offset persistence. Those nights still contribute valid duration and
-overnight HRV when available, but not bedtime variation. The frontend must therefore accept a missing bedtime variation
-independently of total recorded-night count. It renders only the missing metric as unavailable, explains the local-time
-or HRV evidence requirement, and keeps other valid recovery metrics visible. Comparison copy must not imply that every
-metric is available.
+overnight HRV when available, but not local timing metrics. The typical sleep window is the circular-medoid local start
+and end clock time across at least five main sleeps with both trustworthy local endpoints; it is a representative clock
+pattern, not a duration-derived or UTC-inferred time. The table compares a start-time shift as earlier/later without
+presenting one direction as inherently better. The frontend must therefore accept missing sleep-window and bedtime-
+variation evidence independently of total recorded-night count. It renders only the missing metric as unavailable,
+explains the local-time or HRV evidence requirement, and keeps other valid recovery metrics visible. Comparison copy must
+not imply that every metric is available.
 
 `training_build_comparison.payload.recoveryVersion` tracks this recovery interpretation independently of the global
 derived-metric schema. When it changes, both the frontend normalizer and backend freshness gate request only a new

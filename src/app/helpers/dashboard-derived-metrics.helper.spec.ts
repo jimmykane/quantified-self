@@ -387,6 +387,8 @@ describe('dashboard-derived-metrics.helper', () => {
       expectedNightCount: periodDays,
       coverage: 'none',
       averageSleepSeconds: null,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: null,
       medianOvernightHrvMs: null,
       overnightHrvNightCount: 0,
@@ -495,6 +497,8 @@ describe('dashboard-derived-metrics.helper', () => {
         recordedNightCount: 20,
         coverage: 'sufficient',
         averageSleepSeconds: 8 * 60 * 60,
+        typicalLocalStartMinutes: null,
+        typicalLocalEndMinutes: null,
         bedtimeVariationMinutes: null,
         medianOvernightHrvMs: 42,
         overnightHrvNightCount: 18,
@@ -502,10 +506,23 @@ describe('dashboard-derived-metrics.helper', () => {
       expect(resolveDashboardTrainingBuildComparisonContext(payload)).not.toBeNull();
     }
     Object.assign(payload.recovery.current, {
+      typicalLocalStartMinutes: 22 * 60,
+      typicalLocalEndMinutes: 6 * 60,
+    });
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).not.toBeNull();
+    payload.recovery.current.typicalLocalEndMinutes = 24 * 60;
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+    Object.assign(payload.recovery.current, {
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
+    });
+    Object.assign(payload.recovery.current, {
       provider: 'GarminAPI',
       recordedNightCount: 4,
       coverage: 'limited',
       averageSleepSeconds: 8 * 60 * 60,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: 30,
       medianOvernightHrvMs: null,
       overnightHrvNightCount: 0,
@@ -517,6 +534,8 @@ describe('dashboard-derived-metrics.helper', () => {
       recordedNightCount: 5,
       coverage: 'limited',
       averageSleepSeconds: 8 * 60 * 60,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: 721,
     });
     expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
@@ -525,6 +544,8 @@ describe('dashboard-derived-metrics.helper', () => {
       recordedNightCount: 0,
       coverage: 'none',
       averageSleepSeconds: null,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: null,
     });
 

@@ -2920,6 +2920,7 @@ interface ResolvedTrainingSleepNight {
     sleepDayMs: number;
     durationSeconds: number;
     localBedtimeMinutes: number | null;
+    localWakeTimeMinutes: number | null;
     overnightHrvMs: number | null;
 }
 
@@ -2928,6 +2929,7 @@ interface TrainingSleepNightCandidate {
     sleepDayMs: number;
     durationSeconds: number;
     startTimeMs: number;
+    endTimeMs: number | null;
     timezoneOffsetSeconds: number | null;
     overnightHrvMs: number | null;
 }
@@ -2979,6 +2981,15 @@ function resolveTrainingSleepTimezoneOffsetSeconds(
     return parseDateTimeOffsetSeconds(suuntoFields.timestamp);
 }
 
+function hasValidTrainingSleepEndTime(startTimeMs: number, endTimeMs: number | null): endTimeMs is number {
+    if (endTimeMs === null || endTimeMs <= startTimeMs) {
+        return false;
+    }
+    const spanSeconds = (endTimeMs - startTimeMs) / 1000;
+    return spanSeconds >= DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+        && spanSeconds <= DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS;
+}
+
 function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
@@ -3025,8 +3036,12 @@ function resolveTrainingSleepNights(
             : {};
         const overnightHrvMs = toFinitePositiveNumber(vitals.overnightHrvMs)
             ?? toFinitePositiveNumber(vitals.averageHrvMs);
+        const hasValidEndTime = hasValidTrainingSleepEndTime(startTimeMs, endTimeMs);
         const key = `${provider}:${formatUtcDayKey(sleepDayMs)}`;
         const existing = candidates.get(key);
+        const existingHasValidEndTime = existing
+            ? hasValidTrainingSleepEndTime(existing.startTimeMs, existing.endTimeMs)
+            : false;
         const shouldKeepExisting = existing
             && (
                 existing.durationSeconds > durationSeconds
@@ -3040,6 +3055,12 @@ function resolveTrainingSleepNights(
                 || (existing.durationSeconds === durationSeconds
                     && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
                     && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
+                    && existingHasValidEndTime
+                    && !hasValidEndTime)
+                || (existing.durationSeconds === durationSeconds
+                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
+                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
+                    && existingHasValidEndTime === hasValidEndTime
                     && existing.startTimeMs <= startTimeMs)
             );
         if (shouldKeepExisting) {
@@ -3050,6 +3071,7 @@ function resolveTrainingSleepNights(
             sleepDayMs,
             durationSeconds,
             startTimeMs,
+            endTimeMs,
             timezoneOffsetSeconds,
             overnightHrvMs,
         });
@@ -3062,6 +3084,10 @@ function resolveTrainingSleepNights(
         localBedtimeMinutes: night.timezoneOffsetSeconds === null
             ? null
             : resolveLocalClockMinutes(night.startTimeMs, night.timezoneOffsetSeconds),
+        localWakeTimeMinutes: night.timezoneOffsetSeconds === null
+            || !hasValidTrainingSleepEndTime(night.startTimeMs, night.endTimeMs)
+            ? null
+            : resolveLocalClockMinutes(night.endTimeMs, night.timezoneOffsetSeconds),
         overnightHrvMs: night.overnightHrvMs,
     }));
 }
@@ -3279,7 +3305,7 @@ function resolveCircularMinuteDistance(left: number, right: number): number {
     return Math.min(absoluteDistance, (24 * 60) - absoluteDistance);
 }
 
-function resolveBedtimeVariationMinutes(values: readonly number[]): number | null {
+function resolveCircularCenterMinute(values: readonly number[]): number | null {
     if (!values.length) {
         return null;
     }
@@ -3292,7 +3318,12 @@ function resolveBedtimeVariationMinutes(values: readonly number[]): number | nul
             ),
         }))
         .sort((left, right) => left.totalDistance - right.totalDistance || left.value - right.value)[0]?.value;
-    if (center === undefined) {
+    return center === undefined ? null : center;
+}
+
+function resolveBedtimeVariationMinutes(values: readonly number[]): number | null {
+    const center = resolveCircularCenterMinute(values);
+    if (center === null) {
         return null;
     }
     return resolveMedian(values.map(value => resolveCircularMinuteDistance(value, center)));
@@ -3325,6 +3356,9 @@ function buildTrainingRecoveryWindow(
     const localBedtimes = selectedNights.flatMap(
         night => night.localBedtimeMinutes === null ? [] : [night.localBedtimeMinutes],
     );
+    const localSleepWindows = selectedNights.filter(
+        night => night.localBedtimeMinutes !== null && night.localWakeTimeMinutes !== null,
+    );
     const bedtimeVariationMinutes = localBedtimes.length >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
         ? resolveBedtimeVariationMinutes(localBedtimes)
         : null;
@@ -3338,6 +3372,12 @@ function buildTrainingRecoveryWindow(
         coverage: resolveTrainingRecoveryCoverage(selectedNights.length, periodDays),
         averageSleepSeconds: selectedNights.length >= DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS
             ? Math.round(selectedNights.reduce((sum, night) => sum + night.durationSeconds, 0) / selectedNights.length)
+            : null,
+        typicalLocalStartMinutes: localSleepWindows.length >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
+            ? resolveCircularCenterMinute(localSleepWindows.map(night => night.localBedtimeMinutes as number))
+            : null,
+        typicalLocalEndMinutes: localSleepWindows.length >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
+            ? resolveCircularCenterMinute(localSleepWindows.map(night => night.localWakeTimeMinutes as number))
             : null,
         bedtimeVariationMinutes: bedtimeVariationMinutes === null ? null : Math.round(bedtimeVariationMinutes),
         medianOvernightHrvMs: hrvValues.length >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS

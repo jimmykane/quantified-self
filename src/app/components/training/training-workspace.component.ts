@@ -1249,6 +1249,17 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         ? this.resolveTrainingComparisonDeltaTone(current.averageSleepSeconds, reference.averageSleepSeconds, 'direct', 60)
         : 'neutral',
     }, {
+      label: 'Typical sleep window',
+      currentText: this.formatTrainingRecoverySleepWindow(current),
+      referenceText: this.formatTrainingRecoverySleepWindow(reference),
+      deltaText: isComparable
+        ? this.formatTrainingRecoverySleepStartDelta(
+          current.typicalLocalStartMinutes,
+          reference.typicalLocalStartMinutes,
+        )
+        : '—',
+      deltaTone: 'neutral',
+    }, {
       label: 'Recorded nights',
       currentText: `${current.recordedNightCount} / ${current.expectedNightCount}`,
       referenceText: `${reference.recordedNightCount} / ${reference.expectedNightCount}`,
@@ -1309,6 +1320,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       const hasUnavailableMetric = [
         current.averageSleepSeconds,
         reference.averageSleepSeconds,
+        current.typicalLocalStartMinutes,
+        current.typicalLocalEndMinutes,
+        reference.typicalLocalStartMinutes,
+        reference.typicalLocalEndMinutes,
         current.bedtimeVariationMinutes,
         reference.bedtimeVariationMinutes,
         current.medianOvernightHrvMs,
@@ -1349,12 +1364,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const contextNote = referenceLabel === 'Usual'
       ? 'Main overnight sleep only; naps are excluded. Sleep context does not change your Training state.'
       : 'Main overnight sleep only; naps are excluded. This is context, not an explanation of training changes.';
-    const hasMissingBedtimeEvidence = [comparison.current, comparison.reference].some(window => (
+    const hasMissingSleepTimingEvidence = [comparison.current, comparison.reference].some(window => (
       window.recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
-      && window.bedtimeVariationMinutes === null
+      && (
+        window.bedtimeVariationMinutes === null
+        || window.typicalLocalStartMinutes === null
+        || window.typicalLocalEndMinutes === null
+      )
     ));
-    const bedtimeNote = hasMissingBedtimeEvidence
-      ? ' Bedtime variation needs at least five nights that include local-time data.'
+    const sleepTimingNote = hasMissingSleepTimingEvidence
+      ? ' Bedtime variation and the typical sleep window need at least five nights with local start and end times.'
       : '';
     const hasMissingHrvEvidence = [comparison.current, comparison.reference].some(window => (
       window.recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS
@@ -1363,7 +1382,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const hrvNote = hasMissingHrvEvidence
       ? ' Overnight HRV needs at least five nights that include HRV data.'
       : '';
-    return `${providerText} · ${contextNote}${bedtimeNote}${hrvNote}`;
+    return `${providerText} · ${contextNote}${sleepTimingNote}${hrvNote}`;
   }
 
   private formatTrainingSleepProvider(provider: DashboardTrainingRecoveryWindow['provider']): string | null {
@@ -1381,6 +1400,33 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private formatTrainingRecoveryDuration(value: number | null): string {
     return value === null ? '--' : formatSleepDuration(value);
+  }
+
+  private formatTrainingRecoverySleepWindow(window: DashboardTrainingRecoveryWindow): string {
+    const { typicalLocalStartMinutes, typicalLocalEndMinutes } = window;
+    if (typicalLocalStartMinutes === null || typicalLocalEndMinutes === null) {
+      return '--';
+    }
+    return `${this.formatTrainingRecoveryClockTime(typicalLocalStartMinutes)}–${this.formatTrainingRecoveryClockTime(typicalLocalEndMinutes)}`;
+  }
+
+  private formatTrainingRecoverySleepStartDelta(current: number | null, reference: number | null): string {
+    if (current === null || reference === null) {
+      return '--';
+    }
+    const rawDelta = current - reference;
+    const normalizedDelta = ((rawDelta + (12 * 60)) % (24 * 60) + (24 * 60)) % (24 * 60) - (12 * 60);
+    const deltaMinutes = normalizedDelta === -(12 * 60) ? 12 * 60 : normalizedDelta;
+    if (Math.abs(deltaMinutes) < 5) {
+      return 'Same start';
+    }
+    return `${Math.abs(deltaMinutes)}m ${deltaMinutes > 0 ? 'later' : 'earlier'}`;
+  }
+
+  private formatTrainingRecoveryClockTime(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours.toString().padStart(2, '0')}:${remainingMinutes.toString().padStart(2, '0')}`;
   }
 
   private formatTrainingRecoveryDurationDelta(current: number | null, reference: number | null): string {
