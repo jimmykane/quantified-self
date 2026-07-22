@@ -21,7 +21,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
