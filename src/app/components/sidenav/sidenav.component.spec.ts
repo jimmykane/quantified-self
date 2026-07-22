@@ -225,7 +225,7 @@ describe('SideNavComponent', () => {
         expect(component.hasPaidAccess).toBe(false);
     });
 
-    it('links signed-in users to the beta Training workspace', () => {
+    it('links signed-in users to the new Training workspace', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             displayName: 'Athlete',
@@ -242,7 +242,8 @@ describe('SideNavComponent', () => {
             trainingItem?.nativeElement.getAttribute('routerlink')
             ?? trainingItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/training');
-        expect(trainingItem?.nativeElement.textContent).toContain('Beta');
+        expect(trainingItem?.nativeElement.textContent).toContain('New');
+        expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
     it('places AI Insights after the signed-in activity navigation items', () => {
