@@ -291,6 +291,9 @@
             <header class="training-build-card-header">
               <div>
                 <span class="training-metric-label">{{ card.label }}</span>
+                @if (card.state === 'ready' && card.source?.selection?.mode === 'event') {
+                  <span class="training-build-reference-kind">Selected reference event</span>
+                }
                 <h3>{{ card.state === 'ready' ? card.referenceText : 'Historical benchmark' }}</h3>
               </div>
               <button
@@ -325,7 +328,19 @@
                 <p>Refresh to request another derived comparison snapshot.</p>
               </div>
             } @else {
-              <p class="training-build-range">{{ card.source?.selection?.durationWeeks }} weeks · {{ card.rangeText }}</p>
+              <p class="training-build-range">
+                @if (card.source?.selection?.mode === 'event') {
+                  {{ card.source?.selection?.durationWeeks }}-week build before this event · {{ card.rangeText }}
+                } @else {
+                  {{ card.source?.selection?.durationWeeks }} weeks · {{ card.rangeText }}
+                }
+              </p>
+              @if (card.source?.selection?.mode === 'event') {
+                <p class="training-build-anchor-note">
+                  <mat-icon aria-hidden="true">event</mat-icon>
+                  Used as the comparison reference; event day is excluded.
+                </p>
+              }
               @if (card.emptyMessage) {
                 <p class="training-build-empty">{{ card.emptyMessage }}</p>
               }

@@ -1187,8 +1187,8 @@ describe('TrainingWorkspaceComponent', () => {
   it('keeps build sleep comparison compact until details are requested', async () => {
     const derivedState$ = new Subject<DashboardDerivedMetricsState>();
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
-    const endDayMs = Date.UTC(2026, 2, 25);
-    const selection = { mode: 'period' as const, durationWeeks: 12 as const, endDayMs };
+    const eventId = 'event-1';
+    const selection = { mode: 'event' as const, durationWeeks: 12 as const, eventId };
 
     await TestBed.configureTestingModule({
       declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
@@ -1216,8 +1216,8 @@ describe('TrainingWorkspaceComponent', () => {
           discipline: 'cycling', status: 'ready',
           selection: {
             ...selection,
-            selectionKey: `period:12:${endDayMs}`,
-            windowStartDayMs: Date.UTC(2026, 0, 1), windowEndDayMs: endDayMs, label: null,
+            selectionKey: `event:12:${eventId}`,
+            windowStartDayMs: Date.UTC(2026, 0, 1), windowEndDayMs: Date.UTC(2026, 2, 25), label: 'New Event',
           },
           current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
           recovery: {
@@ -1245,6 +1245,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(benchmarkAction?.getAttribute('aria-label')).toBe('Change Cycling benchmark');
     expect(benchmarkAction?.querySelector('.training-build-benchmark-action-label')?.textContent?.trim())
       .toBe('Change');
+    expect(element.textContent).toContain('Selected reference event');
+    expect(element.textContent).toContain('12-week build before this event');
+    expect(element.textContent).toContain('Used as the comparison reference; event day is excluded.');
     const toggle = element.querySelector<HTMLButtonElement>('.training-build-recovery-toggle');
     expect(element.textContent).toContain('Sleep 20m shorter per night · Overnight HRV +3 ms');
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
