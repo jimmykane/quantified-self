@@ -29,7 +29,7 @@ import {
   WAHOO_API_ROUTES_WRITE_SCOPE,
 } from './constants';
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
-import { getWahooErrorLogDetails, getWahooProviderErrorMessage } from './error-details';
+import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicateError } from './error-details';
 
 const MAX_ROUTE_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_BASE64_ROUTE_UPLOAD_LENGTH = Math.ceil(MAX_ROUTE_UPLOAD_BYTES / 3) * 4 + 4;
@@ -126,14 +126,18 @@ async function assertWahooRouteUploadUserActive(userID: string, phase: string): 
   throw new WahooRouteUploadSkippedForDeletedUserError(userID, phase);
 }
 
+async function assertWahooRouteUploadProviderActionAllowed(userID: string, phase: string): Promise<void> {
+  await assertWahooRouteUploadUserActive(userID, phase);
+  if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
+    throw new HttpsError('failed-precondition', 'Wahoo disconnect is pending.');
+  }
+}
+
 async function withWahooRouteAccessToken<T>(
   userID: string,
   operation: (accessToken: string) => Promise<T>,
 ): Promise<T> {
-  await assertWahooRouteUploadUserActive(userID, 'before_token_lookup');
-  if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
-    throw new HttpsError('failed-precondition', 'Wahoo disconnect is pending.');
-  }
+  await assertWahooRouteUploadProviderActionAllowed(userID, 'before_token_lookup');
 
   const initialTokenSnapshots = await admin.firestore()
     .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
@@ -159,7 +163,7 @@ async function withWahooRouteAccessToken<T>(
     if (!hasScope(token.scope, WAHOO_API_ROUTES_READ_SCOPE) || !hasScope(token.scope, WAHOO_API_ROUTES_WRITE_SCOPE)) {
       throw new WahooRouteWriteScopeRequiredError();
     }
-    await assertWahooRouteUploadUserActive(userID, 'before_provider_request');
+    await assertWahooRouteUploadProviderActionAllowed(userID, 'before_provider_request');
     return operation(token.accessToken);
   };
 
@@ -299,6 +303,19 @@ function getProviderRouteId(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+async function findWahooRouteByExternalId(accessToken: string, externalId: string): Promise<WahooRouteRecord | undefined> {
+  const existingResponse = await requestWahooAPI<unknown>(
+    accessToken,
+    `/v1/routes?external_id=${encodeURIComponent(externalId)}`,
+  );
+  return getRouteRecords(existingResponse.data)[0];
+}
+
+function isWahooRouteCreateConflict(error: unknown): boolean {
+  return error instanceof WahooAPIRequestError
+    && (error.statusCode === 409 || isWahooDuplicateError(error));
+}
+
 function toWahooRouteHttpsError(error: unknown): never {
   if (error instanceof WahooAPITransportError) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
@@ -354,21 +371,52 @@ export async function uploadFitRouteToWahoo(
     return await withWahooRouteAccessToken(userID, async (accessToken) => {
       const routeFile = await parseWahooFitRoute(fileBuffer);
       const payload = buildWahooRoutePayload(userID, fileBuffer, routeFile, filename);
-      const existingResponse = await requestWahooAPI<unknown>(
-        accessToken,
-        `/v1/routes?external_id=${encodeURIComponent(payload.externalId)}`,
-      );
-      const existingRoute = getRouteRecords(existingResponse.data)[0];
-      const existingRouteId = getProviderRouteId(existingRoute);
       const form = buildWahooRouteForm(fileBuffer, payload);
-      const response = existingRouteId
-        ? await requestWahooAPI<WahooRouteRecord>(accessToken, `/v1/routes/${encodeURIComponent(existingRouteId)}`, { method: 'PUT', form })
-        : await requestWahooAPI<WahooRouteRecord>(accessToken, '/v1/routes', { method: 'POST', form });
-      return {
-        status: 'success',
-        providerRouteId: getProviderRouteId(response.data) || existingRouteId,
-        message: existingRouteId ? 'Route updated in Wahoo.' : 'Route uploaded to Wahoo.',
-      };
+      await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_lookup');
+      const existingRoute = await findWahooRouteByExternalId(accessToken, payload.externalId);
+      const existingRouteId = getProviderRouteId(existingRoute);
+      if (existingRouteId) {
+        await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_update');
+        const response = await requestWahooAPI<WahooRouteRecord>(
+          accessToken,
+          `/v1/routes/${encodeURIComponent(existingRouteId)}`,
+          { method: 'PUT', form },
+        );
+        return {
+          status: 'success',
+          providerRouteId: getProviderRouteId(response.data) || existingRouteId,
+          message: 'Route updated in Wahoo.',
+        };
+      }
+
+      await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_create');
+      try {
+        const response = await requestWahooAPI<WahooRouteRecord>(accessToken, '/v1/routes', { method: 'POST', form });
+        return {
+          status: 'success',
+          providerRouteId: getProviderRouteId(response.data),
+          message: 'Route uploaded to Wahoo.',
+        };
+      } catch (error) {
+        if (!isWahooRouteCreateConflict(error)) throw error;
+
+        await assertWahooRouteUploadProviderActionAllowed(userID, 'before_conflict_route_lookup');
+        const conflictRoute = await findWahooRouteByExternalId(accessToken, payload.externalId);
+        const conflictRouteId = getProviderRouteId(conflictRoute);
+        if (!conflictRouteId) throw error;
+
+        await assertWahooRouteUploadProviderActionAllowed(userID, 'before_conflict_route_update');
+        const response = await requestWahooAPI<WahooRouteRecord>(
+          accessToken,
+          `/v1/routes/${encodeURIComponent(conflictRouteId)}`,
+          { method: 'PUT', form },
+        );
+        return {
+          status: 'success',
+          providerRouteId: getProviderRouteId(response.data) || conflictRouteId,
+          message: 'Route updated in Wahoo.',
+        };
+      }
     });
   } catch (error) {
     logger.warn('Wahoo route upload failed', getWahooErrorLogDetails(error));

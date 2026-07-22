@@ -148,6 +148,75 @@ describe('Wahoo route uploads', () => {
     expect(request.method).toBe('PUT');
   });
 
+  it('recovers a concurrent create conflict by updating the route now found by its external id', async () => {
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({ data: [] })
+      .mockRejectedValueOnce(new WahooAPIRequestError(
+        'Wahoo API POST /v1/routes failed with 409',
+        409,
+      ))
+      .mockResolvedValueOnce({ data: [{ id: 9 }] })
+      .mockResolvedValueOnce({ data: { id: 9 } });
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT'))).resolves.toEqual({
+      status: 'success',
+      providerRouteId: '9',
+      message: 'Route updated in Wahoo.',
+    });
+
+    expect(mocks.requestWahooAPI.mock.calls.map(([, path]) => path)).toEqual([
+      expect.stringMatching(/^\/v1\/routes\?external_id=qs-route-/),
+      '/v1/routes',
+      expect.stringMatching(/^\/v1\/routes\?external_id=qs-route-/),
+      '/v1/routes/9',
+    ]);
+    expect(mocks.requestWahooAPI.mock.calls[3][2]).toMatchObject({ method: 'PUT' });
+  });
+
+  it('does not call Wahoo when account deletion starts while the FIT route is parsed', async () => {
+    mocks.parseRoutePayload.mockImplementation(async () => {
+      mocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: true });
+      return routeFile();
+    });
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ name: 'WahooRouteUploadSkippedForDeletedUserError' });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('does not call Wahoo when disconnect begins while the FIT route is parsed', async () => {
+    mocks.parseRoutePayload.mockImplementation(async () => {
+      mocks.isDisconnectPendingForUser.mockResolvedValue(true);
+      return routeFile();
+    });
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'failed-precondition', message: 'Wahoo disconnect is pending.' });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('does not create a route when account deletion starts after the Wahoo lookup', async () => {
+    mocks.requestWahooAPI.mockImplementationOnce(async () => {
+      mocks.getUserDeletionGuardState.mockResolvedValue({ shouldSkip: true });
+      return { data: [] };
+    });
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ name: 'WahooRouteUploadSkippedForDeletedUserError' });
+    expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create a route when disconnect begins after the Wahoo lookup', async () => {
+    mocks.requestWahooAPI.mockImplementationOnce(async () => {
+      mocks.isDisconnectPendingForUser.mockResolvedValue(true);
+      return { data: [] };
+    });
+
+    await expect(uploadFitRouteToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'failed-precondition', message: 'Wahoo disconnect is pending.' });
+    expect(mocks.requestWahooAPI).toHaveBeenCalledTimes(1);
+  });
+
   it('requires both Wahoo route scopes before making provider requests', async () => {
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
