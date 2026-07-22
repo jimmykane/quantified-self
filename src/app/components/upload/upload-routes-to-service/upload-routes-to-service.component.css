@@ -26,3 +26,9 @@ button {
 .full {
   width: 100%;
 }
+.upload-routes-to-service__button-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+}

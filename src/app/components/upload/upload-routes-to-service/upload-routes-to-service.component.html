@@ -3,13 +3,14 @@
   ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
   ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
   <button mat-flat-button class="qs-mat-primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
-    @if (isUploading) {
-    <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-      class="qs-spinner-accent"></mat-spinner>
-    Uploading Route...
-    } @else {
-    {{ uploadPrompt }}
-    }
+    <span class="upload-routes-to-service__button-content">
+      @if (isUploading) {
+        <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+        <span>Uploading route…</span>
+      } @else {
+        <span>{{ uploadPrompt }}</span>
+      }
+    </span>
   </button>
   <input #inputFile type="file" [attr.accept]="fileAccept" multiple style="display: none;" (change)="getFiles($event)"
     [disabled]="!hasProAccess" />

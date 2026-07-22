@@ -645,6 +645,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('does **not** delete activities already imported');
     expect(serviceConnectionsSection?.content).toContain('send a FIT activity file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');
     expect(serviceConnectionsSection?.content).toContain('not the ELEMNT App');
     expect(serviceConnectionsSection?.content).toContain('Garmin, COROS, or Suunto activities');

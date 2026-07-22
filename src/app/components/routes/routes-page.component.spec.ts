@@ -26,6 +26,7 @@ import { LoggerService } from '../../services/logger.service';
 import { RoutesPageComponent } from './routes-page.component';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import {
     DASHBOARD_ACTION_PROMPT_GARMIN_ROUTE_PERMISSION_ID,
     DASHBOARD_ACTION_PROMPT_ROUTE_DELIVERY_AUTO_SYNC_ID,
@@ -1839,6 +1840,40 @@ describe('RoutesPageComponent', () => {
 
         expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.WahooAPI);
         expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Wahoo.', undefined, { duration: 2500 });
+    });
+
+    it('opens Wahoo reconnect instead of showing only route-access guidance', async () => {
+        activityServiceConnectionState$.next({
+            ...activityServiceConnectionState$.value,
+            [ServiceNames.WahooAPI]: true,
+        });
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.WahooAPI,
+            status: 'failure',
+            routeCount: 1,
+            successCount: 0,
+            failureCount: 1,
+            skippedCount: 0,
+            results: [{
+                routeId: 'route-1',
+                destinationServiceName: ServiceNames.WahooAPI,
+                status: 'failure',
+                reason: 'DESTINATION_PERMISSION_REQUIRED',
+                message: 'Reconnect Wahoo and allow route access before sending routes.',
+            }],
+        });
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+
+        await component.sendRouteToWahoo(route);
+
+        expect(dialogMock.open).toHaveBeenCalledWith(WahooRouteAccessReconnectDialogComponent);
+        expect(snackBarMock.open).not.toHaveBeenCalledWith(
+            'Reconnect Wahoo and allow route access before sending routes.',
+            undefined,
+            { duration: 3500 },
+        );
+        expect(component.sendingToServiceRouteID()).toBeNull();
     });
 
     it('disables Garmin resend for routes pinned to a different Garmin account', async () => {

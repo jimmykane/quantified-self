@@ -458,7 +458,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'route',
         title: 'Direct GPX/FIT course/route delivery',
-        copy: 'Choose a GPX or FIT course or route file in Wahoo Services to send it directly to Wahoo. Quantified Self converts GPX to FIT in memory; this does not create or retain a Quantified Self route. Reconnect an existing Wahoo connection once to grant route access.',
+        copy: 'Choose a GPX or FIT course or route file in Wahoo Services to send it directly to Wahoo. Quantified Self converts GPX to FIT in memory; this does not create or retain a Quantified Self route. If Wahoo route access is missing, the send flow offers a reconnect action; reconnect once, then send the route again.',
       },
       {
         icon: 'directions_bike',

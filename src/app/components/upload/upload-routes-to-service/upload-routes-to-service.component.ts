@@ -6,6 +6,9 @@ import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppFunctionsService } from '../../../services/app.functions.service';
+import { isWahooRouteAccessReconnectRequired } from '../../../helpers/wahoo-route-access.helper';
+import { markUploadErrorUserActionHandled } from '../../../services/upload-error';
+import { WahooRouteAccessReconnectDialogComponent } from '../../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 
 const MAX_ROUTE_UPLOAD_BYTES = 20 * 1024 * 1024;
 const BASE64_CHUNK_SIZE = 0x8000;
@@ -23,6 +26,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   private auth = inject(Auth);
 
   private functionsService = inject(AppFunctionsService);
+  private wahooRouteAccessReconnectDialogRef: MatDialogRef<WahooRouteAccessReconnectDialogComponent> | null = null;
 
   public data: any = inject(MAT_DIALOG_DATA, { optional: true });
   public dialogRef = inject(MatDialogRef<UploadRoutesToServiceComponent>, { optional: true });
@@ -115,6 +119,11 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
         },
       );
     } catch (error) {
+      if (isWahooRouteAccessReconnectRequired(error)) {
+        this.openWahooRouteAccessReconnectDialog();
+        throw markUploadErrorUserActionHandled(error);
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.snackBar.open(`Could not upload ${fileName}, reason: ${errorMessage}`, 'OK', { duration: 10000 });
       throw error;
@@ -124,6 +133,18 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
       this.processingService.updateJob(file.jobId, { progress: 100 });
     }
     return true;
+  }
+
+  private openWahooRouteAccessReconnectDialog(): void {
+    if (this.wahooRouteAccessReconnectDialogRef) {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(WahooRouteAccessReconnectDialogComponent);
+    this.wahooRouteAccessReconnectDialogRef = dialogRef;
+    dialogRef.afterClosed().subscribe(() => {
+      this.wahooRouteAccessReconnectDialogRef = null;
+    });
   }
 
   private readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {

@@ -9,6 +9,7 @@ import {
   SendRoutesToServiceResponse,
 } from '@shared/saved-route-send';
 import { AppFunctionsService } from './app.functions.service';
+import { WAHOO_ROUTE_ACCESS_RECONNECT_MESSAGE } from '../helpers/wahoo-route-access.helper';
 
 export interface RouteSendProgress {
   chunkIndex: number;
@@ -312,7 +313,7 @@ function getDestinationPermissionRequiredMessage(destinationServiceName: Service
     case ServiceNames.GarminAPI:
       return 'Grant Garmin Course Import permission and reconnect before sending routes.';
     case ServiceNames.WahooAPI:
-      return 'Reconnect Wahoo and allow route access before sending routes.';
+      return WAHOO_ROUTE_ACCESS_RECONNECT_MESSAGE;
     default:
       return 'Grant the required destination permissions and reconnect before sending routes.';
   }

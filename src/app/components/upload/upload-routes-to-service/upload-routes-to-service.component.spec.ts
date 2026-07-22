@@ -18,6 +18,7 @@ import { BrowserCompatibilityService } from '../../../services/browser.compatibi
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { WahooRouteAccessReconnectDialogComponent } from '../../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 
 vi.mock('app/firebase/auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('app/firebase/auth')>()),
@@ -78,9 +79,14 @@ describe('UploadRoutesToServiceComponent', () => {
     let originalCompressionStream: typeof CompressionStream | undefined;
 
     const mockSnackBar = { open: vi.fn() };
-    const mockDialog = {};
+    const mockDialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
     const mockDialogRef = {};
-    const mockProcessingService = { updateJob: vi.fn() };
+    const mockProcessingService = {
+        addJob: vi.fn().mockReturnValue('route-upload-job'),
+        updateJob: vi.fn(),
+        completeJob: vi.fn(),
+        failJob: vi.fn(),
+    };
     const mockRouter = {};
     const mockLogger = { error: vi.fn() };
     const mockAnalytics = { logEvent: vi.fn() };
@@ -355,6 +361,30 @@ describe('UploadRoutesToServiceComponent', () => {
             'Could not upload route.fit, reason: Wahoo rejected the route upload: A route already exists.',
             'OK',
             { duration: 10000 },
+        );
+    });
+
+    it('opens the Wahoo reconnect dialog instead of a duplicate upload error when route access is missing', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        mockFunctionsService.call.mockRejectedValueOnce(new Error('Reconnect Wahoo and allow route access before sending routes.'));
+        const file = Object.assign(new File(['FIT'], 'route.fit', { type: 'application/vnd.fit' }), {
+            arrayBuffer: () => Promise.resolve(Uint8Array.from([1, 2, 3]).buffer),
+        });
+
+        await component.getFiles({
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [file],
+                value: 'route.fit',
+            },
+        });
+
+        expect(mockDialog.open).toHaveBeenCalledWith(WahooRouteAccessReconnectDialogComponent);
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
+        expect(mockProcessingService.failJob).toHaveBeenCalledWith(
+            'route-upload-job',
+            'Reconnect Wahoo and allow route access before sending routes.',
         );
     });
 });

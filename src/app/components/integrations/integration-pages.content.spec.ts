@@ -29,6 +29,8 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('accepts direct FIT activity and GPX/FIT course/route delivery');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not the ELEMNT App');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('not enabled');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.find(flow => flow.title === 'Direct GPX/FIT course/route delivery')?.copy)
+      .toContain('send flow offers a reconnect action');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct FIT activity delivery')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Direct GPX/FIT course/route delivery')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Suunto saved routes to Wahoo')).toBe(true);
