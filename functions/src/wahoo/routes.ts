@@ -34,6 +34,7 @@ import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicate
 const MAX_ROUTE_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_BASE64_ROUTE_UPLOAD_LENGTH = Math.ceil(MAX_ROUTE_UPLOAD_BYTES / 3) * 4 + 4;
 const MAX_FILENAME_LENGTH = 200;
+const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
 
 interface WahooRouteRecord {
   id?: unknown;
@@ -163,7 +164,6 @@ async function withWahooRouteAccessToken<T>(
     if (!hasScope(token.scope, WAHOO_API_ROUTES_READ_SCOPE) || !hasScope(token.scope, WAHOO_API_ROUTES_WRITE_SCOPE)) {
       throw new WahooRouteWriteScopeRequiredError();
     }
-    await assertWahooRouteUploadProviderActionAllowed(userID, 'before_provider_request');
     return operation(token.accessToken);
   };
 
@@ -312,8 +312,29 @@ async function findWahooRouteByExternalId(accessToken: string, externalId: strin
 }
 
 function isWahooRouteCreateConflict(error: unknown): boolean {
-  return error instanceof WahooAPIRequestError
-    && (error.statusCode === 409 || isWahooDuplicateError(error));
+  if (!(error instanceof WahooAPIRequestError)) return false;
+  if (error.statusCode === 409 || isWahooDuplicateError(error)) return true;
+  return error.statusCode === 422
+    && WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN.test(getWahooProviderErrorMessage(error) || '');
+}
+
+async function updateWahooRoute(
+  userID: string,
+  accessToken: string,
+  providerRouteId: string,
+  form: URLSearchParams,
+  phase: string,
+): Promise<{ providerRouteId?: string; message: string }> {
+  await assertWahooRouteUploadProviderActionAllowed(userID, phase);
+  const response = await requestWahooAPI<WahooRouteRecord>(
+    accessToken,
+    `/v1/routes/${encodeURIComponent(providerRouteId)}`,
+    { method: 'PUT', form },
+  );
+  return {
+    providerRouteId: getProviderRouteId(response.data) || providerRouteId,
+    message: 'Route updated in Wahoo.',
+  };
 }
 
 function toWahooRouteHttpsError(error: unknown): never {
@@ -376,16 +397,9 @@ export async function uploadFitRouteToWahoo(
       const existingRoute = await findWahooRouteByExternalId(accessToken, payload.externalId);
       const existingRouteId = getProviderRouteId(existingRoute);
       if (existingRouteId) {
-        await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_update');
-        const response = await requestWahooAPI<WahooRouteRecord>(
-          accessToken,
-          `/v1/routes/${encodeURIComponent(existingRouteId)}`,
-          { method: 'PUT', form },
-        );
         return {
           status: 'success',
-          providerRouteId: getProviderRouteId(response.data) || existingRouteId,
-          message: 'Route updated in Wahoo.',
+          ...await updateWahooRoute(userID, accessToken, existingRouteId, form, 'before_route_update'),
         };
       }
 
@@ -405,16 +419,9 @@ export async function uploadFitRouteToWahoo(
         const conflictRouteId = getProviderRouteId(conflictRoute);
         if (!conflictRouteId) throw error;
 
-        await assertWahooRouteUploadProviderActionAllowed(userID, 'before_conflict_route_update');
-        const response = await requestWahooAPI<WahooRouteRecord>(
-          accessToken,
-          `/v1/routes/${encodeURIComponent(conflictRouteId)}`,
-          { method: 'PUT', form },
-        );
         return {
           status: 'success',
-          providerRouteId: getProviderRouteId(response.data) || conflictRouteId,
-          message: 'Route updated in Wahoo.',
+          ...await updateWahooRoute(userID, accessToken, conflictRouteId, form, 'before_conflict_route_update'),
         };
       }
     });

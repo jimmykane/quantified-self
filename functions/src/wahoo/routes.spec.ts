@@ -148,13 +148,21 @@ describe('Wahoo route uploads', () => {
     expect(request.method).toBe('PUT');
   });
 
-  it('recovers a concurrent create conflict by updating the route now found by its external id', async () => {
+  it.each([
+    ['HTTP 409 conflict', new WahooAPIRequestError(
+      'Wahoo API POST /v1/routes failed with 409',
+      409,
+    )],
+    ['duplicate external-id validation error', new WahooAPIRequestError(
+      'Wahoo API POST /v1/routes failed with 422',
+      422,
+      null,
+      { errors: { external_id: ['has already been taken'] } },
+    )],
+  ])('recovers a concurrent create %s by updating the route now found by its external id', async (_scenario, createError) => {
     mocks.requestWahooAPI
       .mockResolvedValueOnce({ data: [] })
-      .mockRejectedValueOnce(new WahooAPIRequestError(
-        'Wahoo API POST /v1/routes failed with 409',
-        409,
-      ))
+      .mockRejectedValueOnce(createError)
       .mockResolvedValueOnce({ data: [{ id: 9 }] })
       .mockResolvedValueOnce({ data: { id: 9 } });
 
