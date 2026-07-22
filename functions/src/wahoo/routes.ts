@@ -16,6 +16,7 @@ import {
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { getRouteParsingFailureMessage, parseRoutePayload, RouteProcessingHttpStatusError } from '../routes/route-processing';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
+import { MAX_ROUTE_UPLOAD_BYTES, ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/route-processing-config';
 import {
   getUserDeletionGuardState,
   UserDeletionGuardReadError,
@@ -31,7 +32,6 @@ import {
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
 import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicateError } from './error-details';
 
-const MAX_ROUTE_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_BASE64_ROUTE_UPLOAD_LENGTH = Math.ceil(MAX_ROUTE_UPLOAD_BYTES / 3) * 4 + 4;
 const MAX_FILENAME_LENGTH = 200;
 const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
@@ -442,9 +442,8 @@ async function requireWahooRouteUploadAccess(request: { auth?: { uid: string } |
 
 export const importRouteToWahooAPI = onCall({
   region: FUNCTIONS_MANIFEST.importRouteToWahooAPI.region,
+  ...ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
-  timeoutSeconds: 120,
-  maxInstances: 10,
 }, async (request): Promise<WahooRouteUploadResult> => {
   const userID = await requireWahooRouteUploadAccess(request);
   const payload = request.data as WahooRouteUploadRequest;

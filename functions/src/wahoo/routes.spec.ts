@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
   const tokenQueryGet = vi.fn();
   const loggerWarn = vi.fn();
   const tokenRef = { get: tokenRefGet };
+  let onCallOptions: unknown = null;
   const WahooAPIRequestError = class WahooAPIRequestError extends Error {
     constructor(
       _message: string,
@@ -32,6 +33,21 @@ const mocks = vi.hoisted(() => {
     tokenRef,
     loggerWarn,
     WahooAPIRequestError,
+    getOnCallOptions: () => onCallOptions,
+    setOnCallOptions: (options: unknown) => {
+      onCallOptions = options;
+    },
+  };
+});
+
+vi.mock('firebase-functions/v2/https', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('firebase-functions/v2/https')>();
+  return {
+    ...actual,
+    onCall: (options: unknown, handler: unknown) => {
+      mocks.setOnCallOptions(options);
+      return handler;
+    },
   };
 });
 
@@ -102,6 +118,17 @@ describe('Wahoo route uploads', () => {
       scope: 'user_read workouts_read workouts_write routes_read routes_write offline_data',
     });
     mocks.parseRoutePayload.mockResolvedValue(routeFile());
+  });
+
+  it('uses the shared high-memory route-processing runtime', () => {
+    expect(mocks.getOnCallOptions()).toMatchObject({
+      region: 'europe-west2',
+      memory: '4GiB',
+      cpu: 2,
+      concurrency: 1,
+      timeoutSeconds: 3600,
+      maxInstances: 20,
+    });
   });
 
   it('creates an idempotent FIT route upload with Wahoo-required metadata', async () => {
