@@ -481,6 +481,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('minimum sleep heart rate');
     expect(serviceConnectionsSection?.content).toContain('range-average reference lines');
     expect(serviceConnectionsSection?.content).toContain('max SpO2');
+    expect(serviceConnectionsSection?.content).toContain('select **Sleep history** in Connections');
     expect(serviceConnectionsSection?.content).toContain('Import Sleep History');
     expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');

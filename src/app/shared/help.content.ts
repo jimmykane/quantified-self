@@ -586,7 +586,7 @@ From an activity action menu you can also:
 
 Garmin, Suunto, COROS, and Wahoo connections are part of **Pro**.
 
-Services opens each provider on a compact connection overview. Choose an action on an activity, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
+Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
 
 ## Integration pages overview
 
@@ -602,7 +602,7 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Suunto and Garmin Pro users can choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Suunto and Garmin Pro users can select **Sleep history** in Connections, then choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
 
 ## Suunto
 

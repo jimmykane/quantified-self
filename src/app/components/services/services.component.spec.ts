@@ -252,15 +252,18 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
-        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(2);
+        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(3);
         expect(activePanel.textContent).toContain('Activity sync');
+        expect(activePanel.textContent).toContain('Sleep history');
 
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons[0].textContent?.trim()).toBe('History import');
-        expect(manageButtons[0].getAttribute('aria-label')).toBe('History import for Garmin');
-        expect(manageButtons[1].textContent?.trim()).toBe('Activity sync settings');
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
+        expect(manageButtons[0].textContent?.trim()).toBe('Backfill activities');
+        expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for Garmin');
+        expect(manageButtons[1].textContent?.trim()).toBe('Import sleep history');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Garmin');
+        expect(manageButtons[2].textContent?.trim()).toBe('Activity sync settings');
+        expect(manageButtons[2].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
 
         manageButtons[0].click();
         fixture.detectChanges();
@@ -287,17 +290,28 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('history');
+        expect(component.managedToolTitle).toBe('Sleep history');
+        expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
+            ariaLabel: 'Garmin Sleep history tools',
+        }));
+
+        dialogClosed$.next();
+        manageButtons[2].click();
+        fixture.detectChanges();
+
+        expect(component.managedService).toBe('garmin');
         expect(component.managedTool).toBe('auto-sync');
         expect(component.managedToolTitle).toBe('Send activities to connected services');
-        expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
+        expect(mockDialog.open.mock.calls[2][1]).toEqual(expect.objectContaining({
             ariaLabel: 'Garmin Send activities to connected services tools',
         }));
     });
 
     it('maps provider overview cards to distinct tools', () => {
-        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes', 'uploads', 'activity-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto[2].description)
+        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'history', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'activity-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto[3].description)
             .toBe('Send FIT activity files or GPX route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
@@ -310,25 +324,32 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Suunto App"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(4);
-        expect(manageButtons[1].textContent?.trim()).toBe('Route sync settings');
-        expect(manageButtons[2].textContent?.trim()).toBe('Upload files');
-        expect(manageButtons[3].textContent?.trim()).toBe('Activity sync settings');
+        expect(manageButtons).toHaveLength(5);
+        expect(manageButtons[1].textContent?.trim()).toBe('Import sleep history');
+        expect(manageButtons[2].textContent?.trim()).toBe('Route sync settings');
+        expect(manageButtons[3].textContent?.trim()).toBe('Upload files');
+        expect(manageButtons[4].textContent?.trim()).toBe('Activity sync settings');
 
         manageButtons[1].click();
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('history');
+        expect(component.managedToolTitle).toBe('Sleep history');
+
+        dialogClosed$.next();
+        manageButtons[2].click();
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('routes');
         expect(component.managedToolTitle).toBe('Route sync');
 
         dialogClosed$.next();
-        manageButtons[2].click();
+        manageButtons[3].click();
 
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('uploads');
         expect(component.managedToolTitle).toBe('Upload activities and routes');
 
         dialogClosed$.next();
-        manageButtons[3].click();
+        manageButtons[4].click();
 
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('activity-sync');

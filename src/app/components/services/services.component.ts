@@ -84,10 +84,18 @@ export class ServicesComponent implements OnInit, OnDestroy {
     garmin: [
       {
         title: 'Activity sync',
-        description: 'New Garmin activities import automatically while connected.',
-        detail: 'History import · Pro',
+        description: 'New Garmin activities import automatically while connected. Backfill earlier activities from History import.',
+        detail: 'Automatic sync and activity backfill · Pro',
         icon: 'sync',
-        actionLabel: 'History import',
+        actionLabel: 'Backfill activities',
+        tool: 'history',
+      },
+      {
+        title: 'Sleep history',
+        description: 'Backfill Garmin sleep data for recovery and sleep insights.',
+        detail: 'Historical sleep backfill · 30-day cooldown',
+        icon: 'bedtime',
+        actionLabel: 'Import sleep history',
         tool: 'history',
       },
       {
@@ -102,16 +110,24 @@ export class ServicesComponent implements OnInit, OnDestroy {
     suunto: [
       {
         title: 'Activity sync',
-        description: 'New Suunto activities import automatically while connected.',
-        detail: 'History import · Pro',
+        description: 'New Suunto activities import automatically while connected. Backfill earlier activities from History import.',
+        detail: 'Automatic sync and activity backfill · Pro',
         icon: 'sync',
-        actionLabel: 'History import',
+        actionLabel: 'Backfill activities',
+        tool: 'history',
+      },
+      {
+        title: 'Sleep history',
+        description: 'Backfill Suunto sleep data for recovery and sleep insights.',
+        detail: 'Historical sleep backfill · 7-day cooldown',
+        icon: 'bedtime',
+        actionLabel: 'Import sleep history',
         tool: 'history',
       },
       {
         title: 'Route sync',
-        description: 'Import routes from Suunto and send saved Suunto routes to Garmin.',
-        detail: 'Automatic and manual route sync',
+        description: 'Import existing Suunto routes and send saved routes to Garmin.',
+        detail: 'Route import and delivery',
         icon: 'route',
         actionLabel: 'Route sync settings',
         tool: 'routes',
