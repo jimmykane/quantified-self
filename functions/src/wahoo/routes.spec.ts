@@ -92,7 +92,12 @@ vi.mock('./auth/api', () => ({
   WahooAPITransportError: class WahooAPITransportError extends Error {},
 }));
 
-import { uploadFitRouteToWahoo, uploadRouteToWahoo } from './routes';
+import {
+  createWahooRouteSendContext,
+  sendSavedRouteToWahoo,
+  uploadFitRouteToWahoo,
+  uploadRouteToWahoo,
+} from './routes';
 import { WahooAPIRequestError } from './auth/api';
 
 function routeFile(overrides: Partial<Record<string, unknown>> = {}) {
@@ -333,6 +338,42 @@ describe('Wahoo route uploads', () => {
       .rejects.toMatchObject({ code: 'failed-precondition', message: expect.stringContaining('Reconnect Wahoo') });
     expect(mocks.parseRoutePayload).not.toHaveBeenCalled();
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('checks Wahoo route scopes before the saved-route worker downloads or converts a route', async () => {
+    mocks.getTokenData.mockResolvedValue({
+      serviceName: ServiceNames.WahooAPI,
+      accessToken: 'access-token',
+      scope: 'user_read workouts_read workouts_write offline_data',
+    });
+
+    await expect(createWahooRouteSendContext('user-1'))
+      .rejects.toMatchObject({ code: 'failed-precondition', message: expect.stringContaining('Reconnect Wahoo') });
+    expect(mocks.exportRoutesToFit).not.toHaveBeenCalled();
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('updates the same Wahoo route when a saved Quantified Self route is revised', async () => {
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { id: 44 } })
+      .mockResolvedValueOnce({ data: [{ id: 44 }] })
+      .mockResolvedValueOnce({ data: { id: 44 } });
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .resolves.toMatchObject({ providerRouteId: '44', message: 'Route uploaded to Wahoo.' });
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile({
+      name: 'Revised morning ride',
+      createdAt: new Date('2026-07-23T09:00:00.000Z'),
+    }))).resolves.toMatchObject({ providerRouteId: '44', message: 'Route updated in Wahoo.' });
+
+    const firstUploadRequest = mocks.requestWahooAPI.mock.calls[1][2];
+    const secondUploadRequest = mocks.requestWahooAPI.mock.calls[3][2];
+    expect(firstUploadRequest.form.get('route[external_id]')).toBe(secondUploadRequest.form.get('route[external_id]'));
+    expect(firstUploadRequest.form.get('route[external_id]')).toMatch(/^qs-route-/);
+    expect(mocks.requestWahooAPI.mock.calls[3][1]).toBe('/v1/routes/44');
+    expect(secondUploadRequest.method).toBe('PUT');
+    expect(mocks.parseRoutePayload).not.toHaveBeenCalled();
   });
 
   it('rejects an empty route before parsing or making a provider request', async () => {

@@ -311,6 +311,71 @@
         }
       </section>
       }
+
+      @if (isSuuntoToWahooRouteAvailableForUser) {
+      <section class="tool-subsection">
+        <div class="tool-subsection-header">
+          <div class="tool-subsection-title">
+            <mat-icon>directions</mat-icon>
+            <span>Send Suunto routes to Wahoo</span>
+          </div>
+          <mat-slide-toggle
+            color="primary"
+            [checked]="isSuuntoToWahooRouteEnabled"
+            [disabled]="isSavingRouteDeliverySyncRoute || (!isSuuntoToWahooRouteEnabled && !canEnableSuuntoToWahooRoute)"
+            (change)="onSuuntoToWahooRouteToggle($event.checked)">
+            Automatically send new and updated routes
+          </mat-slide-toggle>
+        </div>
+
+        <app-status-info [type]="suuntoToWahooRouteStatusType" [title]="suuntoToWahooRouteStatusTitle">
+          {{ suuntoToWahooRouteStatusMessage }}
+        </app-status-info>
+
+        <p class="description-text">
+          When this is on, new and updated Suunto routes are sent to Wahoo automatically after they are saved in
+          Quantified Self. Wahoo receives each route as a FIT course. The button below sends routes already in your
+          Quantified Self library.
+        </p>
+
+        <div class="tool-section-title">Send saved routes now</div>
+        <app-status-info type="info" title="Which routes will be sent">
+          This checks Suunto routes already saved in Quantified Self and sends any that are missing from Wahoo. It
+          does not import routes from Suunto, and it works even when automatic route sending is off.
+        </app-status-info>
+
+        <button mat-flat-button class="qs-mat-primary full-width-action"
+          [disabled]="isQueueingWahooRouteDeliverySyncBackfill || !canQueueSuuntoToWahooRouteBackfill"
+          (click)="queueSuuntoToWahooRouteDelivery($event)">
+          @if (isQueueingWahooRouteDeliverySyncBackfill) {
+          <ng-container>
+            <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
+            Starting route send...
+          </ng-container>
+          } @else {
+          <ng-container>
+            Send routes
+          </ng-container>
+          }
+        </button>
+
+        @if (wahooRouteDeliveryBackfillSummary) {
+        <app-status-info type="success" title="Route sending started">
+          <div>Found: {{ wahooRouteDeliveryBackfillSummary.scanned }} | Scheduled: {{ wahooRouteDeliveryBackfillSummary.queued }}</div>
+          @if (wahooRouteDeliveryBackfillSummary.failedCount > 0) {
+          <div>Could not schedule: {{ wahooRouteDeliveryBackfillSummary.failedCount }}</div>
+          @if (wahooRouteDeliveryBackfillSummary.failedRoutes?.length) {
+          <ul class="backfill-summary-list">
+            <li *ngFor="let failedRoute of wahooRouteDeliveryBackfillSummary.failedRoutes">
+              <code>{{ failedRoute.routeID }}</code>: {{ failedRoute.message }}
+            </li>
+          </ul>
+          }
+          }
+        </app-status-info>
+        }
+      </section>
+      }
       } @else {
       <app-status-info type="info" title="Connect Account First">
         You need to connect your Suunto account before importing routes.
@@ -365,7 +430,7 @@
         <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-route-to-service>
         } @else {
         <app-status-info type="info" title="Connect Account First">
-          You need to connect your Suunto account before uploading GPX or FIT routes.
+          You need to connect your Suunto account before uploading routes (GPX or FIT).
         </app-status-info>
         }
       </section>

@@ -85,6 +85,7 @@ const SUUNTO_ACTIVITY_SYNC_ROUTE_IDS: ActivitySyncRouteId[] = [
 
 const SUUNTO_ROUTE_DELIVERY_SYNC_ROUTE_IDS: RouteDeliverySyncRouteId[] = [
     ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+    ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
 ];
 
 const SUUNTO_SERVICE_IDENTIFIERS = new Set<string>([

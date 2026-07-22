@@ -73,6 +73,7 @@ import { enqueueRouteDeliverySyncJobsForImportedRoute } from './enqueue-imported
 
 const routeId = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI;
 const route = ROUTE_DELIVERY_SYNC_ROUTES[routeId];
+const wahooRouteId = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI;
 
 function baseParams() {
   return {
@@ -82,6 +83,7 @@ function baseParams() {
     sourceProviderRouteId: 'suunto-route-1',
     sourceProviderUserId: 'suunto-user-1',
     sourceRevisionKey: `${route.sourceServiceName}:suunto-route-1:1710000000000`,
+    routeIdFilter: routeId,
   };
 }
 
@@ -159,5 +161,21 @@ describe('route-delivery-sync/enqueue-imported-route', () => {
     });
     expect(mockMetadataDocs).not.toHaveBeenCalled();
     expect(mockEnqueueQueueItem).toHaveBeenCalled();
+  });
+
+  it('queues one delivery per enabled Suunto destination', async () => {
+    mockMetadataDocs.mockReset();
+    mockMetadataDocs.mockReturnValue([]);
+    const result = await enqueueRouteDeliverySyncJobsForImportedRoute({
+      ...baseParams(),
+      routeIdFilter: undefined,
+    });
+
+    expect(result).toEqual({
+      queued: 2,
+      skippedByReason: {},
+    });
+    expect(mockEnqueueQueueItem).toHaveBeenCalledWith(expect.objectContaining({ routeId }));
+    expect(mockEnqueueQueueItem).toHaveBeenCalledWith(expect.objectContaining({ routeId: wahooRouteId }));
   });
 });

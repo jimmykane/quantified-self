@@ -403,6 +403,16 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.links?.some(link => link.target === '/guides/sync-suunto-routes-to-garmin-courses')).toBe(true);
   });
 
+  it('should document opt-in Suunto saved-route delivery to Wahoo', () => {
+    const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
+
+    expect(serviceConnectionsSection?.content).toContain('Suunto Services for Garmin or Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('Wahoo receives a FIT course');
+    expect(serviceConnectionsSection?.content).toContain('updated Suunto route replaces its earlier Wahoo route instead of creating a duplicate');
+    expect(serviceConnectionsSection?.content).toContain('automatically send new and updated Suunto routes already saved in Quantified Self to Wahoo');
+    expect(serviceConnectionsSection?.content).toContain('Suunto-to-Wahoo saved-route delivery is a separate, opt-in route workflow in Suunto Services');
+  });
+
   it('should document activity and route limits in plans and uploads help', () => {
     const plansSection = HELP_SECTIONS.find(section => section.id === 'plans-and-billing');
     const uploadsSection = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports');

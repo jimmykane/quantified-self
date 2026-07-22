@@ -195,18 +195,19 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'Suunto',
     serviceName: ServiceNames.SuuntoApp,
     h1: 'Suunto Integration for Activity and Route Sync',
-    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, and upload GPX or FIT routes to Suunto.',
+    heroCopy: 'Use Quantified Self as a private training dashboard, automatically sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin or Wahoo, and upload GPX or FIT routes to Suunto.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX/FIT routes, import existing Suunto routes, send Suunto routes to Garmin, import Suunto history, and keep training data centralized.',
+    summary: 'Sync Garmin and COROS workouts to Suunto, upload FIT activities and GPX/FIT routes, import existing Suunto routes, send Suunto routes to Garmin or Wahoo, import Suunto history, and keep training data centralized.',
     highlights: [
       'Garmin to Suunto automatic activity sync',
       'COROS to Suunto automatic activity sync',
       'Automatic and existing Suunto route imports',
       'Send Suunto routes to Garmin',
+      'Send Suunto routes to Wahoo',
       'FIT activity and GPX/FIT route upload to Suunto',
     ],
     syncEyebrow: 'Automatic Sync',
-    syncTitle: 'How to sync activities to Suunto and send Suunto routes to Garmin',
+    syncTitle: 'How to sync activities to Suunto and send Suunto routes to Garmin or Wahoo',
     syncCopy: 'Connect the source and destination services, turn on the sync you want, and keep the relevant service permissions active.',
     syncFlows: [
       {
@@ -234,10 +235,15 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         title: 'Send Suunto routes to Garmin',
         copy: 'Connect Garmin, allow Course Import, and choose whether new and updated Suunto routes should be sent to Garmin automatically.',
       },
+      {
+        icon: 'directions_bike',
+        title: 'Send Suunto routes to Wahoo',
+        copy: 'Connect Wahoo, then choose whether new and updated Suunto routes saved in Quantified Self should be sent to Wahoo automatically as FIT courses. You can also send saved routes now without enabling future delivery.',
+      },
     ],
     toolsEyebrow: 'Suunto Tools',
     toolsTitle: 'Activity, route, history, and sleep workflows',
-    toolsCopy: 'Suunto is not only a sync destination. Quantified Self also supports uploads, automatic and existing route imports, sending routes to Garmin, history imports, and recovery context.',
+    toolsCopy: 'Suunto is not only a sync destination. Quantified Self also supports uploads, automatic and existing route imports, sending routes to Garmin or Wahoo, history imports, and recovery context.',
     tools: [
       {
         icon: 'upload_file',
@@ -258,6 +264,11 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         icon: 'send',
         title: 'Send Suunto routes to Garmin',
         copy: 'Send Suunto routes already saved in Quantified Self to Garmin Connect when Course Import is allowed.',
+      },
+      {
+        icon: 'directions_bike',
+        title: 'Send Suunto routes to Wahoo',
+        copy: 'Use Suunto Services to automatically send new and updated saved Suunto routes to Wahoo as FIT courses, or send the existing saved routes now. Reconnect Wahoo once if route access is missing.',
       },
       {
         icon: 'bedtime',
@@ -302,9 +313,13 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         question: 'Can Suunto routes sync to Garmin courses?',
         answer: 'Yes. Connect Suunto and Garmin, allow Course Import in Garmin Connect, and turn on automatic route sending. You can also send Suunto routes already saved in Quantified Self without importing them again.',
       },
+      {
+        question: 'Can Suunto routes sync to Wahoo?',
+        answer: 'Yes. Connect Suunto and Wahoo, then turn on automatic route sending in Suunto Services. New and updated saved Suunto routes are sent to Wahoo as FIT courses; you can also send existing saved routes without turning on future delivery. Reconnect Wahoo once if it was connected before route access was added.',
+      },
     ],
     closingTitle: 'Connect once, then keep your services aligned',
-    closingCopy: 'New Garmin and COROS workouts can move to Suunto automatically after setup. Suunto routes can be imported into Quantified Self and sent to Garmin when both connections are ready.',
+    closingCopy: 'New Garmin and COROS workouts can move to Suunto automatically after setup. Suunto routes can be imported into Quantified Self and sent to Garmin or Wahoo when both connections are ready.',
   },
   coros: {
     slug: 'coros',
@@ -401,17 +416,18 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'Wahoo',
     serviceName: ServiceNames.WahooAPI,
     h1: 'Wahoo Integration for Activity Sync and Training Analysis',
-    heroCopy: 'Connect Wahoo to Quantified Self to import new Wahoo-recorded workouts, queue FIT-backed history, sync retained Wahoo activities to Suunto, send FIT activities and GPX/FIT courses/routes to Wahoo, and analyze Wahoo activities beside Garmin, Suunto, and COROS data.',
+    heroCopy: 'Connect Wahoo to Quantified Self to import new Wahoo-recorded workouts, queue FIT-backed history, sync retained Wahoo activities to Suunto, send FIT activities, GPX/FIT courses/routes, or saved Suunto routes to Wahoo, and analyze Wahoo activities beside Garmin, Suunto, and COROS data.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use the Pro Wahoo connection for automatic workout imports, FIT-backed history, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, Garmin/COROS/Suunto-to-Wahoo activity sync, and private multi-provider training analysis.',
+    summary: 'Use the Pro Wahoo connection for automatic workout imports, FIT-backed history, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, Garmin/COROS/Suunto-to-Wahoo activity sync, and private multi-provider training analysis.',
     highlights: [
       'Automatic Wahoo workout imports',
       'FIT-backed Wahoo history import',
       'Wahoo-to-Suunto sync and FIT activity/GPX-FIT route delivery to Wahoo',
+      'Send saved Suunto routes to Wahoo',
       'Wahoo, Garmin, Suunto, and COROS in one dashboard',
     ],
     syncEyebrow: 'Wahoo Workflows',
-    syncTitle: 'Import Wahoo workouts, sync them to Suunto, and send activity or route files to Wahoo',
+    syncTitle: 'Import Wahoo workouts, sync them to Suunto, and send activities or routes to Wahoo',
     syncCopy: 'Authorize Wahoo once to receive completed Wahoo workout summaries, then choose automatic or date-range Wahoo-to-Suunto sync, direct FIT activity or GPX/FIT course/route delivery, or Garmin, COROS, and Suunto activity sync to Wahoo.',
     syncFlows: [
       {
@@ -445,6 +461,11 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         copy: 'Choose a GPX or FIT course or route file in Wahoo Services to send it directly to Wahoo. Quantified Self converts GPX to FIT in memory; this does not create or retain a Quantified Self route. Reconnect an existing Wahoo connection once to grant route access.',
       },
       {
+        icon: 'directions_bike',
+        title: 'Suunto saved routes to Wahoo',
+        copy: 'In Suunto Services, connect Wahoo and opt in to send new and updated saved Suunto routes to Wahoo as FIT courses. You can also backfill routes already saved in Quantified Self; revisions update the same Wahoo route.',
+      },
+      {
         icon: 'published_with_changes',
         title: 'Garmin, COROS, and Suunto to Wahoo sync',
         copy: 'Connect Wahoo and the source service, then turn on automatic delivery for new activities or choose a date range for activities already stored in Quantified Self.',
@@ -452,7 +473,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     toolsEyebrow: 'Wahoo Tools',
     toolsTitle: 'FIT source files, Wahoo delivery, and provider-aware analysis',
-    toolsCopy: 'Wahoo-to-Suunto is the supported Wahoo-origin activity route in this release. Wahoo also accepts direct FIT activity and GPX/FIT course/route delivery. Imported Wahoo routes sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App; sleep sync, plans, and other Wahoo forwarding are not enabled.',
+    toolsCopy: 'Wahoo-to-Suunto is the supported Wahoo-origin activity route in this release. Wahoo also accepts direct FIT activity and GPX/FIT course/route delivery plus opt-in saved Suunto route delivery. Imported Wahoo routes sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App; sleep sync, plans, and other Wahoo forwarding are not enabled.',
     tools: [
       {
         icon: 'source',
@@ -478,6 +499,11 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         icon: 'route',
         title: 'Course and route requirements',
         copy: 'Wahoo route delivery accepts GPX and FIT files. Quantified Self converts a selected GPX route to a FIT course in memory; it must contain exactly one route with valid coordinates. A selected route is sent directly to Wahoo and is not added to the Quantified Self route library.',
+      },
+      {
+        icon: 'sync',
+        title: 'Saved Suunto route delivery',
+        copy: 'Opt in from Suunto Services to send new and updated saved Suunto routes to Wahoo, or send existing saved routes now. Quantified Self uses a stable route key so revisions update the same Wahoo route.',
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
@@ -523,11 +549,11 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Can I send a route to Wahoo?',
-        answer: 'Yes. In Wahoo Services, choose a GPX or FIT course or route file. Quantified Self converts GPX to a FIT course in memory before it is sent directly to Wahoo, and it is not stored as a Quantified Self route. Reconnect Wahoo once if it was connected before route delivery was available. Wahoo routes sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.',
+        answer: 'Yes. In Wahoo Services, choose a GPX or FIT course or route file for direct delivery. In Suunto Services, you can also opt in to deliver saved Suunto routes to Wahoo automatically or send existing saved routes now. Quantified Self converts GPX and saved Suunto routes to FIT courses in memory; direct uploads are not stored as Quantified Self routes, while saved-route revisions update the corresponding Wahoo route. Reconnect Wahoo once if it was connected before route delivery was available. Wahoo routes sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.',
       },
     ],
     closingTitle: 'Connect Wahoo and keep completed workouts in context',
-    closingCopy: 'Import Wahoo FIT activities automatically, sync eligible retained Wahoo activities to Suunto, send the FIT activities or GPX/FIT courses/routes you choose directly to Wahoo, add the history range you need, and analyze everything in the same private archive.',
+    closingCopy: 'Import Wahoo FIT activities automatically, sync eligible retained Wahoo activities to Suunto, send the FIT activities or GPX/FIT courses/routes you choose directly to Wahoo, optionally deliver saved Suunto routes to Wahoo, add the history range you need, and analyze everything in the same private archive.',
   },
 };
 
@@ -549,12 +575,13 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     slug: 'suunto',
     label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     serviceName: ServiceNames.SuuntoApp,
-    subtitle: 'Activity sync, route imports, and sending routes to Garmin',
-    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, send Suunto routes to Garmin, upload FIT activities and GPX/FIT routes to Suunto, and keep Suunto history in the same private dashboard.',
+    subtitle: 'Activity sync, route imports, and sending routes to Garmin or Wahoo',
+    summary: 'Connect Suunto to receive Garmin and COROS activities, import Suunto routes, send Suunto routes to Garmin or Wahoo, upload FIT activities and GPX/FIT routes to Suunto, and keep Suunto history in the same private dashboard.',
     highlights: [
       'Receive Garmin activities automatically',
       'Receive COROS activities automatically',
       'Send Suunto routes to Garmin',
+      'Send Suunto routes to Wahoo',
     ],
   },
   {
@@ -574,12 +601,13 @@ export const INTEGRATION_HUB_CARDS: readonly IntegrationHubCard[] = [
     label: getProviderDisplayName(ServiceNames.WahooAPI, 'source'),
     serviceName: ServiceNames.WahooAPI,
     subtitle: 'FIT import, delivery, and activity sync',
-    summary: 'Connect Wahoo to import completed FIT-backed workouts, sync retained Wahoo activities to Suunto, send FIT activities and GPX/FIT courses/routes to Wahoo, and analyze them beside Garmin, Suunto, and COROS in one private dashboard.',
+    summary: 'Connect Wahoo to import completed FIT-backed workouts, sync retained Wahoo activities to Suunto, send FIT activities and GPX/FIT courses/routes or saved Suunto routes to Wahoo, and analyze them beside Garmin, Suunto, and COROS in one private dashboard.',
     highlights: [
       'Import new Wahoo workouts automatically',
       'Queue Wahoo history by date range',
       'Sync retained Wahoo activities to Suunto',
       'Send FIT activities and GPX/FIT courses/routes to Wahoo',
+      'Send saved Suunto routes to Wahoo',
       'Retain imported activities after disconnect',
     ],
   },
@@ -674,10 +702,10 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Suunto Integration',
     preload: true,
     animation: 'Integrations',
-    description: 'Sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, upload FIT activities and GPX/FIT routes, and centralize workout data.',
+    description: 'Sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin or Wahoo, upload FIT activities and GPX/FIT routes, and centralize workout data.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.suunto,
-      'Sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin, upload FIT activities and GPX/FIT routes, and centralize workout data.'
+      'Sync Garmin and COROS activities to Suunto, import Suunto routes, send Suunto routes to Garmin or Wahoo, upload FIT activities and GPX/FIT routes, and centralize workout data.'
     ),
   },
   coros: {
@@ -694,10 +722,10 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Wahoo Integration',
     preload: true,
     animation: 'Integrations',
-    description: 'Connect Wahoo to Quantified Self for automatic FIT activity imports, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, Garmin/COROS/Suunto activity sync to Wahoo, date-range history imports, and private multi-provider training analysis.',
+    description: 'Connect Wahoo to Quantified Self for automatic FIT activity imports, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, Garmin/COROS/Suunto activity sync to Wahoo, date-range history imports, and private multi-provider training analysis.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.wahoo,
-      'Connect Wahoo to Quantified Self for automatic FIT activity imports, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, date-range history imports, original-file retention, and private multi-provider training analysis.',
+      'Connect Wahoo to Quantified Self for automatic FIT activity imports, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, date-range history imports, original-file retention, and private multi-provider training analysis.',
     ),
   },
 };

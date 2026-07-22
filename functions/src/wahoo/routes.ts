@@ -63,6 +63,16 @@ interface WahooRouteUploadRequest {
   filename?: unknown;
 }
 
+interface UploadWahooRouteOptions {
+  /**
+   * A route that has already been parsed by a saved-route delivery worker.
+   * Supplying it avoids a second parse and preserves the saved route's name.
+   */
+  routeFile?: RouteFileInterface;
+  /** A stable provider key used when a saved Quantified Self route is updated. */
+  externalId?: string;
+}
+
 export interface WahooRouteUploadResult {
   status: 'success';
   providerRouteId?: string;
@@ -243,6 +253,7 @@ export function buildWahooRoutePayload(
   fileBuffer: Buffer,
   routeFile: RouteFileInterface,
   filename?: unknown,
+  externalId?: string,
 ): WahooRoutePayload {
   const startPoint = getRouteStartPoint(routeFile);
   if (!startPoint) {
@@ -256,7 +267,7 @@ export function buildWahooRoutePayload(
   const descent = getRouteMetric(routeFile, DataDescent.type);
 
   return {
-    externalId: createExternalId(userID, fileBuffer),
+    externalId: externalId || createExternalId(userID, fileBuffer),
     filename: normalizeWahooFitFilename(filename),
     name: getWahooRouteName(routeFile),
     workoutTypeFamilyId: getWorkoutTypeFamilyId(routeFile),
@@ -398,6 +409,7 @@ async function uploadWahooRoute(
   fileBuffer: Buffer,
   inputFormat: ManualRouteInputFormat,
   filename?: unknown,
+  options: UploadWahooRouteOptions = {},
 ): Promise<WahooRouteUploadResult> {
   if (fileBuffer.length === 0) {
     throw new HttpsError('invalid-argument', 'File content is empty.');
@@ -408,11 +420,11 @@ async function uploadWahooRoute(
 
   try {
     return await withWahooRouteAccessToken(userID, async (accessToken) => {
-      const routeFile = await parseWahooRoute(fileBuffer, inputFormat);
+      const routeFile = options.routeFile || await parseWahooRoute(fileBuffer, inputFormat);
       const fitBuffer = inputFormat === 'gpx'
         ? await convertWahooGpxRouteToFit(routeFile)
         : fileBuffer;
-      const payload = buildWahooRoutePayload(userID, fileBuffer, routeFile, filename);
+      const payload = buildWahooRoutePayload(userID, fileBuffer, routeFile, filename, options.externalId);
       const form = buildWahooRouteForm(fitBuffer, payload);
       await assertWahooRouteUploadProviderActionAllowed(userID, 'before_route_lookup');
       const existingRoute = await findWahooRouteByExternalId(accessToken, payload.externalId);
@@ -450,6 +462,42 @@ async function uploadWahooRoute(
     logger.warn('Wahoo route upload failed', getWahooErrorLogDetails(error));
     return toWahooRouteHttpsError(error);
   }
+}
+
+/**
+ * Verifies that the connected Wahoo account can receive routes. The queued
+ * saved-route path calls this before the Wahoo route lookup or upload so a
+ * missing connection or scope is reported as a skipped delivery, not a retry.
+ */
+export async function createWahooRouteSendContext(userID: string): Promise<void> {
+  await withWahooRouteAccessToken(userID, async () => undefined);
+}
+
+function createSavedRouteExternalId(userID: string, savedRouteID: string): string {
+  return createExternalId(userID, Buffer.from(`saved-route:${savedRouteID}`));
+}
+
+/**
+ * Sends a route already stored by Quantified Self to Wahoo. Each saved-route
+ * id maps to one opaque Wahoo external id, so later Suunto revisions update
+ * the same Wahoo route instead of creating a duplicate.
+ */
+export async function sendSavedRouteToWahoo(
+  userID: string,
+  savedRouteID: string,
+  routeFile: RouteFileInterface,
+): Promise<WahooRouteUploadResult> {
+  const fitBuffer = await convertWahooGpxRouteToFit(routeFile);
+  return uploadWahooRoute(
+    userID,
+    fitBuffer,
+    'fit',
+    `${savedRouteID}.fit`,
+    {
+      routeFile,
+      externalId: createSavedRouteExternalId(userID, savedRouteID),
+    },
+  );
 }
 
 /**

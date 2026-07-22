@@ -129,12 +129,12 @@ const topLevelRoutes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.",
+        "description": "Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -152,6 +152,7 @@ const topLevelRoutes: Routes = [
           "COROS to Suunto activity sync",
           "Wahoo to Suunto activity sync",
           "Send Suunto routes to Garmin",
+          "Send Suunto routes to Wahoo",
           "Send GPX/FIT routes to Wahoo",
           "Sync past activities",
           "Garmin integration",

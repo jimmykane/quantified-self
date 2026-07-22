@@ -17,6 +17,8 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('Activities already imported into Quantified Self are retained');
     expect(content).toContain('send a selected FIT activity file or GPX/FIT course/route file directly to Wahoo');
     expect(content).toContain('converts selected GPX routes to FIT in memory');
+    expect(content).toContain('automatic/backfill delivery of Suunto routes already saved in Quantified Self');
+    expect(content).toContain('updated saved route updates the same Wahoo route');
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto activity sync');

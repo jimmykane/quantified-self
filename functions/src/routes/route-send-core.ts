@@ -38,6 +38,12 @@ import {
   GarminRouteSendPermissionRequiredError,
   sendRouteToGarminConnect,
 } from '../garmin/routes';
+import {
+  createWahooRouteSendContext,
+  sendSavedRouteToWahoo,
+  WahooRouteUploadSkippedForDeletedUserError,
+  WahooRouteWriteScopeRequiredError,
+} from '../wahoo/routes';
 import { setRouteDeliveryMetadata } from './route-persistence';
 import { TokenRefreshSkippedForDeletedUserError } from '../tokens';
 
@@ -130,9 +136,30 @@ class GarminRouteSendAdapter implements RouteSendDestinationAdapter<GarminRouteS
   }
 }
 
+class WahooRouteSendAdapter implements RouteSendDestinationAdapter<void> {
+  readonly destinationServiceName = ServiceNames.WahooAPI;
+
+  createContext(userID: string): Promise<void> {
+    return createWahooRouteSendContext(userID);
+  }
+
+  async sendRoute(
+    userID: string,
+    preparedRoute: PreparedSavedRoute,
+  ): Promise<{ providerRouteId?: string }> {
+    const result = await sendSavedRouteToWahoo(
+      userID,
+      preparedRoute.routeId,
+      preparedRoute.routeFile,
+    );
+    return { providerRouteId: result.providerRouteId };
+  }
+}
+
 const ROUTE_SEND_ADAPTERS = new Map<ServiceNames, RouteSendDestinationAdapter>([
   [ServiceNames.SuuntoApp, new SuuntoRouteSendAdapter()],
   [ServiceNames.GarminAPI, new GarminRouteSendAdapter()],
+  [ServiceNames.WahooAPI, new WahooRouteSendAdapter()],
 ]);
 
 const STRICT_ROUTE_DELIVERY_METADATA_DESTINATIONS = new Set<ServiceNames>([
@@ -627,9 +654,11 @@ export function buildSendRoutesResponse(
 export function isAccountDeletionSkipError(error: unknown): boolean {
   return error instanceof RouteSendSkippedForDeletedUserError
     || error instanceof SuuntoRouteUploadSkippedForDeletedUserError
+    || error instanceof WahooRouteUploadSkippedForDeletedUserError
     || error instanceof TokenRefreshSkippedForDeletedUserError
     || (error instanceof Error && error.name === 'RouteSendSkippedForDeletedUserError')
     || (error instanceof Error && error.name === 'SuuntoRouteUploadSkippedForDeletedUserError')
+    || (error instanceof Error && error.name === 'WahooRouteUploadSkippedForDeletedUserError')
     || (error instanceof Error && error.name === 'TokenRefreshSkippedForDeletedUserError');
 }
 
@@ -643,9 +672,15 @@ export function isDestinationAuthRequiredError(error: unknown): boolean {
     || (error as { code?: unknown } | null)?.code === 'functions/unauthenticated';
 }
 
-export function isDestinationPermissionRequiredError(error: unknown): error is GarminRouteSendPermissionRequiredError {
+export function isDestinationPermissionRequiredError(
+  error: unknown,
+): error is GarminRouteSendPermissionRequiredError | WahooRouteWriteScopeRequiredError {
   return error instanceof GarminRouteSendPermissionRequiredError
-    || (error instanceof Error && error.name === 'GarminRouteSendPermissionRequiredError');
+    || error instanceof WahooRouteWriteScopeRequiredError
+    || (error instanceof Error && (
+      error.name === 'GarminRouteSendPermissionRequiredError'
+      || error.name === 'WahooRouteWriteScopeRequiredError'
+    ));
 }
 
 export function isDeliveryMetadataPersistenceError(error: unknown): error is RouteSendItemError {
