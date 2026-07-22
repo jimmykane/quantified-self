@@ -144,7 +144,10 @@
 }
 
 .service-sync-summary {
-    margin-top: 16px;
+    --mat-card-outlined-container-color: var(--mat-sys-surface-container-lowest);
+    --mat-card-outlined-container-elevation: none;
+
+    margin-top: 12px;
 }
 
 .service-sync-summary mat-card-avatar {

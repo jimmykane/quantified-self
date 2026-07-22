@@ -410,6 +410,7 @@ describe('ServicesComponent', () => {
         const garminPanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
         const summary = garminPanel.querySelector('.service-sync-summary');
 
+        expect(summary.classList.contains('qs-card-plain')).toBe(true);
         expect(summary.textContent).toContain('Enabled automatic sync');
         expect(summary.textContent).toContain('Activity sending');
         expect(summary.textContent).toContain('Garmin → Suunto App');
