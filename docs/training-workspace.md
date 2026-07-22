@@ -1051,6 +1051,13 @@ For cycling, a positive stored decoupling becomes “Power relative to heart rat
 event durability ECharts grid reserves explicit left and bottom insets for numeric axis labels; do not rely only on
 automatic outer-bound containment, which can crop the leading digit on narrow plot hosts.
 
+Both event detail and the Training Durability panel expose a **How to read durability** info control. It uses a
+desktop Material menu and a mobile Material dialog instead of a short opaque tooltip. The guidance explains that a lower
+later output-to-heart-rate ratio is meaningful as a possible fade only when the athlete intended a comparable steady
+effort; intentional easing, changing terrain, coasting, or a pace change can legitimately produce the same pattern. It
+also explains that Training is for repeated comparable-session trends (smaller absolute decoupling/heart-rate drift and
+higher output retention are steadier), and that a missing result means no suitable comparison—not zero durability.
+
 ## Status and Empty-State Semantics
 
 Snapshot status and payload validity are separate concerns. A `ready` document with the wrong schema or an invalid payload

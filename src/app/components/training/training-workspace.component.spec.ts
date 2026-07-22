@@ -88,6 +88,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
     expect(element.textContent).toContain('Settings vs recent evidence');
+    expect(element.querySelector('app-durability-reading-guide[context="training"]')).not.toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
     const importedRecovery = element.querySelector('.training-readiness-imported-recovery');

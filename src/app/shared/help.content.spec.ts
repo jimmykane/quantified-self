@@ -119,6 +119,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
     expect(trainingSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
+    expect(trainingSection?.content).toContain('intentional easing, terrain changes, coasting, or a pace change');
+    expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
     expect(trainingSection?.content).toContain('**Sports shown**');
     expect(trainingSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
     expect(trainingSection?.content).toContain('**Use automatic selection**');

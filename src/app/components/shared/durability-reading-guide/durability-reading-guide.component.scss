@@ -1,0 +1,49 @@
+:host {
+  display: inline-flex;
+}
+
+.durability-reading-guide-content {
+  box-sizing: border-box;
+  display: grid;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 32px));
+  min-width: min(280px, calc(100vw - 32px));
+  padding: 12px 14px;
+}
+
+.durability-reading-guide-dialog-content .durability-reading-guide-content {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.durability-reading-guide-heading {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-small);
+  letter-spacing: 0;
+}
+
+.durability-reading-guide-content p {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: 0;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.durability-reading-guide-item {
+  display: grid;
+  gap: 3px;
+  padding-top: 9px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.durability-reading-guide-item strong {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+  letter-spacing: 0;
+}
+
+.durability-reading-guide-note {
+  font-style: italic;
+}

@@ -223,6 +223,8 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-performance-grid:not(:has(.training-power-profile-panel ~ .training-power-profile-panel)) > .training-power-profile-panel { grid-column: 1 / -1; }
 .training-durability-panel { grid-column: 1 / -1; min-width: 0; overflow: hidden; }
 .training-durability-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 20px 8px; }
+.training-durability-title-row { display: flex; align-items: center; gap: 2px; }
+.training-durability-title-row h3 { margin: 0; }
 .training-durability-panel > header p { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
 .training-durability-panel > header > span { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); white-space: nowrap; }
 .training-durability-panel > .training-empty-state, .training-durability-panel > .training-recovery-update { margin: 12px 20px; }

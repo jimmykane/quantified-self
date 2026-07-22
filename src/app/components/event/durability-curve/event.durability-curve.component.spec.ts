@@ -1,8 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -13,6 +11,8 @@ import { LoggerService } from '../../../services/logger.service';
 import { PerformanceCurveDataService } from '../../../services/performance-curve-data.service';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import { SharedModule } from '../../../modules/shared.module';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 describe('EventDurabilityCurveComponent', () => {
   let fixture: ComponentFixture<EventDurabilityCurveComponent>;
@@ -117,7 +117,7 @@ describe('EventDurabilityCurveComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [MatButtonModule, MatIconModule, NoopAnimationsModule],
+      imports: [SharedModule, NoopAnimationsModule],
       declarations: [EventDurabilityCurveComponent],
       providers: [
         {
@@ -130,6 +130,7 @@ describe('EventDurabilityCurveComponent', () => {
         { provide: AppEventColorService, useValue: { getActivityColor: vi.fn().mockReturnValue('#16B4EA') } },
         { provide: LoggerService, useValue: { error: vi.fn() } },
         { provide: PerformanceCurveDataService, useValue: mockService },
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
       ],
     }).compileComponents();
 
@@ -243,6 +244,7 @@ describe('EventDurabilityCurveComponent', () => {
     expect(text).toContain('Second-half power was 92.7% of the first half; average heart rate was 1 bpm lower.');
     expect(text).not.toContain('decoupling');
     expect(text).not.toContain('paired coverage');
+    expect(fixture.nativeElement.querySelector('[aria-label="How to read durability"]')).not.toBeNull();
   });
 
   it('should hide legend when no marker/activity labels are available', async () => {
