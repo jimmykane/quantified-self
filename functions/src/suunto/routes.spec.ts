@@ -5,6 +5,14 @@ import * as zlib from 'zlib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 import { HttpsError } from 'firebase-functions/v2/https';
 
+const loggerMocks = vi.hoisted(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+}));
+
+vi.mock('firebase-functions/logger', () => loggerMocks);
+
 // Mock Dependencies
 const requestMocks = {
     post: vi.fn(),
@@ -214,6 +222,57 @@ describe('importRouteToSuuntoApp', () => {
         }) as any)).resolves.toEqual({ status: 'success' });
 
         expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({ body: gpxContent }));
+    });
+
+    it('rejects legacy gzip routes that expand beyond the manual route limit before calling Suunto', async () => {
+        const expandedPayload = Buffer.alloc((20 * 1024 * 1024) + 1, 'a');
+        const compressedBase64 = Buffer.from(zlib.gzipSync(expandedPayload)).toString('base64');
+
+        await expect(importRouteToSuuntoApp(createMockRequest({
+            data: { file: compressedBase64 },
+        }) as any)).rejects.toMatchObject({
+            code: 'invalid-argument',
+            message: 'Route file is too large after decompression. Maximum decompressed size is 20MB.',
+        });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
+    it('does not log raw Suunto route response errors', async () => {
+        const providerError = 'provider-error-containing-route-content';
+        requestMocks.post.mockResolvedValue(JSON.stringify({ error: providerError }));
+        const compressedBase64 = Buffer.from(zlib.gzipSync('<gpx>...</gpx>')).toString('base64');
+
+        await expect(importRouteToSuuntoApp(createMockRequest({
+            data: { file: compressedBase64 },
+        }) as any)).rejects.toMatchObject({ code: 'internal' });
+
+        const loggedOutput = JSON.stringify({
+            error: loggerMocks.error.mock.calls,
+            info: loggerMocks.info.mock.calls,
+            warn: loggerMocks.warn.mock.calls,
+        });
+        expect(loggedOutput).not.toContain(providerError);
+    });
+
+    it('does not log raw Suunto route error bodies returned with an HTTP failure', async () => {
+        const providerError = 'provider-error-body-containing-route-content';
+        requestMocks.post.mockRejectedValue(Object.assign(new Error('Suunto request failed'), {
+            statusCode: 422,
+            error: { message: providerError },
+        }));
+        const compressedBase64 = Buffer.from(zlib.gzipSync('<gpx>...</gpx>')).toString('base64');
+
+        await expect(importRouteToSuuntoApp(createMockRequest({
+            data: { file: compressedBase64 },
+        }) as any)).rejects.toMatchObject({ code: 'internal' });
+
+        const loggedOutput = JSON.stringify({
+            error: loggerMocks.error.mock.calls,
+            info: loggerMocks.info.mock.calls,
+            warn: loggerMocks.warn.mock.calls,
+        });
+        expect(loggedOutput).not.toContain(providerError);
     });
 
     it('fetches the latest Suunto token snapshot for each upload when a batch context is reused', async () => {

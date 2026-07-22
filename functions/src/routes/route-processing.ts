@@ -148,11 +148,20 @@ export function resolveStoredExtension(resolvedExtension: string, payload: Buffe
   return baseExtension;
 }
 
-function resolveMaxRouteDecompressedBytes(): number {
-  return Math.min(
+export interface RoutePayloadDecompressionOptions {
+  maxOutputLength?: number;
+  maxOutputLengthLabel?: string;
+}
+
+function resolveMaxRouteDecompressedBytes(requestedMaxOutputLength?: number): number {
+  const defaultMaxOutputLength = Math.min(
     MAX_ROUTE_DECOMPRESSED_BYTES,
     MAX_ROUTE_GZIP_DECOMPRESSED_BYTES,
   );
+  if (requestedMaxOutputLength === undefined) {
+    return defaultMaxOutputLength;
+  }
+  return Math.min(defaultMaxOutputLength, requestedMaxOutputLength);
 }
 
 function resolveRouteDecompressedBytesLabel(maxOutputLength: number): string {
@@ -165,12 +174,16 @@ function resolveRouteDecompressedBytesLabel(maxOutputLength: number): string {
   return `${Math.floor(maxOutputLength / 1024)}KB`;
 }
 
-export function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: string): Buffer {
+export function maybeDecompressPayloadForParsing(
+  payload: Buffer,
+  resolvedExtension: string,
+  options: RoutePayloadDecompressionOptions = {},
+): Buffer {
   if (!shouldDecompressPayloadForParsing(payload, resolvedExtension)) {
     return payload;
   }
 
-  const maxOutputLength = resolveMaxRouteDecompressedBytes();
+  const maxOutputLength = resolveMaxRouteDecompressedBytes(options.maxOutputLength);
   try {
     return gunzipSync(payload, { maxOutputLength });
   } catch (error) {
@@ -185,7 +198,7 @@ export function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtens
     if ((error as { code?: unknown } | undefined)?.code === 'ERR_BUFFER_TOO_LARGE') {
       throw new RouteProcessingHttpStatusError(
         400,
-        `Route file is too large after decompression. Maximum decompressed size is ${resolveRouteDecompressedBytesLabel(maxOutputLength)}.`,
+        `Route file is too large after decompression. Maximum decompressed size is ${options.maxOutputLengthLabel || resolveRouteDecompressedBytesLabel(maxOutputLength)}.`,
       );
     }
     throw new RouteProcessingHttpStatusError(400, 'Could not decompress uploaded route payload.');
