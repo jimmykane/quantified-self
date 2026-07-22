@@ -9,13 +9,14 @@ describe('EventStatsBottomSheetComponent', () => {
     let component: EventStatsBottomSheetComponent;
     let bottomSheetRefMock: { dismiss: ReturnType<typeof vi.fn> };
     let measuredHeight = 500;
+    let measuredWidth = 720;
     let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn>;
     let bottomSheetContainer: HTMLElement;
 
-    const createDomRect = (height: number): DOMRect => ({
+    const createDomRect = (height: number, width = 0): DOMRect => ({
         x: 0,
         y: 0,
-        width: 0,
+        width,
         height,
         top: 0,
         right: 0,
@@ -30,10 +31,14 @@ describe('EventStatsBottomSheetComponent', () => {
         };
 
         measuredHeight = 500;
+        measuredWidth = 720;
         getBoundingClientRectSpy = vi
             .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
             .mockImplementation(function (this: HTMLElement): DOMRect {
-                if (this.classList?.contains('mat-bottom-sheet-container') || this.classList?.contains('bottom-sheet-container')) {
+                if (this.classList?.contains('mat-bottom-sheet-container')) {
+                    return createDomRect(measuredHeight, measuredWidth);
+                }
+                if (this.classList?.contains('bottom-sheet-container')) {
                     return createDomRect(measuredHeight);
                 }
                 return createDomRect(0);
@@ -79,7 +84,7 @@ describe('EventStatsBottomSheetComponent', () => {
         expect(bottomSheetRefMock.dismiss).toHaveBeenCalledTimes(1);
     });
 
-    it('should capture and lock the initial bottom sheet height after first render', async () => {
+    it('should capture and lock the initial bottom sheet width after first render', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
@@ -88,26 +93,31 @@ describe('EventStatsBottomSheetComponent', () => {
 
         const container: HTMLElement = fixture.nativeElement.querySelector('.bottom-sheet-container');
         expect(container.style.height).toBe('500px');
-        expect(bottomSheetContainer.style.height).toBe('500px');
-        expect(bottomSheetContainer.style.minHeight).toBe('500px');
+        expect(component.lockedSheetWidthPx).toBe(720);
+        expect(bottomSheetContainer.style.width).toBe('720px');
+        expect(bottomSheetContainer.style.minWidth).toBe('720px');
     });
 
-    it('should keep the locked height when content shrinks after filtering', async () => {
+    it('should keep the locked width when content shrinks after filtering', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
 
         expect(component.lockedSheetHeightPx).toBe(500);
+        expect(component.lockedSheetWidthPx).toBe(720);
 
         measuredHeight = 200;
+        measuredWidth = 320;
         (component as any).captureAndLockSheetHeight();
+        (component as any).captureAndLockSheetWidth();
         fixture.detectChanges();
 
         expect(component.lockedSheetHeightPx).toBe(500);
+        expect(component.lockedSheetWidthPx).toBe(720);
 
         const container: HTMLElement = fixture.nativeElement.querySelector('.bottom-sheet-container');
         expect(container.style.height).toBe('500px');
-        expect(bottomSheetContainer.style.height).toBe('500px');
-        expect(bottomSheetContainer.style.minHeight).toBe('500px');
+        expect(bottomSheetContainer.style.width).toBe('720px');
+        expect(bottomSheetContainer.style.minWidth).toBe('720px');
     });
 });
