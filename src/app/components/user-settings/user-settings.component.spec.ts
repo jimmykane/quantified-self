@@ -249,6 +249,14 @@ describe('UserSettingsComponent', () => {
         ]);
     });
 
+    it('renders the settings heading before section navigation', () => {
+        const pageHeader = fixture.nativeElement.querySelector('.settings-page-header');
+        const sectionNavigation = fixture.nativeElement.querySelector('app-workspace-section-navigation');
+
+        expect(pageHeader).toBeTruthy();
+        expect(pageHeader.nextElementSibling).toBe(sectionNavigation);
+    });
+
     it('uses the horizontal settings selector without a workspace rail', () => {
         const tabNav = fixture.nativeElement.querySelector('nav[role="tablist"]');
         const tabPanel = fixture.nativeElement.querySelector('.settings-tab-panel');
