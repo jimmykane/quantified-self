@@ -20,6 +20,8 @@ import { MaterialModule } from '../../modules/material.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconRegistry } from '@angular/material/icon';
 import { SharedModule } from '../../modules/shared.module';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -328,6 +330,115 @@ describe('ServicesComponent', () => {
             .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
+    });
+
+    it('summarizes enabled activity and route delivery for every affected provider', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                        [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI]: { enabled: true },
+                    },
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+
+        expect(component.automaticSyncSummaryBySection.garmin).toEqual({
+            activities: [{
+                id: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+                label: 'Garmin → Suunto App',
+            }],
+            routes: [{
+                id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+                label: 'Suunto → Garmin Connect',
+            }],
+        });
+        expect(component.automaticSyncSummaryBySection.suunto).toEqual({
+            activities: [{
+                id: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+                label: 'Garmin → Suunto App',
+            }],
+            routes: [
+                {
+                    id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+                    label: 'Suunto → Garmin Connect',
+                },
+                {
+                    id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+                    label: 'Suunto → Wahoo',
+                },
+            ],
+        });
+        expect(component.automaticSyncSummaryBySection.coros.activities).toEqual([{
+            id: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI,
+            label: 'COROS → Wahoo',
+        }]);
+        expect(component.automaticSyncSummaryBySection.wahoo).toEqual({
+            activities: [{
+                id: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI,
+                label: 'COROS → Wahoo',
+            }],
+            routes: [{
+                id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+                label: 'Suunto → Wahoo',
+            }],
+        });
+    });
+
+    it('renders enabled activity and route delivery without opening a tools dialog', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    },
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        fixture.detectChanges();
+
+        const garminPanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
+        const summary = garminPanel.querySelector('.service-sync-summary');
+
+        expect(summary.textContent).toContain('Enabled automatic sync');
+        expect(summary.textContent).toContain('Activity sending');
+        expect(summary.textContent).toContain('Garmin → Suunto App');
+        expect(summary.textContent).toContain('Route sending');
+        expect(summary.textContent).toContain('Suunto → Garmin Connect');
+        expect(mockDialog.open).not.toHaveBeenCalled();
+    });
+
+    it('refreshes the summary when sync settings change for the signed-in user', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+
+        await component.ngOnInit();
+        userUpdates$.next({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User);
+
+        expect(component.automaticSyncSummaryBySection.wahoo.routes).toEqual([{
+            id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+            label: 'Suunto → Wahoo',
+        }]);
     });
 
     it('opens the Suunto route and upload cards at their matching tools', () => {

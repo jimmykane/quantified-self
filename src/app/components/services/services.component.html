@@ -71,6 +71,9 @@
               (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
             </app-services-garmin>
             <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'garmin' }">
+            </ng-container>
+            <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'garmin' }">
             </ng-container>
           </section>
@@ -85,6 +88,9 @@
               [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
             </app-services-suunto>
+            <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'suunto' }">
+            </ng-container>
             <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'suunto' }">
             </ng-container>
@@ -101,6 +107,9 @@
               (connectionStateChanged)="setServiceConnectionState('coros', $event)">
             </app-services-coros>
             <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'coros' }">
+            </ng-container>
+            <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
             </ng-container>
           </section>
@@ -116,11 +125,52 @@
               (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
             </app-services-wahoo>
             <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'wahoo' }">
+            </ng-container>
+            <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
             </ng-container>
           </section>
           }
         </mat-tab-nav-panel>
+
+        <ng-template #automaticSyncSummary let-section>
+          <mat-card appearance="outlined" class="service-sync-summary" [attr.aria-label]="serviceLabelBySection[section] + ' automatic sync'">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>published_with_changes</mat-icon>
+              <mat-card-title>Enabled automatic sync</mat-card-title>
+              <mat-card-subtitle>Activity and route delivery involving {{ serviceLabelBySection[section] }}</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              @if (automaticSyncSummaryBySection[section].activities.length || automaticSyncSummaryBySection[section].routes.length) {
+              <div class="service-sync-summary__groups">
+                @if (automaticSyncSummaryBySection[section].activities.length) {
+                <section class="service-sync-summary__group" aria-label="Enabled activity sending">
+                  <h2><mat-icon>directions_run</mat-icon> Activity sending</h2>
+                  <ul>
+                    @for (syncRoute of automaticSyncSummaryBySection[section].activities; track syncRoute.id) {
+                    <li>{{ syncRoute.label }}</li>
+                    }
+                  </ul>
+                </section>
+                }
+                @if (automaticSyncSummaryBySection[section].routes.length) {
+                <section class="service-sync-summary__group" aria-label="Enabled route sending">
+                  <h2><mat-icon>route</mat-icon> Route sending</h2>
+                  <ul>
+                    @for (syncRoute of automaticSyncSummaryBySection[section].routes; track syncRoute.id) {
+                    <li>{{ syncRoute.label }}</li>
+                    }
+                  </ul>
+                </section>
+                }
+              </div>
+              } @else {
+              <p class="service-sync-summary__empty">No automatic activity or route delivery is enabled for this service.</p>
+              }
+            </mat-card-content>
+          </mat-card>
+        </ng-template>
 
         <ng-template #serviceOverview let-section>
           <section class="service-overview" aria-label="Connection features">

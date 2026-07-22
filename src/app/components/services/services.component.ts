@@ -13,7 +13,10 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ACTIVITY_SYNC_ROUTES } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTES } from '@shared/route-delivery-sync-routes';
 import { getProviderDisplayName } from '@shared/provider-presentation';
+import { AppUserInterface } from '../../models/app-user.interface';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
 type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync' | 'activity-sync';
@@ -33,6 +36,88 @@ interface ServiceOverviewCard {
   tool: ServiceToolId;
 }
 
+interface ServiceAutomaticSyncRoute {
+  id: string;
+  label: string;
+}
+
+interface ServiceAutomaticSyncSummary {
+  activities: readonly ServiceAutomaticSyncRoute[];
+  routes: readonly ServiceAutomaticSyncRoute[];
+}
+
+const SERVICE_SECTION_BY_NAME: Record<ServiceNames, ServiceSectionId> = {
+  [ServiceNames.GarminAPI]: 'garmin',
+  [ServiceNames.SuuntoApp]: 'suunto',
+  [ServiceNames.COROSAPI]: 'coros',
+  [ServiceNames.WahooAPI]: 'wahoo',
+};
+
+function createEmptyAutomaticSyncSummaryBySection(): Record<ServiceSectionId, ServiceAutomaticSyncSummary> {
+  return {
+    garmin: { activities: [], routes: [] },
+    suunto: { activities: [], routes: [] },
+    coros: { activities: [], routes: [] },
+    wahoo: { activities: [], routes: [] },
+  };
+}
+
+function buildAutomaticSyncRouteLabel(
+  sourceServiceName: ServiceNames,
+  destinationServiceName: ServiceNames,
+): string {
+  return `${getProviderDisplayName(sourceServiceName, 'source')} → ${getProviderDisplayName(destinationServiceName, 'destination')}`;
+}
+
+function buildAutomaticSyncSummaryBySection(
+  user: AppUserInterface | null | undefined,
+): Record<ServiceSectionId, ServiceAutomaticSyncSummary> {
+  const summaries = createEmptyAutomaticSyncSummaryBySection();
+  const serviceSyncSettings = user?.settings?.serviceSyncSettings;
+  const activitySettings = serviceSyncSettings?.activitySyncRoutes || {};
+  const routeSettings = serviceSyncSettings?.routeDeliverySyncRoutes || {};
+
+  for (const route of Object.values(ACTIVITY_SYNC_ROUTES)) {
+    if (activitySettings[route.id]?.enabled !== true) {
+      continue;
+    }
+
+    const summaryRoute: ServiceAutomaticSyncRoute = {
+      id: route.id,
+      label: buildAutomaticSyncRouteLabel(route.sourceServiceName, route.destinationServiceName),
+    };
+    summaries[SERVICE_SECTION_BY_NAME[route.sourceServiceName]].activities = [
+      ...summaries[SERVICE_SECTION_BY_NAME[route.sourceServiceName]].activities,
+      summaryRoute,
+    ];
+    summaries[SERVICE_SECTION_BY_NAME[route.destinationServiceName]].activities = [
+      ...summaries[SERVICE_SECTION_BY_NAME[route.destinationServiceName]].activities,
+      summaryRoute,
+    ];
+  }
+
+  for (const route of Object.values(ROUTE_DELIVERY_SYNC_ROUTES)) {
+    if (routeSettings[route.id]?.enabled !== true) {
+      continue;
+    }
+
+    const summaryRoute: ServiceAutomaticSyncRoute = {
+      id: route.id,
+      label: buildAutomaticSyncRouteLabel(route.sourceServiceName, route.destinationServiceName),
+    };
+    summaries[SERVICE_SECTION_BY_NAME[route.sourceServiceName]].routes = [
+      ...summaries[SERVICE_SECTION_BY_NAME[route.sourceServiceName]].routes,
+      summaryRoute,
+    ];
+    summaries[SERVICE_SECTION_BY_NAME[route.destinationServiceName]].routes = [
+      ...summaries[SERVICE_SECTION_BY_NAME[route.destinationServiceName]].routes,
+      summaryRoute,
+    ];
+  }
+
+  return summaries;
+}
+
 const WAHOO_CONNECTION_ROLLOUT_USER_ID = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
 
 @Component({
@@ -46,7 +131,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   public suuntoAppLinkFormGroup!: UntypedFormGroup;
   public isLoading = false;
-  public user!: User;
+  public user!: AppUserInterface;
 
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
   public activeSection: ServiceSectionId = 'garmin';
@@ -134,8 +219,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
       },
       {
         title: 'Route sync',
-        description: 'Import existing Suunto routes and send saved routes to Garmin.',
-        detail: 'Route import and delivery',
+        description: 'Import existing Suunto routes and send saved routes to Garmin or Wahoo.',
+        detail: 'Route import and automatic delivery',
         icon: 'route',
         actionLabel: 'Route sync settings',
         tool: 'routes',
@@ -214,6 +299,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     coros: false,
     wahoo: false,
   };
+  public automaticSyncSummaryBySection = createEmptyAutomaticSyncSummaryBySection();
 
 
   private userSubscription!: Subscription;
@@ -268,6 +354,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
         const isAdmin = await this.userService.isAdmin();
         this.isAdmin = isAdmin;
         this.processUser(user, isPro);
+      } else if (user) {
+        this.user = user;
+        this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
       }
     }));
 
@@ -321,9 +410,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.serviceConnectionState[section] = connected;
   }
 
-  processUser(user: User | null, isPro: boolean) {
+  processUser(user: AppUserInterface | null, isPro: boolean) {
     if (!user) {
       this.updateWahooConnectionRollout(null);
+      this.automaticSyncSummaryBySection = createEmptyAutomaticSyncSummaryBySection();
       this.isLoading = false;
       this.snackBar.open('You must login if you want to use the service features', 'OK', {
         duration: undefined,
@@ -332,6 +422,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     }
     this.user = user;
     this.updateWahooConnectionRollout(user);
+    this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
 
     this.hasProAccess = isPro;
 
