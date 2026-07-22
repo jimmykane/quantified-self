@@ -35,7 +35,12 @@
   </div>
   }
   @if (showTodaySummary) {
-  <section class="dashboard-current-state-row" aria-label="Current readiness signals">
+  <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">
+    <div class="dashboard-current-state-primary dashboard-training-state-primary">
+      <span>Training state</span>
+      <strong>{{ dashboardTodayTrainingState.label }}</strong>
+      <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
+    </div>
     <div class="dashboard-current-state-primary">
       <span>Readiness</span>
       <div class="dashboard-readiness-primary-value">

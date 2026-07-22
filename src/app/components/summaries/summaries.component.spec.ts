@@ -692,6 +692,36 @@ describe('SummariesComponent', () => {
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
   });
 
+  it('shows the same TSS-only training state as Training above Today readiness', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    (component as any).derivedFormPoints = [{
+      time: Date.UTC(2026, 6, 18),
+      trainingStressScore: 0,
+      ctl: 102,
+      atl: 114,
+      formSameDay: -12,
+      formPriorDay: -10,
+    }];
+    (component as any).derivedRampRateContext = {
+      latestDayMs: nowMs,
+      ctlToday: 102,
+      ctl7DaysAgo: 100,
+      rampRate: 2,
+      trend8Weeks: [],
+    };
+    (component as any).dashboardTodayTrainingState = (component as any).buildDashboardTodayTrainingState();
+
+    fixture.detectChanges();
+
+    const state = fixture.nativeElement.querySelector('.dashboard-training-state-primary') as HTMLElement;
+    expect(state.textContent).toContain('Training state');
+    expect(state.textContent).toContain('Fatigued');
+    expect(state.textContent).toContain('Absorb the load');
+    expect(state.textContent).toContain('TSS only');
+  });
+
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
     const nowMs = Date.UTC(2026, 6, 18, 12);
     vi.useFakeTimers();

@@ -13,11 +13,10 @@ import type {
   DashboardTrainingRecoveryWindow,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
-  resolveDashboardFatigueAtlContext,
-  resolveDashboardFitnessCtlContext,
   resolveDashboardFormNowContextFromPoints,
   resolveDashboardRampRateContextFromPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
+import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
 import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
@@ -917,20 +916,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private refreshDerivedViewModels(): void {
     const nowMs = Date.now();
     const formPoints = this.derivedState.formPoints;
-    const formNowFromSeries = resolveDashboardFormNowContextFromPoints(formPoints, nowMs);
-    const rampRateFromSeries = resolveDashboardRampRateContextFromPoints(formPoints, nowMs);
-    const currentFormNow = formNowFromSeries
-      || this.derivedState.formNow;
-    const currentRampRate = rampRateFromSeries
-      || this.derivedState.rampRate;
-    const currentFitness = resolveDashboardFitnessCtlContext(formPoints, nowMs);
-    const currentFatigue = resolveDashboardFatigueAtlContext(formPoints, nowMs);
-    const stateSignals = {
-      form: currentFormNow?.value ?? null,
-      rampRate: currentRampRate?.rampRate ?? null,
-      fitness: currentFitness?.value ?? null,
-      fatigue: currentFatigue?.value ?? null,
-    };
+    const currentTrainingState = buildCurrentTrainingStateContext({
+      formPoints,
+      fallbackFormNow: this.derivedState.formNow,
+      fallbackRampRate: this.derivedState.rampRate,
+      nowMs,
+    });
+    const currentFormNow = currentTrainingState.formNow;
+    const currentRampRate = currentTrainingState.rampRate;
+    const stateSignals = currentTrainingState.signals;
     const analysis = buildTrainingAnalysis({
       disciplines: this.derivedState.trainingSummary?.disciplines || [],
       stateSignals,
@@ -946,16 +940,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       analysis.activities.baseline,
     );
     const stateSignalStatuses = [
-      formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
-      rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
+      currentTrainingState.formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
+      currentTrainingState.rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
     ];
     const isTrainingStateUpdating = stateSignalStatuses.some(isDerivedMetricPendingStatus);
-    const stateInfo = buildTrainingStateInfo(stateSignals);
     this.trainingStatus = this.buildTrainingStatus(
       analysis,
       this.trainingComparisonState,
       isTrainingStateUpdating,
-      stateInfo,
+      currentTrainingState.info,
     );
     this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
     this.refreshTrainingRecoveryEstimate();
@@ -967,8 +960,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     );
     this.refreshTrainingReadiness();
     this.loadMetrics = {
-      ctlText: this.formatNumber(currentFitness?.value, 0),
-      atlText: this.formatNumber(currentFatigue?.value, 0),
+      ctlText: this.formatNumber(currentTrainingState.fitness?.value, 0),
+      atlText: this.formatNumber(currentTrainingState.fatigue?.value, 0),
       rampText: this.formatNumber(currentRampRate?.rampRate, 2, true),
       acwrText: this.formatNumber(this.derivedState.acwr?.ratio, 2),
       monotonyText: this.formatNumber(this.derivedState.monotonyStrain?.monotony, 2),

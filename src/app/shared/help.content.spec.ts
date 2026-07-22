@@ -131,6 +131,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('selecting an event never changes its tags');
     expect(trainingSection?.content).toContain('**Recovery history**');
     expect(trainingSection?.content).toContain('without changing the Training state');
+    expect(trainingSection?.content).toContain('Dashboard **Today** shows the same compact state label and caption');
     expect(trainingSection?.content).toContain('same current formula as Dashboard Today');
     expect(trainingSection?.content).toContain('Average HR leads the single Overnight HR driver at 70%, minimum HR contributes 30%');
     expect(trainingSection?.content).toContain('Lower Overnight HR versus personal baseline supports readiness');
@@ -342,6 +343,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Efficiency Δ (4w)');
     expect(gettingStartedSection?.content).toContain('Load');
     expect(gettingStartedSection?.content).toContain('Readiness');
+    expect(gettingStartedSection?.content).toContain('same compact **Training state** label and caption as Training');
     expect(gettingStartedSection?.content).toContain('Execution');
     expect(gettingStartedSection?.content).toContain('Current week');
     expect(gettingStartedSection?.content).toContain('Latest week');

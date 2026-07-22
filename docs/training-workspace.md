@@ -32,9 +32,9 @@ The following rules are architectural constraints:
 - Historical and comparative Training calculations belong in derived-metric builders or sports-lib, not Angular
   components. Readiness uses one environment-neutral formula in `shared/readiness.ts`: the frontend applies it to live
   Form/ramp plus bounded sleep evidence, while Functions applies it at each daily cutoff for the historical series.
-- Dashboard remains the user's modular chart and map surface. Current Readiness is a fixed part of the optional
-  Dashboard Today summary rather than a configurable tile, while Training owns its deeper current and historical
-  presentation.
+- Dashboard remains the user's modular chart and map surface. The current TSS-only Training state and recovery-aware
+  Readiness are fixed parts of the optional Dashboard Today summary rather than configurable tiles, while Training owns
+  their deeper current and historical presentation.
   Curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard Aerobic
   Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
 - Missing TSS, zones, pace, sleep, power, heart rate, or durability evidence remains unavailable. Missing values are not
@@ -143,9 +143,10 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-Training is available to signed-in users from the sidenav and is explicitly marked **Beta**. The route header includes a
-Feedback action that opens the configured support email with a Training-specific subject. Training remains absent from
-Dashboard actions, preserving the Dashboard as the user's modular workspace.
+Training is available to signed-in users from the sidenav and is marked **New**. The route header includes a
+Feedback action that opens the configured support email with a Training-specific subject. Dashboard offers one
+**Open Training** route action, but does not add curated Training snapshots as default Dashboard dependencies or
+configurable tiles.
 
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
@@ -171,6 +172,7 @@ Frontend transformation responsibilities are intentionally split into focused he
 | Helper | Responsibility |
 | --- | --- |
 | `training-analysis.helper.ts` | Overall 28-day comparison and state inputs |
+| `current-training-state.helper.ts` | Shared current Form/ramp source selection, CTL/ATL context, and TSS-only Training state for Training and Dashboard Today |
 | `training-capacity.helper.ts` | Imported-marker provenance and FTP/CP interpretation |
 | `training-derived-metrics.helper.ts` | Strict normalization of explanation, durability, and readiness-history payloads |
 | `training-durability-view.helper.ts` | Context grouping, comparison rows, tones, and weekly trajectory models |
@@ -340,8 +342,8 @@ therefore does not create a hidden Training dependency or freshness probe for th
 
 ### Shared Dashboard and Training insight reuse
 
-The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while current Readiness
-is fixed inside the optional Today summary:
+The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while the current
+Training state and Readiness are fixed inside the optional Today summary:
 
 - **Aerobic Capacity** selects the most recent imported running or cycling VO2 max, displays its provider/source
   provenance, and compares only observations from the same source. FTP settings and modeled critical power never become
@@ -350,6 +352,12 @@ is fixed inside the optional Today summary:
   The card selects the current context with the most eligible samples, then uses eligibility ratio and discipline priority
   as deterministic tie-breakers, followed by the lexical context key when every meaningful signal is equal. Running,
   Cycling, and Open water show aerobic decoupling; Pool shows pace retention. Missing weeks remain gaps.
+- **Training state** is one TSS-only interpretation shared between the Training header and Dashboard Today. Both surfaces
+  call `current-training-state.helper.ts`, which prefers the current UTC-day Form series for Form and seven-day CTL
+  ramp, then uses the compact Form/Ramp snapshots only while the series is unavailable. It resolves the accompanying
+  CTL/ATL context and passes the same four values to `training-state.helper.ts`; there is no Dashboard-specific state
+  formula. Dashboard Today intentionally shows the compact label, caption, and `TSS only` qualifier, while Training
+  provides the full Material info control with the contributing values and state boundaries.
 - **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived
@@ -530,6 +538,11 @@ or unavailable. Sleep, sessions, and the 28-day time comparison do not change th
 mark the TSS/load chart as building while the snapshot service retains the prior valid Form series. In that case the
 State card keeps the last complete label for continuity, but adds **Updating from the latest completed TSS calculation…**
 so it is never mistaken for a new result.
+
+Training and Dashboard Today call `current-training-state.helper.ts` before rendering this table. The helper prefers the
+current UTC-day Form series, then falls back to compact Form/Ramp snapshots only until that series is available; it
+also resolves current CTL and ATL from that same series. The Dashboard Today row repeats the exact label and caption
+with an explicit **TSS only** qualifier. Training alone exposes the detailed explanation below.
 
 This follows the Dashboard KPI interaction pattern: the same structured State explanation opens in a `qs-menu-panel`
 Material menu on larger viewports and a viewport-bounded Material dialog at `767px` and below. Do not use `MatTooltip`
@@ -1285,8 +1298,8 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - limited and cross-provider sleep;
 - Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, and
   expandable Recovery history states;
-- Dashboard Today Readiness with full, partial, and missing evidence, plus Today hidden and retired local-preview tile
-  cleanup;
+- Dashboard Today Training state and Readiness with full, partial, and missing evidence, matching Form/ramp fallbacks,
+  plus Today hidden and retired local-preview tile cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;
 - one and multiple capacity/power cards;
 - loading, stale, failed, and valid empty snapshots;
