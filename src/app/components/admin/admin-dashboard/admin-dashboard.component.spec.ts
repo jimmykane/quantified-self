@@ -267,6 +267,30 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Beta');
         expect(text).toContain('Deploying');
         expect(text).toContain('Old');
+        expect(text).toContain('Database backlog');
+        expect(text).toContain('Tasks queued');
+        expect(text).toContain('processing health');
+    });
+
+    it('should provide actionable at-a-glance status summaries', () => {
+        createComponent();
+
+        expect(component.queueOverview()).toEqual({
+            value: '3 need attention',
+            subtitle: '3 errors',
+        });
+        expect(component.maintenanceOverview()).toEqual({
+            value: 'Action needed',
+            subtitle: '1 unavailable',
+        });
+        expect(component.changelogOverview()).toEqual({
+            value: '1 draft',
+            subtitle: '1 published release note',
+        });
+        expect(component.financialOverview()).toEqual({
+            value: '10',
+            subtitle: 'Paid invoices this month',
+        });
     });
 
     it('should render section-level error states without blocking other sections', () => {
@@ -276,7 +300,7 @@ describe('AdminDashboardComponent', () => {
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('Queue stats are unavailable.');
         expect(text).toContain('Unavailable');
-        expect(text).toContain('Stats unavailable');
+        expect(text).toContain('Queue stats could not load');
         expect(text).toContain('Total Users');
         expect(text).toContain('Maintenance');
         expect(loggerSpy.error).toHaveBeenCalledWith('Failed to load admin queue stats:', expect.any(Error));

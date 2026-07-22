@@ -33,6 +33,11 @@ import {
 } from '../../../helpers/admin-dashboard-summary.helper';
 import { CompactCountPipe } from '../../../helpers/compact-count.pipe';
 
+interface AdminDashboardOverview {
+    value: string;
+    subtitle: string;
+}
+
 @Component({
     selector: 'app-admin-dashboard',
     templateUrl: './admin-dashboard.component.html',
@@ -91,6 +96,76 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         this.changelogSummary(),
         this.financialStats()
     ));
+    readonly queueOverview = computed<AdminDashboardOverview>(() => {
+        if (this.isLoadingQueues()) {
+            return { value: 'Loading', subtitle: 'Checking queue health' };
+        }
+
+        if (this.queueError()) {
+            return { value: 'Unavailable', subtitle: 'Queue stats could not load' };
+        }
+
+        const health = this.healthSummary();
+        if (health.queueIssues === 0) {
+            return { value: 'All clear', subtitle: `${this.queueRows().length} queues monitored` };
+        }
+
+        const details = [
+            health.queueErrors > 0 ? `${health.queueErrors} error${health.queueErrors === 1 ? '' : 's'}` : null,
+            health.queueWarnings > 0 ? `${health.queueWarnings} warning${health.queueWarnings === 1 ? '' : 's'}` : null,
+        ].filter((detail): detail is string => detail !== null);
+
+        return {
+            value: `${health.queueIssues} need${health.queueIssues === 1 ? 's' : ''} attention`,
+            subtitle: details.join(' · '),
+        };
+    });
+    readonly maintenanceOverview = computed<AdminDashboardOverview>(() => {
+        if (this.isLoadingMaintenance()) {
+            return { value: 'Loading', subtitle: 'Checking environments' };
+        }
+
+        if (this.maintenanceError()) {
+            return { value: 'Unavailable', subtitle: 'Status could not load' };
+        }
+
+        const health = this.healthSummary();
+        if (health.maintenanceIssues === 0 && health.maintenanceWarnings === 0) {
+            return { value: 'All available', subtitle: 'Production, beta, and local' };
+        }
+
+        const details = [
+            health.maintenanceIssues > 0 ? `${health.maintenanceIssues} unavailable` : null,
+            health.maintenanceWarnings > 0 ? `${health.maintenanceWarnings} unknown` : null,
+        ].filter((detail): detail is string => detail !== null);
+
+        return {
+            value: health.maintenanceIssues > 0 ? 'Action needed' : 'Review status',
+            subtitle: details.join(' · '),
+        };
+    });
+    readonly changelogOverview = computed<AdminDashboardOverview>(() => {
+        const summary = this.changelogSummary();
+        return {
+            value: summary.drafts === 0 ? 'No drafts' : `${summary.drafts} draft${summary.drafts === 1 ? '' : 's'}`,
+            subtitle: `${summary.published} published release note${summary.published === 1 ? '' : 's'}`,
+        };
+    });
+    readonly financialOverview = computed<AdminDashboardOverview>(() => {
+        if (this.isLoadingFinancials()) {
+            return { value: 'Loading', subtitle: 'Checking this month' };
+        }
+
+        if (this.financialError()) {
+            return { value: 'Unavailable', subtitle: 'Financial stats could not load' };
+        }
+
+        const invoiceCount = this.healthSummary().revenueInvoiceCount;
+        return {
+            value: invoiceCount === null ? 'Not reported' : `${invoiceCount}`,
+            subtitle: 'Paid invoices this month',
+        };
+    });
 
     private readonly destroy$ = new Subject<void>();
     private releaseChangelogAdminMode: (() => void) | null = null;
