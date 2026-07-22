@@ -54,6 +54,24 @@ describe('Wahoo auth API helpers', () => {
     }));
   });
 
+  it('sends route updates as URL-encoded PUT requests', async () => {
+    fetchMock.mockResolvedValue(response(200, { id: 42 }));
+    const form = new URLSearchParams();
+    form.set('route[name]', 'Morning ride');
+    form.set('route[provider_updated_at]', '2026-07-22T09:00:00.000Z');
+
+    await requestWahooAPI('access', '/v1/routes/42', { method: 'PUT', form });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://api.wahooligan.com/v1/routes/42', expect.objectContaining({
+      method: 'PUT',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer access',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }),
+      body: form.toString(),
+    }));
+  });
+
   it('exposes rate-limit reset information on errors', async () => {
     fetchMock.mockResolvedValue(response(429, { error: 'rate limited' }, { 'x-ratelimit-reset': '300' }));
     await expect(requestWahooAPI('access', '/v1/workouts')).rejects.toMatchObject<WahooAPIRequestError>({

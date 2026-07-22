@@ -17,6 +17,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppUserService } from '../../../services/app.user.service';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 vi.mock('app/firebase/auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('app/firebase/auth')>()),
@@ -53,6 +54,16 @@ class MockFileReader {
             : Promise.resolve('<gpx></gpx>');
         readText.then((text) => {
             this.result = text;
+            this.onload?.();
+        });
+    }
+
+    readAsArrayBuffer(file: File): void {
+        const readBuffer = typeof (file as File & { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer === 'function'
+            ? (file as File & { arrayBuffer: () => Promise<ArrayBuffer> }).arrayBuffer()
+            : Promise.resolve(Uint8Array.from([1, 2, 3]).buffer);
+        readBuffer.then((buffer) => {
+            this.result = buffer;
             this.onload?.();
         });
     }
@@ -205,5 +216,70 @@ describe('UploadRoutesToServiceComponent', () => {
         } catch (e) {
             expect(e).toBe('Unknown file type');
         }
+    });
+
+    it('uploads a FIT route to Wahoo without applying Suunto GPX compression', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = {
+            file: Object.assign(new File(['FIT'], 'route.fit', { type: 'application/vnd.fit' }), {
+                arrayBuffer: () => Promise.resolve(Uint8Array.from([1, 2, 3]).buffer),
+            }),
+            filename: 'route',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'route.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1',
+        };
+
+        await component.processAndUploadFile(file);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToWahooAPI', {
+            file: 'AQID',
+            filename: 'route.fit',
+        });
+        expect(mockAnalytics.logEvent).toHaveBeenCalledWith('upload_route_to_service', {
+            service: ServiceNames.WahooAPI,
+        });
+    });
+
+    it('rejects GPX files for Wahoo route upload', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = {
+            file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
+            filename: 'route',
+            extension: 'gpx',
+            data: null,
+            id: '1',
+            name: 'route.gpx',
+            status: UPLOAD_STATUS.PROCESSING,
+        };
+
+        await expect(component.processAndUploadFile(file)).rejects.toThrow('Only FIT route files are supported by Wahoo.');
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    });
+
+    it('shows Wahoo route rejection details to the user', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        mockFunctionsService.call.mockRejectedValueOnce(new Error('Wahoo rejected the route upload: A route already exists.'));
+        const file = {
+            file: Object.assign(new File(['FIT'], 'route.fit', { type: 'application/vnd.fit' }), {
+                arrayBuffer: () => Promise.resolve(Uint8Array.from([1, 2, 3]).buffer),
+            }),
+            filename: 'route',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'route.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+        };
+
+        await expect(component.processAndUploadFile(file)).rejects.toThrow('Wahoo rejected the route upload');
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Could not upload route.fit, reason: Wahoo rejected the route upload: A route already exists.',
+            'OK',
+            { duration: 10000 },
+        );
     });
 });

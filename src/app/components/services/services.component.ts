@@ -177,11 +177,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Send FIT activity',
-        description: 'Send a FIT file directly to Wahoo without adding it to your Quantified Self archive.',
+        title: 'Send FIT files',
+        description: 'Send a FIT activity or FIT course/route directly to Wahoo without adding it to your Quantified Self archive.',
         detail: 'Direct FIT delivery · Pro',
         icon: 'cloud_upload',
-        actionLabel: 'Send FIT activity',
+        actionLabel: 'Send FIT files',
         tool: 'uploads',
       },
       {

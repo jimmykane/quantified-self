@@ -29,7 +29,7 @@ export class WahooAPITransportError extends Error {
   }
 }
 
-export type WahooAPIMethod = 'GET' | 'POST' | 'DELETE';
+export type WahooAPIMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 export interface WahooAPIRequestOptions {
   method?: WahooAPIMethod;

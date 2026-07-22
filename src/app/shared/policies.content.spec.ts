@@ -13,7 +13,7 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('Only workouts with an available FIT file are imported');
     expect(content).toContain('OAuth credentials are stored server-side');
     expect(content).toContain('Activities already imported into Quantified Self are retained');
-    expect(content).toContain('send a selected FIT file directly to Wahoo');
+    expect(content).toContain('send a selected FIT activity file or FIT course/route file directly to Wahoo');
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto activity sync');

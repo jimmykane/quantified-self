@@ -8,9 +8,9 @@
       class="qs-spinner-accent"></mat-spinner>
     Uploading Route...
     } @else {
-    Open or drag and drop file
+    {{ uploadPrompt }}
     }
   </button>
-  <input #inputFile type="file" accept=".gpx" multiple style="display: none;" (change)="getFiles($event)"
+  <input #inputFile type="file" [attr.accept]="fileAccept" multiple style="display: none;" (change)="getFiles($event)"
     [disabled]="!hasProAccess" />
 </section>

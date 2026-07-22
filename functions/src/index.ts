@@ -170,6 +170,7 @@ export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 // Suunto Utils
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importActivityToWahooAPI, getWahooAPIWorkoutFileUploadStatus } from './wahoo/activities';
+export { importRouteToWahooAPI } from './wahoo/routes';
 export { importRouteToSuuntoApp } from './suunto/routes';
 export { sendRoutesToService } from './routes/send-routes-to-service';
 export { backfillRouteDeliverySyncRoute } from './route-delivery-sync/backfill';
