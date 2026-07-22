@@ -535,6 +535,23 @@ describe('AppAuthService', () => {
 
             expect(mockLocalStorageService.removeItem).not.toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
         });
+
+        it('signInWithEmailLink should not report an email that does not match the magic link', async () => {
+            const { signInWithEmailLink: signInWithEmailLinkFn } = await import('app/firebase/auth');
+            const authError = {
+                code: 'auth/invalid-email',
+                message: 'The email provided does not match the sign-in email address.',
+            };
+            const loggerErrorSpy = vi.spyOn((service as any).logger, 'error').mockImplementation(() => { });
+            (signInWithEmailLinkFn as Mock).mockRejectedValueOnce(authError);
+
+            await expect(service.signInWithEmailLink('wrong@example.com', 'https://quantified-self.io/login?mode=signIn&code=test'))
+                .rejects.toBe(authError);
+
+            expect(mockLocalStorageService.removeItem).not.toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
+            expect(loggerErrorSpy).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).not.toHaveBeenCalled();
+        });
     });
 
     describe('provider mapping', () => {

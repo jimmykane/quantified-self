@@ -349,6 +349,31 @@ describe('LoginComponent', () => {
         expect(mockAuthService.linkWithPopup).toHaveBeenCalledWith(mockUser, expect.anything());
     });
 
+    it('should retry an email-link sign-in with the matching email without logging an expected error', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'wrong@example.com';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn()
+            .mockRejectedValueOnce({ code: 'auth/invalid-email' })
+            .mockResolvedValueOnce({ user: { uid: 'email-link-user' } });
+        const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('matching@example.com');
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith('emailForSignIn');
+        expect(promptSpy).toHaveBeenCalledWith(
+            'This magic link was sent to a different email address. Enter the email address that received it to continue.'
+        );
+        expect(mockAuthService.signInWithEmailLink).toHaveBeenNthCalledWith(1, 'wrong@example.com', window.location.href);
+        expect(mockAuthService.signInWithEmailLink).toHaveBeenNthCalledWith(2, 'matching@example.com', window.location.href);
+        expect(mockLogger.error).not.toHaveBeenCalled();
+
+        promptSpy.mockRestore();
+    });
+
     // --- Extensive Testing Additions ---
 
     it('should show error dialog if fetchSignInMethods fails during collision', async () => {

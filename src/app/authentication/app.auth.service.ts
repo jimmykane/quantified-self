@@ -33,6 +33,9 @@ export class AppAuthService {
     'auth/account-exists-with-different-credential',
     'auth/email-already-in-use',
   ]);
+  private static readonly emailLinkRetryableErrorCodes = new Set([
+    'auth/invalid-email',
+  ]);
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -193,7 +196,9 @@ export class AppAuthService {
       if (this.shouldClearEmailLinkReturnUrlAfterSignInError(error)) {
         this.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
       }
-      this.handleError(error);
+      if (!AppAuthService.emailLinkRetryableErrorCodes.has(error?.code)) {
+        this.handleError(error);
+      }
       throw error;
     }
   }
@@ -338,6 +343,7 @@ export class AppAuthService {
   }
 
   private shouldClearEmailLinkReturnUrlAfterSignInError(error: any): boolean {
-    return !AppAuthService.emailLinkAccountLinkingErrorCodes.has(error?.code);
+    return !AppAuthService.emailLinkAccountLinkingErrorCodes.has(error?.code)
+      && !AppAuthService.emailLinkRetryableErrorCodes.has(error?.code);
   }
 }
