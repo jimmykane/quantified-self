@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SideNavComponent } from './sidenav.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -244,6 +246,23 @@ describe('SideNavComponent', () => {
         ).toBe('/training');
         expect(trainingItem?.nativeElement.textContent).toContain('New');
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
+    });
+
+    it('opens the profile section when the signed-in profile shortcut is selected', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-1',
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+
+        const profileShortcut = fixture.debugElement.query(By.css('.sidenav-profile'));
+        const template = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'), 'utf8');
+
+        expect(profileShortcut).toBeTruthy();
+        expect(profileShortcut.nativeElement.getAttribute('routerlink')).toBe('/settings');
+        expect(template).toContain('routerLink="/settings" [queryParams]="{ section: \'profile\' }"');
     });
 
     it('places AI Insights after the signed-in activity navigation items', () => {

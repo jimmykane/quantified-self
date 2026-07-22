@@ -9,7 +9,7 @@
 <mat-nav-list>
   <!-- User Profile Section (when logged in) -->
   @if (user) {
-  <div class="sidenav-profile" routerLink="/settings" (click)="closeSideNav()">
+  <div class="sidenav-profile" routerLink="/settings" [queryParams]="{ section: 'profile' }" (click)="closeSideNav()">
     <div class="sidenav-avatar"
       [style.backgroundImage]="'url('+ ($any(user).photoURL ? $any(user).photoURL : 'https://ui-avatars.com/api/?name=' + (user.displayName || 'User')) +')'">
     </div>

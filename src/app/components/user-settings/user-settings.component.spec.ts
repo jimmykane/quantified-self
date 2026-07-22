@@ -339,12 +339,12 @@ describe('UserSettingsComponent', () => {
         expect(component.activeSection).toBe('delete-account');
     });
 
-    it('should restore the appearance section when the section query param is missing', () => {
+    it('should restore the profile section when the section query param is missing', () => {
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
 
-        expect(component.activeSection).toBe('app');
+        expect(component.activeSection).toBe('profile');
     });
 
     it('shows delete account only while the delete account section is active', () => {

@@ -73,7 +73,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public consentToDelete: boolean;
   public errorDeleting;
   public errorSaving;
-  public activeSection: SettingsSectionId = 'app';
+  public activeSection: SettingsSectionId = 'profile';
   public readonly sectionOrder: SettingsSectionId[] = [
     'profile',
     'app',
@@ -585,7 +585,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       return;
     }
 
-    this.activeSection = 'app';
+    this.activeSection = 'profile';
   }
 
   private isSettingsSection(section: unknown): section is SettingsSectionId {
