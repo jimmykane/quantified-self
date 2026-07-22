@@ -42,14 +42,10 @@ export class EventStatsBottomSheetComponent implements AfterViewInit {
             return;
         }
 
-        let measuredHeight = sheetContainer.getBoundingClientRect().height;
+        const matBottomSheetContainer = sheetContainer.closest('.mat-bottom-sheet-container') as HTMLElement | null;
+        let measuredHeight = matBottomSheetContainer?.getBoundingClientRect().height || matBottomSheetContainer?.offsetHeight || 0;
         if (!(measuredHeight > 0)) {
-            measuredHeight = sheetContainer.offsetHeight;
-        }
-
-        if (!(measuredHeight > 0)) {
-            const matBottomSheetContainer = sheetContainer.closest('.mat-bottom-sheet-container') as HTMLElement | null;
-            measuredHeight = matBottomSheetContainer?.getBoundingClientRect().height || matBottomSheetContainer?.offsetHeight || 0;
+            measuredHeight = sheetContainer.getBoundingClientRect().height || sheetContainer.offsetHeight;
         }
 
         if (!(measuredHeight > 0)) {
@@ -57,6 +53,10 @@ export class EventStatsBottomSheetComponent implements AfterViewInit {
         }
 
         this.lockedSheetHeightPx = Math.round(Math.min(measuredHeight, this.getViewportMaxHeight()));
+        if (matBottomSheetContainer) {
+            matBottomSheetContainer.style.height = `${this.lockedSheetHeightPx}px`;
+            matBottomSheetContainer.style.minHeight = `${this.lockedSheetHeightPx}px`;
+        }
     }
 
     private getViewportMaxHeight(): number {

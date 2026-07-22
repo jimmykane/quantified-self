@@ -10,6 +10,7 @@ describe('EventStatsBottomSheetComponent', () => {
     let bottomSheetRefMock: { dismiss: ReturnType<typeof vi.fn> };
     let measuredHeight = 500;
     let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn>;
+    let bottomSheetContainer: HTMLElement;
 
     const createDomRect = (height: number): DOMRect => ({
         x: 0,
@@ -32,7 +33,7 @@ describe('EventStatsBottomSheetComponent', () => {
         getBoundingClientRectSpy = vi
             .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
             .mockImplementation(function (this: HTMLElement): DOMRect {
-                if (this.classList?.contains('bottom-sheet-container')) {
+                if (this.classList?.contains('mat-bottom-sheet-container') || this.classList?.contains('bottom-sheet-container')) {
                     return createDomRect(measuredHeight);
                 }
                 return createDomRect(0);
@@ -59,10 +60,15 @@ describe('EventStatsBottomSheetComponent', () => {
 
         fixture = TestBed.createComponent(EventStatsBottomSheetComponent);
         component = fixture.componentInstance;
+        bottomSheetContainer = document.createElement('div');
+        bottomSheetContainer.classList.add('mat-bottom-sheet-container');
+        bottomSheetContainer.append(fixture.nativeElement);
+        document.body.append(bottomSheetContainer);
     });
 
     afterEach(() => {
         getBoundingClientRectSpy?.mockRestore();
+        bottomSheetContainer?.remove();
     });
 
     it('should create and dismiss when close is called', () => {
@@ -82,6 +88,8 @@ describe('EventStatsBottomSheetComponent', () => {
 
         const container: HTMLElement = fixture.nativeElement.querySelector('.bottom-sheet-container');
         expect(container.style.height).toBe('500px');
+        expect(bottomSheetContainer.style.height).toBe('500px');
+        expect(bottomSheetContainer.style.minHeight).toBe('500px');
     });
 
     it('should keep the locked height when content shrinks after filtering', async () => {
@@ -99,5 +107,7 @@ describe('EventStatsBottomSheetComponent', () => {
 
         const container: HTMLElement = fixture.nativeElement.querySelector('.bottom-sheet-container');
         expect(container.style.height).toBe('500px');
+        expect(bottomSheetContainer.style.height).toBe('500px');
+        expect(bottomSheetContainer.style.minHeight).toBe('500px');
     });
 });
