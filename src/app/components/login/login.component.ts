@@ -33,6 +33,17 @@ export class LoginComponent implements OnInit, OnDestroy {
   private postLoginNavigationInFlight = false;
   private hasCompletedPostLoginNavigation = false;
   private isCompletingEmailLinkSignIn = false;
+  private static readonly nonReportableAuthenticationErrorCodes = new Set([
+    'auth/account-exists-with-different-credential',
+    'auth/cancelled-popup-request',
+    'auth/credential-already-in-use',
+    'auth/email-already-in-use',
+    'auth/invalid-action-code',
+    'auth/invalid-email',
+    'auth/invalid-session-id',
+    'auth/popup-closed-by-user',
+    'auth/user-cancelled',
+  ]);
   // private auth = inject(Auth); // Removed as we use authService
 
 
@@ -106,7 +117,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           this.handleAccountCollision(error);
           return;
         }
-        this.logger.error('Error getting redirect result', error);
+        this.reportUnexpectedAuthenticationError('Error getting redirect result', error);
         this.showErrorDialog('Login Failed', error);
       });
 
@@ -163,7 +174,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.logger.error('Error signing in with email link', error);
+        this.reportUnexpectedAuthenticationError('Error signing in with email link', error);
         this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
         this.finishEmailLinkCompletion(false);
       });
@@ -207,7 +218,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.logger.error(e);
+      this.reportUnexpectedAuthenticationError('Error signing in with provider', e);
       this.showErrorDialog('Login Failed', e);
       this.isLoading = false;
     };
@@ -301,7 +312,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           }
         }
       } catch (linkError: any) {
-        this.logger.error('Account linking failed:', linkError);
+        this.reportUnexpectedAuthenticationError('Account linking failed', linkError);
         this.showErrorDialog('Account Linking Failed', linkError);
       }
     }
@@ -315,6 +326,14 @@ export class LoginComponent implements OnInit, OnDestroy {
       data: { title, message },
       width: '400px'
     });
+  }
+
+  private reportUnexpectedAuthenticationError(message: string, error: { code?: string } | null | undefined): void {
+    if (LoginComponent.nonReportableAuthenticationErrorCodes.has(error?.code || '')) {
+      return;
+    }
+
+    this.logger.error(message, error);
   }
 
   private mapErrorMessage(error: any): string {
@@ -343,7 +362,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
       await this.navigateAfterLoginOnce();
     } catch (e: any) {
-      this.logger.error('Link pending provider failed', e);
+      this.reportUnexpectedAuthenticationError('Link pending provider failed', e);
       this.showErrorDialog('Account Linking Failed', e);
     }
   }

@@ -368,7 +368,7 @@ describe('AppAuthService', () => {
             expect(result).toEqual(redirectResult);
         });
 
-        it('should log details and rethrow when provider sign-in fails', async () => {
+        it('should rethrow provider sign-in failures for the login flow to report', async () => {
             const { signInWithPopup } = await import('app/firebase/auth');
             const provider = new GoogleAuthProvider();
             const authError = { code: 'auth/popup-blocked', message: 'Popup blocked by browser' };
@@ -378,9 +378,7 @@ describe('AppAuthService', () => {
 
             await expect(service.signInWithProvider(provider)).rejects.toBe(authError);
 
-            expect(loggerErrorSpy).toHaveBeenNthCalledWith(1, '[Auth] signInWithProvider error:', authError);
-            expect(loggerErrorSpy).toHaveBeenNthCalledWith(2, '[Auth] Error code:', authError.code);
-            expect(loggerErrorSpy).toHaveBeenNthCalledWith(3, '[Auth] Error message:', authError.message);
+            expect(loggerErrorSpy).not.toHaveBeenCalled();
         });
     });
 
@@ -501,7 +499,7 @@ describe('AppAuthService', () => {
             expect(mockLocalStorageService.removeItem).toHaveBeenCalledWith('emailForSignIn');
         });
 
-        it('signInWithEmailLink should surface error and rethrow when sign-in fails', async () => {
+        it('signInWithEmailLink should let the login flow surface errors once', async () => {
             const { signInWithEmailLink: signInWithEmailLinkFn } = await import('app/firebase/auth');
             const email = 'test@example.com';
             const link = 'https://quantified-self.io/login?mode=signIn&code=test';
@@ -512,12 +510,8 @@ describe('AppAuthService', () => {
             await expect(service.signInWithEmailLink(email, link)).rejects.toBe(authError);
 
             expect(mockLocalStorageService.removeItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
-            expect(loggerErrorSpy).toHaveBeenCalledWith(authError);
-            expect(mockSnackBar.open).toHaveBeenCalledWith(
-                'Could not login due to error invalid-action-code ',
-                undefined,
-                { duration: 2000 }
-            );
+            expect(loggerErrorSpy).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).not.toHaveBeenCalled();
         });
 
         it('signInWithEmailLink should preserve cached return URL for account-linking failures', async () => {
