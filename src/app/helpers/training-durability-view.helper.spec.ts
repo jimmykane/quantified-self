@@ -32,9 +32,11 @@ describe('buildTrainingDurabilityScopeViewModels', () => {
   it('compares current durability with the prior-block median', () => {
     const views = buildTrainingDurabilityScopeViewModels(payload, ['running']);
     expect(views[0]).toEqual(expect.objectContaining({
-      label: 'Running', evidenceText: '3 eligible of 5 candidate activities', coverageText: '60% eligible',
-      exclusionText: 'Primary exclusions: Too variable 1', trendText: '12 of 12 recent weeks produced comparable evidence',
-      supportingEventsText: 'Recent support: Long run',
+      label: 'Running', evidenceText: '3 eligible of 5 candidate workouts', coverageText: '60% eligible',
+      conclusionText: 'Durability is based on 3 comparable current workouts; read it as a directional signal rather than a verdict.',
+      evidenceQualityText: 'Evidence quality: usable — 3 of 5 candidate workouts met the comparison rules.',
+      exclusionText: 'Primary exclusions: Too variable 1', trendText: '12 of 12 recent weeks produced comparable workout evidence',
+      supportingEventsText: 'Recent supporting workouts: Long run',
     }));
     expect(views[0].contexts[0].metrics).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Aerobic decoupling', deltaText: '−1%', deltaTone: 'positive' }),

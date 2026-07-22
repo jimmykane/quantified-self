@@ -86,7 +86,7 @@ describe('TrainingSwimPerformanceChartComponent', () => {
     component.status = 'ready';
     component.performance = null;
     await refresh(component);
-    expect(component.emptyTitle).toBe('No swimming sessions yet');
+    expect(component.emptyTitle).toBe('No swimming workouts yet');
 
     component.performance = performance(null);
     await refresh(component);

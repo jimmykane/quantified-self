@@ -19,6 +19,9 @@ export interface TrainingSwimPerformanceViewModel {
   hasPace: boolean;
   swolfContextText: string | null;
   latestSwolfText: string | null;
+  conclusionText: string;
+  evidenceText: string;
+  nextStepText: string | null;
 }
 
 export function formatTrainingSwimPace(
@@ -54,6 +57,8 @@ export function buildTrainingSwimPerformanceViewModel(
   const pool = mapPoint('pool');
   const openWater = mapPoint('open-water');
   const all = [...pool, ...openWater];
+  const poolPaceWeekCount = pool.filter(point => point.paceSeconds !== null).length;
+  const openWaterPaceWeekCount = openWater.filter(point => point.paceSeconds !== null).length;
   const latestSwolf = [...pool].reverse().find(point => point.swolf !== null) || null;
   const swolfContext = context?.swolfContext || null;
   return {
@@ -69,5 +74,35 @@ export function buildTrainingSwimPerformanceViewModel(
     latestSwolfText: latestSwolf?.swolf === null || latestSwolf?.swolf === undefined
       ? null
       : new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(latestSwolf.swolf),
+    conclusionText: buildConclusion(poolPaceWeekCount, openWaterPaceWeekCount),
+    evidenceText: buildEvidenceText(poolPaceWeekCount, openWaterPaceWeekCount),
+    nextStepText: latestSwolf && swolfContext
+      ? 'Use SWOLF only with the matching stroke and pool length shown below.'
+      : null,
   };
+}
+
+function buildConclusion(poolPaceWeekCount: number, openWaterPaceWeekCount: number): string {
+  if (poolPaceWeekCount > 0 && openWaterPaceWeekCount > 0) {
+    return 'Pool and open-water pace are both available and are shown separately rather than combined.';
+  }
+  if (poolPaceWeekCount > 0) {
+    return 'Pool pace is available; it is not combined with open-water swims.';
+  }
+  if (openWaterPaceWeekCount > 0) {
+    return 'Open-water pace is available; it is not combined with pool swims.';
+  }
+  return 'No explicit swim pace is available to compare yet.';
+}
+
+function buildEvidenceText(poolPaceWeekCount: number, openWaterPaceWeekCount: number): string {
+  const total = poolPaceWeekCount + openWaterPaceWeekCount;
+  if (total === 0) {
+    return 'Evidence quality: unavailable — only explicit recorded swim pace is used; rests are never estimated as pace.';
+  }
+  const parts = [
+    poolPaceWeekCount > 0 ? `${poolPaceWeekCount} pool ${poolPaceWeekCount === 1 ? 'week' : 'weeks'}` : null,
+    openWaterPaceWeekCount > 0 ? `${openWaterPaceWeekCount} open-water ${openWaterPaceWeekCount === 1 ? 'week' : 'weeks'}` : null,
+  ].filter((part): part is string => !!part);
+  return `Evidence quality: explicit pace in ${parts.join(' and ')}; rests are never estimated as pace.`;
 }

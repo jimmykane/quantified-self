@@ -89,6 +89,12 @@ import {
   buildTrainingPowerProfileViewModel,
   type TrainingPowerProfileViewModel,
 } from '../../helpers/training-power-profile.helper';
+import {
+  buildTrainingBuildGuidance,
+  buildTrainingLoadGuidance,
+  buildTrainingMixGuidance,
+  type TrainingCardGuidanceViewModel,
+} from '../../helpers/training-card-guidance.helper';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -125,6 +131,7 @@ interface TrainingMixDisciplineViewModel {
   activityCountText: string;
   durationText: string;
   zones: TrainingMixZoneViewModel[];
+  guidance: TrainingCardGuidanceViewModel;
 }
 
 interface TrainingMixZoneViewModel {
@@ -168,6 +175,7 @@ interface TrainingBuildCardViewModel {
   referenceText: string;
   rangeText: string;
   emptyMessage: string | null;
+  guidance: TrainingCardGuidanceViewModel | null;
   metricRows: TrainingBuildMetricRowViewModel[];
   recovery: TrainingRecoveryViewModel | null;
 }
@@ -269,6 +277,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
+  public trainingLoadGuidance = buildTrainingLoadGuidance(null, null);
   public readonly loadTrajectoryInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FORM_CHART_TYPE);
   public readonly freshnessForecastInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE);
   public trainingMixDisciplines: TrainingMixDisciplineViewModel[] = [];
@@ -487,6 +496,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.trainingStatus = createEmptyTrainingStatusViewModel();
     this.trainingComparisonState = 'preparing';
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
+    this.trainingLoadGuidance = buildTrainingLoadGuidance(null, null);
     this.trainingMixDisciplines = [];
     this.capacityDisciplines = [];
     this.hasReceivedDerivedState = false;
@@ -567,6 +577,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           label: formatTrainingVisibleDisciplinesLabel([summary.discipline]),
           activityCountText: this.formatNumber(summary.current28d.activityCount, 0),
           durationText: formatSleepDuration(summary.current28d.durationSeconds),
+          guidance: buildTrainingMixGuidance(summary, formatTrainingVisibleDisciplinesLabel([summary.discipline])),
           zones: [
             this.createTrainingMixZoneView('Easy', summary.current28d.easySeconds, currentZoneSeconds, summary.baseline28d.easySeconds, baselineZoneSeconds),
             this.createTrainingMixZoneView('Moderate', summary.current28d.moderateSeconds, currentZoneSeconds, summary.baseline28d.moderateSeconds, baselineZoneSeconds),
@@ -965,6 +976,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       freshnessNowText: this.formatNumber(currentFormNow?.value ?? latestCurrentPoint?.formSameDay, 0, true),
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
+    this.trainingLoadGuidance = buildTrainingLoadGuidance(
+      currentFormNow?.value ?? latestCurrentPoint?.formSameDay ?? null,
+      finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value ?? null,
+    );
   }
 
   private refreshTrainingRecoveryEstimate(): void {
@@ -1143,6 +1158,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
           source?.selection?.windowEndDayMs,
         ),
         emptyMessage: this.resolveTrainingBuildEmptyMessage(source),
+        guidance: buildTrainingBuildGuidance(source),
         metricRows: this.buildTrainingBuildMetricRows(source, discipline),
         recovery: state === 'ready' && source?.recovery
           ? this.buildTrainingRecoveryViewModel(source.recovery, 'Now', 'Benchmark')
@@ -1499,10 +1515,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private resolveTrainingBuildEmptyMessage(source: DashboardTrainingBuildComparisonDiscipline | null): string | null {
     if (source?.current?.activityCount === 0) {
-      return 'No eligible sessions in the current window.';
+      return 'No eligible workouts in the current window.';
     }
     if (source?.benchmark?.activityCount === 0) {
-      return 'No eligible sessions in the saved benchmark window.';
+      return 'No eligible workouts in the saved benchmark window.';
     }
     return null;
   }
@@ -1534,7 +1550,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         isIntensity: false,
       },
       {
-        label: 'Sessions',
+        label: 'Workouts',
         currentText: this.formatTrainingBuildNumber(current.activityCount),
         benchmarkText: this.formatTrainingBuildNumber(benchmark.activityCount),
         deltaText: this.formatTrainingBuildDelta(current.activityCount, benchmark.activityCount),
@@ -1550,7 +1566,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         isIntensity: false,
       },
       {
-        label: 'Longest session',
+        label: 'Longest workout',
         currentText: this.formatTrainingBuildDuration(current.longestActivityDurationSeconds),
         benchmarkText: this.formatTrainingBuildDuration(benchmark.longestActivityDurationSeconds),
         deltaText: this.formatTrainingBuildDurationDelta(
@@ -1632,8 +1648,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       const contextLabel = this.formatTrainingBuildDurabilityContext(comparison.context);
       const rows: TrainingBuildMetricRowViewModel[] = [{
         label: `${contextLabel} evidence`,
-        currentText: current ? `${current.sampleCount} activities` : '—',
-        benchmarkText: benchmark ? `${benchmark.sampleCount} activities` : '—',
+        currentText: current ? `${current.sampleCount} ${current.sampleCount === 1 ? 'workout' : 'workouts'}` : '—',
+        benchmarkText: benchmark ? `${benchmark.sampleCount} ${benchmark.sampleCount === 1 ? 'workout' : 'workouts'}` : '—',
         deltaText: comparison.isComparable ? 'Comparable' : 'Limited',
         deltaTone: 'neutral',
         isIntensity: false,
@@ -1805,7 +1821,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         ...currentState,
         volumeText: analysis.duration.current > 0 ? formatSleepDuration(analysis.duration.current) : '0h',
         volumeCaption: 'Updating your training comparison…',
-        sessionsText: `${this.formatNumber(analysis.activities.current, 0)} sessions`,
+        sessionsText: `${this.formatNumber(analysis.activities.current, 0)} workouts`,
         sessionsCaption: 'Updating your training comparison…',
       };
     }
@@ -1813,16 +1829,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return {
         ...currentState,
         volumeText: '0h',
-        volumeCaption: 'No eligible running, cycling/MTB, or swimming sessions in the last 28 days',
-        sessionsText: '0 sessions',
-        sessionsCaption: 'No eligible running, cycling/MTB, or swimming sessions in the last 28 days',
+        volumeCaption: 'No eligible running, cycling/MTB, or swimming workouts in the last 28 days',
+        sessionsText: '0 workouts',
+        sessionsCaption: 'No eligible running, cycling/MTB, or swimming workouts in the last 28 days',
       };
     }
     return {
       ...currentState,
       volumeText: analysis.duration.current > 0 ? formatSleepDuration(analysis.duration.current) : '0h',
       volumeCaption: this.formatVolumeComparison(analysis.duration),
-      sessionsText: `${this.formatNumber(analysis.activities.current, 0)} sessions`,
+      sessionsText: `${this.formatNumber(analysis.activities.current, 0)} workouts`,
       sessionsCaption: this.formatSessionsComparison(analysis.activities),
     };
   }

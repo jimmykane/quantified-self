@@ -24,6 +24,13 @@
         }
       </div>
     </header>
+    <div class="swim-performance-guidance">
+      <p><strong>What this means:</strong>&nbsp;{{ view.conclusionText }}</p>
+      <small>{{ view.evidenceText }}</small>
+      @if (view.nextStepText) {
+        <p class="swim-performance-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ view.nextStepText }}</p>
+      }
+    </div>
     <div #chartDiv class="swim-performance-chart" role="img" aria-label="Twelve-week pool and open-water average swimming pace chart"></div>
     <footer>
       @if (view.swolfContextText && view.latestSwolfText) {

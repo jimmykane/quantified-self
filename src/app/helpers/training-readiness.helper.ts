@@ -70,7 +70,7 @@ export function buildTrainingReadinessViewModel(
   } = {},
 ): TrainingReadinessViewModel {
   const sourceText = 'The current score and backend-derived 14-day history use the same readiness formula. '
-    + 'History reads a Form snapshot seed and a bounded sleep envelope, with the same 30-day window applied at each daily cutoff; the browser does not load event or activity history. '
+    + 'History reads a Form snapshot seed and a bounded sleep envelope, with the same 30-day window applied at each daily cutoff; the browser does not load workout history. '
     + 'This is training context, not a medical score or workout prescription.';
   const history = buildTrainingReadinessHistoryViewModel(context, options);
   if (!context) {

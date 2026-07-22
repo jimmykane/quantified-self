@@ -97,7 +97,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling or swimming sessions in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
     expect(element.textContent).toContain('Preparing capacity evidence');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
@@ -280,7 +280,7 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('-4%');
       expect(panel.textContent).toContain('14-day trend');
       expect(panel.textContent).toContain('14/14 days scored');
-      expect(panel.textContent).toContain('browser does not load event or activity history');
+      expect(panel.textContent).toContain('browser does not load workout history');
       expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
       expect(panel.querySelectorAll('.training-readiness-trend-axis-label')).toHaveLength(4);
       const readinessPoint = panel.querySelector('.training-readiness-trend-point');
@@ -479,7 +479,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
-    expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming sessions.');
+    expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming workouts.');
     expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBeGreaterThanOrEqual(3);
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
@@ -548,7 +548,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).toContain('Modeled critical power');
     expect(text).toContain('186 W');
     expect(text).toContain('Recent efforts have not validated this FTP yet');
-    expect(text).toContain('16% below the imported setting');
+    expect(text).toContain('model sits below the imported setting');
     expect(text).toContain('does not show that fitness declined.');
   });
 
@@ -629,7 +629,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
     expect(element.querySelector('app-power-curve-chart[title="Running Power Curve"]')).toBeNull();
     expect(element.textContent).toContain('Cycling/MTB details · Overall comparison uses all training');
-    expect(element.textContent).toContain('All activities with TSS');
+    expect(element.textContent).toContain('TSS-backed workouts only');
     expect(element.textContent).toContain('Intensity chart uses all eligible zone data');
   });
 
@@ -1094,9 +1094,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(swimRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Distance', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Time', deltaTone: 'positive' }),
-      expect.objectContaining({ label: 'Sessions', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Workouts', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Active weeks', deltaTone: 'positive' }),
-      expect.objectContaining({ label: 'Longest session', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Longest workout', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m faster', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Open-water pace', currentText: '--', benchmarkText: '--', deltaTone: 'neutral' }),
       expect.objectContaining({ label: 'TSS', deltaTone: 'positive' }),
@@ -1128,7 +1128,7 @@ describe('TrainingWorkspaceComponent', () => {
       }],
     }, 'swimming');
     expect(durabilityRows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: '25 m freestyle evidence', currentText: '3 activities', benchmarkText: '4 activities' }),
+      expect.objectContaining({ label: '25 m freestyle evidence', currentText: '3 workouts', benchmarkText: '4 workouts' }),
       expect.objectContaining({ label: '25 m freestyle pace retained', deltaText: '+2%', deltaTone: 'positive' }),
       expect.objectContaining({ label: '25 m freestyle SWOLF change', deltaText: '−1', deltaTone: 'positive' }),
     ]));

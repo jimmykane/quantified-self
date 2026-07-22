@@ -128,7 +128,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       ? ` · ${trajectory.unavailableMetricWeekCount} with eligible samples but no ${trajectory.metricLabel.toLowerCase()}`
       : '';
     this.availabilityText = `${evidenceWeekCount} of ${trajectory.points.length} weeks produced comparable evidence · ${trajectory.noEligibleWeekCount} without an eligible sample${unavailableMetricText}`;
-    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible activity counts, and ${trajectory.metricLabel.toLowerCase()}`;
+    this.chartAriaLabel = `${trajectory.contextLabel} twelve-week durability trend with candidate, ${trajectory.sourceActivityLabel.toLowerCase()}, eligible workout counts, and ${trajectory.metricLabel.toLowerCase()}`;
   }
 
   private buildOption(): ChartOption {
@@ -279,5 +279,5 @@ function formatNumber(value: number): string {
 }
 
 function formatActivityCount(value: number): string {
-  return `${formatNumber(value)} activit${value === 1 ? 'y' : 'ies'}`;
+  return `${formatNumber(value)} ${value === 1 ? 'workout' : 'workouts'}`;
 }

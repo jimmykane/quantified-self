@@ -70,10 +70,11 @@ describe('training-capacity.helper', () => {
     expect(cycling.ftpSetting?.detailText).toContain('Imported from Garmin Connect');
     expect(cycling.modeledCriticalPower).toMatchObject({ label: 'Modeled critical power', valueText: '226 W · 2.48 W/kg' });
     expect(cycling.modeledCriticalPower.detailText).toContain('Best recorded 3–20 min efforts · last 90 days · Strong model fit');
-    expect(cycling.modeledCriticalPower.detailText).toContain('4 power-curve activities in window');
+    expect(cycling.modeledCriticalPower.detailText).toContain('4 power workouts in window');
     expect(cycling.modeledCriticalPower.detailText).not.toContain('confidence');
     expect(cycling.importedVo2Max).toMatchObject({ label: 'Imported VO₂ max', valueText: '55.9 ml/kg/min' });
     expect(cycling.interpretation.title).toBe('Recent power supports your FTP setting');
+    expect(cycling.evidenceText).toContain('Evidence quality: strong');
   });
 
   it('does not describe a lower modeled CP as a decline', () => {
@@ -81,7 +82,7 @@ describe('training-capacity.helper', () => {
 
     expect(cycling.interpretation).toEqual({
       title: 'Recent efforts have not validated this FTP yet',
-      description: 'The 90-day model is 16% below the imported setting, but this does not show that fitness declined. The curve may simply lack recent maximal efforts across the required durations.',
+      description: 'The 90-day model sits below the imported setting, but this does not show that fitness declined. The curve may simply lack recent maximal efforts across the required durations.',
       tone: 'caution',
     });
   });
@@ -110,7 +111,7 @@ describe('training-capacity.helper', () => {
 
     const cycling = buildTrainingCapacityViewModels(context)[1];
 
-    expect(cycling.ftpSetting?.detailText).toContain('Imported with activity data');
+    expect(cycling.ftpSetting?.detailText).toContain('Imported with workout data');
     expect(cycling.ftpSetting?.detailText).not.toContain('activity source');
   });
 });

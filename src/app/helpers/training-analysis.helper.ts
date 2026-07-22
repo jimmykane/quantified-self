@@ -158,8 +158,8 @@ export function buildTrainingAnalysis({ stateSignals, disciplines }: TrainingAna
   if (Math.abs(activities.delta) >= MEANINGFUL_SESSION_CHANGE) {
     const direction = activities.delta > 0 ? 'more' : 'fewer';
     insights.push({
-      title: 'Sessions',
-      description: `You logged ${formatAbsolute(activities.delta)} ${direction} sessions than in your usual 28 days.`,
+      title: 'Workouts',
+      description: `You logged ${formatAbsolute(activities.delta)} ${direction} workouts than in your usual 28 days.`,
     });
   }
 

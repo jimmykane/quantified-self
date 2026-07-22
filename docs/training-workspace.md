@@ -46,6 +46,11 @@ The following rules are architectural constraints:
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
 - Durability shown on Training comes only from the persisted sports-lib `Durability Evidence` activity stat.
+- Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
+  `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
+  workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
+- In athlete-facing Training copy, a recorded sport leg is called a **workout**. `Activity` remains the technical term
+  for normalized Firestore and sports-lib records, and `sleep session` remains the term for overnight sleep data.
 
 ## Ownership: Sports-lib Versus Quantified Self
 
@@ -171,11 +176,12 @@ Frontend transformation responsibilities are intentionally split into focused he
 | `training-durability-view.helper.ts` | Context grouping, comparison rows, tones, and weekly trajectory models |
 | `training-explanation-view.helper.ts` | Load, contributor, sport-driver, rhythm, and coverage cards |
 | `training-power-profile.helper.ts` | 90-day versus one-year power retention |
+| `training-card-guidance.helper.ts` | Plain-language outcomes, evidence quality, and evidence-gated next steps for build, load, and intensity cards |
 | `dashboard-training-insights.helper.ts` | Live readiness adapter and bounded sleep window |
 | `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend geometry |
 | `training-recovery-estimate.helper.ts` | Imported recovery countdown wording |
 | `training-sport-visibility.helper.ts` | Automatic/fixed sport resolution and compact labels |
-| `training-swim-performance.helper.ts` | Swim pace units and pool/open-water chart model |
+| `training-swim-performance.helper.ts` | Swim pace units plus pool/open-water conclusions and evidence-gated chart model |
 
 ## Firestore Data Model
 
@@ -458,7 +464,7 @@ whether selection is automatic.
 
 The status header names the visible-detail scope (for example, `Cycling/MTB details`) and explicitly says that the
 overall comparison still uses all recorded Training disciplines. This prevents the selected-card preference from being
-mistaken for a filter on the global state, time, sessions, or load explanation.
+mistaken for a filter on the global state, time, workouts, or load explanation.
 
 Visibility affects:
 
@@ -472,7 +478,7 @@ Visibility affects:
 Visibility does not affect:
 
 - the overall Training state;
-- training time and session comparison used by that state section;
+- training time and workout comparison used by that state section;
 - What drove this;
 - global form/freshness/load charts; or
 - the all-eligible-activity intensity-distribution chart.
@@ -492,14 +498,14 @@ For every discipline:
 
 - Current window: today plus the preceding 27 UTC days.
 - Baseline: the immediately preceding 84 UTC days, multiplied by `28 / 84` to produce a normalized 28-day value.
-- Sessions: child activity count.
+- Workouts: child activity count.
 - Time: sum of activity `Duration` stats.
 - Intensity: power zones when present, otherwise heart-rate zones.
 - Easy: zones 1-2.
 - Moderate: zones 3-4.
 - Hard: zones 5-7.
 
-The top training time and session values sum all three disciplines, regardless of detailed-card visibility.
+The top training time and workout values sum all three disciplines, regardless of detailed-card visibility.
 
 #### Training state
 
@@ -708,6 +714,11 @@ user opens **Details**. Sleep differences under 15 minutes are summarized as sim
 Card states are `not-configured`, `updating`, `invalid`, `unavailable`, and `ready`. Optimistic pending selections remain
 updating until the snapshot's stable selection key matches the saved choice.
 
+Ready Best Build cards put the outcome above their comparison table (for example, whether the current build is longer,
+shorter, or similar in total time), then state the number of current/reference workouts and TSS coverage. A next-step
+prompt appears only when both windows have enough intensity evidence and a material time difference; the table remains
+the detailed numeric comparison.
+
 ### 3. What Drove This
 
 `training_explanation` compares the current 28 days with the median of three distinct preceding 28-day blocks.
@@ -732,9 +743,13 @@ missing parent TSS and unclassified child activity types visible. A sparse one-o
 confident usual pattern.
 
 The four driver cards use one balanced row on wide screens, a two-by-two tablet layout, and a single mobile column.
-Within each card, the card heading, primary comparison, supporting explanation, and coverage note use distinct type
-levels. Contributor events render as separate list items so an event label and its load share do not split into an
-ambiguous separator-delimited sentence.
+Within each card, the card heading, plain-language outcome, supporting explanation, and coverage note use distinct type
+levels. The outcome uses language such as `Above usual load` or `Same rhythm`; exact TSS and workout counts stay in the
+supporting sentence rather than competing with the conclusion. Contributor events render as separate list items so an
+event label and its load share do not split into an ambiguous separator-delimited sentence.
+
+The section-level conclusion and evidence-quality line appear before the cards. They make TSS coverage explicit without
+turning missing data into a negative or positive training judgment.
 
 ### 4. Load Trajectory
 
@@ -770,6 +785,10 @@ load metrics are intentionally independent of sleep, HRV, overnight heart rate, 
 signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
 state.
 
+The card starts with a concise interpretation of Form (recent fatigue relative to longer-term fitness) and labels the
+model as TSS-backed workouts only. When the no-workout forecast exists, the only follow-up prompt is to compare that
+scenario with today; it does not imply that the athlete should stop training.
+
 ### 5. Training Mix
 
 Discipline cards use `training_summary`:
@@ -783,6 +802,10 @@ duration but not to the zone denominator.
 
 The separate intensity-distribution chart is global and can include any activity with eligible power or heart-rate zone
 data. It is not filtered by the sport visibility control.
+
+Each discipline summary states whether its current zone balance is close to usual or whether easy/hard work has shifted.
+It explicitly excludes workouts without usable zones, and points to the weekly distribution only when that shift is
+material enough to investigate.
 
 On desktop, Training Mix uses its actual visible-discipline count rather than auto-fitting empty grid tracks: one
 discipline pairs a matched-height summary with the intensity chart. The summary keeps activity totals at the top and uses
@@ -834,6 +857,10 @@ from a device estimate or laboratory observation.
 The chart has a full-height layout and an inverted pace axis, because lower seconds per 100 m/yd means faster swimming.
 Units follow the user's swim pace settings.
 
+Its header states whether pool and open-water pace are both available or only one environment has evidence, then states
+the number of explicit-pace weeks. The card never derives pace from elapsed duration or combines environments. A SWOLF
+follow-up appears only when the displayed value has one matching stroke and pool-length context.
+
 #### Power profile
 
 Running and Cycling compare the 90-day best curve with the one-year best curve at:
@@ -855,6 +882,9 @@ one-year curve; summary chips explain the 90-day retention.
 
 The profile summary is a non-growing header above the embedded Power Curve. Its horizontal inset matches the chart
 header so the summary, chart title, benchmark values, and plot remain aligned at every responsive width.
+
+It also states the strongest supported conclusion before the chart, describes the number of recent/annual power workouts
+and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
 
 ## Durability Deep Dive
 
