@@ -1043,7 +1043,13 @@ the Training rule: aggregate Training snapshots use only persisted compact activ
 The event performance-chart region uses a shared `23.1vh` height. On extra-small viewports, the durability eligibility
 summary starts collapsed behind an accessible disclosure button so the plot retains useful vertical space. Expanding the
 summary keeps its list height bounded and scrollable instead of allowing evidence rows to squeeze out the chart. Desktop
-viewports continue to show the summary by default.
+viewports continue to show the summary by default. The event summary translates the aerobic protocol rather than exposing
+implementation labels such as `decoupling`, `paired coverage`, or `qualifying data`: it states whether a steady-effort
+comparison is available, the total duration and matched output/heart-rate duration after warm-up and cool-down exclusion,
+then narrates the second-half change in output relative to heart rate, output retained, and average heart-rate change.
+For cycling, a positive stored decoupling becomes “Power relative to heart rate was <n>% lower in the second half.” The
+event durability ECharts grid reserves explicit left and bottom insets for numeric axis labels; do not rely only on
+automatic outer-bound containment, which can crop the leading digit on narrow plot hosts.
 
 ## Status and Empty-State Semantics
 

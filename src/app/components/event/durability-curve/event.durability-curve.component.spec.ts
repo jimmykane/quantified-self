@@ -172,6 +172,77 @@ describe('EventDurabilityCurveComponent', () => {
     expect(option.xAxis.interval).toBe(5);
     expect(option.xAxis.max).toBe(20);
     expect(option.yAxis.type).toBe('value');
+    expect(option.grid.left).toBe(54);
+    expect(option.grid.bottom).toBe(16);
+  });
+
+  it('explains eligible cycling evidence without implementation-facing durability jargon', async () => {
+    mockService.buildDurabilitySeriesWithMarkerSource.mockReturnValue({
+      renderSeries: [
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Cycling',
+          outputUnit: 'W',
+          points: [
+            { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+            { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+          ],
+        },
+      ],
+      markerSourceSeries: [],
+      activitySummaries: [{
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Cycling',
+        eligibilityLabel: 'Comparable first and second halves',
+        summary: {
+          protocolVersion: 1,
+          discipline: 'cycling',
+          outputSource: 'power',
+          outputUnit: 'W',
+          context: null,
+          durationSeconds: 6_000,
+          qualifyingDurationSeconds: 4_680,
+          coverageRatio: 0.92,
+          eligibility: {
+            eligible: true,
+            reason: 'eligible',
+            validSampleCount: 4_680,
+            comparisonSegments: 'halves',
+            earlySampleCount: 2_340,
+            lateSampleCount: 2_340,
+            outputCoefficientOfVariation: 0.12,
+            hardZoneRatio: 0.08,
+          },
+          evidence: {
+            kind: 'aerobic-efficiency',
+            firstHalfEfficiency: 2.4,
+            secondHalfEfficiency: 2.244,
+            decouplingPercent: 6.5,
+            firstHalfOutput: 250,
+            secondHalfOutput: 231.75,
+            outputRetentionPercent: 92.7,
+            firstHalfHeartRateBpm: 104,
+            secondHalfHeartRateBpm: 103,
+            heartRateDriftBpm: -1,
+          },
+        },
+      }],
+    });
+    mockService.buildBestEffortMarkers.mockReturnValue([]);
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Steady-effort comparison available');
+    expect(text).toContain('01h 40m total · 01h 18m of matched power and heart-rate data (92% coverage)');
+    expect(text).toContain('Power relative to heart rate was 6.5% lower in the second half.');
+    expect(text).toContain('Second-half power was 92.7% of the first half; average heart rate was 1 bpm lower.');
+    expect(text).not.toContain('decoupling');
+    expect(text).not.toContain('paired coverage');
   });
 
   it('should hide legend when no marker/activity labels are available', async () => {
@@ -448,5 +519,7 @@ describe('EventDurabilityCurveComponent', () => {
     await waitForChartStabilization();
 
     expect(mockLoader.setOption.mock.calls.length).toBeGreaterThan(baseline);
+    expect(getLastOption().grid.left).toBe(46);
+    expect(getLastOption().grid.bottom).toBe(20);
   });
 });
