@@ -89,7 +89,7 @@ export async function exportManualRouteAsGPX(routeFile: RouteFileInterface): Pro
     }
     throw new HttpsError(
       'invalid-argument',
-      'This FIT route could not be converted to a GPX route. It must contain valid route coordinates.',
+      'This route could not be converted to a GPX route. It must contain valid route coordinates.',
     );
   }
 }

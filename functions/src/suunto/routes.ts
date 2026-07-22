@@ -38,6 +38,7 @@ import {
   RouteProcessingHttpStatusError,
 } from '../routes/route-processing';
 import { MAX_ROUTE_UPLOAD_BYTES, ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/route-processing-config';
+import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 
 export interface SuuntoRouteUploadTokenRef {
   id: string;
@@ -104,6 +105,9 @@ async function assertSuuntoRouteUploadUserActive(userID: string, phase: string):
   }
 
   if (!deletionGuard.shouldSkip) {
+    if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
+      throw new HttpsError('failed-precondition', 'Suunto disconnect is pending.');
+    }
     return;
   }
 
@@ -580,6 +584,7 @@ export const importRouteToSuuntoApp = onCall({
   }
 
   try {
+    await assertSuuntoRouteUploadUserActive(userID, 'before_manual_route_parsing');
     const gpxContent = await getSuuntoManualRouteGPXContent(request.data as SuuntoRouteUploadRequest);
     await uploadGPXRouteToSuuntoApp(userID, gpxContent);
     return { status: 'success' };
@@ -628,10 +633,11 @@ async function getSuuntoManualRouteGPXContent(payload: SuuntoRouteUploadRequest)
   // source/output limit as the current uploader.
   if (!payload?.filename) {
     try {
-      return maybeDecompressPayloadForParsing(sourcePayload, 'gpx.gz', {
+      const gpxPayload = maybeDecompressPayloadForParsing(sourcePayload, 'gpx.gz', {
         maxOutputLength: MAX_ROUTE_UPLOAD_BYTES,
         maxOutputLengthLabel: '20MB',
-      }).toString('utf8');
+      });
+      return exportManualRouteAsGPX(await parseManualRouteUpload(gpxPayload, 'gpx'));
     } catch (error) {
       if (error instanceof RouteProcessingHttpStatusError) {
         throw new HttpsError('invalid-argument', error.message);
@@ -641,10 +647,6 @@ async function getSuuntoManualRouteGPXContent(payload: SuuntoRouteUploadRequest)
   }
 
   const inputFormat = getManualRouteInputFormat(payload.filename, 'Suunto');
-  if (inputFormat === 'gpx') {
-    return sourcePayload.toString('utf8');
-  }
-
   const routeFile = await parseManualRouteUpload(sourcePayload, inputFormat);
   return exportManualRouteAsGPX(routeFile);
 }

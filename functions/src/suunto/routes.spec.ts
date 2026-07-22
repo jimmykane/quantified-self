@@ -3,7 +3,6 @@
 import { describe, it, vi, expect, beforeEach } from 'vitest';
 import * as zlib from 'zlib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
-import { HttpsError } from 'firebase-functions/v2/https';
 
 const loggerMocks = vi.hoisted(() => ({
     error: vi.fn(),
@@ -12,6 +11,15 @@ const loggerMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('firebase-functions/logger', () => loggerMocks);
+
+const VALID_GPX_ROUTE = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="Quantified Self" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Test route</name>
+    <rtept lat="37.1" lon="23.7"><ele>120</ele></rtept>
+    <rtept lat="37.2" lon="23.8"><ele>135</ele></rtept>
+  </rte>
+</gpx>`;
 
 // Mock Dependencies
 const requestMocks = {
@@ -51,6 +59,14 @@ const deletionGuardMocks = {
     getUserDeletionGuardState: vi.fn(),
     getUserDeletionGuardStateInTransaction: vi.fn(),
 };
+
+const disconnectPendingMocks = {
+    isServiceDisconnectPendingForUser: vi.fn(),
+};
+
+vi.mock('../service-disconnect-pending', () => ({
+    isServiceDisconnectPendingForUser: (...args: unknown[]) => disconnectPendingMocks.isServiceDisconnectPendingForUser(...args),
+}));
 
 vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: (...args: any[]) => deletionGuardMocks.getUserDeletionGuardState(...args),
@@ -167,6 +183,7 @@ describe('importRouteToSuuntoApp', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
+        disconnectPendingMocks.isServiceDisconnectPendingForUser.mockResolvedValue(false);
         const admin = await import('firebase-admin');
         const setMock = (admin.firestore() as any)
             .collection('users')
@@ -180,7 +197,7 @@ describe('importRouteToSuuntoApp', () => {
     });
 
     it('should successfully upload a route', async () => {
-        const gpxContent = '<gpx>...</gpx>';
+        const gpxContent = VALID_GPX_ROUTE;
 
         // Mock request success
         requestMocks.post.mockResolvedValue(JSON.stringify({
@@ -204,14 +221,14 @@ describe('importRouteToSuuntoApp', () => {
                 'Authorization': 'Bearer fake-access-token',
                 'Content-Type': 'application/gpx+xml'
             }),
-            body: gpxContent
+            body: expect.stringContaining('<rtept lat="37.1" lon="23.7">')
         }));
 
         expect(result).toEqual({ status: 'success' });
     });
 
     it('accepts an uncompressed GPX route from the current uploader', async () => {
-        const gpxContent = '<gpx><trk><trkseg><trkpt lat="37.1" lon="23.7" /></trkseg></trk></gpx>';
+        const gpxContent = VALID_GPX_ROUTE;
         requestMocks.post.mockResolvedValue(JSON.stringify({ id: 'route-id' }));
 
         await expect(importRouteToSuuntoApp(createMockRequest({
@@ -221,7 +238,38 @@ describe('importRouteToSuuntoApp', () => {
             },
         }) as any)).resolves.toEqual({ status: 'success' });
 
-        expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({ body: gpxContent }));
+        expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({
+            body: expect.stringContaining('<rtept lat="37.1" lon="23.7">'),
+        }));
+    });
+
+    it('rejects a malformed current GPX upload before calling Suunto', async () => {
+        requestMocks.post.mockResolvedValue(JSON.stringify({ id: 'route-id' }));
+
+        await expect(importRouteToSuuntoApp(createMockRequest({
+            data: {
+                file: Buffer.from('<gpx></gpx>').toString('base64'),
+                filename: 'route.gpx',
+            },
+        }) as any)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
+    it('does not parse or send a manual route while Suunto disconnect is pending', async () => {
+        disconnectPendingMocks.isServiceDisconnectPendingForUser.mockResolvedValue(true);
+
+        await expect(importRouteToSuuntoApp(createMockRequest({
+            data: {
+                file: Buffer.from(VALID_GPX_ROUTE).toString('base64'),
+                filename: 'route.gpx',
+            },
+        }) as any)).rejects.toMatchObject({
+            code: 'failed-precondition',
+            message: 'Suunto disconnect is pending.',
+        });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
     });
 
     it('rejects legacy gzip routes that expand beyond the manual route limit before calling Suunto', async () => {
@@ -241,7 +289,7 @@ describe('importRouteToSuuntoApp', () => {
     it('does not log raw Suunto route response errors', async () => {
         const providerError = 'provider-error-containing-route-content';
         requestMocks.post.mockResolvedValue(JSON.stringify({ error: providerError }));
-        const compressedBase64 = Buffer.from(zlib.gzipSync('<gpx>...</gpx>')).toString('base64');
+        const compressedBase64 = Buffer.from(zlib.gzipSync(VALID_GPX_ROUTE)).toString('base64');
 
         await expect(importRouteToSuuntoApp(createMockRequest({
             data: { file: compressedBase64 },
@@ -261,7 +309,7 @@ describe('importRouteToSuuntoApp', () => {
             statusCode: 422,
             error: { message: providerError },
         }));
-        const compressedBase64 = Buffer.from(zlib.gzipSync('<gpx>...</gpx>')).toString('base64');
+        const compressedBase64 = Buffer.from(zlib.gzipSync(VALID_GPX_ROUTE)).toString('base64');
 
         await expect(importRouteToSuuntoApp(createMockRequest({
             data: { file: compressedBase64 },
@@ -402,7 +450,7 @@ describe('importRouteToSuuntoApp', () => {
     it('should handle service error', async () => {
         // Mock request rejection
         requestMocks.post.mockRejectedValue(new Error('Suunto API Error'));
-        const gpxContent = '<gpx>...</gpx>';
+        const gpxContent = VALID_GPX_ROUTE;
         const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
 
         const request = createMockRequest({
@@ -423,7 +471,7 @@ describe('importRouteToSuuntoApp', () => {
         requestMocks.post.mockResolvedValue(JSON.stringify({
             error: 'Duplicate route'
         }));
-        const gpxContent = '<gpx>...</gpx>';
+        const gpxContent = VALID_GPX_ROUTE;
         const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
 
         const request = createMockRequest({
@@ -444,7 +492,7 @@ describe('importRouteToSuuntoApp', () => {
         error.statusCode = 401;
         requestMocks.post.mockRejectedValue(error);
 
-        const gpxContent = '<gpx>...</gpx>';
+        const gpxContent = VALID_GPX_ROUTE;
         const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
 
         const request = createMockRequest({
@@ -465,7 +513,7 @@ describe('importRouteToSuuntoApp', () => {
         error.response = { statusCode: 401 };
         requestMocks.post.mockRejectedValue(error);
 
-        const gpxContent = '<gpx>...</gpx>';
+        const gpxContent = VALID_GPX_ROUTE;
         const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
 
         const request = createMockRequest({
@@ -482,7 +530,7 @@ describe('importRouteToSuuntoApp', () => {
     });
 
     it('should succeed even if metadata update fails', async () => {
-        const gpxContent = '<gpx>...</gpx>';
+        const gpxContent = VALID_GPX_ROUTE;
 
         // Mock request success
         requestMocks.post.mockResolvedValue(JSON.stringify({

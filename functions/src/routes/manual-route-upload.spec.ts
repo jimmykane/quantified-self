@@ -73,7 +73,7 @@ describe('manual route upload helpers', () => {
     routeExportMocks.getAsString.mockResolvedValueOnce('');
     await expect(exportManualRouteAsGPX({} as never)).rejects.toMatchObject({
       code: 'invalid-argument',
-      message: 'This FIT route could not be converted to a GPX route. It must contain valid route coordinates.',
+      message: 'This route could not be converted to a GPX route. It must contain valid route coordinates.',
     });
   });
 });

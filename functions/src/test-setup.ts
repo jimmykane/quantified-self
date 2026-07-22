@@ -146,6 +146,10 @@ vi.mock('./request-helper', () => ({
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
     return ({
+    // Keep all production exports available by default. Individual fixtures
+    // below intentionally replace only the broad activity constants that tests
+    // need to stay lightweight; route parsing/export remains real.
+    ...actual,
     ActivityTypes: {
         Cycling: 'Cycling',
         EBiking: 'E-Biking',

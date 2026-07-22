@@ -42,6 +42,10 @@ vi.mock('../shared/user-deletion-guard', () => ({
   },
 }));
 
+vi.mock('../service-disconnect-pending', () => ({
+  isServiceDisconnectPendingForUser: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (_options: unknown, handler: unknown) => handler,
   HttpsError: class HttpsError extends Error {

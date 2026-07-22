@@ -168,7 +168,7 @@ The shared Services uploader accepts **GPX and FIT** source routes for every cur
 | Destination | Accepted source | Destination representation | Retention and retry behavior |
 | ----------- | --------------- | -------------------------- | ---------------------------- |
 | Wahoo | GPX, FIT | FIT course; GPX is exported to FIT | Does not create a Quantified Self route. Source-file fingerprint is the external ID, so a retry updates the same Wahoo route. |
-| Suunto | GPX, FIT | GPX route; FIT is exported to GPX | Does not create a Quantified Self route. Keep compatibility for older browser clients that gzip GPX before calling Functions. |
+| Suunto | GPX, FIT | Fresh GPX route generated from the parsed source | Does not create a Quantified Self route. Keep compatibility for older browser clients that gzip GPX before calling Functions. |
 | Garmin Connect | GPX, FIT | Garmin Course Import JSON built from parsed route geometry | Does not create a Quantified Self route or delivery metadata. A repeat direct upload creates another Garmin course; saved-route sends use delivery metadata and update the existing course. |
 
 Apply the same request controls to every destination: authenticated App Check callables, Pro entitlement, explicit FIT/GPX filename allowlist, strict base64 decoding, a 20 MB source limit (including legacy gzip expansion), parsed-route validation, converted-output limit where an output file is generated, deletion/disconnect guards, and sanitized provider errors. Make the route format and retention behavior visible in Services, Help, privacy policy, and the public integration page.
