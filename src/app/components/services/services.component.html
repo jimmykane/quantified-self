@@ -113,7 +113,6 @@
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
             </ng-container>
           </section>
-          @if (isWahooConnectionRolloutEnabled) {
           <section
             class="service-detail"
             [hidden]="activeSection !== 'wahoo'"
@@ -131,7 +130,6 @@
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
             </ng-container>
           </section>
-          }
         </mat-tab-nav-panel>
 
         <ng-template #automaticSyncSummary let-section>
