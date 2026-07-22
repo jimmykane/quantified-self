@@ -337,11 +337,11 @@
             </section>
             <section
               class="settings-panel-section"
-              aria-labelledby="settings-delete-account-title"
-              [hidden]="activeSection !== 'delete-account'">
+              aria-labelledby="settings-account-title"
+              [hidden]="activeSection !== 'account'">
               <header class="settings-panel-header">
-                <h2 id="settings-delete-account-title">Delete Account</h2>
-                <p>Permanently remove your account and all associated data.</p>
+                <h2 id="settings-account-title">Account</h2>
+                <p>Manage account actions and access.</p>
               </header>
               <mat-divider></mat-divider>
               <div class="settings-panel-body">
@@ -446,7 +446,7 @@
             </section>
         </app-workspace-section-navigation>
 
-        @if (activeSection !== 'delete-account') {
+        @if (activeSection !== 'account') {
         <div class="qs-form-actions-floating">
           <button
             mat-flat-button

@@ -788,7 +788,7 @@ In Settings you can:
 
 ## Account deletion
 
-You can delete your account from **Settings -> Profile -> Danger Zone**.
+You can delete your account from **Settings -> Account -> Danger Zone**.
 
 If your account has an email address, self-deletion sends a confirmation email after the request completes.
 

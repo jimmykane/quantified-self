@@ -700,6 +700,13 @@ describe('help.content', () => {
     });
   });
 
+  it('directs account deletion to the Account settings section', () => {
+    const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
+
+    expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> Danger Zone**');
+    expect(dataAndPrivacySection?.content).not.toContain('**Settings -> Profile -> Danger Zone**');
+  });
+
   it('should explain public event and comparison sharing exposure', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
