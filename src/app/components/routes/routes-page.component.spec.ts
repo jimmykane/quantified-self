@@ -55,6 +55,7 @@ describe('RoutesPageComponent', () => {
     let breakpointObserverMock: any;
     let suuntoRouteCatchUpPromptContext$: BehaviorSubject<any>;
     let garminRouteSendContext$: BehaviorSubject<any>;
+    let activityServiceConnectionState$: BehaviorSubject<any>;
 
     const route: FirestoreRouteJSON = {
         id: 'route-1',
@@ -152,6 +153,12 @@ describe('RoutesPageComponent', () => {
             serviceMeta: null,
             permissionPromptSource: null,
         });
+        activityServiceConnectionState$ = new BehaviorSubject({
+            [ServiceNames.GarminAPI]: false,
+            [ServiceNames.SuuntoApp]: true,
+            [ServiceNames.COROSAPI]: false,
+            [ServiceNames.WahooAPI]: false,
+        });
         authServiceMock = {
             getUser: vi.fn().mockResolvedValue(currentUser),
         };
@@ -244,6 +251,7 @@ describe('RoutesPageComponent', () => {
             hasProAccessSignal: vi.fn().mockReturnValue(true),
             watchSuuntoRouteCatchUpPromptContext: vi.fn().mockReturnValue(suuntoRouteCatchUpPromptContext$.asObservable()),
             watchGarminRouteSendContext: vi.fn().mockReturnValue(garminRouteSendContext$.asObservable()),
+            watchActivityServiceConnectionState: vi.fn().mockReturnValue(activityServiceConnectionState$.asObservable()),
             addSuuntoRoutesToQueueForCurrentUser: vi.fn().mockResolvedValue({
                 queuedCount: 2,
                 skippedCount: 1,
@@ -1801,6 +1809,36 @@ describe('RoutesPageComponent', () => {
         });
         expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Garmin.', undefined, { duration: 2500 });
         expect(component.sendingToServiceRouteID()).toBeNull();
+    });
+
+    it('enables Wahoo as a route-send destination and sends a row route', async () => {
+        activityServiceConnectionState$.next({
+            ...activityServiceConnectionState$.value,
+            [ServiceNames.WahooAPI]: true,
+        });
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+            destinationServiceName: ServiceNames.WahooAPI,
+            status: 'success',
+            routeCount: 1,
+            successCount: 1,
+            failureCount: 0,
+            skippedCount: 0,
+            results: [{
+                routeId: 'route-1',
+                destinationServiceName: ServiceNames.WahooAPI,
+                status: 'success',
+            }],
+        });
+        await component.ngOnInit();
+        const routes = await firstValueFrom(component.routes$!);
+
+        expect(routes[0].canSendToWahoo).toBe(true);
+        expect(component.canSendRoutesToWahoo()).toBe(true);
+
+        await component.sendRouteToWahoo(route);
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.WahooAPI);
+        expect(snackBarMock.open).toHaveBeenCalledWith('Route sent to Wahoo.', undefined, { duration: 2500 });
     });
 
     it('disables Garmin resend for routes pinned to a different Garmin account', async () => {

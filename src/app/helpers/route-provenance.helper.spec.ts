@@ -29,6 +29,7 @@ describe('route-provenance.helper', () => {
             syncedDestinationServiceNames: [
                 ServiceNames.GarminAPI,
                 ServiceNames.SuuntoApp,
+                ServiceNames.WahooAPI,
                 ServiceNames.GarminAPI,
             ],
         } as FirestoreRouteJSON;
@@ -38,10 +39,12 @@ describe('route-provenance.helper', () => {
         expect(summaries.map(summary => summary.label)).toEqual([
             'Sent to Garmin Connect',
             'Sent to Suunto App',
+            'Sent to Wahoo',
         ]);
         expect(summaries.map(summary => summary.presentation?.displayLabel)).toEqual([
             'Garmin Connect',
             'Suunto App',
+            'Wahoo',
         ]);
     });
 

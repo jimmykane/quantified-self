@@ -132,6 +132,7 @@ interface RoutePageRouteViewModel {
     canSendToGarmin: boolean;
     garminSendDisabledReason: string | null;
     garminSendMenuLabel: string;
+    canSendToWahoo: boolean;
     canDelete: boolean;
     filterText: string;
 }
@@ -275,6 +276,7 @@ export class RoutesPageComponent implements OnInit {
         serviceMeta: null,
         permissionPromptSource: null,
     });
+    readonly isWahooRouteDeliveryConnected = signal(false);
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
         hasToken: false,
         serviceMeta: null,
@@ -292,6 +294,10 @@ export class RoutesPageComponent implements OnInit {
             && !connectionView.reconnectRequired
             && connectionView.missingPermissions.length === 0;
     });
+    readonly canSendRoutesToWahoo = computed(() => (
+        this.userService.hasProAccessSignal()
+        && this.isWahooRouteDeliveryConnected()
+    ));
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
     readonly routeMapRoutes = computed(() => this.visibleRouteViewModels().map(item => item.route));
     readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
@@ -416,6 +422,18 @@ export class RoutesPageComponent implements OnInit {
             && item.canSendToGarmin
         )).length;
     });
+    readonly selectedSendableRoutesToWahooCount = computed(() => {
+        if (!this.canSendRoutesToWahoo()) {
+            return 0;
+        }
+
+        const selectedIDs = this.selectedRouteIDSet();
+        return this.visibleRouteViewModels().filter(item => (
+            !!item.route.id
+            && selectedIDs.has(item.route.id)
+            && item.canSendToWahoo
+        )).length;
+    });
     readonly allVisibleRoutesSelected = computed(() => {
         const visibleRoutes = this.visibleRouteViewModels();
         const selectedIDs = this.selectedRouteIDSet();
@@ -491,6 +509,12 @@ export class RoutesPageComponent implements OnInit {
             ).subscribe(context => {
                 this.garminRouteSendContext.set(context);
                 this.garminRouteSendContextSubject.next(context);
+            });
+            this.userService.watchActivityServiceConnectionState(user).pipe(
+                takeUntilDestroyed(this.destroyRef),
+            ).subscribe(connectionState => {
+                const wahooConnected = connectionState[ServiceNames.WahooAPI] === true;
+                this.isWahooRouteDeliveryConnected.set(wahooConnected);
             });
 
             const routeDocuments$ = this.routeService.getAllRoutes(user).pipe(
@@ -1196,6 +1220,10 @@ export class RoutesPageComponent implements OnInit {
         await this.sendRouteToService(route, ServiceNames.GarminAPI, source);
     }
 
+    async sendRouteToWahoo(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
+        await this.sendRouteToService(route, ServiceNames.WahooAPI, source);
+    }
+
     async sendRouteToService(
         route: FirestoreRouteJSON,
         destinationServiceName: ServiceNames,
@@ -1392,6 +1420,10 @@ export class RoutesPageComponent implements OnInit {
 
     async sendSelectedRoutesToGarmin(): Promise<void> {
         await this.sendSelectedRoutesToService(ServiceNames.GarminAPI);
+    }
+
+    async sendSelectedRoutesToWahoo(): Promise<void> {
+        await this.sendSelectedRoutesToService(ServiceNames.WahooAPI);
     }
 
     async sendSelectedRoutesToService(destinationServiceName: ServiceNames): Promise<void> {
@@ -1823,6 +1855,11 @@ export class RoutesPageComponent implements OnInit {
             && canSendRouteToConnectedGarminAccount(route, this.garminRouteSendContext());
     }
 
+    private canSendRouteToWahoo(route: FirestoreRouteJSON): boolean {
+        return this.canManageRoute(route)
+            && this.routeService.getOriginalRouteFiles(route).length > 0;
+    }
+
     private getGarminSendDisabledReason(route: FirestoreRouteJSON): string | null {
         if (!this.canManageRoute(route) || this.routeService.getOriginalRouteFiles(route).length === 0) {
             return null;
@@ -1837,6 +1874,8 @@ export class RoutesPageComponent implements OnInit {
                 return this.canSendRoutesToSuunto();
             case ServiceNames.GarminAPI:
                 return this.canSendRoutesToGarmin();
+            case ServiceNames.WahooAPI:
+                return this.canSendRoutesToWahoo();
             default:
                 return false;
         }
@@ -1848,13 +1887,15 @@ export class RoutesPageComponent implements OnInit {
                 return this.canSendRouteToSuunto(route);
             case ServiceNames.GarminAPI:
                 return this.canSendRouteToGarmin(route);
+            case ServiceNames.WahooAPI:
+                return this.canSendRouteToWahoo(route);
             default:
                 return false;
         }
     }
 
     private canSendRouteItemToDestination(
-        item: Pick<RoutePageRouteViewModel, 'canSendToSuunto' | 'canSendToGarmin'>,
+        item: Pick<RoutePageRouteViewModel, 'canSendToSuunto' | 'canSendToGarmin' | 'canSendToWahoo'>,
         destinationServiceName: ServiceNames,
     ): boolean {
         switch (destinationServiceName) {
@@ -1862,6 +1903,8 @@ export class RoutesPageComponent implements OnInit {
                 return item.canSendToSuunto;
             case ServiceNames.GarminAPI:
                 return item.canSendToGarmin;
+            case ServiceNames.WahooAPI:
+                return item.canSendToWahoo;
             default:
                 return false;
         }
@@ -2030,6 +2073,7 @@ export class RoutesPageComponent implements OnInit {
             canSendToGarmin: this.canSendRouteToGarmin(route),
             garminSendDisabledReason,
             garminSendMenuLabel,
+            canSendToWahoo: this.canSendRouteToWahoo(route),
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,
