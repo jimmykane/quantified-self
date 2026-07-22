@@ -201,6 +201,7 @@ interface WahooRoutePoint {
 
 interface WahooRouteSegment {
   activityType?: unknown;
+  name?: unknown;
   getPointData?: () => WahooRoutePoint[];
 }
 
@@ -240,6 +241,14 @@ function getWorkoutTypeFamilyId(routeFile: RouteFileInterface): number {
   return 31;
 }
 
+function getWahooRouteName(routeFile: RouteFileInterface): string {
+  const routeName = (routeFile.getRoutes() as WahooRouteSegment[])
+    .map((route) => `${route.name || ''}`.trim())
+    .find(Boolean);
+  const fileName = `${routeFile.name || ''}`.trim();
+  return (routeName || fileName || 'Quantified Self route').slice(0, 200);
+}
+
 function getRouteCreatedAt(routeFile: RouteFileInterface): Date {
   const candidate = routeFile.createdAt;
   return candidate instanceof Date && Number.isFinite(candidate.getTime()) ? candidate : new Date();
@@ -268,14 +277,13 @@ export function buildWahooRoutePayload(
   if (distance === null || distance <= 0) {
     throw new HttpsError('invalid-argument', 'This route is missing distance data required by Wahoo.');
   }
-  const routeName = `${routeFile.name || ''}`.trim() || 'Quantified Self route';
   const ascent = getRouteMetric(routeFile, DataAscent.type) ?? 0;
   const descent = getRouteMetric(routeFile, DataDescent.type);
 
   return {
     externalId: createExternalId(userID, fileBuffer),
     filename: normalizeWahooFitFilename(filename),
-    name: routeName.slice(0, 200),
+    name: getWahooRouteName(routeFile),
     workoutTypeFamilyId: getWorkoutTypeFamilyId(routeFile),
     startLatitude: startPoint.latitude,
     startLongitude: startPoint.longitude,

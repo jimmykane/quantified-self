@@ -171,6 +171,14 @@ describe('Wahoo route uploads', () => {
   });
 
   it('converts a GPX route to FIT before creating an idempotent Wahoo route', async () => {
+    mocks.parseRoutePayload.mockResolvedValue(routeFile({
+      name: 'New Route File',
+      getRoutes: () => [{
+        name: 'Morning GPX route',
+        activityType: 'cycling',
+        getPointData: () => [{ latitudeDegrees: 60.1699, longitudeDegrees: 24.9384 }],
+      }],
+    }));
     mocks.requestWahooAPI
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ data: { id: 42 } });
@@ -182,12 +190,13 @@ describe('Wahoo route uploads', () => {
     });
 
     expect(mocks.parseRoutePayload).toHaveBeenCalledWith(Buffer.from('<gpx/>'), 'gpx');
-    expect(mocks.exportRoutesToFit).toHaveBeenCalledWith(expect.objectContaining({ name: 'Morning ride' }));
+    expect(mocks.exportRoutesToFit).toHaveBeenCalledWith(expect.objectContaining({ name: 'New Route File' }));
 
     const [, uploadPath, request] = mocks.requestWahooAPI.mock.calls[1];
     expect(uploadPath).toBe('/v1/routes');
     expect(request.form.get('route[file]')).toBe('data:application/vnd.fit;base64,RklU');
     expect(request.form.get('route[filename]')).toBe('morning.fit');
+    expect(request.form.get('route[name]')).toBe('Morning GPX route');
   });
 
   it('rejects unsupported Wahoo route file types before looking up a token', async () => {
