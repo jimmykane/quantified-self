@@ -51,6 +51,7 @@ export const FUNCTIONS_MANIFEST = {
     getGarminAPIAuthRequestTokenRedirectURI: { name: 'getGarminAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetGarminAPIAccessToken: { name: 'requestAndSetGarminAPIAccessToken', region: 'europe-west2' },
     deauthorizeGarminAPI: { name: 'deauthorizeGarminAPI', region: 'europe-west2' },
+    importRouteToGarminAPI: { name: 'importRouteToGarminAPI', region: 'europe-west2' },
     backfillGarminAPIActivities: { name: 'backfillGarminAPIActivities', region: 'europe-west2' },
     backfillGarminAPISleep: { name: 'backfillGarminAPISleep', region: 'europe-west2' },
     receiveGarminAPIDeregistration: { name: 'receiveGarminAPIDeregistration', region: 'europe-west2' },

@@ -61,7 +61,8 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('Can Suunto routes sync to Garmin courses?');
     expect(text).toContain('FIT activity upload');
-    expect(text).toContain('GPX route upload');
+    expect(text).toContain('GPX and FIT route upload');
+    expect(text).toContain('FIT sources are converted to GPX for Suunto');
     expect(text).toContain('Can Quantified Self sync routes with Suunto?');
   });
 

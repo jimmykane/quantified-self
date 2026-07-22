@@ -166,6 +166,16 @@
         <span>History Import</span>
       </span>
     </a>
+    <a
+      href=""
+      mat-tab-link
+      [active]="activeProviderTool === 'uploads'"
+      (click)="$event.preventDefault(); selectProviderTool('uploads')">
+      <span class="provider-tab-label">
+        <mat-icon>cloud_upload</mat-icon>
+        <span>Uploads</span>
+      </span>
+    </a>
     @if (isGarminToSuuntoRouteAvailableForUser) {
     <a
       href=""
@@ -212,6 +222,46 @@
         You need to connect your Garmin account before importing history.
       </app-status-info>
       }
+    </section>
+    }
+
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
+    <section
+      class="provider-tool-panel"
+      [hidden]="activeProviderTool !== 'uploads'"
+      [class.locked-panel]="!hasProAccess">
+      <section class="tool-subsection">
+        <div class="tool-subsection-header">
+          <div class="tool-subsection-title">
+            <mat-icon>route</mat-icon>
+            <span>Send GPX or FIT Route to Garmin</span>
+          </div>
+        </div>
+        <p class="description-text">
+          Select a GPX or FIT route file to create a Garmin Connect course. This sends the route directly to Garmin and does not create or retain a route in Quantified Self.
+        </p>
+        @if (!hasProAccess) {
+        <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
+          <mat-icon>lock</mat-icon>
+          <span>Sending routes to Garmin is a Pro feature.</span>
+        </button>
+        } @else if (isReconnectRequired || !isConnectedToService()) {
+        <app-status-info type="info" title="Connect Account First">
+          Connect Garmin before sending GPX or FIT routes.
+        </app-status-info>
+        } @else if (!hasPermissionsLoaded) {
+        <app-service-syncing-state></app-service-syncing-state>
+        } @else if (!hasGarminCourseImportPermission) {
+        <app-status-info type="info" title="Allow Course Import">
+          Reconnect Garmin and allow Course Import before sending routes.
+        </app-status-info>
+        } @else {
+        <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-route-to-service>
+        <app-status-info type="info" title="Garmin course access">
+          Garmin receives a course created from the selected GPX or FIT route. If Course Import was enabled after you connected, reconnect Garmin once to refresh that permission.
+        </app-status-info>
+        }
+      </section>
     </section>
     }
 

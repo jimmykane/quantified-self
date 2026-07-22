@@ -6,7 +6,6 @@ import { FieldValue } from 'firebase-admin/firestore';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
-import * as zlib from 'zlib';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
@@ -27,6 +26,15 @@ import {
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+import {
+  decodeManualRouteUpload,
+  exportManualRouteAsGPX,
+  getManualRouteInputFormat,
+  ManualRouteUploadRequest,
+  parseManualRouteUpload,
+} from '../routes/manual-route-upload';
+import { maybeDecompressPayloadForParsing } from '../routes/route-processing';
+import { ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/route-processing-config';
 
 export interface SuuntoRouteUploadTokenRef {
   id: string;
@@ -552,8 +560,7 @@ export async function uploadGPXRouteToSuuntoApp(
 export const importRouteToSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.importRouteToSuuntoApp.region,
   cors: ALLOWED_CORS_ORIGINS,
-  timeoutSeconds: 300,
-  maxInstances: 10,
+  ...ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
 }, async (request) => {
 
   if (!request.auth) {
@@ -569,16 +576,8 @@ export const importRouteToSuuntoApp = onCall({
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  const base64File = request.data.file;
-
-  if (!base64File) {
-    logger.error('No file provided');
-    throw new HttpsError('invalid-argument', 'File content missing');
-  }
-
   try {
-    const compressedData = Buffer.from(base64File, 'base64');
-    const gpxContent = zlib.gunzipSync(compressedData).toString();
+    const gpxContent = await getSuuntoManualRouteGPXContent(request.data as SuuntoRouteUploadRequest);
     await uploadGPXRouteToSuuntoApp(userID, gpxContent);
     return { status: 'success' };
   } catch (error) {
@@ -595,7 +594,7 @@ export const importRouteToSuuntoApp = onCall({
 
     const statusCode = getStatusCode(error);
     const providerMessage = getSuuntoErrorMessage(error);
-    logger.error('[importRouteToSuuntoApp] Could not upload GPX route', {
+    logger.error('[importRouteToSuuntoApp] Could not upload route', {
       userID,
       statusCode,
       message: providerMessage || (error instanceof Error ? error.message : String(error)),
@@ -603,3 +602,23 @@ export const importRouteToSuuntoApp = onCall({
     throw new HttpsError('internal', providerMessage || 'Upload failed due to service errors.');
   }
 });
+
+type SuuntoRouteUploadRequest = ManualRouteUploadRequest;
+
+async function getSuuntoManualRouteGPXContent(payload: SuuntoRouteUploadRequest): Promise<string> {
+  const sourcePayload = decodeManualRouteUpload(payload?.file);
+
+  // Older browser clients gzip their GPX and omit a filename. Keep accepting that
+  // wire format until every deployed client sends the source filename.
+  if (!payload?.filename) {
+    return maybeDecompressPayloadForParsing(sourcePayload, 'gpx.gz').toString('utf8');
+  }
+
+  const inputFormat = getManualRouteInputFormat(payload.filename, 'Suunto');
+  if (inputFormat === 'gpx') {
+    return sourcePayload.toString('utf8');
+  }
+
+  const routeFile = await parseManualRouteUpload(sourcePayload, inputFormat);
+  return exportManualRouteAsGPX(routeFile);
+}

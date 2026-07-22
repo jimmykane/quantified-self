@@ -174,7 +174,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should upload compressed binary for valid gpx file', async () => {
+    it('uploads a GPX route to Suunto for server-side delivery', async () => {
         const file = {
             file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
             filename: 'route',
@@ -190,7 +190,10 @@ describe('UploadRoutesToServiceComponent', () => {
 
         expect(mockFunctionsService.call).toHaveBeenCalledWith(
             'importRouteToSuuntoApp',
-            expect.objectContaining({ file: expect.any(String) })
+            expect.objectContaining({
+                file: expect.any(String),
+                filename: 'route.gpx',
+            })
         );
 
         // Verify base64 string
@@ -199,7 +202,7 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(sentData.file.length).toBeGreaterThan(0);
     });
 
-    it('should reject non-gpx files', async () => {
+    it('rejects route files other than GPX or FIT', async () => {
         const file = {
             file: new File(['content'], 'test.txt'),
             filename: 'test',
@@ -214,8 +217,67 @@ describe('UploadRoutesToServiceComponent', () => {
             await component.processAndUploadFile(file);
             expect.unreachable('Should have rejected');
         } catch (e) {
-            expect(e).toBe('Unknown file type');
+            expect(e).toMatchObject({ message: 'Only GPX or FIT route files are supported by Suunto.' });
         }
+    });
+
+    it('uploads a FIT route to Suunto for server-side GPX conversion', async () => {
+        const file = {
+            file: Object.assign(new File(['FIT'], 'route.fit', { type: 'application/vnd.fit' }), {
+                arrayBuffer: () => Promise.resolve(Uint8Array.from([1, 2, 3]).buffer),
+            }),
+            filename: 'route',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'route.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+        };
+
+        await component.processAndUploadFile(file);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToSuuntoApp', {
+            file: 'AQID',
+            filename: 'route.fit',
+        });
+    });
+
+    it('uploads a GPX route to Garmin for server-side course conversion', async () => {
+        component.serviceName = ServiceNames.GarminAPI;
+        const file = {
+            file: Object.assign(new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }), {
+                arrayBuffer: () => Promise.resolve(Uint8Array.from([60, 103, 112, 120, 47, 62]).buffer),
+            }),
+            filename: 'route',
+            extension: 'gpx',
+            data: null,
+            id: '1',
+            name: 'route.gpx',
+            status: UPLOAD_STATUS.PROCESSING,
+        };
+
+        await component.processAndUploadFile(file);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importRouteToGarminAPI', {
+            file: 'PGdweC8+',
+            filename: 'route.gpx',
+        });
+    });
+
+    it('does not route an unsupported provider upload through Suunto', async () => {
+        component.serviceName = ServiceNames.COROSAPI;
+        const file = {
+            file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
+            filename: 'route',
+            extension: 'gpx',
+            data: null,
+            id: '1',
+            name: 'route.gpx',
+            status: UPLOAD_STATUS.PROCESSING,
+        };
+
+        await expect(component.processAndUploadFile(file)).rejects.toThrow('Manual route upload is not supported by COROS API.');
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
     });
 
     it('uploads a FIT route to Wahoo without applying Suunto GPX compression', async () => {

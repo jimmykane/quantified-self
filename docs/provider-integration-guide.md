@@ -24,8 +24,8 @@ The current providers are intentionally not identical:
 
 | Provider | Current primary role                                                    | Important distinction                                                                                               |
 | -------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Garmin   | Activity and sleep import, route delivery, and activity sync to Suunto/Wahoo | Garmin Connect is the destination label; its permissions and asynchronous history delivery need dedicated handling. |
-| Suunto   | Activity, sleep, and route import; route/activity destination workflows | Supports both import and destination workflows, including activity delivery to Wahoo.                               |
+| Garmin   | Activity and sleep import, route delivery, and activity sync to Suunto/Wahoo | Garmin Connect receives a normalized Course Import payload; direct and saved GPX/FIT routes require Course Import permission. |
+| Suunto   | Activity, sleep, and route import; route/activity destination workflows | Suunto receives GPX routes, so direct FIT routes are parsed and exported to GPX before delivery.                               |
 | COROS    | Activity and sleep import, activity upload, and activity sync to Suunto/Wahoo | History range and partner API constraints differ from Garmin and Suunto.                                            |
 | Wahoo    | Pro-only activity import through webhook/history, FIT activity delivery, and direct GPX/FIT course/route delivery | Wahoo imports only FIT-backed Wahoo-recorded workouts; retained Wahoo FITs can sync to Suunto, while Wahoo also accepts direct and selected source-event activity delivery plus user-selected GPX/FIT course/route uploads. |
 
@@ -160,6 +160,18 @@ When a provider accepts activities, use the shared `activity-sync` route model r
 - Persist a provider-issued asynchronous upload/job identifier before retrying. Subsequent retries must poll that identifier, not repost the original file, otherwise a timeout can create duplicate activities.
 - Normalize terminal states into the shared result contract: success, duplicate-as-success, retryable pending/rate-limit/outage, skipped auth/scope problem, or a sanitized terminal failure. Do not log raw provider payloads or source files; for operator diagnosis, log only the HTTP status and a length-bounded, allowlisted provider error message. Some providers, including Wahoo, report an exact duplicate as an asynchronous terminal status; handle that as success rather than a failed retry.
 - A direct browser file upload is a separate product path. State whether it creates an event or route. Wahoo direct activity delivery intentionally accepts FIT only and retains only the short-lived browser row/upload token needed to show status. Wahoo direct course/route delivery accepts FIT and GPX sources, converts GPX to FIT in memory because Wahoo receives FIT courses, makes a server-side idempotent route-library request using the source-file fingerprint, and does not create or retain a Quantified Self route. Bound both source and converted output, and define conversion limits such as one route with valid coordinates.
+
+### Direct manual route delivery formats
+
+The shared Services uploader accepts **GPX and FIT** source routes for every current route destination. The browser sends the selected source unchanged; Functions parses it and produces the destination representation in memory. Never put provider conversion logic in the browser, and never infer the output format from the source extension alone.
+
+| Destination | Accepted source | Destination representation | Retention and retry behavior |
+| ----------- | --------------- | -------------------------- | ---------------------------- |
+| Wahoo | GPX, FIT | FIT course; GPX is exported to FIT | Does not create a Quantified Self route. Source-file fingerprint is the external ID, so a retry updates the same Wahoo route. |
+| Suunto | GPX, FIT | GPX route; FIT is exported to GPX | Does not create a Quantified Self route. Keep compatibility for older browser clients that gzip GPX before calling Functions. |
+| Garmin Connect | GPX, FIT | Garmin Course Import JSON built from parsed route geometry | Does not create a Quantified Self route or delivery metadata. A repeat direct upload creates another Garmin course; saved-route sends use delivery metadata and update the existing course. |
+
+Apply the same request controls to every destination: authenticated App Check callables, Pro entitlement, explicit FIT/GPX filename allowlist, strict base64 decoding, a 20 MB source limit, parsed-route validation, converted-output limit where an output file is generated, deletion/disconnect guards, and sanitized provider errors. Make the route format and retention behavior visible in Services, Help, privacy policy, and the public integration page.
 
 OAuth scope changes are migrations. Request the full supported scope for new connections, enforce the specific write scope immediately before outbound calls, and show existing users a clear reconnect action. Wahoo's direct route flow needs both `routes_read` (idempotency lookup) and `routes_write` (create/update); its direct activity flow needs `workouts_write`. Do not mark a read-only connection as generally disconnected when inbound imports remain valid.
 

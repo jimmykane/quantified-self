@@ -471,7 +471,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Unlimited saved routes**
 - Garmin, Suunto, COROS, and Wahoo integration workflows
 - History import workflows (provider limits still apply)
-- Suunto FIT activity upload and GPX route upload tools
+- Suunto FIT activity upload and GPX/FIT route upload tools
 - COROS FIT activity upload tool
 
 ## Feature access by area
@@ -591,7 +591,7 @@ Services opens each provider on a compact connection overview. Choose an action 
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, activity sync to Suunto and Wahoo, direct FIT activity and GPX/FIT course/route delivery to Wahoo, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin, history imports, uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, activity sync to Suunto and Wahoo, direct GPX/FIT route delivery to Garmin, Suunto, and Wahoo, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin, history imports, uploads, and how those workflows connect to the private training dashboard.
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
@@ -616,7 +616,7 @@ Suunto tools currently include:
 - automatically importing saved Suunto routes,
 - importing existing Suunto routes,
 - uploading FIT activities to Suunto,
-- uploading GPX routes to Suunto.
+- uploading GPX or FIT routes to Suunto.
 
 Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
@@ -625,6 +625,8 @@ While your Suunto account is connected, Quantified Self also imports new and upd
 Suunto users can turn on **Automatically send new and updated routes** in Suunto Services or from a one-time **Routes** page prompt when both Suunto and Garmin are ready. This sends newly imported or updated Suunto routes already saved in Quantified Self to Garmin as courses. Garmin must be connected with **Course Import** permission. **Send routes** uses Suunto routes already saved in Quantified Self; it does not fetch routes from Suunto or Garmin.
 
 Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Suunto imports sent route files as new routes, so sending an edited route that was already sent to Suunto creates an updated copy in Suunto App. Routes imported from Suunto are not sent back to the same connected Suunto account, but they can still be sent to a different connected Suunto account when one exists. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
+
+**Uploads** in Suunto Services also accepts a selected GPX or FIT route without adding it to **Routes**. Suunto receives GPX, so Quantified Self converts a selected FIT route to GPX in memory before delivery. The direct upload does not create or retain a Quantified Self route.
 
 See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, sleep sync, route imports, and sending routes to Garmin.
 
@@ -642,6 +644,8 @@ Garmin sleep history import is separate from activity history import. It request
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
 
 Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**. Garmin must be connected with **Course Import** permission. If that permission is missing, Routes can show a Garmin permission prompt; open Garmin Connect, go to **Connected Apps**, allow Course Import for Quantified Self, and reconnect Garmin from Routes or **Services**. Quantified Self reads the original saved route file, uses the saved route name, and updates the same Garmin course when you send that route again to the same Garmin account.
+
+**Uploads** in Garmin Services accepts selected GPX and FIT route files as well. Quantified Self parses either source format and creates a Garmin Connect course; this direct upload does not add the route to Quantified Self or retain Garmin delivery metadata, so uploading the same file again creates another Garmin course. Course Import permission is required.
 See [Policies -> Garmin Data](/policies#garmin-data) for the provider-specific privacy summary for Garmin imports, sleep history, and Garmin to Suunto sync.
 
 Garmin to Suunto activity sync requires:

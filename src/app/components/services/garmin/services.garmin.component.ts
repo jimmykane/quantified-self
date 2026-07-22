@@ -57,7 +57,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
     'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
     'HEALTH_EXPORT': 'Required to import Garmin sleep history.',
-    'COURSE_IMPORT': 'Required to send saved Quantified Self routes to Garmin Connect.',
+    'COURSE_IMPORT': 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.',
     'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
   };
 
@@ -129,8 +129,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       : this.isDisconnectPending
       ? 'Disconnect is pending while Garmin finishes deauthorization. Sync and imports are paused for this connection.'
       : this.isReconnectRequired
-      ? 'Reconnect Garmin to resume history imports, sending saved routes to Garmin, and automatic activity sync to Suunto.'
-      : 'Required for history imports, sending saved routes to Garmin, and automatic activity sync to Suunto.';
+      ? 'Reconnect Garmin to resume history imports, sending routes to Garmin, and automatic activity sync to Suunto.'
+      : 'Required for history imports, sending routes to Garmin, and automatic activity sync to Suunto.';
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -195,6 +195,10 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   get isHistoryImportLoading(): boolean {
     return this.isLoading || !this.hasPermissionsLoaded;
+  }
+
+  get hasGarminCourseImportPermission(): boolean {
+    return this.hasTokenWithPermissions(GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS);
   }
 
   getPermissionLabel(permission: string): string {

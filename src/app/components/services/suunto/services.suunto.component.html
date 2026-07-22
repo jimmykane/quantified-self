@@ -350,7 +350,7 @@
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
             <mat-icon>route</mat-icon>
-            <span>Upload GPX Route</span>
+            <span>Upload GPX or FIT Route</span>
           </div>
           @if (suuntoServiceMeta && suuntoServiceMeta.uploadedRoutesCount && suuntoServiceMeta.uploadedRoutesCount > 0) {
           <span class="tool-subsection-meta">{{ suuntoServiceMeta.uploadedRoutesCount }} uploaded</span>
@@ -365,7 +365,7 @@
         <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-route-to-service>
         } @else {
         <app-status-info type="info" title="Connect Account First">
-          You need to connect your Suunto account before uploading routes.
+          You need to connect your Suunto account before uploading GPX or FIT routes.
         </app-status-info>
         }
       </section>

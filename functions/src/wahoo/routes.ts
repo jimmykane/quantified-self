@@ -16,6 +16,11 @@ import {
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { getRouteParsingFailureMessage, parseRoutePayload, RouteProcessingHttpStatusError } from '../routes/route-processing';
+import {
+  decodeManualRouteUpload,
+  getManualRouteInputFormat,
+  ManualRouteInputFormat,
+} from '../routes/manual-route-upload';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { MAX_ROUTE_UPLOAD_BYTES, ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/route-processing-config';
 import {
@@ -33,11 +38,8 @@ import {
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
 import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicateError } from './error-details';
 
-const MAX_BASE64_ROUTE_UPLOAD_LENGTH = Math.ceil(MAX_ROUTE_UPLOAD_BYTES / 3) * 4 + 4;
 const MAX_FILENAME_LENGTH = 200;
 const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
-
-type WahooRouteInputFormat = 'fit' | 'gpx';
 
 interface WahooRouteRecord {
   id?: unknown;
@@ -98,33 +100,6 @@ function normalizeWahooFitFilename(value: unknown): string {
   if (normalized.toLowerCase().endsWith('.fit')) return normalized;
   const filenameWithoutExtension = normalized.replace(/\.[^./]+$/, '');
   return `${filenameWithoutExtension || 'route'}.fit`;
-}
-
-function getWahooRouteInputFormat(filename: unknown): WahooRouteInputFormat {
-  const normalized = `${filename || ''}`.trim().toLowerCase();
-  if (!normalized || normalized.endsWith('.fit')) return 'fit';
-  if (normalized.endsWith('.gpx')) return 'gpx';
-  throw new HttpsError('invalid-argument', 'Wahoo routes must be FIT or GPX files.');
-}
-
-function toUploadBuffer(value: unknown): Buffer {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new HttpsError('invalid-argument', 'File content missing.');
-  }
-  if (value.length > MAX_BASE64_ROUTE_UPLOAD_LENGTH
-    || value.length % 4 !== 0
-    || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
-    throw new HttpsError('invalid-argument', 'File content is not valid base64.');
-  }
-
-  const fileBuffer = Buffer.from(value, 'base64');
-  if (fileBuffer.length === 0) {
-    throw new HttpsError('invalid-argument', 'File content is empty.');
-  }
-  if (fileBuffer.length > MAX_ROUTE_UPLOAD_BYTES) {
-    throw new HttpsError('invalid-argument', 'Cannot upload route because the size is greater than 20MB.');
-  }
-  return fileBuffer;
 }
 
 async function assertWahooRouteUploadUserActive(userID: string, phase: string): Promise<void> {
@@ -385,7 +360,7 @@ function toWahooRouteHttpsError(error: unknown): never {
 
 async function parseWahooRoute(
   fileBuffer: Buffer,
-  inputFormat: WahooRouteInputFormat,
+  inputFormat: ManualRouteInputFormat,
 ): Promise<RouteFileInterface> {
   try {
     const routeFile = await parseRoutePayload(fileBuffer, inputFormat);
@@ -421,7 +396,7 @@ async function convertWahooGpxRouteToFit(routeFile: RouteFileInterface): Promise
 async function uploadWahooRoute(
   userID: string,
   fileBuffer: Buffer,
-  inputFormat: WahooRouteInputFormat,
+  inputFormat: ManualRouteInputFormat,
   filename?: unknown,
 ): Promise<WahooRouteUploadResult> {
   if (fileBuffer.length === 0) {
@@ -486,7 +461,10 @@ export async function uploadRouteToWahoo(
   fileBuffer: Buffer,
   filename?: unknown,
 ): Promise<WahooRouteUploadResult> {
-  return uploadWahooRoute(userID, fileBuffer, getWahooRouteInputFormat(filename), filename);
+  const inputFormat = filename
+    ? getManualRouteInputFormat(filename, 'Wahoo', 'FIT or GPX')
+    : 'fit';
+  return uploadWahooRoute(userID, fileBuffer, inputFormat, filename);
 }
 
 /** @deprecated Use uploadRouteToWahoo for user-selected files. */
@@ -514,6 +492,6 @@ export const importRouteToWahooAPI = onCall({
 }, async (request): Promise<WahooRouteUploadResult> => {
   const userID = await requireWahooRouteUploadAccess(request);
   const payload = request.data as WahooRouteUploadRequest;
-  const fileBuffer = toUploadBuffer(payload?.file);
+  const fileBuffer = decodeManualRouteUpload(payload?.file);
   return uploadRouteToWahoo(userID, fileBuffer, payload?.filename);
 });

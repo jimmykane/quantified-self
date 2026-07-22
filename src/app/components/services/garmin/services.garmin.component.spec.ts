@@ -158,7 +158,7 @@ describe('ServicesGarminComponent', () => {
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();
-        expect(providerTabs.length).toBe(1);
+        expect(providerTabs.length).toBe(2);
         expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
     });
 
@@ -200,20 +200,52 @@ describe('ServicesGarminComponent', () => {
         const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
         const panels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
 
-        expect(tabs.length).toBe(2);
-        expect(panels.length).toBe(2);
+        expect(tabs.length).toBe(3);
+        expect(panels.length).toBe(3);
         expect(panels[0].hidden).toBe(false);
         expect(panels[1].hidden).toBe(true);
         expect(getComputedStyle(panels[1]).display).toBe('none');
-        expect(panels[1].textContent).toContain('Send Garmin activities to Suunto');
+        expect(panels[2].textContent).toContain('Send Garmin activities to Suunto');
 
-        tabs[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        tabs[2].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         fixture.detectChanges();
 
         expect(component.activeProviderTool).toBe('auto-sync');
         expect(panels[0].hidden).toBe(true);
         expect(getComputedStyle(panels[0]).display).toBe('none');
-        expect(panels[1].hidden).toBe(false);
+        expect(panels[2].hidden).toBe(false);
+    });
+
+    it('shows the direct Garmin route uploader when Course Import is granted', () => {
+        component.activeProviderTool = 'uploads';
+        component.showOnlyActiveProviderTool = true;
+        component.hasProAccess = true;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userID: 'garmin-user',
+            permissions: ['COURSE_IMPORT'],
+        } as any];
+        fixture.detectChanges();
+
+        expect(component.hasGarminCourseImportPermission).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
+        expect(fixture.nativeElement.textContent).toContain('Send GPX or FIT Route to Garmin');
+    });
+
+    it('asks the user to allow Course Import before showing the Garmin route uploader', () => {
+        component.activeProviderTool = 'uploads';
+        component.showOnlyActiveProviderTool = true;
+        component.hasProAccess = true;
+        component.serviceTokens = [{
+            accessToken: 'token',
+            userID: 'garmin-user',
+            permissions: ['ACTIVITY_EXPORT'],
+        } as any];
+        fixture.detectChanges();
+
+        expect(component.hasGarminCourseImportPermission).toBe(false);
+        expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.textContent).toContain('Reconnect Garmin and allow Course Import before sending routes.');
     });
 
     it('renders disconnect beside the connected account details', () => {

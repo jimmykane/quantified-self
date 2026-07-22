@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONNECTED_SERVICES_POLICY_SECTION,
+  POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
 
@@ -18,5 +20,20 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto activity sync');
+  });
+});
+
+describe('Garmin and Suunto manual route delivery policy', () => {
+  it('documents selected GPX/FIT route delivery and the destination conversion behavior', () => {
+    const garminContent = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_GARMIN_DATA_FRAGMENT)?.content.join(' ') || '';
+    const suuntoContent = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_SUUNTO_DATA_FRAGMENT)?.content.join(' ') || '';
+
+    expect(garminContent).toContain('explicitly select a GPX/FIT route file in Garmin Services');
+    expect(garminContent).toContain('does not create or retain a Quantified Self route or Garmin delivery metadata');
+    expect(suuntoContent).toContain('saved or selected GPX/FIT route to Suunto');
+    expect(suuntoContent).toContain('selected FIT routes and saved routes are converted to a compatible GPX route in memory');
+    expect(suuntoContent).toContain('Direct selected-file route delivery does not create or retain a Quantified Self route');
   });
 });

@@ -202,6 +202,20 @@ describe('importRouteToSuuntoApp', () => {
         expect(result).toEqual({ status: 'success' });
     });
 
+    it('accepts an uncompressed GPX route from the current uploader', async () => {
+        const gpxContent = '<gpx><trk><trkseg><trkpt lat="37.1" lon="23.7" /></trkseg></trk></gpx>';
+        requestMocks.post.mockResolvedValue(JSON.stringify({ id: 'route-id' }));
+
+        await expect(importRouteToSuuntoApp(createMockRequest({
+            data: {
+                file: Buffer.from(gpxContent).toString('base64'),
+                filename: 'route.gpx',
+            },
+        }) as any)).resolves.toEqual({ status: 'success' });
+
+        expect(requestMocks.post).toHaveBeenCalledWith(expect.objectContaining({ body: gpxContent }));
+    });
+
     it('fetches the latest Suunto token snapshot for each upload when a batch context is reused', async () => {
         const firstSnapshot = {
             id: 'token1',

@@ -99,6 +99,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
+        title: 'Send route files to Garmin',
+        description: 'Send a GPX or FIT route file directly to Garmin Connect as a course without adding it to your Quantified Self route library.',
+        detail: 'Direct GPX and FIT route delivery · Pro',
+        icon: 'route',
+        actionLabel: 'Send route file',
+        tool: 'uploads',
+      },
+      {
         title: 'Send activities to connected services',
         description: 'Automatically send new Garmin activities to Suunto or Wahoo, or sync past activities by date.',
         detail: 'Automatic and past activity sync',
@@ -134,8 +142,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
       },
       {
         title: 'Upload activities and routes',
-        description: 'Send FIT activity files or GPX route files to the Suunto app.',
-        detail: 'FIT and GPX uploads',
+        description: 'Send FIT activity files or GPX/FIT route files to the Suunto app.',
+        detail: 'FIT activity and GPX/FIT route uploads',
         icon: 'cloud_upload',
         actionLabel: 'Upload files',
         tool: 'uploads',

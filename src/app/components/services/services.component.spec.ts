@@ -252,7 +252,7 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
-        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(3);
+        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(4);
         expect(activePanel.textContent).toContain('Activity sync');
         expect(activePanel.textContent).toContain('Sleep history');
 
@@ -262,8 +262,10 @@ describe('ServicesComponent', () => {
         expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for Garmin');
         expect(manageButtons[1].textContent?.trim()).toBe('Import sleep history');
         expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Garmin');
-        expect(manageButtons[2].textContent?.trim()).toBe('Activity sync settings');
-        expect(manageButtons[2].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
+        expect(manageButtons[2].textContent?.trim()).toBe('Send route file');
+        expect(manageButtons[2].getAttribute('aria-label')).toBe('Send route file for Garmin');
+        expect(manageButtons[3].textContent?.trim()).toBe('Activity sync settings');
+        expect(manageButtons[3].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
 
         manageButtons[0].click();
         fixture.detectChanges();
@@ -301,18 +303,29 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('uploads');
+        expect(component.managedToolTitle).toBe('Send route files to Garmin');
+        expect(mockDialog.open.mock.calls[2][1]).toEqual(expect.objectContaining({
+            ariaLabel: 'Garmin Send route files to Garmin tools',
+        }));
+
+        dialogClosed$.next();
+        manageButtons[3].click();
+        fixture.detectChanges();
+
+        expect(component.managedService).toBe('garmin');
         expect(component.managedTool).toBe('auto-sync');
         expect(component.managedToolTitle).toBe('Send activities to connected services');
-        expect(mockDialog.open.mock.calls[2][1]).toEqual(expect.objectContaining({
+        expect(mockDialog.open.mock.calls[3][1]).toEqual(expect.objectContaining({
             ariaLabel: 'Garmin Send activities to connected services tools',
         }));
     });
 
     it('maps provider overview cards to distinct tools', () => {
-        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'history', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'auto-sync']);
         expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'activity-sync']);
         expect(component.serviceOverviewCardsBySection.suunto[3].description)
-            .toBe('Send FIT activity files or GPX route files to the Suunto app.');
+            .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
     });

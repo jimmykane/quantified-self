@@ -68,12 +68,18 @@ interface GarminCoursePayload {
   description?: string;
 }
 
+type GarminRouteSource = Pick<FirestoreRouteJSON, 'name' | 'activityTypes'>;
+
 interface GarminCreateCourseResponse {
   courseId?: number | string | null;
 }
 
 export class GarminRouteSendPermissionRequiredError extends Error {
   readonly name = 'GarminRouteSendPermissionRequiredError';
+}
+
+export class GarminRouteValidationError extends Error {
+  readonly name = 'GarminRouteValidationError';
 }
 
 class GarminRouteSendRateLimitError extends Error {
@@ -190,7 +196,7 @@ function buildGarminCourseGeoPoints(routeFile: RouteFileInterface): GarminCourse
   return geoPoints;
 }
 
-function resolveGarminCourseActivityType(routeFile: RouteFileInterface, routeDocument: FirestoreRouteJSON): string {
+function resolveGarminCourseActivityType(routeFile: RouteFileInterface, routeDocument: GarminRouteSource): string {
   const normalizedCandidates = [
     ...routeFile.getRoutes().map(route => route.activityType),
     ...(Array.isArray(routeDocument.activityTypes) ? routeDocument.activityTypes : []),
@@ -220,18 +226,18 @@ function resolveGarminCourseActivityType(routeFile: RouteFileInterface, routeDoc
   return 'OTHER';
 }
 
-function buildGarminCoursePayload(routeFile: RouteFileInterface, routeDocument: FirestoreRouteJSON): GarminCoursePayload {
+function buildGarminCoursePayload(routeFile: RouteFileInterface, routeDocument: GarminRouteSource): GarminCoursePayload {
   const routeName = normalizeNonEmptyString(routeFile.name)
     || normalizeNonEmptyString(routeDocument.name)
     || 'Saved route';
   const distance = getRouteStatsValue(routeFile, DataDistance.type);
   if (distance === null || distance <= 0) {
-    throw new Error('Saved route is missing distance data required by Garmin Connect.');
+    throw new GarminRouteValidationError('Route is missing distance data required by Garmin Connect.');
   }
 
   const geoPoints = buildGarminCourseGeoPoints(routeFile);
   if (geoPoints.length === 0) {
-    throw new Error('Saved route is missing geometry data required by Garmin Connect.');
+    throw new GarminRouteValidationError('Route is missing geometry data required by Garmin Connect.');
   }
 
   return {
@@ -310,16 +316,20 @@ async function executeGarminCourseRequest<T>(
 async function createGarminCourse(
   tokenSnapshotRef: GarminRouteSendTokenSnapshot,
   payload: GarminCoursePayload,
+  beforeProviderRequest?: () => Promise<void>,
 ): Promise<string> {
   try {
-    const response = await executeGarminCourseRequest(tokenSnapshotRef, async (accessToken) => requestPromise.post({
-      url: GARMIN_COURSES_API_BASE_URL,
-      json: true,
-      body: payload,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }));
+    const response = await executeGarminCourseRequest(tokenSnapshotRef, async (accessToken) => {
+      await beforeProviderRequest?.();
+      return requestPromise.post({
+        url: GARMIN_COURSES_API_BASE_URL,
+        json: true,
+        body: payload,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+    });
     const courseId = getGarminCourseId(response);
     if (!courseId) {
       throw new Error('Garmin course create response did not include a course id.');
@@ -556,6 +566,48 @@ export async function createGarminRouteSendContext(userID: string): Promise<Garm
   return {
     tokenSnapshots: tokenQuerySnapshot.docs,
     preferredProviderUserId,
+  };
+}
+
+/**
+ * Creates a Garmin course from a route selected in Services without storing a
+ * Quantified Self route or delivery metadata. Saved-route delivery continues
+ * to use sendRouteToGarminConnect so it can update the same Garmin course.
+ */
+export async function uploadManualRouteToGarminConnect(
+  userID: string,
+  routeFile: RouteFileInterface,
+  options: {
+    beforeProviderRequest?: () => Promise<void>;
+  } = {},
+): Promise<{
+  providerRouteId: string;
+  deliveries: Array<{ providerUserId: string; providerRouteId: string }>;
+}> {
+  const context = await createGarminRouteSendContext(userID);
+  const tokenSnapshotRef = getPreferredGarminRouteSendTokenSnapshot(context);
+  if (!tokenSnapshotRef) {
+    throw buildGarminAuthRequiredError('No connected Garmin account found.');
+  }
+  if (tokenSnapshotRef.missingPermissions.length > 0) {
+    throw new GarminRouteSendPermissionRequiredError('Grant Garmin Course Import permission and reconnect before sending routes.');
+  }
+
+  const providerRouteId = await createGarminCourse(
+    tokenSnapshotRef,
+    buildGarminCoursePayload(routeFile, {
+      name: routeFile.name,
+      activityTypes: [],
+    }),
+    options.beforeProviderRequest,
+  );
+
+  return {
+    providerRouteId,
+    deliveries: [{
+      providerUserId: tokenSnapshotRef.providerUserId,
+      providerRouteId,
+    }],
   };
 }
 

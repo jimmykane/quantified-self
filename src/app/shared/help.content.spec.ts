@@ -385,6 +385,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Course Import** permission');
     expect(serviceConnectionsSection?.content).toContain('Routes can show a Garmin permission prompt');
     expect(serviceConnectionsSection?.content).toContain('updates the same Garmin course when you send that route again to the same Garmin account');
+    expect(serviceConnectionsSection?.content).toContain('**Uploads** in Garmin Services accepts selected GPX and FIT route files');
+    expect(serviceConnectionsSection?.content).toContain('uploading the same file again creates another Garmin course');
   });
 
   it('should document automatic and one-time Suunto route sending to Garmin', () => {
@@ -465,6 +467,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can be sent to Suunto from **Routes**');
+    expect(serviceConnectionsSection?.content).toContain('**Uploads** in Suunto Services also accepts a selected GPX or FIT route');
+    expect(serviceConnectionsSection?.content).toContain('converts a selected FIT route to GPX in memory before delivery');
     expect(serviceConnectionsSection?.content).toContain('row action or the selected-row bulk toolbar');
     expect(serviceConnectionsSection?.content).toContain('uses the saved Quantified Self route name as the route name sent to Suunto');
     expect(serviceConnectionsSection?.content).toContain('Bulk sends upload routes one at a time');
