@@ -19,7 +19,6 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   ENABLE_LIVE_SELECTION_PREVIEW_STATS,
-  ENABLE_LIVE_SELECTION_SYNC,
   EventCardChartPanelComponent
 } from './event.card.chart.panel.component';
 import { EChartsLoaderService } from '../../../../services/echarts-loader.service';
@@ -1689,7 +1688,7 @@ describe('EventCardChartPanelComponent', () => {
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
   });
 
-  it('follows live selection sync constant for brush preview emissions', async () => {
+  it('emits the selection preview while brushing so every panel replaces the prior range', async () => {
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     const emitSpy = vi.spyOn(component.previewRangeChange, 'emit');
     await renderComponent();
@@ -1705,12 +1704,7 @@ describe('EventCardChartPanelComponent', () => {
       ]
     });
 
-    if (ENABLE_LIVE_SELECTION_SYNC) {
-      expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
-      return;
-    }
-
-    expect(emitSpy).not.toHaveBeenCalled();
+    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 60 });
   });
 
   it('disables hover tooltips during an active selection brush and restores them on brush end', async () => {
@@ -2276,21 +2270,14 @@ describe('EventCardChartPanelComponent', () => {
     expect((component as any).formatDataValue(DataDistance.type, 10000, false)).toBe('6.22');
   });
 
-  it('follows live selection sync constant for active selection labels', () => {
+  it('uses the live selection preview for active selection labels', () => {
     component.xAxisType = XAxisTypes.Duration;
     component.previewRange = { start: 10, end: 20 };
     component.selectedRange = { start: 65, end: 140 };
 
-    if (ENABLE_LIVE_SELECTION_SYNC) {
-      expect(component.selectedRangeStartLabel).toBe('00:10');
-      expect(component.selectedRangeEndLabel).toBe('00:20');
-      expect(component.selectedRangeSpanLabel).toBe('00:10');
-      return;
-    }
-
-    expect(component.selectedRangeStartLabel).toBe('01:05');
-    expect(component.selectedRangeEndLabel).toBe('02:20');
-    expect(component.selectedRangeSpanLabel).toBe('01:15');
+    expect(component.selectedRangeStartLabel).toBe('00:10');
+    expect(component.selectedRangeEndLabel).toBe('00:20');
+    expect(component.selectedRangeSpanLabel).toBe('00:10');
   });
 
   it('follows preview-stats constant for preview-only range stat updates', async () => {
