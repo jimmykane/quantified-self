@@ -14,8 +14,15 @@ const mocks = vi.hoisted(() => {
   };
   const firestoreCollection = vi.fn(() => rootCollection);
   const firestore = vi.fn(() => ({ collection: firestoreCollection }));
+  class WahooOwnershipTransferBlockedByEventPublicationError extends Error {
+    public readonly name = 'WahooOwnershipTransferBlockedByEventPublicationError';
+  }
   return {
     enforceAppCheck: vi.fn(),
+    hasServiceOAuthConnectAccess: vi.fn(),
+    getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
+    getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn(),
+    validateOAuth2State: vi.fn(),
     tokenQueryGet,
     tokenCollection,
     tokenRoot,
@@ -23,6 +30,7 @@ const mocks = vi.hoisted(() => {
     firestoreCollection,
     firestore,
     setServiceConnectionProviderUserId: vi.fn(),
+    WahooOwnershipTransferBlockedByEventPublicationError,
   };
 });
 
@@ -42,6 +50,7 @@ vi.mock('firebase-admin', () => ({
 
 vi.mock('firebase-functions/logger', () => ({
   error: vi.fn(),
+  warn: vi.fn(),
 }));
 
 vi.mock('../../utils', () => ({
@@ -51,27 +60,37 @@ vi.mock('../../utils', () => ({
 }));
 
 vi.mock('../../service-oauth-access', () => ({
-  hasServiceOAuthConnectAccess: vi.fn(),
+  hasServiceOAuthConnectAccess: mocks.hasServiceOAuthConnectAccess,
 }));
 
 vi.mock('../../OAuth2', () => ({
   disconnectServiceForUser: vi.fn(),
-  getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
-  getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn(),
-  validateOAuth2State: vi.fn(),
+  getAndSetServiceOAuth2AccessTokenForUser: mocks.getAndSetServiceOAuth2AccessTokenForUser,
+  getServiceOAuth2CodeRedirectAndSaveStateToUser: mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser,
+  validateOAuth2State: mocks.validateOAuth2State,
 }));
 
 vi.mock('../../service-connection-meta', () => ({
   setServiceConnectionProviderUserId: mocks.setServiceConnectionProviderUserId,
 }));
 
-import { getWahooAPIConnectionAccount } from './wrapper';
+vi.mock('./adapter', () => ({
+  WahooOwnershipTransferBlockedByEventPublicationError:
+    mocks.WahooOwnershipTransferBlockedByEventPublicationError,
+}));
+
+import {
+  getWahooAPIConnectionAccount,
+  requestAndSetWahooAPIAccessToken,
+} from './wrapper';
 
 describe('Wahoo Auth Wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.setServiceConnectionProviderUserId.mockResolvedValue(true);
     mocks.tokenQueryGet.mockResolvedValue({ docs: [] });
+    mocks.hasServiceOAuthConnectAccess.mockResolvedValue(true);
+    mocks.validateOAuth2State.mockResolvedValue(true);
   });
 
   it('returns and safely mirrors only the Wahoo account ID for an authenticated user', async () => {
@@ -116,5 +135,24 @@ describe('Wahoo Auth Wrapper', () => {
       .rejects.toThrow('User must be authenticated.');
 
     expect(mocks.tokenQueryGet).not.toHaveBeenCalled();
+  });
+
+  it('asks the user to reconnect shortly when event publication temporarily blocks an ownership transfer', async () => {
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue(
+      new mocks.WahooOwnershipTransferBlockedByEventPublicationError('wahoo-user-1'),
+    );
+
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'oauth-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
+      code: 'unavailable',
+      message: 'Wahoo is still finishing an activity import. Please reconnect again shortly.',
+    });
   });
 });

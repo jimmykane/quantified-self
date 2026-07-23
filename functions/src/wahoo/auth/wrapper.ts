@@ -13,6 +13,7 @@ import {
 import { SERVICE_NAME, WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../constants';
 import { getWahooErrorLogDetails } from '../error-details';
 import { setServiceConnectionProviderUserId } from '../../service-connection-meta';
+import { WahooOwnershipTransferBlockedByEventPublicationError } from './adapter';
 
 async function requireWahooConnectAccess(request: { auth?: { uid: string } | null }): Promise<string> {
   enforceAppCheck(request as any);
@@ -56,6 +57,13 @@ export const requestAndSetWahooAPIAccessToken = onCall({
   try {
     await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
   } catch (error) {
+    if (error instanceof WahooOwnershipTransferBlockedByEventPublicationError) {
+      logger.warn('Wahoo authorization is waiting for an in-flight activity import to finish.');
+      throw new HttpsError(
+        'unavailable',
+        'Wahoo is still finishing an activity import. Please reconnect again shortly.',
+      );
+    }
     logger.error('Wahoo authorization code flow failed', getWahooErrorLogDetails(error));
     const statusCode = (error as { statusCode?: number })?.statusCode;
     if (statusCode === 429 || (statusCode && statusCode >= 500)) {
