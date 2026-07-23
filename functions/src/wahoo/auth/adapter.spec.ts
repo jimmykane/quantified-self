@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { WahooAuthAdapter } from './adapter';
 import * as api from './api';
@@ -161,7 +162,7 @@ describe('WahooAuthAdapter', () => {
         exists: true,
         data: () => ({ firebaseUserID: 'current-user', ownershipVersion: 5 }),
       }),
-    } as any;
+    } as unknown as admin.firestore.Transaction;
     await expect(guard(transaction)).resolves.toBe(true);
   });
 

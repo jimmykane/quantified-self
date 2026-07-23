@@ -259,7 +259,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     });
 
     await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
-      { ...input, ref: mocks.ref } as any,
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
       'worker-1',
     )).resolves.toBe(false);
     expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.ref);
@@ -281,7 +281,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     });
 
     await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
-      { ...input, ref: mocks.ref } as any,
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
       'worker-1',
     )).resolves.toBe(true);
   });
