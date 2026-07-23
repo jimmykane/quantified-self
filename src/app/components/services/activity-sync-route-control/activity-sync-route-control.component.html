@@ -1,4 +1,7 @@
-<section class="activity-sync-route-control" [class.activity-sync-route-control--locked]="!hasProAccess">
+<section
+  class="activity-sync-route-control"
+  [class.activity-sync-route-control--locked]="!hasProAccess"
+  [class.activity-sync-route-control--with-divider]="showTopDivider">
   <div class="activity-sync-route-control__header">
     <div class="activity-sync-route-control__title">
       <span class="activity-sync-route-control__provider-icons" aria-hidden="true">

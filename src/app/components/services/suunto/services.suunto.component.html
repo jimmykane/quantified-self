@@ -279,7 +279,7 @@
           does not import routes from Suunto, and it works even when automatic route sending is off.
         </app-status-info>
 
-        <button mat-flat-button class="qs-mat-primary full-width-action"
+        <button mat-flat-button class="qs-mat-primary service-tool-primary-action"
           [disabled]="isQueueingRouteDeliverySyncBackfill || !canQueueSuuntoToGarminRouteBackfill"
           (click)="queueSuuntoToGarminRouteDelivery($event)">
           @if (isQueueingRouteDeliverySyncBackfill) {
@@ -344,7 +344,7 @@
           does not import routes from Suunto, and it works even when automatic route sending is off.
         </app-status-info>
 
-        <button mat-flat-button class="qs-mat-primary full-width-action"
+        <button mat-flat-button class="qs-mat-primary service-tool-primary-action"
           [disabled]="isQueueingWahooRouteDeliverySyncBackfill || !canQueueSuuntoToWahooRouteBackfill"
           (click)="queueSuuntoToWahooRouteDelivery($event)">
           @if (isQueueingWahooRouteDeliverySyncBackfill) {

@@ -25,6 +25,7 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
   @Input() destinationServiceName!: ServiceNames;
   @Input() sourceConnected = false;
   @Input() sourceReconnectRequired = false;
+  @Input() showTopDivider = false;
 
   public routeId: ActivitySyncRouteId | null = null;
   public destinationConnected = false;

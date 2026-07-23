@@ -186,6 +186,9 @@ describe('ServicesGarminComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-tools-panel')).toBeNull();
         expect(toolPanels).toHaveLength(1);
         expect(toolPanels[0].hidden).toBe(false);
+        expect(toolPanels[0].classList).toContain('provider-tool-panel--focused');
+        expect(toolPanels[0].querySelector('.activity-sync-destination-selector')).toBeTruthy();
+        expect(toolPanels[0].textContent).toContain('To Wahoo');
         expect(toolPanels[0].querySelector('.tool-subsection-title')?.textContent)
             .toContain('Send Garmin activities to Suunto');
         expect(toolPanels[0].textContent).toContain('Sending Garmin activities to Suunto is a Pro feature.');
@@ -766,7 +769,7 @@ describe('ServicesGarminComponent', () => {
             fixture.detectChanges();
 
             const queueButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
-                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Sync activities')) as HTMLButtonElement | undefined;
+                .find((button: HTMLButtonElement) => (button.textContent || '').includes('Schedule activities')) as HTMLButtonElement | undefined;
 
             expect(component.isGarminToSuuntoRouteEnabled).toBe(false);
             expect(queueButton).toBeTruthy();

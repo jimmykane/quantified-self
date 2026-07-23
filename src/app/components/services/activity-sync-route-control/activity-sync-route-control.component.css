@@ -9,6 +9,9 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+}
+
+.activity-sync-route-control--with-divider {
   padding: 16px 0;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
@@ -75,7 +78,7 @@
 }
 
 .activity-sync-route-control__action {
-  width: 100%;
+  align-self: flex-start;
 }
 
 .activity-sync-route-control__action-content {
@@ -111,5 +114,10 @@
 
   .activity-sync-route-control__date-fields {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-sync-route-control__action {
+    align-self: stretch;
+    width: 100%;
   }
 }

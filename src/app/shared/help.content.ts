@@ -590,6 +590,8 @@ Garmin, Suunto, COROS, and Wahoo connections are part of **Pro**.
 
 Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
 
+At the top of Connections, **Your data flow** explains that connected providers import new activities into Quantified Self. Once two or more services are connected, it shows a provider-to-provider matrix of compatible automatic activity and saved-route delivery paths through Quantified Self. On phones, the same routes are grouped by source and destination instead of using a wide table. Enabled routes show **On**, available routes remain opt-in, and a configured route that cannot run because a provider is disconnected or needs reconnection is marked **Needs connection**. With no services connected, it prompts you to connect your first provider.
+
 ## Integration pages overview
 
 The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, activity sync to Suunto and Wahoo, direct GPX/FIT route delivery to Garmin, Suunto, and Wahoo, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin or Wahoo, history imports, uploads, and how those workflows connect to the private training dashboard.

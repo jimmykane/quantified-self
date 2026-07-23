@@ -227,6 +227,178 @@ describe('ServicesComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-selector--desktop')).toBeTruthy();
     });
 
+    it('shows a connect-first data-flow state when no services are connected', () => {
+        fixture.detectChanges();
+
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+
+        expect(dataFlow.textContent).toContain('Your data flow');
+        expect(dataFlow.textContent).toContain('No services connected');
+        expect(dataFlow.textContent).toContain('Connect a service below');
+        expect(dataFlow.querySelector('.service-data-flow__matrix')).toBeNull();
+    });
+
+    it('starts the data-flow panel collapsed and lets the user expand it', () => {
+        fixture.detectChanges();
+
+        const dataFlowHeader = fixture.nativeElement.querySelector(
+            '.service-data-flow mat-expansion-panel-header',
+        ) as HTMLElement;
+
+        expect(dataFlowHeader.getAttribute('aria-expanded')).toBe('false');
+
+        dataFlowHeader.click();
+        fixture.detectChanges();
+
+        expect(component.isDataFlowExpanded).toBe(true);
+        expect(dataFlowHeader.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('shows a single-service import state before the matrix becomes useful', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        fixture.detectChanges();
+
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+
+        expect(dataFlow.textContent).toContain('Activities are importing into Quantified Self');
+        expect(dataFlow.textContent).toContain('Connect another compatible service');
+        expect(dataFlow.querySelector('.service-data-flow__matrix')).toBeNull();
+    });
+
+    it('shows connected imports and flags an enabled delivery when a provider needs connection', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('wahoo', true);
+        fixture.detectChanges();
+
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+        const matrix = dataFlow.querySelector('.service-data-flow__matrix');
+
+        expect(dataFlow.textContent).toContain('Connected services import new activities into Quantified Self');
+        expect(matrix.textContent).toContain('Garmin');
+        expect(matrix.textContent).toContain('Suunto');
+        expect(matrix.textContent).toContain('Needs connection');
+        expect(matrix.querySelectorAll('.service-data-flow__matrix-route--attention')).toHaveLength(1);
+    });
+
+    it('shows supported matrix routes and marks enabled delivery as active', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        component.setServiceConnectionState('suunto', true);
+        component.setServiceConnectionState('garmin', true);
+        fixture.detectChanges();
+
+        const matrix = fixture.nativeElement.querySelector('.service-data-flow__matrix');
+
+        expect(matrix.textContent).toContain('Activity');
+        expect(matrix.textContent).toContain('Route');
+        expect(matrix.textContent).toContain('Available');
+        expect(matrix.textContent).toContain('On');
+        expect(matrix.querySelectorAll('.service-data-flow__matrix-route--active')).toHaveLength(1);
+    });
+
+    it('shows a green connected status beside connected providers in the data-flow matrix', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('suunto', true);
+        fixture.detectChanges();
+
+        const matrix = fixture.nativeElement.querySelector('.service-data-flow__matrix');
+        const columnStatuses = matrix.querySelectorAll('thead .service-data-flow__provider-status');
+        const rowStatuses = matrix.querySelectorAll('tbody .service-data-flow__provider-status');
+        const mobileSourceStatuses = fixture.nativeElement.querySelectorAll(
+            '.service-data-flow__mobile-matrix-group > h2 .service-data-flow__provider-status',
+        );
+
+        expect(columnStatuses).toHaveLength(2);
+        expect(rowStatuses).toHaveLength(2);
+        expect(mobileSourceStatuses).toHaveLength(2);
+        expect(columnStatuses[0].getAttribute('aria-label')).toBe('Connected');
+    });
+
+    it('opens the matching source settings dialog from activity and route data-flow paths', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    },
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('suunto', true);
+        fixture.detectChanges();
+
+        const activityRoute = fixture.nativeElement.querySelector(
+            '.service-data-flow__matrix-route--activity',
+        ) as HTMLButtonElement;
+        const routeDelivery = fixture.nativeElement.querySelector(
+            '.service-data-flow__matrix-route--route',
+        ) as HTMLButtonElement;
+
+        expect(activityRoute.getAttribute('aria-label')).toBe('Manage activity delivery from Garmin to Suunto App');
+        activityRoute.click();
+        expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('auto-sync');
+        expect(component.managedToolTitle).toBe('Send activities to Suunto App');
+        expect(component.managedActivitySyncDestination).toBe('suunto');
+        expect(mockDialog.open).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+            ariaLabel: 'Garmin Send activities to Suunto App tools',
+        }));
+
+        dialogClosed$.next();
+        routeDelivery.click();
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('routes');
+        expect(component.managedToolTitle).toBe('Send routes to Garmin Connect');
+        expect(component.managedActivitySyncDestination).toBeNull();
+        expect(mockDialog.open).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+            ariaLabel: 'Suunto Send routes to Garmin Connect tools',
+        }));
+    });
+
+    it('renders a compact stacked matrix for mobile layouts', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('suunto', true);
+        fixture.detectChanges();
+
+        const mobileMatrix = fixture.nativeElement.querySelector('.service-data-flow__mobile-matrix');
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+
+        expect(mobileMatrix.textContent).toContain('From Garmin');
+        expect(mobileMatrix.textContent).toContain('To Suunto');
+        expect(mobileMatrix.textContent).toContain('Activity');
+        expect(styles).toContain('.service-data-flow__matrix-scroll {\n        display: none;');
+        expect(styles).toContain('.service-data-flow__mobile-matrix {\n        display: grid;');
+    });
+
     it('keeps service panels mounted and hides inactive panels during tab switches', () => {
         fixture.detectChanges();
 
@@ -261,13 +433,13 @@ describe('ServicesComponent', () => {
 
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons[0].textContent?.trim()).toBe('Backfill activities');
+        expect(manageButtons[0].textContent).toContain('Manage');
         expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for Garmin');
-        expect(manageButtons[1].textContent?.trim()).toBe('Import sleep history');
+        expect(manageButtons[1].textContent).toContain('Manage');
         expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Garmin');
-        expect(manageButtons[2].textContent?.trim()).toBe('Send route file');
+        expect(manageButtons[2].textContent).toContain('Manage');
         expect(manageButtons[2].getAttribute('aria-label')).toBe('Send route file for Garmin');
-        expect(manageButtons[3].textContent?.trim()).toBe('Activity sync settings');
+        expect(manageButtons[3].textContent).toContain('Manage');
         expect(manageButtons[3].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
 
         manageButtons[0].click();
@@ -458,10 +630,10 @@ describe('ServicesComponent', () => {
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
         expect(manageButtons).toHaveLength(5);
-        expect(manageButtons[1].textContent?.trim()).toBe('Import sleep history');
-        expect(manageButtons[2].textContent?.trim()).toBe('Route sync settings');
-        expect(manageButtons[3].textContent?.trim()).toBe('Upload files');
-        expect(manageButtons[4].textContent?.trim()).toBe('Activity sync settings');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Suunto');
+        expect(manageButtons[2].getAttribute('aria-label')).toBe('Route sync settings for Suunto');
+        expect(manageButtons[3].getAttribute('aria-label')).toBe('Upload files for Suunto');
+        expect(manageButtons[4].getAttribute('aria-label')).toBe('Activity sync settings for Suunto');
 
         manageButtons[1].click();
         expect(component.managedService).toBe('suunto');
@@ -496,6 +668,24 @@ describe('ServicesComponent', () => {
         );
 
         expect(template).toContain('aria-label="Close tools dialog"');
+    });
+
+    it('uses one compact, consistent manage action for all connection feature dialogs', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.html'),
+            'utf8'
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+        const actionRule = styles.match(/\.service-overview-card__action\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(template).toContain('class="service-overview-card__action"');
+        expect(template).toContain('<span>Manage</span>');
+        expect(template).toContain('<mat-icon>arrow_forward</mat-icon>');
+        expect(actionRule).toContain('min-width: 104px');
+        expect(styles).toContain('border-bottom: 1px solid var(--mat-sys-outline-variant)');
     });
 
     it('keeps the tools dialog focused on tool content', () => {

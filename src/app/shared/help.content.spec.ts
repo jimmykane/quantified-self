@@ -383,6 +383,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Choose an action');
     expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');
     expect(serviceConnectionsSection?.content).toContain('unchanged overview');
+    expect(serviceConnectionsSection?.content).toContain('**Your data flow**');
+    expect(serviceConnectionsSection?.content).toContain('With no services connected');
+    expect(serviceConnectionsSection?.content).toContain('provider-to-provider matrix');
+    expect(serviceConnectionsSection?.content).toContain('On phones, the same routes are grouped by source and destination');
+    expect(serviceConnectionsSection?.content).toContain('**Needs connection**');
     expect(serviceConnectionsSection?.content).toContain('Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**');
     expect(serviceConnectionsSection?.content).toContain('**Course Import** permission');
     expect(serviceConnectionsSection?.content).toContain('Routes can show a Garmin permission prompt');

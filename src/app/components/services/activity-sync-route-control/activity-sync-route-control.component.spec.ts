@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
@@ -103,6 +105,21 @@ describe('ActivitySyncRouteControlComponent', () => {
     expect(action.getAttribute('aria-busy')).toBe('true');
     expect(content.querySelector('mat-spinner')).not.toBeNull();
     expect(content.textContent.trim()).toBe('Scheduling activities…');
+  });
+
+  it('keeps the backfill action compact on desktop and only adds a divider when another tool precedes it', () => {
+    component.showTopDivider = true;
+    fixture.detectChanges();
+
+    const control = fixture.nativeElement.querySelector('.activity-sync-route-control');
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/services/activity-sync-route-control/activity-sync-route-control.component.css'),
+      'utf8',
+    );
+
+    expect(control.classList.contains('activity-sync-route-control--with-divider')).toBe(true);
+    expect(styles).toContain('.activity-sync-route-control__action {\n  align-self: flex-start;');
+    expect(styles).toContain('.activity-sync-route-control__action {\n    align-self: stretch;\n    width: 100%;');
   });
 
   it('explains which selected events were newly scheduled', async () => {

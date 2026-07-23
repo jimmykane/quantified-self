@@ -13,12 +13,15 @@ import { AppWindowService } from '../../services/app.window.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTES } from '@shared/activity-sync-routes';
+import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import { ROUTE_DELIVERY_SYNC_ROUTES } from '@shared/route-delivery-sync-routes';
+import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-sync-rollout';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { AppUserInterface } from '../../models/app-user.interface';
 
 type ServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
 type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync' | 'activity-sync';
+type ServiceDataFlowActivityDestination = 'suunto' | 'wahoo';
 
 interface ServiceSectionOption {
   id: ServiceSectionId;
@@ -26,13 +29,18 @@ interface ServiceSectionOption {
   serviceName: ServiceNames;
 }
 
-interface ServiceOverviewCard {
+interface ServiceToolLaunch {
+  tool: ServiceToolId;
+  title: string;
+  activitySyncDestination?: ServiceDataFlowActivityDestination;
+}
+
+interface ServiceOverviewCard extends ServiceToolLaunch {
   title: string;
   description: string;
   detail: string;
   icon: string;
   actionLabel: string;
-  tool: ServiceToolId;
 }
 
 interface ServiceAutomaticSyncRoute {
@@ -45,6 +53,36 @@ interface ServiceAutomaticSyncSummary {
   routes: readonly ServiceAutomaticSyncRoute[];
 }
 
+type ServiceDataFlowMatrixRouteKind = 'activity' | 'route';
+type ServiceDataFlowMatrixRouteState = 'available' | 'active' | 'attention';
+
+interface ServiceDataFlowMatrixRoute extends ServiceToolLaunch {
+  id: string;
+  kind: ServiceDataFlowMatrixRouteKind;
+  state: ServiceDataFlowMatrixRouteState;
+  sourceSection: ServiceSectionId;
+}
+
+interface ServiceDataFlowMatrixCell {
+  id: string;
+  destinationServiceName: ServiceNames;
+  destinationLabel: string;
+  destinationConnected: boolean;
+  routes: ServiceDataFlowMatrixRoute[];
+}
+
+interface ServiceDataFlowMatrixRow {
+  sourceServiceName: ServiceNames;
+  sourceLabel: string;
+  sourceConnected: boolean;
+  cells: ServiceDataFlowMatrixCell[];
+}
+
+interface ServiceDataFlowSummary {
+  connectedServiceCount: number;
+  matrixRows: readonly ServiceDataFlowMatrixRow[];
+}
+
 const SERVICE_SECTION_BY_NAME: Record<ServiceNames, ServiceSectionId> = {
   [ServiceNames.GarminAPI]: 'garmin',
   [ServiceNames.SuuntoApp]: 'suunto',
@@ -52,12 +90,26 @@ const SERVICE_SECTION_BY_NAME: Record<ServiceNames, ServiceSectionId> = {
   [ServiceNames.WahooAPI]: 'wahoo',
 };
 
+const SERVICE_MATRIX_PROVIDERS: readonly ServiceNames[] = [
+  ServiceNames.GarminAPI,
+  ServiceNames.SuuntoApp,
+  ServiceNames.COROSAPI,
+  ServiceNames.WahooAPI,
+];
+
 function createEmptyAutomaticSyncSummaryBySection(): Record<ServiceSectionId, ServiceAutomaticSyncSummary> {
   return {
     garmin: { activities: [], routes: [] },
     suunto: { activities: [], routes: [] },
     coros: { activities: [], routes: [] },
     wahoo: { activities: [], routes: [] },
+  };
+}
+
+function createEmptyServiceDataFlowSummary(): ServiceDataFlowSummary {
+  return {
+    connectedServiceCount: 0,
+    matrixRows: [],
   };
 }
 
@@ -115,6 +167,103 @@ function buildAutomaticSyncSummaryBySection(
   }
 
   return summaries;
+}
+
+function buildServiceDataFlowSummary(
+  user: AppUserInterface | null | undefined,
+  serviceConnectionState: Record<ServiceSectionId, boolean>,
+): ServiceDataFlowSummary {
+  const matrixRows = SERVICE_MATRIX_PROVIDERS.map((sourceServiceName) => ({
+    sourceServiceName,
+    sourceLabel: getProviderDisplayName(sourceServiceName, 'source'),
+    sourceConnected: serviceConnectionState[SERVICE_SECTION_BY_NAME[sourceServiceName]],
+    cells: SERVICE_MATRIX_PROVIDERS
+      .map((destinationServiceName) => ({
+        id: `${sourceServiceName}-to-${destinationServiceName}`,
+        destinationServiceName,
+        destinationLabel: getProviderDisplayName(destinationServiceName, 'destination'),
+        destinationConnected: serviceConnectionState[SERVICE_SECTION_BY_NAME[destinationServiceName]],
+        routes: [],
+      })),
+  }));
+  const matrixCellByRoute = new Map<string, ServiceDataFlowMatrixCell>();
+  for (const row of matrixRows) {
+    for (const cell of row.cells) {
+      matrixCellByRoute.set(cell.id, cell);
+    }
+  }
+
+  const addRoute = (
+    id: string,
+    kind: ServiceDataFlowMatrixRouteKind,
+    sourceServiceName: ServiceNames,
+    destinationServiceName: ServiceNames,
+    enabled: boolean,
+  ): void => {
+    const cell = matrixCellByRoute.get(`${sourceServiceName}-to-${destinationServiceName}`);
+    if (!cell) {
+      return;
+    }
+
+    const sourceSection = SERVICE_SECTION_BY_NAME[sourceServiceName];
+    const destinationSection = SERVICE_SECTION_BY_NAME[destinationServiceName];
+    const sourceConnected = serviceConnectionState[sourceSection];
+    const destinationConnected = serviceConnectionState[destinationSection];
+    cell.routes.push({
+      id: `${kind}-${id}`,
+      kind,
+      state: !enabled
+        ? 'available'
+        : sourceConnected && destinationConnected
+          ? 'active'
+          : 'attention',
+      sourceSection,
+      tool: kind === 'route'
+        ? 'routes'
+        : sourceSection === 'suunto'
+          ? 'activity-sync'
+          : 'auto-sync',
+      title: `${kind === 'activity' ? 'Send activities' : 'Send routes'} to ${getProviderDisplayName(destinationServiceName, 'destination')}`,
+      activitySyncDestination: kind === 'activity'
+        && (sourceSection === 'garmin' || sourceSection === 'coros')
+        && (destinationSection === 'suunto' || destinationSection === 'wahoo')
+        ? destinationSection
+        : undefined,
+    });
+  };
+
+  const activitySettings = user?.settings?.serviceSyncSettings?.activitySyncRoutes || {};
+  for (const route of Object.values(ACTIVITY_SYNC_ROUTES)) {
+    if (!isActivitySyncRouteUIDAllowlisted(route.id, `${user?.uid || ''}`)) {
+      continue;
+    }
+    addRoute(
+      route.id,
+      'activity',
+      route.sourceServiceName,
+      route.destinationServiceName,
+      activitySettings[route.id]?.enabled === true,
+    );
+  }
+
+  const routeSettings = user?.settings?.serviceSyncSettings?.routeDeliverySyncRoutes || {};
+  for (const route of Object.values(ROUTE_DELIVERY_SYNC_ROUTES)) {
+    if (!isRouteDeliverySyncRouteUIDAllowlisted(route.id, `${user?.uid || ''}`)) {
+      continue;
+    }
+    addRoute(
+      route.id,
+      'route',
+      route.sourceServiceName,
+      route.destinationServiceName,
+      routeSettings[route.id]?.enabled === true,
+    );
+  }
+
+  return {
+    connectedServiceCount: Object.values(serviceConnectionState).filter((connected) => connected).length,
+    matrixRows,
+  };
 }
 
 @Component({
@@ -288,6 +437,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public managedService: ServiceSectionId | null = null;
   public managedTool: ServiceToolId = 'history';
   public managedToolTitle: string | null = null;
+  public managedActivitySyncDestination: ServiceDataFlowActivityDestination | null = null;
   public readonly serviceConnectionState: Record<ServiceSectionId, boolean> = {
     garmin: false,
     suunto: false,
@@ -295,6 +445,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
     wahoo: false,
   };
   public automaticSyncSummaryBySection = createEmptyAutomaticSyncSummaryBySection();
+  public dataFlowSummary = createEmptyServiceDataFlowSummary();
+  public isDataFlowExpanded = false;
 
 
   private userSubscription!: Subscription;
@@ -352,6 +504,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       } else if (user) {
         this.user = user;
         this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
+        this.refreshDataFlowSummary();
       }
     }));
 
@@ -371,16 +524,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  public openServiceTools(section: ServiceSectionId, card: ServiceOverviewCard): void {
+  public openServiceTools(section: ServiceSectionId, toolLaunch: ServiceToolLaunch): void {
     if (!this.serviceToolsDialog || this.serviceToolsDialogRef) {
       return;
     }
 
     this.managedService = section;
-    this.managedTool = card.tool;
-    this.managedToolTitle = card.title;
+    this.managedTool = toolLaunch.tool;
+    this.managedToolTitle = toolLaunch.title;
+    this.managedActivitySyncDestination = toolLaunch.activitySyncDestination ?? null;
     const dialogRef = this.dialog.open(this.serviceToolsDialog, {
-      ariaLabel: `${this.serviceLabelBySection[section]} ${card.title} tools`,
+      ariaLabel: `${this.serviceLabelBySection[section]} ${toolLaunch.title} tools`,
       autoFocus: 'dialog',
       maxHeight: 'calc(100dvh - 32px)',
       maxWidth: 'calc(100vw - 32px)',
@@ -396,16 +550,19 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.managedService = null;
       this.managedTool = 'history';
       this.managedToolTitle = null;
+      this.managedActivitySyncDestination = null;
     });
   }
 
   public setServiceConnectionState(section: ServiceSectionId, connected: boolean): void {
     this.serviceConnectionState[section] = connected;
+    this.refreshDataFlowSummary();
   }
 
   processUser(user: AppUserInterface | null, isPro: boolean) {
     if (!user) {
       this.automaticSyncSummaryBySection = createEmptyAutomaticSyncSummaryBySection();
+      this.dataFlowSummary = createEmptyServiceDataFlowSummary();
       this.isLoading = false;
       this.snackBar.open('You must login if you want to use the service features', 'OK', {
         duration: undefined,
@@ -414,6 +571,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     }
     this.user = user;
     this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
+    this.refreshDataFlowSummary();
 
     this.hasProAccess = isPro;
 
@@ -446,6 +604,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
       return 'wahoo';
     }
     return 'garmin';
+  }
+
+  private refreshDataFlowSummary(): void {
+    this.dataFlowSummary = buildServiceDataFlowSummary(this.user, this.serviceConnectionState);
   }
 
 }
