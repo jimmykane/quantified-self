@@ -194,32 +194,22 @@
           }
         </mat-button-toggle-group>
 
-        <nav
-          mat-tab-nav-bar
-          [tabPanel]="providerPanel"
-          mat-stretch-tabs="true"
+        <mat-button-toggle-group
           class="provider-selector provider-selector--mobile"
-          aria-label="Service providers">
+          [value]="activeSection"
+          hideSingleSelectionIndicator
+          aria-label="Service providers"
+          (change)="selectService($event.value)">
           @for (section of serviceSectionOptions; track section.id) {
-          <a
-            href=""
-            mat-tab-link
-            [active]="activeSection === section.id"
-            (click)="$event.preventDefault(); selectService(section.id)">
-            <span class="provider-selector__mobile-option">
-              <app-service-source-icon
-                [sourceServiceName]="section.serviceName"
-                [iconWidth]="36"
-                [iconHeight]="18"
-                [showTooltip]="false">
-              </app-service-source-icon>
-              <span>{{ section.label }}</span>
-            </span>
-          </a>
+          <mat-button-toggle
+            [value]="section.id"
+            [attr.aria-label]="section.label">
+            <span class="provider-selector__mobile-option">{{ section.label }}</span>
+          </mat-button-toggle>
           }
-        </nav>
+        </mat-button-toggle-group>
 
-        <mat-tab-nav-panel #providerPanel class="services-workspace-main">
+        <section class="services-workspace-main">
           <section
             class="service-detail"
             [hidden]="activeSection !== 'garmin'"
@@ -291,7 +281,7 @@
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
             </ng-container>
           </section>
-        </mat-tab-nav-panel>
+        </section>
 
         <ng-template #automaticSyncSummary let-section>
           <mat-card appearance="outlined" class="service-sync-summary qs-card-plain" [attr.aria-label]="serviceLabelBySection[section] + ' automatic sync'">

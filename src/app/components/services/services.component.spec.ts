@@ -191,17 +191,16 @@ describe('ServicesComponent', () => {
         expect((component as any).getSectionFromServiceName(ServiceNames.SuuntoApp)).toBe('suunto');
     });
 
-    it('renders the mobile provider selector as Material tab navigation', () => {
+    it('renders the mobile provider selector as a compact Material toggle group', () => {
         fixture.detectChanges();
 
-        const tabNav = fixture.nativeElement.querySelector('.provider-selector--mobile');
-        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
-            .map((link: Element) => link.textContent?.trim());
+        const providerSelector = fixture.nativeElement.querySelector('.provider-selector--mobile');
+        const providerLabels = Array.from(providerSelector.querySelectorAll('mat-button-toggle'))
+            .map((toggle: Element) => toggle.textContent?.trim());
 
-        expect(tabNav).toBeTruthy();
-        expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
-        const mobileProviderIcons = tabNav.querySelectorAll('app-service-source-icon');
-        expect(mobileProviderIcons).toHaveLength(4);
+        expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        expect(providerSelector.querySelectorAll('app-service-source-icon')).toHaveLength(0);
         expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
     });
 

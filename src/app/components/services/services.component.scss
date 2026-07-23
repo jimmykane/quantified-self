@@ -589,6 +589,11 @@
         margin-bottom: 16px;
     }
 
+    .provider-selector--mobile mat-button-toggle {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
     .provider-selector__mobile-option {
         gap: 4px;
         font-size: 0.82rem;
