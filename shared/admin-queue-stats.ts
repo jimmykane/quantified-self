@@ -112,6 +112,8 @@ export interface ReparseQueueStats<
     TFailure,
     TJobs extends ReparseJobsStats = ReparseJobsStats
 > {
+    /** Whether the automatic scanner may discover and enqueue new work; distinct from Cloud Tasks queue state. */
+    automaticScanEnabled?: boolean;
     queuePending: number;
     targetSportsLibVersion: string;
     jobs: TJobs;

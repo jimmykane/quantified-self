@@ -1324,6 +1324,13 @@ Derived metrics also require the Cloud Tasks emulator configuration used by this
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.
 
+### Sports-lib reparse observability
+
+Admin reparse status reports automatic scanning separately from Cloud Tasks queue state. `automaticScanEnabled` controls
+whether the scheduled event or route scanner can discover and enqueue new candidates; a Cloud Tasks queue reports whether
+already queued work can dispatch. A `RUNNING` Cloud Tasks queue does not enable automatic reparse, and a disabled scanner
+does not pause Cloud Tasks. Keep these labels distinct in operational UI and diagnostics.
+
 When Training appears stuck on Preparing:
 
 1. Check the browser snapshot status and console.

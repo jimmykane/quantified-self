@@ -3,10 +3,7 @@ import { createHash } from 'node:crypto';
 import semver from 'semver';
 
 import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '../../../shared/app-route.interface';
-import {
-    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
-    SPORTS_LIB_REPARSE_TARGET_VERSION,
-} from './sports-lib-reparse.config';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
 import {
     assertSportsLibRuntimeVersionMatchesTarget,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
@@ -20,12 +17,7 @@ import {
 
 export const SPORTS_LIB_ROUTE_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibRouteReparse';
 export const SPORTS_LIB_ROUTE_REPARSE_JOBS_COLLECTION = 'sportsLibRouteReparseJobs';
-export const SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS = {
-    enabled: false,
-    scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
-    enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
-    uidAllowlist: [] as string[],
-} as const;
+export { SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS } from './sports-lib-reparse.config';
 
 export type SportsLibRouteReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 

@@ -24,3 +24,10 @@ export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
     enqueueLimit: 1200,
     uidAllowlist: [],
 } as const;
+
+export const SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS = {
+    enabled: false,
+    scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
+    enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
+    uidAllowlist: [],
+} as const;

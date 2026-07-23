@@ -152,6 +152,7 @@ describe('AdminDashboardComponent', () => {
             advanced: { throughput: 5, maxLagMs: 5_000, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] },
         },
         reparse: {
+            automaticScanEnabled: false,
             queuePending: 5,
             targetSportsLibVersion: '9.1.5',
             jobs: { total: 20, pending: 5, processing: 2, completed: 12, failed: 1 },
@@ -167,6 +168,7 @@ describe('AdminDashboardComponent', () => {
             recentFailures: [],
         },
         routeReparse: {
+            automaticScanEnabled: false,
             queuePending: 0,
             targetSportsLibVersion: '9.1.5',
             jobs: { total: 10, pending: 0, processing: 0, completed: 8, skipped: 2, failed: 0 },
@@ -263,6 +265,7 @@ describe('AdminDashboardComponent', () => {
         expect(text).toContain('Scheduled Cancels');
         expect(text).toContain('Workout');
         expect(text).toContain('Event Reparse');
+        expect(text).toContain('Automatic scan: disabled');
         expect(text).toContain('Derived Metrics');
         expect(text).toContain('Beta');
         expect(text).toContain('Deploying');

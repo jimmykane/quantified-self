@@ -321,6 +321,7 @@ describe('getQueueStats Cloud Function', () => {
             },
         });
         expect(result.routeReparse).toEqual(expect.objectContaining({
+            automaticScanEnabled: false,
             queuePending: 1,
             targetSportsLibVersion: expect.any(String),
             jobs: expect.objectContaining({
@@ -370,6 +371,7 @@ describe('getQueueStats Cloud Function', () => {
             },
         });
         expect(result.reparse).toEqual(expect.objectContaining({
+            automaticScanEnabled: false,
             queuePending: 10,
             targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
             jobs: {

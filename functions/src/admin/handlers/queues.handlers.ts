@@ -13,6 +13,8 @@ import { config } from '../../config';
 import {
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
+    SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
 } from '../../reparse/sports-lib-reparse.config';
 import {
@@ -1065,6 +1067,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 },
             },
             reparse: {
+                automaticScanEnabled: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled,
                 queuePending: reparseCloudTaskDepth,
                 targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
                 jobs: {
@@ -1095,6 +1098,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                 recentFailures: recentReparseFailures,
             },
             routeReparse: {
+                automaticScanEnabled: SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS.enabled,
                 queuePending: sportsLibRouteReparseCloudTaskStats.pending,
                 targetSportsLibVersion: `${routeCheckpointData?.targetSportsLibVersion || SPORTS_LIB_REPARSE_TARGET_VERSION}`,
                 jobs: {
