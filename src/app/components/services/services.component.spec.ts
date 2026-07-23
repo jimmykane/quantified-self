@@ -333,6 +333,13 @@ describe('ServicesComponent', () => {
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
     });
 
+    it('does not repeat the Pro plan in provider feature details', () => {
+        const featureDetails = Object.values(component.serviceOverviewCardsBySection)
+            .flatMap(cards => cards.map(card => card.detail));
+
+        expect(featureDetails).not.toContain(expect.stringMatching(/\bpro\b/i));
+    });
+
     it('summarizes enabled activity and route delivery for every affected provider', () => {
         component.processUser({
             uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',

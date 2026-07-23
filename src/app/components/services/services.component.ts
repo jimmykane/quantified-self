@@ -165,7 +165,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Activity sync',
         description: 'New Garmin activities import automatically while connected. Backfill earlier activities from History import.',
-        detail: 'Automatic sync and activity backfill · Pro',
+        detail: 'Automatic sync and activity backfill',
         icon: 'sync',
         actionLabel: 'Backfill activities',
         tool: 'history',
@@ -181,7 +181,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send route files to Garmin',
         description: 'Send a GPX or FIT route file directly to Garmin Connect as a course without adding it to your Quantified Self route library.',
-        detail: 'Direct GPX and FIT route delivery · Pro',
+        detail: 'Direct GPX and FIT route delivery',
         icon: 'route',
         actionLabel: 'Send route file',
         tool: 'uploads',
@@ -199,7 +199,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Activity sync',
         description: 'New Suunto activities import automatically while connected. Backfill earlier activities from History import.',
-        detail: 'Automatic sync and activity backfill · Pro',
+        detail: 'Automatic sync and activity backfill',
         icon: 'sync',
         actionLabel: 'Backfill activities',
         tool: 'history',
@@ -241,7 +241,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Activity sync',
         description: 'New COROS activities import automatically while connected.',
-        detail: 'History import · Pro',
+        detail: 'History import',
         icon: 'sync',
         actionLabel: 'History import',
         tool: 'history',
@@ -259,7 +259,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Activity sync',
         description: 'New Wahoo activities import automatically while connected.',
-        detail: 'History import · Pro',
+        detail: 'History import',
         icon: 'sync',
         actionLabel: 'History import',
         tool: 'history',
@@ -267,7 +267,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       {
         title: 'Send activity or route files',
         description: 'Send a FIT activity or GPX/FIT course/route directly to Wahoo without adding it to your Quantified Self archive.',
-        detail: 'Direct file delivery · Pro',
+        detail: 'Direct file delivery',
         icon: 'cloud_upload',
         actionLabel: 'Send files',
         tool: 'uploads',
