@@ -14,7 +14,11 @@ import {
 import { updateQueueItemIfUserActive, QueueItemUserGuardedUpdateResult } from '../queue/dispatch-marker';
 import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { QueueResult } from '../queue-utils';
-import { SERVICE_NAME, WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from './constants';
+import {
+  SERVICE_NAME,
+  WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
+  WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+} from './constants';
 
 export type WahooQueueDispatchMode = 'immediate' | 'deferred';
 export type WahooQueueClaimResult = 'claimed' | 'superseded' | 'busy';
@@ -255,10 +259,23 @@ export async function isClaimedWahooWorkoutQueueRevisionCurrent(
   processingOwner: string,
 ): Promise<boolean> {
   if (!queueItem.ref) return false;
-  const snapshot = await queueItem.ref.get();
-  if (!snapshot.exists) return false;
-  const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
-  return hasSameRevision(current, queueItem) && current.processingOwner === processingOwner;
+  const db = admin.firestore();
+  const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(queueItem.wahooUserID);
+  return db.runTransaction(async (transaction) => {
+    // Read the queue lease and identity mapping from the same snapshot. This
+    // prevents a transfer from being interleaved between the two final checks
+    // immediately before persisting an activity.
+    const [snapshot, mappingSnapshot] = await Promise.all([
+      transaction.get(queueItem.ref!),
+      transaction.get(mappingRef),
+    ]);
+    if (!snapshot.exists || !mappingSnapshot.exists) return false;
+    const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
+    const currentOwner = `${mappingSnapshot.data()?.firebaseUserID || ''}`.trim();
+    return hasSameRevision(current, queueItem)
+      && current.processingOwner === processingOwner
+      && currentOwner === `${queueItem.firebaseUserID || ''}`.trim();
+  });
 }
 
 export async function completeWahooWorkoutQueueRevision(

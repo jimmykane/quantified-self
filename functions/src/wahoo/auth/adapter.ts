@@ -22,10 +22,14 @@ import {
 import { WahooAPIAuth } from './auth';
 import { deauthorizeWahooUser, getWahooUserID } from './api';
 
-function getNextOwnershipVersion(value: unknown): number {
-  const currentVersion = typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+function getOwnershipVersion(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
     ? value
     : 0;
+}
+
+function getNextOwnershipVersion(value: unknown): number {
+  const currentVersion = getOwnershipVersion(value);
   return currentVersion < Number.MAX_SAFE_INTEGER ? currentVersion + 1 : 1;
 }
 
@@ -94,7 +98,12 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
       const snapshot = await transaction.get(mappingRef);
       const existingMapping = snapshot.exists ? snapshot.data() : undefined;
       const existingOwner = `${existingMapping?.firebaseUserID || ''}`;
-      const ownershipVersion = getNextOwnershipVersion(existingMapping?.ownershipVersion);
+      // This is a generation of the mapping's *owner*, not of each OAuth
+      // callback. A same-owner reconnect must leave an in-flight transfer's
+      // cleanup guard valid, while a later transfer must invalidate it.
+      const ownershipVersion = existingOwner === userId
+        ? getOwnershipVersion(existingMapping?.ownershipVersion)
+        : getNextOwnershipVersion(existingMapping?.ownershipVersion);
       transaction.set(mappingRef, {
         firebaseUserID: userId,
         wahooUserID: externalUserId,

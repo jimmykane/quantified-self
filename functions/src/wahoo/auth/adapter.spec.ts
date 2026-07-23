@@ -137,6 +137,34 @@ describe('WahooAuthAdapter', () => {
     await expect(guard(transaction)).resolves.toBe(true);
   });
 
+  it('keeps a transfer cleanup guard valid when the new owner reconnects', async () => {
+    firestoreMocks.transactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ firebaseUserID: 'previous-user', ownershipVersion: 4 }),
+    });
+    const persistedIdentity = await adapter.onTokenPersisted('current-user', '60462');
+    const guard = persistedIdentity.previousOwnerTokenCleanupGuard;
+    if (!guard) throw new Error('Expected duplicate cleanup guard.');
+
+    firestoreMocks.transactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ firebaseUserID: 'current-user', ownershipVersion: 5 }),
+    });
+    await expect(adapter.onTokenPersisted('current-user', '60462')).resolves.toEqual({});
+    expect(firestoreMocks.transactionSet).toHaveBeenLastCalledWith(firestoreMocks.mappingRef, expect.objectContaining({
+      firebaseUserID: 'current-user',
+      ownershipVersion: 5,
+    }));
+
+    const transaction = {
+      get: vi.fn().mockResolvedValue({
+        exists: true,
+        data: () => ({ firebaseUserID: 'current-user', ownershipVersion: 5 }),
+      }),
+    } as any;
+    await expect(guard(transaction)).resolves.toBe(true);
+  });
+
   it('does not create or transfer a webhook mapping after account deletion begins', async () => {
     deletionGuardMocks.getStateInTransaction.mockResolvedValue({
       userExists: true,

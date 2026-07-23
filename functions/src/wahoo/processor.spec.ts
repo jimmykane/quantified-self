@@ -167,6 +167,15 @@ describe('processWahooWorkoutQueueItem', () => {
     });
   });
 
+  it('does not write if Wahoo ownership transfers after the FIT file was parsed', async () => {
+    mocks.isCurrentRevision.mockResolvedValue(false);
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.setEvent).not.toHaveBeenCalled();
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
+  });
+
   it('skips work if the server-side Wahoo credential is no longer present', async () => {
     mocks.tokenGet.mockResolvedValue({ exists: false });
 

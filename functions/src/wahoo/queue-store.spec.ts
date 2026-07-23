@@ -7,16 +7,16 @@ const mocks = vi.hoisted(() => {
   const transactionSet = vi.fn();
   const transactionUpdate = vi.fn();
   const transactionDelete = vi.fn();
-  const refGet = vi.fn();
-  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', get: refGet };
+  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1' };
+  const mappingRef = { id: 'wahoo-1', path: 'wahooAPIUserMappings/wahoo-1' };
   const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
   return {
     transactionGet,
     transactionSet,
     transactionUpdate,
     transactionDelete,
-    refGet,
     ref,
+    mappingRef,
     failedRef,
     recursiveDelete: vi.fn().mockResolvedValue(undefined),
     runTransaction: vi.fn(async (runner: any) => runner({
@@ -35,7 +35,11 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('firebase-admin', () => ({
   firestore: Object.assign(() => ({
-    collection: (name: string) => ({ doc: () => name === 'failed_jobs' ? mocks.failedRef : mocks.ref }),
+    collection: (name: string) => ({ doc: () => {
+      if (name === 'failed_jobs') return mocks.failedRef;
+      if (name === 'wahooAPIUserMappings') return mocks.mappingRef;
+      return mocks.ref;
+    } }),
     runTransaction: mocks.runTransaction,
     recursiveDelete: mocks.recursiveDelete,
   }), {
@@ -68,6 +72,7 @@ import {
   claimWahooWorkoutQueueRevision,
   completeWahooWorkoutQueueRevision,
   failWahooWorkoutQueueRevision,
+  isClaimedWahooWorkoutQueueRevisionCurrent,
   upsertWahooWorkoutQueueItem,
 } from './queue-store';
 
@@ -237,6 +242,48 @@ describe('upsertWahooWorkoutQueueItem', () => {
     await expect(claimWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-2'))
       .resolves.toBe('busy');
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a claimed revision as current after Wahoo ownership transfers', async () => {
+    mocks.transactionGet.mockImplementation((ref: unknown) => {
+      if (ref === mocks.ref) {
+        return Promise.resolve({
+          exists: true,
+          data: () => ({ ...input, processingOwner: 'worker-1' }),
+        });
+      }
+      return Promise.resolve({
+        exists: true,
+        data: () => ({ firebaseUserID: 'new-firebase-owner' }),
+      });
+    });
+
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+      { ...input, ref: mocks.ref } as any,
+      'worker-1',
+    )).resolves.toBe(false);
+    expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.ref);
+    expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.mappingRef);
+  });
+
+  it('keeps a claimed revision current while its Wahoo mapping has the same owner', async () => {
+    mocks.transactionGet.mockImplementation((ref: unknown) => {
+      if (ref === mocks.ref) {
+        return Promise.resolve({
+          exists: true,
+          data: () => ({ ...input, processingOwner: 'worker-1' }),
+        });
+      }
+      return Promise.resolve({
+        exists: true,
+        data: () => ({ firebaseUserID: input.firebaseUserID }),
+      });
+    });
+
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+      { ...input, ref: mocks.ref } as any,
+      'worker-1',
+    )).resolves.toBe(true);
   });
 
   it('lets the latest revision claim immediately after replacing an older worker lease', async () => {
