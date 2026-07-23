@@ -458,6 +458,24 @@ describe('EventWriter', () => {
             expect(mockLogger.error).not.toHaveBeenCalled();
         });
 
+        it('should rethrow transaction-authorization write aborts without wrapping them', async () => {
+            const authorizationSkipError = Object.assign(new Error('ownership changed'), {
+                name: 'EventWriteSkippedByTransactionGuardError',
+            });
+            const failingAdapter: FirestoreAdapter = {
+                setDoc: vi.fn().mockRejectedValue(authorizationSkipError),
+                createBlob: vi.fn((data) => data),
+                generateID: vi.fn().mockReturnValue('generated-id'),
+            };
+
+            const writerWithFailingAdapter = new EventWriter(failingAdapter, undefined, undefined, mockLogger);
+
+            await expect(writerWithFailingAdapter.writeAllEventData('user-1', eventMock))
+                .rejects.toBe(authorizationSkipError);
+
+            expect(mockLogger.error).not.toHaveBeenCalled();
+        });
+
         it('should warn with document path and undefined fields when Firestore rejects undefined values', async () => {
             const firestoreUndefinedError = new Error(
                 'Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value.'

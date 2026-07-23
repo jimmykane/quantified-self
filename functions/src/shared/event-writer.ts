@@ -100,6 +100,7 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
 
 function isControlFlowWriteAbort(error: Error): boolean {
     return error.name === 'EventWriteSkippedForDeletedUserError'
+        || error.name === 'EventWriteSkippedByTransactionGuardError'
         || error.name === 'UserDeletionGuardReadError';
 }
 

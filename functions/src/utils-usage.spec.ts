@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
-import { HttpsError } from 'firebase-functions/v2/https';
+import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedByTransactionGuardError, EventWriteSkippedForDeletedUserError } from './utils';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
@@ -264,6 +263,45 @@ describe('utils higher-level helpers', () => {
                 .rejects.toBeInstanceOf(EventWriteSkippedForDeletedUserError);
 
             expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        });
+
+        it('does not set event documents when their transaction authorization guard is rejected', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            const transactionGuard = vi.fn().mockResolvedValue(false);
+
+            await expect(setEventDocumentIfUserActive(
+                'user-1',
+                'wahoo_event_write',
+                docRef as any,
+                { ready: true },
+                undefined,
+                undefined,
+                transactionGuard,
+            )).rejects.toBeInstanceOf(EventWriteSkippedByTransactionGuardError);
+
+            expect(transactionGuard).toHaveBeenCalledWith(expect.objectContaining({
+                get: expect.any(Function),
+                set: expect.any(Function),
+            }));
+            expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        });
+
+        it('sets event documents when their transaction authorization guard remains current', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            const transactionGuard = vi.fn().mockResolvedValue(true);
+
+            await setEventDocumentIfUserActive(
+                'user-1',
+                'wahoo_event_write',
+                docRef as any,
+                { ready: true },
+                undefined,
+                undefined,
+                transactionGuard,
+            );
+
+            expect(transactionGuard).toHaveBeenCalledTimes(1);
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef, { ready: true });
         });
 
         it('can preserve existing event tags inside the guarded write transaction', async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
@@ -71,8 +72,9 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 import {
   claimWahooWorkoutQueueRevision,
   completeWahooWorkoutQueueRevision,
+  createWahooEventWriteOwnershipGuard,
   failWahooWorkoutQueueRevision,
-  isClaimedWahooWorkoutQueueRevisionCurrent,
+  getClaimedWahooWorkoutQueueRevisionEventWriteFence,
   upsertWahooWorkoutQueueItem,
 } from './queue-store';
 
@@ -244,7 +246,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
   });
 
-  it('does not treat a claimed revision as current after Wahoo ownership transfers', async () => {
+  it('does not create an event-write fence after Wahoo ownership transfers', async () => {
     mocks.transactionGet.mockImplementation((ref: unknown) => {
       if (ref === mocks.ref) {
         return Promise.resolve({
@@ -258,15 +260,15 @@ describe('upsertWahooWorkoutQueueItem', () => {
       });
     });
 
-    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+    await expect(getClaimedWahooWorkoutQueueRevisionEventWriteFence(
       { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
       'worker-1',
-    )).resolves.toBe(false);
+    )).resolves.toBeNull();
     expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.ref);
     expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.mappingRef);
   });
 
-  it('keeps a claimed revision current while its Wahoo mapping has the same owner', async () => {
+  it('captures the Wahoo ownership version for a claimed current revision', async () => {
     mocks.transactionGet.mockImplementation((ref: unknown) => {
       if (ref === mocks.ref) {
         return Promise.resolve({
@@ -276,14 +278,41 @@ describe('upsertWahooWorkoutQueueItem', () => {
       }
       return Promise.resolve({
         exists: true,
-        data: () => ({ firebaseUserID: input.firebaseUserID }),
+        data: () => ({ firebaseUserID: input.firebaseUserID, ownershipVersion: 7 }),
       });
     });
 
-    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+    await expect(getClaimedWahooWorkoutQueueRevisionEventWriteFence(
       { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
       'worker-1',
-    )).resolves.toBe(true);
+    )).resolves.toEqual({
+      firebaseUserID: input.firebaseUserID,
+      wahooUserID: input.wahooUserID,
+      ownershipVersion: 7,
+    });
+  });
+
+  it('rejects event writes when the captured Wahoo mapping version is superseded', async () => {
+    const guard = createWahooEventWriteOwnershipGuard({
+      firebaseUserID: input.firebaseUserID,
+      wahooUserID: input.wahooUserID,
+      ownershipVersion: 7,
+    });
+    const transaction = {
+      get: vi.fn().mockResolvedValue({
+        exists: true,
+        data: () => ({ firebaseUserID: 'new-firebase-owner', ownershipVersion: 8 }),
+      }),
+    } as unknown as admin.firestore.Transaction;
+
+    await expect(guard(transaction)).resolves.toBe(false);
+    expect(transaction.get).toHaveBeenCalledWith(mocks.mappingRef);
+
+    transaction.get.mockResolvedValue({
+      exists: true,
+      data: () => ({ firebaseUserID: input.firebaseUserID, ownershipVersion: 7 }),
+    });
+    await expect(guard(transaction)).resolves.toBe(true);
   });
 
   it('lets the latest revision claim immediately after replacing an older worker lease', async () => {

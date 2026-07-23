@@ -180,6 +180,32 @@ export class EventWriteSkippedForDeletedUserError extends Error {
   }
 }
 
+/**
+ * Optional authorization condition evaluated in the same transaction as each
+ * event or activity document write. The condition must return false rather
+ * than throwing when authorization has been superseded; operational failures
+ * should still throw so callers can retry them.
+ */
+export type EventWriteTransactionGuard = (
+  transaction: admin.firestore.Transaction,
+) => Promise<boolean>;
+
+export interface SetEventWriteOptions {
+  transactionGuard?: EventWriteTransactionGuard;
+}
+
+export class EventWriteSkippedByTransactionGuardError extends Error {
+  public readonly name = 'EventWriteSkippedByTransactionGuardError';
+  public readonly code = 'event_write_guard_rejected';
+
+  constructor(
+    public readonly userID: string,
+    public readonly phase: string,
+  ) {
+    super(`Skipping event write for user ${userID} during ${phase} because its write authorization is no longer current.`);
+  }
+}
+
 export async function assertEventWriteUserActive(userID: string, phase: string): Promise<void> {
   let deletionGuard;
   try {
@@ -206,6 +232,7 @@ export async function setEventDocumentIfUserActive(
     incomingData: admin.firestore.DocumentData,
     existingData: admin.firestore.DocumentData | null,
   ) => admin.firestore.DocumentData,
+  transactionGuard?: EventWriteTransactionGuard,
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
@@ -219,6 +246,11 @@ export async function setEventDocumentIfUserActive(
     if (deletionGuard.shouldSkip) {
       logger.warn(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
       throw new EventWriteSkippedForDeletedUserError(userID, phase);
+    }
+
+    if (transactionGuard && !(await transactionGuard(transaction))) {
+      logger.info(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because its write authorization is no longer current.`);
+      throw new EventWriteSkippedByTransactionGuardError(userID, phase);
     }
 
     const incomingData = data as admin.firestore.DocumentData;
@@ -240,8 +272,9 @@ export async function setEventDocumentIfUserActive(
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData | WahooAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<SetEventResult> {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData | WahooAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, writeOptions: SetEventWriteOptions = {}): Promise<SetEventResult> {
   await assertEventWriteUserActive(userID, 'event_write_start');
+  const transactionGuard = writeOptions.transactionGuard;
 
   // Enforce Usage Limit
   await checkEventUsageLimit(userID, usageCache, pendingWrites);
@@ -290,6 +323,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         data,
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
+        transactionGuard,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -339,7 +373,15 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     .collection('metaData')
     .doc('processing');
 
-  await setEventDocumentIfUserActive(userID, 'event_processing_metadata', processingMetaRef, processingMetaData);
+  await setEventDocumentIfUserActive(
+    userID,
+    'event_processing_metadata',
+    processingMetaRef,
+    processingMetaData,
+    undefined,
+    undefined,
+    transactionGuard,
+  );
 
   // Write Metadata (not handled by EventWriter)
   const metaRef = admin.firestore()
@@ -350,7 +392,15 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     .collection('metaData')
     .doc(metaData.serviceName);
 
-  await setEventDocumentIfUserActive(userID, `event_service_metadata:${metaData.serviceName}`, metaRef, metaData.toJSON());
+  await setEventDocumentIfUserActive(
+    userID,
+    `event_service_metadata:${metaData.serviceName}`,
+    metaRef,
+    metaData.toJSON(),
+    undefined,
+    undefined,
+    transactionGuard,
+  );
 
   return {
     eventID: <string>event.getID(),

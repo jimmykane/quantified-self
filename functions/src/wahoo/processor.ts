@@ -12,7 +12,11 @@ import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
-import { hasProAccess, setEvent } from '../utils';
+import {
+  EventWriteSkippedByTransactionGuardError,
+  hasProAccess,
+  setEvent,
+} from '../utils';
 import { enqueueActivitySyncAfterEventPersistence } from '../activity-sync/enqueue-after-event-persistence';
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
@@ -21,8 +25,9 @@ import { getWahooErrorLogDetails, getWahooRetryError } from './error-details';
 import {
   claimWahooWorkoutQueueRevision,
   completeWahooWorkoutQueueRevision,
+  createWahooEventWriteOwnershipGuard,
   failWahooWorkoutQueueRevision,
-  isClaimedWahooWorkoutQueueRevisionCurrent,
+  getClaimedWahooWorkoutQueueRevisionEventWriteFence,
   type WahooQueueClaimResult,
 } from './queue-store';
 
@@ -80,7 +85,11 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'user_deleted_or_deleting',
       });
     }
-    if (!(await isClaimedWahooWorkoutQueueRevisionCurrent(queueItem, processingOwner))) {
+    const eventWriteOwnershipFence = await getClaimedWahooWorkoutQueueRevisionEventWriteFence(
+      queueItem,
+      processingOwner,
+    );
+    if (!eventWriteOwnershipFence) {
       return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
     }
     const eventID = await resolveProviderImportEventID({
@@ -109,6 +118,10 @@ export async function processWahooWorkoutQueueItem(
       event,
       metadata,
       { data: fitFile, extension: 'fit', startDate: event.startDate },
+      undefined,
+      undefined,
+      undefined,
+      { transactionGuard: createWahooEventWriteOwnershipGuard(eventWriteOwnershipFence) },
     );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,
@@ -125,6 +138,16 @@ export async function processWahooWorkoutQueueItem(
     }
     return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
   } catch (error) {
+    if (error instanceof EventWriteSkippedByTransactionGuardError) {
+      logger.info('Skipped Wahoo activity persistence because ownership changed during processing', {
+        queueItemId: queueItem.id,
+        wahooUserID: queueItem.wahooUserID,
+      });
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
+        resultStatus: 'skipped',
+        skippedReason: 'wahoo_ownership_changed',
+      });
+    }
     logger.error('Wahoo activity processing failed', {
       queueItemId: queueItem.id,
       error: getWahooErrorLogDetails(error),

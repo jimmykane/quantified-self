@@ -14,6 +14,7 @@ import {
 import { updateQueueItemIfUserActive, QueueItemUserGuardedUpdateResult } from '../queue/dispatch-marker';
 import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { QueueResult } from '../queue-utils';
+import type { EventWriteTransactionGuard } from '../utils';
 import {
   SERVICE_NAME,
   WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
@@ -23,11 +24,23 @@ import {
 export type WahooQueueDispatchMode = 'immediate' | 'deferred';
 export type WahooQueueClaimResult = 'claimed' | 'superseded' | 'busy';
 
+export interface WahooEventWriteOwnershipFence {
+  firebaseUserID: string;
+  wahooUserID: string;
+  ownershipVersion: number;
+}
+
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
 
 function revisionTime(value: unknown): number {
   const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function ownershipVersion(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : 0;
 }
 
 function hasSameRevision(
@@ -254,28 +267,54 @@ export async function claimWahooWorkoutQueueRevision(
   });
 }
 
-export async function isClaimedWahooWorkoutQueueRevisionCurrent(
+export async function getClaimedWahooWorkoutQueueRevisionEventWriteFence(
   queueItem: WahooAPIWorkoutQueueItemInterface,
   processingOwner: string,
-): Promise<boolean> {
-  if (!queueItem.ref) return false;
+): Promise<WahooEventWriteOwnershipFence | null> {
+  if (!queueItem.ref) return null;
   const db = admin.firestore();
   const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(queueItem.wahooUserID);
   return db.runTransaction(async (transaction) => {
-    // Read the queue lease and identity mapping from the same snapshot. This
-    // prevents a transfer from being interleaved between the two final checks
-    // immediately before persisting an activity.
     const [snapshot, mappingSnapshot] = await Promise.all([
       transaction.get(queueItem.ref!),
       transaction.get(mappingRef),
     ]);
-    if (!snapshot.exists || !mappingSnapshot.exists) return false;
+    if (!snapshot.exists || !mappingSnapshot.exists) return null;
     const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
     const currentOwner = `${mappingSnapshot.data()?.firebaseUserID || ''}`.trim();
-    return hasSameRevision(current, queueItem)
-      && current.processingOwner === processingOwner
-      && currentOwner === `${queueItem.firebaseUserID || ''}`.trim();
+    const firebaseUserID = `${queueItem.firebaseUserID || ''}`.trim();
+    if (!hasSameRevision(current, queueItem)
+      || current.processingOwner !== processingOwner
+      || currentOwner !== firebaseUserID) {
+      return null;
+    }
+    return {
+      firebaseUserID,
+      wahooUserID: queueItem.wahooUserID,
+      ownershipVersion: ownershipVersion(mappingSnapshot.data()?.ownershipVersion),
+    };
   });
+}
+
+/**
+ * Every event/activity document write reads this same mapping in its own
+ * write transaction. A concurrent OAuth ownership transfer writes the mapping
+ * and therefore conflicts with that transaction rather than racing after a
+ * read-only precheck.
+ */
+export function createWahooEventWriteOwnershipGuard(
+  fence: WahooEventWriteOwnershipFence,
+): EventWriteTransactionGuard {
+  const mappingRef = admin.firestore()
+    .collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME)
+    .doc(fence.wahooUserID);
+  return async (transaction) => {
+    const mappingSnapshot = await transaction.get(mappingRef);
+    if (!mappingSnapshot.exists) return false;
+    const currentMapping = mappingSnapshot.data();
+    return `${currentMapping?.firebaseUserID || ''}`.trim() === fence.firebaseUserID
+      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion;
+  };
 }
 
 export async function completeWahooWorkoutQueueRevision(

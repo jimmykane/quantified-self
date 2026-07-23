@@ -2,7 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 
-const mocks = vi.hoisted(() => ({
+const mocks = vi.hoisted(() => {
+  class EventWriteSkippedByTransactionGuardError extends Error {
+    readonly name = 'EventWriteSkippedByTransactionGuardError';
+  }
+  const eventWriteFence = {
+    firebaseUserID: 'firebase-1',
+    wahooUserID: 'wahoo-1',
+    ownershipVersion: 1,
+  };
+  const eventWriteGuard = vi.fn();
+  return {
   tokenGet: vi.fn(),
   parseFIT: vi.fn(),
   downloadFIT: vi.fn(),
@@ -16,11 +26,16 @@ const mocks = vi.hoisted(() => ({
   retry: vi.fn().mockResolvedValue('retry'),
   processed: vi.fn().mockResolvedValue('processed'),
   claimRevision: vi.fn().mockResolvedValue('claimed'),
-  isCurrentRevision: vi.fn().mockResolvedValue(true),
+  getEventWriteFence: vi.fn().mockResolvedValue(eventWriteFence),
+  createEventWriteGuard: vi.fn().mockReturnValue(eventWriteGuard),
+  eventWriteFence,
+  eventWriteGuard,
+  EventWriteSkippedByTransactionGuardError,
   completeRevision: vi.fn().mockResolvedValue('processed'),
   failRevision: vi.fn().mockResolvedValue('retry'),
   enqueueActivitySyncAfterEventPersistence: vi.fn(),
-}));
+  };
+});
 
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
@@ -43,7 +58,11 @@ vi.mock('./file-download', () => ({ downloadWahooFITFile: mocks.downloadFIT }));
 vi.mock('../queue/user-deletion-skip', () => ({ shouldSkipQueueWorkForDeletedUser: mocks.deletionSkip }));
 vi.mock('../service-disconnect-pending', () => ({ isServiceDisconnectPendingForUser: mocks.disconnectPending }));
 vi.mock('../queue/provider-event-id', () => ({ resolveProviderImportEventID: mocks.resolveEventID }));
-vi.mock('../utils', () => ({ hasProAccess: mocks.hasProAccess, setEvent: mocks.setEvent }));
+vi.mock('../utils', () => ({
+  EventWriteSkippedByTransactionGuardError: mocks.EventWriteSkippedByTransactionGuardError,
+  hasProAccess: mocks.hasProAccess,
+  setEvent: mocks.setEvent,
+}));
 vi.mock('../activity-sync/enqueue-after-event-persistence', () => ({
   enqueueActivitySyncAfterEventPersistence: mocks.enqueueActivitySyncAfterEventPersistence,
 }));
@@ -54,7 +73,8 @@ vi.mock('../queue-utils', () => ({
 }));
 vi.mock('./queue-store', () => ({
   claimWahooWorkoutQueueRevision: mocks.claimRevision,
-  isClaimedWahooWorkoutQueueRevisionCurrent: mocks.isCurrentRevision,
+  getClaimedWahooWorkoutQueueRevisionEventWriteFence: mocks.getEventWriteFence,
+  createWahooEventWriteOwnershipGuard: mocks.createEventWriteGuard,
   completeWahooWorkoutQueueRevision: mocks.completeRevision,
   failWahooWorkoutQueueRevision: mocks.failRevision,
 }));
@@ -98,7 +118,8 @@ describe('processWahooWorkoutQueueItem', () => {
     mocks.enqueueActivitySyncAfterEventPersistence.mockResolvedValue(false);
     mocks.hasProAccess.mockResolvedValue(true);
     mocks.claimRevision.mockResolvedValue('claimed');
-    mocks.isCurrentRevision.mockResolvedValue(true);
+    mocks.getEventWriteFence.mockResolvedValue(mocks.eventWriteFence);
+    mocks.createEventWriteGuard.mockReturnValue(mocks.eventWriteGuard);
     mocks.completeRevision.mockResolvedValue('processed');
     mocks.failRevision.mockResolvedValue('retry');
   });
@@ -129,7 +150,12 @@ describe('processWahooWorkoutQueueItem', () => {
         serviceUserID: 'wahoo-1',
       }),
       expect.objectContaining({ extension: 'fit' }),
+      undefined,
+      undefined,
+      undefined,
+      { transactionGuard: mocks.eventWriteGuard },
     );
+    expect(mocks.createEventWriteGuard).toHaveBeenCalledWith(mocks.eventWriteFence);
     expect(mocks.enqueueActivitySyncAfterEventPersistence).toHaveBeenCalledWith({
       userID: 'firebase-1',
       eventID: 'event-1',
@@ -168,12 +194,24 @@ describe('processWahooWorkoutQueueItem', () => {
   });
 
   it('does not write if Wahoo ownership transfers after the FIT file was parsed', async () => {
-    mocks.isCurrentRevision.mockResolvedValue(false);
+    mocks.getEventWriteFence.mockResolvedValue(null);
 
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
 
     expect(mocks.setEvent).not.toHaveBeenCalled();
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
+  });
+
+  it('marks the queue item skipped instead of retrying when ownership changes in an event-write transaction', async () => {
+    mocks.setEvent.mockRejectedValue(new mocks.EventWriteSkippedByTransactionGuardError());
+
+    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+
+    expect(mocks.failRevision).not.toHaveBeenCalled();
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
+      resultStatus: 'skipped',
+      skippedReason: 'wahoo_ownership_changed',
+    });
   });
 
   it('skips work if the server-side Wahoo credential is no longer present', async () => {
