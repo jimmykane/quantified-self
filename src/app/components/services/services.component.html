@@ -90,10 +90,7 @@
                           [class.service-data-flow__matrix-route--attention]="route.state === 'attention'"
                           [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
                           (click)="openServiceTools(route.sourceSection, route)">
-                          <span>
-                            {{ route.kind === 'activity' ? 'Activity' : 'Route' }}
-                            <mat-icon aria-hidden="true">arrow_outward</mat-icon>
-                          </span>
+                          <span>{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
                           @if (route.state === 'active') {
                           <small>On</small>
                           } @else if (route.state === 'attention') {
@@ -149,10 +146,7 @@
                       [class.service-data-flow__matrix-route--attention]="route.state === 'attention'"
                       [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
                       (click)="openServiceTools(route.sourceSection, route)">
-                      <span>
-                        {{ route.kind === 'activity' ? 'Activity' : 'Route' }}
-                        <mat-icon aria-hidden="true">arrow_outward</mat-icon>
-                      </span>
+                      <span>{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
                       @if (route.state === 'active') {
                       <small>On</small>
                       } @else if (route.state === 'attention') {
