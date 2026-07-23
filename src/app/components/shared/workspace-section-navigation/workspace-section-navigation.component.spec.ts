@@ -95,6 +95,38 @@ describe('WorkspaceSectionNavigationComponent', () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'center' });
   });
 
+  it('retries scrolling the active section resolved after the initial layout completes', () => {
+    const scrollIntoView = vi.fn();
+    let scheduledScroll: FrameRequestCallback | undefined;
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      scheduledScroll = callback;
+      return 1;
+    }) as typeof requestAnimationFrame;
+    component.activeSection = 'profile';
+    (component as any).mobileSectionTabs = {
+      get: vi.fn(() => ({
+        nativeElement: {
+          getClientRects: () => [{}],
+          scrollIntoView,
+        },
+      })),
+    };
+
+    try {
+      component.ngAfterViewChecked();
+      component.activeSection = 'appearance';
+      scheduledScroll?.(0);
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+      expect((component as any).mobileSectionTabs.get).toHaveBeenLastCalledWith(1);
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'center' });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
   it('shows mobile overflow affordances and scrolls the section strip', () => {
     const scrollBy = vi.fn();
     (component as any).mobileNavigation = {

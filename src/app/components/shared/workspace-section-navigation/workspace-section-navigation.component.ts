@@ -5,6 +5,7 @@ import {
   EventEmitter,
   HostListener,
   Input,
+  OnDestroy,
   Output,
   QueryList,
   ViewChild,
@@ -25,7 +26,7 @@ export interface WorkspaceSectionNavigationItem {
   styleUrls: ['./workspace-section-navigation.component.scss'],
   standalone: false,
 })
-export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
+export class WorkspaceSectionNavigationComponent implements AfterViewChecked, OnDestroy {
   @Input({ required: true }) public sections: readonly WorkspaceSectionNavigationItem[] = [];
   @Input({ required: true }) public activeSection = '';
   @Input({ required: true }) public navigationAriaLabel = '';
@@ -36,6 +37,7 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
   private mobileSectionTabs!: QueryList<ElementRef<HTMLAnchorElement>>;
 
   private lastVisibleActiveSection = '';
+  private activeSectionScrollFrameId: number | null = null;
   public canScrollMobileBackward = false;
   public canScrollMobileForward = false;
 
@@ -54,6 +56,15 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
     activeTab.scrollIntoView({ block: 'nearest', inline: 'center' });
     this.lastVisibleActiveSection = this.activeSection;
     this.updateMobileNavigationScrollState();
+    this.scheduleActiveSectionScroll();
+  }
+
+  public ngOnDestroy(): void {
+    if (this.activeSectionScrollFrameId === null || typeof cancelAnimationFrame !== 'function') {
+      return;
+    }
+
+    cancelAnimationFrame(this.activeSectionScrollFrameId);
   }
 
   @HostListener('window:resize')
@@ -91,5 +102,24 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked {
     const maximumScrollLeft = Math.max(0, navigation.scrollWidth - navigation.clientWidth);
     this.canScrollMobileBackward = navigation.scrollLeft > 1;
     this.canScrollMobileForward = navigation.scrollLeft < maximumScrollLeft - 1;
+  }
+
+  private scheduleActiveSectionScroll(): void {
+    if (this.activeSectionScrollFrameId !== null || typeof requestAnimationFrame !== 'function') {
+      return;
+    }
+
+    this.activeSectionScrollFrameId = requestAnimationFrame(() => {
+      this.activeSectionScrollFrameId = null;
+
+      const activeIndex = this.sections.findIndex(section => section.id === this.activeSection);
+      const activeTab = activeIndex >= 0 ? this.mobileSectionTabs.get(activeIndex)?.nativeElement : undefined;
+      if (!activeTab || activeTab.getClientRects().length === 0 || typeof activeTab.scrollIntoView !== 'function') {
+        return;
+      }
+
+      activeTab.scrollIntoView({ block: 'nearest', inline: 'center' });
+      this.updateMobileNavigationScrollState();
+    });
   }
 }
