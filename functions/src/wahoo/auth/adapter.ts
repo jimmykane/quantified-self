@@ -33,6 +33,25 @@ function getNextOwnershipVersion(value: unknown): number {
   return currentVersion < Number.MAX_SAFE_INTEGER ? currentVersion + 1 : 1;
 }
 
+function hasActiveEventPublicationLease(value: unknown, now: number = Date.now()): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const record = candidate as Record<string, unknown>;
+    return `${record.leaseID || ''}`.trim().length > 0
+      && Number.isFinite(Number(record.expiresAt))
+      && Number(record.expiresAt) > now;
+  });
+}
+
+export class WahooOwnershipTransferBlockedByEventPublicationError extends Error {
+  public readonly name = 'WahooOwnershipTransferBlockedByEventPublicationError';
+
+  constructor(externalUserId: string) {
+    super(`Wahoo account ${externalUserId} is finishing an activity import. Retry the connection shortly.`);
+  }
+}
+
 export class WahooAuthAdapter implements ServiceAuthAdapter {
   public serviceName = ServiceNames.WahooAPI;
   public tokenCollectionName = WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME;
@@ -98,6 +117,10 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
       const snapshot = await transaction.get(mappingRef);
       const existingMapping = snapshot.exists ? snapshot.data() : undefined;
       const existingOwner = `${existingMapping?.firebaseUserID || ''}`;
+      const ownershipTransfer = Boolean(existingOwner && existingOwner !== userId);
+      if (ownershipTransfer && hasActiveEventPublicationLease(existingMapping?.eventPublicationLeases)) {
+        throw new WahooOwnershipTransferBlockedByEventPublicationError(externalUserId);
+      }
       // This is a generation of the mapping's *owner*, not of each OAuth
       // callback. A same-owner reconnect must leave an in-flight transfer's
       // cleanup guard valid, while a later transfer must invalidate it.
@@ -110,7 +133,8 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
         serviceName: this.serviceName,
         ownershipVersion,
         updatedAt: FieldValue.serverTimestamp(),
-      });
+        ...(ownershipTransfer ? { eventPublicationLeases: FieldValue.delete() } : {}),
+      }, { merge: true });
       return {
         previousOwnerUserID: existingOwner && existingOwner !== userId ? existingOwner : undefined,
         ownershipVersion,

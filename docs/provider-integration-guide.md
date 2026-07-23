@@ -87,6 +87,7 @@ OAuth is a server-owned integration. The browser starts and completes the user e
 - Prefer a stable provider user ID over a display name, email, or mutable device identifier.
 - If one provider account may belong to only one Quantified Self account, enforce the mapping atomically in a Firestore transaction.
 - Store the mapping separately from credentials when webhook resolution needs it. Verify current ownership before deleting a mapping; another connection may have claimed it while cleanup was in flight.
+- When an imported original file is published into a user-readable Storage path, serialize that publication with a transferable provider identity. A mapping-backed publication lease must be acquired before event writes, honored by the OAuth transfer transaction, and held through final file publication. If an ownership fence rejects after partial persistence, recursively remove the event root and every linked activity tree before releasing the lease.
 - Use the shared `getServiceAdapter()` factory and `ServiceAuthAdapter` lifecycle. Do not create a provider-specific token refresh path that bypasses shared deauthorization, cleanup, or safe metadata behavior.
 - Refresh access tokens only when a provider request needs one, persist rotation safely, and never log token values or signed authorization URLs.
 

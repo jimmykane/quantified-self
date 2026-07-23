@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { WahooAuthAdapter } from './adapter';
+import { WahooAuthAdapter, WahooOwnershipTransferBlockedByEventPublicationError } from './adapter';
 import * as api from './api';
 
 const firestoreMocks = vi.hoisted(() => {
@@ -25,6 +25,7 @@ const deletionGuardMocks = vi.hoisted(() => ({
 
 const firestoreFieldValueMocks = vi.hoisted(() => ({
   serverTimestamp: vi.fn(() => 'server-timestamp'),
+  delete: vi.fn(() => 'delete-sentinel'),
 }));
 
 vi.mock('./api');
@@ -44,6 +45,7 @@ vi.mock('firebase-admin', () => ({
 vi.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     serverTimestamp: firestoreFieldValueMocks.serverTimestamp,
+    delete: firestoreFieldValueMocks.delete,
   },
 }));
 
@@ -110,7 +112,26 @@ describe('WahooAuthAdapter', () => {
       serviceName: ServiceNames.WahooAPI,
       ownershipVersion: 1,
       updatedAt: 'server-timestamp',
+      eventPublicationLeases: 'delete-sentinel',
+    }, { merge: true });
+  });
+
+  it('does not transfer a Wahoo identity while an event publication lease is active', async () => {
+    firestoreMocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        firebaseUserID: 'previous-user',
+        ownershipVersion: 3,
+        eventPublicationLeases: [{
+          leaseID: 'publication-lease-1',
+          expiresAt: Date.now() + 60_000,
+        }],
+      }),
     });
+
+    await expect(adapter.onTokenPersisted('current-user', '60462'))
+      .rejects.toBeInstanceOf(WahooOwnershipTransferBlockedByEventPublicationError);
+    expect(firestoreMocks.transactionSet).not.toHaveBeenCalled();
   });
 
   it('only permits duplicate-owner cleanup while this callback still owns the same mapping version', async () => {
@@ -149,13 +170,22 @@ describe('WahooAuthAdapter', () => {
 
     firestoreMocks.transactionGet.mockResolvedValueOnce({
       exists: true,
-      data: () => ({ firebaseUserID: 'current-user', ownershipVersion: 5 }),
+      data: () => ({
+        firebaseUserID: 'current-user',
+        ownershipVersion: 5,
+        eventPublicationLeases: [{
+          leaseID: 'publication-lease-1',
+          expiresAt: Date.now() + 60_000,
+        }],
+      }),
     });
     await expect(adapter.onTokenPersisted('current-user', '60462')).resolves.toEqual({});
-    expect(firestoreMocks.transactionSet).toHaveBeenLastCalledWith(firestoreMocks.mappingRef, expect.objectContaining({
+    const reconnectWrite = firestoreMocks.transactionSet.mock.calls.at(-1);
+    expect(reconnectWrite).toEqual([firestoreMocks.mappingRef, expect.objectContaining({
       firebaseUserID: 'current-user',
       ownershipVersion: 5,
-    }));
+    }), { merge: true }]);
+    expect(reconnectWrite?.[1]).not.toHaveProperty('eventPublicationLeases');
 
     const transaction = {
       get: vi.fn().mockResolvedValue({

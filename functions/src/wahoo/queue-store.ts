@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import {
   enqueueWorkoutTaskWithDispatchRecovery,
@@ -30,7 +31,19 @@ export interface WahooEventWriteOwnershipFence {
   ownershipVersion: number;
 }
 
+interface WahooEventPublicationLease {
+  leaseID: string;
+  expiresAt: number;
+}
+
+export interface WahooEventPublicationFence extends WahooEventWriteOwnershipFence {
+  publicationLease: WahooEventPublicationLease;
+}
+
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
+// The task worker is limited to nine minutes. Keep the publication lease
+// longer so an ownership transfer cannot overtake a still-running worker.
+const EVENT_PUBLICATION_LEASE_MS = 10 * 60 * 1000;
 
 function revisionTime(value: unknown): number {
   const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -41,6 +54,26 @@ function ownershipVersion(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
     ? value
     : 0;
+}
+
+function getActiveEventPublicationLeases(
+  value: unknown,
+  now: number = Date.now(),
+): WahooEventPublicationLease[] {
+  if (!Array.isArray(value)) return [];
+
+  const leaseIDs = new Set<string>();
+  return value.flatMap((candidate): WahooEventPublicationLease[] => {
+    if (!candidate || typeof candidate !== 'object') return [];
+    const record = candidate as Record<string, unknown>;
+    const leaseID = `${record.leaseID || ''}`.trim();
+    const expiresAt = Number(record.expiresAt);
+    if (!leaseID || !Number.isFinite(expiresAt) || expiresAt <= now || leaseIDs.has(leaseID)) {
+      return [];
+    }
+    leaseIDs.add(leaseID);
+    return [{ leaseID, expiresAt }];
+  });
 }
 
 function hasSameRevision(
@@ -297,13 +330,100 @@ export async function getClaimedWahooWorkoutQueueRevisionEventWriteFence(
 }
 
 /**
+ * Makes a Wahoo event publication mutually exclusive with an ownership
+ * transfer. OAuth transfers read and honor the same mapping document, so the
+ * transaction that creates this lease conflicts with a competing transfer.
+ */
+export async function acquireWahooEventPublicationLease(
+  fence: WahooEventWriteOwnershipFence,
+): Promise<WahooEventPublicationFence | null> {
+  const db = admin.firestore();
+  const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(fence.wahooUserID);
+  const now = Date.now();
+  const publicationLease: WahooEventPublicationLease = {
+    leaseID: crypto.randomUUID(),
+    expiresAt: now + EVENT_PUBLICATION_LEASE_MS,
+  };
+
+  return db.runTransaction(async (transaction) => {
+    const mappingSnapshot = await transaction.get(mappingRef);
+    if (!mappingSnapshot.exists) return null;
+
+    const currentMapping = mappingSnapshot.data();
+    const isCurrentOwner = `${currentMapping?.firebaseUserID || ''}`.trim() === fence.firebaseUserID
+      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion;
+    if (!isCurrentOwner) return null;
+
+    const activeLeases = getActiveEventPublicationLeases(
+      currentMapping?.eventPublicationLeases,
+      now,
+    );
+    transaction.update(mappingRef, {
+      eventPublicationLeases: [...activeLeases, publicationLease],
+    });
+    return {
+      ...fence,
+      publicationLease,
+    };
+  });
+}
+
+export async function releaseWahooEventPublicationLease(
+  fence: WahooEventPublicationFence,
+): Promise<void> {
+  const db = admin.firestore();
+  const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(fence.wahooUserID);
+  await db.runTransaction(async (transaction) => {
+    const mappingSnapshot = await transaction.get(mappingRef);
+    if (!mappingSnapshot.exists) return;
+
+    const currentMapping = mappingSnapshot.data();
+    const isCurrentOwner = `${currentMapping?.firebaseUserID || ''}`.trim() === fence.firebaseUserID
+      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion;
+    if (!isCurrentOwner) return;
+
+    const remainingLeases = getActiveEventPublicationLeases(currentMapping?.eventPublicationLeases)
+      .filter(({ leaseID }) => leaseID !== fence.publicationLease.leaseID);
+    transaction.update(mappingRef, {
+      eventPublicationLeases: remainingLeases.length > 0
+        ? remainingLeases
+        : admin.firestore.FieldValue.delete(),
+    });
+  });
+}
+
+/**
+ * Event documents own a metadata subtree, while activities are stored in a
+ * sibling collection. Both roots must be recursively removed if a Wahoo
+ * ownership fence rejects after any individual write has committed.
+ */
+export async function cleanupWahooPartialEventPersistence(
+  userID: string,
+  eventID: string,
+): Promise<void> {
+  const db = admin.firestore();
+  const eventRef = db.collection('users').doc(userID).collection('events').doc(eventID);
+  const activitiesSnapshot = await db
+    .collection('users')
+    .doc(userID)
+    .collection('activities')
+    .where('eventID', '==', eventID)
+    .get();
+
+  await Promise.all([
+    db.recursiveDelete(eventRef),
+    ...activitiesSnapshot.docs.map((activity) => db.recursiveDelete(activity.ref)),
+  ]);
+}
+
+/**
  * Every event/activity document write reads this same mapping in its own
  * write transaction. A concurrent OAuth ownership transfer writes the mapping
  * and therefore conflicts with that transaction rather than racing after a
  * read-only precheck.
  */
 export function createWahooEventWriteOwnershipGuard(
-  fence: WahooEventWriteOwnershipFence,
+  fence: WahooEventPublicationFence,
 ): EventWriteTransactionGuard {
   const mappingRef = admin.firestore()
     .collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME)
@@ -313,7 +433,9 @@ export function createWahooEventWriteOwnershipGuard(
     if (!mappingSnapshot.exists) return false;
     const currentMapping = mappingSnapshot.data();
     return `${currentMapping?.firebaseUserID || ''}`.trim() === fence.firebaseUserID
-      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion;
+      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion
+      && getActiveEventPublicationLeases(currentMapping?.eventPublicationLeases)
+        .some(({ leaseID }) => leaseID === fence.publicationLease.leaseID);
   };
 }
 
