@@ -203,6 +203,68 @@ describe('Cloud Tasks Utils', () => {
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledTimes(2);
         });
 
+        it('advances a durable recovery generation before retrying an unavailable workout dispatch', async () => {
+            const { enqueueWorkoutTaskWithDispatchRecovery } = await import('./cloud-tasks');
+            const enqueueTask = vi.fn()
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
+            const advanceDispatchRecoveryGeneration = vi.fn().mockResolvedValue({
+                id: 'item-recovery',
+                dateCreated: 1000,
+                retryCount: 2,
+                dispatchRecoveryGeneration: 1,
+            });
+
+            await expect(enqueueWorkoutTaskWithDispatchRecovery({
+                serviceName: 'garminAPI' as ServiceNames,
+                queueItem: {
+                    id: 'item-recovery',
+                    dateCreated: 1000,
+                    retryCount: 2,
+                },
+                enqueueTask,
+                advanceDispatchRecoveryGeneration,
+            })).resolves.toBe(true);
+
+            expect(advanceDispatchRecoveryGeneration).toHaveBeenCalledWith({
+                id: 'item-recovery',
+                dateCreated: 1000,
+                retryCount: 2,
+            });
+            expect(enqueueTask).toHaveBeenNthCalledWith(1,
+                'garminAPI',
+                'item-recovery',
+                1000,
+                undefined,
+                { recoveryTaskKey: 2 },
+            );
+            expect(enqueueTask).toHaveBeenNthCalledWith(2,
+                'garminAPI',
+                'item-recovery',
+                1000,
+                undefined,
+                { recoveryTaskKey: '2-1' },
+            );
+        });
+
+        it('retries a transient post-enqueue dispatch marker write', async () => {
+            vi.useFakeTimers();
+            const { markWorkoutTaskDispatchedWithRetry } = await import('./cloud-tasks');
+            const markDispatched = vi.fn()
+                .mockRejectedValueOnce(Object.assign(new Error('temporarily unavailable'), { code: 'unavailable' }))
+                .mockResolvedValueOnce(true);
+
+            const result = markWorkoutTaskDispatchedWithRetry({
+                serviceName: 'suuntoApp' as ServiceNames,
+                queueItemId: 'item-marker',
+                markDispatched,
+            });
+            await vi.runAllTimersAsync();
+
+            await expect(result).resolves.toBe(true);
+            expect(markDispatched).toHaveBeenCalledTimes(2);
+        });
+
         it.each([
             ['enqueueActivitySyncTask', 'processActivitySyncTask', 'activity-sync-item-123-9'],
             ['enqueueRouteSyncTask', 'processRouteSyncTask', 'route-sync-item-123-9'],

@@ -2,9 +2,14 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import * as readline from 'readline';
-import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
-import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
-import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
+import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
+import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
+import {
+    WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
+    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
+    WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+} from '../wahoo/constants';
 
 // Initialize admin if not already initialized
 if (admin.apps.length === 0) {
@@ -63,7 +68,8 @@ async function cleanupUser(uid: string, dryRun: boolean) {
     const services = [
         { name: 'Suunto', fn: () => deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp) },
         { name: 'COROS', fn: () => deauthorizeServiceForUser(uid, ServiceNames.COROSAPI) },
-        { name: 'Garmin', fn: () => deauthorizeServiceForUser(uid, ServiceNames.GarminAPI) }
+        { name: 'Garmin', fn: () => deauthorizeServiceForUser(uid, ServiceNames.GarminAPI) },
+        { name: 'Wahoo', fn: () => deauthorizeServiceForUser(uid, ServiceNames.WahooAPI) },
     ];
 
     for (const service of services) {
@@ -83,7 +89,11 @@ async function cleanupUser(uid: string, dryRun: boolean) {
     // 2. Delete Firestore Data (Recursive)
     const collectionsToRecursiveDelete = [
         db.collection('users').doc(uid),
-        db.collection('customers').doc(uid)
+        db.collection('customers').doc(uid),
+        db.collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(uid),
+        db.collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(uid),
+        db.collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(uid),
+        db.collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME).doc(uid),
     ];
 
     for (const ref of collectionsToRecursiveDelete) {
@@ -131,25 +141,54 @@ async function cleanupUser(uid: string, dryRun: boolean) {
         GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
         SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
         COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
+        WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
         'failed_jobs',
     ];
 
     for (const col of topLevelCollections) {
         try {
             // Find docs where the UID is in any of the possible fields
-            const fields = ['userID', 'userName', 'openId', 'userId', 'uid'];
+            const fields = ['userID', 'firebaseUserID', 'userName', 'openId', 'userId', 'uid'];
             for (const field of fields) {
                 const snapshot = await db.collection(col).where(field, '==', uid).get();
                 if (!snapshot.empty) {
-                    const batch = db.batch();
-                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                    await batch.commit();
-                    logger.info(`    - Deleted ${snapshot.size} documents in ${col} (field: ${field})`);
+                    for (const doc of snapshot.docs) {
+                        await db.recursiveDelete(doc.ref);
+                    }
+                    logger.info(`    - Recursively deleted ${snapshot.size} documents in ${col} (field: ${field})`);
                 }
             }
         } catch (e: unknown) {
             logger.error(`    - Error cleaning up ${col}: ${(e as Error).message}`);
         }
+    }
+
+    // Wahoo mappings are transferable. Re-read ownership transactionally so stale orphan scans cannot delete a new owner's mapping.
+    try {
+        const snapshot = await db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME)
+            .where('firebaseUserID', '==', uid)
+            .get();
+        let deletedMappingCount = 0;
+        for (const doc of snapshot.docs) {
+            const mappingDeleted = await db.runTransaction(async (transaction) => {
+                const latestSnapshot = await transaction.get(doc.ref);
+                if (!latestSnapshot.exists || latestSnapshot.data()?.firebaseUserID !== uid) {
+                    return false;
+                }
+
+                // Mapping documents cannot have descendants by design.
+                transaction.delete(doc.ref);
+                return true;
+            });
+            if (mappingDeleted) {
+                deletedMappingCount += 1;
+            }
+        }
+        if (deletedMappingCount > 0) {
+            logger.info(`    - Transactionally deleted ${deletedMappingCount} Wahoo user mappings`);
+        }
+    } catch (e: unknown) {
+        logger.error(`    - Error cleaning up Wahoo user mappings: ${(e as Error).message}`);
     }
 }
 
@@ -203,8 +242,9 @@ async function cleanupOrphanedUsers() {
         try {
             const storage = admin.storage().bucket(STORAGE_BUCKET_NAME);
             // Metadata listing is cheap compared to Firestore reads
-            const [, , apiResponse] = await storage.getFiles({ prefix: 'users/', delimiter: '/', autoPaginate: true }) as any;
-            const prefixes = apiResponse.prefixes || [];
+            const getFilesResponse = await storage.getFiles({ prefix: 'users/', delimiter: '/', autoPaginate: true });
+            const apiResponse = getFilesResponse[2] as unknown as { prefixes?: string[] } | undefined;
+            const prefixes = apiResponse?.prefixes || [];
             prefixes.forEach((prefix: string) => {
                 const parts = prefix.split('/');
                 if (parts.length >= 2 && parts[0] === 'users') {

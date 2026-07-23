@@ -227,7 +227,7 @@ describe('UserSettingsComponent', () => {
             'map',
             'charts',
             'units',
-            'delete-account',
+            'account',
         ]);
     });
 
@@ -245,8 +245,16 @@ describe('UserSettingsComponent', () => {
             'Maps',
             'Charts',
             'Units',
-            'Delete Account',
+            'Account',
         ]);
+    });
+
+    it('renders the settings heading before section navigation', () => {
+        const pageHeader = fixture.nativeElement.querySelector('.settings-page-header');
+        const sectionNavigation = fixture.nativeElement.querySelector('app-workspace-section-navigation');
+
+        expect(pageHeader).toBeTruthy();
+        expect(pageHeader.nextElementSibling).toBe(sectionNavigation);
     });
 
     it('uses the horizontal settings selector without a workspace rail', () => {
@@ -288,11 +296,11 @@ describe('UserSettingsComponent', () => {
         }
     });
 
-    it('shows delete account as its own final settings section', () => {
+    it('shows account as the final settings section for account actions', () => {
         const sectionIds = component.settingsSectionOptions.map(section => section.id);
 
         expect(sectionIds[sectionIds.length - 2]).toBe('units');
-        expect(sectionIds[sectionIds.length - 1]).toBe('delete-account');
+        expect(sectionIds[sectionIds.length - 1]).toBe('account');
     });
 
     it('should update section query param when a settings section is selected', async () => {
@@ -331,34 +339,44 @@ describe('UserSettingsComponent', () => {
         expect(mapPanel.hidden).toBe(false);
     });
 
-    it('should update the active section from section query param changes', () => {
+    it('should update the active section from account query param changes', () => {
+        component.activeSection = 'profile';
+
+        queryParamMapSubject.next(convertToParamMap({ section: 'account' }));
+
+        expect(component.activeSection).toBe('account');
+    });
+
+    it('maps the legacy delete-account section query to account', () => {
         component.activeSection = 'profile';
 
         queryParamMapSubject.next(convertToParamMap({ section: 'delete-account' }));
 
-        expect(component.activeSection).toBe('delete-account');
+        expect(component.activeSection).toBe('account');
     });
 
-    it('should restore the appearance section when the section query param is missing', () => {
+    it('should restore the profile section when the section query param is missing', () => {
         component.activeSection = 'units';
 
         queryParamMapSubject.next(convertToParamMap({}));
 
-        expect(component.activeSection).toBe('app');
+        expect(component.activeSection).toBe('profile');
     });
 
-    it('shows delete account only while the delete account section is active', () => {
+    it('shows delete account as an action only while the account section is active', () => {
         component.activeSection = 'profile';
         fixture.detectChanges();
 
-        const deletePanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-delete-account-title"]');
-        expect(deletePanel.querySelector('.danger-card')).toBeTruthy();
-        expect(deletePanel.hidden).toBe(true);
+        const accountPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
+        expect(accountPanel.querySelector('.danger-card')).toBeTruthy();
+        expect(accountPanel.querySelector('.settings-panel-body')).toBeNull();
+        expect(accountPanel.textContent).toContain('Delete My Account');
+        expect(accountPanel.hidden).toBe(true);
 
-        component.activeSection = 'delete-account';
+        component.activeSection = 'account';
         fixture.detectChanges();
 
-        expect(deletePanel.hidden).toBe(false);
+        expect(accountPanel.hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('.qs-form-actions-floating')).toBeNull();
         expect(fixture.nativeElement.querySelector('.mobile-save-bar')).toBeNull();
     });

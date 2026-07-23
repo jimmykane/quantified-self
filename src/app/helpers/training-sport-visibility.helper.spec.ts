@@ -44,9 +44,9 @@ describe('resolveTrainingSportVisibility', () => {
     expect(formatTrainingVisibleDisciplinesScopeLabel(['running', 'swimming'])).toBe('Running and Swimming');
     expect(formatTrainingVisibleDisciplinesScopeLabel(['running', 'cycling', 'swimming']))
       .toBe('Running, Cycling/MTB, and Swimming');
-    expect(formatTrainingVisibleDisciplinesActivityLabel(['running'])).toBe('running sessions');
+    expect(formatTrainingVisibleDisciplinesActivityLabel(['running'])).toBe('running workouts');
     expect(formatTrainingVisibleDisciplinesActivityLabel(['running', 'cycling']))
-      .toBe('running or cycling sessions');
+      .toBe('running or cycling workouts');
     expect(formatTrainingVisibleDisciplinesCompactLabel(['running', 'cycling', 'swimming'])).toBe('All 3');
     expect(formatTrainingVisibleDisciplinesCompactLabel(['running', 'swimming'])).toBe('2 sports');
     expect(formatTrainingVisibleDisciplinesAccessibleLabel(['cycling', 'swimming'], false))

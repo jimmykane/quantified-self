@@ -4,6 +4,12 @@ header { display: flex; align-items: flex-start; justify-content: space-between;
 h3 { margin: 0; color: var(--mat-sys-on-surface); }
 header p, footer span { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size, 13px); line-height: 1.4; }
 .swim-performance-status { display: inline-flex; align-items: center; gap: 6px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size, 13px); white-space: nowrap; }
+.swim-performance-guidance { display: grid; gap: 4px; margin: 12px 0 4px; padding: 0 0 10px; border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.swim-performance-guidance p { margin: 0; font-size: var(--training-inter-body-font-size, 14px); line-height: 1.4; }
+.swim-performance-guidance p strong { margin-right: 6px; font-size: var(--training-inter-caption-font-size, 13px); }
+.swim-performance-guidance small { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size, 13px); line-height: 1.35; }
+.swim-performance-guidance-next { color: var(--mat-sys-on-surface-variant); }
+.swim-performance-guidance-next strong { color: var(--mat-sys-primary); }
 .swim-performance-chart { flex: 1 1 auto; width: 100%; min-height: 230px; }
 footer { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 footer strong { font-size: var(--training-inter-body-font-size, 14px); }

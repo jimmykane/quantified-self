@@ -137,6 +137,233 @@ describe('UploadActivitiesToServiceComponent', () => {
         await promise;
     });
 
+    it('should send Wahoo uploads with filename and browser time zone and retain the pending upload id', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        mockFunctionsService.call.mockResolvedValueOnce({
+            data: { status: 'pending', uploadId: 'wahoo-upload-1', message: 'Wahoo is processing the activity.' },
+        });
+        const file = {
+            file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1',
+        };
+
+        const result = await component.processAndUploadFile(file);
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'importActivityToWahooAPI',
+            expect.objectContaining({
+                file: expect.any(String),
+                filename: 'activity.fit',
+                timeZone: expect.any(String),
+            }),
+        );
+        expect(result).toEqual({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: 'wahoo-upload-1',
+            message: 'Wahoo is processing the activity.',
+        });
+    });
+
+    it('automatically polls Wahoo processing status until the activity is uploaded', async () => {
+        vi.useFakeTimers();
+        component.serviceName = ServiceNames.WahooAPI;
+        component.wahooStatusPollDelayMs = 2000;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [file],
+                value: 'pending-upload',
+            },
+        };
+
+        mockProcessingService.addJob.mockReturnValueOnce('wahoo-job');
+        vi.spyOn(component, 'processAndUploadFile').mockResolvedValue({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: 'wahoo-upload-1',
+            message: 'Wahoo is processing the activity.',
+        });
+        mockFunctionsService.call
+            .mockResolvedValueOnce({ data: { status: 'pending', message: 'Wahoo is still processing the activity.' } })
+            .mockResolvedValueOnce({ data: { status: 'success', message: 'Activity uploaded to Wahoo.' } });
+
+        await component.getFiles(event);
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'processing',
+            uploadId: 'wahoo-upload-1',
+        });
+
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(component.uploadRows()[0]).toMatchObject({ status: 'processing' });
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'getWahooAPIWorkoutFileUploadStatus',
+            { uploadId: 'wahoo-upload-1' },
+        );
+
+        await vi.advanceTimersByTimeAsync(4000);
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'success',
+            progress: 100,
+            message: 'Activity uploaded to Wahoo.',
+        });
+        expect(mockProcessingService.completeJob).toHaveBeenCalledWith('wahoo-job', 'Activity uploaded to Wahoo.');
+    });
+
+    it('backs off Wahoo status polling and honors the provider retry-after window', async () => {
+        vi.useFakeTimers();
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: { files: [file], value: 'pending-upload' },
+        };
+
+        mockProcessingService.addJob.mockReturnValueOnce('wahoo-job');
+        vi.spyOn(component, 'processAndUploadFile').mockResolvedValue({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: 'wahoo-upload-1',
+            message: 'Wahoo is processing the activity.',
+        });
+        mockFunctionsService.call
+            .mockRejectedValueOnce({
+                code: 'functions/resource-exhausted',
+                message: 'Wahoo is rate-limiting uploads. Please retry shortly.',
+                details: { retryAfterSeconds: 30 },
+            })
+            .mockResolvedValueOnce({ data: { status: 'success', message: 'Activity uploaded to Wahoo.' } });
+
+        await component.getFiles(event);
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'processing',
+            message: expect.stringContaining('Checking again in 30 seconds.'),
+        });
+        expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'success',
+            message: 'Activity uploaded to Wahoo.',
+        });
+    });
+
+    it('pauses automatic Wahoo status checks after the bounded retry budget is exhausted', async () => {
+        vi.useFakeTimers();
+        component.serviceName = ServiceNames.WahooAPI;
+        component.wahooStatusPollMaxAttempts = 2;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: { files: [file], value: 'pending-upload' },
+        };
+
+        mockProcessingService.addJob.mockReturnValueOnce('wahoo-job');
+        vi.spyOn(component, 'processAndUploadFile').mockResolvedValue({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: 'wahoo-upload-1',
+            message: 'Wahoo is processing the activity.',
+        });
+        mockFunctionsService.call.mockResolvedValue({ data: { status: 'pending', message: 'Wahoo is still processing the activity.' } });
+
+        await component.getFiles(event);
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.advanceTimersByTimeAsync(4000);
+
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'processing',
+            message: expect.stringContaining('Automatic status checks are paused'),
+        });
+        expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops Wahoo status polling when the upload component is destroyed', async () => {
+        vi.useFakeTimers();
+        component.serviceName = ServiceNames.WahooAPI;
+        component.wahooStatusPollDelayMs = 2000;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [file],
+                value: 'pending-upload',
+            },
+        };
+
+        mockProcessingService.addJob.mockReturnValueOnce('wahoo-job');
+        vi.spyOn(component, 'processAndUploadFile').mockResolvedValue({
+            success: false,
+            duplicate: false,
+            pending: true,
+            uploadId: 'wahoo-upload-1',
+            message: 'Wahoo is processing the activity.',
+        });
+
+        await component.getFiles(event);
+        component.ngOnDestroy();
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    });
+
+    it('does not restart Wahoo status polling when a request completes after the component is destroyed', async () => {
+        component.serviceName = ServiceNames.WahooAPI;
+        const file = new File(['fit'], 'activity.fit', { type: 'application/octet-stream' });
+        let resolveStatusRequest: ((value: { data: ServiceUploadCallableResponse }) => void) | undefined;
+        const row = {
+            id: 'wahoo-pending-upload',
+            file,
+            name: 'activity.fit',
+            filename: 'activity',
+            extension: 'fit',
+            sizeLabel: '3 B',
+            status: 'processing' as const,
+            attempts: 1,
+            progress: 75,
+            message: 'Wahoo is processing the activity.',
+            jobId: 'wahoo-job',
+            uploadId: 'wahoo-upload-1',
+        };
+
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockImplementationOnce(() => new Promise((resolve) => {
+            resolveStatusRequest = resolve;
+        }));
+
+        const refreshPromise = component.refreshUpload(row);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+
+        component.ngOnDestroy();
+        resolveStatusRequest?.({ data: { status: 'pending', message: 'Wahoo is still processing the activity.' } });
+        await refreshPromise;
+
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+    });
+
     it('should reject non-fit files', async () => {
         const file = {
             file: new File(['content'], 'test.txt'),

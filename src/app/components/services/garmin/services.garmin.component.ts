@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, Input } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -57,7 +57,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
     'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
     'HEALTH_EXPORT': 'Required to import Garmin sleep history.',
-    'COURSE_IMPORT': 'Required to send saved Quantified Self routes to Garmin Connect.',
+    'COURSE_IMPORT': 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.',
     'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
   };
 
@@ -67,6 +67,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
   public backfillEndDate: Date = new Date();
   public backfillSummary: ActivitySyncBackfillSummary | null = null;
+  public activeActivitySyncDestination: 'suunto' | 'wahoo' = 'suunto';
+  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | null = null;
 
   private suuntoConnectionSubscription: Subscription | null = null;
   public suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
@@ -129,8 +131,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       : this.isDisconnectPending
       ? 'Disconnect is pending while Garmin finishes deauthorization. Sync and imports are paused for this connection.'
       : this.isReconnectRequired
-      ? 'Reconnect Garmin to resume history imports, sending saved routes to Garmin, and automatic activity sync to Suunto.'
-      : 'Required for history imports, sending saved routes to Garmin, and automatic activity sync to Suunto.';
+      ? 'Reconnect Garmin to resume history imports, sending routes to Garmin, and automatic activity sync to Suunto.'
+      : 'Required for history imports, sending routes to Garmin, and automatic activity sync to Suunto.';
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
@@ -197,6 +199,10 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return this.isLoading || !this.hasPermissionsLoaded;
   }
 
+  get hasGarminCourseImportPermission(): boolean {
+    return this.hasTokenWithPermissions(GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS);
+  }
+
   getPermissionLabel(permission: string): string {
     return this.permissionLabels[permission] || permission;
   }
@@ -213,6 +219,9 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   override async ngOnChanges() {
+    if (this.initialActivitySyncDestination) {
+      this.activeActivitySyncDestination = this.initialActivitySyncDestination;
+    }
     await super.ngOnChanges();
     this.watchSuuntoConnectionState();
   }

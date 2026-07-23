@@ -126,7 +126,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     const emptyTooltip = option.tooltip.formatter([{ dataIndex: 1 }]);
     expect(emptyTooltip).toContain('No comparable sample');
     expect(emptyTooltip).toContain('Power recorded');
-    expect(emptyTooltip).toContain('0 activities');
+    expect(emptyTooltip).toContain('0 workouts');
     expect(emptyTooltip).toContain('No recorded power');
   });
 

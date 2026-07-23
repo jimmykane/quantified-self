@@ -18,6 +18,9 @@ process.env.GARMINHEALTHAPI_CONSUMER_KEY = 'test-garmin-consumer-key';
 process.env.GARMINHEALTHAPI_CONSUMER_SECRET = 'test-garmin-consumer-secret';
 process.env.GARMINAPI_CLIENT_ID = 'test-garmin-client-id';
 process.env.GARMINAPI_CLIENT_SECRET = 'test-garmin-consumer-secret';
+process.env.WAHOOAPI_CLIENT_ID = 'test-wahoo-client-id';
+process.env.WAHOOAPI_CLIENT_SECRET = 'test-wahoo-client-secret';
+process.env.WAHOOAPI_WEBHOOK_TOKEN = 'test-wahoo-webhook-token';
 
 // Mock firebase-functions - this will be hoisted
 vi.mock('firebase-functions/v1', () => {
@@ -143,6 +146,10 @@ vi.mock('./request-helper', () => ({
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
     return ({
+    // Keep all production exports available by default. Individual fixtures
+    // below intentionally replace only the broad activity constants that tests
+    // need to stay lightweight; route parsing/export remains real.
+    ...actual,
     ActivityTypes: {
         Cycling: 'Cycling',
         EBiking: 'E-Biking',
@@ -197,7 +204,9 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         },
     },
     DataActivityTypes: { type: 'Activity Types' },
+    DataAscent: { type: 'Ascent' },
     DataCriticalPower: { type: 'Critical Power' },
+    DataDescent: { type: 'Descent' },
     DataDistance: { type: 'Distance' },
     DataDurabilityEvidence: { type: 'Durability Evidence' },
     DataDuration: { type: 'Duration' },
@@ -298,7 +307,9 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         GarminAPI: 'garminAPI',
         SuuntoApp: 'suuntoApp',
         COROSAPI: 'corosAPI',
+        WahooAPI: 'wahooAPI',
     },
+    WahooAPIEventMetaData: actual.WahooAPIEventMetaData,
     GarminAPIAuth: () => ({
         toHeader: () => ({}),
         authorize: () => ({}),

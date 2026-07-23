@@ -1,0 +1,158 @@
+<div
+  class="service-container"
+  [class.service-container--advanced]="showAdvancedTools"
+  [class.service-container--tools-only]="!showConnectionSummary">
+  @if (showConnectionSummary) {
+  <app-service-connection-status
+    serviceLabel="Wahoo"
+    providerIcon="wahoo"
+    [description]="connectionDescription"
+    [connected]="isConnectedToService()"
+    [loading]="isLoading"
+    [compact]="!showAdvancedTools"
+    [locked]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
+    [proRequired]="!canConnectServiceWithCurrentAccess && !isConnectedToService()"
+    [showDetails]="isConnectedToService() || isDisconnectPending"
+    [statusLabelOverride]="isDisconnectPending ? 'Disconnect pending' : null"
+    [statusIconOverride]="isDisconnectPending ? 'sync_problem' : null"
+    [statusTone]="isDisconnectPending ? 'attention' : 'default'">
+    <div connection-body class="connection-details">
+      @if (isDisconnectPending) {
+      <div class="reconnect-required-banner" role="status">
+        <mat-icon>sync_problem</mat-icon>
+        <div class="reconnect-required-banner__copy">
+          <div class="reconnect-required-banner__title">Disconnect pending</div>
+          <div class="reconnect-required-banner__message">We are retrying Wahoo deauthorization. New imports are paused.</div>
+        </div>
+      </div>
+      }
+      @if (isConnectedToService()) {
+      <div class="connection-account-row">
+        <div class="connection-account-info">
+          <mat-icon class="connected-account-icon">account_circle</mat-icon>
+          <div class="connected-account-copy">
+            @if (wahooAccountId()) {
+            <div class="connected-account-title">Wahoo account ID: {{ wahooAccountId() }}</div>
+            <div class="connected-account-line">OAuth credentials are stored securely on the server.</div>
+            } @else if (isLoadingWahooAccountId()) {
+            <div class="connected-account-title">Loading Wahoo account ID…</div>
+            <div class="connected-account-line">OAuth credentials stay securely on the server.</div>
+            } @else {
+            <div class="connected-account-title">Wahoo account ID unavailable</div>
+            <div class="connected-account-line">Reconnect Wahoo if this account ID remains unavailable.</div>
+            }
+          </div>
+        </div>
+        <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"
+          [disabled]="isLoading || isDisconnecting" (click)="deauthorizeService($event)">
+          <mat-icon>link_off</mat-icon> {{ isDisconnecting ? 'Disconnecting...' : 'Disconnect' }}
+        </button>
+      </div>
+      }
+    </div>
+
+    <div connection-actions class="tool-actions">
+      @if (!isConnectedToService() && !isDisconnectPending) {
+      <button mat-flat-button class="qs-mat-primary"
+        [disabled]="!user || isLoading || isConnecting"
+        (click)="connectWithService($event)">
+        <mat-icon>{{ canConnectServiceWithCurrentAccess ? 'link' : 'workspace_premium' }}</mat-icon>
+        {{ isConnecting ? 'Connecting...' : (canConnectServiceWithCurrentAccess ? 'Connect' : 'View Pro plans') }}
+      </button>
+      }
+    </div>
+  </app-service-connection-status>
+  }
+
+  @if (showAdvancedTools) {
+  @if (showConnectionSummary) {
+  <mat-divider class="connection-tools-divider"></mat-divider>
+  }
+  @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
+  <section
+    class="provider-tool-panel"
+    [hidden]="activeProviderTool !== 'history'">
+    @if (!showOnlyActiveProviderTool) {
+    <div class="tool-subsection-title">
+      <mat-icon>history</mat-icon>
+      <span>History Import</span>
+    </div>
+    }
+    @if (!hasProAccess) {
+    <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
+      <mat-icon>lock</mat-icon>
+      <span>Wahoo history import is a Pro feature.</span>
+    </button>
+    } @else if (isConnectedToService()) {
+    <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+      [providerConnected]="true" [isLoadingParent]="isLoading"
+      (importInitiated)="onHistoryImportInitiated($event)"></app-history-import-form>
+    } @else {
+    <app-status-info type="info" title="Connect Account First">Connect Wahoo before importing history.</app-status-info>
+    }
+  </section>
+  }
+
+  @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
+  <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'uploads'">
+    <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
+      <div class="tool-subsection-header">
+        <div class="tool-subsection-title">
+          <mat-icon>cloud_upload</mat-icon>
+          <span>Send FIT Activity to Wahoo</span>
+        </div>
+      </div>
+      <p class="description-text">This sends a FIT file directly to Wahoo. It does not create or retain an activity in Quantified Self.</p>
+      @if (!hasProAccess) {
+      <div class="pro-required-inline" (click)="triggerUpsell()">
+        <mat-icon>lock</mat-icon>
+        <span>Sending activities to Wahoo is a Pro feature.</span>
+      </div>
+      } @else if (isConnectedToService()) {
+      <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-activity-to-service>
+      <app-status-info type="info" title="Wahoo access">
+        If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.
+      </app-status-info>
+      } @else {
+      <app-status-info type="info" title="Connect Account First">Connect Wahoo before sending FIT activities.</app-status-info>
+      }
+    </section>
+
+    <section class="tool-subsection" [class.locked-panel]="!hasProAccess">
+      <div class="tool-subsection-header">
+        <div class="tool-subsection-title">
+          <mat-icon>route</mat-icon>
+          <span>Send Route to Wahoo</span>
+        </div>
+      </div>
+      <p class="description-text">This sends a GPX or FIT course or route directly to Wahoo. GPX routes are converted to FIT before sending. It does not create or retain a route in Quantified Self.</p>
+      @if (!hasProAccess) {
+      <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
+        <mat-icon>lock</mat-icon>
+        <span>Sending routes to Wahoo is a Pro feature.</span>
+      </button>
+      } @else if (isConnectedToService()) {
+      <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-route-to-service>
+      <app-status-info type="info" title="Wahoo route access">
+        If Wahoo was connected before route sending was available, reconnect it once to grant route access. Wahoo receives a FIT course; Quantified Self converts selected GPX routes to FIT before sending.
+      </app-status-info>
+      } @else {
+      <app-status-info type="info" title="Connect Account First">Connect Wahoo before sending GPX or FIT routes.</app-status-info>
+      }
+    </section>
+  </section>
+  }
+
+  @if (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync') {
+  <section class="provider-tool-panel" [hidden]="activeProviderTool !== 'auto-sync'">
+    <app-activity-sync-route-control
+      [user]="user"
+      [hasProAccess]="hasProAccess"
+      [sourceServiceName]="serviceName"
+      [destinationServiceName]="serviceNames.SuuntoApp"
+      [sourceConnected]="isConnectedToService()">
+    </app-activity-sync-route-control>
+  </section>
+  }
+  }
+</div>

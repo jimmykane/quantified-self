@@ -88,12 +88,14 @@ import { AppUserService, GarminRouteSendContext } from '../../services/app.user.
 import { LoggerService } from '../../services/logger.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { UploadRoutesComponent } from '../upload/upload-routes/upload-routes.component';
+import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import { RoutePreviewThumbnailComponent } from './route-preview-thumbnail/route-preview-thumbnail.component';
 import { RoutePreviewMapComponent } from './route-preview-map/route-preview-map.component';
 import { AppAppSettingsInterface, AppUserInterface } from '../../models/app-user.interface';
 import { AppBreakpoints } from '../../constants/breakpoints';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-sync-rollout';
+import { isWahooRouteAccessReconnectRequired } from '../../helpers/wahoo-route-access.helper';
 
 interface RoutePageRouteViewModel {
     route: FirestoreRouteJSON;
@@ -132,6 +134,7 @@ interface RoutePageRouteViewModel {
     canSendToGarmin: boolean;
     garminSendDisabledReason: string | null;
     garminSendMenuLabel: string;
+    canSendToWahoo: boolean;
     canDelete: boolean;
     filterText: string;
 }
@@ -275,6 +278,7 @@ export class RoutesPageComponent implements OnInit {
         serviceMeta: null,
         permissionPromptSource: null,
     });
+    readonly isWahooRouteDeliveryConnected = signal(false);
     readonly suuntoConnectionView = signal<SuuntoServiceConnectionViewModel>(buildSuuntoServiceConnectionViewModel({
         hasToken: false,
         serviceMeta: null,
@@ -292,6 +296,10 @@ export class RoutesPageComponent implements OnInit {
             && !connectionView.reconnectRequired
             && connectionView.missingPermissions.length === 0;
     });
+    readonly canSendRoutesToWahoo = computed(() => (
+        this.userService.hasProAccessSignal()
+        && this.isWahooRouteDeliveryConnected()
+    ));
     readonly routeFilterActive = computed(() => this.isRouteFilterActive());
     readonly routeMapRoutes = computed(() => this.visibleRouteViewModels().map(item => item.route));
     readonly selectedRouteCount = computed(() => this.selectedRouteIDs().length);
@@ -416,6 +424,18 @@ export class RoutesPageComponent implements OnInit {
             && item.canSendToGarmin
         )).length;
     });
+    readonly selectedSendableRoutesToWahooCount = computed(() => {
+        if (!this.canSendRoutesToWahoo()) {
+            return 0;
+        }
+
+        const selectedIDs = this.selectedRouteIDSet();
+        return this.visibleRouteViewModels().filter(item => (
+            !!item.route.id
+            && selectedIDs.has(item.route.id)
+            && item.canSendToWahoo
+        )).length;
+    });
     readonly allVisibleRoutesSelected = computed(() => {
         const visibleRoutes = this.visibleRouteViewModels();
         const selectedIDs = this.selectedRouteIDSet();
@@ -491,6 +511,12 @@ export class RoutesPageComponent implements OnInit {
             ).subscribe(context => {
                 this.garminRouteSendContext.set(context);
                 this.garminRouteSendContextSubject.next(context);
+            });
+            this.userService.watchActivityServiceConnectionState(user).pipe(
+                takeUntilDestroyed(this.destroyRef),
+            ).subscribe(connectionState => {
+                const wahooConnected = connectionState[ServiceNames.WahooAPI] === true;
+                this.isWahooRouteDeliveryConnected.set(wahooConnected);
             });
 
             const routeDocuments$ = this.routeService.getAllRoutes(user).pipe(
@@ -1167,6 +1193,21 @@ export class RoutesPageComponent implements OnInit {
         return `Route sent to ${this.getRouteSendDestinationLabel(destinationServiceName)}.`;
     }
 
+    private openWahooRouteAccessReconnectDialogIfNeeded(
+        destinationServiceName: ServiceNames,
+        message: unknown,
+    ): boolean {
+        if (
+            destinationServiceName !== ServiceNames.WahooAPI
+            || !isWahooRouteAccessReconnectRequired(message)
+        ) {
+            return false;
+        }
+
+        this.dialog.open(WahooRouteAccessReconnectDialogComponent);
+        return true;
+    }
+
     private async confirmSuuntoCopySendIfNeeded(routes: FirestoreRouteJSON[]): Promise<boolean> {
         const deliveredRouteCount = routes.filter(route => hasRouteDeliveryForService(route, ServiceNames.SuuntoApp)).length;
         if (deliveredRouteCount === 0) {
@@ -1194,6 +1235,10 @@ export class RoutesPageComponent implements OnInit {
 
     async sendRouteToGarmin(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
         await this.sendRouteToService(route, ServiceNames.GarminAPI, source);
+    }
+
+    async sendRouteToWahoo(route: FirestoreRouteJSON, source: 'routes_list_row' | 'routes_list_bulk' = 'routes_list_row'): Promise<void> {
+        await this.sendRouteToService(route, ServiceNames.WahooAPI, source);
     }
 
     async sendRouteToService(
@@ -1239,8 +1284,12 @@ export class RoutesPageComponent implements OnInit {
                 destinationService: destinationServiceName,
             });
 
+            const responseMessage = getRouteSendResponseMessage(result);
+            if (result.successCount === 0 && this.openWahooRouteAccessReconnectDialogIfNeeded(destinationServiceName, responseMessage)) {
+                return;
+            }
             this.snackBar.open(
-                result.successCount > 0 ? this.getRouteSendSuccessMessage(route, destinationServiceName) : getRouteSendResponseMessage(result),
+                result.successCount > 0 ? this.getRouteSendSuccessMessage(route, destinationServiceName) : responseMessage,
                 undefined,
                 { duration: result.successCount > 0 ? 2500 : 3500 },
             );
@@ -1256,7 +1305,10 @@ export class RoutesPageComponent implements OnInit {
                 routeID,
                 destinationServiceName,
             }, error);
-            this.snackBar.open(getRouteSendErrorMessage(error, destinationServiceName), undefined, { duration: 4000 });
+            const errorMessage = getRouteSendErrorMessage(error, destinationServiceName);
+            if (!this.openWahooRouteAccessReconnectDialogIfNeeded(destinationServiceName, errorMessage)) {
+                this.snackBar.open(errorMessage, undefined, { duration: 4000 });
+            }
         } finally {
             this.sendingToServiceRouteID.set(null);
         }
@@ -1394,6 +1446,10 @@ export class RoutesPageComponent implements OnInit {
         await this.sendSelectedRoutesToService(ServiceNames.GarminAPI);
     }
 
+    async sendSelectedRoutesToWahoo(): Promise<void> {
+        await this.sendSelectedRoutesToService(ServiceNames.WahooAPI);
+    }
+
     async sendSelectedRoutesToService(destinationServiceName: ServiceNames): Promise<void> {
         const selectedRoutes = this.getSelectedVisibleRouteItems();
         const sendableRoutes = selectedRoutes.filter(item => this.canSendRouteItemToDestination(item, destinationServiceName));
@@ -1454,7 +1510,10 @@ export class RoutesPageComponent implements OnInit {
                     source: 'routes_list_bulk',
                     destinationService: destinationServiceName,
                 });
-                this.snackBar.open(getRouteSendResponseMessage(result), undefined, { duration: 4000 });
+                const responseMessage = getRouteSendResponseMessage(result);
+                if (!this.openWahooRouteAccessReconnectDialogIfNeeded(destinationServiceName, responseMessage)) {
+                    this.snackBar.open(responseMessage, undefined, { duration: 4000 });
+                }
                 return;
             }
 
@@ -1462,6 +1521,10 @@ export class RoutesPageComponent implements OnInit {
             const guidanceMessage = status === 'partial_success'
                 ? getActionableRouteSendResponseMessage(result)
                 : null;
+            const openedWahooReconnectDialog = this.openWahooRouteAccessReconnectDialogIfNeeded(
+                destinationServiceName,
+                guidanceMessage,
+            );
             this.processingService.completeJob(
                 jobId,
                 `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to ${destinationLabel}`,
@@ -1476,7 +1539,13 @@ export class RoutesPageComponent implements OnInit {
             });
             this.snackBar.open(
                 status === 'partial_success'
-                    ? this.getBulkRouteSendSummaryMessage(destinationServiceName, result.successCount, result.failureCount, totalSkippedCount, guidanceMessage)
+                    ? this.getBulkRouteSendSummaryMessage(
+                        destinationServiceName,
+                        result.successCount,
+                        result.failureCount,
+                        totalSkippedCount,
+                        openedWahooReconnectDialog ? null : guidanceMessage,
+                    )
                     : `Sent ${result.successCount} ${result.successCount === 1 ? 'route' : 'routes'} to ${destinationLabel}.`,
                 undefined,
                 { duration: status === 'partial_success' ? 4000 : 2500 },
@@ -1492,7 +1561,10 @@ export class RoutesPageComponent implements OnInit {
             this.logger.error('[RoutesPageComponent] Failed to send selected routes to service', {
                 destinationServiceName,
             }, error);
-            this.snackBar.open(getRouteSendErrorMessage(error, destinationServiceName), undefined, { duration: 4000 });
+            const errorMessage = getRouteSendErrorMessage(error, destinationServiceName);
+            if (!this.openWahooRouteAccessReconnectDialogIfNeeded(destinationServiceName, errorMessage)) {
+                this.snackBar.open(errorMessage, undefined, { duration: 4000 });
+            }
         } finally {
             this.bulkActionInProgress.set(false);
         }
@@ -1823,6 +1895,11 @@ export class RoutesPageComponent implements OnInit {
             && canSendRouteToConnectedGarminAccount(route, this.garminRouteSendContext());
     }
 
+    private canSendRouteToWahoo(route: FirestoreRouteJSON): boolean {
+        return this.canManageRoute(route)
+            && this.routeService.getOriginalRouteFiles(route).length > 0;
+    }
+
     private getGarminSendDisabledReason(route: FirestoreRouteJSON): string | null {
         if (!this.canManageRoute(route) || this.routeService.getOriginalRouteFiles(route).length === 0) {
             return null;
@@ -1837,6 +1914,8 @@ export class RoutesPageComponent implements OnInit {
                 return this.canSendRoutesToSuunto();
             case ServiceNames.GarminAPI:
                 return this.canSendRoutesToGarmin();
+            case ServiceNames.WahooAPI:
+                return this.canSendRoutesToWahoo();
             default:
                 return false;
         }
@@ -1848,13 +1927,15 @@ export class RoutesPageComponent implements OnInit {
                 return this.canSendRouteToSuunto(route);
             case ServiceNames.GarminAPI:
                 return this.canSendRouteToGarmin(route);
+            case ServiceNames.WahooAPI:
+                return this.canSendRouteToWahoo(route);
             default:
                 return false;
         }
     }
 
     private canSendRouteItemToDestination(
-        item: Pick<RoutePageRouteViewModel, 'canSendToSuunto' | 'canSendToGarmin'>,
+        item: Pick<RoutePageRouteViewModel, 'canSendToSuunto' | 'canSendToGarmin' | 'canSendToWahoo'>,
         destinationServiceName: ServiceNames,
     ): boolean {
         switch (destinationServiceName) {
@@ -1862,6 +1943,8 @@ export class RoutesPageComponent implements OnInit {
                 return item.canSendToSuunto;
             case ServiceNames.GarminAPI:
                 return item.canSendToGarmin;
+            case ServiceNames.WahooAPI:
+                return item.canSendToWahoo;
             default:
                 return false;
         }
@@ -2030,6 +2113,7 @@ export class RoutesPageComponent implements OnInit {
             canSendToGarmin: this.canSendRouteToGarmin(route),
             garminSendDisabledReason,
             garminSendMenuLabel,
+            canSendToWahoo: this.canSendRouteToWahoo(route),
             canDelete: this.canManageRoute(route),
             filterText: [
                 routeName,

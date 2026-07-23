@@ -70,6 +70,8 @@ describe('dashboard-chart-info.helper', () => {
     expect(formInfo).toContain('ATL');
     expect(formInfo).toContain('same-day');
     expect(formInfo).toContain('previous CTL');
+    expect(formInfo).toContain('training-load only');
+    expect(formInfo).toContain('Today Readiness');
     expect(acwrInfo).toContain('7 days');
     expect(acwrInfo).toContain('28 days');
     expect(fitnessInfo).toContain('42-day');

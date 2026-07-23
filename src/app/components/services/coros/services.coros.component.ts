@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, Input } from '@angular/core';
 import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -38,6 +38,8 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
   public backfillEndDate: Date = new Date();
   public backfillSummary: ActivitySyncBackfillSummary | null = null;
+  public activeActivitySyncDestination: 'suunto' | 'wahoo' = 'suunto';
+  @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | null = null;
 
   private suuntoConnectionSubscription: Subscription | null = null;
   public suuntoConnectionView: SuuntoServiceConnectionViewModel = buildSuuntoServiceConnectionViewModel({
@@ -69,6 +71,9 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   override async ngOnChanges() {
+    if (this.initialActivitySyncDestination) {
+      this.activeActivitySyncDestination = this.initialActivitySyncDestination;
+    }
     await super.ngOnChanges();
     this.watchSuuntoConnectionState();
   }

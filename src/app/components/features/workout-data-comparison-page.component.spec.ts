@@ -32,10 +32,10 @@ describe('WorkoutDataComparisonPageComponent', () => {
     const featureCards = fixture.nativeElement.querySelectorAll('.feature-card');
     const faqItems = fixture.nativeElement.querySelectorAll('.faq-item');
 
-    expect(providerChips.length).toBe(3);
+    expect(providerChips.length).toBe(4);
     expect(featureCards.length).toBe(4);
     expect(faqItems.length).toBe(5);
-    expect(text).toContain('Compare Garmin, Suunto, and COROS workout data');
+    expect(text).toContain('Compare Garmin, Suunto, COROS, and Wahoo workout data');
     expect(text).toContain('custom FIT, TCX, GPX, JSON, or SML imports');
     expect(text).toContain('Manual uploads and benchmark comparisons are available on the free plan');
     expect(text).toContain('automatic provider sync and higher limits');
@@ -65,7 +65,7 @@ describe('WorkoutDataComparisonPageComponent', () => {
     expect(text).toContain('lab tests, beta firmware, review units, exported workouts, or unsupported services');
     expect(text).toContain('Reviewers, YouTube creators, bloggers, coaches, and testers');
     expect(text).toContain('Is workout data comparison available on the free plan?');
-    expect(text).toContain('Centralize Garmin, Suunto, and COROS workout data');
+    expect(text).toContain('Centralize Garmin, Suunto, COROS, and Wahoo workout data');
     expect(text).toContain('Compare custom FIT, TCX, GPX, JSON, and SML files');
     expect(text).toContain('free to try on the Starter plan');
     expect(text).not.toContain('AI insights');

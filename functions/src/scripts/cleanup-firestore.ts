@@ -4,6 +4,11 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import * as readline from 'readline';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
+import {
+    WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
+    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
+    WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+} from '../wahoo/constants';
 
 // Initialize admin if not already initialized
 if (admin.apps.length === 0) {
@@ -24,18 +29,25 @@ const COLLECTION_GROUPS = [
     GARMIN_API_TOKENS_COLLECTION_NAME,
     "suuntoAppAccessTokens",
     "COROSAPIAccessTokens",
+    WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
     GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
     "suuntoAppWorkoutQueue",
     "COROSAPIWorkoutQueue",
+    WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
     "system",
     "config",
     "failed_jobs"
 ];
 
-const DEAUTH_CONFIG: Record<string, { service: ServiceNames | null, fn: (uid: string, service?: any) => Promise<unknown> }> = {
+const DEAUTH_CONFIG: Record<string, {
+    service: ServiceNames;
+    fn: (uid: string, service: ServiceNames) => Promise<unknown>;
+}> = {
     'suuntoAppAccessTokens': { service: ServiceNames.SuuntoApp, fn: deauthorizeServiceForUser },
     'COROSAPIAccessTokens': { service: ServiceNames.COROSAPI, fn: deauthorizeServiceForUser },
-    [GARMIN_API_TOKENS_COLLECTION_NAME]: { service: ServiceNames.GarminAPI, fn: deauthorizeServiceForUser }
+    [GARMIN_API_TOKENS_COLLECTION_NAME]: { service: ServiceNames.GarminAPI, fn: deauthorizeServiceForUser },
+    [WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME]: { service: ServiceNames.WahooAPI, fn: deauthorizeServiceForUser },
 };
 
 async function confirm(message: string): Promise<boolean> {
@@ -82,16 +94,13 @@ async function deauthorize(collectionName: string, dryRun: boolean, verbose: boo
             }
         } else {
             try {
-                if (config.service) {
-                    await config.fn(uid, config.service);
-                } else {
-                    await config.fn(uid);
-                }
-            } catch (e: Error | any) {
+                await config.fn(uid, config.service);
+            } catch (e: unknown) {
+                const error = e as { name?: string; statusCode?: number; message?: string };
                 // Ignore 404s/TokenNotFound as success
-                if (!(e.name === 'TokenNotFoundError' || e.statusCode === 404 || e.message === 'No token found')) {
+                if (!(error.name === 'TokenNotFoundError' || error.statusCode === 404 || error.message === 'No token found')) {
                     process.stdout.write('\n');
-                    logger.error(`  Failed to deauthorize ${uid}: ${e.message}`);
+                    logger.error(`  Failed to deauthorize ${uid}: ${error.message || `${e}`}`);
                 }
             }
 
@@ -144,7 +153,7 @@ async function cleanupFirestore() {
     // Phase 1 Confirmation: External Service Disconnection
     let shouldDeauth = deauthorizeFlag;
     if (!dryRun && !force && !shouldDeauth) {
-        shouldDeauth = await confirm('PHASE 1: Do you want to DISCONNECT users from external services (Suunto, COROS, Garmin)?\n(This revokes their API tokens so we don\'t keep getting their data)');
+        shouldDeauth = await confirm('PHASE 1: Do you want to DISCONNECT users from external services (Suunto, COROS, Garmin, Wahoo)?\n(This revokes their API tokens so we don\'t keep getting their data)');
     }
 
     // Phase 2 Confirmation: Data Deletion
@@ -178,7 +187,7 @@ async function cleanupFirestore() {
     }
 
     // 2. Deletion phase
-    logger.info('\n--- Phase 2: Deletion (BulkWriter) ---');
+    logger.info('\n--- Phase 2: Recursive Deletion (BulkWriter) ---');
     const bulkWriter = db.bulkWriter();
     bulkWriter.onWriteError((error) => {
         logger.error('BulkWriter Error:', error.message);
@@ -207,7 +216,8 @@ async function cleanupFirestore() {
                 const stream = db.collectionGroup(group).stream();
                 let groupDeleted = 0;
                 for await (const doc of stream) {
-                    bulkWriter.delete((doc as any).ref);
+                    const documentSnapshot = doc as unknown as admin.firestore.QueryDocumentSnapshot;
+                    await db.recursiveDelete(documentSnapshot.ref, bulkWriter);
                     groupDeleted++;
                     totalDeleted++;
                     if (totalDeleted % 500 === 0) {
@@ -216,8 +226,8 @@ async function cleanupFirestore() {
                 }
                 logger.info(`\n - Queued ${groupDeleted} documents from [${group}]`);
             }
-        } catch (error: any) {
-            logger.error(`Error processing [${group}]:`, error.message);
+        } catch (error: unknown) {
+            logger.error(`Error processing [${group}]:`, error instanceof Error ? error.message : `${error}`);
         }
     }
 

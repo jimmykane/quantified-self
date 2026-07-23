@@ -55,18 +55,29 @@
           </div>
           <div class="training-state-value-row">
             <strong>{{ trainingStatus.stateLabel }}</strong>
-            <button
-              mat-icon-button
-              type="button"
-              class="title-info-button training-state-info-button"
-              appHapticTap
-              appTooltipTap
-              [matTooltip]="trainingStatus.stateInfoTooltip"
-              matTooltipPosition="below"
-              [attr.aria-label]="'How ' + trainingStatus.stateLabel + ' is calculated'"
-            >
-              <mat-icon aria-hidden="true">info</mat-icon>
-            </button>
+            @if (useTrainingStateDetailsDialog()) {
+              <button
+                mat-icon-button
+                type="button"
+                class="title-info-button training-state-info-button"
+                appHapticTap
+                (click)="openTrainingStateDetailsDialog($event)"
+                [attr.aria-label]="'How ' + trainingStatus.stateLabel + ' is calculated'"
+              >
+                <mat-icon aria-hidden="true">info</mat-icon>
+              </button>
+            } @else {
+              <button
+                mat-icon-button
+                type="button"
+                class="title-info-button training-state-info-button"
+                appHapticTap
+                [matMenuTriggerFor]="trainingStateDetailsMenu"
+                [attr.aria-label]="'How ' + trainingStatus.stateLabel + ' is calculated'"
+              >
+                <mat-icon aria-hidden="true">info</mat-icon>
+              </button>
+            }
           </div>
           <span class="training-state-caption">{{ trainingStatus.stateCaption }}</span>
           @if (trainingStatus.stateUpdateText) {
@@ -77,7 +88,7 @@
           <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel" role="status">
             <span class="training-metric-label">Training comparison</span>
             <strong>Preparing</strong>
-            <span>Reading your recent running, cycling/MTB, and swimming sessions.</span>
+            <span>Reading your recent running, cycling/MTB, and swimming workouts.</span>
           </article>
         } @else if (trainingComparisonState === 'unavailable') {
           <article class="training-comparison-panel training-comparison-status-panel qs-glass-card-panel">
@@ -92,17 +103,9 @@
             <span>{{ trainingStatus.volumeCaption }}</span>
           </article>
           <article class="training-comparison-panel qs-glass-card-panel">
-            <span class="training-metric-label">Sessions</span>
+            <span class="training-metric-label">Workouts</span>
             <strong><app-training-metric-text [text]="trainingStatus.sessionsText"></app-training-metric-text></strong>
             <span>{{ trainingStatus.sessionsCaption }}</span>
-          </article>
-        }
-        @if (trainingRecoveryEstimate; as estimate) {
-          <article class="training-comparison-panel training-recovery-estimate-panel qs-glass-card-panel">
-            <span class="training-metric-label">Recovery remaining</span>
-            <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
-            <span>{{ estimate.detailText }}</span>
-            @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
           </article>
         }
       </div>
@@ -112,6 +115,7 @@
             <div>
               <span class="training-metric-label">Current context</span>
               <h3 id="training-readiness-title">Readiness today</h3>
+              <p class="training-readiness-method">Load + sleep signals · Freshness stays TSS-only.</p>
             </div>
             @if (trainingReadiness.state === 'ready') {
               <div class="training-readiness-summary" aria-label="Current readiness signal summary">
@@ -217,6 +221,20 @@
               }
             </dl>
           }
+          @if (trainingRecoveryEstimate; as estimate) {
+            <aside class="training-readiness-imported-recovery" aria-label="Imported recovery estimate">
+              <mat-icon aria-hidden="true">timer</mat-icon>
+              <div class="training-readiness-imported-recovery-copy">
+                <span class="training-metric-label">Imported recovery estimate</span>
+                <div class="training-readiness-imported-recovery-value">
+                  <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
+                  <span>remaining</span>
+                </div>
+                <p>{{ estimate.detailText }}</p>
+              </div>
+              @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
+            </aside>
+          }
           <p class="training-readiness-source">{{ trainingReadiness.sourceText }}</p>
 
           <section class="training-recovery-history" aria-labelledby="training-recovery-history-title">
@@ -273,6 +291,9 @@
             <header class="training-build-card-header">
               <div>
                 <span class="training-metric-label">{{ card.label }}</span>
+                @if (card.state === 'ready' && card.source?.selection?.mode === 'event') {
+                  <span class="training-build-reference-kind">Selected reference event</span>
+                }
                 <h3>{{ card.state === 'ready' ? card.referenceText : 'Historical benchmark' }}</h3>
               </div>
               <button
@@ -307,7 +328,28 @@
                 <p>Refresh to request another derived comparison snapshot.</p>
               </div>
             } @else {
-              <p class="training-build-range">{{ card.source?.selection?.durationWeeks }} weeks · {{ card.rangeText }}</p>
+              <p class="training-build-range">
+                @if (card.source?.selection?.mode === 'event') {
+                  {{ card.source?.selection?.durationWeeks }}-week build before this event · {{ card.rangeText }}
+                } @else {
+                  {{ card.source?.selection?.durationWeeks }} weeks · {{ card.rangeText }}
+                }
+              </p>
+              @if (card.source?.selection?.mode === 'event') {
+                <p class="training-build-anchor-note">
+                  <mat-icon aria-hidden="true">event</mat-icon>
+                  Used as the comparison reference; event day is excluded.
+                </p>
+              }
+              @if (card.guidance; as guidance) {
+                <div class="training-card-guidance">
+                  <p><strong>What this means:</strong>&nbsp;{{ guidance.conclusionText }}</p>
+                  <small>{{ guidance.evidenceText }}</small>
+                  @if (guidance.nextStepText) {
+                    <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ guidance.nextStepText }}</p>
+                  }
+                </div>
+              }
               @if (card.emptyMessage) {
                 <p class="training-build-empty">{{ card.emptyMessage }}</p>
               }
@@ -367,7 +409,7 @@
               @if (card.discipline === 'swimming') {
                 <p class="training-build-footnote">Pool and open-water pace stay separate. Missing pace, TSS, or intensity remains unavailable rather than zero.</p>
               } @else {
-                <p class="training-build-footnote">Merged events are excluded. Durability compares only eligible, context-matched activities; missing evidence remains unavailable.</p>
+                <p class="training-build-footnote">Merged events are excluded. Durability compares only eligible, context-matched workouts; missing evidence remains unavailable.</p>
               }
             }
           </article>
@@ -390,6 +432,13 @@
           @if (derivedState.trainingExplanationStatus !== 'ready') {
             <p class="training-empty-state" role="status">Updating training drivers. The latest complete explanation remains visible.</p>
           }
+          <div class="training-card-guidance training-card-guidance--section">
+            <p><strong>What this means:</strong>&nbsp;{{ explanation.conclusionText }}</p>
+            <small>{{ explanation.evidenceText }}</small>
+            @if (explanation.nextStepText) {
+              <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ explanation.nextStepText }}</p>
+            }
+          </div>
           @for (card of explanation.cards; track card.key) {
             <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
               <h3 class="training-insight-title">{{ card.title }}</h3>
@@ -407,7 +456,7 @@
         } @else {
           <div class="training-capacity-loading qs-glass-card-panel" role="status">
             <mat-spinner diameter="24"></mat-spinner>
-            <div><strong>Preparing training drivers</strong><p>Comparing parent-event load, child sport groups, and training rhythm.</p></div>
+            <div><strong>Preparing training drivers</strong><p>Comparing workout load, sport groups, and training rhythm.</p></div>
           </div>
         }
       </div>
@@ -419,7 +468,14 @@
           <p>Load trajectory</p>
           <h2 id="load-trajectory-title">How your load is changing</h2>
         </div>
-        <span class="training-section-note">All activities with TSS</span>
+        <span class="training-section-note">TSS-backed workouts only</span>
+      </div>
+      <div class="training-card-guidance training-card-guidance--section">
+        <p><strong>What this means:</strong>&nbsp;{{ trainingLoadGuidance.conclusionText }}</p>
+        <small>{{ trainingLoadGuidance.evidenceText }}</small>
+        @if (trainingLoadGuidance.nextStepText) {
+          <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ trainingLoadGuidance.nextStepText }}</p>
+        }
       </div>
       <div class="training-load-grid">
         @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
@@ -438,7 +494,7 @@
         }
         @if (derivedState.freshnessForecastStatus === 'ready' || derivedState.freshnessForecast?.points?.length) {
           <article class="training-chart-panel qs-glass-card-panel">
-            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()"></app-freshness-forecast-chart>
+            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="freshnessForecastInfoTooltip"></app-freshness-forecast-chart>
           </article>
         } @else {
           <article class="training-chart-state training-chart-state-forecast qs-glass-card-panel" role="status">
@@ -482,7 +538,14 @@
           @for (discipline of trainingMixDisciplines; track discipline.summary.discipline) {
             <article class="training-mix-panel qs-glass-card-panel" [class.training-mix-panel--single]="trainingMixDisciplines.length === 1">
               <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
-              <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>activities</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time</span></div>
+              <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>workouts</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time</span></div>
+              <div class="training-card-guidance training-card-guidance--compact">
+                <p><strong>What this means:</strong>&nbsp;{{ discipline.guidance.conclusionText }}</p>
+                <small>{{ discipline.guidance.evidenceText }}</small>
+                @if (discipline.guidance.nextStepText) {
+                  <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ discipline.guidance.nextStepText }}</p>
+                }
+              </div>
               @if (trainingMixDisciplines.length === 1) {
                 <div class="training-mix-zone-comparison">
                   <div class="training-mix-zone-heading"><span>Intensity balance</span><span>Now / usual</span></div>
@@ -553,6 +616,17 @@
                 <span class="training-capacity-window">90-day performance</span>
               </header>
 
+              <div
+                class="training-card-guidance training-capacity-interpretation"
+                [class.training-capacity-interpretation-positive]="discipline.interpretation.tone === 'positive'"
+                [class.training-capacity-interpretation-caution]="discipline.interpretation.tone === 'caution'">
+                <p><strong>{{ discipline.interpretation.title }}:</strong>&nbsp;{{ discipline.interpretation.description }}</p>
+                <small>{{ discipline.evidenceText }}</small>
+                @if (discipline.nextStepText) {
+                  <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ discipline.nextStepText }}</p>
+                }
+              </div>
+
               <div class="training-capacity-markers">
                 @if (discipline.ftpSetting; as ftpSetting) {
                   <div class="training-capacity-marker">
@@ -575,13 +649,6 @@
                 }
               </div>
 
-              <div
-                class="training-capacity-interpretation"
-                [class.training-capacity-interpretation-positive]="discipline.interpretation.tone === 'positive'"
-                [class.training-capacity-interpretation-caution]="discipline.interpretation.tone === 'caution'">
-                <strong>{{ discipline.interpretation.title }}</strong>
-                <p>{{ discipline.interpretation.description }}</p>
-              </div>
             </article>
             } @empty {
               <p class="training-empty-state">No capacity snapshot is available for the sports shown.</p>
@@ -617,7 +684,10 @@
         <article class="training-durability-panel qs-glass-card-panel" aria-labelledby="training-durability-title">
           <header>
             <div>
-              <h3 id="training-durability-title" class="qs-dashboard-chart-title">Durability</h3>
+              <div class="training-durability-title-row">
+                <h3 id="training-durability-title" class="qs-dashboard-chart-title">Durability</h3>
+                <app-durability-reading-guide context="training"></app-durability-reading-guide>
+              </div>
               <p>Current 28 days compared with the median of the prior three 28-day blocks</p>
             </div>
             <span>12-week evidence trail</span>
@@ -632,6 +702,13 @@
               @for (scope of trainingDurabilityScopes; track scope.scope) {
                 <mat-tab [label]="scope.label">
                   <div class="training-durability-tab">
+                    <div class="training-card-guidance training-card-guidance--compact">
+                      <p><strong>What this means:</strong>&nbsp;{{ scope.conclusionText }}</p>
+                      <small>{{ scope.evidenceQualityText }}</small>
+                      @if (scope.nextStepText) {
+                        <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ scope.nextStepText }}</p>
+                      }
+                    </div>
                     <div class="training-durability-evidence">
                       <strong><app-training-metric-text [text]="scope.evidenceText"></app-training-metric-text></strong>
                       <span><app-training-metric-text [text]="scope.coverageText"></app-training-metric-text></span>
@@ -663,7 +740,7 @@
                         ></app-training-durability-trajectory-chart>
                       </section>
                     } @empty {
-                      <p class="training-empty-state">No comparable steady-session evidence in the current 28-day window. The primary exclusions above explain which eligibility gates were missed.</p>
+                      <p class="training-empty-state">No comparable steady-workout evidence in the current 28-day window. The primary exclusions above explain which eligibility gates were missed.</p>
                     }
                     @if (scope.supportingEventsText) { <p class="training-durability-support">{{ scope.supportingEventsText }}</p> }
                   </div>
@@ -673,7 +750,7 @@
           } @else {
             <div class="training-capacity-loading" role="status">
               <mat-spinner diameter="24"></mat-spinner>
-              <div><strong>Preparing durability evidence</strong><p>Reading comparable activity-level evidence for the sports shown.</p></div>
+              <div><strong>Preparing durability evidence</strong><p>Reading comparable workout evidence for the sports shown.</p></div>
             </div>
           }
         </article>
@@ -684,6 +761,11 @@
                 <div class="training-power-profile-summary">
                   <strong>90-day profile vs 1 year</strong>
                   <span><app-training-metric-text [text]="profile.activityCountText"></app-training-metric-text></span>
+                  <p class="training-power-profile-conclusion"><strong>What this means:</strong>&nbsp;{{ profile.conclusionText }}</p>
+                  <small>{{ profile.evidenceText }}</small>
+                  @if (profile.nextStepText) {
+                    <p class="training-power-profile-next"><strong>What to look at next:</strong>&nbsp;{{ profile.nextStepText }}</p>
+                  }
                   @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
                   @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
                   @if (profile.anchors.length) {
@@ -713,6 +795,11 @@
                 <div class="training-power-profile-summary">
                   <strong>90-day profile vs 1 year</strong>
                   <span><app-training-metric-text [text]="profile.activityCountText"></app-training-metric-text></span>
+                  <p class="training-power-profile-conclusion"><strong>What this means:</strong>&nbsp;{{ profile.conclusionText }}</p>
+                  <small>{{ profile.evidenceText }}</small>
+                  @if (profile.nextStepText) {
+                    <p class="training-power-profile-next"><strong>What to look at next:</strong>&nbsp;{{ profile.nextStepText }}</p>
+                  }
                   @if (profile.strongestText) { <p>{{ profile.strongestText }}</p> }
                   @if (profile.clearestGapText) { <p>{{ profile.clearestGapText }}</p> }
                   @if (profile.anchors.length) {
@@ -739,3 +826,29 @@
     </section>
   }
 </main>
+
+<ng-template #trainingStateDetailsContent>
+  <section class="training-state-details-content" aria-label="Training state details">
+    <div class="training-state-details-heading">{{ trainingStatus.stateLabel }} state</div>
+    <p class="training-state-details-description">{{ trainingStatus.stateInfo.description }}</p>
+    <dl class="training-state-details-list">
+      @for (row of trainingStatus.stateInfo.rows; track row.label) {
+        <div class="training-state-details-row">
+          <dt>{{ row.label }}</dt>
+          <dd><app-training-metric-text [text]="row.value"></app-training-metric-text></dd>
+        </div>
+      }
+    </dl>
+    <p class="training-state-details-note">{{ trainingStatus.stateInfo.note }}</p>
+  </section>
+</ng-template>
+
+<mat-menu #trainingStateDetailsMenu="matMenu" class="qs-menu-panel training-state-details-menu" xPosition="after" yPosition="below">
+  <ng-container [ngTemplateOutlet]="trainingStateDetailsContent"></ng-container>
+</mat-menu>
+
+<ng-template #trainingStateDetailsDialogTemplate>
+  <div class="training-state-details-dialog-content">
+    <ng-container [ngTemplateOutlet]="trainingStateDetailsContent"></ng-container>
+  </div>
+</ng-template>

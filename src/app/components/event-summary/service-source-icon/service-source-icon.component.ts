@@ -22,6 +22,8 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() showTooltip = true;
     @Input() showText = false;
     @Input() suppressedTextLabels: readonly string[] = [];
+    @Input() iconWidth: number | null = null;
+    @Input() iconHeight = 20;
 
     serviceName: ServiceNames | null = null;
     serviceLogo: string | null = null;
@@ -71,7 +73,9 @@ export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
         this.metadataKeysSubscription = this.eventService.getEventMetaDataKeys(this.user, eventID)
             .pipe(take(1))
             .subscribe(keys => {
-                if (keys?.includes(ServiceNames.COROSAPI)) {
+                if (keys?.includes(ServiceNames.WahooAPI)) {
+                    this.serviceName = ServiceNames.WahooAPI;
+                } else if (keys?.includes(ServiceNames.COROSAPI)) {
                     this.serviceName = ServiceNames.COROSAPI;
                 } else if (keys?.includes(ServiceNames.SuuntoApp)) {
                     this.serviceName = ServiceNames.SuuntoApp;

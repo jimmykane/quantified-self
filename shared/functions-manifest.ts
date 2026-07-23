@@ -24,6 +24,16 @@ export const FUNCTIONS_MANIFEST = {
     addCOROSAPIHistoryToQueue: { name: 'addCOROSAPIHistoryToQueue', region: 'europe-west2' },
     importActivityToCOROSAPI: { name: 'importActivityToCOROSAPI', region: 'europe-west2' },
 
+    // Wahoo Functions
+    getWahooAPIAuthRequestTokenRedirectURI: { name: 'getWahooAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
+    requestAndSetWahooAPIAccessToken: { name: 'requestAndSetWahooAPIAccessToken', region: 'europe-west2' },
+    deauthorizeWahooAPI: { name: 'deauthorizeWahooAPI', region: 'europe-west2' },
+    getWahooAPIConnectionAccount: { name: 'getWahooAPIConnectionAccount', region: 'europe-west2' },
+    addWahooAPIHistoryToQueue: { name: 'addWahooAPIHistoryToQueue', region: 'europe-west2' },
+    importActivityToWahooAPI: { name: 'importActivityToWahooAPI', region: 'europe-west2' },
+    getWahooAPIWorkoutFileUploadStatus: { name: 'getWahooAPIWorkoutFileUploadStatus', region: 'europe-west2' },
+    importRouteToWahooAPI: { name: 'importRouteToWahooAPI', region: 'europe-west2' },
+
     // Suunto Functions
     getSuuntoAPIAuthRequestTokenRedirectURI: { name: 'getSuuntoAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetSuuntoAPIAccessToken: { name: 'requestAndSetSuuntoAPIAccessToken', region: 'europe-west2' },
@@ -41,6 +51,7 @@ export const FUNCTIONS_MANIFEST = {
     getGarminAPIAuthRequestTokenRedirectURI: { name: 'getGarminAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetGarminAPIAccessToken: { name: 'requestAndSetGarminAPIAccessToken', region: 'europe-west2' },
     deauthorizeGarminAPI: { name: 'deauthorizeGarminAPI', region: 'europe-west2' },
+    importRouteToGarminAPI: { name: 'importRouteToGarminAPI', region: 'europe-west2' },
     backfillGarminAPIActivities: { name: 'backfillGarminAPIActivities', region: 'europe-west2' },
     backfillGarminAPISleep: { name: 'backfillGarminAPISleep', region: 'europe-west2' },
     receiveGarminAPIDeregistration: { name: 'receiveGarminAPIDeregistration', region: 'europe-west2' },

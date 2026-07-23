@@ -2,11 +2,13 @@ import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import {
   COROSAPIEventMetaData,
-  SuuntoAppEventMetaData
+  SuuntoAppEventMetaData,
+  WahooAPIEventMetaData,
 } from '@sports-alliance/sports-lib';
 import { GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 
@@ -179,6 +181,56 @@ export class EventWriteSkippedForDeletedUserError extends Error {
   }
 }
 
+/**
+ * Optional authorization condition evaluated in the same transaction as each
+ * event or activity document write. The condition must return false rather
+ * than throwing when authorization has been superseded; operational failures
+ * should still throw so callers can retry them.
+ */
+export type EventWriteTransactionGuard = (
+  transaction: admin.firestore.Transaction,
+) => Promise<boolean>;
+
+/**
+ * Records Firestore document roots that did not exist before a successful
+ * event-write transaction. Callers that need to compensate a rejected
+ * authorization fence must only remove these roots: provider revisions reuse
+ * deterministic event and activity IDs, so an ID alone is not evidence that
+ * this attempt created the document.
+ */
+export type EventWriteDocumentCreatedCallback = (path: readonly string[]) => void;
+
+export interface SetEventWriteOptions {
+  transactionGuard?: EventWriteTransactionGuard;
+  /**
+   * Invoked after a guarded document write commits only when that document did
+   * not exist before this write attempt. This is an internal server-side hook
+   * for precise compensation after an authorization change.
+   */
+  onDocumentCreated?: EventWriteDocumentCreatedCallback;
+  /**
+   * Keep original files outside user-readable Storage paths until every
+   * deletion and authorization-guarded Firestore write has succeeded.
+   *
+   * This is for imports whose authorization can change while they are being
+   * processed (for example, a transferred provider account). It is opt-in so
+   * existing provider imports retain their established Storage behavior.
+   */
+  stageOriginalFilesUntilEventWrite?: boolean;
+}
+
+export class EventWriteSkippedByTransactionGuardError extends Error {
+  public readonly name = 'EventWriteSkippedByTransactionGuardError';
+  public readonly code = 'event_write_guard_rejected';
+
+  constructor(
+    public readonly userID: string,
+    public readonly phase: string,
+  ) {
+    super(`Skipping event write for user ${userID} during ${phase} because its write authorization is no longer current.`);
+  }
+}
+
 export async function assertEventWriteUserActive(userID: string, phase: string): Promise<void> {
   let deletionGuard;
   try {
@@ -195,6 +247,42 @@ export async function assertEventWriteUserActive(userID: string, phase: string):
   throw new EventWriteSkippedForDeletedUserError(userID, phase);
 }
 
+async function assertEventWriteAuthorizationInTransaction(
+  db: admin.firestore.Firestore,
+  transaction: admin.firestore.Transaction,
+  userID: string,
+  phase: string,
+  transactionGuard?: EventWriteTransactionGuard,
+): Promise<void> {
+  let deletionGuard;
+  try {
+    deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+  } catch (error) {
+    throw new UserDeletionGuardReadError(userID, phase, error);
+  }
+
+  if (deletionGuard.shouldSkip) {
+    logger.warn(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
+    throw new EventWriteSkippedForDeletedUserError(userID, phase);
+  }
+
+  if (transactionGuard && !(await transactionGuard(transaction))) {
+    logger.info(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because its write authorization is no longer current.`);
+    throw new EventWriteSkippedByTransactionGuardError(userID, phase);
+  }
+}
+
+async function assertEventWriteAuthorizationCurrent(
+  userID: string,
+  phase: string,
+  transactionGuard?: EventWriteTransactionGuard,
+): Promise<void> {
+  const db = admin.firestore();
+  await db.runTransaction(async (transaction) => {
+    await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase, transactionGuard);
+  });
+}
+
 export async function setEventDocumentIfUserActive(
   userID: string,
   phase: string,
@@ -205,29 +293,25 @@ export async function setEventDocumentIfUserActive(
     incomingData: admin.firestore.DocumentData,
     existingData: admin.firestore.DocumentData | null,
   ) => admin.firestore.DocumentData,
+  transactionGuard?: EventWriteTransactionGuard,
+  onDocumentCreated?: () => void,
 ): Promise<void> {
   const db = admin.firestore();
+  let documentCreated = false;
   await db.runTransaction(async (transaction) => {
-    let deletionGuard;
-    try {
-      deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
-    } catch (error) {
-      throw new UserDeletionGuardReadError(userID, phase, error);
-    }
-
-    if (deletionGuard.shouldSkip) {
-      logger.warn(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
-      throw new EventWriteSkippedForDeletedUserError(userID, phase);
-    }
+    await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase, transactionGuard);
 
     const incomingData = data as admin.firestore.DocumentData;
     let resolvedData = incomingData;
-    if (transformExistingData) {
+    if (transformExistingData || onDocumentCreated) {
       const existingSnapshot = await transaction.get(docRef);
-      resolvedData = transformExistingData(
-        incomingData,
-        existingSnapshot.exists ? existingSnapshot.data() || null : null,
-      );
+      documentCreated = !existingSnapshot.exists;
+      if (transformExistingData) {
+        resolvedData = transformExistingData(
+          incomingData,
+          existingSnapshot.exists ? existingSnapshot.data() || null : null,
+        );
+      }
     }
 
     if (options) {
@@ -237,10 +321,50 @@ export async function setEventDocumentIfUserActive(
 
     transaction.set(docRef, resolvedData);
   });
+
+  if (documentCreated) {
+    onDocumentCreated?.();
+  }
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<SetEventResult> {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData | WahooAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, writeOptions: SetEventWriteOptions = {}): Promise<SetEventResult> {
   await assertEventWriteUserActive(userID, 'event_write_start');
+  const transactionGuard = writeOptions.transactionGuard;
+  const onDocumentCreated = writeOptions.onDocumentCreated;
+  const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true;
+  const stagedOriginalFiles: { stagingPath: string; targetPath: string }[] = [];
+  const stagingBucket = stageOriginalFilesUntilEventWrite ? admin.storage().bucket() : undefined;
+
+  const cleanupStagedOriginalFiles = async (): Promise<void> => {
+    if (!stagingBucket || stagedOriginalFiles.length === 0) {
+      return;
+    }
+
+    await Promise.all(stagedOriginalFiles.map(async ({ stagingPath }) => {
+      try {
+        await stagingBucket.file(stagingPath).delete({ ignoreNotFound: true });
+      } catch (cleanupError) {
+        // Do not turn an ownership/deletion rejection into a retried import.
+        // The staged path is deliberately outside every client-readable path.
+        logger.error('[EventWrite] Failed to clean up staged original file', {
+          stagingPath,
+          error: cleanupError,
+        });
+      }
+    }));
+  };
+
+  const promoteStagedOriginalFiles = async (): Promise<void> => {
+    if (!stagingBucket || stagedOriginalFiles.length === 0) {
+      return;
+    }
+
+    for (const { stagingPath, targetPath } of stagedOriginalFiles) {
+      await stagingBucket.file(stagingPath).copy(stagingBucket.file(targetPath));
+    }
+
+    await cleanupStagedOriginalFiles();
+  };
 
   // Enforce Usage Limit
   await checkEventUsageLimit(userID, usageCache, pendingWrites);
@@ -289,6 +413,8 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         data,
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
+        transactionGuard,
+        onDocumentCreated ? () => onDocumentCreated([...path]) : undefined,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -302,6 +428,14 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   const storageAdapter: StorageAdapter = {
     uploadFile: async (path: string, data: any) => {
       await assertEventWriteUserActive(userID, `event_original_file_upload:${path}`);
+      if (stagingBucket) {
+        // These objects are backend-only: no user ID appears in the path, so
+        // they cannot match the Storage rules' user-readable `/users/**` paths.
+        const stagingPath = `event-write-staging/${crypto.randomUUID()}`;
+        stagedOriginalFiles.push({ stagingPath, targetPath: path });
+        await stagingBucket.file(stagingPath).save(data);
+        return {};
+      }
       const bucket = admin.storage().bucket();
       const file = bucket.file(path);
       await file.save(data);
@@ -321,40 +455,77 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   };
 
   const writer = new EventWriter(adapter, storageAdapter, undefined, logAdapter);
-  const savedOriginalFiles = await writer.writeAllEventData(userID, event, originalFile);
+  try {
+    const savedOriginalFiles = await writer.writeAllEventData(userID, event, originalFile);
 
-  const processingMetaData: ProcessingMetaData = {
-    processingEntity: EVENT_PROCESSING_ENTITY,
-    sportsLibVersion: SPORTS_LIB_VERSION,
-    sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
-    processedAt: admin.firestore.FieldValue.serverTimestamp(),
-  };
+    const processingMetaData: ProcessingMetaData = {
+      processingEntity: EVENT_PROCESSING_ENTITY,
+      sportsLibVersion: SPORTS_LIB_VERSION,
+      sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
 
-  const processingMetaRef = admin.firestore()
-    .collection('users')
-    .doc(userID)
-    .collection('events')
-    .doc(<string>event.getID())
-    .collection('metaData')
-    .doc('processing');
+    const processingMetaRef = admin.firestore()
+      .collection('users')
+      .doc(userID)
+      .collection('events')
+      .doc(<string>event.getID())
+      .collection('metaData')
+      .doc('processing');
 
-  await setEventDocumentIfUserActive(userID, 'event_processing_metadata', processingMetaRef, processingMetaData);
+    await setEventDocumentIfUserActive(
+      userID,
+      'event_processing_metadata',
+      processingMetaRef,
+      processingMetaData,
+      undefined,
+      undefined,
+      transactionGuard,
+      onDocumentCreated ? () => onDocumentCreated([
+        'users', userID, 'events', <string>event.getID(), 'metaData', 'processing',
+      ]) : undefined,
+    );
 
-  // Write Metadata (not handled by EventWriter)
-  const metaRef = admin.firestore()
-    .collection('users')
-    .doc(userID)
-    .collection('events')
-    .doc(<string>event.getID())
-    .collection('metaData')
-    .doc(metaData.serviceName);
+    // Write Metadata (not handled by EventWriter)
+    const metaRef = admin.firestore()
+      .collection('users')
+      .doc(userID)
+      .collection('events')
+      .doc(<string>event.getID())
+      .collection('metaData')
+      .doc(metaData.serviceName);
 
-  await setEventDocumentIfUserActive(userID, `event_service_metadata:${metaData.serviceName}`, metaRef, metaData.toJSON());
+    await setEventDocumentIfUserActive(
+      userID,
+      `event_service_metadata:${metaData.serviceName}`,
+      metaRef,
+      metaData.toJSON(),
+      undefined,
+      undefined,
+      transactionGuard,
+      onDocumentCreated ? () => onDocumentCreated([
+        'users', userID, 'events', <string>event.getID(), 'metaData', metaData.serviceName,
+      ]) : undefined,
+    );
 
-  return {
-    eventID: <string>event.getID(),
-    savedOriginalFiles,
-  };
+    // Storage cannot join the Firestore transaction. Recheck immediately
+    // before promotion, then only expose the user-readable copy after every
+    // guarded event write has committed.
+    await assertEventWriteAuthorizationCurrent(
+      userID,
+      'event_original_file_promotion',
+      transactionGuard,
+    );
+    await promoteStagedOriginalFiles();
+
+    return {
+      eventID: <string>event.getID(),
+      savedOriginalFiles,
+    };
+  } catch (error) {
+    await cleanupStagedOriginalFiles();
+    throw error;
+  }
 }
 
 /**

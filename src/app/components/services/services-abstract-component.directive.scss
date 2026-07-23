@@ -76,6 +76,11 @@ mat-icon {
     padding: 16px 0 0;
 }
 
+.provider-tool-panel--focused {
+    gap: 20px;
+    padding-top: 0;
+}
+
 .provider-tool-panel[hidden] {
     display: none;
 }
@@ -261,6 +266,19 @@ mat-icon {
     height: 20px;
 }
 
+.activity-sync-provider-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.activity-sync-provider-icons mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
 .tool-subsection-meta {
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.8rem;
@@ -336,8 +354,13 @@ mat-icon {
     font-weight: 600;
 }
 
-.full-width-action {
-    width: 100%;
+.service-tool-primary-action {
+    align-self: flex-start;
+    margin-right: 0;
+}
+
+.activity-sync-destination-selector {
+    align-self: flex-start;
 }
 
 .date-fields {
@@ -394,5 +417,19 @@ mat-icon {
 
     .tool-actions button {
         width: 100%;
+    }
+
+    .service-tool-primary-action {
+        align-self: stretch;
+        width: 100%;
+    }
+
+    .activity-sync-destination-selector {
+        align-self: stretch;
+        width: 100%;
+    }
+
+    .activity-sync-destination-selector mat-button-toggle {
+        flex: 1 1 0;
     }
 }

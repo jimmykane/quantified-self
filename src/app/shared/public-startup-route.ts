@@ -16,6 +16,7 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/integrations/garmin',
   '/integrations/suunto',
   '/integrations/coros',
+  '/integrations/wahoo',
   '/features',
   '/features/workout-data-comparison',
   '/features/training-analysis',
@@ -27,6 +28,7 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/guides',
   '/guides/sync-garmin-to-suunto',
   '/guides/sync-coros-to-suunto',
+  '/guides/sync-wahoo-to-suunto',
   '/guides/sync-suunto-routes-to-garmin-courses',
   '/guides/centralize-garmin-suunto-coros-workout-data',
 ]);

@@ -115,7 +115,7 @@ export function formatTrainingVisibleDisciplinesActivityLabel(
     discipline => TRAINING_VISIBLE_DISCIPLINE_PRESENTATION[discipline].label.toLowerCase(),
   );
   if (labels.length <= 1) {
-    return `${labels[0] || 'sport'} sessions`;
+    return `${labels[0] || 'sport'} workouts`;
   }
-  return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]} sessions`;
+  return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]} workouts`;
 }

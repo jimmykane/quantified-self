@@ -562,25 +562,16 @@ describe('checkAndSendSubscriptionEmails', () => {
             expireAt: expect.any(Object)
         }));
     });
-    it('should use raw role name if display name not found (Unknown Role Upgrade)', async () => {
+    it('should use the raw role name in a cancellation email when no display name exists', async () => {
         const uid = 'user1';
         const subId = 'sub1';
-        const before = { status: 'active', role: 'basic' };
-        // 'alien-lord' is not in ROLE_HIERARCHY, so level 0. basic is 1.
-        // Wait, if new level is 0 and old is 1, that's a downgrade.
-        // Let's test upgrade with something higher than pro if possible, or just custom logic?
-        // Actually, if it returns 0, it counts as Free.
-        // To test lookup failure but still passing logic, we need to mock ROLE_HIERARCHY to include it but not display name?
-        // The mock in line 7 hardcodes the hierarchy.
-        // Let's test the Display Name fallback specifically.
-
-        // We can't easily change the mocked hierarchy mid-test without re-importing or using doMock.
-        // However, we CAN test the fallback in cancellation which doesn't check hierarchy.
+        const before = { status: 'active', role: 'unknown-role' };
+        const periodEnd = new Date('2026-08-01T00:00:00.000Z');
         const after = {
             status: 'active',
             role: 'unknown-role',
             cancel_at_period_end: true,
-            current_period_end: { seconds: 123, toDate: () => new Date() }
+            current_period_end: { seconds: 123, toDate: () => periodEnd }
         };
         const eventId = 'evt_unknown_1';
 
@@ -588,11 +579,13 @@ describe('checkAndSendSubscriptionEmails', () => {
 
         expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
             template: expect.objectContaining({
+                name: 'subscription_cancellation',
                 data: expect.objectContaining({
                     role: 'unknown-role'
                 })
             })
         }));
+        expect(setSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should use raw role name if display name not found (Downgrade)', async () => {

@@ -545,6 +545,37 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     );
   });
 
+  it('does not apply follow-up cleanup when a duplicate-token ownership guard becomes stale', async () => {
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: false,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+      skippedByCondition: true,
+    });
+
+    const guard = vi.fn().mockResolvedValue(false);
+    const outcome = await cleanupServiceTokenById(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      'wahoo-user',
+      SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup,
+      { shouldDeleteInTransaction: guard },
+    );
+
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      'wahoo-user',
+      expect.objectContaining({ shouldDeleteInTransaction: guard }),
+    );
+    expect(mockCleanupProviderOperationalDocsForServiceToken).not.toHaveBeenCalled();
+    expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      deletedTokenCount: 0,
+      skippedByCondition: true,
+    });
+  });
+
   it('cleans provider-keyed operational docs after targeted token deletion using captured token data', async () => {
     tokenDocumentGet.mockResolvedValueOnce({
       exists: true,
@@ -774,6 +805,53 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
   });
 
+  it('account deletion deauthorizes Wahoo with its stored provider identity', async () => {
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'wahoo-token-id',
+          data: () => ({
+            serviceName: ServiceNames.WahooAPI,
+            accessToken: 'stored-wahoo-access-token',
+            refreshToken: 'stored-wahoo-refresh-token',
+            expiresAt: Date.now() + 120_000,
+            scope: 'user_read workouts_read',
+            tokenType: 'bearer',
+            wahooUserID: 'wahoo-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(mockAdapterDeauthorize).toHaveBeenCalledWith(expect.objectContaining({
+      serviceName: ServiceNames.WahooAPI,
+      accessToken: 'stored-wahoo-access-token',
+      refreshToken: 'stored-wahoo-refresh-token',
+      wahooUserID: 'wahoo-user-id',
+    }));
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      'wahoo-token-id',
+      { preserveOAuthFlowContext: false },
+    );
+  });
+
   it('refreshes expired account-deletion tokens in memory before partner deauthorization without persisting them', async () => {
     const expiredAt = Date.now() - 1_000;
     const refreshedExpiresAt = new Date(Date.now() + 3_600_000);
@@ -836,6 +914,59 @@ describe('service-auth-lifecycle terminal auth handling', () => {
       'suunto-token-id',
       { preserveOAuthFlowContext: false },
     );
+  });
+
+  it('preserves the Wahoo provider identity when refreshing before account-deletion deauthorization', async () => {
+    const expiredAt = Date.now() - 1_000;
+    const refreshedExpiresAt = new Date(Date.now() + 3_600_000);
+    tokenCollectionRef.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: 'wahoo-token-id',
+          data: () => ({
+            serviceName: ServiceNames.WahooAPI,
+            accessToken: 'expired-wahoo-access-token',
+            refreshToken: 'stored-wahoo-refresh-token',
+            expiresAt: expiredAt,
+            scope: 'user_read workouts_read',
+            tokenType: 'bearer',
+            wahooUserID: 'wahoo-user-id',
+            dateCreated: 1,
+            dateRefreshed: 2,
+          }),
+        },
+      ],
+    });
+    mockRefreshOAuthToken.mockResolvedValueOnce({
+      token: {
+        access_token: 'fresh-wahoo-access-token',
+        refresh_token: 'fresh-wahoo-refresh-token',
+        expires_at: refreshedExpiresAt,
+        scope: 'user_read workouts_read',
+        token_type: 'bearer',
+      },
+    });
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: true,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+    });
+
+    await cleanupServiceConnectionForUser(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion,
+    );
+
+    expect(mockAdapterDeauthorize).toHaveBeenCalledWith(expect.objectContaining({
+      serviceName: ServiceNames.WahooAPI,
+      accessToken: 'fresh-wahoo-access-token',
+      refreshToken: 'fresh-wahoo-refresh-token',
+      expiresAt: refreshedExpiresAt.getTime(),
+      wahooUserID: 'wahoo-user-id',
+    }));
   });
 
   it('returns refreshed account-deletion token material for archival when partner deauthorization fails after refresh', async () => {

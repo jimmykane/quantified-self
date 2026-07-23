@@ -39,7 +39,7 @@ describe('training-readiness.helper', () => {
     expect(view.implicationText).toContain('does not choose a workout');
     expect(view.sourceText).toContain('bounded sleep envelope');
     expect(view.sourceText).toContain('same 30-day window applied at each daily cutoff');
-    expect(view.sourceText).toContain('browser does not load event or activity history');
+    expect(view.sourceText).toContain('browser does not load workout history');
   });
 
   it('keeps unavailable evidence explicit while the shared inputs prepare', () => {

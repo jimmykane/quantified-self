@@ -46,6 +46,7 @@ import {
   buildDashboardReadinessSignalsContext,
   resolveDashboardReadinessSleepRefreshAtMs,
 } from '../../helpers/dashboard-training-insights.helper';
+import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
 import { AppUserService } from '../../services/app.user.service';
 import {
   DashboardDerivedMetricsService,
@@ -192,6 +193,11 @@ interface DashboardTodayReadinessViewModel {
   recoveryText: string;
 }
 
+interface DashboardTodayTrainingStateViewModel {
+  label: string;
+  caption: string;
+}
+
 function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessViewModel {
   return {
     label: 'Awaiting data',
@@ -205,6 +211,13 @@ function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessV
     overnightHeartRateText: '--',
     overnightHeartRateTone: 'neutral',
     recoveryText: '--',
+  };
+}
+
+function createEmptyDashboardTodayTrainingStateViewModel(): DashboardTodayTrainingStateViewModel {
+  return {
+    label: 'Awaiting data',
+    caption: 'TSS-derived state is preparing',
   };
 }
 
@@ -328,6 +341,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
   public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel();
+  public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
 
   constructor(
     private themeService: AppThemeService,
@@ -531,7 +545,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private previewTodaySummaryVisibility(showTodaySummary: boolean): void {
     this.showTodaySummary = showTodaySummary;
     this.syncReadinessSleepSubscription();
-    this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+    this.refreshDashboardTodaySignals();
     this.changeDetector.markForCheck();
   }
 
@@ -559,7 +573,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private async rebuildTilesFromCurrentState(): Promise<void> {
     const buildStart = performance.now();
-    this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+    this.refreshDashboardTodaySignals();
     this.refreshDerivedMetricsBannerState();
     const newTiles = buildDashboardTileViewModels({
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
@@ -769,7 +783,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedPowerCurveStatus = state.powerCurveStatus;
       this.derivedTrainingCapacityStatus = state.trainingCapacityStatus;
       this.derivedTrainingDurabilityStatus = state.trainingDurabilityStatus;
-      this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+      this.refreshDashboardTodaySignals();
       this.updateRecoveryRefreshTimer();
       this.refreshDerivedMetricsBannerState();
 
@@ -1612,6 +1626,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedTrainingCapacityStatus = 'missing';
     this.derivedTrainingDurabilityStatus = 'missing';
     this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel();
+    this.dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
     this.refreshDerivedMetricsBannerState();
   }
 
@@ -1649,6 +1664,23 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     };
   }
 
+  private buildDashboardTodayTrainingState(): DashboardTodayTrainingStateViewModel {
+    const state = buildCurrentTrainingStateContext({
+      formPoints: this.derivedFormPoints,
+      fallbackFormNow: this.derivedFormNowContext,
+      fallbackRampRate: this.derivedRampRateContext,
+    }).state;
+    return {
+      label: state.label || 'Awaiting data',
+      caption: state.caption || 'TSS-derived state is preparing',
+    };
+  }
+
+  private refreshDashboardTodaySignals(): void {
+    this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+    this.dashboardTodayTrainingState = this.buildDashboardTodayTrainingState();
+  }
+
   private formatDashboardTodayMetric(value: number | null | undefined, signed = false): string {
     if (value === null || value === undefined || !Number.isFinite(value)) {
       return '--';
@@ -1684,7 +1716,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
     this.recoveryRefreshIntervalHandle = setInterval(() => {
-      this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+      this.refreshDashboardTodaySignals();
       this.updateRecoveryRefreshTimer();
       this.changeDetector.markForCheck();
     }, RECOVERY_NOW_REFRESH_INTERVAL_MS);

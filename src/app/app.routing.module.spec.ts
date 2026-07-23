@@ -21,7 +21,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Training analysis, Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -37,7 +37,9 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Training analysis');
     expect(helpAbout).toContain('Garmin to Suunto activity sync');
     expect(helpAbout).toContain('COROS to Suunto activity sync');
+    expect(helpAbout).toContain('Wahoo to Suunto activity sync');
     expect(helpAbout).toContain('Send Suunto routes to Garmin');
+    expect(helpAbout).toContain('Send GPX/FIT routes to Wahoo');
     expect(helpAbout).toContain('Sync past activities');
   });
 
@@ -138,14 +140,15 @@ describe('AppRoutingModule routes', () => {
         inLanguage: 'en',
       },
     });
-    expect(integrationsRoute?.data?.['description']).toContain('Garmin, Suunto, and COROS integrations');
+    expect(integrationsRoute?.data?.['description']).toContain('Garmin, Suunto, COROS, and Wahoo integrations');
   });
 
-  it('should define public Garmin, Suunto, and COROS provider integration routes', () => {
+  it('should define public Garmin, Suunto, COROS, and Wahoo provider integration routes', () => {
     const expectedRoutes = [
       { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'private Garmin training dashboard' },
       { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
       { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS to Suunto activity sync' },
+      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'automatic FIT activity imports' },
     ];
 
     for (const expectedRoute of expectedRoutes) {
@@ -220,7 +223,7 @@ describe('AppRoutingModule routes', () => {
     expect(jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
-      name: 'Compare Garmin, Suunto, and COROS workout data',
+      name: 'Compare Garmin, Suunto, COROS, and Wahoo workout data',
       url: 'https://quantified-self.io/features/workout-data-comparison',
       inLanguage: 'en',
     });
@@ -323,12 +326,16 @@ describe('AppRoutingModule routes', () => {
         h1: 'How to sync COROS workouts to Suunto automatically',
       },
       {
+        path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
+        h1: 'How to sync Wahoo activities to Suunto automatically',
+      },
+      {
         path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
         h1: 'How to send Suunto routes to Garmin courses',
       },
       {
         path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
-        h1: 'Centralize Garmin, Suunto, and COROS workout data',
+        h1: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data',
       },
     ];
 
@@ -357,7 +364,7 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.data).toMatchObject({
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Analyze Garmin, Suunto, and COROS training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync to Suunto.');
+    expect(homeRoute?.data?.['description']).toBe('Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync between supported connected services.');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',

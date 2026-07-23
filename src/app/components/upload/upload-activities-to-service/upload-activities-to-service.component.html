@@ -3,7 +3,8 @@
     ondragenter="event.stopPropagation(); event.preventDefault();"
     ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
     ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-    <button mat-flat-button class="qs-mat-primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
+    <button mat-flat-button type="button" class="qs-mat-primary service-upload-button" (click)="inputFile.click()"
+      [disabled]="!hasProAccess || isUploading">
       <span class="upload-button-content">
         @if (isUploading) {
         <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
@@ -56,8 +57,9 @@
         <td mat-cell *matCellDef="let row">
           <span class="status-pill" [class.status-queued]="row.status === 'queued'"
             [class.status-uploading]="row.status === 'uploading'" [class.status-success]="row.status === 'success'"
-            [class.status-duplicate]="row.status === 'duplicate'" [class.status-failed]="row.status === 'failed'">
-            @if (row.status === 'uploading') {
+            [class.status-duplicate]="row.status === 'duplicate'" [class.status-failed]="row.status === 'failed'"
+            [class.status-uploading]="row.status === 'processing'">
+            @if (row.status === 'uploading' || row.status === 'processing') {
             <mat-spinner diameter="18" class="status-spinner"></mat-spinner>
             } @else {
             <mat-icon>{{ statusIconMap[row.status] }}</mat-icon>
@@ -85,6 +87,12 @@
           @if (row.status === 'failed' && row.extension === 'fit') {
           <button mat-icon-button type="button" (click)="retryUpload(row)" [disabled]="isUploading" matTooltip="Retry upload"
             aria-label="Retry upload">
+            <mat-icon>refresh</mat-icon>
+          </button>
+          }
+          @if (row.status === 'processing' && row.uploadId) {
+          <button mat-icon-button type="button" (click)="refreshUpload(row)" [disabled]="isUploading" matTooltip="Check processing status"
+            aria-label="Check processing status">
             <mat-icon>refresh</mat-icon>
           </button>
           }

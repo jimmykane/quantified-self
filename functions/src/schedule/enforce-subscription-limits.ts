@@ -13,6 +13,7 @@ import {
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
+import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { GRACE_PERIOD_DAYS } from '../../../shared/limits';
 
 const USER_PROCESS_BATCH_SIZE = 10;
@@ -20,7 +21,8 @@ const USER_SCAN_PAGE_SIZE = 500;
 const SERVICES_TO_DEAUTHORIZE: ReadonlyArray<ServiceNames> = [
     ServiceNames.SuuntoApp,
     ServiceNames.COROSAPI,
-    ServiceNames.GarminAPI
+    ServiceNames.GarminAPI,
+    ServiceNames.WahooAPI,
 ];
 
 /**
@@ -115,6 +117,9 @@ async function getConnectedUserIds(): Promise<Set<string>> {
 
     const corosSnapshot = await admin.firestore().collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).get();
     corosSnapshot.forEach(doc => userIDs.add(doc.id));
+
+    const wahooSnapshot = await admin.firestore().collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME).get();
+    wahooSnapshot.forEach(doc => userIDs.add(doc.id));
 
     return userIDs;
 }

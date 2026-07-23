@@ -35,6 +35,9 @@ describe('training-swim-performance.helper', () => {
     expect(view.hasPace).toBe(true);
     expect(view.swolfContextText).toBe('Freestyle · 25 m pool');
     expect(view.latestSwolfText).toBe('41.5');
+    expect(view.conclusionText).toContain('shown separately');
+    expect(view.evidenceText).toContain('1 pool week and 1 open-water week');
+    expect(view.nextStepText).toContain('matching stroke and pool length');
   });
 
   it('formats unit-aware pace without changing the stored per-100-metre value', () => {

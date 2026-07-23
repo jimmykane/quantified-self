@@ -32,9 +32,9 @@ The following rules are architectural constraints:
 - Historical and comparative Training calculations belong in derived-metric builders or sports-lib, not Angular
   components. Readiness uses one environment-neutral formula in `shared/readiness.ts`: the frontend applies it to live
   Form/ramp plus bounded sleep evidence, while Functions applies it at each daily cutoff for the historical series.
-- Dashboard remains the user's modular chart and map surface. Current Readiness is a fixed part of the optional
-  Dashboard Today summary rather than a configurable tile, while Training owns its deeper current and historical
-  presentation.
+- Dashboard remains the user's modular chart and map surface. The current TSS-only Training state and recovery-aware
+  Readiness are fixed parts of the optional Dashboard Today summary rather than configurable tiles, while Training owns
+  their deeper current and historical presentation.
   Curated Training-only insights do not become hidden Dashboard dependencies. An explicitly configured Dashboard Aerobic
   Capacity or Aerobic Durability tile may opt into only its matching Training snapshot kind.
 - Missing TSS, zones, pace, sleep, power, heart rate, or durability evidence remains unavailable. Missing values are not
@@ -46,6 +46,11 @@ The following rules are architectural constraints:
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
 - Durability shown on Training comes only from the persisted sports-lib `Durability Evidence` activity stat.
+- Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
+  `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
+  workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
+- In athlete-facing Training copy, a recorded sport leg is called a **workout**. `Activity` remains the technical term
+  for normalized Firestore and sports-lib records, and `sleep session` remains the term for overnight sleep data.
 
 ## Ownership: Sports-lib Versus Quantified Self
 
@@ -138,9 +143,10 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-Training is available to signed-in users from the sidenav and is explicitly marked **Beta**. The route header includes a
-Feedback action that opens the configured support email with a Training-specific subject. Training remains absent from
-Dashboard actions, preserving the Dashboard as the user's modular workspace.
+Training is available to signed-in users from the sidenav and is marked **New**. The route header includes a
+Feedback action that opens the configured support email with a Training-specific subject. Dashboard offers one
+**Open Training** route action, but does not add curated Training snapshots as default Dashboard dependencies or
+configurable tiles.
 
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
@@ -166,16 +172,18 @@ Frontend transformation responsibilities are intentionally split into focused he
 | Helper | Responsibility |
 | --- | --- |
 | `training-analysis.helper.ts` | Overall 28-day comparison and state inputs |
+| `current-training-state.helper.ts` | Shared current Form/ramp source selection, CTL/ATL context, and TSS-only Training state for Training and Dashboard Today |
 | `training-capacity.helper.ts` | Imported-marker provenance and FTP/CP interpretation |
 | `training-derived-metrics.helper.ts` | Strict normalization of explanation, durability, and readiness-history payloads |
 | `training-durability-view.helper.ts` | Context grouping, comparison rows, tones, and weekly trajectory models |
 | `training-explanation-view.helper.ts` | Load, contributor, sport-driver, rhythm, and coverage cards |
 | `training-power-profile.helper.ts` | 90-day versus one-year power retention |
+| `training-card-guidance.helper.ts` | Plain-language outcomes, evidence quality, and evidence-gated next steps for build, load, and intensity cards |
 | `dashboard-training-insights.helper.ts` | Live readiness adapter and bounded sleep window |
 | `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend geometry |
 | `training-recovery-estimate.helper.ts` | Imported recovery countdown wording |
 | `training-sport-visibility.helper.ts` | Automatic/fixed sport resolution and compact labels |
-| `training-swim-performance.helper.ts` | Swim pace units and pool/open-water chart model |
+| `training-swim-performance.helper.ts` | Swim pace units plus pool/open-water conclusions and evidence-gated chart model |
 
 ## Firestore Data Model
 
@@ -334,8 +342,8 @@ therefore does not create a hidden Training dependency or freshness probe for th
 
 ### Shared Dashboard and Training insight reuse
 
-The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while current Readiness
-is fixed inside the optional Today summary:
+The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while the current
+Training state and Readiness are fixed inside the optional Today summary:
 
 - **Aerobic Capacity** selects the most recent imported running or cycling VO2 max, displays its provider/source
   provenance, and compares only observations from the same source. FTP settings and modeled critical power never become
@@ -344,6 +352,12 @@ is fixed inside the optional Today summary:
   The card selects the current context with the most eligible samples, then uses eligibility ratio and discipline priority
   as deterministic tie-breakers, followed by the lexical context key when every meaningful signal is equal. Running,
   Cycling, and Open water show aerobic decoupling; Pool shows pace retention. Missing weeks remain gaps.
+- **Training state** is one TSS-only interpretation shared between the Training header and Dashboard Today. Both surfaces
+  call `current-training-state.helper.ts`, which prefers the current UTC-day Form series for Form and seven-day CTL
+  ramp, then uses the compact Form/Ramp snapshots only while the series is unavailable. It resolves the accompanying
+  CTL/ATL context and passes the same four values to `training-state.helper.ts`; there is no Dashboard-specific state
+  formula. Dashboard Today intentionally shows the compact label, caption, and `TSS only` qualifier, while Training
+  provides the full Material info control with the contributing values and state boundaries.
 - **Readiness** uses the environment-neutral formula in `shared/readiness.ts` in both surfaces. Dashboard Today applies
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived
@@ -458,7 +472,7 @@ whether selection is automatic.
 
 The status header names the visible-detail scope (for example, `Cycling/MTB details`) and explicitly says that the
 overall comparison still uses all recorded Training disciplines. This prevents the selected-card preference from being
-mistaken for a filter on the global state, time, sessions, or load explanation.
+mistaken for a filter on the global state, time, workouts, or load explanation.
 
 Visibility affects:
 
@@ -472,7 +486,7 @@ Visibility affects:
 Visibility does not affect:
 
 - the overall Training state;
-- training time and session comparison used by that state section;
+- training time and workout comparison used by that state section;
 - What drove this;
 - global form/freshness/load charts; or
 - the all-eligible-activity intensity-distribution chart.
@@ -492,14 +506,14 @@ For every discipline:
 
 - Current window: today plus the preceding 27 UTC days.
 - Baseline: the immediately preceding 84 UTC days, multiplied by `28 / 84` to produce a normalized 28-day value.
-- Sessions: child activity count.
+- Workouts: child activity count.
 - Time: sum of activity `Duration` stats.
 - Intensity: power zones when present, otherwise heart-rate zones.
 - Easy: zones 1-2.
 - Moderate: zones 3-4.
 - Hard: zones 5-7.
 
-The top training time and session values sum all three disciplines, regardless of detailed-card visibility.
+The top training time and workout values sum all three disciplines, regardless of detailed-card visibility.
 
 #### Training state
 
@@ -524,6 +538,16 @@ or unavailable. Sleep, sessions, and the 28-day time comparison do not change th
 mark the TSS/load chart as building while the snapshot service retains the prior valid Form series. In that case the
 State card keeps the last complete label for continuity, but adds **Updating from the latest completed TSS calculation…**
 so it is never mistaken for a new result.
+
+Training and Dashboard Today call `current-training-state.helper.ts` before rendering this table. The helper prefers the
+current UTC-day Form series, then falls back to compact Form/Ramp snapshots only until that series is available; it
+also resolves current CTL and ATL from that same series. The Dashboard Today row repeats the exact label and caption
+with an explicit **TSS only** qualifier. Training alone exposes the detailed explanation below.
+
+This follows the Dashboard KPI interaction pattern: the same structured State explanation opens in a `qs-menu-panel`
+Material menu on larger viewports and a viewport-bounded Material dialog at `767px` and below. Do not use `MatTooltip`
+for this multi-value explanation; it is hard to read and can be clipped or rendered as an opaque transient bubble on
+mobile.
 
 #### Readiness today
 
@@ -555,6 +579,12 @@ mixed, or strained and directs attention to the drivers rather than choosing a w
 failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
 failure remains visible only while it is still eligible; load-only readiness remains available afterward.
 
+Readiness is the recovery-aware companion to the load model, not a replacement for it. It adds recorded sleep, HRV, and
+overnight heart-rate evidence to the Form/ramp driver when those signals are available. Form/Freshness, CTL, ATL, Ramp,
+Load Status, and the zero-load forecast remain deliberately TSS-only; recovery evidence never changes their values or
+the Training state. The UI calls this distinction out in the Readiness header and in the Form/Freshness information
+controls so athletes do not interpret a sleep change as a recalculation of training load.
+
 The same card plots a backend-derived 14-day series. `training_readiness` declares only `formDocs` and
 `trainingReadinessSleepDocs`; it never declares activities or settings. On a readiness-only refresh, the worker accepts a
 schema-compatible Form snapshot seed, avoids a full event scan, and queries a bounded sleep-end envelope covering every
@@ -575,10 +605,13 @@ no point and therefore remain visible as gaps rather than being interpolated.
 
 #### Recovery remaining
 
-`recovery_now` combines supported imported post-workout recovery estimates. The card counts down using the stored end
-time. It is explicitly labeled as an imported estimate, not readiness, and does not change the Training state. The
-worker scans a bounded 16-day event window; no events in that window is a valid empty result for new or inactive users
-and is logged as informational rather than a warning.
+`recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as one compact
+row inside Readiness, with its live countdown and explicit separation from the Readiness score and Freshness/Form. It
+replaces the former top-level status tile so the same timer is not presented twice. Dashboard Today shows the same active
+countdown as an imported estimate beneath its score. The timer uses the stored end time, is contextual rather than a
+second recovery model, and never changes Readiness, Freshness, or the Training state. The worker scans a bounded 16-day
+event window; no events in that window is a valid empty result for new or inactive users and is logged as informational
+rather than a warning.
 
 #### Recovery history
 
@@ -587,17 +620,26 @@ The expandable Recovery history inside Readiness uses:
 - Current: the current 28-day window.
 - Reference: the immediately preceding 84-day window.
 - Main overnight sleep only; naps excluded.
-- Metrics: average sleep per night, recorded-night coverage, bedtime variation, and median overnight HRV.
+- Metrics: average sleep per night, a typical local sleep window, recorded-night coverage, bedtime variation, and median overnight HRV.
 
 Comparative deltas require the same provider and sufficient coverage in both windows. The minimum is at least seven
 nights and at least half of each window (`14/28` and `42/84` for the normal comparison). Bedtime regularity requires a
 usable timezone; the builder must not fabricate local bedtime from UTC timestamps. Garmin normally supplies this as
 `startTimeOffsetInSeconds`, while COROS can supply explicit offsets or its start/end timezone fields, and Suunto can
-supply an offset-bearing sleep timestamp. Any provider can omit that evidence, and older backfilled records can predate
-offset persistence. Those nights still contribute valid duration and overnight HRV when available, but not bedtime
-variation. The frontend must therefore accept a missing bedtime variation independently of total recorded-night count.
-It renders only the missing metric as unavailable, explains the local-time or HRV evidence requirement, and keeps other
-valid recovery metrics visible. Comparison copy must not imply that every metric is available.
+supply an offset-bearing sleep timestamp. The build-comparison projection includes that historical Suunto timestamp and
+prefers a valid normalized `timezoneOffsetSeconds` before falling back to its embedded offset. Any provider can omit that
+evidence, and older backfilled records can predate offset persistence. Those nights still contribute valid duration and
+overnight HRV when available, but not local timing metrics. The typical sleep window is the circular-medoid local start
+and end clock time across at least five main sleeps with both trustworthy local endpoints; it is a representative clock
+pattern, not a duration-derived or UTC-inferred time. The table compares a start-time shift as earlier/later without
+presenting one direction as inherently better. The frontend must therefore accept missing sleep-window and bedtime-
+variation evidence independently of total recorded-night count. It renders only the missing metric as unavailable,
+explains the local-time or HRV evidence requirement, and keeps other valid recovery metrics visible. Comparison copy must
+not imply that every metric is available.
+
+`training_build_comparison.payload.recoveryVersion` tracks this recovery interpretation independently of the global
+derived-metric schema. When it changes, both the frontend normalizer and backend freshness gate request only a new
+build-comparison snapshot, leaving unrelated derived metrics fresh.
 Provider mappers preserve null or blank timezone fields as missing rather than coercing them to UTC; COROS can still fall
 back from a missing explicit offset to its start/end timezone fields.
 
@@ -629,9 +671,10 @@ The picker shows up to 20 tagged races and up to 100 other historical events. It
 or earlier history, and sort by latest, longest, or highest load. Generic `New Event` names are suppressed; date and
 available distance, duration, and TSS provide identity.
 
-The Best Build card shows a meaningful selected-event name when one exists. Default, blank, or timestamp-like event
-names are never repeated as a card heading: event-mode benchmarks instead show `Event on <UTC anchor date>`, while
-manual selections remain labeled as a historical period.
+The Best Build card identifies event-mode selections as a **Selected reference event** and explains that the event day is
+excluded from the compared workload. It shows a meaningful selected-event name when one exists. Default, blank, or
+timestamp-like event names are never repeated as a card heading: event-mode benchmarks instead show `Event on <UTC
+anchor date>`, while manual selections remain labeled as a historical period.
 
 #### Callable validation
 
@@ -684,6 +727,11 @@ user opens **Details**. Sleep differences under 15 minutes are summarized as sim
 Card states are `not-configured`, `updating`, `invalid`, `unavailable`, and `ready`. Optimistic pending selections remain
 updating until the snapshot's stable selection key matches the saved choice.
 
+Ready Best Build cards put the outcome above their comparison table (for example, whether the current build is longer,
+shorter, or similar in total time), then state the number of current/reference workouts and TSS coverage. A next-step
+prompt appears only when both windows have enough intensity evidence and a material time difference; the table remains
+the detailed numeric comparison.
+
 ### 3. What Drove This
 
 `training_explanation` compares the current 28 days with the median of three distinct preceding 28-day blocks.
@@ -708,9 +756,13 @@ missing parent TSS and unclassified child activity types visible. A sparse one-o
 confident usual pattern.
 
 The four driver cards use one balanced row on wide screens, a two-by-two tablet layout, and a single mobile column.
-Within each card, the card heading, primary comparison, supporting explanation, and coverage note use distinct type
-levels. Contributor events render as separate list items so an event label and its load share do not split into an
-ambiguous separator-delimited sentence.
+Within each card, the card heading, plain-language outcome, supporting explanation, and coverage note use distinct type
+levels. The outcome uses language such as `Above usual load` or `Same rhythm`; exact TSS and workout counts stay in the
+supporting sentence rather than competing with the conclusion. Contributor events render as separate list items so an
+event label and its load share do not split into an ambiguous separator-delimited sentence.
+
+The section-level conclusion and evidence-quality line appear before the cards. They make TSS coverage explicit without
+turning missing data into a negative or positive training judgment.
 
 ### 4. Load Trajectory
 
@@ -741,7 +793,14 @@ rates, so TSB and Ramp Rate can change without a new workout. CTL, ATL, Form Now
 this one current-day Form series. Ramp Rate is `CTL(today) - CTL(today - 7 UTC days)`. The last real workout’s TSS is
 shown separately and is never replaced by an assumed zero.
 
-The forecast is a scenario with zero future load, not a prediction of what the athlete will actually do.
+The forecast is a scenario with zero future load, not a prediction of what the athlete will actually do. All of these
+load metrics are intentionally independent of sleep, HRV, overnight heart rate, and imported recovery timers. Those
+signals appear only in Readiness today, which adds recovery context without changing Freshness/Form or the Training
+state.
+
+The card starts with a concise interpretation of Form (recent fatigue relative to longer-term fitness) and labels the
+model as TSS-backed workouts only. When the no-workout forecast exists, the only follow-up prompt is to compare that
+scenario with today; it does not imply that the athlete should stop training.
 
 ### 5. Training Mix
 
@@ -756,6 +815,10 @@ duration but not to the zone denominator.
 
 The separate intensity-distribution chart is global and can include any activity with eligible power or heart-rate zone
 data. It is not filtered by the sport visibility control.
+
+Each discipline summary states whether its current zone balance is close to usual or whether easy/hard work has shifted.
+It explicitly excludes workouts without usable zones, and points to the weekly distribution only when that shift is
+material enough to investigate.
 
 On desktop, Training Mix uses its actual visible-discipline count rather than auto-fitting empty grid tracks: one
 discipline pairs a matched-height summary with the intensity chart. The summary keeps activity totals at the top and uses
@@ -807,6 +870,10 @@ from a device estimate or laboratory observation.
 The chart has a full-height layout and an inverted pace axis, because lower seconds per 100 m/yd means faster swimming.
 Units follow the user's swim pace settings.
 
+Its header states whether pool and open-water pace are both available or only one environment has evidence, then states
+the number of explicit-pace weeks. The card never derives pace from elapsed duration or combines environments. A SWOLF
+follow-up appears only when the displayed value has one matching stroke and pool-length context.
+
 #### Power profile
 
 Running and Cycling compare the 90-day best curve with the one-year best curve at:
@@ -828,6 +895,9 @@ one-year curve; summary chips explain the 90-day retention.
 
 The profile summary is a non-growing header above the embedded Power Curve. Its horizontal inset matches the chart
 header so the summary, chart title, benchmark values, and plot remain aligned at every responsive width.
+
+It also states the strongest supported conclusion before the chart, describes the number of recent/annual power workouts
+and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
 
 ## Durability Deep Dive
 
@@ -1020,7 +1090,20 @@ the Training rule: aggregate Training snapshots use only persisted compact activ
 The event performance-chart region uses a shared `23.1vh` height. On extra-small viewports, the durability eligibility
 summary starts collapsed behind an accessible disclosure button so the plot retains useful vertical space. Expanding the
 summary keeps its list height bounded and scrollable instead of allowing evidence rows to squeeze out the chart. Desktop
-viewports continue to show the summary by default.
+viewports continue to show the summary by default. The event summary translates the aerobic protocol rather than exposing
+implementation labels such as `decoupling`, `paired coverage`, or `qualifying data`: it states whether a steady-effort
+comparison is available, the total duration and matched output/heart-rate duration after warm-up and cool-down exclusion,
+then narrates the second-half change in output relative to heart rate, output retained, and average heart-rate change.
+For cycling, a positive stored decoupling becomes “Power relative to heart rate was <n>% lower in the second half.” The
+event durability ECharts grid reserves explicit left and bottom insets for numeric axis labels; do not rely only on
+automatic outer-bound containment, which can crop the leading digit on narrow plot hosts.
+
+Both event detail and the Training Durability panel expose a **How to read durability** info control. It uses a
+desktop Material menu and a mobile Material dialog instead of a short opaque tooltip. The guidance explains that a lower
+later output-to-heart-rate ratio is meaningful as a possible fade only when the athlete intended a comparable steady
+effort; intentional easing, changing terrain, coasting, or a pace change can legitimately produce the same pattern. It
+also explains that Training is for repeated comparable-session trends (smaller absolute decoupling/heart-rate drift and
+higher output retention are steadier), and that a missing result means no suitable comparison—not zero durability.
 
 ## Status and Empty-State Semantics
 
@@ -1215,8 +1298,8 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - limited and cross-provider sleep;
 - Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, and
   expandable Recovery history states;
-- Dashboard Today Readiness with full, partial, and missing evidence, plus Today hidden and retired local-preview tile
-  cleanup;
+- Dashboard Today Training state and Readiness with full, partial, and missing evidence, matching Form/ramp fallbacks,
+  plus Today hidden and retired local-preview tile cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;
 - one and multiple capacity/power cards;
 - loading, stale, failed, and valid empty snapshots;

@@ -52,6 +52,12 @@ describe('ServicesSuuntoComponent', () => {
                 serviceMeta: null,
                 permissionPromptSource: null,
             })),
+            watchActivityServiceConnectionState: vi.fn().mockReturnValue(of({
+                [ServiceNames.COROSAPI]: false,
+                [ServiceNames.GarminAPI]: false,
+                [ServiceNames.SuuntoApp]: true,
+                [ServiceNames.WahooAPI]: false,
+            })),
             updateRouteDeliverySyncRouteSettings: vi.fn().mockResolvedValue(undefined),
             backfillRouteDeliverySyncRouteForCurrentUser: vi.fn().mockResolvedValue({
                 scanned: 2,
@@ -149,7 +155,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(providerToolTabs.tagName.toLowerCase()).toBe('nav');
         expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeFalsy();
         expect(providerToolPanel).toBeTruthy();
-        expect(providerTabs.length).toBe(3);
+        expect(providerTabs.length).toBe(4);
         expect(fixture.nativeElement.querySelector('.provider-tools-panel .service-connection-status')).toBeFalsy();
     });
 
@@ -179,6 +185,18 @@ describe('ServicesSuuntoComponent', () => {
         expect(toolPanels[0].textContent).toContain('Importing and sending routes is a Pro feature.');
     });
 
+    it('renders the Wahoo activity-sync control in focused mode', () => {
+        component.activeProviderTool = 'activity-sync';
+        component.showOnlyActiveProviderTool = true;
+        fixture.detectChanges();
+
+        const toolPanels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
+
+        expect(toolPanels).toHaveLength(1);
+        expect(toolPanels[0].hidden).toBe(false);
+        expect(toolPanels[0].querySelector('app-activity-sync-route-control')).toBeTruthy();
+    });
+
     it('hides inactive provider tool panels when switching tabs', () => {
         component.hasProAccess = true;
         component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
@@ -187,7 +205,7 @@ describe('ServicesSuuntoComponent', () => {
         const tabs = fixture.nativeElement.querySelectorAll('a[mat-tab-link]');
         const panels = fixture.nativeElement.querySelectorAll('.provider-tool-panel');
 
-        expect(panels.length).toBe(3);
+        expect(panels.length).toBe(4);
         expect(panels[0].hidden).toBe(false);
         expect(panels[1].hidden).toBe(true);
         expect(getComputedStyle(panels[1]).display).toBe('none');
@@ -578,6 +596,58 @@ describe('ServicesSuuntoComponent', () => {
                 failedRoutes: [],
             });
             expect(mockSnackBar.open).toHaveBeenCalledWith('Route sending started for 1 route.', undefined, { duration: 4000 });
+        });
+
+        it('renders and enables Suunto to Wahoo route delivery for a connected Wahoo account', async () => {
+            component.user = {
+                uid: 'user-1',
+                settings: {
+                    serviceSyncSettings: {
+                        routeDeliverySyncRoutes: {
+                            [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: false },
+                        },
+                    },
+                },
+            } as any;
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.isWahooRouteDeliveryConnected = true;
+            component.activeProviderTool = 'routes';
+            fixture.detectChanges();
+
+            expect(component.isSuuntoToWahooRouteAvailableForUser).toBe(true);
+            expect(component.canEnableSuuntoToWahooRoute).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('Send Suunto routes to Wahoo');
+            expect(fixture.nativeElement.textContent).toContain('Wahoo receives each route as a FIT course');
+
+            await component.onSuuntoToWahooRouteToggle(true);
+
+            expect(mockUserService.updateRouteDeliverySyncRouteSettings).toHaveBeenCalledWith(component.user, {
+                [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: true,
+            });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('New Suunto routes will be sent to Wahoo automatically.', undefined, { duration: 3000 });
+        });
+
+        it('queues saved Suunto routes for Wahoo delivery', async () => {
+            component.user = { uid: 'user-1', settings: {} } as any;
+            component.hasProAccess = true;
+            component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
+            component.isWahooRouteDeliveryConnected = true;
+            fixture.detectChanges();
+
+            await component.queueSuuntoToWahooRouteDelivery(new MouseEvent('click'));
+
+            expect(mockUserService.backfillRouteDeliverySyncRouteForCurrentUser).toHaveBeenCalledWith(
+                ServiceNames.SuuntoApp,
+                ServiceNames.WahooAPI,
+            );
+            expect(component.wahooRouteDeliveryBackfillSummary).toEqual({
+                scanned: 2,
+                queued: 1,
+                skippedByReason: { already_synced: 1 },
+                failedCount: 0,
+                failedRoutes: [],
+            });
         });
     });
 

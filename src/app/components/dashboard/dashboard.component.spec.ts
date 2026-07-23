@@ -334,7 +334,7 @@ describe('DashboardComponent', () => {
         expect(mockEventService.hasAnyActivity).toHaveBeenCalledWith(mockUser);
         expect(component.showNoActivityDashboardState).toBe(true);
         expect(text).toContain('No activities yet');
-        expect(text).toContain('Upload an activity file or connect Garmin, Suunto, or COROS.');
+        expect(text).toContain('Upload an activity file or connect Garmin, Suunto, COROS, or Wahoo.');
         expect(template).toContain('[fullWidth]="true"');
         expect(template).toContain('uploadLabel="Upload activity"');
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);

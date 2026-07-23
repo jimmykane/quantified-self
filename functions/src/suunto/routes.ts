@@ -6,7 +6,6 @@ import { FieldValue } from 'firebase-admin/firestore';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
-import * as zlib from 'zlib';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
@@ -27,6 +26,19 @@ import {
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+import {
+  decodeManualRouteUpload,
+  exportManualRouteAsGPX,
+  getManualRouteInputFormat,
+  ManualRouteUploadRequest,
+  parseManualRouteUpload,
+} from '../routes/manual-route-upload';
+import {
+  maybeDecompressPayloadForParsing,
+  RouteProcessingHttpStatusError,
+} from '../routes/route-processing';
+import { MAX_ROUTE_UPLOAD_BYTES, ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/route-processing-config';
+import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 
 export interface SuuntoRouteUploadTokenRef {
   id: string;
@@ -93,6 +105,9 @@ async function assertSuuntoRouteUploadUserActive(userID: string, phase: string):
   }
 
   if (!deletionGuard.shouldSkip) {
+    if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
+      throw new HttpsError('failed-precondition', 'Suunto disconnect is pending.');
+    }
     return;
   }
 
@@ -147,27 +162,6 @@ function getStatusCode(error: unknown): number | undefined {
 
   const responseStatusCode = (error as any)?.response?.statusCode;
   return typeof responseStatusCode === 'number' ? responseStatusCode : undefined;
-}
-
-function getSuuntoErrorMessage(error: unknown): string | undefined {
-  const errorPayload = (error as any)?.error;
-  if (typeof errorPayload === 'string') {
-    return errorPayload;
-  }
-
-  if (typeof errorPayload?.message === 'string') {
-    return errorPayload.message;
-  }
-
-  if (typeof errorPayload?.error === 'string') {
-    return errorPayload.error;
-  }
-
-  if (typeof errorPayload?.error_description === 'string') {
-    return errorPayload.error_description;
-  }
-
-  return undefined;
 }
 
 function normalizeSuuntoProviderUserId(value: unknown): string | null {
@@ -486,14 +480,25 @@ export async function uploadGPXRouteToSuuntoApp(
         `Upload route for user ${userID}`
       );
 
-      logger.info('Suunto API raw response:', result);
       if (typeof result === 'string') {
         try {
           result = JSON.parse(result);
-        } catch (e) {
-          logger.warn('Suunto API response is not JSON:', result);
+        } catch {
+          logger.warn('[SuuntoRoutes] Route upload response was not JSON.', {
+            userID,
+            providerUserId: tokenRef.providerUserId,
+            tokenId: tokenRef.id,
+            responseLength: result.length,
+          });
         }
       }
+      logger.info('[SuuntoRoutes] Route upload response received.', {
+        userID,
+        providerUserId: tokenRef.providerUserId,
+        tokenId: tokenRef.id,
+        hasProviderRouteId: !!getSuuntoProviderRouteId(result),
+        hasProviderError: !!(result as { error?: unknown } | null)?.error,
+      });
     } catch (e: unknown) {
       const error = e as Error;
       if (isUserDeletionGuardReadError(error) || error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
@@ -507,7 +512,13 @@ export async function uploadGPXRouteToSuuntoApp(
         continue;
       }
 
-      logger.error(`Could not upload route for token ${tokenRef.id} for user ${userID}`, error);
+      logger.error('[SuuntoRoutes] Could not upload route for provider token.', {
+        userID,
+        providerUserId: tokenRef.providerUserId,
+        tokenId: tokenRef.id,
+        statusCode: getStatusCode(error),
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       if (getStatusCode(error) === 401) {
         authFailures++;
       }
@@ -515,7 +526,11 @@ export async function uploadGPXRouteToSuuntoApp(
     }
 
     if (result?.error) {
-      logger.error(`Could not upload route for token ${tokenRef.id} for user ${userID} due to service error`, result.error);
+      logger.error('[SuuntoRoutes] Route upload returned a provider error.', {
+        userID,
+        providerUserId: tokenRef.providerUserId,
+        tokenId: tokenRef.id,
+      });
       continue;
     }
 
@@ -552,8 +567,7 @@ export async function uploadGPXRouteToSuuntoApp(
 export const importRouteToSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.importRouteToSuuntoApp.region,
   cors: ALLOWED_CORS_ORIGINS,
-  timeoutSeconds: 300,
-  maxInstances: 10,
+  ...ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
 }, async (request) => {
 
   if (!request.auth) {
@@ -569,16 +583,9 @@ export const importRouteToSuuntoApp = onCall({
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  const base64File = request.data.file;
-
-  if (!base64File) {
-    logger.error('No file provided');
-    throw new HttpsError('invalid-argument', 'File content missing');
-  }
-
   try {
-    const compressedData = Buffer.from(base64File, 'base64');
-    const gpxContent = zlib.gunzipSync(compressedData).toString();
+    await assertSuuntoRouteUploadUserActive(userID, 'before_manual_route_parsing');
+    const gpxContent = await getSuuntoManualRouteGPXContent(request.data as SuuntoRouteUploadRequest);
     await uploadGPXRouteToSuuntoApp(userID, gpxContent);
     return { status: 'success' };
   } catch (error) {
@@ -594,12 +601,52 @@ export const importRouteToSuuntoApp = onCall({
     }
 
     const statusCode = getStatusCode(error);
-    const providerMessage = getSuuntoErrorMessage(error);
-    logger.error('[importRouteToSuuntoApp] Could not upload GPX route', {
+    logger.error('[importRouteToSuuntoApp] Could not upload route', {
       userID,
       statusCode,
-      message: providerMessage || (error instanceof Error ? error.message : String(error)),
+      errorName: error instanceof Error ? error.name : typeof error,
     });
-    throw new HttpsError('internal', providerMessage || 'Upload failed due to service errors.');
+    if (statusCode === 401) {
+      throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
+    }
+    if (statusCode === 429) {
+      throw new HttpsError('resource-exhausted', 'Suunto is rate-limiting route uploads. Please retry shortly.');
+    }
+    if (statusCode !== undefined && statusCode >= 500) {
+      throw new HttpsError('unavailable', 'Suunto is temporarily unavailable. Please retry.');
+    }
+    if (statusCode !== undefined) {
+      throw new HttpsError('failed-precondition', 'Suunto rejected the route upload.');
+    }
+    throw new HttpsError('internal', 'Upload failed due to service errors.');
   }
 });
+
+type SuuntoRouteUploadRequest = ManualRouteUploadRequest;
+
+async function getSuuntoManualRouteGPXContent(payload: SuuntoRouteUploadRequest): Promise<string> {
+  const sourcePayload = decodeManualRouteUpload(payload?.file);
+
+  // Older browser clients gzip their GPX and omit a filename. Keep accepting that
+  // wire format until every deployed client sends the source filename. Unlike
+  // saved-route processing, this direct upload is constrained to the same 20MB
+  // source/output limit as the current uploader.
+  if (!payload?.filename) {
+    try {
+      const gpxPayload = maybeDecompressPayloadForParsing(sourcePayload, 'gpx.gz', {
+        maxOutputLength: MAX_ROUTE_UPLOAD_BYTES,
+        maxOutputLengthLabel: '20MB',
+      });
+      return exportManualRouteAsGPX(await parseManualRouteUpload(gpxPayload, 'gpx'));
+    } catch (error) {
+      if (error instanceof RouteProcessingHttpStatusError) {
+        throw new HttpsError('invalid-argument', error.message);
+      }
+      throw error;
+    }
+  }
+
+  const inputFormat = getManualRouteInputFormat(payload.filename, 'Suunto');
+  const routeFile = await parseManualRouteUpload(sourcePayload, inputFormat);
+  return exportManualRouteAsGPX(routeFile);
+}

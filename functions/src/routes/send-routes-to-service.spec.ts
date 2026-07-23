@@ -94,6 +94,27 @@ vi.mock('../garmin/routes', () => ({
   },
 }));
 
+const wahooRouteMocks = {
+  createWahooRouteSendContext: vi.fn(),
+  sendSavedRouteToWahoo: vi.fn(),
+};
+
+vi.mock('../wahoo/routes', () => ({
+  createWahooRouteSendContext: (...args: any[]) => wahooRouteMocks.createWahooRouteSendContext(...args),
+  sendSavedRouteToWahoo: (...args: any[]) => wahooRouteMocks.sendSavedRouteToWahoo(...args),
+  WahooRouteUploadSkippedForDeletedUserError: class WahooRouteUploadSkippedForDeletedUserError extends Error {
+    readonly name = 'WahooRouteUploadSkippedForDeletedUserError';
+  },
+  WahooRouteWriteScopeRequiredError: class WahooRouteWriteScopeRequiredError extends Error {
+    readonly name = 'WahooRouteWriteScopeRequiredError';
+    readonly code = 'failed-precondition';
+
+    constructor() {
+      super('Reconnect Wahoo and allow route access before sending routes.');
+    }
+  },
+}));
+
 const routePersistenceMocks = {
   isRouteFromSourceService: vi.fn(),
   setRouteDeliveryMetadata: vi.fn(),
@@ -232,6 +253,12 @@ describe('sendRoutesToService', () => {
       providerRouteId: 'garmin-course-1',
       deliveries: [{ providerUserId: 'garmin-user-1', providerRouteId: 'garmin-course-1' }],
     });
+    wahooRouteMocks.createWahooRouteSendContext.mockResolvedValue(undefined);
+    wahooRouteMocks.sendSavedRouteToWahoo.mockResolvedValue({
+      status: 'success',
+      providerRouteId: 'wahoo-route-1',
+      message: 'Route uploaded to Wahoo.',
+    });
   });
 
   it('rejects unsupported destinations', async () => {
@@ -350,6 +377,55 @@ describe('sendRoutesToService', () => {
         routeId: 'route-1',
         reason: 'DESTINATION_PERMISSION_REQUIRED',
         message: 'Grant Garmin Course Import permission and reconnect before sending routes.',
+      }),
+    ]);
+  });
+
+  it('sends saved routes to Wahoo through the shared route-send adapter', async () => {
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Wahoo Ready Route',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.WahooAPI,
+    }) as any);
+
+    expect(wahooRouteMocks.createWahooRouteSendContext).toHaveBeenCalledWith('user-1');
+    expect(wahooRouteMocks.sendSavedRouteToWahoo).toHaveBeenCalledWith(
+      'user-1',
+      'route-1',
+      expect.objectContaining({ name: 'Wahoo Ready Route' }),
+    );
+    expect(result).toMatchObject({
+      destinationServiceName: ServiceNames.WahooAPI,
+      status: 'success',
+      successCount: 1,
+    });
+  });
+
+  it('returns a Wahoo route-scope failure in-band', async () => {
+    const { WahooRouteWriteScopeRequiredError } = await import('../wahoo/routes');
+    wahooRouteMocks.createWahooRouteSendContext.mockRejectedValueOnce(
+      new WahooRouteWriteScopeRequiredError(),
+    );
+
+    const result = await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.WahooAPI,
+    }) as any);
+
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        routeId: 'route-1',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+        message: 'Reconnect Wahoo and allow route access before sending routes.',
       }),
     ]);
   });

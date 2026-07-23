@@ -26,10 +26,10 @@ describe('segmentTrainingMetricText', () => {
   });
 
   it('keeps connective copy in Inter-ready segments across compound summaries', () => {
-    expect(metricText('11 activities in 90 days · 39 activities in 1 year')).toEqual([
-      '11 activities',
+    expect(metricText('11 workouts in 90 days · 39 workouts in 1 year')).toEqual([
+      '11 workouts',
       '90 days',
-      '39 activities',
+      '39 workouts',
       '1 year',
     ]);
     expect(segmentTrainingMetricText('Same active days')).toEqual([

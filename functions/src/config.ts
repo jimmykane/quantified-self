@@ -21,6 +21,13 @@ interface GarminApiConfig {
     client_secret: string;
 }
 
+interface WahooApiConfig {
+    client_id: string;
+    client_secret: string;
+    webhook_token: string;
+    allowed_file_hosts: string[];
+}
+
 interface CloudTasksConfig {
     projectId: string | undefined;
     location: string;
@@ -45,6 +52,7 @@ interface AppConfig {
     suuntoapp: SuuntoAppConfig;
     corosapi: CorosApiConfig;
     garminapi: GarminApiConfig;
+    wahooapi: WahooApiConfig;
     cloudtasks: CloudTasksConfig;
     debug: DebugConfig;
 }
@@ -76,6 +84,17 @@ export const config: AppConfig = {
         return {
             client_id: getEnvVar('GARMINAPI_CLIENT_ID'),
             client_secret: getEnvVar('GARMINAPI_CLIENT_SECRET'),
+        };
+    },
+    get wahooapi() {
+        return {
+            client_id: getEnvVar('WAHOOAPI_CLIENT_ID'),
+            client_secret: getEnvVar('WAHOOAPI_CLIENT_SECRET'),
+            webhook_token: getEnvVar('WAHOOAPI_WEBHOOK_TOKEN'),
+            allowed_file_hosts: (process.env.WAHOOAPI_ALLOWED_FILE_HOSTS || 'cdn.wahooligan.com')
+                .split(',')
+                .map((host) => host.trim().toLowerCase())
+                .filter(Boolean),
         };
     },
     get cloudtasks() {

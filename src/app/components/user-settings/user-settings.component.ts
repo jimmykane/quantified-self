@@ -47,7 +47,7 @@ import {
   getAppCanonicalChartDataTypes,
 } from '../../helpers/app-chart-data-types.helper';
 
-type SettingsSectionId = 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' | 'delete-account';
+type SettingsSectionId = 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' | 'account';
 
 interface SettingsSectionOption {
   id: SettingsSectionId;
@@ -73,7 +73,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   public consentToDelete: boolean;
   public errorDeleting;
   public errorSaving;
-  public activeSection: SettingsSectionId = 'app';
+  public activeSection: SettingsSectionId = 'profile';
   public readonly sectionOrder: SettingsSectionId[] = [
     'profile',
     'app',
@@ -81,7 +81,7 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
     'map',
     'charts',
     'units',
-    'delete-account',
+    'account',
   ];
   public readonly settingsSectionOptions: SettingsSectionOption[] = [
     {
@@ -121,10 +121,10 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
       icon: 'straighten',
     },
     {
-      id: 'delete-account',
-      label: 'Delete Account',
-      description: 'Permanent account removal',
-      icon: 'delete_forever',
+      id: 'account',
+      label: 'Account',
+      description: 'Account actions and access',
+      icon: 'account_circle',
     },
   ];
   public readonly brandTextMaxLength = 60;
@@ -580,12 +580,17 @@ export class UserSettingsComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   private applySectionParam(section: unknown): void {
+    if (section === 'delete-account') {
+      this.activeSection = 'account';
+      return;
+    }
+
     if (this.isSettingsSection(section)) {
       this.activeSection = section;
       return;
     }
 
-    this.activeSection = 'app';
+    this.activeSection = 'profile';
   }
 
   private isSettingsSection(section: unknown): section is SettingsSectionId {

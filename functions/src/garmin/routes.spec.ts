@@ -77,6 +77,7 @@ import {
   createGarminRouteSendContext,
   GarminRouteSendPermissionRequiredError,
   sendRouteToGarminConnect,
+  uploadManualRouteToGarminConnect,
 } from './routes';
 
 function createTokenSnapshot(id: string, userID: string, permissions: string[] = ['COURSE_IMPORT'], dateCreated = 1000) {
@@ -197,6 +198,26 @@ describe('garmin route sending', () => {
     expect(result).toEqual({
       providerRouteId: '9001',
       deliveries: [{ providerUserId: 'garmin-user-1', providerRouteId: '9001' }],
+    });
+  });
+
+  it('creates a Garmin course from a manually selected route without delivery metadata', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockResolvedValueOnce({ courseId: 9002 });
+
+    const beforeProviderRequest = vi.fn().mockResolvedValue(undefined);
+    const result = await uploadManualRouteToGarminConnect('user-1', createRouteFile(), { beforeProviderRequest });
+
+    expect(requestHelperMocks.post).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://apis.garmin.com/training-api/courses/v1/course',
+      body: expect.objectContaining({ courseName: 'QS Route Name' }),
+    }));
+    expect(beforeProviderRequest).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      providerRouteId: '9002',
+      deliveries: [{ providerUserId: 'garmin-user-1', providerRouteId: '9002' }],
     });
   });
 

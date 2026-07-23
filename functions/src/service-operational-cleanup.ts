@@ -12,8 +12,12 @@ import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './activity-sync/constants';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from './route-delivery-sync/constants';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
+import {
+  WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
+  WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+} from './wahoo/constants';
 
-type ProviderIdentifierField = 'userName' | 'openId' | 'userID';
+type ProviderIdentifierField = 'userName' | 'openId' | 'userID' | 'wahooUserID';
 
 interface ProviderOperationalCleanupConfig {
   serviceName: ServiceNames;
@@ -37,6 +41,7 @@ const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
   SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
   COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
   GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
+  WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 ]);
 
 export interface ProviderOperationalCleanupResult {
@@ -61,6 +66,8 @@ function providerUserIdFromTokenData(
       return asNonEmptyString(tokenData.openId);
     case ServiceNames.GarminAPI:
       return asNonEmptyString(tokenData.userID);
+    case ServiceNames.WahooAPI:
+      return asNonEmptyString(tokenData.wahooUserID);
     default:
       return null;
   }
@@ -99,6 +106,14 @@ function getProviderOperationalCleanupConfig(
         providerUserIdField: 'userID',
         workoutQueueCollection: GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
         sleepProvider: SLEEP_PROVIDERS.GarminAPI,
+      };
+    case ServiceNames.WahooAPI:
+      return {
+        serviceName,
+        providerUserId,
+        providerUserIdField: 'wahooUserID',
+        workoutQueueCollection: WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+        sleepProvider: '',
       };
     default:
       return null;
@@ -190,13 +205,11 @@ function failedJobSourceCollection(data: Record<string, unknown>): string | null
   if (looksLikeLegacyGarminWorkoutQueueData(data)) {
     return GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME;
   }
+  if (asNonEmptyString(data.wahooUserID)) {
+    return WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME;
+  }
 
   return null;
-}
-
-function tokenSnapshotHasServiceName(doc: admin.firestore.QueryDocumentSnapshot, serviceName: ServiceNames): boolean {
-  const data = doc.data() as Record<string, unknown>;
-  return asNonEmptyString(data.serviceName) === serviceName;
 }
 
 async function hasConnectedTokenForProviderUser(
@@ -205,9 +218,10 @@ async function hasConnectedTokenForProviderUser(
 ): Promise<boolean> {
   const snapshot = await db.collectionGroup('tokens')
     .where(config.providerUserIdField, '==', config.providerUserId)
+    .where('serviceName', '==', config.serviceName)
     .get();
 
-  return snapshot.docs.some((doc) => tokenSnapshotHasServiceName(doc, config.serviceName));
+  return !snapshot.empty;
 }
 
 function shouldDeleteOperationalDoc(
@@ -367,6 +381,23 @@ export async function cleanupProviderOperationalDocsForServiceToken(
         `[ServiceOperationalCleanup] Failed to clean ${query.collectionName} for ${serviceName} provider user ${config.providerUserId}`,
         error,
       );
+    }
+  }
+
+  if (serviceName === ServiceNames.WahooAPI && !hasActiveConnection) {
+    const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(config.providerUserId);
+    const mappingDeleted = await db.runTransaction(async (transaction) => {
+      const mappingSnapshot = await transaction.get(mappingRef);
+      if (!mappingSnapshot.exists || asNonEmptyString(mappingSnapshot.data()?.firebaseUserID) !== userID) {
+        return false;
+      }
+
+      // Mapping documents cannot have descendants by design, so a transactional document delete is sufficient.
+      transaction.delete(mappingRef);
+      return true;
+    });
+    if (mappingDeleted) {
+      deletedDocCount += 1;
     }
   }
 

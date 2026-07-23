@@ -323,6 +323,10 @@ describe('AppRouteSendService', () => {
     }, ServiceNames.GarminAPI)).toBe('Connect Garmin again before sending routes.');
     expect(getRouteSendErrorMessage({
       code: 'functions/unauthenticated',
+      message: 'Connect Wahoo before sending routes.',
+    }, ServiceNames.WahooAPI)).toBe('Connect Wahoo again before sending routes.');
+    expect(getRouteSendErrorMessage({
+      code: 'functions/unauthenticated',
       message: 'Reconnect the Garmin account previously used for this route before sending it again.',
     }, ServiceNames.GarminAPI)).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
     expect(getRouteSendErrorMessage({ message: 'Sending saved routes to GarminAPI is not supported yet.' }))
@@ -347,6 +351,40 @@ describe('AppRouteSendService', () => {
         message: 'Authentication failed. Please re-connect your Suunto account.',
       }],
     })).toBe('Connect Suunto again before sending routes.');
+
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.WahooAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.WahooAPI,
+        status: 'failure',
+        reason: 'DESTINATION_AUTH_REQUIRED',
+        message: 'Connect Wahoo before sending routes.',
+      }],
+    })).toBe('Connect Wahoo again before sending routes.');
+  });
+
+  it('maps Wahoo route-scope failures to reconnect guidance', () => {
+    expect(getRouteSendResponseMessage({
+      destinationServiceName: ServiceNames.WahooAPI,
+      status: 'failure',
+      routeCount: 1,
+      successCount: 0,
+      failureCount: 1,
+      skippedCount: 0,
+      results: [{
+        routeId: 'route-1',
+        destinationServiceName: ServiceNames.WahooAPI,
+        status: 'failure',
+        reason: 'DESTINATION_PERMISSION_REQUIRED',
+        message: 'Reconnect Wahoo and allow route access before sending routes.',
+      }],
+    })).toBe('Reconnect Wahoo and allow route access before sending routes.');
   });
 
   it('maps Garmin permission-required failures to reconnect guidance', () => {

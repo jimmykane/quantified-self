@@ -21,6 +21,7 @@ export interface ProviderImportEventIDRequest {
   providerEventIDField: string;
   providerEventSecondaryID?: string | number | null;
   providerEventSecondaryIDField?: string;
+  preferProviderIdentityEventID?: boolean;
 }
 
 interface ProviderImportEventIDReservation {
@@ -166,9 +167,11 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
 
     const metadataSnapshot = await transaction.get(metadataRef);
     if (metadataSnapshot.exists) {
-      const eventID = metadataMatchesProviderIdentity(metadataSnapshot.data(), request)
-        ? primaryEventID
-        : providerIdentityEventID;
+      const eventID = request.preferProviderIdentityEventID
+        ? providerIdentityEventID
+        : metadataMatchesProviderIdentity(metadataSnapshot.data(), request)
+          ? primaryEventID
+          : providerIdentityEventID;
       transaction.set(
         reservationRef,
         reservationPayload(request, primaryEventID, providerIdentityKey, eventID),
@@ -184,7 +187,7 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
       return existingReservation.eventID;
     }
 
-    const eventID = hasReservedProviderIdentity(providerIdentities)
+    const eventID = request.preferProviderIdentityEventID || hasReservedProviderIdentity(providerIdentities)
       ? providerIdentityEventID
       : primaryEventID;
     transaction.set(
@@ -195,7 +198,7 @@ export async function resolveProviderImportEventID(request: ProviderImportEventI
     return eventID;
   });
 
-  if (selectedEventID !== primaryEventID) {
+  if (selectedEventID !== primaryEventID && !request.preferProviderIdentityEventID) {
     logCollision(request, primaryEventID, selectedEventID);
   }
 

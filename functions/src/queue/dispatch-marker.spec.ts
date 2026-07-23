@@ -6,20 +6,24 @@ const {
     mockLoggerInfo,
     mockRecursiveDelete,
     mockRunTransaction,
+    mockTransactionGet,
     mockTransactionUpdate,
     mockGetUserDeletionGuardStateInTransaction,
     mockMarkQueueItemDeletedForUserCleanup,
 } = vi.hoisted(() => {
     const mockTransactionUpdate = vi.fn((ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => ref.update?.(data));
+    const mockTransactionGet = vi.fn();
     return {
         mockLoggerError: vi.fn(),
         mockLoggerWarn: vi.fn(),
         mockLoggerInfo: vi.fn(),
         mockRecursiveDelete: vi.fn(),
-        mockRunTransaction: vi.fn(async (runner: (transaction: { update: typeof mockTransactionUpdate }) => unknown) => runner({
+        mockRunTransaction: vi.fn(async (runner: (transaction: { get: typeof mockTransactionGet, update: typeof mockTransactionUpdate }) => unknown) => runner({
+            get: mockTransactionGet,
             update: mockTransactionUpdate,
         })),
         mockTransactionUpdate,
+        mockTransactionGet,
         mockGetUserDeletionGuardStateInTransaction: vi.fn(),
         mockMarkQueueItemDeletedForUserCleanup: vi.fn(),
     };
@@ -77,7 +81,9 @@ describe('queue dispatch marker guarded updates', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
-        mockRunTransaction.mockImplementation(async (runner: (transaction: { update: typeof mockTransactionUpdate }) => unknown) => runner({
+        mockTransactionGet.mockResolvedValue({ exists: true, data: () => ({}) });
+        mockRunTransaction.mockImplementation(async (runner: (transaction: { get: typeof mockTransactionGet, update: typeof mockTransactionUpdate }) => unknown) => runner({
+            get: mockTransactionGet,
             update: mockTransactionUpdate,
         }));
     });
@@ -144,5 +150,31 @@ describe('queue dispatch marker guarded updates', () => {
         expect(mockLoggerError).toHaveBeenCalledWith(
             '[SleepSync] Failed to write cleanup tombstone for queue item sleep-item-1; leaving item in place to avoid missing-doc Cloud Task retries.',
         );
+    });
+
+    it('does not mark a queue item that was replaced by a newer revision', async () => {
+        mockTransactionGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({ revision: 'newer' }),
+        });
+        const queueItemDocument = {
+            parent: { id: 'wahooAPIWorkoutQueue' },
+            update: vi.fn(),
+        };
+
+        const result = await updateQueueItemIfUserActive({
+            queueItemDocument: queueItemDocument as any,
+            queueItemId: 'wahoo-item-1',
+            userID: 'active-user',
+            phase: 'wahoo_queue_dispatch_marker',
+            updateData: { dispatchedToCloudTask: 123 },
+            logPrefix: 'WahooQueue',
+            actionDescription: 'Cloud Task dispatch marker',
+            isCurrent: (queueItem) => queueItem.revision === 'expected',
+        });
+
+        expect(result).toBe(QueueItemUserGuardedUpdateResult.NotCurrent);
+        expect(mockTransactionUpdate).not.toHaveBeenCalled();
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
     });
 });

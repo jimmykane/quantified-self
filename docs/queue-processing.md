@@ -1,6 +1,6 @@
 # Queue Processing Architecture
 
-The application uses a dual-path architecture to process workout and activity data from third-party services (Suunto, Garmin, COROS). This ensures both responsiveness (immediate processing) and reliability (background processing).
+The application uses a dual-path architecture to process workout and activity data from third-party services (Suunto, Garmin, COROS, and Wahoo). This ensures both responsiveness (immediate processing) and reliability (background processing).
 
 ## Architecture Overview
 
@@ -39,3 +39,5 @@ All queue configuration is centralized in `functions/src/shared/queue-config.ts`
 *   `functions/src/tasks/workout-processor.ts`: Cloud Task worker (Path A).
 *   `functions/src/queue.ts`: Shared processing logic and Scheduled Functions (Path B).
 *   `functions/src/garmin/queue.ts`: Specialized parsing logic for Garmin formats.
+*   `functions/src/wahoo/queue-store.ts`: Idempotent Wahoo webhook/history queue upserts and dispatch.
+*   `functions/src/wahoo/processor.ts`: Secure Wahoo FIT download, parsing, and event persistence.

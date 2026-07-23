@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
     shouldSkip: false,
   }),
   runTransaction: vi.fn(),
+  fieldValueDelete: vi.fn(() => 'delete-sentinel'),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -54,11 +55,7 @@ vi.mock('firebase-admin', () => {
       })),
     })),
     runTransaction: hoisted.runTransaction,
-  }), {
-    FieldValue: {
-      delete: vi.fn(() => 'delete-sentinel'),
-    },
-  });
+  }), {});
 
   return {
     default: { firestore },
@@ -66,12 +63,19 @@ vi.mock('firebase-admin', () => {
   };
 });
 
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    delete: hoisted.fieldValueDelete,
+  },
+}));
+
 import * as logger from 'firebase-functions/logger';
 import {
   clearServiceConnectionState,
   markServiceConnected,
   markServiceReconnectRequired,
   mirrorServiceDisconnectPendingToUserMeta,
+  setServiceConnectionProviderUserId,
 } from './service-connection-meta';
 
 describe('service-connection-meta', () => {
@@ -165,6 +169,20 @@ describe('service-connection-meta', () => {
     }), { merge: true });
   });
 
+  it('stores a normalized provider account ID without changing connection state', async () => {
+    await expect(setServiceConnectionProviderUserId('user-1', ServiceNames.WahooAPI, ' 60462 ')).resolves.toBe(true);
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), {
+      providerUserId: '60462',
+    }, { merge: true });
+  });
+
+  it('does not write an empty provider account ID', async () => {
+    await expect(setServiceConnectionProviderUserId('user-1', ServiceNames.WahooAPI, '   ')).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
   it('skips clear-state writes when user deletion is in progress', async () => {
     hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: true,
@@ -175,6 +193,14 @@ describe('service-connection-meta', () => {
     await clearServiceConnectionState('user-1', ServiceNames.SuuntoApp);
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
+  it('removes the provider account ID when a service is disconnected', async () => {
+    await clearServiceConnectionState('user-1', ServiceNames.WahooAPI);
+
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      providerUserId: 'delete-sentinel',
+    }), { merge: true });
   });
 
   it('tracks route restore state when mirroring pending disconnect metadata', async () => {

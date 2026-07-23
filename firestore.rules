@@ -395,6 +395,16 @@ service cloud.firestore {
        }
     }
 
+    // Wahoo OAuth credentials and provider identity mappings are server-owned.
+    // The app reads safe connection state from users/{uid}/meta/Wahoo API.
+    match /wahooAPIAccessTokens/{userID}/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /wahooAPIUserMappings/{document=**} {
+      allow read, write: if false;
+    }
+
     match /garminAPIActivityQueue/{userID} {
       allow read: if isAdmin();
       allow write: if false;
@@ -406,6 +416,11 @@ service cloud.firestore {
     }
 
     match /suuntoAppWorkoutQueue/{userID} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /wahooAPIWorkoutQueue/{queueItemID} {
       allow read: if isAdmin();
       allow write: if false;
     }

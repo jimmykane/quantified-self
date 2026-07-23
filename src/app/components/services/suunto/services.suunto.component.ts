@@ -37,11 +37,14 @@ function isDateValue(value: unknown): value is Date {
 export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements DoCheck, OnDestroy {
   public serviceName = ServiceNames.SuuntoApp;
   public readonly suuntoToGarminRouteID = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI;
+  public readonly suuntoToWahooRouteID = ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI;
   clicks = 0;
   isQueueingRoutes = false;
   isSavingRouteDeliverySyncRoute = false;
   isQueueingRouteDeliverySyncBackfill = false;
   routeDeliveryBackfillSummary: RouteDeliverySyncBackfillSummary | null = null;
+  isQueueingWahooRouteDeliverySyncBackfill = false;
+  wahooRouteDeliveryBackfillSummary: RouteDeliverySyncBackfillSummary | null = null;
   public isServiceConnected = false;
   public connectedSuuntoServiceTokens: Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface> = [];
   public connectedSuuntoAccounts: Array<{
@@ -59,6 +62,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   public skippedRoutesFromLastRouteImportCount = 0;
   public failedRoutesFromLastRouteImportCount = 0;
   public totalRoutesFromLastRouteImportCount = 0;
+  public isWahooRouteDeliveryConnected = false;
   public garminRouteSendContext: GarminRouteSendContext = {
     connected: false,
     reconnectRequired: false,
@@ -72,17 +76,21 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   private lastServiceMetaRef: AppUserServiceMetaInterface | undefined;
   private lastForceConnected = false;
   private garminRouteSendSubscription: Subscription | null = null;
+  private wahooRouteDeliverySubscription: Subscription | null = null;
 
   override async ngOnChanges() {
     await super.ngOnChanges();
     this.syncDerivedState();
     this.watchGarminRouteSendState();
+    this.watchWahooRouteDeliveryState();
   }
 
   override ngOnDestroy(): void {
     super.ngOnDestroy();
     this.garminRouteSendSubscription?.unsubscribe();
     this.garminRouteSendSubscription = null;
+    this.wahooRouteDeliverySubscription?.unsubscribe();
+    this.wahooRouteDeliverySubscription = null;
   }
 
   ngDoCheck(): void {
@@ -148,6 +156,15 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return this.user?.settings?.serviceSyncSettings?.routeDeliverySyncRoutes?.[this.suuntoToGarminRouteID]?.enabled === true;
   }
 
+  get isSuuntoToWahooRouteAvailableForUser(): boolean {
+    const userID = `${this.user?.uid || ''}`.trim();
+    return isRouteDeliverySyncRouteUIDAllowlisted(this.suuntoToWahooRouteID, userID);
+  }
+
+  get isSuuntoToWahooRouteEnabled(): boolean {
+    return this.user?.settings?.serviceSyncSettings?.routeDeliverySyncRoutes?.[this.suuntoToWahooRouteID]?.enabled === true;
+  }
+
   get isGarminRouteDeliveryReady(): boolean {
     return this.garminRouteSendContext.connected
       && !this.garminRouteSendContext.reconnectRequired
@@ -164,6 +181,18 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   get canQueueSuuntoToGarminRouteBackfill(): boolean {
     return this.canEnableSuuntoToGarminRoute;
+  }
+
+  get canEnableSuuntoToWahooRoute(): boolean {
+    return this.hasProAccess
+      && this.isSuuntoToWahooRouteAvailableForUser
+      && this.hasConnectedSuuntoAccount
+      && !this.isReconnectRequired
+      && this.isWahooRouteDeliveryConnected;
+  }
+
+  get canQueueSuuntoToWahooRouteBackfill(): boolean {
+    return this.canEnableSuuntoToWahooRoute;
   }
 
   get suuntoToGarminRouteStatusTitle(): string {
@@ -200,6 +229,24 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return garminAccount
       ? `Suunto routes saved in Quantified Self can be sent to Garmin account ${garminAccount}.`
       : 'Suunto routes saved in Quantified Self can be sent to Garmin.';
+  }
+
+  get suuntoToWahooRouteStatusTitle(): string {
+    return this.isWahooRouteDeliveryConnected
+      ? 'Wahoo connection detected'
+      : 'Connect Wahoo to send routes';
+  }
+
+  get suuntoToWahooRouteStatusType(): 'info' {
+    return 'info';
+  }
+
+  get suuntoToWahooRouteStatusMessage(): string {
+    if (!this.isWahooRouteDeliveryConnected) {
+      return 'Connect Wahoo before automatically sending Suunto routes to Wahoo.';
+    }
+
+    return 'Suunto routes saved in Quantified Self can be sent to Wahoo. Route access is checked when sending begins; if Wahoo was connected before route sending was available, reconnect it once to grant route access.';
   }
 
   constructor(protected http: HttpClient,
@@ -342,6 +389,84 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     }
   }
 
+  async onSuuntoToWahooRouteToggle(enabled: boolean): Promise<void> {
+    if (!this.user || this.isSavingRouteDeliverySyncRoute) {
+      return;
+    }
+
+    if (!this.isSuuntoToWahooRouteAvailableForUser) {
+      this.snackBar.open('Automatic route sending is not available for this account.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (enabled && !this.canEnableSuuntoToWahooRoute) {
+      this.snackBar.open('Connect Suunto and Wahoo before sending routes.', undefined, { duration: 4500 });
+      return;
+    }
+
+    this.isSavingRouteDeliverySyncRoute = true;
+    try {
+      await this.userService.updateRouteDeliverySyncRouteSettings(this.user, {
+        [this.suuntoToWahooRouteID]: enabled,
+      });
+      this.analyticsService.logEvent('route_delivery_sync_route_toggle', {
+        route_id: this.suuntoToWahooRouteID,
+        enabled,
+      });
+      this.snackBar.open(enabled ? 'New Suunto routes will be sent to Wahoo automatically.' : 'Automatic Suunto route sending to Wahoo is off.', undefined, { duration: 3000 });
+    } catch (error: any) {
+      this.logger.error(error);
+      this.snackBar.open(`Could not update automatic route sending: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+    } finally {
+      this.isSavingRouteDeliverySyncRoute = false;
+    }
+  }
+
+  async queueSuuntoToWahooRouteDelivery(event: Event): Promise<void> {
+    event.preventDefault();
+
+    if (!this.hasProAccess) {
+      this.triggerUpsell();
+      return;
+    }
+
+    if (this.isQueueingWahooRouteDeliverySyncBackfill) {
+      return;
+    }
+
+    if (!this.isSuuntoToWahooRouteAvailableForUser) {
+      this.snackBar.open('Sending Suunto routes to Wahoo is not available for this account.', undefined, { duration: 4000 });
+      return;
+    }
+
+    if (!this.canQueueSuuntoToWahooRouteBackfill) {
+      this.snackBar.open('Connect Suunto and Wahoo before sending routes.', undefined, { duration: 4500 });
+      return;
+    }
+
+    this.isQueueingWahooRouteDeliverySyncBackfill = true;
+    try {
+      const summary = await this.userService.backfillRouteDeliverySyncRouteForCurrentUser(
+        ServiceNames.SuuntoApp,
+        ServiceNames.WahooAPI,
+      );
+      this.wahooRouteDeliveryBackfillSummary = summary;
+      this.analyticsService.logEvent('route_delivery_sync_backfill', {
+        route_id: this.suuntoToWahooRouteID,
+        scanned: summary.scanned,
+        queued: summary.queued,
+        failed_count: summary.failedCount,
+      });
+      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
+      this.snackBar.open(`Route sending started for ${summary.queued} ${summary.queued === 1 ? 'route' : 'routes'}.${failureSuffix}`, undefined, { duration: 4000 });
+    } catch (error: any) {
+      this.logger.error(error);
+      this.snackBar.open(`Could not start route sending: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
+    } finally {
+      this.isQueueingWahooRouteDeliverySyncBackfill = false;
+    }
+  }
+
   private syncDerivedState(): void {
     this.lastServiceTokensRef = this.serviceTokens;
     this.lastServiceMetaRef = this.serviceMeta;
@@ -394,6 +519,20 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
     this.garminRouteSendSubscription = this.userService.watchGarminRouteSendContext(this.user).subscribe(context => {
       this.garminRouteSendContext = context;
+    });
+  }
+
+  private watchWahooRouteDeliveryState(): void {
+    this.wahooRouteDeliverySubscription?.unsubscribe();
+    this.wahooRouteDeliverySubscription = null;
+
+    if (!this.user) {
+      this.isWahooRouteDeliveryConnected = false;
+      return;
+    }
+
+    this.wahooRouteDeliverySubscription = this.userService.watchActivityServiceConnectionState(this.user).subscribe(connectionState => {
+      this.isWahooRouteDeliveryConnected = connectionState[ServiceNames.WahooAPI] === true;
     });
   }
 

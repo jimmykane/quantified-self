@@ -6,6 +6,20 @@ import { ServiceTokenInput } from '../shared/token-types';
 // Re-export for convenience
 export { ServiceTokenInput } from '../shared/token-types';
 
+/**
+ * A provider-owned condition that is evaluated in the same Firestore
+ * transaction as removal of a duplicate token. This lets providers with a
+ * transferable external identity fence stale cleanup work.
+ */
+export type PreviousOwnerTokenCleanupGuard = (
+    transaction: admin.firestore.Transaction,
+) => Promise<boolean>;
+
+export interface PersistedServiceIdentity {
+    previousOwnerUserID?: string;
+    previousOwnerTokenCleanupGuard?: PreviousOwnerTokenCleanupGuard;
+}
+
 export interface ServiceAuthAdapter {
     serviceName: ServiceNames;
     tokenCollectionName: string;
@@ -28,6 +42,10 @@ export interface ServiceAuthAdapter {
 
     // Process post-token logic (e.g. fetch User ID from API if not in token)
     processNewToken(token: AccessToken, userId: string): Promise<{ uniqueId?: string; permissions?: string[] }>;
+
+    // Optional provider-owned identity projection created after the token is durable.
+    onTokenPersisted?(userId: string, externalUserId: string): Promise<PersistedServiceIdentity | void>;
+    managesDuplicateConnections?: boolean;
 
     // Deauthorization
     deauthorize(token: Auth2ServiceTokenInterface): Promise<void>;

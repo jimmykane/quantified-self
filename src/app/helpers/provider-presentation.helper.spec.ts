@@ -25,14 +25,16 @@ describe('provider-presentation.helper', () => {
         expect(presentation?.tooltipLabel).toBe('Synced from Garmin');
     });
 
-    it('keeps Suunto and COROS source branding simple', () => {
+    it('keeps Suunto, COROS, and Wahoo source branding simple', () => {
         expect(buildSourceProviderPresentation(ServiceNames.SuuntoApp)?.displayLabel).toBe('Suunto');
         expect(buildSourceProviderPresentation(ServiceNames.COROSAPI)?.displayLabel).toBe('COROS');
+        expect(buildSourceProviderPresentation(ServiceNames.WahooAPI)?.displayLabel).toBe('Wahoo');
     });
 
     it('uses destination branding for connected-provider surfaces', () => {
         expect(buildDestinationProviderPresentation(ServiceNames.GarminAPI)?.displayLabel).toBe('Garmin Connect');
         expect(buildDestinationProviderPresentation(ServiceNames.SuuntoApp)?.displayLabel).toBe('Suunto App');
         expect(buildDestinationProviderPresentation(ServiceNames.COROSAPI)?.displayLabel).toBe('COROS');
+        expect(buildDestinationProviderPresentation(ServiceNames.WahooAPI)?.displayLabel).toBe('Wahoo');
     });
 });

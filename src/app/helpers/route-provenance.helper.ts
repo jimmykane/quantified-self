@@ -52,6 +52,7 @@ function normalizeRouteServiceName(serviceName: string | null | undefined): Serv
         case ServiceNames.SuuntoApp:
         case ServiceNames.GarminAPI:
         case ServiceNames.COROSAPI:
+        case ServiceNames.WahooAPI:
             return serviceName;
         default:
             return null;

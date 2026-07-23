@@ -6,6 +6,171 @@
           <p>Bring your activity data together.</p>
         </header>
 
+        <mat-expansion-panel
+          class="service-data-flow"
+          [expanded]="isDataFlowExpanded"
+          (opened)="isDataFlowExpanded = true"
+          (closed)="isDataFlowExpanded = false">
+          <mat-expansion-panel-header collapsedHeight="64px" expandedHeight="64px">
+            <mat-panel-title class="service-data-flow__panel-title">
+              <mat-icon aria-hidden="true">account_tree</mat-icon>
+              <span class="service-data-flow__panel-copy">
+                <span id="service-data-flow-title">Your data flow</span>
+                <span>Compatible provider delivery routes through Quantified Self</span>
+              </span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="service-data-flow__content" aria-labelledby="service-data-flow-title">
+            @if (dataFlowSummary.connectedServiceCount === 0) {
+            <div class="service-data-flow__empty">
+              <mat-icon aria-hidden="true">hub</mat-icon>
+              <div>
+                <h2>No services connected</h2>
+                <p>Connect a service below to start bringing activity data into Quantified Self.</p>
+              </div>
+            </div>
+            } @else if (dataFlowSummary.connectedServiceCount === 1) {
+            <div class="service-data-flow__empty">
+              <mat-icon aria-hidden="true">download</mat-icon>
+              <div>
+                <h2>Activities are importing into Quantified Self</h2>
+                <p>Connect another compatible service to view and enable provider-to-provider delivery routes.</p>
+              </div>
+            </div>
+            } @else {
+            <p class="service-data-flow__intro">
+              <mat-icon aria-hidden="true">download</mat-icon>
+              Connected services import new activities into Quantified Self. Each matrix route is delivered through Quantified Self; select a path to open its source settings.
+            </p>
+            <div class="service-data-flow__matrix-scroll">
+              <table class="service-data-flow__matrix">
+                <caption>Automatic delivery routes through Quantified Self</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">From · To</th>
+                    @for (provider of dataFlowSummary.matrixRows; track provider.sourceServiceName) {
+                    <th scope="col">
+                      <span class="service-data-flow__provider-label">
+                        {{ provider.sourceLabel }}
+                        @if (provider.sourceConnected) {
+                        <mat-icon class="service-data-flow__provider-status" aria-label="Connected">check_circle</mat-icon>
+                        }
+                      </span>
+                    </th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of dataFlowSummary.matrixRows; track row.sourceServiceName) {
+                  <tr>
+                    <th scope="row">
+                      <span class="service-data-flow__provider-label">
+                        {{ row.sourceLabel }}
+                        @if (row.sourceConnected) {
+                        <mat-icon class="service-data-flow__provider-status" aria-label="Connected">check_circle</mat-icon>
+                        }
+                      </span>
+                    </th>
+                    @for (provider of dataFlowSummary.matrixRows; track provider.sourceServiceName; let columnIndex = $index) {
+                    @let cell = row.cells[columnIndex];
+                    @if (provider.sourceServiceName === row.sourceServiceName) {
+                    <td class="service-data-flow__matrix-cell service-data-flow__matrix-cell--same" aria-label="Same provider">—</td>
+                    } @else {
+                    <td class="service-data-flow__matrix-cell">
+                      @if (cell.routes.length) {
+                      <div class="service-data-flow__matrix-routes">
+                        @for (route of cell.routes; track route.id) {
+                        <button
+                          mat-button
+                          type="button"
+                          class="service-data-flow__matrix-route"
+                          [class.service-data-flow__matrix-route--activity]="route.kind === 'activity'"
+                          [class.service-data-flow__matrix-route--route]="route.kind === 'route'"
+                          [class.service-data-flow__matrix-route--active]="route.state === 'active'"
+                          [class.service-data-flow__matrix-route--attention]="route.state === 'attention'"
+                          [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
+                          (click)="openServiceTools(route.sourceSection, route)">
+                          <span class="service-data-flow__matrix-route-content">
+                            <span class="service-data-flow__matrix-route-label">{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
+                            @if (route.state === 'active') {
+                            <small>On</small>
+                            } @else if (route.state === 'attention') {
+                            <small><mat-icon aria-hidden="true">sync_problem</mat-icon> Needs connection</small>
+                            } @else {
+                            <small>Available</small>
+                            }
+                          </span>
+                        </button>
+                        }
+                      </div>
+                      } @else {
+                      <span class="service-data-flow__matrix-empty">—</span>
+                      }
+                    </td>
+                    }
+                    }
+                  </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="service-data-flow__mobile-matrix" aria-label="Automatic delivery routes through Quantified Self">
+              @for (row of dataFlowSummary.matrixRows; track row.sourceServiceName) {
+              <section class="service-data-flow__mobile-matrix-group">
+                <h2>
+                  <span class="service-data-flow__provider-label">
+                    From {{ row.sourceLabel }}
+                    @if (row.sourceConnected) {
+                    <mat-icon class="service-data-flow__provider-status" aria-label="Connected">check_circle</mat-icon>
+                    }
+                  </span>
+                </h2>
+                @for (cell of row.cells; track cell.id) {
+                @if (cell.routes.length) {
+                <div class="service-data-flow__mobile-matrix-target">
+                  <h3>
+                    <span class="service-data-flow__provider-label">
+                      To {{ cell.destinationLabel }}
+                      @if (cell.destinationConnected) {
+                      <mat-icon class="service-data-flow__provider-status" aria-label="Connected">check_circle</mat-icon>
+                      }
+                    </span>
+                  </h3>
+                  <div class="service-data-flow__matrix-routes">
+                    @for (route of cell.routes; track route.id) {
+                    <button
+                      mat-button
+                      type="button"
+                      class="service-data-flow__matrix-route"
+                      [class.service-data-flow__matrix-route--activity]="route.kind === 'activity'"
+                      [class.service-data-flow__matrix-route--route]="route.kind === 'route'"
+                      [class.service-data-flow__matrix-route--active]="route.state === 'active'"
+                      [class.service-data-flow__matrix-route--attention]="route.state === 'attention'"
+                      [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
+                      (click)="openServiceTools(route.sourceSection, route)">
+                      <span class="service-data-flow__matrix-route-content">
+                        <span class="service-data-flow__matrix-route-label">{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
+                        @if (route.state === 'active') {
+                        <small>On</small>
+                        } @else if (route.state === 'attention') {
+                        <small><mat-icon aria-hidden="true">sync_problem</mat-icon> Needs connection</small>
+                        } @else {
+                        <small>Available</small>
+                        }
+                      </span>
+                    </button>
+                    }
+                  </div>
+                </div>
+                }
+                }
+              </section>
+              }
+            </div>
+            }
+          </div>
+        </mat-expansion-panel>
+
         <mat-button-toggle-group
           class="provider-selector provider-selector--desktop"
           [value]="activeSection"
@@ -17,6 +182,8 @@
             <span class="provider-selector__option">
               <app-service-source-icon
                 [sourceServiceName]="section.serviceName"
+                [iconWidth]="72"
+                [iconHeight]="24"
                 [showTooltip]="false">
               </app-service-source-icon>
               <span class="provider-selector__name">{{ section.label }}</span>
@@ -31,24 +198,22 @@
           }
         </mat-button-toggle-group>
 
-        <nav
-          mat-tab-nav-bar
-          [tabPanel]="providerPanel"
-          mat-stretch-tabs="true"
+        <mat-button-toggle-group
           class="provider-selector provider-selector--mobile"
-          aria-label="Service providers">
+          [value]="activeSection"
+          hideSingleSelectionIndicator
+          aria-label="Service providers"
+          (change)="selectService($event.value)">
           @for (section of serviceSectionOptions; track section.id) {
-          <a
-            href=""
-            mat-tab-link
-            [active]="activeSection === section.id"
-            (click)="$event.preventDefault(); selectService(section.id)">
-            {{ section.label }}
-          </a>
+          <mat-button-toggle
+            [value]="section.id"
+            [attr.aria-label]="section.label">
+            <span class="provider-selector__mobile-option">{{ section.label }}</span>
+          </mat-button-toggle>
           }
-        </nav>
+        </mat-button-toggle-group>
 
-        <mat-tab-nav-panel #providerPanel class="services-workspace-main">
+        <section class="services-workspace-main">
           <section
             class="service-detail"
             [hidden]="activeSection !== 'garmin'"
@@ -60,6 +225,9 @@
               [showAdvancedTools]="false"
               (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
             </app-services-garmin>
+            <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'garmin' }">
+            </ng-container>
             <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'garmin' }">
             </ng-container>
@@ -76,6 +244,9 @@
               (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
             </app-services-suunto>
             <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'suunto' }">
+            </ng-container>
+            <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'suunto' }">
             </ng-container>
           </section>
@@ -91,10 +262,68 @@
               (connectionStateChanged)="setServiceConnectionState('coros', $event)">
             </app-services-coros>
             <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'coros' }">
+            </ng-container>
+            <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
             </ng-container>
           </section>
-        </mat-tab-nav-panel>
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'wahoo'"
+            aria-label="Wahoo">
+            <app-services-wahoo
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
+            </app-services-wahoo>
+            <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'wahoo' }">
+            </ng-container>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
+            </ng-container>
+          </section>
+        </section>
+
+        <ng-template #automaticSyncSummary let-section>
+          <mat-card appearance="outlined" class="service-sync-summary qs-card-plain" [attr.aria-label]="serviceLabelBySection[section] + ' automatic sync'">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>published_with_changes</mat-icon>
+              <mat-card-title>Enabled automatic sync</mat-card-title>
+              <mat-card-subtitle>Activity and route delivery involving {{ serviceLabelBySection[section] }}</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              @if (automaticSyncSummaryBySection[section].activities.length || automaticSyncSummaryBySection[section].routes.length) {
+              <div class="service-sync-summary__groups">
+                @if (automaticSyncSummaryBySection[section].activities.length) {
+                <section class="service-sync-summary__group" aria-label="Enabled activity sending">
+                  <h2><mat-icon>directions_run</mat-icon> Activity sending</h2>
+                  <ul>
+                    @for (syncRoute of automaticSyncSummaryBySection[section].activities; track syncRoute.id) {
+                    <li>{{ syncRoute.label }}</li>
+                    }
+                  </ul>
+                </section>
+                }
+                @if (automaticSyncSummaryBySection[section].routes.length) {
+                <section class="service-sync-summary__group" aria-label="Enabled route sending">
+                  <h2><mat-icon>route</mat-icon> Route sending</h2>
+                  <ul>
+                    @for (syncRoute of automaticSyncSummaryBySection[section].routes; track syncRoute.id) {
+                    <li>{{ syncRoute.label }}</li>
+                    }
+                  </ul>
+                </section>
+                }
+              </div>
+              } @else {
+              <p class="service-sync-summary__empty">No automatic activity or route delivery is enabled for this service.</p>
+              }
+            </mat-card-content>
+          </mat-card>
+        </ng-template>
 
         <ng-template #serviceOverview let-section>
           <section class="service-overview" aria-label="Connection features">
@@ -113,10 +342,12 @@
                 </div>
                 <button
                   mat-stroked-button
+                  class="service-overview-card__action"
                   type="button"
                   [attr.aria-label]="card.actionLabel + ' for ' + serviceLabelBySection[section]"
                   (click)="openServiceTools(section, card)">
-                  {{ card.actionLabel }}
+                  <span>Manage</span>
+                  <mat-icon>arrow_forward</mat-icon>
                 </button>
               </article>
             }
@@ -148,6 +379,7 @@
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
         [activeProviderTool]="managedTool"
+        [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
       </app-services-garmin>
@@ -170,9 +402,21 @@
         [showAdvancedTools]="true"
         [showConnectionSummary]="false"
         [activeProviderTool]="managedTool"
+        [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
         (connectionStateChanged)="setServiceConnectionState('coros', $event)">
       </app-services-coros>
+      }
+      @case ('wahoo') {
+      <app-services-wahoo
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [showAdvancedTools]="true"
+        [showConnectionSummary]="false"
+        [activeProviderTool]="managedTool"
+        [showOnlyActiveProviderTool]="true"
+        (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
+      </app-services-wahoo>
       }
     }
   </mat-dialog-content>

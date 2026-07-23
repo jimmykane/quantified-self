@@ -35,13 +35,14 @@ export const COMPARISON_PROVIDER_SOURCES: readonly ComparisonProviderSource[] = 
   { label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'), serviceName: ServiceNames.GarminAPI },
   { label: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'), serviceName: ServiceNames.SuuntoApp },
   { label: getProviderDisplayName(ServiceNames.COROSAPI, 'source'), serviceName: ServiceNames.COROSAPI },
+  { label: getProviderDisplayName(ServiceNames.WahooAPI, 'source'), serviceName: ServiceNames.WahooAPI },
 ];
 
 export const COMPARISON_FEATURE_ITEMS: readonly ComparisonFeatureItem[] = [
   {
     icon: 'compare_arrows',
     title: 'Device, provider, and file data in one view',
-    copy: 'Bring Garmin, Suunto, COROS, manual FIT, TCX, GPX, JSON, and SML imports into one private dashboard so source service, original files, maps, routes, and workout metrics stay visible together.',
+    copy: 'Bring Garmin, Suunto, COROS, Wahoo, manual FIT, TCX, GPX, JSON, and SML imports into one private dashboard so source service, original files, maps, routes, and workout metrics stay visible together.',
   },
   {
     icon: 'merge_type',
@@ -64,17 +65,17 @@ export const COMPARISON_SEARCH_INTENT_ITEMS: readonly ComparisonFeatureItem[] = 
   {
     icon: 'dashboard_customize',
     title: 'Private Garmin training dashboard',
-    copy: 'Use Garmin data beyond Garmin Connect by keeping original activity files, maps, load metrics, routes, exports, and connected Suunto or COROS workouts in your own account.',
+    copy: 'Use Garmin data beyond Garmin Connect by keeping original activity files, maps, load metrics, routes, exports, and connected Suunto, COROS, or Wahoo workouts in your own account.',
   },
   {
     icon: 'sync_alt',
-    title: 'Garmin and COROS to Suunto sync context',
-    copy: 'Connect your services once and automatically send new Garmin or COROS activities to Suunto. You can also choose a date range to sync past activities.',
+    title: 'Garmin, COROS, and Wahoo to Suunto sync context',
+    copy: 'Connect your services once and automatically send new Garmin, COROS, or eligible Wahoo FIT activities to Suunto. You can also choose a date range to sync past activities.',
   },
   {
     icon: 'hub',
     title: 'Centralized multi-provider workout history',
-    copy: 'Centralize Garmin, Suunto, and COROS workout data so each service can be useful without trapping analysis inside one device ecosystem.',
+    copy: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data so each service can be useful without trapping analysis inside one device ecosystem.',
   },
   {
     icon: 'upload_file',
@@ -90,7 +91,7 @@ export const COMPARISON_SEARCH_INTENT_ITEMS: readonly ComparisonFeatureItem[] = 
 
 export const COMPARISON_FAQ_ITEMS: readonly ComparisonFaqItem[] = [
   {
-    question: 'Can I compare Garmin, COROS, Suunto, and uploaded workout files?',
+    question: 'Can I compare Garmin, COROS, Suunto, Wahoo, and uploaded workout files?',
     answer: 'Yes. Import provider activities or upload FIT, TCX, GPX, JSON, and SML files, then compare compatible recordings with source-aware maps, charts, overlays, and benchmark reports from the same private dashboard.',
   },
   {
@@ -115,12 +116,12 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
   title: 'Workout Data Comparison',
   preload: true,
   animation: 'Features',
-  description: `Compare Garmin, Suunto, COROS, and custom FIT, TCX, or GPX workout data in one private training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
+  description: `Compare Garmin, Suunto, COROS, Wahoo, and custom FIT, TCX, or GPX workout data in one private training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
-    name: 'Compare Garmin, Suunto, and COROS workout data',
-    description: `Compare Garmin, Suunto, COROS, and custom FIT, TCX, or GPX workout data in one private training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
+    name: 'Compare Garmin, Suunto, COROS, and Wahoo workout data',
+    description: `Compare Garmin, Suunto, COROS, Wahoo, and custom FIT, TCX, or GPX workout data in one private training dashboard with free-plan manual uploads, benchmark reports, source files, and reviewer-ready device comparisons.`,
     url: WORKOUT_DATA_COMPARISON_URL,
     inLanguage: 'en',
     isPartOf: {
@@ -140,12 +141,13 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
     ],
     about: [
       'Garmin vs COROS workout data',
-      'Garmin, Suunto, and COROS workout comparison',
+      'Garmin, Suunto, COROS, and Wahoo workout comparison',
       'Custom FIT and TCX workout file comparison',
       'Sports watch review benchmark reports',
       'Private Garmin training dashboard',
       'Garmin to Suunto activity sync',
       'COROS to Suunto activity sync',
+      'Wahoo to Suunto activity sync',
     ],
     mainEntity: [
       {

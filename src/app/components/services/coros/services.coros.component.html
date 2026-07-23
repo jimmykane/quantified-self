@@ -5,6 +5,7 @@
   @if (showConnectionSummary) {
   <app-service-connection-status
     serviceLabel="COROS"
+    providerIcon="coros"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
@@ -206,15 +207,40 @@
     @if (isCorosToSuuntoRouteAvailableForUser && (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync')) {
     <section
       class="provider-tool-panel"
+      [class.provider-tool-panel--focused]="showOnlyActiveProviderTool"
       [hidden]="activeProviderTool !== 'auto-sync'"
       [class.locked-panel]="!hasProAccess"
         (click)="!hasProAccess && triggerUpsell()">
-        @if (!showOnlyActiveProviderTool) {
-          <div class="tool-subsection-title">
-            <mat-icon>published_with_changes</mat-icon>
-            <span>Send COROS activities to Suunto</span>
-          </div>
+        @if (showOnlyActiveProviderTool) {
+        <mat-button-toggle-group
+          class="activity-sync-destination-selector"
+          aria-label="Activity sync destination"
+          [value]="activeActivitySyncDestination"
+          (change)="activeActivitySyncDestination = $event.value">
+          <mat-button-toggle value="suunto">To Suunto</mat-button-toggle>
+          <mat-button-toggle value="wahoo">To Wahoo</mat-button-toggle>
+        </mat-button-toggle-group>
         }
+
+        @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'suunto') {
+        <div class="tool-subsection-title">
+          <span class="activity-sync-provider-icons" aria-hidden="true">
+            <app-service-source-icon
+              [sourceServiceName]="serviceName"
+              [iconWidth]="32"
+              [iconHeight]="18"
+              [showTooltip]="false">
+            </app-service-source-icon>
+            <mat-icon>arrow_forward</mat-icon>
+            <app-service-source-icon
+              [sourceServiceName]="serviceNames.SuuntoApp"
+              [iconWidth]="32"
+              [iconHeight]="18"
+              [showTooltip]="false">
+            </app-service-source-icon>
+          </span>
+          <span>Send COROS activities to Suunto</span>
+        </div>
         @if (!hasProAccess) {
         <div class="pro-required-inline">
           <mat-icon>lock</mat-icon>
@@ -258,17 +284,17 @@
           </mat-form-field>
         </div>
 
-        <button mat-flat-button class="qs-mat-primary full-width-action"
+        <button mat-flat-button class="qs-mat-primary service-tool-primary-action"
           [disabled]="isBackfillingSync || isBackfillDateRangeInvalid"
           (click)="runCorosToSuuntoBackfill($event)">
           @if (isBackfillingSync) {
           <ng-container>
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-            Starting sync...
+            Scheduling activities…
           </ng-container>
           } @else {
           <ng-container>
-            Sync activities
+            Schedule activities
           </ng-container>
           }
         </button>
@@ -288,6 +314,18 @@
           }
         </app-status-info>
         }
+        }
+        }
+
+        @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'wahoo') {
+      <app-activity-sync-route-control
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [sourceServiceName]="serviceName"
+        [destinationServiceName]="serviceNames.WahooAPI"
+        [sourceConnected]="isConnectedToService()"
+        [showTopDivider]="!showOnlyActiveProviderTool">
+      </app-activity-sync-route-control>
         }
       </section>
     }

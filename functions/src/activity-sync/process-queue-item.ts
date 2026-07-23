@@ -27,9 +27,15 @@ import {
 } from './metadata';
 import { uploadActivityFileToSuunto } from '../suunto/activities';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
+import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from '../wahoo/activities';
+import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
+import {
+    QueueItemUserGuardedUpdateResult,
+    updateQueueItemIfUserActive,
+} from '../queue/dispatch-marker';
 
 function toExtension(path?: string, extension?: string): string {
     if (extension && typeof extension === 'string' && extension.trim().length > 0) {
@@ -75,6 +81,7 @@ const TRANSIENT_ACTIVITY_SYNC_ERROR_CODES = new Set([
     'aborted',
     'deadline-exceeded',
     'unavailable',
+    'resource-exhausted',
 ]);
 
 const TRANSIENT_ACTIVITY_SYNC_GRPC_CODES = new Set([
@@ -132,11 +139,16 @@ function isSkippableAuthenticationError(error: unknown): boolean {
     return httpsCode === 'unauthenticated' || httpsCode === 'permission-denied';
 }
 
+function isWahooWriteScopeError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'WahooWorkoutWriteScopeRequiredError';
+}
+
 function isAccountDeletionSkipError(error: unknown): boolean {
     return error instanceof Error
         && (
             error.name === 'TokenRefreshSkippedForDeletedUserError'
             || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
+            || error.name === 'WahooActivityUploadSkippedForDeletedUserError'
         );
 }
 
@@ -183,6 +195,22 @@ async function getDestinationConnectionStatus(userID: string, destinationService
                 .get();
             return snapshot.size > 0 ? 'connected' : 'not_connected';
         }
+        case ServiceNames.WahooAPI: {
+            const meta = await getServiceConnectionMeta(userID, destinationServiceName);
+            if (isDisconnectPendingServiceConnection(meta)) {
+                return 'disconnect_pending';
+            }
+            if (isServiceUnavailableForSyncConnection(meta)) {
+                return 'not_connected';
+            }
+            const snapshot = await admin.firestore()
+                .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
+                .doc(userID)
+                .collection('tokens')
+                .limit(1)
+                .get();
+            return snapshot.size > 0 ? 'connected' : 'not_connected';
+        }
         default:
             return 'not_connected';
     }
@@ -215,9 +243,50 @@ async function uploadToDestination(
     switch (queueItem.destinationServiceName) {
         case ServiceNames.SuuntoApp:
             return uploadActivityFileToSuunto(queueItem.userID, fileBuffer);
+        case ServiceNames.WahooAPI:
+            if (queueItem.destinationUploadID) {
+                return getWahooActivityUploadStatus(queueItem.userID, queueItem.destinationUploadID);
+            }
+            return uploadActivityFileToWahoo(queueItem.userID, fileBuffer, {
+                filename: queueItem.originalFile.originalFilename || queueItem.originalFile.path.split('/').pop(),
+            });
         default:
             throw new Error(`Unsupported destination service ${queueItem.destinationServiceName}`);
     }
+}
+
+async function persistWahooPendingUpload(
+    queueItem: ActivitySyncQueueItemInterface,
+    uploadResult: UploadActivityFileResult,
+): Promise<boolean> {
+    if (!queueItem.ref || !uploadResult.uploadId) {
+        throw new Error('Wahoo pending upload is missing queue persistence data.');
+    }
+    const destinationUploadID = uploadResult.uploadId;
+    const destinationWorkoutKey = uploadResult.workoutKey || queueItem.destinationWorkoutKey;
+    const destinationInfoCode = uploadResult.code || queueItem.destinationInfoCode;
+    const updateResult = await updateQueueItemIfUserActive({
+        queueItemDocument: queueItem.ref,
+        queueItemId: queueItem.id,
+        userID: queueItem.userID,
+        phase: 'before_activity_sync_wahoo_pending_upload_persist',
+        updateData: {
+            destinationUploadID,
+            destinationWorkoutKey: destinationWorkoutKey || null,
+            destinationInfoCode: destinationInfoCode || null,
+        },
+        logPrefix: 'ActivitySync',
+        actionDescription: 'Wahoo pending upload token persistence',
+    });
+    if (updateResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
+        // The guarded update writes a cleanup tombstone and deletes the queue item.
+        // A follow-up queue-state write would target a document that no longer exists.
+        return false;
+    }
+    queueItem.destinationUploadID = destinationUploadID;
+    queueItem.destinationWorkoutKey = destinationWorkoutKey;
+    queueItem.destinationInfoCode = destinationInfoCode;
+    return true;
 }
 
 async function safelyWriteMetadata(writeOperation: () => Promise<void>): Promise<void> {
@@ -333,17 +402,17 @@ export async function processActivitySyncQueueItem(
 
         const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
         const isManualRun = queueItem.manual === true;
-        if (!enabled && !isManualRun) {
-            const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
-            if (pendingDisconnectService) {
-                return deferActivitySyncQueueItemForPendingDisconnect(
-                    queueItem,
-                    bulkWriter,
-                    routeMeta,
-                    pendingDisconnectService,
-                );
-            }
+        const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
+        if (pendingDisconnectService) {
+            return deferActivitySyncQueueItemForPendingDisconnect(
+                queueItem,
+                bulkWriter,
+                routeMeta,
+                pendingDisconnectService,
+            );
+        }
 
+        if (!enabled && !isManualRun) {
             await setActivitySyncSkippedMetadata({
                 ...routeMeta,
                 skippedReason: 'route_disabled',
@@ -414,6 +483,15 @@ export async function processActivitySyncQueueItem(
 
         duringDestinationUpload = true;
         const uploadResult = await uploadToDestination(queueItem, fileBuffer);
+        if (uploadResult.status === 'pending') {
+            const persisted = await persistWahooPendingUpload(queueItem, uploadResult);
+            if (!persisted) {
+                return QueueResult.Processed;
+            }
+            throw Object.assign(new Error('Wahoo is still processing the activity.'), {
+                code: 'deadline-exceeded',
+            });
+        }
         duringDestinationUpload = false;
 
         await setActivitySyncSuccessMetadata({
@@ -440,6 +518,19 @@ export async function processActivitySyncQueueItem(
             }));
             return updateToProcessed(queueItem, bulkWriter, {
                 skippedReason: 'destination_auth_failed',
+                resultStatus: 'skipped',
+            });
+        }
+
+        if (duringDestinationUpload && isWahooWriteScopeError(error)) {
+            const errorLike = asErrorLike(error);
+            await safelyWriteMetadata(() => setActivitySyncSkippedMetadata({
+                ...routeMeta,
+                skippedReason: 'destination_write_scope_missing',
+                detail: `${errorLike.message || 'Reconnect Wahoo and allow workout access.'}`,
+            }));
+            return updateToProcessed(queueItem, bulkWriter, {
+                skippedReason: 'destination_write_scope_missing',
                 resultStatus: 'skipped',
             });
         }

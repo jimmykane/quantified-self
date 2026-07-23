@@ -50,7 +50,7 @@ describe('buildTrainingAnalysis', () => {
     expect(analysis.state).toEqual({ label: 'Balanced', caption: 'Stable load' });
     expect(analysis.insights).toEqual([
       { title: 'Volume', description: 'You trained 50% more time than in your usual 28 days.' },
-      { title: 'Sessions', description: 'You logged 4 more sessions than in your usual 28 days.' },
+      { title: 'Workouts', description: 'You logged 4 more workouts than in your usual 28 days.' },
       { title: 'Intensity mix', description: 'Hard work is 10 percentage points more prominent than in your usual 28 days.' },
     ]);
   });

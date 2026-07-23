@@ -1,4 +1,4 @@
-import { Directive, inject, Input, OnInit, computed } from '@angular/core';
+import { Directive, inject, Input, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { FileInterface } from './file.interface';
@@ -8,7 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppUserService } from '../../services/app.user.service';
-import { shouldReportUploadError } from '../../services/upload-error';
+import { isUploadErrorUserActionHandled, shouldReportUploadError } from '../../services/upload-error';
 
 export interface UploadBatchSummary {
   totalFiles: number;
@@ -112,6 +112,7 @@ export abstract class UploadAbstractDirective implements OnInit {
     let successfulUploads = 0;
     let failedUploads = 0;
     let duplicateUploads = 0;
+    let userActionHandledFailures = 0;
     try {
       for (const fileItem of filesToProcess) {
         this.processingService.updateJob(fileItem.jobId, { status: 'processing', progress: 0 });
@@ -125,7 +126,9 @@ export abstract class UploadAbstractDirective implements OnInit {
             successfulUploads++;
           }
         } catch (error: unknown) {
-          if (shouldReportUploadError(error)) {
+          if (isUploadErrorUserActionHandled(error)) {
+            userActionHandledFailures++;
+          } else if (shouldReportUploadError(error)) {
             this.logger.error(error);
           }
           const errorMessage = error instanceof Error ? error.message : 'Upload failed';
@@ -153,9 +156,11 @@ export abstract class UploadAbstractDirective implements OnInit {
       if (failedUploads > 0) parts.push(`${failedUploads} failed`);
       message = `Processed ${filesToProcess.length} files: ${parts.join(', ')}`;
     }
-    this.snackBar.open(message, 'OK', {
-      duration: 5000,
-    });
+    if (failedUploads === 0 || failedUploads !== userActionHandledFailures) {
+      this.snackBar.open(message, 'OK', {
+        duration: 5000,
+      });
+    }
     this.onUploadBatchFinished({
       totalFiles: filesToProcess.length,
       successfulUploads,

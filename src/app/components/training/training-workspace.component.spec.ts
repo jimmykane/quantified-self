@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatMenuModule } from '@angular/material/menu';
 import { concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -30,6 +31,7 @@ describe('TrainingWorkspaceComponent', () => {
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
+      imports: [MatMenuModule],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
   });
@@ -38,6 +40,10 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       formPoints: [],
+      recoveryNow: {
+        totalSeconds: 7_200,
+        endTimeMs: Date.now(),
+      },
       formStatus: 'ready', recoveryNowStatus: 'ready', acwrStatus: 'ready', rampRateStatus: 'ready',
       monotonyStrainStatus: 'ready', formNowStatus: 'ready', formPlus7dStatus: 'ready',
       easyPercentStatus: 'ready', hardPercentStatus: 'ready', efficiencyDelta4wStatus: 'ready',
@@ -77,14 +83,21 @@ describe('TrainingWorkspaceComponent', () => {
     expect(feedbackAction?.getAttribute('target')).toBe('_blank');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     expect(element.textContent).toContain('Compared with your usual 28 days');
+    expect(element.querySelector('.training-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(element.textContent).toContain('What drove this');
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
     expect(element.textContent).toContain('Settings vs recent evidence');
+    expect(element.querySelector('app-durability-reading-guide[context="training"]')).not.toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
+    const importedRecovery = element.querySelector('.training-readiness-imported-recovery');
+    expect(importedRecovery?.textContent).toContain('Imported recovery estimate');
+    expect(importedRecovery?.textContent).toContain('separate from Readiness and Freshness');
+    expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling or swimming sessions in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
     expect(element.textContent).toContain('Preparing capacity evidence');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
@@ -144,8 +157,8 @@ describe('TrainingWorkspaceComponent', () => {
       expect(statePanel.textContent).toContain('Updating from the latest completed TSS calculation');
       const infoButton = statePanel.querySelector('.training-state-info-button');
       expect(infoButton?.getAttribute('aria-label')).toBe('How Building is calculated');
-      expect(fixture.componentInstance.trainingStatus.stateInfoTooltip).toContain('CTL minus ATL');
-      expect(fixture.componentInstance.trainingStatus.stateInfoTooltip).toContain('Form +4 (CTL 102 − ATL 98)');
+      expect(fixture.componentInstance.trainingStatus.stateInfo.tooltip).toContain('CTL minus ATL');
+      expect(fixture.componentInstance.trainingStatus.stateInfo.tooltip).toContain('Form +4 (CTL 102 − ATL 98)');
       fixture.destroy();
     } finally {
       vi.useRealTimers();
@@ -267,7 +280,7 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('-4%');
       expect(panel.textContent).toContain('14-day trend');
       expect(panel.textContent).toContain('14/14 days scored');
-      expect(panel.textContent).toContain('browser does not load event or activity history');
+      expect(panel.textContent).toContain('browser does not load workout history');
       expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
       expect(panel.querySelectorAll('.training-readiness-trend-axis-label')).toHaveLength(4);
       const readinessPoint = panel.querySelector('.training-readiness-trend-point');
@@ -466,7 +479,7 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
-    expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming sessions.');
+    expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming workouts.');
     expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBeGreaterThanOrEqual(3);
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
@@ -535,7 +548,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).toContain('Modeled critical power');
     expect(text).toContain('186 W');
     expect(text).toContain('Recent efforts have not validated this FTP yet');
-    expect(text).toContain('16% below the imported setting');
+    expect(text).toContain('model sits below the imported setting');
     expect(text).toContain('does not show that fitness declined.');
   });
 
@@ -616,7 +629,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('app-power-curve-chart[title="Cycling Power Curve"]')).not.toBeNull();
     expect(element.querySelector('app-power-curve-chart[title="Running Power Curve"]')).toBeNull();
     expect(element.textContent).toContain('Cycling/MTB details · Overall comparison uses all training');
-    expect(element.textContent).toContain('All activities with TSS');
+    expect(element.textContent).toContain('TSS-backed workouts only');
     expect(element.textContent).toContain('Intensity chart uses all eligible zone data');
   });
 
@@ -745,6 +758,32 @@ describe('TrainingWorkspaceComponent', () => {
       action: 'cleared',
       discipline: 'cycling',
     });
+  });
+
+  it('opens Training state details in a viewport-bounded dialog for mobile', () => {
+    const dialogRef = { afterClosed: () => of(undefined) };
+    const dialog = { open: vi.fn(() => dialogRef) };
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      dialog as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    (component as any).trainingStateDetailsDialogTemplate = {};
+    const stopPropagation = vi.fn();
+
+    component.openTrainingStateDetailsDialog({ stopPropagation } as unknown as MouseEvent);
+
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      ariaLabel: 'Training state details',
+      autoFocus: false,
+      maxWidth: '340px',
+      restoreFocus: true,
+      width: 'calc(100vw - 32px)',
+    }));
   });
 
   it('records only the non-identifying benchmark configuration after a saved selection', () => {
@@ -878,13 +917,13 @@ describe('TrainingWorkspaceComponent', () => {
       current: {
         periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
         recordedNightCount: 20, expectedNightCount: 28, coverage: 'sufficient',
-        averageSleepSeconds: 8 * 3600, bedtimeVariationMinutes: 30,
+        averageSleepSeconds: 8 * 3600, typicalLocalStartMinutes: 22 * 60, typicalLocalEndMinutes: 6 * 60, bedtimeVariationMinutes: 30,
         medianOvernightHrvMs: 60, overnightHrvNightCount: 20,
       },
       reference: {
         periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
         recordedNightCount: 50, expectedNightCount: 84, coverage: 'sufficient',
-        averageSleepSeconds: 7 * 3600, bedtimeVariationMinutes: 45,
+        averageSleepSeconds: 7 * 3600, typicalLocalStartMinutes: (22 * 60) + 15, typicalLocalEndMinutes: (6 * 60) + 15, bedtimeVariationMinutes: 45,
         medianOvernightHrvMs: 50, overnightHrvNightCount: 50,
       },
     };
@@ -893,6 +932,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryView.compactText).toBe('Sleep 1h 00m longer per night · Overnight HRV +10 ms');
     expect(recoveryView.metricRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Sleep / night', currentText: '8h 00m', deltaText: '+1h 00m', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Typical sleep window', currentText: '22:00–06:00', referenceText: '22:15–06:15', deltaText: '15m earlier', deltaTone: 'neutral' }),
       expect.objectContaining({ label: 'Recorded nights', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Bedtime variation', deltaText: '15m steadier', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Overnight HRV', deltaText: '+10 ms', deltaTone: 'positive' }),
@@ -915,7 +955,7 @@ describe('TrainingWorkspaceComponent', () => {
       'Recorded sleep coverage supports comparison where matching metrics are available.',
     );
     expect(missingBedtimeRecoveryView.sourceText).toContain(
-      'Bedtime variation needs at least five nights that include local-time data.',
+      'Bedtime variation and the typical sleep window need at least five nights with local start and end times.',
     );
     expect(missingBedtimeRecoveryView.sourceText).not.toContain('Overnight HRV needs');
 
@@ -1054,9 +1094,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(swimRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Distance', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Time', deltaTone: 'positive' }),
-      expect.objectContaining({ label: 'Sessions', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Workouts', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Active weeks', deltaTone: 'positive' }),
-      expect.objectContaining({ label: 'Longest session', deltaTone: 'positive' }),
+      expect.objectContaining({ label: 'Longest workout', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m faster', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Open-water pace', currentText: '--', benchmarkText: '--', deltaTone: 'neutral' }),
       expect.objectContaining({ label: 'TSS', deltaTone: 'positive' }),
@@ -1088,7 +1128,7 @@ describe('TrainingWorkspaceComponent', () => {
       }],
     }, 'swimming');
     expect(durabilityRows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: '25 m freestyle evidence', currentText: '3 activities', benchmarkText: '4 activities' }),
+      expect.objectContaining({ label: '25 m freestyle evidence', currentText: '3 workouts', benchmarkText: '4 workouts' }),
       expect.objectContaining({ label: '25 m freestyle pace retained', deltaText: '+2%', deltaTone: 'positive' }),
       expect.objectContaining({ label: '25 m freestyle SWOLF change', deltaText: '−1', deltaTone: 'positive' }),
     ]));
@@ -1147,8 +1187,8 @@ describe('TrainingWorkspaceComponent', () => {
   it('keeps build sleep comparison compact until details are requested', async () => {
     const derivedState$ = new Subject<DashboardDerivedMetricsState>();
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
-    const endDayMs = Date.UTC(2026, 2, 25);
-    const selection = { mode: 'period' as const, durationWeeks: 12 as const, endDayMs };
+    const eventId = 'event-1';
+    const selection = { mode: 'event' as const, durationWeeks: 12 as const, eventId };
 
     await TestBed.configureTestingModule({
       declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
@@ -1176,8 +1216,8 @@ describe('TrainingWorkspaceComponent', () => {
           discipline: 'cycling', status: 'ready',
           selection: {
             ...selection,
-            selectionKey: `period:12:${endDayMs}`,
-            windowStartDayMs: Date.UTC(2026, 0, 1), windowEndDayMs: endDayMs, label: null,
+            selectionKey: `event:12:${eventId}`,
+            windowStartDayMs: Date.UTC(2026, 0, 1), windowEndDayMs: Date.UTC(2026, 2, 25), label: 'New Event',
           },
           current: null, benchmark: null, suggestedRaces: [], suggestedEvents: [],
           recovery: {
@@ -1185,13 +1225,13 @@ describe('TrainingWorkspaceComponent', () => {
             current: {
               periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
               recordedNightCount: 78, expectedNightCount: 84, coverage: 'sufficient',
-              averageSleepSeconds: 31_200, bedtimeVariationMinutes: 36,
+              averageSleepSeconds: 31_200, typicalLocalStartMinutes: 1_380, typicalLocalEndMinutes: 420, bedtimeVariationMinutes: 36,
               medianOvernightHrvMs: 33, overnightHrvNightCount: 78,
             },
             reference: {
               periodDays: 84, windowStartDayMs: 1, windowEndDayMs: 2, provider: 'GarminAPI',
               recordedNightCount: 78, expectedNightCount: 84, coverage: 'sufficient',
-              averageSleepSeconds: 32_400, bedtimeVariationMinutes: 35,
+              averageSleepSeconds: 32_400, typicalLocalStartMinutes: 1_365, typicalLocalEndMinutes: 405, bedtimeVariationMinutes: 35,
               medianOvernightHrvMs: 30, overnightHrvNightCount: 78,
             },
           },
@@ -1205,6 +1245,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(benchmarkAction?.getAttribute('aria-label')).toBe('Change Cycling benchmark');
     expect(benchmarkAction?.querySelector('.training-build-benchmark-action-label')?.textContent?.trim())
       .toBe('Change');
+    expect(element.textContent).toContain('Selected reference event');
+    expect(element.textContent).toContain('12-week build before this event');
+    expect(element.textContent).toContain('Used as the comparison reference; event day is excluded.');
     const toggle = element.querySelector<HTMLButtonElement>('.training-build-recovery-toggle');
     expect(element.textContent).toContain('Sleep 20m shorter per night · Overnight HRV +3 ms');
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');

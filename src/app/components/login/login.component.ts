@@ -33,6 +33,17 @@ export class LoginComponent implements OnInit, OnDestroy {
   private postLoginNavigationInFlight = false;
   private hasCompletedPostLoginNavigation = false;
   private isCompletingEmailLinkSignIn = false;
+  private static readonly nonReportableAuthenticationErrorCodes = new Set([
+    'auth/account-exists-with-different-credential',
+    'auth/cancelled-popup-request',
+    'auth/credential-already-in-use',
+    'auth/email-already-in-use',
+    'auth/invalid-action-code',
+    'auth/invalid-email',
+    'auth/invalid-session-id',
+    'auth/popup-closed-by-user',
+    'auth/user-cancelled',
+  ]);
   // private auth = inject(Auth); // Removed as we use authService
 
 
@@ -72,44 +83,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
 
       if (email) {
-        this.isLoading = true;
-        this.authService.signInWithEmailLink(email, window.location.href)
-          .then(async (result) => {
-            // Check for pending link intent (Scenario: User clicked "Send Magic Link" to link this email to an existing GitHub/Google account)
-            // Wait, logic is reverse: User was on "Login" page, tried to sign in with GitHub, failed (collision), chose "Send Magic Link".
-            // So now they are signed in with Email. We need to link GitHub.
-            const pendingLinkProvider = this.authService.localStorageService.getItem('pendingLinkProvider');
-            if (pendingLinkProvider) {
-              this.isLoading = false;
-              const confirmLink = window.confirm(
-                `You are now signed in with your email.Please sign in with ${pendingLinkProvider} to finish linking your accounts.`
-              );
-
-              if (confirmLink) {
-                this.authService.localStorageService.removeItem('pendingLinkProvider');
-                await this.linkPendingProvider(pendingLinkProvider, result.user);
-                return; // linkPendingProvider handles redirect/dialog
-              }
-            }
-            this.redirectOrShowDataPrivacyDialog(result);
-          })
-          .catch((error) => {
-            this.isLoading = false;
-            // Handle collision (Scenario: User tries to sign in with Email Link, but account exists with GitHub)
-            if (error.code === 'auth/credential-already-in-use' || error.code === 'auth/account-exists-with-different-credential' || error.code === 'auth/email-already-in-use') {
-              // For email link, the email is known.
-              // We need to trigger the collision flow.
-              // However, error object might not provide everything cleanly for email link flow.
-              // But we have the 'email' variable.
-              // We can manually trigger the resolution.
-              this.handleAccountCollision(error, email);
-              return;
-            }
-
-            this.logger.error('Error signing in with email link', error);
-            this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
-            this.finishEmailLinkCompletion(false);
-          });
+        this.completeEmailLinkSignIn(email);
       } else {
         this.finishEmailLinkCompletion(false);
       }
@@ -143,11 +117,67 @@ export class LoginComponent implements OnInit, OnDestroy {
           this.handleAccountCollision(error);
           return;
         }
-        this.logger.error('Error getting redirect result', error);
+        this.reportUnexpectedAuthenticationError('Error getting redirect result', error);
         this.showErrorDialog('Login Failed', error);
       });
 
     this.isLoading = false;
+  }
+
+  private completeEmailLinkSignIn(email: string): void {
+    this.isLoading = true;
+    this.authService.signInWithEmailLink(email, window.location.href)
+      .then(async (result) => {
+        // Check for pending link intent (Scenario: User clicked "Send Magic Link" to link this email to an existing GitHub/Google account)
+        // Wait, logic is reverse: User was on "Login" page, tried to sign in with GitHub, failed (collision), chose "Send Magic Link".
+        // So now they are signed in with Email. We need to link GitHub.
+        const pendingLinkProvider = this.authService.localStorageService.getItem('pendingLinkProvider');
+        if (pendingLinkProvider) {
+          this.isLoading = false;
+          const confirmLink = window.confirm(
+            `You are now signed in with your email.Please sign in with ${pendingLinkProvider} to finish linking your accounts.`
+          );
+
+          if (confirmLink) {
+            this.authService.localStorageService.removeItem('pendingLinkProvider');
+            await this.linkPendingProvider(pendingLinkProvider, result.user);
+            return; // linkPendingProvider handles redirect/dialog
+          }
+        }
+        this.redirectOrShowDataPrivacyDialog(result);
+      })
+      .catch((error) => {
+        this.isLoading = false;
+        // Handle collision (Scenario: User tries to sign in with Email Link, but account exists with GitHub)
+        if (error.code === 'auth/credential-already-in-use' || error.code === 'auth/account-exists-with-different-credential' || error.code === 'auth/email-already-in-use') {
+          // For email link, the email is known.
+          // We need to trigger the collision flow.
+          // However, error object might not provide everything cleanly for email link flow.
+          // But we have the 'email' variable.
+          // We can manually trigger the resolution.
+          this.handleAccountCollision(error, email);
+          return;
+        }
+
+        if (error?.code === 'auth/invalid-email') {
+          this.authService.localStorageService.removeItem('emailForSignIn');
+          const confirmedEmail = window.prompt(
+            'This magic link was sent to a different email address. Enter the email address that received it to continue.'
+          )?.trim();
+          if (confirmedEmail) {
+            this.completeEmailLinkSignIn(confirmedEmail);
+            return;
+          }
+
+          this.snackBar.open('Enter the email address that received the magic link to continue.', 'Close', { duration: 5000 });
+          this.finishEmailLinkCompletion(false);
+          return;
+        }
+
+        this.reportUnexpectedAuthenticationError('Error signing in with email link', error);
+        this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
+        this.finishEmailLinkCompletion(false);
+      });
   }
 
   // .. existing sendEmailLink ...
@@ -188,7 +218,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.logger.error(e);
+      this.reportUnexpectedAuthenticationError('Error signing in with provider', e);
       this.showErrorDialog('Login Failed', e);
       this.isLoading = false;
     };
@@ -282,7 +312,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           }
         }
       } catch (linkError: any) {
-        this.logger.error('Account linking failed:', linkError);
+        this.reportUnexpectedAuthenticationError('Account linking failed', linkError);
         this.showErrorDialog('Account Linking Failed', linkError);
       }
     }
@@ -296,6 +326,14 @@ export class LoginComponent implements OnInit, OnDestroy {
       data: { title, message },
       width: '400px'
     });
+  }
+
+  private reportUnexpectedAuthenticationError(message: string, error: { code?: string } | null | undefined): void {
+    if (LoginComponent.nonReportableAuthenticationErrorCodes.has(error?.code || '')) {
+      return;
+    }
+
+    this.logger.error(message, error);
   }
 
   private mapErrorMessage(error: any): string {
@@ -324,7 +362,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
       await this.navigateAfterLoginOnce();
     } catch (e: any) {
-      this.logger.error('Link pending provider failed', e);
+      this.reportUnexpectedAuthenticationError('Link pending provider failed', e);
       this.showErrorDialog('Account Linking Failed', e);
     }
   }

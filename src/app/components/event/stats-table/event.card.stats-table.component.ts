@@ -514,6 +514,7 @@ export class EventCardStatsTableComponent implements OnChanges {
       ServiceNames.GarminAPI,
       ServiceNames.SuuntoApp,
       ServiceNames.COROSAPI,
+      ServiceNames.WahooAPI,
     ],
   ): ServiceNames | null {
     const hints = this.getActivityProviderHints(activity);
@@ -525,6 +526,9 @@ export class EventCardStatsTableComponent implements OnChanges {
     }
     if (hints.some(hint => hint.includes('garmin')) && allowedSourceServices.includes(ServiceNames.GarminAPI)) {
       return ServiceNames.GarminAPI;
+    }
+    if (hints.some(hint => hint.includes('wahoo')) && allowedSourceServices.includes(ServiceNames.WahooAPI)) {
+      return ServiceNames.WahooAPI;
     }
     return null;
   }

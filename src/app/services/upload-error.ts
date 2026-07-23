@@ -10,6 +10,11 @@ export class UploadError extends Error {
 }
 
 const EXPECTED_UPLOAD_ERROR_STATUSES = new Set([400, 401, 409, 413, 415, 422, 429]);
+const USER_ACTION_HANDLED_UPLOAD_ERROR = Symbol('userActionHandledUploadError');
+
+type UserActionHandledUploadError = Error & {
+  [USER_ACTION_HANDLED_UPLOAD_ERROR]?: true;
+};
 
 function getPayloadCode(payload: unknown): string {
   if (!payload || typeof payload !== 'object') {
@@ -56,4 +61,31 @@ export function createHttpUploadError(message: string, status: number, payload: 
 
 export function shouldReportUploadError(error: unknown): boolean {
   return !(error instanceof UploadError && EXPECTED_UPLOAD_ERROR_STATUSES.has(error.status));
+}
+
+export function markUploadErrorUserActionHandled(error: unknown): Error {
+  const errorMessage = (error as { message?: unknown } | null)?.message;
+  const handledError = error instanceof Error
+    ? error as UserActionHandledUploadError
+    : new Error(typeof errorMessage === 'string' ? errorMessage : 'Upload failed');
+
+  try {
+    Object.defineProperty(handledError, USER_ACTION_HANDLED_UPLOAD_ERROR, {
+      value: true,
+      enumerable: false,
+    });
+    return handledError;
+  } catch {
+    const fallback = new Error(handledError.message) as UserActionHandledUploadError;
+    Object.defineProperty(fallback, USER_ACTION_HANDLED_UPLOAD_ERROR, {
+      value: true,
+      enumerable: false,
+    });
+    return fallback;
+  }
+}
+
+export function isUploadErrorUserActionHandled(error: unknown): boolean {
+  return error instanceof Error
+    && (error as UserActionHandledUploadError)[USER_ACTION_HANDLED_UPLOAD_ERROR] === true;
 }

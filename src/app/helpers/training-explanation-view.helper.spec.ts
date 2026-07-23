@@ -34,16 +34,18 @@ describe('buildTrainingExplanationViewModel', () => {
   it('explains load, contributors, sport load, rhythm, and coverage', () => {
     const view = buildTrainingExplanationViewModel(payload());
     expect(view?.cards).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'load', valueText: '50% higher than usual', tone: 'neutral' }),
+      expect.objectContaining({ key: 'load', valueText: 'Above usual load', tone: 'neutral' }),
       expect.objectContaining({
         key: 'contributors',
         description: 'Long run (40%; mostly running)',
         descriptionItems: ['Long run (40%; mostly running)'],
       }),
-      expect.objectContaining({ key: 'mix', title: 'Running load', valueText: '100 TSS higher', tone: 'neutral' }),
-      expect.objectContaining({ key: 'rhythm', valueText: '2 active days higher', tone: 'neutral' }),
+      expect.objectContaining({ key: 'mix', title: 'Running load', valueText: 'Above usual load', tone: 'neutral' }),
+      expect.objectContaining({ key: 'rhythm', valueText: 'More active days', tone: 'neutral' }),
     ]));
-    expect(view?.coverageText).toContain('4/4 current parent events');
+    expect(view?.conclusionText).toBe('Your overall training load is higher than usual.');
+    expect(view?.evidenceText).toContain('4/4 current workouts');
+    expect(view?.coverageText).toContain('4 classified');
   });
 
   it('retains text-only comparison values for the metric renderer', () => {
@@ -52,7 +54,7 @@ describe('buildTrainingExplanationViewModel', () => {
 
     const view = buildTrainingExplanationViewModel(input);
 
-    expect(view?.cards.find(card => card.key === 'rhythm')?.valueText).toBe('Same active days');
+    expect(view?.cards.find(card => card.key === 'rhythm')?.valueText).toBe('Same rhythm');
   });
 
   it('never selects a dormant discipline when active-day changes tie', () => {
@@ -73,7 +75,7 @@ describe('buildTrainingExplanationViewModel', () => {
 
     const rhythm = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'rhythm');
 
-    expect(rhythm).toEqual(expect.objectContaining({ title: 'Cycling rhythm', valueText: 'Same active days' }));
+    expect(rhythm).toEqual(expect.objectContaining({ title: 'Cycling rhythm', valueText: 'Same rhythm' }));
   });
 
   it('preserves each top contributor as a separate display item', () => {

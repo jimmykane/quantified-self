@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION } from '@shared/derived-metrics';
 import {
   resolveDashboardEasyPercentContext,
   resolveDashboardEfficiencyDelta4wContext,
@@ -386,6 +387,8 @@ describe('dashboard-derived-metrics.helper', () => {
       expectedNightCount: periodDays,
       coverage: 'none',
       averageSleepSeconds: null,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: null,
       medianOvernightHrvMs: null,
       overnightHrvNightCount: 0,
@@ -420,6 +423,7 @@ describe('dashboard-derived-metrics.helper', () => {
       medianSwolfChange: null,
     };
     const payload = {
+      recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
       dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 5, 30),
       excludesMergedEvents: true,
@@ -482,6 +486,10 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(context?.disciplines[1].suggestedEvents).toEqual([]);
     expect(context?.recovery.current.periodDays).toBe(28);
     expect(context?.disciplines[0].recovery?.reference.periodDays).toBe(84);
+    expect(resolveDashboardTrainingBuildComparisonContext({
+      ...payload,
+      recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION - 1,
+    })).toBeNull();
 
     for (const provider of ['GarminAPI', 'COROSAPI', 'SuuntoApp']) {
       Object.assign(payload.recovery.current, {
@@ -489,6 +497,8 @@ describe('dashboard-derived-metrics.helper', () => {
         recordedNightCount: 20,
         coverage: 'sufficient',
         averageSleepSeconds: 8 * 60 * 60,
+        typicalLocalStartMinutes: null,
+        typicalLocalEndMinutes: null,
         bedtimeVariationMinutes: null,
         medianOvernightHrvMs: 42,
         overnightHrvNightCount: 18,
@@ -496,10 +506,23 @@ describe('dashboard-derived-metrics.helper', () => {
       expect(resolveDashboardTrainingBuildComparisonContext(payload)).not.toBeNull();
     }
     Object.assign(payload.recovery.current, {
+      typicalLocalStartMinutes: 22 * 60,
+      typicalLocalEndMinutes: 6 * 60,
+    });
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).not.toBeNull();
+    payload.recovery.current.typicalLocalEndMinutes = 24 * 60;
+    expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
+    Object.assign(payload.recovery.current, {
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
+    });
+    Object.assign(payload.recovery.current, {
       provider: 'GarminAPI',
       recordedNightCount: 4,
       coverage: 'limited',
       averageSleepSeconds: 8 * 60 * 60,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: 30,
       medianOvernightHrvMs: null,
       overnightHrvNightCount: 0,
@@ -511,6 +534,8 @@ describe('dashboard-derived-metrics.helper', () => {
       recordedNightCount: 5,
       coverage: 'limited',
       averageSleepSeconds: 8 * 60 * 60,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: 721,
     });
     expect(resolveDashboardTrainingBuildComparisonContext(payload)).toBeNull();
@@ -519,6 +544,8 @@ describe('dashboard-derived-metrics.helper', () => {
       recordedNightCount: 0,
       coverage: 'none',
       averageSleepSeconds: null,
+      typicalLocalStartMinutes: null,
+      typicalLocalEndMinutes: null,
       bedtimeVariationMinutes: null,
     });
 

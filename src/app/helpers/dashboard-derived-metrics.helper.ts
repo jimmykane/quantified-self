@@ -31,6 +31,7 @@ import type {
 import { normalizeSleepProvider } from '@shared/sleep';
 import {
   DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES,
+  DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS,
   DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS,
   DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
@@ -812,6 +813,8 @@ function resolveDashboardTrainingRecoveryWindow(value: unknown): DashboardTraini
   const expectedNightCount = toFiniteNumber(raw.expectedNightCount);
   const overnightHrvNightCount = toFiniteNumber(raw.overnightHrvNightCount);
   const averageSleepSeconds = raw.averageSleepSeconds === null ? null : toFiniteNumber(raw.averageSleepSeconds);
+  const typicalLocalStartMinutes = raw.typicalLocalStartMinutes === null ? null : toFiniteNumber(raw.typicalLocalStartMinutes);
+  const typicalLocalEndMinutes = raw.typicalLocalEndMinutes === null ? null : toFiniteNumber(raw.typicalLocalEndMinutes);
   const bedtimeVariationMinutes = raw.bedtimeVariationMinutes === null ? null : toFiniteNumber(raw.bedtimeVariationMinutes);
   const medianOvernightHrvMs = raw.medianOvernightHrvMs === null ? null : toFiniteNumber(raw.medianOvernightHrvMs);
   const provider = raw.provider === null ? null : normalizeSleepProvider(raw.provider);
@@ -838,11 +841,18 @@ function resolveDashboardTrainingRecoveryWindow(value: unknown): DashboardTraini
     || (raw.provider !== null && provider === null)
     || (recordedNightCount === 0) !== (provider === null)
     || (raw.averageSleepSeconds !== null && (averageSleepSeconds === null || averageSleepSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS || averageSleepSeconds > DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS))
+    || (raw.typicalLocalStartMinutes !== null && (typicalLocalStartMinutes === null || !Number.isInteger(typicalLocalStartMinutes) || typicalLocalStartMinutes < 0 || typicalLocalStartMinutes >= 24 * 60))
+    || (raw.typicalLocalEndMinutes !== null && (typicalLocalEndMinutes === null || !Number.isInteger(typicalLocalEndMinutes) || typicalLocalEndMinutes < 0 || typicalLocalEndMinutes >= 24 * 60))
+    || (typicalLocalStartMinutes === null) !== (typicalLocalEndMinutes === null)
     || (raw.bedtimeVariationMinutes !== null && (bedtimeVariationMinutes === null || bedtimeVariationMinutes < 0 || bedtimeVariationMinutes > DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES))
     || (raw.medianOvernightHrvMs !== null && (medianOvernightHrvMs === null || medianOvernightHrvMs <= 0))
     || (recordedNightCount >= DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS) !== (averageSleepSeconds !== null)
     || (
       bedtimeVariationMinutes !== null
+      && recordedNightCount < DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
+    )
+    || (
+      typicalLocalStartMinutes !== null
       && recordedNightCount < DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS
     )
     || (overnightHrvNightCount >= DERIVED_TRAINING_RECOVERY_MIN_HRV_NIGHTS) !== (medianOvernightHrvMs !== null)
@@ -865,6 +875,8 @@ function resolveDashboardTrainingRecoveryWindow(value: unknown): DashboardTraini
     expectedNightCount: periodDays,
     coverage: expectedCoverage,
     averageSleepSeconds,
+    typicalLocalStartMinutes,
+    typicalLocalEndMinutes,
     bedtimeVariationMinutes,
     medianOvernightHrvMs,
     overnightHrvNightCount,
@@ -946,7 +958,8 @@ export function resolveDashboardTrainingBuildComparisonContext(payload: unknown)
   const asOfDayMs = toFiniteNumber(raw.asOfDayMs);
   const recovery = resolveDashboardTrainingRecoveryComparison(raw.recovery);
   if (
-    raw.dayBoundary !== 'UTC'
+    raw.recoveryVersion !== DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION
+    || raw.dayBoundary !== 'UTC'
     || raw.excludesMergedEvents !== true
     || asOfDayMs === null
     || resolveUtcDayStartMs(asOfDayMs) !== asOfDayMs

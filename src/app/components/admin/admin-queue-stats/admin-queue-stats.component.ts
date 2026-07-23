@@ -298,6 +298,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             case 'garmin': return 'assets/logos/garmin.svg';
             case 'suunto': return 'assets/logos/suunto.svg';
             case 'coros': return 'assets/logos/coros.svg';
+            case 'wahoo': return 'assets/logos/wahoo.svg';
             default: return '';
         }
     }

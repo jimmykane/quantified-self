@@ -390,6 +390,28 @@ describe('listUsers Cloud Function', () => {
         expect(result.users).toHaveLength(1);
     });
 
+    it('should filter users by filterService (Wahoo)', async () => {
+        const mockSnap = { docs: [{ id: 'u1' }], empty: false };
+        mockCollection.mockImplementation((path) => {
+            if (path === 'wahooAPIAccessTokens') {
+                return {
+                    select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue(mockSnap) })
+                };
+            }
+            return {
+                doc: vi.fn().mockReturnValue({ collection: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) }) }) }),
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ empty: true })
+            };
+        });
+        mockListUsers.mockResolvedValue({ users: [{ uid: 'u1', providerData: [] }], pageToken: undefined });
+
+        const result: any = await (listUsers as any)(getAdminRequest({ filterService: 'wahoo' }));
+
+        expect(result.users).toHaveLength(1);
+        expect(mockCollection).toHaveBeenCalledWith('wahooAPIAccessTokens');
+    });
+
     it('should use default sort (created) when sortField is invalid', async () => {
         const mockUsers = [
             { uid: 'u1', email: 'b@test.com', metadata: { creationTime: '2024-02-01' }, providerData: [] },
@@ -440,7 +462,7 @@ describe('listUsers Cloud Function', () => {
                         })
                     };
                 }
-                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens', 'wahooAPIAccessTokens'].includes(path)) {
                     // db.collection(service).doc(uid).collection('tokens').limit(1).get()
                     return {
                         doc: vi.fn().mockReturnValue({
@@ -471,7 +493,7 @@ describe('listUsers Cloud Function', () => {
 
             const user = result.users[0];
             expect(user.subscription).toEqual(mockSubData);
-            expect(user.connectedServices).toHaveLength(3);
+            expect(user.connectedServices).toHaveLength(4);
         });
 
         it('should include aiCreditsConsumed from the current subscription usage period', async () => {
@@ -543,7 +565,7 @@ describe('listUsers Cloud Function', () => {
                     };
                 }
 
-                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens', 'wahooAPIAccessTokens'].includes(path)) {
                     return {
                         doc: vi.fn().mockReturnValue({
                             collection: vi.fn().mockReturnValue({
@@ -653,7 +675,7 @@ describe('listUsers Cloud Function', () => {
                     };
                 }
 
-                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens', 'wahooAPIAccessTokens'].includes(path)) {
                     return {
                         doc: vi.fn().mockReturnValue({
                             collection: vi.fn().mockReturnValue({
@@ -751,7 +773,7 @@ describe('listUsers Cloud Function', () => {
                     };
                 }
 
-                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens', 'wahooAPIAccessTokens'].includes(path)) {
                     return {
                         doc: vi.fn().mockReturnValue({
                             collection: vi.fn().mockReturnValue({

@@ -172,6 +172,38 @@ describe('Firestore Security Rules', () => {
         });
     });
 
+    describe('Wahoo server-owned integration state', () => {
+        const userId = 'wahoo_user';
+
+        it('denies browser reads and writes for Wahoo OAuth credentials and mappings', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`wahooAPIAccessTokens/${userId}/tokens/42`).set({
+                    accessToken: 'secret',
+                    refreshToken: 'rotating-secret',
+                    wahooUserID: '42',
+                });
+                await context.firestore().doc('wahooAPIUserMappings/42').set({ firebaseUserID: userId });
+            });
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.doc(`wahooAPIAccessTokens/${userId}/tokens/42`).get());
+            await assertFails(db.doc(`wahooAPIAccessTokens/${userId}/tokens/42`).set({ accessToken: 'forged' }));
+            await assertFails(db.doc('wahooAPIUserMappings/42').get());
+            await assertFails(db.doc('wahooAPIUserMappings/42').set({ firebaseUserID: userId }));
+        });
+
+        it('allows the owner to read only the safe Wahoo connection metadata projection', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(`users/${userId}/meta/Wahoo API`).set({
+                    connectionState: 'connected',
+                    providerUserId: '60462',
+                });
+            });
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertSucceeds(db.doc(`users/${userId}/meta/Wahoo API`).get());
+            await assertFails(db.doc(`users/${userId}/meta/Wahoo API`).set({ connectionState: 'connected' }));
+        });
+    });
+
 
     describe('User Split Model', () => {
         const userId = 'split_user';
@@ -1531,6 +1563,17 @@ describe('Firestore Security Rules', () => {
     });
 
     describe('Server-Owned Queue Collections', () => {
+        it('allows only admin reads and denies every client write for wahooAPIWorkoutQueue', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc('wahooAPIWorkoutQueue/item-1').set({ processed: false });
+            });
+            const userDb = testEnv.authenticatedContext('regular-user').firestore();
+            const adminDb = testEnv.authenticatedContext('admin-user', { admin: true }).firestore();
+            await assertFails(userDb.doc('wahooAPIWorkoutQueue/item-1').get());
+            await assertSucceeds(adminDb.doc('wahooAPIWorkoutQueue/item-1').get());
+            await assertFails(adminDb.doc('wahooAPIWorkoutQueue/item-2').set({ processed: false }));
+        });
+
         it('should deny non-admin reads from activitySyncQueue', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc('activitySyncQueue/queue-item-1').set({

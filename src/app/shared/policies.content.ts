@@ -16,6 +16,7 @@ export const POLICIES_CONNECTED_SERVICES_FRAGMENT = 'connected-services-data';
 export const POLICIES_GARMIN_DATA_FRAGMENT = 'garmin-data';
 export const POLICIES_SUUNTO_DATA_FRAGMENT = 'suunto-data';
 export const POLICIES_COROS_DATA_FRAGMENT = 'coros-data';
+export const POLICIES_WAHOO_DATA_FRAGMENT = 'wahoo-data';
 export const POLICIES_AI_AND_PROCESSORS_FRAGMENT = 'ai-and-third-party-processing';
 
 export type PolicyFragmentId =
@@ -23,6 +24,7 @@ export type PolicyFragmentId =
     | typeof POLICIES_GARMIN_DATA_FRAGMENT
     | typeof POLICIES_SUUNTO_DATA_FRAGMENT
     | typeof POLICIES_COROS_DATA_FRAGMENT
+    | typeof POLICIES_WAHOO_DATA_FRAGMENT
     | typeof POLICIES_AI_AND_PROCESSORS_FRAGMENT;
 
 export interface ConnectedServicesPolicyAnchor {
@@ -51,11 +53,11 @@ export interface ConnectedServicesPolicySection {
 export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection = {
     id: POLICIES_CONNECTED_SERVICES_FRAGMENT,
     title: 'Connected Services, AI & Third-Party Processing',
-    summary: 'Provider-specific disclosures for Garmin, Suunto, COROS, AI Insights, infrastructure, payments, and analytics.',
+    summary: 'Provider-specific disclosures for Garmin, Suunto, COROS, Wahoo, AI Insights, infrastructure, payments, and analytics.',
     content: [
         '<strong>What this section covers:</strong> This page explains what connected-service data Quantified Self collects, how it is used inside the product, what may be stored for exports, reprocessing, and sync tools, and which third parties process that data.',
         '<strong>Storage location:</strong> Imported provider data, saved route metadata, source-file references, and related processing metadata are stored in Quantified Self infrastructure on Google Cloud in the EU region.',
-        '<strong>User-initiated sharing:</strong> When you use features such as history import, FIT/GPX uploads, sending routes, or Garmin/COROS to Suunto activity sync, Quantified Self must send the activity, route, or related data needed by the destination provider.',
+        '<strong>User-initiated sharing:</strong> When you use features such as history import, FIT/GPX uploads, sending routes, or activity sync to Suunto or Wahoo, Quantified Self must send the activity, route, or related data needed by the destination provider.',
         '<strong>AI scope:</strong> Connected-service data is not forwarded wholesale to AI providers. AI Insights uses only the minimum derived stats needed to answer the prompt you submit, and does not send your raw activities, raw routes, or uploaded source files to the AI provider.',
     ],
     navLinks: [
@@ -63,6 +65,7 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
         { id: POLICIES_GARMIN_DATA_FRAGMENT, label: 'Garmin', icon: 'sync_alt' },
         { id: POLICIES_SUUNTO_DATA_FRAGMENT, label: 'Suunto', icon: 'published_with_changes' },
         { id: POLICIES_COROS_DATA_FRAGMENT, label: 'COROS', icon: 'sync' },
+        { id: POLICIES_WAHOO_DATA_FRAGMENT, label: 'Wahoo', icon: 'directions_bike' },
         { id: POLICIES_AI_AND_PROCESSORS_FRAGMENT, label: 'AI & Processors', icon: 'shield' },
     ],
     topics: [
@@ -70,10 +73,11 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             id: POLICIES_GARMIN_DATA_FRAGMENT,
             title: 'Garmin Data',
             icon: 'sync_alt',
-            summary: 'Garmin activity, sleep, and Garmin to Suunto sync workflows.',
+            summary: 'Garmin activity, sleep, route delivery, and Garmin to Suunto sync workflows.',
             content: [
                 '<strong>Collected from Garmin:</strong> When you connect Garmin, Quantified Self can import Garmin activities, request Garmin history imports, request Garmin sleep history, and receive Garmin health/sleep updates when Garmin permissions allow it.',
                 '<strong>Stored and used in Quantified Self:</strong> Imported Garmin data is used to build your dashboard, event analysis, sleep views, and related summaries. When needed, Quantified Self may retain original activity files or equivalent source-file metadata for downloads, exports, reprocessing, and syncing past activities.',
+                '<strong>Shared with Garmin:</strong> You can send a saved route or explicitly select a GPX/FIT route file in Garmin Services. Quantified Self parses the selected route and creates a Garmin Connect course. Direct selected-file delivery does not create or retain a Quantified Self route or Garmin delivery metadata.',
                 '<strong>Shared with Suunto from Garmin:</strong> If you turn on automatic Garmin to Suunto activity sync or choose to sync past activities, Quantified Self uses the original activity file already saved with the Quantified Self event to send that activity to Suunto. That workflow therefore involves both Garmin-originated data and Suunto as a destination processor.',
             ],
         },
@@ -81,11 +85,11 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             id: POLICIES_SUUNTO_DATA_FRAGMENT,
             title: 'Suunto Data',
             icon: 'published_with_changes',
-            summary: 'Suunto activity, sleep, route import, FIT upload, and route sending workflows.',
+            summary: 'Suunto activity, sleep, route import, FIT upload, and GPX/FIT route sending workflows.',
             content: [
                 '<strong>Collected from Suunto:</strong> When you connect Suunto, Quantified Self can import Suunto activities and history, sync recent sleep data, import sleep history, and automatically import new or updated Suunto routes into your saved Routes list.',
                 '<strong>Stored and used in Quantified Self:</strong> Imported Suunto data is used for event analysis, route detail views, dashboard summaries, sleep views, and saved route management. Connection metadata and processing metadata are also stored so reconnect, dedupe, and refresh workflows can work reliably.',
-                '<strong>Shared back to Suunto:</strong> When you upload FIT activities or send a saved route to Suunto, Quantified Self sends the file or generated GPX route needed for that upload. For saved routes, it reads the original source file, generates a compatible GPX file, and uses the saved Quantified Self route name.',
+                '<strong>Shared back to Suunto:</strong> When you upload FIT activities or send a saved or selected GPX/FIT route to Suunto, Quantified Self sends the file or generated GPX route needed for that upload. Suunto receives GPX routes, so selected FIT routes and saved routes are converted to a compatible GPX route in memory; saved routes use the Quantified Self route name. Direct selected-file route delivery does not create or retain a Quantified Self route.',
                 '<strong>Account-scope note:</strong> Routes imported from one Suunto account are blocked from being sent back to that same account, but can still be sent to a different connected Suunto account when that workflow is available to you.',
             ],
         },
@@ -102,6 +106,20 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             ],
         },
         {
+            id: POLICIES_WAHOO_DATA_FRAGMENT,
+            title: 'Wahoo Data',
+            icon: 'directions_bike',
+            summary: 'Wahoo OAuth, webhook, FIT activity and GPX/FIT course/route delivery, and history-import workflows.',
+            content: [
+                '<strong>Collected from Wahoo:</strong> When you connect Wahoo, Quantified Self can receive completed workout-summary webhooks and request Wahoo workout history. Only workouts with an available FIT file are imported, and records identified by Wahoo as originating from third-party fitness applications are skipped.',
+                '<strong>Stored and used in Quantified Self:</strong> Imported Wahoo FIT activities, source identifiers, summary revision metadata, and original activity files are used for event analysis, dashboard metrics, exports, deduplication, and reprocessing. OAuth credentials are stored server-side and are not readable by the browser.',
+                '<strong>Disconnect and retention:</strong> Disconnecting Wahoo revokes future provider access and stops new imports. Activities already imported into Quantified Self are retained until you delete those activities or delete your account. Account deletion removes Wahoo tokens, provider mappings, queue state, and imported account data under the normal deletion workflow.',
+                '<strong>Shared with Wahoo:</strong> You can explicitly send a selected FIT activity file or GPX/FIT course/route file directly to Wahoo, turn on/send a date range for Garmin, COROS, or Suunto activities already stored in Quantified Self, or opt in to automatic/backfill delivery of Suunto routes already saved in Quantified Self. Quantified Self converts selected GPX routes to FIT in memory before sending them to Wahoo, and converts saved Suunto routes to FIT in memory for the same destination. Saved-route delivery uses an opaque stable key so an updated saved route updates the same Wahoo route. Direct Wahoo activity delivery does not create or retain a Quantified Self activity; direct course/route delivery does not create or retain a Quantified Self route.',
+                '<strong>Shared with Suunto:</strong> You can turn on or backfill Wahoo-to-Suunto activity sync. Quantified Self sends the retained original FIT file from a Wahoo-imported event to Suunto only after you enable or start that route.',
+                '<strong>Outbound boundaries:</strong> Wahoo-to-Suunto is the only Wahoo-origin provider-to-provider activity route. Suunto-to-Wahoo saved-route delivery is a separate opt-in route workflow in Suunto Services; direct GPX/FIT course/route delivery is a separate Wahoo-only upload. Plans, sleep, and other non-activity data are not sent between Wahoo and another provider. Existing Wahoo connections may need to be reconnected to grant workout and route access for delivery to Wahoo.',
+            ],
+        },
+        {
             id: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
             title: 'AI & Third-Party Processing',
             icon: 'shield',
@@ -112,7 +130,7 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
                 '<strong>Google Analytics:</strong> If you consent to analytics cookies, Google Analytics receives anonymized usage analytics used to improve the service. Analytics is optional and can be withdrawn in Settings.',
                 '<strong>Mapbox:</strong> When you use location-based AI Insights queries, Mapbox is used to resolve places and geographic scope for those prompts.',
                 '<strong>Google GenAI / Gemini:</strong> AI Insights currently uses Google\'s Gemini models through Google GenAI. Quantified Self sends only the minimum derived statistics needed to answer the prompt you explicitly submit. Raw activities, raw routes, uploaded FIT/GPX/TCX/JSON/SML files, and saved route source files are not sent to the AI provider.',
-                '<strong>No hidden provider forwarding:</strong> Connected Garmin, Suunto, and COROS data is only sent to destination providers when you explicitly use the related import, upload, delivery, or sync feature.',
+                '<strong>No hidden provider forwarding:</strong> Connected Garmin, Suunto, COROS, and Wahoo data is only sent to destination providers when you explicitly use the related import, upload, delivery, or sync feature. Wahoo delivery is limited to the explicit FIT activity, GPX/FIT course/route, opt-in Suunto saved-route, and Garmin/COROS/Suunto-to-Wahoo activity workflows described above.',
             ],
         },
     ],

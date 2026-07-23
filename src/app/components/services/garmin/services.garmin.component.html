@@ -18,6 +18,7 @@
   @if (showConnectionSummary) {
   <app-service-connection-status
     serviceLabel="Garmin Connect"
+    providerIcon="garmin"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
@@ -165,6 +166,16 @@
         <span>History Import</span>
       </span>
     </a>
+    <a
+      href=""
+      mat-tab-link
+      [active]="activeProviderTool === 'uploads'"
+      (click)="$event.preventDefault(); selectProviderTool('uploads')">
+      <span class="provider-tab-label">
+        <mat-icon>cloud_upload</mat-icon>
+        <span>Uploads</span>
+      </span>
+    </a>
     @if (isGarminToSuuntoRouteAvailableForUser) {
     <a
       href=""
@@ -214,18 +225,83 @@
     </section>
     }
 
+    @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
+    <section
+      class="provider-tool-panel"
+      [hidden]="activeProviderTool !== 'uploads'"
+      [class.locked-panel]="!hasProAccess">
+      <section class="tool-subsection">
+        <div class="tool-subsection-header">
+          <div class="tool-subsection-title">
+            <mat-icon>route</mat-icon>
+            <span>Send GPX or FIT Route to Garmin</span>
+          </div>
+        </div>
+        <p class="description-text">
+          Select a GPX or FIT route file to create a Garmin Connect course. This sends the route directly to Garmin and does not create or retain a route in Quantified Self.
+        </p>
+        @if (!hasProAccess) {
+        <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
+          <mat-icon>lock</mat-icon>
+          <span>Sending routes to Garmin is a Pro feature.</span>
+        </button>
+        } @else if (isReconnectRequired || !isConnectedToService()) {
+        <app-status-info type="info" title="Connect Account First">
+          Connect Garmin before sending GPX or FIT routes.
+        </app-status-info>
+        } @else if (!hasPermissionsLoaded) {
+        <app-service-syncing-state></app-service-syncing-state>
+        } @else if (!hasGarminCourseImportPermission) {
+        <app-status-info type="info" title="Allow Course Import">
+          Reconnect Garmin and allow Course Import before sending routes.
+        </app-status-info>
+        } @else {
+        <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-route-to-service>
+        <app-status-info type="info" title="Garmin course access">
+          Garmin receives a course created from the selected GPX or FIT route. If Course Import was enabled after you connected, reconnect Garmin once to refresh that permission.
+        </app-status-info>
+        }
+      </section>
+    </section>
+    }
+
     @if (isGarminToSuuntoRouteAvailableForUser && (!showOnlyActiveProviderTool || activeProviderTool === 'auto-sync')) {
     <section
       class="provider-tool-panel"
+      [class.provider-tool-panel--focused]="showOnlyActiveProviderTool"
       [hidden]="activeProviderTool !== 'auto-sync'"
       [class.locked-panel]="!hasProAccess"
         (click)="!hasProAccess && triggerUpsell()">
-        @if (!showOnlyActiveProviderTool) {
-          <div class="tool-subsection-title">
-            <mat-icon>published_with_changes</mat-icon>
-            <span>Send Garmin activities to Suunto</span>
-          </div>
+        @if (showOnlyActiveProviderTool) {
+        <mat-button-toggle-group
+          class="activity-sync-destination-selector"
+          aria-label="Activity sync destination"
+          [value]="activeActivitySyncDestination"
+          (change)="activeActivitySyncDestination = $event.value">
+          <mat-button-toggle value="suunto">To Suunto</mat-button-toggle>
+          <mat-button-toggle value="wahoo">To Wahoo</mat-button-toggle>
+        </mat-button-toggle-group>
         }
+
+        @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'suunto') {
+        <div class="tool-subsection-title">
+          <span class="activity-sync-provider-icons" aria-hidden="true">
+            <app-service-source-icon
+              [sourceServiceName]="serviceName"
+              [iconWidth]="32"
+              [iconHeight]="18"
+              [showTooltip]="false">
+            </app-service-source-icon>
+            <mat-icon>arrow_forward</mat-icon>
+            <app-service-source-icon
+              [sourceServiceName]="serviceNames.SuuntoApp"
+              [iconWidth]="32"
+              [iconHeight]="18"
+              [showTooltip]="false">
+            </app-service-source-icon>
+          </span>
+          <span>Send Garmin activities to Suunto</span>
+        </div>
         @if (!hasProAccess) {
         <div class="pro-required-inline">
           <mat-icon>lock</mat-icon>
@@ -279,17 +355,17 @@
           </mat-form-field>
         </div>
 
-        <button mat-flat-button class="qs-mat-primary full-width-action"
+        <button mat-flat-button class="qs-mat-primary service-tool-primary-action"
           [disabled]="isBackfillingSync || isBackfillDateRangeInvalid"
           (click)="runGarminToSuuntoBackfill($event)">
           @if (isBackfillingSync) {
           <ng-container>
             <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-            Starting sync...
+            Scheduling activities…
           </ng-container>
           } @else {
           <ng-container>
-            Sync activities
+            Schedule activities
           </ng-container>
           }
         </button>
@@ -309,6 +385,19 @@
           }
         </app-status-info>
         }
+        }
+        }
+
+        @if (!showOnlyActiveProviderTool || activeActivitySyncDestination === 'wahoo') {
+      <app-activity-sync-route-control
+        [user]="user"
+        [hasProAccess]="hasProAccess"
+        [sourceServiceName]="serviceName"
+        [destinationServiceName]="serviceNames.WahooAPI"
+        [sourceConnected]="isConnectedToService()"
+        [sourceReconnectRequired]="isReconnectRequired"
+        [showTopDivider]="!showOnlyActiveProviderTool">
+      </app-activity-sync-route-control>
         }
       </section>
     }

@@ -106,6 +106,20 @@ describe('processActivitySyncTask', () => {
     expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
   });
 
+  it('fails clearly when an existing queue document has no payload', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => undefined,
+    });
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } }))
+      .rejects
+      .toThrow('[ActivitySyncTaskWorker] Queue item queue-item-1 has no data.');
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+  });
+
   it('stops retries when queue item is missing but exists in failed_jobs', async () => {
     mockQueueGet.mockResolvedValueOnce({ exists: false });
     mockFailedJobsGet.mockResolvedValueOnce({ exists: true });
@@ -146,6 +160,30 @@ describe('processActivitySyncTask', () => {
     await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } }))
       .rejects
       .toThrow('Item queue-item-1 failed and was scheduled for retry.');
+  });
+
+  it('surfaces a redacted retry reason in Cloud Task errors', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        errors: [{
+          error: 'Wahoo is still processing the activity. Bearer sensitive-token token=another-secret https://api.example.test/status?x-sig=secret',
+          atRetryCount: 1,
+          date: 1,
+        }],
+      }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('RETRY_INCREMENTED');
+
+    const error = await invokeWorker({ data: { queueItemId: 'queue-item-1' } }).catch((caughtError) => caughtError as Error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(
+      'Item queue-item-1 failed and was scheduled for retry: Wahoo is still processing the activity. Bearer [redacted] token=[redacted] [url]',
+    );
   });
 
   it('stops Cloud Task retries when processing defers the queue item', async () => {

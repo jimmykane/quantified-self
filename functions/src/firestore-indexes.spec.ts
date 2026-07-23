@@ -33,6 +33,58 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps Wahoo token cleanup and duplicate-account queries deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'tokens',
+            queryScope: 'COLLECTION_GROUP',
+            fields: [
+                {
+                    fieldPath: 'wahooUserID',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'serviceName',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
+    it('keeps Wahoo pending-disconnect retries deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'wahooAPIAccessTokens',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'disconnectManualReviewRequired',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'disconnectState',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: 'disconnectNextAttemptAt',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps scoped dashboard Power Curve auto-tile eligibility query deployable', () => {
         const config = loadFirestoreIndexes();
 

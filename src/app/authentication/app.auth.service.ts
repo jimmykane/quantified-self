@@ -33,6 +33,9 @@ export class AppAuthService {
     'auth/account-exists-with-different-credential',
     'auth/email-already-in-use',
   ]);
+  private static readonly emailLinkRetryableErrorCodes = new Set([
+    'auth/invalid-email',
+  ]);
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -115,22 +118,15 @@ export class AppAuthService {
    */
   public async signInWithProvider(provider: AuthProvider) {
     this.logger.log('[Auth] signInWithProvider - localhost:', environment.localhost);
-    try {
-      if (environment.localhost) {
-        this.logger.log('[Auth] Using popup...');
-        const result = await signInWithPopup(this.auth, provider);
-        this.logger.log('[Auth] Popup succeeded:', result);
-        return result;
-      } else {
-        this.logger.log('[Auth] Using redirect...');
-        return await signInWithRedirect(this.auth, provider);
-      }
-    } catch (error: any) {
-      this.logger.error('[Auth] signInWithProvider error:', error);
-      this.logger.error('[Auth] Error code:', error?.code);
-      this.logger.error('[Auth] Error message:', error?.message);
-      throw error;
+    if (environment.localhost) {
+      this.logger.log('[Auth] Using popup...');
+      const result = await signInWithPopup(this.auth, provider);
+      this.logger.log('[Auth] Popup succeeded:', result);
+      return result;
     }
+
+    this.logger.log('[Auth] Using redirect...');
+    return signInWithRedirect(this.auth, provider);
   }
 
   public async signInWithPopup(provider: AuthProvider) {
@@ -193,7 +189,6 @@ export class AppAuthService {
       if (this.shouldClearEmailLinkReturnUrlAfterSignInError(error)) {
         this.localStorageService.removeItem(EMAIL_LINK_RETURN_URL_STORAGE_KEY);
       }
-      this.handleError(error);
       throw error;
     }
   }
@@ -338,6 +333,7 @@ export class AppAuthService {
   }
 
   private shouldClearEmailLinkReturnUrlAfterSignInError(error: any): boolean {
-    return !AppAuthService.emailLinkAccountLinkingErrorCodes.has(error?.code);
+    return !AppAuthService.emailLinkAccountLinkingErrorCodes.has(error?.code)
+      && !AppAuthService.emailLinkRetryableErrorCodes.has(error?.code);
   }
 }

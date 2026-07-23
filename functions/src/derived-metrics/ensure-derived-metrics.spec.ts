@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
+    DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import {
@@ -288,6 +289,17 @@ describe('decideDerivedMetricsFreshness', () => {
         expect(resolveDerivedMetricSnapshotPayloadValidity(
             DERIVED_METRIC_KINDS.Form,
             legacyPayload,
+        )).toBe(true);
+    });
+
+    it('rebuilds only build comparisons created before the current recovery calculation', () => {
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.TrainingBuildComparison,
+            { recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION - 1 },
+        )).toBe(false);
+        expect(resolveDerivedMetricSnapshotPayloadValidity(
+            DERIVED_METRIC_KINDS.TrainingBuildComparison,
+            { recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION },
         )).toBe(true);
     });
 });

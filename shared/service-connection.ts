@@ -8,6 +8,11 @@ export type ServiceConnectionState = typeof SERVICE_CONNECTION_STATES[keyof type
 
 export interface ServiceConnectionMetaFields {
   connectionState?: ServiceConnectionState | null;
+  /**
+   * A display-only stable identifier supplied by the connected provider.
+   * Never use this field for OAuth credentials, access tokens, or refresh tokens.
+   */
+  providerUserId?: string | null;
   lastAuthFailureCode?: string | null;
   lastAuthFailureMessage?: string | null;
   lastDisconnectedAt?: number | null;

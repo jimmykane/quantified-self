@@ -57,6 +57,9 @@ export interface TrainingDurabilityContextViewModel {
 export interface TrainingDurabilityScopeViewModel {
   scope: DerivedTrainingDurabilityScope;
   label: string;
+  conclusionText: string;
+  evidenceQualityText: string;
+  nextStepText: string | null;
   evidenceText: string;
   coverageText: string;
   exclusionText: string | null;
@@ -96,12 +99,21 @@ export function buildTrainingDurabilityScopeViewModels(
     const currentPowerActivityCount = item.scope === 'cycling'
       ? resolvePowerActivityCount(item.current.coverage)
       : null;
+    const candidateCount = item.current.coverage.candidateActivityCount;
+    const eligibleCount = item.current.coverage.eligibleActivityCount;
     return {
       scope: item.scope,
       label: formatScopeLabel(item.scope),
+      conclusionText: buildScopeConclusion(candidateCount, eligibleCount),
+      evidenceQualityText: buildEvidenceQualityText(candidateCount, eligibleCount),
+      nextStepText: eligibleCount === 0 && exclusions.length
+        ? 'Look at the primary exclusions to see which data or comparability condition prevented a reading.'
+        : eligibleCount > 0 && eligibleWeeks < 2
+          ? 'Use the twelve-week trail to see how often comparable evidence is available.'
+          : null,
       evidenceText: currentPowerActivityCount === null
-        ? `${item.current.coverage.eligibleActivityCount} eligible of ${item.current.coverage.candidateActivityCount} candidate activities`
-        : `${item.current.coverage.eligibleActivityCount} eligible · ${currentPowerActivityCount} with power · ${item.current.coverage.candidateActivityCount} candidates`,
+        ? `${eligibleCount} eligible of ${candidateCount} candidate workouts`
+        : `${eligibleCount} eligible · ${currentPowerActivityCount} with power · ${candidateCount} candidates`,
       coverageText: item.current.coverage.eligibilityRatio === null
         ? 'Eligibility ratio unavailable'
         : `${formatPercent(item.current.coverage.eligibilityRatio * 100)} eligible`,
@@ -109,10 +121,29 @@ export function buildTrainingDurabilityScopeViewModels(
         ? `Primary exclusions: ${exclusions.map(exclusion => `${formatExclusionReason(exclusion.reason, item.scope === 'cycling')} ${exclusion.activityCount}`).join(' · ')}`
         : null,
       contexts,
-      trendText: `${eligibleWeeks} of 12 recent weeks produced comparable evidence`,
-      supportingEventsText: supportingLabels.length ? `Recent support: ${supportingLabels.join(' · ')}` : null,
+      trendText: `${eligibleWeeks} of 12 recent weeks produced comparable workout evidence`,
+      supportingEventsText: supportingLabels.length ? `Recent supporting workouts: ${supportingLabels.join(' · ')}` : null,
     };
   });
+}
+
+function buildScopeConclusion(candidateCount: number, eligibleCount: number): string {
+  if (candidateCount === 0) {
+    return 'No recent workouts can be checked for durability in this sport yet.';
+  }
+  if (eligibleCount === 0) {
+    return 'No current workout met the steady-effort comparison rules, so durability is not being judged.';
+  }
+  return `Durability is based on ${eligibleCount} comparable current ${eligibleCount === 1 ? 'workout' : 'workouts'}; read it as a directional signal rather than a verdict.`;
+}
+
+function buildEvidenceQualityText(candidateCount: number, eligibleCount: number): string {
+  if (candidateCount === 0) {
+    return 'Evidence quality: unavailable — no candidate workouts in the current window.';
+  }
+  const ratio = eligibleCount / candidateCount;
+  const quality = ratio >= 0.5 ? 'usable' : 'limited';
+  return `Evidence quality: ${quality} — ${eligibleCount} of ${candidateCount} candidate ${candidateCount === 1 ? 'workout met' : 'workouts met'} the comparison rules.`;
 }
 
 function buildContextViewModel(
@@ -131,8 +162,8 @@ function buildContextViewModel(
     contextKey: context.contextKey,
     label: formatContextLabel(context),
     sampleText: current
-      ? `${current.sampleCount} current samples${current.medianDurationSeconds === null ? '' : ` · median ${formatSleepDuration(current.medianDurationSeconds)}`}${current.medianCoverageRatio === null ? '' : ` · ${formatPercent(current.medianCoverageRatio * 100)} coverage`}`
-      : 'No current eligible samples',
+      ? `${current.sampleCount} comparable ${current.sampleCount === 1 ? 'workout' : 'workouts'}${current.medianDurationSeconds === null ? '' : ` · median ${formatSleepDuration(current.medianDurationSeconds)}`}${current.medianCoverageRatio === null ? '' : ` · ${formatPercent(current.medianCoverageRatio * 100)} paired data`}`
+      : 'No current comparable workouts',
     metrics,
     trajectory: buildTrajectoryViewModel(context, weeks),
   };
@@ -213,12 +244,12 @@ function buildTrajectoryViewModel(
       ? 'Weekly median final-versus-early comparable-length pace retention.'
       : 'Weekly median first-versus-second-half aerobic-efficiency drift.',
     eligibilityDescription: isPower
-      ? 'Only comparable steady power-and-heart-rate sessions produce a trend point.'
-      : 'Only sessions that pass the comparability checks produce a trend point.',
+      ? 'Only comparable steady power-and-heart-rate workouts produce a trend point.'
+      : 'Only workouts that pass the comparability checks produce a trend point.',
     sourceActivityLabel,
     barExplanation: isPower
-      ? 'Bar height shows power-recorded activities; labels show eligible / power-recorded.'
-      : 'Bar height shows candidate activities; labels show eligible / candidates.',
+      ? 'Bar height shows power-recorded workouts; labels show eligible / power-recorded.'
+      : 'Bar height shows candidate workouts; labels show eligible / candidates.',
     activityCountSummary: isPower
       ? `Across 12 weeks: ${totalCandidates} candidates · ${totalSourceActivities} with power · ${totalEligible} eligible`
       : `Across 12 weeks: ${totalCandidates} candidates · ${totalEligible} eligible`,

@@ -12,6 +12,7 @@ import {
   COROSAPIWorkoutQueueItemInterface,
   GarminAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
+  WahooAPIWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
 import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth, EventWriteSkippedForDeletedUserError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -32,7 +33,7 @@ import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/
 import { uploadDebugFile } from './debug-utils';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { normalizeDownloadedFitPayload } from './shared/fit-payload';
-import { enqueueActivitySyncJobsForImportedEvent } from './activity-sync/enqueue-imported-event';
+import { enqueueActivitySyncAfterEventPersistence } from './activity-sync/enqueue-after-event-persistence';
 import { shouldSkipQueueWorkForDeletedUser } from './queue/user-deletion-skip';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from './queue/provider-queue-errors';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from './shared/user-deletion-guard';
@@ -47,6 +48,16 @@ import {
   QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from './queue/cleanup-tombstone';
 import { resolveProviderImportEventID } from './queue/provider-event-id';
+import { processWahooWorkoutQueueItem } from './wahoo/processor';
+import {
+  enqueueWorkoutTaskWithDispatchRecovery,
+  markWorkoutTaskDispatchedWithRetry,
+} from './shared/cloud-tasks';
+
+type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
+  | GarminAPIActivityQueueItemInterface
+  | COROSAPIWorkoutQueueItemInterface
+  | WahooAPIWorkoutQueueItemInterface;
 
 export {
   ProviderQueueUserDeletedOrDeletingError,
@@ -55,33 +66,6 @@ export {
   isProviderQueueUserDeletedOrDeletingError,
   isProviderQueueUserNotConnectedError,
 } from './queue/provider-queue-errors';
-
-async function enqueueActivitySyncBestEffort(
-  parentID: string,
-  eventID: string,
-  sourceServiceName: ServiceNames,
-  sourceActivityID: string,
-  setEventResult: unknown
-): Promise<boolean> {
-  if (await shouldSkipQueueWorkForDeletedUser(parentID, sourceServiceName, eventID, 'before_activity_sync_enqueue')) {
-    return true;
-  }
-
-  try {
-    const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
-    const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
-    await enqueueActivitySyncJobsForImportedEvent({
-      userID: parentID,
-      eventID: activitySyncEventID,
-      sourceServiceName,
-      sourceActivityID,
-      originalFiles: activitySyncOriginalFiles,
-    });
-  } catch (activitySyncError) {
-    logger.error(`[ActivitySync] Failed to enqueue post-import sync for ${sourceServiceName} event ${eventID} and user ${parentID}. Import remains successful.`, activitySyncError);
-  }
-  return false;
-}
 
 function markWorkoutQueueItemSkippedForDeletedUser(
   queueItem: QueueItemInterface,
@@ -137,39 +121,6 @@ function isUserDeletionGuardReadError(error: unknown): boolean {
   return error instanceof Error && error.name === 'UserDeletionGuardReadError';
 }
 
-const POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS = 3;
-const POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS = 25;
-
-function getRetryableDispatchMarkerCause(error: unknown): unknown {
-  if (isUserDeletionGuardReadError(error) && 'originalError' in (error as Record<string, unknown>)) {
-    return (error as { originalError: unknown }).originalError;
-  }
-  return error;
-}
-
-function isRetryableFirestoreDispatchMarkerError(error: unknown): boolean {
-  const cause = getRetryableDispatchMarkerCause(error);
-  const code = (cause as { code?: unknown } | null | undefined)?.code;
-  const details = `${(cause as { details?: unknown } | null | undefined)?.details || ''}`.toLowerCase();
-  const message = `${(cause as { message?: unknown } | null | undefined)?.message || ''}`.toLowerCase();
-  const normalizedCode = typeof code === 'string' ? code.toLowerCase() : code;
-
-  return normalizedCode === 10
-    || normalizedCode === 14
-    || normalizedCode === 4
-    || normalizedCode === 'aborted'
-    || normalizedCode === 'unavailable'
-    || normalizedCode === 'deadline-exceeded'
-    || details.includes('too much contention')
-    || message.includes('too much contention');
-}
-
-function waitForDispatchMarkerRetry(attempt: number): Promise<void> {
-  const delayMs = (POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS * attempt)
-    + Math.floor(Math.random() * POST_ENQUEUE_DISPATCH_MARKER_RETRY_BASE_DELAY_MS);
-  return new Promise((resolve) => setTimeout(resolve, delayMs));
-}
-
 interface WorkoutQueueDispatchContext {
   firebaseUserID: string;
   providerUserID: string;
@@ -193,8 +144,8 @@ enum WorkoutQueueGuardedUpdateResult {
 
 function getProviderUserIDForQueueItem(
   serviceName: ServiceNames,
-  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
-): { fieldName: 'userName' | 'openId' | 'userID'; value: string } | null {
+  queueItem: ProviderWorkoutQueueItem,
+): { fieldName: 'userName' | 'openId' | 'userID' | 'wahooUserID'; value: string } | null {
   switch (serviceName) {
     case ServiceNames.SuuntoApp:
       return { fieldName: 'userName', value: `${(queueItem as SuuntoAppWorkoutQueueItemInterface).userName || ''}` };
@@ -202,6 +153,8 @@ function getProviderUserIDForQueueItem(
       return { fieldName: 'openId', value: `${(queueItem as COROSAPIWorkoutQueueItemInterface).openId || ''}` };
     case ServiceNames.GarminAPI:
       return { fieldName: 'userID', value: `${(queueItem as GarminAPIActivityQueueItemInterface).userID || ''}` };
+    case ServiceNames.WahooAPI:
+      return { fieldName: 'wahooUserID', value: `${(queueItem as WahooAPIWorkoutQueueItemInterface).wahooUserID || ''}` };
     default:
       return null;
   }
@@ -209,7 +162,7 @@ function getProviderUserIDForQueueItem(
 
 async function resolveFirebaseUserIDForQueueItem(
   serviceName: ServiceNames,
-  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+  queueItem: ProviderWorkoutQueueItem,
 ): Promise<string | null> {
   if (queueItem.firebaseUserID) {
     return queueItem.firebaseUserID;
@@ -230,7 +183,7 @@ async function resolveFirebaseUserIDForQueueItem(
 
 async function resolveFirebaseUserIDForProviderIdentity(
   serviceName: ServiceNames,
-  providerFieldName: 'userName' | 'openId' | 'userID',
+  providerFieldName: 'userName' | 'openId' | 'userID' | 'wahooUserID',
   providerUserID: string,
   logContext: string,
 ): Promise<string | null> {
@@ -262,7 +215,7 @@ export function resolveFirebaseUserIDForGarminUserID(userID: string): Promise<st
   );
 }
 
-async function attachFirebaseUserIDToQueueItem<T extends SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface>(
+async function attachFirebaseUserIDToQueueItem<T extends ProviderWorkoutQueueItem>(
   queueItem: T,
   serviceName: ServiceNames,
 ): Promise<T> {
@@ -331,7 +284,7 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
     try {
       dispatchContext = await assertWorkoutQueueCanDispatch(
         doc.ref,
-        Object.assign({}, data, { id: doc.id }) as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+        Object.assign({}, data, { id: doc.id }) as ProviderWorkoutQueueItem,
         serviceName,
         `workout_queue_scheduled_dispatch:${serviceName}`,
       );
@@ -353,13 +306,18 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 
     try {
       const queueItemForDispatch = Object.assign({}, data, { id: doc.id }) as QueueItemInterface;
-      const wasTaskEnqueued = await enqueueWorkoutTaskWithRecoveryGeneration(
-        doc.ref,
-        queueItemForDispatch,
+      const wasTaskEnqueued = await enqueueWorkoutTaskWithDispatchRecovery({
         serviceName,
-        dispatchContext.firebaseUserID,
-        delay,
-      );
+        queueItem: queueItemForDispatch,
+        scheduleDelaySeconds: delay,
+        enqueueTask: enqueueWorkoutTask,
+        advanceDispatchRecoveryGeneration: (queueItem) => advanceWorkoutQueueDispatchRecoveryGeneration(
+          doc.ref,
+          queueItem,
+          serviceName,
+          dispatchContext.firebaseUserID,
+        ),
+      });
       if (!wasTaskEnqueued) {
         logger.info(`Task not enqueued for ${serviceName} queue item ${doc.id}; leaving dispatch marker unchanged.`);
         return false;
@@ -369,9 +327,10 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
         doc.id,
         serviceName,
         dispatchContext.firebaseUserID,
+        queueItemForDispatch,
       );
       if (!didMarkDispatched) {
-        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because the owning user is missing or deletion is in progress.`);
+        logger.info(`Skipped ${serviceName} queue item ${doc.id} dispatch marker because it is no longer current or the owning user is missing or deletion is in progress.`);
         return false;
       }
       return true;
@@ -424,6 +383,14 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
   await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
+});
+
+export const parseWahooAPIWorkoutQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_HIGH,
+  memory: MEMORY_HIGH,
+  maxInstances: 1,
+}).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
+  await dispatchQueueItemTasks(ServiceNames.WahooAPI);
 });
 
 
@@ -533,9 +500,12 @@ function getTokenQueryForWorkoutQueueItem(
 }
 
 
-export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: ProviderWorkoutQueueItem, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
     return processGarminAPIActivityQueueItem(queueItem as GarminAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
+  }
+  if (serviceName === ServiceNames.WahooAPI) {
+    return processWahooWorkoutQueueItem(queueItem as WahooAPIWorkoutQueueItemInterface);
   }
 
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
@@ -637,7 +607,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
-      const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+      const downloadedPayload = await getWorkoutForService(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, serviceToken as any);
       const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
       if (normalizedPayload.normalizedFromMultipart) {
         const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
@@ -652,7 +622,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
-          const downloadedPayload = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
+          const downloadedPayload = await getWorkoutForService(serviceName, queueItem as COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, serviceToken as any);
           const normalizedPayload = normalizeDownloadedFitPayload(downloadedPayload);
           if (normalizedPayload.normalizedFromMultipart) {
             const downloadedSize = typeof downloadedPayload?.length === 'number' ? downloadedPayload.length : downloadedPayload?.byteLength;
@@ -743,7 +713,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.COROSAPI, corosWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
+              userID: parentID,
+              eventID: deterministicID,
+              sourceServiceName: ServiceNames.COROSAPI,
+              sourceActivityID: corosWorkoutQueueItem.workoutID,
+              setEventResult,
+            });
             if (skippedAfterDeletionStarted) {
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
             }
@@ -762,7 +738,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           if (!bulkWriter) {
-            const skippedAfterDeletionStarted = await enqueueActivitySyncBestEffort(parentID, deterministicID, ServiceNames.SuuntoApp, suuntoWorkoutQueueItem.workoutID, setEventResult);
+            const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
+              userID: parentID,
+              eventID: deterministicID,
+              sourceServiceName: ServiceNames.SuuntoApp,
+              sourceActivityID: suuntoWorkoutQueueItem.workoutID,
+              setEventResult,
+            });
             if (skippedAfterDeletionStarted) {
               return markWorkoutQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
             }
@@ -851,28 +833,10 @@ function isFirestoreNotFoundError(error: unknown): boolean {
   return code === 5 || code === 'not-found' || code === 'NOT_FOUND' || message.includes('NOT_FOUND') || message.includes('No document to update');
 }
 
-function workoutQueueRetryGeneration(queueItem: { totalRetryCount?: unknown, retryCount?: unknown } | null | undefined): number {
-  if (typeof queueItem?.totalRetryCount === 'number' && Number.isFinite(queueItem.totalRetryCount)) {
-    return Math.max(0, Math.floor(queueItem.totalRetryCount));
-  }
-  if (typeof queueItem?.retryCount === 'number' && Number.isFinite(queueItem.retryCount)) {
-    return Math.max(0, Math.floor(queueItem.retryCount));
-  }
-  return 0;
-}
-
 function workoutQueueDispatchRecoveryGeneration(queueItem: { dispatchRecoveryGeneration?: unknown } | null | undefined): number {
   return typeof queueItem?.dispatchRecoveryGeneration === 'number' && Number.isFinite(queueItem.dispatchRecoveryGeneration)
     ? Math.max(0, Math.floor(queueItem.dispatchRecoveryGeneration))
     : 0;
-}
-
-function workoutQueueRecoveryTaskKey(
-  queueItem: { totalRetryCount?: unknown, retryCount?: unknown, dispatchRecoveryGeneration?: unknown } | null | undefined,
-): number | string {
-  const retryGeneration = workoutQueueRetryGeneration(queueItem);
-  const dispatchGeneration = workoutQueueDispatchRecoveryGeneration(queueItem);
-  return dispatchGeneration > 0 ? `${retryGeneration}-${dispatchGeneration}` : retryGeneration;
 }
 
 async function advanceWorkoutQueueDispatchRecoveryGeneration(
@@ -949,37 +913,6 @@ async function advanceWorkoutQueueDispatchRecoveryGeneration(
   }
 }
 
-async function enqueueWorkoutTaskWithRecoveryGeneration(
-  queueItemDocument: admin.firestore.DocumentReference,
-  queueItem: QueueItemInterface,
-  serviceName: ServiceNames,
-  firebaseUserID: string,
-  scheduleDelaySeconds?: number,
-): Promise<boolean> {
-  const wasTaskEnqueued = await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated, scheduleDelaySeconds, {
-    recoveryTaskKey: workoutQueueRecoveryTaskKey(queueItem),
-  });
-  if (wasTaskEnqueued) {
-    return true;
-  }
-
-  const nextQueueItem = await advanceWorkoutQueueDispatchRecoveryGeneration(
-    queueItemDocument,
-    queueItem,
-    serviceName,
-    firebaseUserID,
-  );
-  if (!nextQueueItem) {
-    logger.info(`Could not advance dispatch recovery generation for ${serviceName} queue item ${queueItem.id}; leaving dispatch marker unchanged.`);
-    return false;
-  }
-
-  logger.warn(`Advanced dispatch recovery generation for ${serviceName} queue item ${queueItem.id} to ${nextQueueItem.dispatchRecoveryGeneration}; retrying deterministic Cloud Task enqueue.`);
-  return enqueueWorkoutTask(serviceName, nextQueueItem.id, nextQueueItem.dateCreated, scheduleDelaySeconds, {
-    recoveryTaskKey: workoutQueueRecoveryTaskKey(nextQueueItem),
-  });
-}
-
 async function wasQueueItemMovedToFailedJobs(
   queueItemId: string,
   serviceName: ServiceNames,
@@ -995,8 +928,12 @@ async function markWorkoutQueueItemDispatched(
   queueItemId: string,
   serviceName: ServiceNames,
   firebaseUserID: string,
+  queueItem?: QueueItemInterface,
 ): Promise<boolean> {
   try {
+    const isCurrent = queueItem && serviceName === ServiceNames.WahooAPI
+      ? createWahooQueueRevisionCurrentGuard(queueItem)
+      : undefined;
     const result = await markQueueItemDispatchedIfUserActive({
       queueItemDocument,
       queueItemId,
@@ -1004,6 +941,7 @@ async function markWorkoutQueueItemDispatched(
       phase: `workout_queue_dispatch_marker:${serviceName}`,
       dispatchedAtMs: Date.now(),
       logPrefix: 'WorkoutQueue',
+      isCurrent,
     });
     return result === QueueDispatchMarkerResult.Marked;
   } catch (error) {
@@ -1025,32 +963,29 @@ async function markWorkoutQueueItemDispatchedAfterTaskEnqueue(
   queueItemId: string,
   serviceName: ServiceNames,
   firebaseUserID: string,
+  queueItem?: QueueItemInterface,
 ): Promise<boolean> {
-  for (let attempt = 1; attempt <= POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS; attempt++) {
-    try {
-      return await markWorkoutQueueItemDispatched(
-        queueItemDocument,
-        queueItemId,
-        serviceName,
-        firebaseUserID,
-      );
-    } catch (error) {
-      if (!isRetryableFirestoreDispatchMarkerError(error)) {
-        throw error;
-      }
+  return markWorkoutTaskDispatchedWithRetry({
+    serviceName,
+    queueItemId,
+    markDispatched: () => markWorkoutQueueItemDispatched(
+      queueItemDocument,
+      queueItemId,
+      serviceName,
+      firebaseUserID,
+      queueItem,
+    ),
+  });
+}
 
-      if (attempt < POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS) {
-        logger.warn(`Retryable dispatch marker write failure after Cloud Task enqueue for ${serviceName} queue item ${queueItemId}; retrying marker write (${attempt}/${POST_ENQUEUE_DISPATCH_MARKER_MAX_ATTEMPTS}).`, error);
-        await waitForDispatchMarkerRetry(attempt);
-        continue;
-      }
-
-      logger.warn(`Retryable dispatch marker write failure after Cloud Task enqueue for ${serviceName} queue item ${queueItemId}; leaving marker untouched because the task was already accepted.`, error);
-      return true;
-    }
-  }
-
-  return true;
+function createWahooQueueRevisionCurrentGuard(
+  queueItem: QueueItemInterface,
+): (currentQueueItem: Record<string, unknown>) => boolean {
+  const wahooQueueItem = queueItem as Partial<WahooAPIWorkoutQueueItemInterface>;
+  return (currentQueueItem) => currentQueueItem.processed !== true
+    && currentQueueItem.dispatchedToCloudTask === null
+    && currentQueueItem.workoutSummaryID === wahooQueueItem.workoutSummaryID
+    && currentQueueItem.summaryUpdatedAt === wahooQueueItem.summaryUpdatedAt;
 }
 
 async function backfillWorkoutQueueFirebaseUserID(
@@ -1111,7 +1046,7 @@ async function deleteWorkoutQueueDocBeforeDispatch(
 
 async function assertWorkoutQueueCanDispatch(
   queueItemDocument: admin.firestore.DocumentReference,
-  queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface,
+  queueItem: ProviderWorkoutQueueItem,
   serviceName: ServiceNames,
   phase: string,
 ): Promise<WorkoutQueueDispatchContext> {
@@ -1339,18 +1274,24 @@ async function handleDuplicateProviderWebhookQueueItem(
     refreshData,
     { id: queuePayload.id, dateCreated },
   ) as QueueItemInterface;
-  const wasDuplicateTaskEnqueued = await enqueueWorkoutTaskWithRecoveryGeneration(
-    queueItemDocument,
-    queueItemForDuplicateDispatch,
+  const wasDuplicateTaskEnqueued = await enqueueWorkoutTaskWithDispatchRecovery({
     serviceName,
-    duplicateDispatchContext.firebaseUserID,
-  );
+    queueItem: queueItemForDuplicateDispatch,
+    enqueueTask: enqueueWorkoutTask,
+    advanceDispatchRecoveryGeneration: (queueItem) => advanceWorkoutQueueDispatchRecoveryGeneration(
+      queueItemDocument,
+      queueItem,
+      serviceName,
+      duplicateDispatchContext.firebaseUserID,
+    ),
+  });
   if (wasDuplicateTaskEnqueued) {
     const didMarkDuplicateDispatched = await markWorkoutQueueItemDispatchedAfterTaskEnqueue(
       queueItemDocument,
       queuePayload.id,
       serviceName,
       duplicateDispatchContext.firebaseUserID,
+      queueItemForDuplicateDispatch,
     );
     if (!didMarkDuplicateDispatched) {
       throw new ProviderQueueUserDeletedOrDeletingError(
@@ -1390,18 +1331,24 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
 
   if (options.dispatchMode === 'immediate') {
     // Dispatch a Cloud Task for immediate processing
-    const wasTaskEnqueued = await enqueueWorkoutTaskWithRecoveryGeneration(
-      queueItemDocument,
-      queuePayload,
+    const wasTaskEnqueued = await enqueueWorkoutTaskWithDispatchRecovery({
       serviceName,
-      dispatchContext.firebaseUserID,
-    );
+      queueItem: queuePayload,
+      enqueueTask: enqueueWorkoutTask,
+      advanceDispatchRecoveryGeneration: (queueItem) => advanceWorkoutQueueDispatchRecoveryGeneration(
+        queueItemDocument,
+        queueItem,
+        serviceName,
+        dispatchContext.firebaseUserID,
+      ),
+    });
     if (wasTaskEnqueued) {
       const didMarkDispatched = await markWorkoutQueueItemDispatchedAfterTaskEnqueue(
         queueItemDocument,
         queueItem.id,
         serviceName,
         dispatchContext.firebaseUserID,
+        queuePayload,
       );
       if (!didMarkDispatched) {
         throw new ProviderQueueUserDeletedOrDeletingError(

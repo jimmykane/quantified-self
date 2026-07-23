@@ -25,6 +25,13 @@
   text-align: right;
 }
 
+.chart-title-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+}
+
 .chart-title {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 12px;

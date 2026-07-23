@@ -9,6 +9,7 @@ import {
   SendRoutesToServiceResponse,
 } from '@shared/saved-route-send';
 import { AppFunctionsService } from './app.functions.service';
+import { WAHOO_ROUTE_ACCESS_RECONNECT_MESSAGE } from '../helpers/wahoo-route-access.helper';
 
 export interface RouteSendProgress {
   chunkIndex: number;
@@ -45,6 +46,7 @@ const GENERIC_ROUTE_SEND_RESPONSE_MESSAGES = new Set<string>([
   'Could not send route.',
   'Could not send routes to Suunto.',
   'Could not send routes to Garmin.',
+  'Could not send routes to Wahoo.',
   'Could not send routes to the selected service.',
 ]);
 
@@ -299,6 +301,8 @@ function getDestinationAuthRequiredMessage(destinationServiceName: ServiceNames)
       return 'Connect Suunto again before sending routes.';
     case ServiceNames.GarminAPI:
       return 'Connect Garmin again before sending routes.';
+    case ServiceNames.WahooAPI:
+      return 'Connect Wahoo again before sending routes.';
     default:
       return 'Reconnect the selected service before sending routes.';
   }
@@ -308,6 +312,8 @@ function getDestinationPermissionRequiredMessage(destinationServiceName: Service
   switch (destinationServiceName) {
     case ServiceNames.GarminAPI:
       return 'Grant Garmin Course Import permission and reconnect before sending routes.';
+    case ServiceNames.WahooAPI:
+      return WAHOO_ROUTE_ACCESS_RECONNECT_MESSAGE;
     default:
       return 'Grant the required destination permissions and reconnect before sending routes.';
   }
@@ -337,6 +343,8 @@ function getDefaultRouteSendFailureMessage(destinationServiceName?: ServiceNames
       return 'Could not send routes to Suunto.';
     case ServiceNames.GarminAPI:
       return 'Could not send routes to Garmin.';
+    case ServiceNames.WahooAPI:
+      return 'Could not send routes to Wahoo.';
     default:
       return 'Could not send routes to the selected service.';
   }
@@ -349,16 +357,25 @@ function inferDestinationServiceNameFromMessage(message: string): ServiceNames |
   if (/garmin/i.test(message)) {
     return ServiceNames.GarminAPI;
   }
+  if (/wahoo/i.test(message)) {
+    return ServiceNames.WahooAPI;
+  }
   return null;
 }
 
 function isDestinationAuthReconnectMessage(message: string, destinationServiceName?: ServiceNames): boolean {
-  return destinationServiceName === ServiceNames.SuuntoApp
-    ? /suunto/i.test(message) || /no connected .*account/i.test(message) || /re-?connect/i.test(message)
-    : destinationServiceName === ServiceNames.GarminAPI
-      ? /garmin/i.test(message) || /no connected .*account/i.test(message) || /re-?connect/i.test(message)
-      : /suunto/i.test(message)
-        || /garmin/i.test(message)
+  if (destinationServiceName === ServiceNames.SuuntoApp) {
+    return /suunto/i.test(message) || /no connected .*account/i.test(message) || /re-?connect/i.test(message);
+  }
+  if (destinationServiceName === ServiceNames.GarminAPI) {
+    return /garmin/i.test(message) || /no connected .*account/i.test(message) || /re-?connect/i.test(message);
+  }
+  if (destinationServiceName === ServiceNames.WahooAPI) {
+    return /wahoo/i.test(message) || /no connected .*account/i.test(message) || /re-?connect/i.test(message);
+  }
+  return /suunto/i.test(message)
+    || /garmin/i.test(message)
+    || /wahoo/i.test(message)
     || /no connected .*account/i.test(message)
-        || /re-?connect/i.test(message);
+    || /re-?connect/i.test(message);
 }

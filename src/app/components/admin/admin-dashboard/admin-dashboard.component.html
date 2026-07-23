@@ -1,7 +1,7 @@
 <div class="admin-container">
     <div class="header-container">
         <h1 class="app-text-gradient">Admin Dashboard</h1>
-        <p class="premium-subtitle">Operational overview for users, queues, billing, maintenance, and content</p>
+        <p class="premium-subtitle">A live view of user growth, queue work, service availability, releases, and current-month billing.</p>
     </div>
 
     <section class="dashboard-section">
@@ -13,24 +13,8 @@
                     <mat-icon>dns</mat-icon>
                     <span>Queues</span>
                 </div>
-                <div class="overview-value">
-                    @if (isLoadingQueues()) {
-                    Loading
-                    } @else if (queueError()) {
-                    Unavailable
-                    } @else {
-                    {{ healthSummary().queueIssues === 0 ? 'Healthy' : healthSummary().queueIssues + ' issue' + (healthSummary().queueIssues === 1 ? '' : 's') }}
-                    }
-                </div>
-                <div class="overview-subtitle">
-                    @if (isLoadingQueues()) {
-                    Loading stats
-                    } @else if (queueError()) {
-                    Stats unavailable
-                    } @else {
-                    Across {{ queueRows().length }} pipelines
-                    }
-                </div>
+                <div class="overview-value">{{ queueOverview().value }}</div>
+                <div class="overview-subtitle">{{ queueOverview().subtitle }}</div>
             </mat-card>
 
             <mat-card class="overview-card" [class.status-error]="maintenanceError() || healthSummary().maintenanceIssues > 0"
@@ -40,28 +24,8 @@
                     <mat-icon>build</mat-icon>
                     <span>Maintenance</span>
                 </div>
-                <div class="overview-value">
-                    @if (isLoadingMaintenance()) {
-                    Loading
-                    } @else if (maintenanceError()) {
-                    Unavailable
-                    } @else if (healthSummary().maintenanceIssues > 0 && healthSummary().maintenanceWarnings > 0) {
-                    {{ healthSummary().maintenanceIssues }} offline / {{ healthSummary().maintenanceWarnings }} unknown
-                    } @else if (healthSummary().maintenanceWarnings > 0 && healthSummary().maintenanceIssues === 0) {
-                    {{ healthSummary().maintenanceWarnings }} unknown
-                    } @else {
-                    {{ healthSummary().maintenanceIssues === 0 ? 'Online' : healthSummary().maintenanceIssues + ' offline' }}
-                    }
-                </div>
-                <div class="overview-subtitle">
-                    @if (isLoadingMaintenance()) {
-                    Loading status
-                    } @else if (maintenanceError()) {
-                    Status unavailable
-                    } @else {
-                    Prod, beta, and dev
-                    }
-                </div>
+                <div class="overview-value">{{ maintenanceOverview().value }}</div>
+                <div class="overview-subtitle">{{ maintenanceOverview().subtitle }}</div>
             </mat-card>
 
             <mat-card class="overview-card" [class.status-warning]="healthSummary().draftChangelogs > 0">
@@ -69,8 +33,8 @@
                     <mat-icon>history_edu</mat-icon>
                     <span>Release Notes</span>
                 </div>
-                <div class="overview-value">{{ healthSummary().draftChangelogs }}</div>
-                <div class="overview-subtitle">Draft entries</div>
+                <div class="overview-value">{{ changelogOverview().value }}</div>
+                <div class="overview-subtitle">{{ changelogOverview().subtitle }}</div>
             </mat-card>
 
             <mat-card class="overview-card" [class.status-error]="financialError()">
@@ -78,28 +42,21 @@
                     <mat-icon>payments</mat-icon>
                     <span>Paid Invoices</span>
                 </div>
-                <div class="overview-value">
-                    @if (isLoadingFinancials()) {
-                    Loading
-                    } @else if (financialError()) {
-                    Unavailable
-                    } @else if (healthSummary().revenueInvoiceCount !== null) {
-                    {{ healthSummary().revenueInvoiceCount }}
-                    } @else {
-                    -
-                    }
-                </div>
-                <div class="overview-subtitle">Current month</div>
+                <div class="overview-value">{{ financialOverview().value }}</div>
+                <div class="overview-subtitle">{{ financialOverview().subtitle }}</div>
             </mat-card>
         </div>
     </section>
 
     <section class="dashboard-section">
         <div class="section-title">
-            <h2>
-                <mat-icon>people</mat-icon>
-                User KPIs
-            </h2>
+            <div class="section-heading">
+                <h2>
+                    <mat-icon>people</mat-icon>
+                    User KPIs
+                </h2>
+                <p class="section-description">Current account and subscription totals. Growth and subscription change cover the last 12 months.</p>
+            </div>
             <div class="section-actions">
                 <button mat-icon-button type="button" matTooltip="Refresh user KPIs" aria-label="Refresh user KPIs"
                     [disabled]="isLoadingUsers()" (click)="fetchUserOverview()">
@@ -154,10 +111,13 @@
 
     <section class="dashboard-section">
         <div class="section-title">
-            <h2>
-                <mat-icon>dns</mat-icon>
-                Queue Status
-            </h2>
+            <div class="section-heading">
+                <h2>
+                    <mat-icon>dns</mat-icon>
+                    Queue Status
+                </h2>
+                <p class="section-description">Database backlog, Cloud Tasks, and processing health. Open a queue for diagnostics.</p>
+            </div>
             <div class="section-actions">
                 <button mat-icon-button type="button" matTooltip="Refresh queue stats" aria-label="Refresh queue stats"
                     [disabled]="isLoadingQueues()" (click)="fetchQueueStats()">
@@ -181,7 +141,7 @@
             <span>{{ queueError() }}</span>
         </mat-card>
         } @else {
-        <mat-card class="table-container">
+        <mat-card class="table-container queue-table-container">
             <div class="table-wrapper">
                 <table mat-table [dataSource]="queueRows()">
                     <ng-container matColumnDef="queue">
@@ -196,17 +156,17 @@
                     </ng-container>
 
                     <ng-container matColumnDef="pendingDb">
-                        <th mat-header-cell *matHeaderCellDef> DB Pending </th>
+                        <th mat-header-cell *matHeaderCellDef> Database backlog </th>
                         <td mat-cell *matCellDef="let row">{{ row.pendingDb | number }}</td>
                     </ng-container>
 
                     <ng-container matColumnDef="cloudTasks">
-                        <th mat-header-cell *matHeaderCellDef> Cloud Tasks </th>
+                        <th mat-header-cell *matHeaderCellDef> Tasks queued </th>
                         <td mat-cell *matCellDef="let row">{{ row.cloudTasks | number }}</td>
                     </ng-container>
 
                     <ng-container matColumnDef="completed">
-                        <th mat-header-cell *matHeaderCellDef> Done </th>
+                        <th mat-header-cell *matHeaderCellDef> Completed </th>
                         <td mat-cell *matCellDef="let row">
                             <span>{{ row.completed | number }}</span>
                             <span class="cell-detail">{{ row.completedLabel }}</span>
@@ -214,7 +174,7 @@
                     </ng-container>
 
                     <ng-container matColumnDef="problems">
-                        <th mat-header-cell *matHeaderCellDef> Stuck / Failed </th>
+                        <th mat-header-cell *matHeaderCellDef> Needs attention </th>
                         <td mat-cell *matCellDef="let row" [class.problem-cell]="row.problemCount > 0">
                             <span>{{ row.problemCount | number }}</span>
                             <span class="cell-detail">{{ row.problemLabel }}</span>
@@ -222,7 +182,7 @@
                     </ng-container>
 
                     <ng-container matColumnDef="dead">
-                        <th mat-header-cell *matHeaderCellDef> DLQ / Dead </th>
+                        <th mat-header-cell *matHeaderCellDef> Dead letter </th>
                         <td mat-cell *matCellDef="let row" [class.problem-cell]="row.dead > 0">
                             <span>{{ row.dead | number }}</span>
                             <span class="cell-detail">{{ row.deadLabel }}</span>
@@ -241,12 +201,12 @@
                     </ng-container>
 
                     <ng-container matColumnDef="lag">
-                        <th mat-header-cell *matHeaderCellDef> Max Lag </th>
+                        <th mat-header-cell *matHeaderCellDef> Longest wait </th>
                         <td mat-cell *matCellDef="let row">{{ row.maxLagLabel }}</td>
                     </ng-container>
 
                     <ng-container matColumnDef="details">
-                        <th mat-header-cell *matHeaderCellDef> Details </th>
+                        <th mat-header-cell *matHeaderCellDef> Context </th>
                         <td mat-cell *matCellDef="let row">
                             @if (row.chips.length) {
                             <mat-chip-set aria-label="Queue details">
@@ -264,7 +224,7 @@
                         <th mat-header-cell *matHeaderCellDef></th>
                         <td mat-cell *matCellDef="let row">
                             <button mat-icon-button class="qs-mat-primary" [routerLink]="row.route"
-                                [attr.aria-label]="'Open ' + row.label">
+                                [attr.aria-label]="'Open ' + row.label + ' queue'">
                                 <mat-icon>open_in_new</mat-icon>
                             </button>
                         </td>
@@ -277,16 +237,78 @@
                 </table>
             </div>
         </mat-card>
+
+        <div class="queue-card-list">
+            @for (row of queueRows(); track row.id) {
+            <mat-card class="queue-card" [class.status-error]="row.severity === 'error'"
+                [class.status-warning]="row.severity === 'warning'"
+                [class.status-ok]="row.severity === 'ok'">
+                <div class="queue-card-header">
+                    <div class="queue-name-cell">
+                        <mat-icon [class.status-error-icon]="row.severity === 'error'"
+                            [class.status-warning-icon]="row.severity === 'warning'">{{ row.icon }}</mat-icon>
+                        <span>{{ row.label }}</span>
+                    </div>
+                    <button mat-icon-button class="qs-mat-primary" [routerLink]="row.route"
+                        [attr.aria-label]="'Open ' + row.label + ' queue'">
+                        <mat-icon>open_in_new</mat-icon>
+                    </button>
+                </div>
+
+                <div class="queue-card-metrics">
+                    <div class="queue-metric">
+                        <span class="queue-metric-value">{{ row.pendingDb | number }}</span>
+                        <span class="queue-metric-label">Database backlog</span>
+                    </div>
+                    <div class="queue-metric">
+                        <span class="queue-metric-value">{{ row.cloudTasks | number }}</span>
+                        <span class="queue-metric-label">Tasks queued</span>
+                    </div>
+                    <div class="queue-metric">
+                        <span class="queue-metric-value">{{ row.completed | number }}</span>
+                        <span class="queue-metric-label">{{ row.completedLabel }}</span>
+                    </div>
+                    <div class="queue-metric">
+                        <span class="queue-metric-value" [class.problem-cell]="row.problemCount > 0">{{ row.problemCount | number }}</span>
+                        <span class="queue-metric-label">{{ row.problemLabel }}</span>
+                    </div>
+                    <div class="queue-metric">
+                        <span class="queue-metric-value" [class.problem-cell]="row.dead > 0">{{ row.dead | number }}</span>
+                        <span class="queue-metric-label">{{ row.deadLabel }}</span>
+                    </div>
+                    <div class="queue-metric">
+                        <span class="queue-metric-value">{{ row.throughput === null ? '-' : (row.throughput | number) }}</span>
+                        <span class="queue-metric-label">Throughput</span>
+                    </div>
+                    <div class="queue-metric queue-metric-wide">
+                        <span class="queue-metric-value">{{ row.maxLagLabel }}</span>
+                        <span class="queue-metric-label">Longest wait</span>
+                    </div>
+                </div>
+
+                @if (row.chips.length) {
+                <mat-chip-set class="queue-card-chips" aria-label="Queue details">
+                    @for (chip of row.chips; track chip) {
+                    <mat-chip>{{ chip }}</mat-chip>
+                    }
+                </mat-chip-set>
+                }
+            </mat-card>
+            }
+        </div>
         }
     </section>
 
     <section class="dashboard-section two-column-section">
         <div>
             <div class="section-title">
-                <h2>
-                    <mat-icon>build</mat-icon>
-                    Maintenance
-                </h2>
+                <div class="section-heading">
+                    <h2>
+                        <mat-icon>build</mat-icon>
+                        Maintenance
+                    </h2>
+                    <p class="section-description">Maintenance controls for production, beta, and local environments.</p>
+                </div>
                 <div class="section-actions">
                     <button mat-icon-button type="button" matTooltip="Refresh maintenance status"
                         aria-label="Refresh maintenance status" [disabled]="isLoadingMaintenance()"
@@ -330,10 +352,13 @@
 
         <div>
             <div class="section-title">
-                <h2>
-                    <mat-icon>article</mat-icon>
-                    Content Health
-                </h2>
+                <div class="section-heading">
+                    <h2>
+                        <mat-icon>article</mat-icon>
+                        Content Health
+                    </h2>
+                    <p class="section-description">Published release notes and updates still awaiting review.</p>
+                </div>
                 <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/changelog">
                     <mat-icon>history_edu</mat-icon>
                     Manage Changelog

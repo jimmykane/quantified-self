@@ -1,0 +1,55 @@
+@if (useDialog()) {
+  <button
+    mat-icon-button
+    type="button"
+    class="title-info-button durability-reading-guide-trigger"
+    appHapticTap
+    (click)="openDialog($event)"
+    aria-label="How to read durability"
+  >
+    <mat-icon aria-hidden="true">info</mat-icon>
+  </button>
+} @else {
+  <button
+    mat-icon-button
+    type="button"
+    class="title-info-button durability-reading-guide-trigger"
+    appHapticTap
+    [matMenuTriggerFor]="durabilityReadingGuideMenu"
+    aria-label="How to read durability"
+  >
+    <mat-icon aria-hidden="true">info</mat-icon>
+  </button>
+}
+
+<ng-template #durabilityReadingGuideContent>
+  <section class="durability-reading-guide-content" aria-label="How to read durability">
+    <div class="durability-reading-guide-heading">How to read durability</div>
+    <p>It compares the usable first and second parts of a long, reasonably steady aerobic effort. For running, cycling, and open-water swimming, warm-up and cool-down are excluded and both output and heart rate must be recorded.</p>
+    <div class="durability-reading-guide-item">
+      <strong>For one activity</strong>
+      <p>Less power or speed for the same heart rate later in the session can suggest a fade if you meant to hold a similar effort. If you deliberately eased off, changed terrain, coasted, or changed pace, it simply describes that pacing choice.</p>
+    </div>
+    @if (isTrainingContext) {
+      <div class="durability-reading-guide-item">
+        <strong>Across your Training</strong>
+        <p>More stable comparable sessions tend to have smaller absolute aerobic decoupling and heart-rate drift, with higher output retained. Use the weekly trail to look for a pattern, not one score.</p>
+      </div>
+    }
+    <div class="durability-reading-guide-item">
+      <strong>For swimming</strong>
+      <p>Pool swims compare like-for-like pace and, when available, SWOLF from the same stroke and pool length. A missing result means there was no suitable comparison, not zero durability.</p>
+    </div>
+    <p class="durability-reading-guide-note">This is context for your training, not a fitness verdict or workout prescription.</p>
+  </section>
+</ng-template>
+
+<mat-menu #durabilityReadingGuideMenu="matMenu" class="qs-menu-panel durability-reading-guide-menu" xPosition="after" yPosition="below">
+  <ng-container [ngTemplateOutlet]="durabilityReadingGuideContent"></ng-container>
+</mat-menu>
+
+<ng-template #durabilityReadingGuideDialogTemplate>
+  <div class="durability-reading-guide-dialog-content">
+    <ng-container [ngTemplateOutlet]="durabilityReadingGuideContent"></ng-container>
+  </div>
+</ng-template>

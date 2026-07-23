@@ -26,15 +26,16 @@
           }
         </ng-template>
 
+        <header class="settings-page-header">
+          <h1>Settings</h1>
+          <p>Manage your account and app preferences.</p>
+        </header>
+
         <app-workspace-section-navigation
           navigationAriaLabel="Settings sections"
           [sections]="settingsSectionOptions"
           [activeSection]="activeSection"
           (sectionSelected)="selectSettingsSection($any($event))">
-          <header class="settings-page-header">
-            <h1>Settings</h1>
-            <p>Manage your account and app preferences.</p>
-          </header>
 
           <ng-container *ngTemplateOutlet="settingsValidationInfo"></ng-container>
 
@@ -336,35 +337,33 @@
             </section>
             <section
               class="settings-panel-section"
-              aria-labelledby="settings-delete-account-title"
-              [hidden]="activeSection !== 'delete-account'">
+              aria-labelledby="settings-account-title"
+              [hidden]="activeSection !== 'account'">
               <header class="settings-panel-header">
-                <h2 id="settings-delete-account-title">Delete Account</h2>
-                <p>Permanently remove your account and all associated data.</p>
+                <h2 id="settings-account-title">Account</h2>
+                <p>Manage account actions and access.</p>
               </header>
               <mat-divider></mat-divider>
-              <div class="settings-panel-body">
-                <mat-card appearance="outlined" class="danger-card">
-                  <mat-card-content class="card-content">
-                    <div class="danger-title">
-                      <mat-icon>warning</mat-icon>
-                      <span>Danger Zone</span>
-                    </div>
-                    <p>
-                      Deleting your account will permanently remove all your activities, settings, connected services,
-                      and any other associated data. If you have an active subscription, it will also be cancelled.
-                      This action cannot be undone.
-                    </p>
+              <mat-card appearance="outlined" class="danger-card">
+                <mat-card-content class="card-content">
+                  <div class="danger-title">
+                    <mat-icon>warning</mat-icon>
+                    <span>Danger Zone</span>
+                  </div>
+                  <p>
+                    Deleting your account will permanently remove all your activities, settings, connected services,
+                    and any other associated data. If you have an active subscription, it will also be cancelled.
+                    This action cannot be undone.
+                  </p>
 
-                    <div>
-                      <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isDeleting">
-                        <mat-icon>delete_forever</mat-icon>
-                        Delete My Account
-                      </button>
-                    </div>
-                  </mat-card-content>
-                </mat-card>
-              </div>
+                  <div>
+                    <button mat-stroked-button class="qs-mat-warn" (click)="deleteUser($event)" [disabled]="isDeleting">
+                      <mat-icon>delete_forever</mat-icon>
+                      Delete My Account
+                    </button>
+                  </div>
+                </mat-card-content>
+              </mat-card>
             </section>
             <section
               class="settings-panel-section"
@@ -445,7 +444,7 @@
             </section>
         </app-workspace-section-navigation>
 
-        @if (activeSection !== 'delete-account') {
+        @if (activeSection !== 'account') {
         <div class="qs-form-actions-floating">
           <button
             mat-flat-button

@@ -35,16 +35,22 @@
   </div>
   }
   @if (showTodaySummary) {
-  <section class="dashboard-current-state-row" aria-label="Current readiness signals">
+  <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">
+    <div class="dashboard-current-state-primary dashboard-training-state-primary">
+      <span>Training state</span>
+      <strong>{{ dashboardTodayTrainingState.label }}</strong>
+      <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
+    </div>
     <div class="dashboard-current-state-primary">
       <span>Readiness</span>
       <div class="dashboard-readiness-primary-value">
         <strong>{{ dashboardTodayReadiness.label }}</strong>
         <b>{{ dashboardTodayReadiness.scoreText }}</b>
       </div>
+      <small class="dashboard-readiness-method">Load + sleep signals · Freshness stays TSS-only</small>
       <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
       @if (dashboardTodayReadiness.recoveryText !== '--') {
-      <small>Imported recovery · {{ dashboardTodayReadiness.recoveryText }}</small>
+      <small class="dashboard-readiness-imported-recovery">Imported recovery estimate · {{ dashboardTodayReadiness.recoveryText }} remaining · separate from score</small>
       }
     </div>
     <dl>

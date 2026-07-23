@@ -15,7 +15,7 @@ import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from 
 import { routeResolver } from './resolvers/route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
-const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, and COROS training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync to Suunto.';
+const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync between supported connected services.';
 
 const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   '',
@@ -129,12 +129,12 @@ const topLevelRoutes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Training analysis, Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Training analysis, Garmin to Suunto and COROS to Suunto activity sync, sending Suunto routes to Garmin, account setup, uploads, billing, privacy, and troubleshooting.",
+        "description": "Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -150,11 +150,15 @@ const topLevelRoutes: Routes = [
           "Membership and billing",
           "Garmin to Suunto activity sync",
           "COROS to Suunto activity sync",
+          "Wahoo to Suunto activity sync",
           "Send Suunto routes to Garmin",
+          "Send Suunto routes to Wahoo",
+          "Send GPX/FIT routes to Wahoo",
           "Sync past activities",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
+          "Wahoo integration",
           "Privacy controls",
           "Troubleshooting"
         ]
@@ -188,6 +192,14 @@ const topLevelRoutes: Routes = [
     data: {
       ...PROVIDER_INTEGRATION_ROUTE_DATA.coros,
       integrationProvider: 'coros'
+    }
+  },
+  {
+    path: 'integrations/wahoo',
+    loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    data: {
+      ...PROVIDER_INTEGRATION_ROUTE_DATA.wahoo,
+      integrationProvider: 'wahoo'
     }
   },
   {
@@ -313,6 +325,11 @@ const topLevelRoutes: Routes = [
     path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.syncCorosToSuunto
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.syncWahooToSuunto
   },
   {
     path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,

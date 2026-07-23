@@ -5,7 +5,7 @@ export interface TrainingMetricTextSegment {
 
 const TRAINING_METRIC_COUNT_UNIT_PATTERN = [
   '(?:(?:active|recorded|parent|candidate|eligible|recent|classified|unclassified|matching|power-recorded)\\s+)*',
-  '(?:sessions?|activities?|events?|nights?|days?|weeks?|years?|signals?|samples?|blocks?|efforts?)',
+  '(?:workouts?|sessions?|activities?|events?|nights?|days?|weeks?|years?|signals?|samples?|blocks?|efforts?)',
 ].join('');
 
 const TRAINING_METRIC_UNIT_PATTERN = [

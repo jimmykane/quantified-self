@@ -35,6 +35,22 @@ export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
   FITFileURI: string,
 }
 
+export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
+  wahooUserID: string;
+  workoutID: string;
+  workoutSummaryID: string;
+  summaryUpdatedAt: string;
+  FITFileURI: string;
+  starts: string;
+  manual?: boolean;
+  edited?: boolean;
+  fitnessAppID?: number;
+  fromHistory?: boolean;
+  processingOwner?: string;
+  processingRevision?: string;
+  processingLeaseExpiresAt?: number;
+}
+
 export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {
   userID: string
   startTimeInSeconds: number,
@@ -64,6 +80,9 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
   successProcessedAt?: number;
+  destinationUploadID?: string;
+  destinationWorkoutKey?: string;
+  destinationInfoCode?: string;
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {

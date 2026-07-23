@@ -10,9 +10,21 @@ export interface TrainingStateClassification {
   caption: string | null;
 }
 
+export interface TrainingStateInfoRow {
+  label: string;
+  value: string;
+}
+
+export interface TrainingStateInfo {
+  tooltip: string;
+  description: string;
+  rows: TrainingStateInfoRow[];
+  note: string;
+}
+
 /**
  * Shared baseline for state explanations. The current input values are added by
- * resolveTrainingStateInfoTooltip so the displayed state is auditable without
+ * buildTrainingStateInfo so the displayed state is auditable without
  * duplicating the state rules in the workspace component.
  */
 export const TRAINING_STATE_INFO_TOOLTIP = 'Training state uses TSS-derived Form (CTL minus ATL), 7-day CTL ramp, current CTL, and current ATL.';
@@ -25,7 +37,7 @@ function formatStateInput(value: number | null, maximumFractionDigits: number, s
   return `${prefix}${new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(value)}`;
 }
 
-export function resolveTrainingStateInfoTooltip(input: TrainingStateSignalInput): string {
+export function buildTrainingStateInfo(input: TrainingStateSignalInput): TrainingStateInfo {
   const { form, rampRate, fitness, fatigue } = input;
   const state = resolveTrainingStateClassification(input);
   const formText = form === null || !Number.isFinite(form)
@@ -33,19 +45,35 @@ export function resolveTrainingStateInfoTooltip(input: TrainingStateSignalInput)
     : `Form ${formatStateInput(form, 1, true)}${fitness !== null && Number.isFinite(fitness) && fatigue !== null && Number.isFinite(fatigue)
       ? ` (CTL ${formatStateInput(fitness, 1)} − ATL ${formatStateInput(fatigue, 1)})`
       : ''}`;
+  const decision = state.label === 'Balanced'
+    ? 'Balanced applies because these values do not meet the Starting, overload, fatigued, building, fresh, or detraining thresholds. Building specifically needs a 7-day CTL ramp of at least +1 and Form below +6 (or unavailable).'
+    : state.label
+      ? `${state.label} is selected by the first matching state rule.`
+      : 'The state is awaiting data until at least one load signal is available.';
+  const note = 'Sleep, session count, and 28-day training time do not change this label.';
+  const rows = [
+    { label: 'Form (TSB)', value: formatStateInput(form, 1, true) },
+    { label: 'CTL', value: formatStateInput(fitness, 1) },
+    { label: 'ATL', value: formatStateInput(fatigue, 1) },
+    { label: '7-day CTL ramp', value: formatStateInput(rampRate, 2, true) },
+  ];
   const details = [
     formText,
     `7-day CTL ramp ${formatStateInput(rampRate, 2, true)}`,
     fitness === null || !Number.isFinite(fitness) ? 'CTL unavailable' : '',
     fatigue === null || !Number.isFinite(fatigue) ? 'ATL unavailable' : '',
   ].filter(Boolean).join('; ');
-  const decision = state.label === 'Balanced'
-    ? 'Balanced applies because these values do not meet the Starting, overload, fatigued, building, fresh, or detraining thresholds. Building specifically needs a 7-day CTL ramp of at least +1 and Form below +6 (or unavailable).'
-    : state.label
-      ? `${state.label} is selected by the first matching state rule.`
-      : 'The state is awaiting data until at least one load signal is available.';
 
-  return `${TRAINING_STATE_INFO_TOOLTIP} Current inputs: ${details}. ${decision} Sleep, session count, and 28-day training time do not change this label.`;
+  return {
+    tooltip: `${TRAINING_STATE_INFO_TOOLTIP} Current inputs: ${details}. ${decision} ${note}`,
+    description: `Form (TSB) is CTL minus ATL. ${decision}`,
+    rows,
+    note,
+  };
+}
+
+export function resolveTrainingStateInfoTooltip(input: TrainingStateSignalInput): string {
+  return buildTrainingStateInfo(input).tooltip;
 }
 
 export function resolveTrainingStateClassification(

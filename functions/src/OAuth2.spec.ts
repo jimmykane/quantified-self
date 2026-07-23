@@ -20,10 +20,14 @@ const mockAdd = vi.fn().mockResolvedValue({ id: 'new-doc-id' });
 const mockBatchCommit = vi.fn().mockResolvedValue({});
 const mockRecursiveDelete = vi.fn().mockResolvedValue({});
 const mockRunTransaction = vi.fn();
+const { mockFieldValueDelete } = vi.hoisted(() => ({
+    mockFieldValueDelete: vi.fn().mockReturnValue('delete-sentinel'),
+}));
 const {
     mockGetUserDeletionGuardState,
     mockGetUserDeletionGuardStateInTransaction,
     mockArchiveOrphanedServiceToken,
+    mockGetWahooUserID,
     mockMarkServiceConnected,
     mockClearServiceDisconnectPending,
     mockResumeServiceDisconnectRetryAfterRecoveryFailure,
@@ -39,6 +43,7 @@ const {
         shouldSkip: false,
     }),
     mockArchiveOrphanedServiceToken: vi.fn().mockResolvedValue(undefined),
+    mockGetWahooUserID: vi.fn().mockResolvedValue('60462'),
     mockMarkServiceConnected: vi.fn().mockResolvedValue(true),
     mockClearServiceDisconnectPending: vi.fn().mockResolvedValue(undefined),
     mockResumeServiceDisconnectRetryAfterRecoveryFailure: vi.fn().mockResolvedValue(true),
@@ -125,6 +130,10 @@ vi.mock('firebase-functions', () => ({
             client_id: 'test-garmin-client-id',
             client_secret: 'test-garmin-client-secret',
         },
+        wahooapi: {
+            client_id: 'test-wahoo-client-id',
+            client_secret: 'test-wahoo-client-secret',
+        },
     }),
     region: () => ({
         https: { onRequest: () => { } },
@@ -148,11 +157,7 @@ vi.mock('firebase-admin', () => {
         batch: batch,
         recursiveDelete: mockRecursiveDelete,
         runTransaction: mockRunTransaction,
-    }), {
-        FieldValue: {
-            delete: vi.fn().mockReturnValue('delete-sentinel'),
-        },
-    });
+    }), {});
     return {
         default: {
             firestore,
@@ -162,6 +167,13 @@ vi.mock('firebase-admin', () => {
         firestore,
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        delete: mockFieldValueDelete,
+        serverTimestamp: vi.fn(() => 'server-timestamp-sentinel'),
+    },
+}));
 
 // Mock tokens
 vi.mock('./tokens', () => ({
@@ -188,6 +200,11 @@ vi.mock('./request-helper', () => ({
     get: vi.fn(() => Promise.resolve({})),
     post: vi.fn(() => Promise.resolve({})),
     delete: vi.fn(() => Promise.resolve({})),
+}));
+
+vi.mock('./wahoo/auth/api', () => ({
+    getWahooUserID: mockGetWahooUserID,
+    deauthorizeWahooUser: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./service-connection-meta', () => ({
@@ -268,6 +285,7 @@ describe('OAuth2', () => {
         });
         installDefaultRunTransactionMock();
         mockArchiveOrphanedServiceToken.mockReset().mockResolvedValue(undefined);
+        mockGetWahooUserID.mockReset().mockResolvedValue('60462');
         mockMarkServiceConnected.mockReset().mockResolvedValue(true);
         mockClearServiceDisconnectPending.mockReset().mockResolvedValue(undefined);
         mockResumeServiceDisconnectRetryAfterRecoveryFailure.mockReset().mockResolvedValue(true);
@@ -299,6 +317,15 @@ describe('OAuth2', () => {
             expect(config).toBeDefined();
             expect(config.tokenCollectionName).toBe('garminAPITokens');
             // Scope might be null or specific, let's just check client existence
+            expect(config.oauth2Client).toBeDefined();
+        });
+
+        it('should return config for WahooAPI', () => {
+            const config = getServiceConfig(ServiceNames.WahooAPI);
+
+            expect(config).toBeDefined();
+            expect(config.tokenCollectionName).toBe('wahooAPIAccessTokens');
+            expect(config.oAuthScopes).toBe('user_read workouts_read workouts_write routes_read routes_write offline_data');
             expect(config.oauth2Client).toBeDefined();
         });
     });
@@ -786,6 +813,7 @@ describe('OAuth2', () => {
                 tokenRootDeleted: true,
                 tokenRootPreservedForOAuthFlow: false,
                 remainingTokenCount: 0,
+                skippedByCondition: false,
             });
         });
 
@@ -799,6 +827,7 @@ describe('OAuth2', () => {
                 tokenRootDeleted: false,
                 tokenRootPreservedForOAuthFlow: false,
                 remainingTokenCount: 1,
+                skippedByCondition: false,
             });
         });
 
@@ -816,6 +845,7 @@ describe('OAuth2', () => {
                 tokenRootDeleted: false,
                 tokenRootPreservedForOAuthFlow: true,
                 remainingTokenCount: 0,
+                skippedByCondition: false,
             });
         });
 
@@ -835,6 +865,24 @@ describe('OAuth2', () => {
                 tokenRootDeleted: true,
                 tokenRootPreservedForOAuthFlow: false,
                 remainingTokenCount: 0,
+                skippedByCondition: false,
+            });
+        });
+
+        it('does not delete a token when the transaction-owned identity cleanup guard is stale', async () => {
+            const guard = vi.fn().mockResolvedValue(false);
+
+            const result = await deleteLocalServiceToken(userID, serviceName, tokenID, {
+                shouldDeleteInTransaction: guard,
+            });
+
+            expect(guard).toHaveBeenCalledTimes(1);
+            expect(transactionDeleteSpy).not.toHaveBeenCalled();
+            expect(result).toEqual({
+                tokenRootDeleted: false,
+                tokenRootPreservedForOAuthFlow: false,
+                remainingTokenCount: 0,
+                skippedByCondition: true,
             });
         });
 
@@ -1321,6 +1369,20 @@ describe('OAuth2', () => {
             expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.SuuntoApp);
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
+        });
+
+        it('stores the Wahoo provider account ID in safe connection metadata after OAuth', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            mockDelete.mockResolvedValue({});
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { access_token: 'mock-token', refresh_token: 'mock-refresh-token' },
+                expired: () => false,
+            } as any);
+            mockGetWahooUserID.mockResolvedValueOnce('60462');
+
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.WahooAPI, redirectUri, code);
+
+            expect(mockMarkServiceConnected).toHaveBeenCalledWith(userID, ServiceNames.WahooAPI, '60462');
         });
 
         it('immediately deauthorizes manual-review OAuth recovery for non-Pro users without marking connected', async () => {

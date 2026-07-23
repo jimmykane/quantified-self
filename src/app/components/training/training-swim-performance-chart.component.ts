@@ -57,7 +57,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
   public view: TrainingSwimPerformanceViewModel = buildTrainingSwimPerformanceViewModel(null, null);
   public showEmpty = true;
   public isUpdating = true;
-  public emptyTitle = 'No swimming sessions yet';
+  public emptyTitle = 'No swimming workouts yet';
   public emptyHint = 'Pool and open-water pace appear after eligible swims are available.';
 
   private readonly chartHost: EChartsHostController;
@@ -117,7 +117,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
       this.emptyHint = 'These swims have no stored Average Swim Pace; rests are not used to estimate it.';
       return;
     }
-    this.emptyTitle = 'No swimming sessions yet';
+    this.emptyTitle = 'No swimming workouts yet';
     this.emptyHint = 'Pool and open-water pace appear after eligible swims are available.';
   }
 
@@ -164,7 +164,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
             }
             return [{
               label: row.label,
-              value: `${formatTrainingSwimPace(row.point.paceSeconds, this.view.usesYards)} · ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(row.point.distanceMeters)} m · ${row.point.activityCount} swim${row.point.activityCount === 1 ? '' : 's'}`,
+              value: `${formatTrainingSwimPace(row.point.paceSeconds, this.view.usesYards)} · ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(row.point.distanceMeters)} m · ${row.point.activityCount} swim ${row.point.activityCount === 1 ? 'workout' : 'workouts'}`,
             }];
           });
           return renderDashboardEChartsTooltipCard(style, {

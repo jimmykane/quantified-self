@@ -3,6 +3,8 @@ import { AppIconService } from './app.icon.service';
 import { MatIconRegistry } from '@angular/material/icon';
 import { DomSanitizer } from '@angular/platform-browser';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('AppIconService', () => {
     let service: AppIconService;
@@ -33,5 +35,14 @@ describe('AppIconService', () => {
         expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalled();
         // We can be more specific if we want, checking for a specific icon
         expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalledWith('logo', undefined);
+        expect(matIconRegistrySpy.addSvgIcon).toHaveBeenCalledWith('wahoo', undefined);
+    });
+
+    it('keeps the Wahoo registry asset as a path-based SVG', () => {
+        const wahooIcon = readFileSync(resolve(process.cwd(), 'src/assets/logos/wahoo.svg'), 'utf8');
+
+        expect(wahooIcon).toContain('<path ');
+        expect(wahooIcon).not.toContain('<image');
+        expect(wahooIcon).not.toContain('data:image');
     });
 });

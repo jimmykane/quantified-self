@@ -13,6 +13,7 @@ export class EventStatsBottomSheetComponent implements AfterViewInit {
     private sheetContainerRef!: ElementRef<HTMLElement>;
 
     public lockedSheetHeightPx: number | null = null;
+    public lockedSheetWidthPx: number | null = null;
 
     constructor(
         @Inject(MAT_BOTTOM_SHEET_DATA) public data: {
@@ -29,7 +30,10 @@ export class EventStatsBottomSheetComponent implements AfterViewInit {
     }
 
     ngAfterViewInit(): void {
-        setTimeout(() => this.captureAndLockSheetHeight());
+        setTimeout(() => {
+            this.captureAndLockSheetHeight();
+            this.captureAndLockSheetWidth();
+        });
     }
 
     private captureAndLockSheetHeight(): void {
@@ -57,6 +61,27 @@ export class EventStatsBottomSheetComponent implements AfterViewInit {
         }
 
         this.lockedSheetHeightPx = Math.round(Math.min(measuredHeight, this.getViewportMaxHeight()));
+    }
+
+    private captureAndLockSheetWidth(): void {
+        if (this.lockedSheetWidthPx !== null) {
+            return;
+        }
+
+        const sheetContainer = this.sheetContainerRef?.nativeElement;
+        const matBottomSheetContainer = sheetContainer?.closest('.mat-bottom-sheet-container') as HTMLElement | null;
+        if (!matBottomSheetContainer) {
+            return;
+        }
+
+        const measuredWidth = matBottomSheetContainer.getBoundingClientRect().width || matBottomSheetContainer.offsetWidth;
+        if (!(measuredWidth > 0)) {
+            return;
+        }
+
+        this.lockedSheetWidthPx = Math.round(measuredWidth);
+        matBottomSheetContainer.style.width = `${this.lockedSheetWidthPx}px`;
+        matBottomSheetContainer.style.minWidth = `${this.lockedSheetWidthPx}px`;
     }
 
     private getViewportMaxHeight(): number {

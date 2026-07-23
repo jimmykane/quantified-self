@@ -24,6 +24,8 @@ export interface TrainingCapacityDisciplineViewModel {
   modeledCriticalPower: TrainingCapacityMarkerViewModel;
   importedVo2Max: TrainingCapacityMarkerViewModel | null;
   interpretation: TrainingCapacityInterpretationViewModel;
+  evidenceText: string;
+  nextStepText: string | null;
 }
 
 const FTP_ALIGNMENT_TOLERANCE = 0.05;
@@ -57,7 +59,7 @@ function formatSource(sourceKey: string | null): string {
 
 function buildImportedMarkerDetail(metric: DashboardTrainingCapacityImportedMetric): string {
   const formattedSource = formatSource(metric.sourceKey);
-  const sourceText = formattedSource ? `Imported from ${formattedSource}` : 'Imported with activity data';
+  const sourceText = formattedSource ? `Imported from ${formattedSource}` : 'Imported with workout data';
   const observationText = metric.firstSeenAtMs === metric.lastSeenAtMs
     ? `seen ${formatDate(metric.lastSeenAtMs)}`
     : `unchanged since ${formatDate(metric.firstSeenAtMs)} · last seen ${formatDate(metric.lastSeenAtMs)}`;
@@ -94,7 +96,7 @@ function buildModeledCriticalPower(
       ? ` · ${formatNumber(model.valueWattsPerKg, 2)} W/kg`
       : '';
     const fitQuality = model.confidence === 'high' ? 'Strong model fit' : 'Moderate model fit';
-    const effortCount = `${formatNumber(model.sourceEventCount)} power-curve ${model.sourceEventCount === 1 ? 'activity' : 'activities'} in window`;
+    const effortCount = `${formatNumber(model.sourceEventCount)} power ${model.sourceEventCount === 1 ? 'workout' : 'workouts'} in window`;
     return {
       label: 'Modeled critical power',
       valueText: `${formatNumber(model.valueWatts)} W${relativePower}`,
@@ -123,18 +125,17 @@ function buildInterpretation(
   const modeledPower = model.status === 'ready' ? model.valueWatts : null;
   if (ftp !== null && modeledPower !== null) {
     const relativeDifference = (modeledPower - ftp) / ftp;
-    const differenceText = `${formatNumber(Math.abs(relativeDifference) * 100)}%`;
     if (relativeDifference > FTP_ALIGNMENT_TOLERANCE) {
       return {
         title: 'Your FTP setting may be conservative',
-        description: `The 90-day model is ${differenceText} above the imported setting. Consider reviewing FTP before using it for zones or workout targets.`,
+        description: 'The 90-day model sits above the imported setting. Review the recent curve before using FTP for zones or workout targets.',
         tone: 'positive',
       };
     }
     if (relativeDifference < -FTP_ALIGNMENT_TOLERANCE) {
       return {
         title: 'Recent efforts have not validated this FTP yet',
-        description: `The 90-day model is ${differenceText} below the imported setting, but this does not show that fitness declined. The curve may simply lack recent maximal efforts across the required durations.`,
+        description: 'The 90-day model sits below the imported setting, but this does not show that fitness declined. The curve may simply lack recent maximal efforts across the required durations.',
         tone: 'caution',
       };
     }
@@ -172,6 +173,40 @@ function buildInterpretation(
   };
 }
 
+function buildEvidenceText(
+  discipline: DashboardTrainingCapacityContext['disciplines'][number],
+): string {
+  const model = discipline.modeledCriticalPower;
+  if (model.status === 'ready') {
+    const fit = model.confidence === 'high' ? 'strong' : 'moderate';
+    return `Evidence quality: ${fit} — ${formatNumber(model.sourceEventCount)} power ${model.sourceEventCount === 1 ? 'workout' : 'workouts'} across the 3–20 minute model range.`;
+  }
+  if (model.status === 'poor-fit') {
+    return 'Evidence quality: limited — recent 3–20 minute efforts do not form a stable power model.';
+  }
+  if (discipline.ftpSetting) {
+    return 'Evidence quality: imported FTP setting only — there is not enough recent power evidence to compare it yet.';
+  }
+  if (discipline.importedVo2Max) {
+    return 'Evidence quality: imported aerobic marker only — it is not interchangeable with a power threshold.';
+  }
+  return 'Evidence quality: unavailable — no imported marker or reliable recent power model is available yet.';
+}
+
+function buildNextStepText(
+  discipline: DashboardTrainingCapacityContext['disciplines'][number],
+): string | null {
+  const ftp = discipline.ftpSetting?.value ?? null;
+  const model = discipline.modeledCriticalPower;
+  if (ftp === null || model.status !== 'ready' || model.valueWatts === null) {
+    return null;
+  }
+  const relativeDifference = Math.abs((model.valueWatts - ftp) / ftp);
+  return relativeDifference > FTP_ALIGNMENT_TOLERANCE
+    ? 'Look at the recent 3–20 minute power curve before changing FTP-based zones or targets.'
+    : null;
+}
+
 export function buildTrainingCapacityViewModels(
   context: DashboardTrainingCapacityContext | null,
 ): TrainingCapacityDisciplineViewModel[] {
@@ -182,5 +217,7 @@ export function buildTrainingCapacityViewModels(
     modeledCriticalPower: buildModeledCriticalPower(discipline),
     importedVo2Max: buildImportedMarker(discipline.importedVo2Max, 'Imported VO₂ max', ' ml/kg/min', 1),
     interpretation: buildInterpretation(discipline),
+    evidenceText: buildEvidenceText(discipline),
+    nextStepText: buildNextStepText(discipline),
   }));
 }

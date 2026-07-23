@@ -349,6 +349,65 @@ describe('LoginComponent', () => {
         expect(mockAuthService.linkWithPopup).toHaveBeenCalledWith(mockUser, expect.anything());
     });
 
+    it('should retry an email-link sign-in with the matching email without logging an expected error', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'wrong@example.com';
+            return null;
+        });
+        mockAuthService.signInWithEmailLink = vi.fn()
+            .mockRejectedValueOnce({ code: 'auth/invalid-email' })
+            .mockResolvedValueOnce({ user: { uid: 'email-link-user' } });
+        const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('matching@example.com');
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.localStorageService.removeItem).toHaveBeenCalledWith('emailForSignIn');
+        expect(promptSpy).toHaveBeenCalledWith(
+            'This magic link was sent to a different email address. Enter the email address that received it to continue.'
+        );
+        expect(mockAuthService.signInWithEmailLink).toHaveBeenNthCalledWith(1, 'wrong@example.com', window.location.href);
+        expect(mockAuthService.signInWithEmailLink).toHaveBeenNthCalledWith(2, 'matching@example.com', window.location.href);
+        expect(mockLogger.error).not.toHaveBeenCalled();
+
+        promptSpy.mockRestore();
+    });
+
+    it('should show an expired magic-link message without reporting it to Sentry', async () => {
+        mockAuthService.isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        mockAuthService.localStorageService.getItem = vi.fn().mockReturnValue('test@example.com');
+        mockAuthService.signInWithEmailLink = vi.fn().mockRejectedValue({
+            code: 'auth/invalid-action-code',
+            message: 'The action code is invalid or expired.',
+        });
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockLogger.error).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Error signing in. The link might be invalid or expired.',
+            'Close'
+        );
+    });
+
+    it('should show a cancelled provider sign-in without reporting it to Sentry', async () => {
+        mockAuthService.googleLogin = vi.fn().mockRejectedValue({
+            code: 'auth/user-cancelled',
+            message: 'The user cancelled sign-in.',
+        });
+        (mockDialog as any).open = vi.fn();
+
+        component.signInWithProvider(SignInProviders.Google);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockLogger.error).not.toHaveBeenCalled();
+        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({ title: 'Login Failed' })
+        }));
+    });
+
     // --- Extensive Testing Additions ---
 
     it('should show error dialog if fetchSignInMethods fails during collision', async () => {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     DERIVED_METRIC_KINDS,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
+    DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
 } from '../../../shared/derived-metrics';
 import {
     ActivityTypeGroups,
@@ -340,6 +341,7 @@ describe('fetchTrainingBuildSleepDocs', () => {
             'timezoneOffsetSeconds',
             'durationSeconds',
             'isNap',
+            'providerFields.suunto.timestamp',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
         );
@@ -853,6 +855,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
                 medianOvernightHrvMs: 50,
             },
         });
+        expect(result.payload.recoveryVersion).toBe(DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION);
         const running = result.payload.disciplines.find(item => item.discipline === 'running');
         expect(running?.recovery).toMatchObject({
             sameProvider: true,
@@ -993,6 +996,42 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(result.payload.recovery.current.bedtimeVariationMinutes).toBe(120);
     });
 
+    it('derives a typical local sleep window only from complete local start and end evidence', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const dayMs = 24 * 60 * 60 * 1000;
+        const firstSleepDayMs = Date.UTC(2026, 5, 25);
+        const sleepDocs = Array.from({ length: 6 }, (_, index) => {
+            const sleepDayMs = firstSleepDayMs + (index * dayMs);
+            const hasCompleteLocalWindow = index < 5;
+            return {
+                id: `local-window-${index}`,
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (90 * 60 * 1000),
+                    ...(hasCompleteLocalWindow ? { endTimeMs: sleepDayMs + ((6 * 60 + 45) * 60 * 1000) } : {}),
+                    durationSeconds: 8 * 3600,
+                    timezoneOffsetSeconds: 0,
+                    isNap: false,
+                    vitals: {},
+                }),
+            };
+        });
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs as any,
+        );
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 6,
+            typicalLocalStartMinutes: (22 * 60) + 30,
+            typicalLocalEndMinutes: (6 * 60) + 45,
+        });
+    });
+
     it('keeps malformed finite timestamps and timezone offsets from poisoning bedtime variation', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const dayMs = 24 * 60 * 60 * 1000;
@@ -1057,6 +1096,39 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
             averageSleepSeconds: 8 * 3600,
             bedtimeVariationMinutes: null,
             medianOvernightHrvMs: 52,
+        });
+    });
+
+    it('uses the local offset preserved in historical Suunto timestamps for bedtime variation', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const dayMs = 24 * 60 * 60 * 1000;
+        const firstSleepDayMs = Date.UTC(2026, 5, 26);
+        const sleepDocs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = firstSleepDayMs + (index * dayMs);
+            return {
+                id: `suunto-offset-${index}`,
+                data: () => ({
+                    source: { provider: 'SuuntoApp' },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (2 * 60 * 60 * 1000),
+                    durationSeconds: 8 * 3600,
+                    isNap: false,
+                    providerFields: { suunto: { timestamp: '2026-06-26T00:00:00+02:00' } },
+                    vitals: {},
+                }),
+            };
+        });
+
+        const result = buildTrainingBuildComparisonMetricPayload(
+            [],
+            {},
+            Date.UTC(2026, 5, 30, 12),
+            sleepDocs as any,
+        );
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 5,
+            bedtimeVariationMinutes: 0,
         });
     });
 

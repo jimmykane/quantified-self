@@ -22,7 +22,7 @@ The application defines three primary user roles based on subscription status:
 ### 3. Pro
 *   **Activity Limit:** Unlimited
 *   **AI Insights Limit:** 100 requests per billing period
-*   **Device Sync:** Full Access (Garmin, Suunto, COROS)
+*   **Device Sync:** Full Access (Garmin, Suunto, COROS, Wahoo)
 *   **Role Key:** `pro`
 
 > **Note:** Exact pricing amounts are configured in the Stripe Dashboard and populated dynamically in the UI.
@@ -40,7 +40,7 @@ Limits are enforced through a scheduled background process (`enforceSubscription
 
 ### Device Synchronization
 *   Sync is exclusively a **Pro** feature.
-*   If a user loses Pro status (and any grace period expires), all external service connections (Garmin, Suunto, COROS) are automatically disconnected.
+*   If a user loses Pro status (and any grace period expires), all external service connections (Garmin, Suunto, COROS, Wahoo) are automatically disconnected.
 
 ---
 

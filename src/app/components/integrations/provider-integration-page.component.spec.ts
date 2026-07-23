@@ -61,7 +61,8 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('Can Suunto routes sync to Garmin courses?');
     expect(text).toContain('FIT activity upload');
-    expect(text).toContain('GPX route upload');
+    expect(text).toContain('GPX and FIT route upload');
+    expect(text).toContain('FIT sources are converted to GPX for Suunto');
     expect(text).toContain('Can Quantified Self sync routes with Suunto?');
   });
 
@@ -73,6 +74,20 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('COROS to Suunto automatic activity sync');
     expect(text).toContain('COROS history import');
     expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
+  });
+
+  it('should render Wahoo import, explicit delivery, and retention boundaries', () => {
+    const fixture = renderProvider('wahoo');
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('Wahoo Integration for Activity Sync and Training Analysis');
+    expect(text).toContain('New workout imports');
+    expect(text).toContain('Wahoo history import');
+    expect(text).toContain('Can I sync Wahoo activities to Suunto automatically?');
+    expect(text).toContain('does not delete activities already imported');
+    expect(text).toContain('Direct GPX/FIT course/route delivery');
+    expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');
+    expect(text).toContain('sleep sync, plans, and other Wahoo forwarding are not enabled');
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {

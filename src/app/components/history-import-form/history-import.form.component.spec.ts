@@ -25,6 +25,7 @@ import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common'; // Added CommonModule
+import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '@shared/history-import.constants';
 
 vi.mock('../../services/app.event.service');
 vi.mock('../../services/app.user.service');
@@ -393,7 +394,7 @@ describe('HistoryImportFormComponent', () => {
             expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalled();
         });
 
-        it('should store pendingImportResult from backend response (COROS/Suunto)', async () => {
+        it('should store pendingImportResult from backend response (COROS/Suunto/Wahoo)', async () => {
             // Setup component for allowed import
             component.serviceName = ServiceNames.COROSAPI;
             component.userMetaForService = {} as UserServiceMetaInterface;
@@ -587,7 +588,7 @@ describe('HistoryImportFormComponent', () => {
         });
 
         it('should work for all service types', async () => {
-            for (const serviceName of [ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.GarminAPI]) {
+            for (const serviceName of [ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.GarminAPI, ServiceNames.WahooAPI]) {
                 // Reset the signal
                 component.isHistoryImportPending.set(false);
 
@@ -611,6 +612,81 @@ describe('HistoryImportFormComponent', () => {
 
                 expect(component.isHistoryImportPending()).toBe(true);
             }
+        });
+    });
+
+    describe('Wahoo history imports', () => {
+        it('enables a first import and renders the generic confirmation copy', () => {
+            component.serviceName = ServiceNames.WahooAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+
+            (component as any).processChanges();
+            fixture.detectChanges();
+
+            expect(component.isAllowedToDoHistoryImport).toBe(true);
+            expect(component.formGroup.enabled).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('I understand this may take hours to days.');
+        });
+
+        it('disables a repeated import during the activity-based cooldown and renders its status', () => {
+            component.serviceName = ServiceNames.WahooAPI;
+            component.userMetaForService = {
+                didLastHistoryImport: Date.now(),
+                processedActivitiesFromLastHistoryImportCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT,
+            } as UserServiceMetaInterface;
+            component.isPro = true;
+
+            (component as any).processChanges();
+            fixture.detectChanges();
+
+            expect(component.isAllowedToDoHistoryImport).toBe(false);
+            expect(component.formGroup.disabled).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('500 activities scheduled from the last import.');
+            expect(fixture.nativeElement.textContent).toContain('Cooldown active for 1 day.');
+            expect(component.nextImportAvailableDate.getTime()).toBeGreaterThan(Date.now());
+        });
+
+        it('enables a repeated import after the activity-based cooldown', () => {
+            component.serviceName = ServiceNames.WahooAPI;
+            component.userMetaForService = {
+                didLastHistoryImport: Date.now() - (2 * 24 * 60 * 60 * 1000),
+                processedActivitiesFromLastHistoryImportCount: HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT,
+            } as UserServiceMetaInterface;
+            component.isPro = true;
+
+            (component as any).processChanges();
+
+            expect(component.isAllowedToDoHistoryImport).toBe(true);
+            expect(component.formGroup.enabled).toBe(true);
+        });
+
+        it('renders Wahoo queue statistics after a successful import request', async () => {
+            component.serviceName = ServiceNames.WahooAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true,
+            });
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({
+                result: 'History items added to queue',
+                stats: {
+                    successCount: 42,
+                    failureCount: 0,
+                    processedBatches: 1,
+                    failedBatches: 0,
+                },
+            });
+
+            await component.onSubmit({ preventDefault: vi.fn() } as any);
+            fixture.detectChanges();
+
+            expect(component.isHistoryImportPending()).toBe(true);
+            expect(fixture.nativeElement.textContent).toContain('42 activities scheduled.');
+            expect(fixture.nativeElement.textContent).toContain('5,000 / day capacity');
         });
     });
 });

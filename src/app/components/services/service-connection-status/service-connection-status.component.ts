@@ -1,4 +1,5 @@
 import { Component, Input } from '@angular/core';
+import { ProviderIconKey } from '@shared/provider-presentation';
 
 @Component({
     selector: 'app-service-connection-status',
@@ -18,6 +19,7 @@ export class ServiceConnectionStatusComponent {
     @Input() statusLabelOverride: string | null = null;
     @Input() statusIconOverride: string | null = null;
     @Input() statusTone: 'default' | 'attention' = 'default';
+    @Input() providerIcon: ProviderIconKey | null = null;
 
     get statusLabel(): string {
         if (this.statusLabelOverride) {

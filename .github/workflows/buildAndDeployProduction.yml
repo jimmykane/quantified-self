@@ -65,6 +65,10 @@ jobs:
           echo "GARMINHEALTHAPI_CONSUMER_SECRET=${{ secrets.GARMINHEALTHAPI_CONSUMER_SECRET }}" >> functions/.env
           echo "GARMINAPI_CLIENT_ID=${{ secrets.GARMINAPI_CLIENT_ID }}" >> functions/.env
           echo "GARMINAPI_CLIENT_SECRET=${{ secrets.GARMINAPI_CLIENT_SECRET }}" >> functions/.env
+          echo "WAHOOAPI_CLIENT_ID=${{ secrets.WAHOOAPI_CLIENT_ID }}" >> functions/.env
+          echo "WAHOOAPI_CLIENT_SECRET=${{ secrets.WAHOOAPI_CLIENT_SECRET }}" >> functions/.env
+          echo "WAHOOAPI_WEBHOOK_TOKEN=${{ secrets.WAHOOAPI_WEBHOOK_TOKEN }}" >> functions/.env
+          echo "WAHOOAPI_ALLOWED_FILE_HOSTS=${{ secrets.WAHOOAPI_ALLOWED_FILE_HOSTS }}" >> functions/.env
 
       - name: Deploy to Firebase
         run: |

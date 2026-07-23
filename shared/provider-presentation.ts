@@ -2,14 +2,15 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 export type ProviderPresentationMode = 'source' | 'destination';
 
-export type ProviderIconKey = 'garmin' | 'suunto' | 'coros';
+export type ProviderIconKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
 
 export type ProviderBrandingVariant =
     | 'garmin'
     | 'garmin-connect'
     | 'suunto'
     | 'suunto-app'
-    | 'coros';
+    | 'coros'
+    | 'wahoo';
 
 export interface ProviderPresentation {
     serviceName: ServiceNames;
@@ -35,30 +36,35 @@ const SOURCE_PROVIDER_LABELS: Record<ServiceNames, string> = {
     [ServiceNames.GarminAPI]: 'Garmin',
     [ServiceNames.SuuntoApp]: 'Suunto',
     [ServiceNames.COROSAPI]: 'COROS',
+    [ServiceNames.WahooAPI]: 'Wahoo',
 };
 
 const DESTINATION_PROVIDER_LABELS: Record<ServiceNames, string> = {
     [ServiceNames.GarminAPI]: 'Garmin Connect',
     [ServiceNames.SuuntoApp]: 'Suunto App',
     [ServiceNames.COROSAPI]: 'COROS',
+    [ServiceNames.WahooAPI]: 'Wahoo',
 };
 
 const PROVIDER_ICON_KEYS: Record<ServiceNames, ProviderIconKey> = {
     [ServiceNames.GarminAPI]: 'garmin',
     [ServiceNames.SuuntoApp]: 'suunto',
     [ServiceNames.COROSAPI]: 'coros',
+    [ServiceNames.WahooAPI]: 'wahoo',
 };
 
 const SOURCE_BRANDING_VARIANTS: Record<ServiceNames, ProviderBrandingVariant> = {
     [ServiceNames.GarminAPI]: 'garmin',
     [ServiceNames.SuuntoApp]: 'suunto',
     [ServiceNames.COROSAPI]: 'coros',
+    [ServiceNames.WahooAPI]: 'wahoo',
 };
 
 const DESTINATION_BRANDING_VARIANTS: Record<ServiceNames, ProviderBrandingVariant> = {
     [ServiceNames.GarminAPI]: 'garmin-connect',
     [ServiceNames.SuuntoApp]: 'suunto-app',
     [ServiceNames.COROSAPI]: 'coros',
+    [ServiceNames.WahooAPI]: 'wahoo',
 };
 
 function normalizeNonEmptyString(value: unknown): string | null {
@@ -70,6 +76,7 @@ export function normalizeProviderServiceName(serviceName: unknown): ServiceNames
         case ServiceNames.GarminAPI:
         case ServiceNames.SuuntoApp:
         case ServiceNames.COROSAPI:
+        case ServiceNames.WahooAPI:
             return serviceName;
         default:
             return null;

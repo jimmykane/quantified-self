@@ -284,6 +284,33 @@ describe('resolveProviderImportEventID', () => {
     expect(mockWarn).not.toHaveBeenCalled();
   });
 
+  it('uses a provider identity event ID when a provider needs stability across edited start times', async () => {
+    const eventID = await resolveProviderImportEventID({
+      userID: 'uid-1',
+      startDate: new Date('2026-07-18T10:00:00.000Z'),
+      serviceName: ServiceNames.WahooAPI,
+      providerEventID: 'workout-1',
+      providerEventIDField: 'serviceWorkoutID',
+      providerEventSecondaryID: 'wahoo-user-1',
+      providerEventSecondaryIDField: 'serviceUserID',
+      preferProviderIdentityEventID: true,
+    });
+
+    expect(eventID).toBe('uid-1|wahooAPI|serviceWorkoutID|workout-1|serviceUserID|wahoo-user-1');
+    expect(mockTransactionSet).toHaveBeenCalledWith(
+      mockReservationRef,
+      expect.objectContaining({
+        providerIdentities: {
+          'uid-1|wahooAPI|serviceWorkoutID|workout-1|serviceUserID|wahoo-user-1': expect.objectContaining({
+            eventID: 'uid-1|wahooAPI|serviceWorkoutID|workout-1|serviceUserID|wahoo-user-1',
+          }),
+        },
+      }),
+      { merge: true },
+    );
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+
   it('skips before writing a reservation when the user is deleted or deleting', async () => {
     mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
       userExists: false,

@@ -311,10 +311,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         },
       },
       grid: {
-        left: 0,
-        right: 0,
+        left: this.isMobile ? 46 : 54,
+        right: this.isMobile ? 10 : 14,
         top: showLegend ? 18 : 0,
-        bottom: this.isMobile ? 8 : 4,
+        bottom: this.isMobile ? 20 : 16,
         outerBoundsMode: 'same',
         outerBoundsContain: 'axisLabel',
       },
@@ -626,12 +626,12 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
   private resolveChartDescription(series: PerformanceCurveDurabilitySeries[]): string {
     const units = new Set(series.map(item => item.outputUnit));
     if (units.size === 1 && units.has('W')) {
-      return 'Power per heartbeat over time. The comparison window excludes warm-up and cooldown.';
+      return 'How consistently you held power for your heart rate. Lower later values can indicate fatigue.';
     }
     if (units.size === 1 && units.has('m/s')) {
-      return 'Speed per heartbeat over time. The comparison window excludes warm-up and cooldown.';
+      return 'How consistently you held speed for your heart rate. Lower later values can indicate fatigue.';
     }
-    return 'Aerobic efficiency over time. The comparison window excludes warm-up and cooldown.';
+    return 'How consistently your output matched your heart rate. Lower later values can indicate fatigue.';
   }
 
   private buildSummaryViewModels(
@@ -641,12 +641,17 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       const { summary } = item;
       const coveragePercent = Math.round(summary.coverageRatio * 100);
       const durationText = this.formatDurationLabel(summary.durationSeconds) || 'Unknown duration';
+      const qualifyingDurationText = this.formatDurationLabel(summary.qualifyingDurationSeconds) || 'No';
+      const outputLabel = summary.outputSource === 'power' ? 'power' : 'speed';
+      const matchedDataText = summary.qualifyingDurationSeconds > 0
+        ? `${qualifyingDurationText} of matched ${outputLabel} and heart-rate data (${coveragePercent}% coverage)`
+        : `No matched ${outputLabel} and heart-rate data`;
       const contextText = summary.context
         ? `${summary.context.poolLengthMeters} m · ${summary.context.stroke} · ${summary.eligibility.validSampleCount} comparable lengths`
-        : `${durationText} · ${coveragePercent}% paired coverage · ${this.formatDurationLabel(summary.qualifyingDurationSeconds) || 'No'} qualifying data`;
+        : `${durationText} total · ${matchedDataText} · warm-up and cool-down excluded`;
       let evidenceText: string | null = null;
       if (summary.evidence?.kind === 'aerobic-efficiency') {
-        evidenceText = `${this.formatSigned(summary.evidence.decouplingPercent)}% decoupling · ${summary.evidence.outputRetentionPercent.toFixed(1)}% output retained · ${this.formatSigned(summary.evidence.heartRateDriftBpm)} bpm HR drift`;
+        evidenceText = `${this.describeEfficiencyChange(summary.evidence.decouplingPercent)}. Second-half ${outputLabel} was ${summary.evidence.outputRetentionPercent.toFixed(1)}% of the first half; ${this.describeHeartRateChange(summary.evidence.heartRateDriftBpm)}.`;
       } else if (summary.evidence?.kind === 'pool-consistency') {
         const swolfText = summary.evidence.swolfChange === null
           ? ''
@@ -656,7 +661,9 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       return {
         activityId: item.activityId,
         label: item.label,
-        eligibilityText: item.eligibilityLabel,
+        eligibilityText: summary.eligibility.eligible
+          ? 'Steady-effort comparison available'
+          : item.eligibilityLabel,
         contextText,
         evidenceText,
         isEligible: summary.eligibility.eligible,
@@ -667,6 +674,28 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
   private formatSigned(value: number): string {
     const formatted = Math.abs(value).toFixed(1).replace(/\.0$/, '');
     return value > 0 ? `+${formatted}` : value < 0 ? `−${formatted}` : formatted;
+  }
+
+  private describeEfficiencyChange(decouplingPercent: number): string {
+    const magnitude = Math.abs(decouplingPercent).toFixed(1).replace(/\.0$/, '');
+    if (decouplingPercent > 0) {
+      return `Power relative to heart rate was ${magnitude}% lower in the second half`;
+    }
+    if (decouplingPercent < 0) {
+      return `Power relative to heart rate was ${magnitude}% higher in the second half`;
+    }
+    return 'Power relative to heart rate was unchanged between halves';
+  }
+
+  private describeHeartRateChange(heartRateDriftBpm: number): string {
+    const magnitude = Math.abs(heartRateDriftBpm).toFixed(1).replace(/\.0$/, '');
+    if (heartRateDriftBpm > 0) {
+      return `average heart rate was ${magnitude} bpm higher`;
+    }
+    if (heartRateDriftBpm < 0) {
+      return `average heart rate was ${magnitude} bpm lower`;
+    }
+    return 'average heart rate was unchanged';
   }
 
 }

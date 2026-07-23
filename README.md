@@ -9,7 +9,7 @@ Try the hosted app at [quantified-self.io](https://www.quantified-self.io/).
 ## Highlights
 
 - Import activity files in FIT, GPX, TCX, JSON, and SML formats.
-- Connect Garmin, Suunto, and COROS for supported activity, route, and sleep workflows.
+- Connect Garmin, Suunto, COROS, and Wahoo for supported activity, route, sleep, and history workflows.
 - Explore configurable dashboards, training readiness, load trends, power curves, intensity zones, laps, and durability metrics.
 - View activities and saved routes with Mapbox-powered maps and route tools.
 - Compare recordings from multiple devices, share selected activities, and export your data.
@@ -123,6 +123,7 @@ Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are use
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET`, `GARMINHEALTHAPI_CONSUMER_KEY`, `GARMINHEALTHAPI_CONSUMER_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
+| Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, optional `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY` or `STRIPE_API_KEY` |
 | AI Insights | `GEMINI_API_KEY` |
 | Backend Mapbox access | `MAPBOX_ACCESS_TOKEN` |
@@ -157,7 +158,7 @@ Self-hosting is an advanced workflow rather than a turnkey installation. A fork 
 - Auth providers, authorized domains, redirect URIs, App Check, and Remote Config.
 - Function regions, Cloud Tasks queues, buckets, allowed origins, and email URLs.
 - Firebase Extension instances and Secret Manager bindings.
-- Garmin, Suunto, COROS, Stripe, Gemini, Mapbox, email, and observability credentials used by enabled features.
+- Garmin, Suunto, COROS, Wahoo, Stripe, Gemini, Mapbox, email, and observability credentials used by enabled features.
 
 Audit all project-specific identifiers and domains before deploying a fork. Deployment, publishing, and cloud configuration changes should always be deliberate, separate operations.
 
@@ -178,6 +179,8 @@ These policies are infrastructure configuration; starting local emulators does n
 
 ## Architecture documentation
 
+- [Provider integration implementation guide](docs/provider-integration-guide.md)
+- [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)

@@ -18,6 +18,7 @@ interface BackfillActivitySyncRouteRequest {
 
 interface BackfillActivitySyncRouteResponse {
     scanned: number;
+    sourceActivityCount: number;
     queued: number;
     skippedByReason: Record<string, number>;
     failedCount: number;
@@ -31,6 +32,7 @@ interface BackfillFailedEvent {
 }
 
 interface BackfillEventProcessingResult {
+    sourceActivityCount: number;
     queued: number;
     skippedByReason: Record<string, number>;
     failedEvent?: BackfillFailedEvent;
@@ -135,21 +137,26 @@ async function processBackfillEvent(params: {
         eventSnapshot,
     } = params;
     const eventID = eventSnapshot.id;
+    let sourceActivityCount = 0;
 
     try {
         const sourceMetaSnapshot = await eventSnapshot.ref.collection('metaData').doc(sourceServiceName).get();
         if (!sourceMetaSnapshot.exists) {
-            // Event was not imported from the selected source route, skip silently.
             return {
+                sourceActivityCount: 0,
                 queued: 0,
-                skippedByReason: {},
+                skippedByReason: {
+                    not_imported_from_source: 1,
+                },
             };
         }
+        sourceActivityCount = 1;
 
         const existingRouteMetadataSnapshot = await eventSnapshot.ref.collection('metaData').doc(routeMetadataDocId).get();
         const existingRouteMetadata = asRecord(existingRouteMetadataSnapshot.data()) || undefined;
         if (existingRouteMetadata?.status === 'success') {
             return {
+                sourceActivityCount,
                 queued: 0,
                 skippedByReason: {
                     already_synced: 1,
@@ -160,6 +167,7 @@ async function processBackfillEvent(params: {
         const eventData = asRecord(eventSnapshot.data());
         if (!eventData) {
             return {
+                sourceActivityCount,
                 queued: 0,
                 skippedByReason: {
                     event_payload_invalid: 1,
@@ -180,6 +188,7 @@ async function processBackfillEvent(params: {
                 detail: 'No stored original files found for event.',
             });
             return {
+                sourceActivityCount,
                 queued: 0,
                 skippedByReason: {
                     missing_original_files: 1,
@@ -200,12 +209,14 @@ async function processBackfillEvent(params: {
         });
 
         return {
+            sourceActivityCount,
             queued: enqueueResult.queued,
             skippedByReason: enqueueResult.skippedByReason,
         };
     } catch (error) {
         logger.error(`[ActivitySyncBackfill] Failed processing event ${eventID}`, error);
         return {
+            sourceActivityCount,
             queued: 0,
             skippedByReason: {},
             failedEvent: {
@@ -265,6 +276,7 @@ export const backfillActivitySyncRoute = onCall({
     }
 
     const skippedByReason: Record<string, number> = {};
+    let sourceActivityCount = 0;
     let queued = 0;
     let scanned = 0;
     const routeMetadataDocId = getActivitySyncMetadataDocId(routeId);
@@ -292,6 +304,7 @@ export const backfillActivitySyncRoute = onCall({
             })));
 
             for (const chunkResult of chunkResults) {
+                sourceActivityCount += chunkResult.sourceActivityCount;
                 queued += chunkResult.queued;
                 mergeSkippedReasons(skippedByReason, chunkResult.skippedByReason);
                 if (chunkResult.failedEvent) {
@@ -312,6 +325,7 @@ export const backfillActivitySyncRoute = onCall({
 
     return {
         scanned,
+        sourceActivityCount,
         queued,
         skippedByReason,
         failedCount,

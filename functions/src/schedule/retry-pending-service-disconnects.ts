@@ -5,6 +5,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
+import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { getTokenData } from '../tokens';
 import {
   cleanupServiceConnectionForUser,
@@ -45,6 +46,10 @@ const PENDING_DISCONNECT_COLLECTIONS: ReadonlyArray<PendingDisconnectCollectionC
   {
     serviceName: ServiceNames.GarminAPI,
     collectionName: GARMIN_API_TOKENS_COLLECTION_NAME,
+  },
+  {
+    serviceName: ServiceNames.WahooAPI,
+    collectionName: WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
   },
 ];
 

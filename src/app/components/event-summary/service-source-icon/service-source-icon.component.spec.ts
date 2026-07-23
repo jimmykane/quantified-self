@@ -4,7 +4,7 @@ import { ServiceSourceIconComponent } from './service-source-icon.component';
 import { AppEventService } from '../../../services/app.event.service';
 import { of } from 'rxjs';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
-import { MatIconModule } from '@angular/material/icon';
+import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { buildSourceProviderPresentation } from '../../../helpers/provider-presentation.helper';
 
@@ -12,17 +12,29 @@ describe('ServiceSourceIconComponent', () => {
     let component: ServiceSourceIconComponent;
     let fixture: ComponentFixture<ServiceSourceIconComponent>;
     let eventService: any;
+    let iconRegistry: {
+        getDefaultFontSetClass: ReturnType<typeof vi.fn>;
+        getNamedSvgIcon: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(async () => {
         eventService = {
             getEventMetaDataKeys: vi.fn().mockReturnValue(of([]))
+        };
+        iconRegistry = {
+            getDefaultFontSetClass: vi.fn(() => ['material-icons']),
+            getNamedSvgIcon: vi.fn(() => {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                return of(svg);
+            }),
         };
 
         await TestBed.configureTestingModule({
             declarations: [ServiceSourceIconComponent],
             imports: [MatIconModule, MatTooltipModule],
             providers: [
-                { provide: AppEventService, useValue: eventService }
+                { provide: AppEventService, useValue: eventService },
+                { provide: MatIconRegistry, useValue: iconRegistry }
             ]
         }).compileComponents();
 
@@ -110,6 +122,38 @@ describe('ServiceSourceIconComponent', () => {
 
         expect(component.serviceName).toBe(ServiceNames.COROSAPI);
         expect(component.serviceLogo).toBe('coros');
+    });
+
+    it('should detect Wahoo service source', () => {
+        const user = { getID: () => 'user-1' } as any as User;
+        const event = { getID: () => 'event-1' } as any as EventInterface;
+        eventService.getEventMetaDataKeys.mockReturnValue(of([ServiceNames.WahooAPI]));
+
+        component.user = user;
+        component.event = event;
+        component.ngOnChanges({
+            event: { currentValue: event, previousValue: null, firstChange: true, isFirstChange: () => true }
+        });
+
+        expect(component.serviceName).toBe(ServiceNames.WahooAPI);
+        expect(component.serviceLogo).toBe('wahoo');
+        expect(component.serviceDisplayName).toBe('Wahoo');
+    });
+
+    it('renders Wahoo through the shared SVG icon registry', () => {
+        component.sourceServiceName = ServiceNames.WahooAPI;
+        component.ngOnChanges({
+            sourceServiceName: {
+                currentValue: ServiceNames.WahooAPI,
+                previousValue: null,
+                firstChange: true,
+                isFirstChange: () => true
+            }
+        });
+        fixture.detectChanges();
+
+        expect(iconRegistry.getNamedSvgIcon).toHaveBeenCalled();
+        expect(iconRegistry.getNamedSvgIcon.mock.calls[0][0]).toBe('wahoo');
     });
 
     it('should clear stale service source when the next lookup has no keys', () => {

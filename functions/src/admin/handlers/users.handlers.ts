@@ -6,6 +6,7 @@ import { onAdminCall } from '../../shared/auth';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
+import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../../wahoo/constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import {
     ACTIVE_SUBSCRIPTION_STATUSES,
@@ -328,6 +329,9 @@ export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
                     break;
                 case 'coros':
                     collectionName = COROSAPI_ACCESS_TOKENS_COLLECTION_NAME;
+                    break;
+                case 'wahoo':
+                    collectionName = WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME;
                     break;
             }
 

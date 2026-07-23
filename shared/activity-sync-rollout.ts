@@ -4,6 +4,10 @@ export const ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS: Record<ActivitySyncRouteId, Reado
     // Empty allowlist disables UID-gating for the route (production-wide rollout).
     [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: [],
     [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]: [],
+    [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI]: [],
+    [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI]: [],
+    [ACTIVITY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: [],
+    [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp]: [],
 };
 
 export function isActivitySyncRouteUIDAllowlisted(routeId: ActivitySyncRouteId, uid: string): boolean {

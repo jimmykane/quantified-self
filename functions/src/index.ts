@@ -72,6 +72,13 @@ export {
   deauthorizeCOROSAPI,
 } from './coros/auth/wrapper';
 
+export {
+  getWahooAPIAuthRequestTokenRedirectURI,
+  requestAndSetWahooAPIAccessToken,
+  deauthorizeWahooAPI,
+  getWahooAPIConnectionAccount,
+} from './wahoo/auth/wrapper';
+
 // Suunto Auth
 export {
   getSuuntoAPIAuthRequestTokenRedirectURI,
@@ -103,6 +110,10 @@ export {
 export {
   parseCOROSAPIWorkoutQueue,
 } from './queue';
+
+export { parseWahooAPIWorkoutQueue } from './queue';
+export { wahooAPIWebhook } from './wahoo/webhook';
+export { addWahooAPIHistoryToQueue } from './wahoo/history-to-queue';
 
 
 // Suunto Queue & History
@@ -148,6 +159,7 @@ export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
   disableActivitySyncRoutesOnCOROSTokenRootDelete,
+  disableActivitySyncRoutesOnWahooTokenRootDelete,
 } from './activity-sync/disconnect-routes';
 
 // Tokens
@@ -157,7 +169,10 @@ export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 
 // Suunto Utils
 export { importActivityToSuuntoApp } from './suunto/activities';
+export { importActivityToWahooAPI, getWahooAPIWorkoutFileUploadStatus } from './wahoo/activities';
+export { importRouteToWahooAPI } from './wahoo/routes';
 export { importRouteToSuuntoApp } from './suunto/routes';
+export { importRouteToGarminAPI } from './garmin/manual-route-upload';
 export { sendRoutesToService } from './routes/send-routes-to-service';
 export { backfillRouteDeliverySyncRoute } from './route-delivery-sync/backfill';
 export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';

@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../../coros/constants';
+import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../../wahoo/constants';
 import { toEpochMillis } from './date.utils';
 import { BasicUser, CountStats, EnrichedUser } from './types';
 
@@ -109,7 +110,7 @@ export async function enrichUsers(
             const hasSubscribedOnce = userFlagsByUid.get(user.uid)?.hasSubscribedOnce === true;
 
             try {
-                const [subsSnapshot, garminDoc, suuntoSnapshot, corosSnapshot] = await Promise.all([
+                const [subsSnapshot, garminDoc, suuntoSnapshot, corosSnapshot, wahooSnapshot] = await Promise.all([
                     db.collection('customers')
                         .doc(user.uid)
                         .collection('subscriptions')
@@ -119,7 +120,8 @@ export async function enrichUsers(
                         .get(),
                     db.collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get(),
                     db.collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get(),
-                    db.collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get()
+                    db.collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get(),
+                    db.collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get()
                 ]);
 
                 if (!subsSnapshot.empty) {
@@ -183,6 +185,11 @@ export async function enrichUsers(
                     const doc = corosSnapshot.docs[0];
                     const docData = doc.data();
                     connectedServices.push({ provider: 'COROS', connectedAt: docData?.dateCreated || doc.createTime });
+                }
+                if (!wahooSnapshot.empty) {
+                    const doc = wahooSnapshot.docs[0];
+                    const docData = doc.data();
+                    connectedServices.push({ provider: 'Wahoo', connectedAt: docData?.dateCreated || doc.createTime });
                 }
             } catch (e) {
                 logger.warn(`Failed to fetch details for ${user.uid}`, e);

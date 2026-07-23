@@ -184,7 +184,6 @@ describe('Firebase Hosting configuration', () => {
       `${siteOrigin}/integrations/garmin`,
       `${siteOrigin}/integrations/suunto`,
       `${siteOrigin}/features/fit-gpx-route-files`,
-      `${siteOrigin}/guides`,
       `${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`,
     ];
 
@@ -193,11 +192,15 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
-  it('marks Training launch surfaces and Help content as recently updated in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-18');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-18');
+  it('marks Wahoo activity-sync launch surfaces and Help content as recently updated in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-07-18');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-07-19');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-07-21');
   });
 
   it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {

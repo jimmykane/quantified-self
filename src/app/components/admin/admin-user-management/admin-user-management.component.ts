@@ -120,7 +120,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     currentPage = 0;
     pageSize = 10;
     pageSizeOptions: number[] = [10, 25, 50];
-    filterService: 'garmin' | 'suunto' | 'coros' | undefined = undefined;
+    filterService: 'garmin' | 'suunto' | 'coros' | 'wahoo' | undefined = undefined;
 
     // Search and sort state
     searchTerm = '';
@@ -324,7 +324,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
         this.searchSubject.next('');
     }
 
-    onFilterServiceChange(service: 'garmin' | 'suunto' | 'coros' | undefined): void {
+    onFilterServiceChange(service: 'garmin' | 'suunto' | 'coros' | 'wahoo' | undefined): void {
         this.filterService = service;
         this.currentPage = 0;
         this.fetchUsers();
@@ -489,6 +489,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             case 'garmin': return 'assets/logos/garmin.svg';
             case 'suunto': return 'assets/logos/suunto.svg';
             case 'coros': return 'assets/logos/coros.svg';
+            case 'wahoo': return 'assets/logos/wahoo.svg';
             default: return '';
         }
     }

@@ -158,7 +158,7 @@
           <button mat-button type="button"
             class="route-bulk-action-button"
             [matMenuTriggerFor]="routeBulkSendMenu"
-            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || (selectedSendableRouteCount() === 0 && selectedSendableRoutesToGarminCount() === 0)"
+            [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || (selectedSendableRouteCount() === 0 && selectedSendableRoutesToGarminCount() === 0 && selectedSendableRoutesToWahooCount() === 0)"
             aria-label="Send selected routes to a connected service"
             (click)="$event.preventDefault(); $event.stopPropagation()">
             <span class="route-bulk-action-content">
@@ -181,6 +181,14 @@
               (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToGarmin()">
               <mat-icon>cloud_upload</mat-icon>
               <span>Garmin</span>
+            </button>
+            }
+            @if (selectedSendableRoutesToWahooCount() > 0 || canSendRoutesToWahoo()) {
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToWahoo() || selectedSendableRoutesToWahooCount() === 0"
+              (click)="$event.preventDefault(); $event.stopPropagation(); sendSelectedRoutesToWahoo()">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Wahoo</span>
             </button>
             }
           </mat-menu>
@@ -520,7 +528,7 @@
             </button>
             <button mat-menu-item type="button"
               [matMenuTriggerFor]="routeRowSendMenu"
-              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || (!item.canSendToSuunto && !item.canSendToGarmin && !item.garminSendDisabledReason)"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || deletingRouteID() === item.route.id || downloadingRouteID() === item.route.id || reprocessingRouteID() === item.route.id || exportingRouteID() === item.route.id || (!item.canSendToSuunto && !item.canSendToGarmin && !item.canSendToWahoo && !item.garminSendDisabledReason)"
               (click)="$event.stopPropagation()">
               <mat-icon>cloud_upload</mat-icon>
               <span>Send to</span>
@@ -547,6 +555,14 @@
               (click)="sendRouteToGarmin(item.route)">
               <mat-icon>cloud_upload</mat-icon>
               <span>{{ item.garminSendMenuLabel }}</span>
+            </button>
+            }
+            @if (canSendRoutesToWahoo()) {
+            <button mat-menu-item type="button"
+              [disabled]="bulkActionInProgress() || sendingToServiceRouteID() !== null || !canSendRoutesToWahoo() || !item.canSendToWahoo"
+              (click)="sendRouteToWahoo(item.route)">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Wahoo</span>
             </button>
             }
           </mat-menu>

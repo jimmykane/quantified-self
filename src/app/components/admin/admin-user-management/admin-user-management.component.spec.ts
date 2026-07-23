@@ -766,6 +766,7 @@ describe('AdminUserManagementComponent', () => {
             expect(component.getServiceLogo('garmin')).toBe('assets/logos/garmin.svg');
             expect(component.getServiceLogo('Suunto')).toBe('assets/logos/suunto.svg');
             expect(component.getServiceLogo('COROS')).toBe('assets/logos/coros.svg');
+            expect(component.getServiceLogo('Wahoo')).toBe('assets/logos/wahoo.svg');
         });
 
         it('should return empty for unknown', () => {

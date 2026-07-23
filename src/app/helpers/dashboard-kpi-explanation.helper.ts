@@ -115,9 +115,9 @@ function resolveDescription(inputs: DashboardKpiExplanationInputs): string {
         ? 'Shows pool durability from persisted eligible activity evidence; higher pace retention is steadier.'
         : 'Shows long-session durability from persisted eligible activity evidence; lower aerobic decoupling is steadier.';
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
-      return 'Combines current Form, ramp rate, CTL, and ATL from the same UTC-day Form model into one current-state label.';
+      return 'Combines current Form, ramp rate, CTL, and ATL from the same UTC-day Form model into one current-state label. It is TSS-only; Today Readiness separately adds recorded recovery signals when available.';
     case DASHBOARD_FORM_NOW_KPI_CHART_TYPE:
-      return 'Current Form is TSB: CTL minus ATL. It uses the same UTC-day Form series as the chart and decays through today after the latest workout.';
+      return 'Current Form is TSB: CTL minus ATL. It uses the same UTC-day Form series as the chart and decays through today after the latest workout. It is TSS-only; Today Readiness separately adds recorded recovery signals when available.';
     case DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE:
       return 'Fitness is current CTL, a 42-day exponential moving average of daily TSS, carried through empty UTC days with zero load.';
     case DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE:
@@ -129,7 +129,7 @@ function resolveDescription(inputs: DashboardKpiExplanationInputs): string {
     case DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE:
       return 'Estimates zero-load days until current Form returns to neutral.';
     case DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE:
-      return 'Projects Form seven days ahead assuming no new training load.';
+      return 'Projects TSS-only Form seven days ahead assuming no new training load. It does not forecast sleep or other recovery signals.';
     case DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE:
       return 'Summarizes the latest weekly Easy, Moderate, and Hard intensity mix.';
     case DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE:
@@ -202,6 +202,7 @@ function resolveMetricRows(
     case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
       return [
         textRow('Model basis', 'UTC daily TSS; zero-load decay through today'),
+        textRow('Recovery context', 'Not included; see Today Readiness'),
         textRow('Current label', inputs.primaryValueText),
         textRow('Reason', inputs.primaryLabel),
         metricRow('Form (TSB)', inputs.formNow?.value, formatMetricValue, { signed: true }),
@@ -214,6 +215,7 @@ function resolveMetricRows(
         metricRow('Current TSB', inputs.formNow?.value, formatMetricValue, { signed: true }),
         textRow('Formula', 'CTL - ATL'),
         textRow('Daily input', 'Training Stress Score (TSS)'),
+        textRow('Recovery context', 'Not included; see Today Readiness'),
         textRow('Empty UTC days', '0 TSS through today'),
       ].filter(isExplanationRow);
     case DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE:
@@ -249,6 +251,7 @@ function resolveMetricRows(
       return [
         metricRow('Projected TSB', inputs.formPlus7d?.value, formatMetricValue, { signed: true }),
         dateRow('Projected day', inputs.formPlus7d?.projectedDayMs, locale),
+        textRow('Recovery context', 'Not forecast; see Today Readiness'),
       ].filter(isExplanationRow);
     case DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE:
       return [

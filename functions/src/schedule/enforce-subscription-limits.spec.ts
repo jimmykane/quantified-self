@@ -175,6 +175,7 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('orphan1', ServiceNames.SuuntoApp);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('orphan1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('orphan1', ServiceNames.GarminAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('orphan1', ServiceNames.WahooAPI);
 
         expect(orphanSystemDoc.set).not.toHaveBeenCalled();
         expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
@@ -262,6 +263,7 @@ describe('enforceSubscriptionLimits', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.WahooAPI);
     });
 
     it('should initialize grace period if missing (Fail-safe)', async () => {

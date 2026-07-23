@@ -6,6 +6,7 @@ import {
   POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
+  POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
 
 export type HelpSectionId =
@@ -65,12 +66,12 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
 ## Load and readiness
 
-- The top **Training state** is a conservative label from the current TSS-derived Form model: Form (CTL minus ATL), 7-day CTL ramp, current CTL, and current ATL. The info control beside the current label shows those exact contributing values and explains the selected state. **Balanced** means none of the Starting, overload, fatigued, building, fresh, or detraining thresholds applies. Sleep, sessions, and the 28-day time comparison do not change this label. While its Form/TSS snapshot refreshes, Training keeps the latest complete state visible and labels it as updating rather than treating it as a newly calculated result.
+- The top **Training state** is a conservative label from the current TSS-derived Form model: Form (CTL minus ATL), 7-day CTL ramp, current CTL, and current ATL. The info control beside the current label shows those exact contributing values and explains the selected state. On desktop it opens a details menu; on a phone it opens the same content in a proper dialog rather than a transient tooltip. **Balanced** means none of the Starting, overload, fatigued, building, fresh, or detraining thresholds applies. Sleep, sessions, and the 28-day time comparison do not change this label. Dashboard **Today** shows the same compact state label and caption before Readiness, with an explicit **TSS only** qualifier. While its Form/TSS snapshot refreshes, Training keeps the latest complete state visible and labels it as updating rather than treating it as a newly calculated result.
 - **What drove this** compares the current 28 days with the median of the prior three 28-day blocks. It separates parent-event TSS from child sport-group load, shows top parent-event contributors, keeps Other and unclassified child activities visible, reports load coverage, and compares sport-specific training rhythm. Raw load and composition changes use neutral higher/lower language because a larger load is not inherently good or bad.
-- **Readiness today** uses the same current formula as Dashboard Today. It combines derived Form/ramp with a bounded 30-day sleep-only query; the browser does not load event or activity history. The latest non-nap night must be no more than 48 hours old. HRV, average sleep HR, and minimum sleep HR compare with up to 14 prior nights from the same provider and require at least three matching values. Average HR leads the single Overnight HR driver at 70%, minimum HR contributes 30%, and either can stand alone when the other is missing. Lower Overnight HR versus personal baseline supports readiness; missing evidence is never zero. Current normalized Suunto sleep records can provide both HR measures, COROS records can provide average HR, and Garmin Health sleep summaries currently provide neither normalized sleep-HR measure. It re-evaluates automatically when time alone makes a future record eligible, expires the latest night, or removes baseline evidence. Score, status, confidence, calculation time, driver freshness, and missing signals remain separate. Failed load or sleep reads are identified separately from missing evidence. Sleep already loaded before a listener failure remains visible only while eligible, with available load-only context afterward. Its short training implication is context, not a workout instruction.
+- **Readiness today** uses the same current formula as Dashboard Today. It combines derived Form/ramp with a bounded 30-day sleep-only query; the browser does not load event or activity history. The latest non-nap night must be no more than 48 hours old. HRV, average sleep HR, and minimum sleep HR compare with up to 14 prior nights from the same provider and require at least three matching values. Average HR leads the single Overnight HR driver at 70%, minimum HR contributes 30%, and either can stand alone when the other is missing. Lower Overnight HR versus personal baseline supports readiness; missing evidence is never zero. Current normalized Suunto sleep records can provide both HR measures, COROS records can provide average HR, and Garmin Health sleep summaries currently provide neither normalized sleep-HR measure. **Readiness is recovery-aware; Form, Freshness, CTL, ATL, forecasts, and the Training state remain TSS-only.** An active imported post-workout recovery timer appears as separate context in Readiness; it never changes the score or Freshness. It re-evaluates automatically when time alone makes a future record eligible, expires the latest night, or removes baseline evidence. Score, status, confidence, calculation time, driver freshness, and missing signals remain separate. Failed load or sleep reads are identified separately from missing evidence. Sleep already loaded before a listener failure remains visible only while eligible, with available load-only context afterward. Its short training implication is context, not a workout instruction.
 - The **14-day trend** is a backend-derived daily series built with the same formula. A readiness-only refresh reuses the prepared Form snapshot and a bounded sleep envelope, without scanning activity history; each daily point applies its own 30-day sleep window. Each point uses only evidence available by that UTC day cutoff, and missing scores stay as gaps. Today's chart point follows the live current result only when the retained series reaches the current UTC day.
 - **Recovery history** is expandable inside Readiness today. It places recorded overnight sleep beside training without changing the Training state or claiming that sleep caused a performance change. It compares the current 28 days with the preceding 84 days. Every ready **Best build vs now** card separately keeps sleep where it directly compares the exact current and saved benchmark ranges, with full metrics and source notes under **Details**.
-- Recovery history uses the longest valid main overnight record from each provider per sleep date; naps are excluded. Average sleep appears with at least three recorded nights, while bedtime variation and overnight HRV need at least five qualifying nights. Bedtime variation uses only nights with a trustworthy local timezone offset; a night without one can still contribute duration and HRV. Missing nights and missing HRV are never counted as zero. These 28/84-day and build comparisons do not create a readiness score. Readiness today can use a provider sleep score or recorded duration, but does not blend sleep stages, SpO₂, or respiration.
+- Recovery history uses the longest valid main overnight record from each provider per sleep date; naps are excluded. Average sleep appears with at least three recorded nights, while bedtime variation and overnight HRV need at least five qualifying nights. Bedtime variation uses only nights with a trustworthy local timezone offset, including the offset retained on older Suunto sleep timestamps; a night without one can still contribute duration and HRV. Missing nights and missing HRV are never counted as zero. These 28/84-day and build comparisons do not create a readiness score. Readiness today can use a provider sleep score or recorded duration, but does not blend sleep stages, SpO₂, or respiration.
 - Deltas require the same sleep provider in both windows and sufficient coverage in each: at least seven recorded nights and at least half of the window. When coverage is limited or providers differ, Training can show the available values but withholds change claims. This protects comparisons when a device was connected late or changed between builds.
 - When a recent activity supplies a still-active device recovery estimate, Training can show the imported post-workout time remaining. It updates each minute, is omitted when missing or elapsed, is not a readiness score, and does not change the Training state.
 
@@ -84,7 +85,7 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 ## Evidence and missing data
 
 - When a derived comparison is missing or rebuilding, Training says it is preparing rather than showing a zero-session result. A confirmed empty state means no eligible activity leg was found in the latest 28 days.
-- **Durability** replaces the old aggregate efficiency trend on Training. Its Running, Cycling, Pool, and Open water tabs compare the current 28 days with the median of the prior three 28-day blocks, expose candidate and eligible activity coverage, preserve output and pool-length/stroke contexts, and show primary exclusion reasons. A context needs eligible evidence in at least two prior blocks before Training calls it usual. Each context also plots a readable 12-week durability trend: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. A Cycling Power Curve proves that power was recorded, but it does not by itself make the ride comparable durability evidence; cycling also needs paired heart rate, sufficient duration and coverage, steady output, and no more than 20% in zones 4–7. Cycling trajectory bars show power-recorded activities while their labels show eligible / power-recorded counts. Weeks without a comparable session explain their primary exclusions instead of being called simply empty, and lines never bridge those gaps. Evidence is generated when supported activities are processed; older activities that have not yet been reprocessed stay explicitly missing. Activity-level timelines remain on event detail pages and are not persisted in Training snapshots.
+- **Durability** replaces the old aggregate efficiency trend on Training. Its Running, Cycling, Pool, and Open water tabs compare the current 28 days with the median of the prior three 28-day blocks, expose candidate and eligible activity coverage, preserve output and pool-length/stroke contexts, and show primary exclusion reasons. A context needs eligible evidence in at least two prior blocks before Training calls it usual. Each context also plots a readable 12-week durability trend: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. A Cycling Power Curve proves that power was recorded, but it does not by itself make the ride comparable durability evidence; cycling also needs paired heart rate, sufficient duration and coverage, steady output, and no more than 20% in zones 4–7. Cycling trajectory bars show power-recorded activities while their labels show eligible / power-recorded counts. Weeks without a comparable session explain their primary exclusions instead of being called simply empty, and lines never bridge those gaps. A lower output-to-heart-rate ratio later in one session can suggest a fade only when you intended a similarly steady effort; intentional easing, terrain changes, coasting, or a pace change can produce it too. Use repeated comparable sessions as a trend, and treat missing durability as no suitable comparison rather than zero. Evidence is generated when supported activities are processed; older activities that have not yet been reprocessed stay explicitly missing. Activity-level timelines remain on event detail pages and are not persisted in Training snapshots.
 - Capacity markers are separated by sport, meaning, source, and time window. **FTP setting** is the latest positive FTP imported with an eligible activity; repeated carried values are deduplicated and shown with when that setting was first and last seen. A value that exactly matches the session-derived estimate of 95% of that activity's 20-minute best is not presented as an imported setting.
 - **Modeled critical power** comes from the aggregate best 3–20 minute power curve over the latest 90 days, never from one activity's Critical Power field. It appears only when the curve covers the required durations without large interpolation gaps and passes fit-quality checks. The fit-quality label and number of activities with usable power curves stay visible; neither is a guarantee that every effort was maximal.
 - FTP and modeled critical power are interpreted as setting versus recent performance evidence. A lower model means recent efforts have not validated the setting; it does not by itself mean fitness declined, especially when the window lacks recent maximal efforts.
@@ -140,7 +141,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Dashboard** is your main activity overview.
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
-- **Services** is where you connect Garmin, Suunto, and COROS.
+- **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.
 - **Subscription** is where you review your current plan.
 - **Release Notes** shows product updates and fixes.
@@ -161,7 +162,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
-- New dashboards start clean. The optional Dashboard **Today** header contains current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, Overnight HR, and an **Open Training** action. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
+- New dashboards start clean. The optional Dashboard **Today** header begins with the same TSS-only **Training state** shown in Training, then shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, Overnight HR, and an **Open Training** action. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
 - **Training** remains the fixed analytical workspace. Dashboard tiles can reuse selected derived evidence without changing Training calculations or layout.
 - Existing curated and KPI tiles are preserved until you edit or remove them in Dashboard manager.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
@@ -173,14 +174,15 @@ export const HELP_SECTIONS: HelpSection[] = [
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - **Aerobic Capacity** shows the latest imported running or cycling VO2 max and compares only observations from the same source. It does not substitute FTP or modeled critical power for VO2 max.
 - **Aerobic Durability** shows the current persisted long-session context with the strongest sample evidence: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. Missing and ineligible activity evidence stays unavailable.
-- Today **Readiness** combines available current Form/ramp with the latest aggregated non-nap night from the last 48 hours. Its four drivers are Load (40%), Sleep (25%), HRV versus the same-provider baseline (20%), and one Overnight HR driver (15%). Overnight HR blends average sleep HR (70%) and minimum sleep HR (30%), bounds each ratio to 80–120% of baseline, and falls back to whichever measure is available. Lower average or minimum sleep HR supports the score only relative to that user's own same-provider baseline; it is not a universal medical judgment. Provider coverage follows the normalized sleep record: current Suunto records can provide average and minimum sleep HR, COROS records can provide average sleep HR, and Garmin Health sleep summaries currently do not populate these normalized sleep-HR measures. Missing drivers are excluded and the available weights are renormalized. Current sleep evidence is independent of the Sleep chart's selected range or historical page, and score and evidence confidence stay separate.
+- Dashboard **Today** begins with the same compact **Training state** label and caption as Training. It uses current Form, ramp, CTL, and ATL only, so recorded sleep and imported recovery never change it; those are shown separately in Today Readiness.
+- Today **Readiness** combines available current Form/ramp with the latest aggregated non-nap night from the last 48 hours. Its four drivers are Load (40%), Sleep (25%), HRV versus the same-provider baseline (20%), and one Overnight HR driver (15%). Overnight HR blends average sleep HR (70%) and minimum sleep HR (30%), bounds each ratio to 80–120% of baseline, and falls back to whichever measure is available. Lower average or minimum sleep HR supports the score only relative to that user's own same-provider baseline; it is not a universal medical judgment. Provider coverage follows the normalized sleep record: current Suunto records can provide average and minimum sleep HR, COROS records can provide average sleep HR, and Garmin Health sleep summaries currently do not populate these normalized sleep-HR measures. Missing drivers are excluded and the available weights are renormalized. **Freshness, Form, CTL, ATL, their forecasts, and Load Status remain TSS-only; only Readiness adds recorded sleep-recovery context.** An active imported recovery estimate is displayed separately and is never weighted into the score. Current sleep evidence is independent of the Sleep chart's selected range or historical page, and score and evidence confidence stay separate.
 - Curated and KPI tiles include an **info** icon beside the title with formulas, interpretation guidance, and KPI detail rows such as metric state, freshness date, source, and the signals behind the current label.
 - On supported mobile devices, dashboard buttons and chart interactions provide lightweight haptic feedback.
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - Event search filters only the dashboard event table.
 - Event tags can be added from an event row or event details. The table supports an exact tag filter, and up to 250 selected events can receive atomic add/remove tag changes in bulk. Each event supports up to 10 tags of 32 characters; tags are visible on public event and comparison links.
 - **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
-- If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, and COROS.
+- If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, COROS, and Wahoo.
 - Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
 - Pro users with activity data but without a connected activity service may see a one-time **Connect a service** action prompt; dismissing it hides the prompt permanently, and services can still be connected later from **Services**.
@@ -259,7 +261,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Training Balance** summarizes the latest weekly Easy/Moderate/Hard intensity mix.
 - **Easy %** and **Hard %** use the latest weekly intensity distribution bucket.
 - **Efficiency Δ (4w)** shows current efficiency versus the prior 4-week baseline as absolute + percent delta.
-- **Freshness Forecast** projects 7 future days with zero load from the latest derived day.
+- **Freshness Forecast** projects 7 future days with zero load from the latest derived day. It is a TSS-only scenario, not a forecast of sleep or recovery.
 - **Intensity Distribution** uses power zones when available, otherwise heart-rate zones, grouped to Easy/Moderate/Hard by week.
 - Intensity Distribution headline percentages are labeled as **Current week**; when no current-week bucket exists they are labeled **Latest week**.
 - **Efficiency Trend** uses weekly duration-weighted average of avgPower/avgHeartRate.
@@ -319,6 +321,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Each event chart panel can use the **Overlay** button to compare one other available metric on a shared y-axis when metrics are compatible, otherwise on a right-side y-axis; overlay choices are saved globally by primary metric, so **Heart Rate** can always request **Altitude** when both streams exist.
 - Right-clicking an event chart copies a themed image of the full chart panel, including the chart title, legend, and range statistics.
 - On phones, the **Durability** performance chart keeps its activity eligibility details collapsed by default; use the disclosure button beside the chart title to inspect them.
+- **Durability** compares the usable first and second halves of a long, reasonably steady effort after warm-up and cool-down are excluded. For cycling, **matched power and heart-rate data** means both signals were recorded at the same moments; coverage tells you how much of the comparison was usable. An eligible result describes whether power relative to heart rate was lower, higher, or unchanged in the second half, then reports second-half output relative to the first and the average heart-rate change. Lower later power relative to heart rate can suggest more cardiovascular strain, but one ride is context rather than a fitness verdict.
 - Swim activities with per-length pool data show a **Show Swim Lengths** chart option that overlays swim length end boundaries on the chart; active and idle/rest lengths are both included.
 - When an overlay is active, the primary metric keeps its normal line and fill, while the overlay renders as a plain solid no-fill line using the overlay metric's series color. On merged and benchmark events, overlay legend and tooltip rows include both metric and activity labels.
 - When Grade Smooth or Grade streams are available, **Altitude** charts can color the altitude line by grade; the chart option **Color Altitude by Grade** is on by default and can be turned off from Chart options.
@@ -467,9 +470,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Everything in Basic
 - **Unlimited activities**
 - **Unlimited saved routes**
-- Garmin, Suunto, and COROS integration workflows
+- Garmin, Suunto, COROS, and Wahoo integration workflows
 - History import workflows (provider limits still apply)
-- Suunto FIT activity upload and GPX route upload tools
+- Suunto FIT activity upload and GPX/FIT route upload tools
 - COROS FIT activity upload tool
 
 ## Feature access by area
@@ -580,20 +583,22 @@ From an activity action menu you can also:
     id: 'service-connections',
     icon: 'sync',
     title: 'Connected Services',
-    summary: 'Garmin, Suunto, and COROS connection rules, limits, and expected import behavior.',
+    summary: 'Garmin, Suunto, COROS, and Wahoo connection rules, limits, and expected import behavior.',
     content: `## Pro requirement
 
-Garmin, Suunto, and COROS connections are part of **Pro**.
+Garmin, Suunto, COROS, and Wahoo connections are part of **Pro**.
 
-Services opens each provider on a compact connection overview. Choose an action on an activity, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
+Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
+
+At the top of Connections, **Your data flow** explains that connected providers import new activities into Quantified Self. Once two or more services are connected, it shows a provider-to-provider matrix of compatible automatic activity and saved-route delivery paths through Quantified Self. On phones, the same routes are grouped by source and destination instead of using a wide table. Enabled routes show **On**, available routes remain opt-in, and a configured route that cannot run because a provider is disconnected or needs reconnection is marked **Needs connection**. With no services connected, it prompts you to connect your first provider.
 
 ## Integration pages overview
 
-The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), and [COROS Integration](/integrations/coros) pages. They explain Garmin to Suunto activity sync, COROS to Suunto activity sync, sending saved routes to Garmin Connect, syncing past activities, provider history imports, FIT activity uploads, GPX route uploads, and how those workflows connect to the private training dashboard.
+The public [Integrations hub](/integrations) links to focused [Garmin Integration](/integrations/garmin), [Suunto Integration](/integrations/suunto), [COROS Integration](/integrations/coros), and [Wahoo Integration](/integrations/wahoo) pages. They explain provider activity imports, activity sync to Suunto and Wahoo, direct GPX/FIT route delivery to Garmin, Suunto, and Wahoo, sending saved routes to Garmin Connect, syncing past activities, sending Suunto routes to Garmin or Wahoo, history imports, uploads, and how those workflows connect to the private training dashboard.
 
-Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
+Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
-The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
+The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
 
@@ -601,7 +606,7 @@ The public [Features hub](/features) links to [Workout Data Comparison](/feature
 
 ## Sleep data
 
-Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Suunto and Garmin Pro users can choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
+Sleep sync is server-owned health data. When available, Garmin, Suunto, and COROS sleep sessions are imported as separate source records and shown by the dashboard **Sleep** tile. The sleep chart has its own 14d, 30d, 90d, and 1y range control with older/newer paging, independent from dashboard event filters. It stacks sleep stages and overlays available vitals: recorded sleep HRV, average sleep heart rate, and minimum sleep heart rate with range-average reference lines, plus max SpO2 when the provider includes those values. Suunto and Garmin Pro users can select **Sleep history** in Connections, then choose **Import Sleep History** from History Import; Garmin users may also see a one-time dashboard prompt. Suunto can import sleep from Jan 1, 2016 to today with a 7-day cooldown. Garmin can request sleep from Jan 1, 2016 to today, receives records asynchronously from Garmin, and uses a 30-day cooldown.
 
 ## Suunto
 
@@ -614,15 +619,17 @@ Suunto tools currently include:
 - automatically importing saved Suunto routes,
 - importing existing Suunto routes,
 - uploading FIT activities to Suunto,
-- uploading GPX routes to Suunto.
+- uploading GPX or FIT routes to Suunto.
 
 Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. Large upload batches are processed one file at a time with short pauses between provider upload calls.
 
 While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes an **Import existing routes** action for first-time imports or after reconnecting. The **Routes** page can also show a one-time prompt to import existing Suunto routes.
 
-Suunto users can turn on **Automatically send new and updated routes** in Suunto Services or from a one-time **Routes** page prompt when both Suunto and Garmin are ready. This sends newly imported or updated Suunto routes already saved in Quantified Self to Garmin as courses. Garmin must be connected with **Course Import** permission. **Send routes** uses Suunto routes already saved in Quantified Self; it does not fetch routes from Suunto or Garmin.
+Suunto users can turn on **Automatically send new and updated routes** in Suunto Services for Garmin or Wahoo. Garmin can also be enabled from a one-time **Routes** page prompt when both connections are ready. This sends newly imported or updated Suunto routes already saved in Quantified Self to the selected destination. For Garmin, it sends routes already saved in Quantified Self to Garmin as courses; Garmin must be connected with **Course Import** permission. Wahoo receives a FIT course and requires Wahoo route access. **Send routes** uses Suunto routes already saved in Quantified Self. For Garmin, it does not fetch routes from Suunto or Garmin; Wahoo delivery likewise operates only on the saved route. Wahoo route delivery uses a stable saved-route key, so an updated Suunto route replaces its earlier Wahoo route instead of creating a duplicate. If Wahoo was connected before route delivery was available, reconnect it once to grant route access.
 
 Saved FIT and GPX routes can be sent to Suunto from **Routes** using a row action or the selected-row bulk toolbar. Quantified Self reparses each saved route from its original source file, generates a fresh GPX export, and uses the saved Quantified Self route name as the route name sent to Suunto. Suunto imports sent route files as new routes, so sending an edited route that was already sent to Suunto creates an updated copy in Suunto App. Routes imported from Suunto are not sent back to the same connected Suunto account, but they can still be sent to a different connected Suunto account when one exists. Bulk sends upload routes one at a time so partial failures can be reported without stopping successful routes.
+
+**Uploads** in Suunto Services also accepts a selected GPX or FIT route without adding it to **Routes**. Suunto receives GPX, so Quantified Self converts a selected FIT route to GPX in memory before delivery. The direct upload does not create or retain a Quantified Self route.
 
 See [Policies -> Suunto Data](/policies#suunto-data) for the provider-specific privacy summary for Suunto imports, sleep sync, route imports, and sending routes to Garmin.
 
@@ -640,6 +647,8 @@ Garmin sleep history import is separate from activity history import. It request
 If Garmin permissions are missing, reconnect the app and grant the required export, history, and health permissions in Garmin Connect.
 
 Saved FIT and GPX routes can also be sent to Garmin Connect from **Routes**. Garmin must be connected with **Course Import** permission. If that permission is missing, Routes can show a Garmin permission prompt; open Garmin Connect, go to **Connected Apps**, allow Course Import for Quantified Self, and reconnect Garmin from Routes or **Services**. Quantified Self reads the original saved route file, uses the saved route name, and updates the same Garmin course when you send that route again to the same Garmin account.
+
+**Uploads** in Garmin Services accepts selected GPX and FIT route files as well. Quantified Self parses either source format and creates a Garmin Connect course; this direct upload does not add the route to Quantified Self or retain Garmin delivery metadata, so uploading the same file again creates another Garmin course. Course Import permission is required.
 See [Policies -> Garmin Data](/policies#garmin-data) for the provider-specific privacy summary for Garmin imports, sleep history, and Garmin to Suunto sync.
 
 Garmin to Suunto activity sync requires:
@@ -689,9 +698,43 @@ When COROS and Suunto are connected, the dashboard may offer a one-time action p
 
 See [Policies -> COROS Data](/policies#coros-data) for the provider-specific privacy summary for COROS imports, sleep summaries, uploads, and COROS to Suunto sync.
 
-## Import processing times
+## Wahoo
 
-Suunto and COROS history imports run in the background. Large date ranges can take hours or days to finish, depending on volume and current demand.`,
+Wahoo is a **Pro** activity integration. Connect Wahoo from Services to:
+
+- receive new completed Wahoo workouts automatically,
+- import Wahoo workout history for a selected date range,
+- retain the original FIT activity with the imported event for downloads, exports, and reprocessing,
+- analyze Wahoo activities alongside your other activity sources,
+- send a FIT activity file directly to Wahoo without creating a Quantified Self activity,
+- send a GPX or FIT course or route file directly to Wahoo without creating a Quantified Self route,
+- automatically send new Garmin, COROS, or Suunto activities to Wahoo,
+- or choose a date range to send past Garmin, COROS, or Suunto activities already in Quantified Self to Wahoo,
+- automatically send new and updated Suunto routes already saved in Quantified Self to Wahoo, or send those saved routes now,
+- automatically send new Wahoo activities to Suunto, or choose a date range to send past retained Wahoo activities to Suunto.
+
+Quantified Self imports only Wahoo records with an available FIT file. Workouts without a FIT file are skipped, as are workouts Wahoo identifies as originating from a third-party fitness application. History is returned newest first and is queued for background processing; large ranges may take time to appear.
+
+Direct FIT activity delivery only sends the selected file to Wahoo. It does not create or retain an activity in Quantified Self. Wahoo may process an activity upload asynchronously; Services keeps the upload status available to refresh. If you connected Wahoo before activity sending was available, reconnect it once to grant workout write access.
+
+Direct course/route delivery accepts GPX and FIT files. Quantified Self converts a selected GPX route to a FIT course in memory before sending it to Wahoo; the GPX must contain exactly one route with valid coordinates. It sends the route to Wahoo without creating or retaining a route in Quantified Self. If you connected Wahoo before route sending was available, reconnect it once to grant route access. When a route send reports missing Wahoo route access, select **Reconnect Wahoo** in the displayed dialog, then send the route again after you return. Routes imported by Wahoo's Cloud API sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.
+
+Wahoo to Suunto activity sync requires:
+
+- you must connect both Wahoo and Suunto,
+- turn on automatic activity sync in Wahoo Services,
+- keep both service connections active,
+- and use Wahoo activities with a retained original FIT file.
+
+Automatic sync runs only for newly imported eligible Wahoo activities. **Sync past activities** in Wahoo Services sends retained Wahoo FIT activities from the date range you choose to Suunto. You can sync past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
+
+Disconnecting Wahoo revokes future access and stops new imports and deliveries. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo-to-Suunto is the only Wahoo-origin provider-to-provider activity route in this release. Suunto-to-Wahoo saved-route delivery is a separate, opt-in route workflow in Suunto Services; direct Wahoo GPX/FIT course/route delivery is a separate, user-selected Wahoo-only upload. Sleep sync, plans, and other Wahoo forwarding are not supported.
+
+See [Policies -> Wahoo Data](/policies#wahoo-data) for the provider-specific privacy and retention summary.
+
+## Queue behavior
+
+Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take hours or days to finish, depending on volume and queue load.`,
     links: [
       { label: 'Integrations', icon: 'hub', kind: 'route', target: '/integrations' },
       { label: 'Features', icon: 'dashboard_customize', kind: 'route', target: '/features' },
@@ -702,15 +745,18 @@ Suunto and COROS history imports run in the background. Large date ranges can ta
       { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
       { label: 'Garmin to Suunto Guide', icon: 'sync_alt', kind: 'route', target: '/guides/sync-garmin-to-suunto' },
       { label: 'COROS to Suunto Guide', icon: 'published_with_changes', kind: 'route', target: '/guides/sync-coros-to-suunto' },
+      { label: 'Wahoo to Suunto Guide', icon: 'directions_bike', kind: 'route', target: '/guides/sync-wahoo-to-suunto' },
       { label: 'Suunto Routes to Garmin Guide', icon: 'route', kind: 'route', target: '/guides/sync-suunto-routes-to-garmin-courses' },
       { label: 'Centralize Workout Data', icon: 'hub', kind: 'route', target: '/guides/centralize-garmin-suunto-coros-workout-data' },
       { label: 'Garmin Integration', icon: 'sync_alt', kind: 'route', target: '/integrations/garmin' },
       { label: 'Suunto Integration', icon: 'published_with_changes', kind: 'route', target: '/integrations/suunto' },
       { label: 'COROS Integration', icon: 'sync', kind: 'route', target: '/integrations/coros' },
+      { label: 'Wahoo Integration', icon: 'directions_bike', kind: 'route', target: '/integrations/wahoo' },
       { label: 'Connected Service Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_CONNECTED_SERVICES_FRAGMENT },
       { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
       { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },
       { label: 'COROS Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_COROS_DATA_FRAGMENT },
+      { label: 'Wahoo Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_WAHOO_DATA_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
@@ -732,7 +778,7 @@ Suunto and COROS history imports run in the background. Large date ranges can ta
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
 - For AI Insights, we do **not** share your raw activity data with AI providers.
 - Only the minimum derived stats required to answer your prompt are sent.
-- The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
+- The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
 ## Settings you can change yourself
 
@@ -744,7 +790,7 @@ In Settings you can:
 
 ## Account deletion
 
-You can delete your account from **Settings -> Profile -> Danger Zone**.
+You can delete your account from **Settings -> Account -> Danger Zone**.
 
 If your account has an email address, self-deletion sends a confirmation email after the request completes.
 

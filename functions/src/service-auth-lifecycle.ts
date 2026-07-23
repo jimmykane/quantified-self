@@ -1,6 +1,10 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
+import {
+  Auth2ServiceTokenInterface,
+  ServiceNames,
+  WahooAPIAuth2ServiceTokenInterface,
+} from '@sports-alliance/sports-lib';
 import { GarminAPIAuth2ServiceTokenInterface } from './garmin/auth/adapter';
 import { getServiceAdapter } from './auth/factory';
 import { TokenNotFoundError } from './utils';
@@ -13,13 +17,17 @@ import {
   PendingServiceDisconnectFailure,
 } from './service-disconnect-pending';
 import {
+  DeleteLocalServiceTokenOptions,
   deleteLocalServiceToken,
   getServiceTokenCollectionRef,
   getServiceTokenRootDocumentRef,
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
 
-type StoredServiceToken = Auth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface;
+type StoredServiceToken =
+  | Auth2ServiceTokenInterface
+  | GarminAPIAuth2ServiceTokenInterface
+  | WahooAPIAuth2ServiceTokenInterface;
 type QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
 
@@ -65,8 +73,13 @@ export interface ServiceAuthCleanupOutcome {
   localCleanupStatus: 'completed' | 'partial' | 'no_tokens_found';
   connectionStateUpdate: 'reconnect_required' | 'cleared' | 'unchanged';
   fallbackTokenRootCleanupPerformed: boolean;
+  skippedByCondition?: boolean;
   tokensToArchive?: ServiceAuthCleanupArchiveToken[];
   retryableDisconnectFailures?: PendingServiceDisconnectFailure[];
+}
+
+interface CleanupServiceTokenByIdOptions {
+  shouldDeleteInTransaction?: DeleteLocalServiceTokenOptions['shouldDeleteInTransaction'];
 }
 
 export interface ServiceAuthCleanupArchiveToken {
@@ -349,6 +362,18 @@ function buildStoredServiceToken(
         dateRefreshed: tokenData.dateRefreshed,
         dateCreated: tokenData.dateCreated,
       } as GarminAPIAuth2ServiceTokenInterface;
+    case ServiceNames.WahooAPI:
+      return {
+        serviceName,
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
+        expiresAt: tokenData.expiresAt,
+        scope: tokenData.scope,
+        tokenType: tokenData.tokenType,
+        wahooUserID: (tokenData as WahooAPIAuth2ServiceTokenInterface).wahooUserID,
+        dateRefreshed: tokenData.dateRefreshed,
+        dateCreated: tokenData.dateCreated,
+      } as WahooAPIAuth2ServiceTokenInterface;
     default:
       throw new Error(`Unsupported service ${serviceName}`);
   }
@@ -599,6 +624,7 @@ export async function cleanupServiceTokenById(
   serviceName: ServiceNames,
   tokenID: string,
   reason: ServiceAuthCleanupReason,
+  options: CleanupServiceTokenByIdOptions = {},
 ): Promise<ServiceAuthCleanupOutcome> {
   const outcome: ServiceAuthCleanupOutcome = {
     reason,
@@ -621,7 +647,13 @@ export async function cleanupServiceTokenById(
       preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
         && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
         && reason !== SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+      shouldDeleteInTransaction: options.shouldDeleteInTransaction,
     });
+    if (deleteResult.skippedByCondition) {
+      outcome.skippedByCondition = true;
+      logger.info(`Skipped stale duplicate-token cleanup for ${serviceName} user ${userID} token ${tokenID}.`);
+      return outcome;
+    }
     outcome.deletedTokenCount = 1;
     if (tokenDataForOperationalCleanup) {
       try {

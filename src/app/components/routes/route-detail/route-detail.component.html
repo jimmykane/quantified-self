@@ -26,13 +26,11 @@
         <span summary-chips class="route-chip">{{ label }}</span>
       }
       @if (singleSegment(); as segment) {
-        <ng-container summary-chips>
-          <span class="route-chip route-chip--segment" [matTooltip]="segment.label">
-            <span class="route-chip-dot" [style.background]="segment.color" aria-hidden="true"></span>
-            <span class="route-chip-prefix">Segment</span>
-            <span class="route-chip-value">{{ segment.label }}</span>
-          </span>
-        </ng-container>
+        <span summary-chips class="route-chip route-chip--segment" [matTooltip]="segment.label">
+          <span class="route-chip-dot" [style.background]="segment.color" aria-hidden="true"></span>
+          <span class="route-chip-prefix">Segment</span>
+          <span class="route-chip-value">{{ segment.label }}</span>
+        </span>
       }
       <div summary-actions class="route-summary-actions">
         <button mat-icon-button type="button"

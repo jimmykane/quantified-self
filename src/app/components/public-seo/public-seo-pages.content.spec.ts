@@ -21,6 +21,7 @@ describe('public-seo-pages.content', () => {
       hub: 'guides',
       syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
+      syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
       syncSuuntoRoutesToGarmin: 'guides/sync-suunto-routes-to-garmin-courses',
       centralizeWorkoutData: 'guides/centralize-garmin-suunto-coros-workout-data',
     });
@@ -90,17 +91,23 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.guidesHub.h1).toBe('Training data sync guides');
     expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Garmin to Suunto activity sync');
-    expect(PUBLIC_SEO_PAGES.guidesHub.intro).toContain('centralized Garmin, Suunto, and COROS workout archive');
+    expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Wahoo to Suunto activity sync');
+    expect(PUBLIC_SEO_PAGES.guidesHub.intro).toContain('centralized multi-provider workout archive');
 
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.h1).toBe('How to sync Garmin data to Suunto automatically');
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps).toHaveLength(4);
+
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.h1).toBe('How to sync Wahoo activities to Suunto automatically');
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.description).toContain('Wahoo FIT activities');
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.howToSteps).toHaveLength(4);
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.faqItems.some(item => item.question === 'Will activities sent to Wahoo come back as Wahoo imports?')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.h1).toBe('How to send Suunto routes to Garmin courses');
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('Course Import');
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('send routes already saved');
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.howToSteps).toHaveLength(5);
 
-    expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.h1).toBe('Centralize Garmin, Suunto, and COROS workout data');
+    expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.h1).toBe('Centralize Garmin, Suunto, COROS, and Wahoo workout data');
     expect(PUBLIC_SEO_PAGES.centralizeWorkoutData.intro).not.toContain('centralize Garmin Suunto and COROS workout data');
   });
 
@@ -126,6 +133,7 @@ describe('public-seo-pages.content', () => {
 
     expect(guideHubLinks).toContain('/guides/sync-garmin-to-suunto');
     expect(guideHubLinks).toContain('/guides/sync-coros-to-suunto');
+    expect(guideHubLinks).toContain('/guides/sync-wahoo-to-suunto');
     expect(guideHubLinks).toContain('/guides/sync-suunto-routes-to-garmin-courses');
     expect(guideHubLinks).toContain('/guides/centralize-garmin-suunto-coros-workout-data');
     expect(guideHubLinks).toContain('/features');

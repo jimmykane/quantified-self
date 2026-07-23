@@ -12,6 +12,26 @@ interface ActivitySyncTaskPayload {
     queueItemId: string;
 }
 
+const MAX_RETRY_REASON_LENGTH = 300;
+
+function getSafeRetryReason(queueItem: ActivitySyncQueueItemInterface): string | undefined {
+    const errors = Array.isArray(queueItem.errors) ? queueItem.errors : [];
+    const latestError = errors[errors.length - 1];
+    const message = `${latestError?.error || ''}`.trim();
+    if (!message) {
+        return undefined;
+    }
+
+    return message
+        .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+        .replace(/\b(access_token|refresh_token|id_token|client_secret|authorization|token|api[_-]?key|x-sig|signature|sig)=([^&\s]+)/gi, '$1=[redacted]')
+        .replace(/\b(access_token|refresh_token|id_token|client_secret|authorization|token|api[_-]?key|x-sig|signature|sig)["']?\s*:\s*["'][^"']+["']/gi, '$1: "[redacted]"')
+        .replace(/https?:\/\/[^\s]+/gi, '[url]')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, MAX_RETRY_REASON_LENGTH);
+}
+
 export const processActivitySyncTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
     memory: '1GiB',
@@ -39,7 +59,10 @@ export const processActivitySyncTask = onTaskDispatched({
     }
 
     const queueItem = queueDoc.data() as ActivitySyncQueueItemInterface | undefined;
-    if (queueItem?.processed) {
+    if (!queueItem) {
+        throw new Error(`[ActivitySyncTaskWorker] Queue item ${queueItemId} has no data.`);
+    }
+    if (queueItem.processed) {
         logger.info(`[ActivitySyncTaskWorker] Item ${queueItemId} already processed, skipping.`);
         return;
     }
@@ -60,9 +83,13 @@ export const processActivitySyncTask = onTaskDispatched({
             case QueueResult.MovedToDLQ:
                 logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);
                 break;
-            case QueueResult.RetryIncremented:
-                logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} failed and retry count was incremented.`);
-                throw new Error(`Item ${queueItemId} failed and was scheduled for retry.`);
+            case QueueResult.RetryIncremented: {
+                const retryReason = getSafeRetryReason(queueItem);
+                logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} failed and retry count was incremented.`, {
+                    ...(retryReason ? { retryReason } : {}),
+                });
+                throw new Error(`Item ${queueItemId} failed and was scheduled for retry${retryReason ? `: ${retryReason}` : '.'}`);
+            }
             case QueueResult.Failed:
                 logger.error(`[ActivitySyncTaskWorker] Fatal failure updating state for item ${queueItemId}`);
                 throw new Error(`Fatal failure updating state for activity sync item ${queueItemId}`);

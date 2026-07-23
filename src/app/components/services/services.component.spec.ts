@@ -15,11 +15,13 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { of, Subject } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceNames, User } from '@sports-alliance/sports-lib';
 import { MaterialModule } from '../../modules/material.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconRegistry } from '@angular/material/icon';
 import { SharedModule } from '../../modules/shared.module';
+import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
+import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -140,22 +142,66 @@ describe('ServicesComponent', () => {
             'garmin',
             'suunto',
             'coros',
+            'wahoo',
         ]);
+    });
+
+    it('shows the Wahoo connection section to every user', () => {
+        component.processUser({ uid: 'another-user' } as User, true);
+
+        expect(component.serviceSectionOptions.map(section => section.id)).toEqual([
+            'garmin',
+            'suunto',
+            'coros',
+            'wahoo',
+        ]);
+
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="Wahoo"]')).toBeTruthy();
+    });
+
+    it('keeps Wahoo available when a user signs out', () => {
+        component.processUser({ uid: 'another-user' } as User, true);
+        component.activeSection = 'wahoo';
+        component.processUser(null, false);
+
+        expect(component.activeSection).toBe('wahoo');
+        expect(component.serviceSectionOptions.map(section => section.id)).toEqual([
+            'garmin',
+            'suunto',
+            'coros',
+            'wahoo',
+        ]);
+    });
+
+    it('allows direct Wahoo service selection for every user', async () => {
+        component.processUser({ uid: 'another-user' } as User, true);
+
+        await component.selectService('wahoo');
+
+        expect(component.activeSection).toBe('wahoo');
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: { serviceName: ServiceNames.WahooAPI },
+            queryParamsHandling: 'merge',
+        });
     });
 
     it('maps the Suunto query parameter to the Suunto panel', () => {
         expect((component as any).getSectionFromServiceName(ServiceNames.SuuntoApp)).toBe('suunto');
     });
 
-    it('renders the mobile provider selector as Material tab navigation', () => {
+    it('renders the mobile provider selector as a compact Material toggle group', () => {
         fixture.detectChanges();
 
-        const tabNav = fixture.nativeElement.querySelector('.provider-selector--mobile');
-        const tabLabels = Array.from(tabNav.querySelectorAll('.mat-mdc-tab-link'))
-            .map((link: Element) => link.textContent?.trim());
+        const providerSelector = fixture.nativeElement.querySelector('.provider-selector--mobile');
+        const providerLabels = Array.from(providerSelector.querySelectorAll('mat-button-toggle'))
+            .map((toggle: Element) => toggle.textContent?.trim());
 
-        expect(tabNav).toBeTruthy();
-        expect(tabLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
+        expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        expect(providerSelector.querySelectorAll('app-service-source-icon')).toHaveLength(0);
+        expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
     });
 
     it('renders the desktop provider selector as a Material button toggle group', () => {
@@ -166,7 +212,10 @@ describe('ServicesComponent', () => {
             .map((label: Element) => label.textContent?.trim());
 
         expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
-        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS']);
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        const desktopProviderIcons = providerSelector.querySelectorAll('app-service-source-icon');
+        expect(desktopProviderIcons).toHaveLength(4);
+        expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
     });
 
     it('renders connections without a workspace rail', () => {
@@ -177,6 +226,195 @@ describe('ServicesComponent', () => {
         expect(fixture.nativeElement.querySelector('.provider-selector--desktop')).toBeTruthy();
     });
 
+    it('shows a connect-first data-flow state when no services are connected', () => {
+        fixture.detectChanges();
+
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+
+        expect(dataFlow.textContent).toContain('Your data flow');
+        expect(dataFlow.textContent).toContain('No services connected');
+        expect(dataFlow.textContent).toContain('Connect a service below');
+        expect(dataFlow.querySelector('.service-data-flow__matrix')).toBeNull();
+    });
+
+    it('starts the data-flow panel collapsed and lets the user expand it', () => {
+        fixture.detectChanges();
+
+        const dataFlowHeader = fixture.nativeElement.querySelector(
+            '.service-data-flow mat-expansion-panel-header',
+        ) as HTMLElement;
+
+        expect(dataFlowHeader.getAttribute('aria-expanded')).toBe('false');
+
+        dataFlowHeader.click();
+        fixture.detectChanges();
+
+        expect(component.isDataFlowExpanded).toBe(true);
+        expect(dataFlowHeader.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('shows a single-service import state before the matrix becomes useful', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        fixture.detectChanges();
+
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+
+        expect(dataFlow.textContent).toContain('Activities are importing into Quantified Self');
+        expect(dataFlow.textContent).toContain('Connect another compatible service');
+        expect(dataFlow.querySelector('.service-data-flow__matrix')).toBeNull();
+    });
+
+    it('shows connected imports and flags an enabled delivery when a provider needs connection', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('wahoo', true);
+        fixture.detectChanges();
+
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+        const matrix = dataFlow.querySelector('.service-data-flow__matrix');
+
+        expect(dataFlow.textContent).toContain('Connected services import new activities into Quantified Self');
+        expect(matrix.textContent).toContain('Garmin');
+        expect(matrix.textContent).toContain('Suunto');
+        expect(matrix.textContent).toContain('Needs connection');
+        expect(matrix.querySelectorAll('.service-data-flow__matrix-route--attention')).toHaveLength(1);
+    });
+
+    it('shows supported matrix routes and marks enabled delivery as active', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        component.setServiceConnectionState('suunto', true);
+        component.setServiceConnectionState('garmin', true);
+        fixture.detectChanges();
+
+        const matrix = fixture.nativeElement.querySelector('.service-data-flow__matrix');
+
+        expect(matrix.textContent).toContain('Activity');
+        expect(matrix.textContent).toContain('Route');
+        expect(matrix.textContent).toContain('Available');
+        expect(matrix.textContent).toContain('On');
+        expect(matrix.querySelectorAll('.service-data-flow__matrix-route--active')).toHaveLength(1);
+    });
+
+    it('keeps each matrix route label and state in an app-owned vertical layout wrapper', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8',
+        );
+        const routeContentRule = styles.match(/\.service-data-flow__matrix-route-content\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(template).toContain('class="service-data-flow__matrix-route-content"');
+        expect(template).toContain('class="service-data-flow__matrix-route-label"');
+        expect(routeContentRule).toContain('display: grid');
+        expect(routeContentRule).toContain('gap: 3px');
+    });
+
+    it('shows a green connected status beside connected providers in the data-flow matrix', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('suunto', true);
+        fixture.detectChanges();
+
+        const matrix = fixture.nativeElement.querySelector('.service-data-flow__matrix');
+        const columnStatuses = matrix.querySelectorAll('thead .service-data-flow__provider-status');
+        const rowStatuses = matrix.querySelectorAll('tbody .service-data-flow__provider-status');
+        const mobileSourceStatuses = fixture.nativeElement.querySelectorAll(
+            '.service-data-flow__mobile-matrix-group > h2 .service-data-flow__provider-status',
+        );
+
+        expect(columnStatuses).toHaveLength(2);
+        expect(rowStatuses).toHaveLength(2);
+        expect(mobileSourceStatuses).toHaveLength(2);
+        expect(columnStatuses[0].getAttribute('aria-label')).toBe('Connected');
+    });
+
+    it('opens the matching source settings dialog from activity and route data-flow paths', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    },
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('suunto', true);
+        fixture.detectChanges();
+
+        const activityRoute = fixture.nativeElement.querySelector(
+            '.service-data-flow__matrix-route--activity',
+        ) as HTMLButtonElement;
+        const routeDelivery = fixture.nativeElement.querySelector(
+            '.service-data-flow__matrix-route--route',
+        ) as HTMLButtonElement;
+
+        expect(activityRoute.getAttribute('aria-label')).toBe('Manage activity delivery from Garmin to Suunto App');
+        activityRoute.click();
+        expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('auto-sync');
+        expect(component.managedToolTitle).toBe('Send activities to Suunto App');
+        expect(component.managedActivitySyncDestination).toBe('suunto');
+        expect(mockDialog.open).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+            ariaLabel: 'Garmin Send activities to Suunto App tools',
+        }));
+
+        dialogClosed$.next();
+        routeDelivery.click();
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('routes');
+        expect(component.managedToolTitle).toBe('Send routes to Garmin Connect');
+        expect(component.managedActivitySyncDestination).toBeNull();
+        expect(mockDialog.open).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+            ariaLabel: 'Suunto Send routes to Garmin Connect tools',
+        }));
+    });
+
+    it('renders a compact stacked matrix for mobile layouts', () => {
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+        component.setServiceConnectionState('garmin', true);
+        component.setServiceConnectionState('suunto', true);
+        fixture.detectChanges();
+
+        const mobileMatrix = fixture.nativeElement.querySelector('.service-data-flow__mobile-matrix');
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+
+        expect(mobileMatrix.textContent).toContain('From Garmin');
+        expect(mobileMatrix.textContent).toContain('To Suunto');
+        expect(mobileMatrix.textContent).toContain('Activity');
+        expect(styles).toContain('.service-data-flow__matrix-scroll {\n        display: none;');
+        expect(styles).toContain('.service-data-flow__mobile-matrix {\n        display: grid;');
+    });
+
     it('keeps service panels mounted and hides inactive panels during tab switches', () => {
         fixture.detectChanges();
 
@@ -184,12 +422,13 @@ describe('ServicesComponent', () => {
         const garminOverview = servicePanels[0].querySelector('.service-overview');
         const corosOverview = servicePanels[2].querySelector('.service-overview');
 
-        expect(servicePanels.length).toBe(3);
+        expect(servicePanels.length).toBe(4);
         expect(garminOverview).toBeTruthy();
         expect(corosOverview).toBeTruthy();
         expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('[aria-label="suunto app" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('[aria-label="wahoo" i]').hidden).toBe(true);
 
         component.activeSection = 'coros';
         fixture.detectChanges();
@@ -204,15 +443,20 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
-        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(2);
+        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(4);
         expect(activePanel.textContent).toContain('Activity sync');
+        expect(activePanel.textContent).toContain('Sleep history');
 
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons[0].textContent?.trim()).toBe('History import');
-        expect(manageButtons[0].getAttribute('aria-label')).toBe('History import for Garmin');
-        expect(manageButtons[1].textContent?.trim()).toBe('Activity sync settings');
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
+        expect(manageButtons[0].textContent).toContain('Manage');
+        expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for Garmin');
+        expect(manageButtons[1].textContent).toContain('Manage');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Garmin');
+        expect(manageButtons[2].textContent).toContain('Manage');
+        expect(manageButtons[2].getAttribute('aria-label')).toBe('Send route file for Garmin');
+        expect(manageButtons[3].textContent).toContain('Manage');
+        expect(manageButtons[3].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
 
         manageButtons[0].click();
         fixture.detectChanges();
@@ -239,19 +483,159 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         expect(component.managedService).toBe('garmin');
-        expect(component.managedTool).toBe('auto-sync');
-        expect(component.managedToolTitle).toBe('Send activities to Suunto');
+        expect(component.managedTool).toBe('history');
+        expect(component.managedToolTitle).toBe('Sleep history');
         expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Send activities to Suunto tools',
+            ariaLabel: 'Garmin Sleep history tools',
+        }));
+
+        dialogClosed$.next();
+        manageButtons[2].click();
+        fixture.detectChanges();
+
+        expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('uploads');
+        expect(component.managedToolTitle).toBe('Send route files to Garmin');
+        expect(mockDialog.open.mock.calls[2][1]).toEqual(expect.objectContaining({
+            ariaLabel: 'Garmin Send route files to Garmin tools',
+        }));
+
+        dialogClosed$.next();
+        manageButtons[3].click();
+        fixture.detectChanges();
+
+        expect(component.managedService).toBe('garmin');
+        expect(component.managedTool).toBe('auto-sync');
+        expect(component.managedToolTitle).toBe('Send activities to connected services');
+        expect(mockDialog.open.mock.calls[3][1]).toEqual(expect.objectContaining({
+            ariaLabel: 'Garmin Send activities to connected services tools',
         }));
     });
 
     it('maps provider overview cards to distinct tools', () => {
-        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes', 'uploads']);
-        expect(component.serviceOverviewCardsBySection.suunto[2].description)
-            .toBe('Send FIT activity files or GPX route files to the Suunto app.');
+        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'uploads', 'activity-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto[3].description)
+            .toBe('Send FIT activity files or GPX/FIT route files to the Suunto app.');
         expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
+    });
+
+    it('does not repeat the Pro plan in provider feature details', () => {
+        const featureDetails = Object.values(component.serviceOverviewCardsBySection)
+            .flatMap(cards => cards.map(card => card.detail));
+
+        expect(featureDetails).not.toContain(expect.stringMatching(/\bpro\b/i));
+    });
+
+    it('summarizes enabled activity and route delivery for every affected provider', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                        [ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI]: { enabled: true },
+                    },
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+
+        expect(component.automaticSyncSummaryBySection.garmin).toEqual({
+            activities: [{
+                id: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+                label: 'Garmin → Suunto App',
+            }],
+            routes: [{
+                id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+                label: 'Suunto → Garmin Connect',
+            }],
+        });
+        expect(component.automaticSyncSummaryBySection.suunto).toEqual({
+            activities: [{
+                id: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+                label: 'Garmin → Suunto App',
+            }],
+            routes: [
+                {
+                    id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+                    label: 'Suunto → Garmin Connect',
+                },
+                {
+                    id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+                    label: 'Suunto → Wahoo',
+                },
+            ],
+        });
+        expect(component.automaticSyncSummaryBySection.coros.activities).toEqual([{
+            id: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI,
+            label: 'COROS → Wahoo',
+        }]);
+        expect(component.automaticSyncSummaryBySection.wahoo).toEqual({
+            activities: [{
+                id: ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_WahooAPI,
+                label: 'COROS → Wahoo',
+            }],
+            routes: [{
+                id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+                label: 'Suunto → Wahoo',
+            }],
+        });
+    });
+
+    it('renders enabled activity and route delivery without opening a tools dialog', () => {
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    },
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User, true);
+        fixture.detectChanges();
+
+        const garminPanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
+        const summary = garminPanel.querySelector('.service-sync-summary');
+
+        expect(summary.classList.contains('qs-card-plain')).toBe(true);
+        expect(summary.textContent).toContain('Enabled automatic sync');
+        expect(summary.textContent).toContain('Activity sending');
+        expect(summary.textContent).toContain('Garmin → Suunto App');
+        expect(summary.textContent).toContain('Route sending');
+        expect(summary.textContent).toContain('Suunto → Garmin Connect');
+        expect(mockDialog.open).not.toHaveBeenCalled();
+    });
+
+    it('refreshes the summary when sync settings change for the signed-in user', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
+
+        await component.ngOnInit();
+        userUpdates$.next({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    routeDeliverySyncRoutes: {
+                        [ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI]: { enabled: true },
+                    },
+                },
+            },
+        } as User);
+
+        expect(component.automaticSyncSummaryBySection.wahoo.routes).toEqual([{
+            id: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+            label: 'Suunto → Wahoo',
+        }]);
     });
 
     it('opens the Suunto route and upload cards at their matching tools', () => {
@@ -261,21 +645,36 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Suunto App"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(3);
-        expect(manageButtons[1].textContent?.trim()).toBe('Route sync settings');
-        expect(manageButtons[2].textContent?.trim()).toBe('Upload files');
+        expect(manageButtons).toHaveLength(5);
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Suunto');
+        expect(manageButtons[2].getAttribute('aria-label')).toBe('Route sync settings for Suunto');
+        expect(manageButtons[3].getAttribute('aria-label')).toBe('Upload files for Suunto');
+        expect(manageButtons[4].getAttribute('aria-label')).toBe('Activity sync settings for Suunto');
 
         manageButtons[1].click();
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('history');
+        expect(component.managedToolTitle).toBe('Sleep history');
+
+        dialogClosed$.next();
+        manageButtons[2].click();
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('routes');
         expect(component.managedToolTitle).toBe('Route sync');
 
         dialogClosed$.next();
-        manageButtons[2].click();
+        manageButtons[3].click();
 
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('uploads');
         expect(component.managedToolTitle).toBe('Upload activities and routes');
+
+        dialogClosed$.next();
+        manageButtons[4].click();
+
+        expect(component.managedService).toBe('suunto');
+        expect(component.managedTool).toBe('activity-sync');
+        expect(component.managedToolTitle).toBe('Send activities to Wahoo');
     });
 
     it('gives the service tools dialog an accessible close action', () => {
@@ -285,6 +684,24 @@ describe('ServicesComponent', () => {
         );
 
         expect(template).toContain('aria-label="Close tools dialog"');
+    });
+
+    it('uses one compact, consistent manage action for all connection feature dialogs', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.html'),
+            'utf8'
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8'
+        );
+        const actionRule = styles.match(/\.service-overview-card__action\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(template).toContain('class="service-overview-card__action"');
+        expect(template).toContain('<span>Manage</span>');
+        expect(template).toContain('<mat-icon>arrow_forward</mat-icon>');
+        expect(actionRule).toContain('min-width: 104px');
+        expect(styles).toContain('border-bottom: 1px solid var(--mat-sys-outline-variant)');
     });
 
     it('keeps the tools dialog focused on tool content', () => {
@@ -306,9 +723,9 @@ describe('ServicesComponent', () => {
         );
         const historyFormRule = historyFormStyles.match(/\.history-import-form\s*\{[^}]*\}/)?.[0] ?? '';
 
-        expect(toolsOnlyBindings).toHaveLength(3);
-        expect(initialToolBindings).toHaveLength(3);
-        expect(focusedToolBindings).toHaveLength(3);
+        expect(toolsOnlyBindings).toHaveLength(4);
+        expect(initialToolBindings).toHaveLength(4);
+        expect(focusedToolBindings).toHaveLength(4);
         expect(template).not.toContain('service-tools-dialog__description');
         expect(toolsOnlyRule).toContain('width: 100%');
         expect(toolsOnlyRule).toContain('max-width: none');
