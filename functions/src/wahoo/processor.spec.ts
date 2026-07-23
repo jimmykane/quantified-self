@@ -173,6 +173,7 @@ describe('processWahooWorkoutQueueItem', () => {
       {
         transactionGuard: mocks.eventWriteGuard,
         stageOriginalFilesUntilEventWrite: true,
+        onDocumentCreated: expect.any(Function),
       },
     );
     expect(mocks.acquireEventPublicationLease).toHaveBeenCalledWith(mocks.eventWriteFence);
@@ -224,12 +225,20 @@ describe('processWahooWorkoutQueueItem', () => {
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
   });
 
-  it('marks the queue item skipped instead of retrying when ownership changes in an event-write transaction', async () => {
-    mocks.setEvent.mockRejectedValue(new mocks.EventWriteSkippedByTransactionGuardError());
+  it('compensates only document roots created by this rejected Wahoo attempt', async () => {
+    mocks.setEvent.mockImplementationOnce(async (...args: unknown[]) => {
+      const writeOptions = args[8] as { onDocumentCreated: (path: readonly string[]) => void };
+      writeOptions.onDocumentCreated(['users', 'firebase-1', 'activities', 'new-activity']);
+      writeOptions.onDocumentCreated(['users', 'firebase-1', 'events', 'event-1', 'metaData', 'processing']);
+      throw new mocks.EventWriteSkippedByTransactionGuardError();
+    });
 
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
 
-    expect(mocks.cleanupPartialEvent).toHaveBeenCalledWith('firebase-1', 'event-1');
+    expect(mocks.cleanupPartialEvent).toHaveBeenCalledWith('firebase-1', 'event-1', [
+      'users/firebase-1/activities/new-activity',
+      'users/firebase-1/events/event-1/metaData/processing',
+    ]);
     expect(mocks.failRevision).not.toHaveBeenCalled();
     expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {
       resultStatus: 'skipped',

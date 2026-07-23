@@ -191,8 +191,23 @@ export type EventWriteTransactionGuard = (
   transaction: admin.firestore.Transaction,
 ) => Promise<boolean>;
 
+/**
+ * Records Firestore document roots that did not exist before a successful
+ * event-write transaction. Callers that need to compensate a rejected
+ * authorization fence must only remove these roots: provider revisions reuse
+ * deterministic event and activity IDs, so an ID alone is not evidence that
+ * this attempt created the document.
+ */
+export type EventWriteDocumentCreatedCallback = (path: readonly string[]) => void;
+
 export interface SetEventWriteOptions {
   transactionGuard?: EventWriteTransactionGuard;
+  /**
+   * Invoked after a guarded document write commits only when that document did
+   * not exist before this write attempt. This is an internal server-side hook
+   * for precise compensation after an authorization change.
+   */
+  onDocumentCreated?: EventWriteDocumentCreatedCallback;
   /**
    * Keep original files outside user-readable Storage paths until every
    * deletion and authorization-guarded Firestore write has succeeded.
@@ -279,19 +294,24 @@ export async function setEventDocumentIfUserActive(
     existingData: admin.firestore.DocumentData | null,
   ) => admin.firestore.DocumentData,
   transactionGuard?: EventWriteTransactionGuard,
+  onDocumentCreated?: () => void,
 ): Promise<void> {
   const db = admin.firestore();
+  let documentCreated = false;
   await db.runTransaction(async (transaction) => {
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase, transactionGuard);
 
     const incomingData = data as admin.firestore.DocumentData;
     let resolvedData = incomingData;
-    if (transformExistingData) {
+    if (transformExistingData || onDocumentCreated) {
       const existingSnapshot = await transaction.get(docRef);
-      resolvedData = transformExistingData(
-        incomingData,
-        existingSnapshot.exists ? existingSnapshot.data() || null : null,
-      );
+      documentCreated = !existingSnapshot.exists;
+      if (transformExistingData) {
+        resolvedData = transformExistingData(
+          incomingData,
+          existingSnapshot.exists ? existingSnapshot.data() || null : null,
+        );
+      }
     }
 
     if (options) {
@@ -301,11 +321,16 @@ export async function setEventDocumentIfUserActive(
 
     transaction.set(docRef, resolvedData);
   });
+
+  if (documentCreated) {
+    onDocumentCreated?.();
+  }
 }
 
 export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData | WahooAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, writeOptions: SetEventWriteOptions = {}): Promise<SetEventResult> {
   await assertEventWriteUserActive(userID, 'event_write_start');
   const transactionGuard = writeOptions.transactionGuard;
+  const onDocumentCreated = writeOptions.onDocumentCreated;
   const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true;
   const stagedOriginalFiles: { stagingPath: string; targetPath: string }[] = [];
   const stagingBucket = stageOriginalFilesUntilEventWrite ? admin.storage().bucket() : undefined;
@@ -389,6 +414,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
         transactionGuard,
+        onDocumentCreated ? () => onDocumentCreated([...path]) : undefined,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -455,6 +481,9 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       undefined,
       undefined,
       transactionGuard,
+      onDocumentCreated ? () => onDocumentCreated([
+        'users', userID, 'events', <string>event.getID(), 'metaData', 'processing',
+      ]) : undefined,
     );
 
     // Write Metadata (not handled by EventWriter)
@@ -474,6 +503,9 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       undefined,
       undefined,
       transactionGuard,
+      onDocumentCreated ? () => onDocumentCreated([
+        'users', userID, 'events', <string>event.getID(), 'metaData', metaData.serviceName,
+      ]) : undefined,
     );
 
     // Storage cannot join the Firestore transaction. Recheck immediately

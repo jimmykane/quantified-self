@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
   const eventRef = { id: 'event-1', path: 'users/firebase-1/events/event-1' };
   const activityRefOne = { id: 'activity-1', path: 'users/firebase-1/activities/activity-1' };
   const activityRefTwo = { id: 'activity-2', path: 'users/firebase-1/activities/activity-2' };
+  const processingMetaRef = { id: 'processing', path: 'users/firebase-1/events/event-1/metaData/processing' };
   const activityQueryGet = vi.fn();
   return {
     transactionGet,
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => {
     eventRef,
     activityRefOne,
     activityRefTwo,
+    processingMetaRef,
     activityQueryGet,
     recursiveDelete: vi.fn().mockResolvedValue(undefined),
     runTransaction: vi.fn(async (runner: any) => runner({
@@ -65,6 +67,13 @@ vi.mock('firebase-admin', () => ({
         if (name === 'wahooAPIUserMappings') return mocks.mappingRef;
         return mocks.ref;
       } };
+    },
+    doc: (path: string) => {
+      if (path === mocks.eventRef.path) return mocks.eventRef;
+      if (path === mocks.activityRefOne.path) return mocks.activityRefOne;
+      if (path === mocks.activityRefTwo.path) return mocks.activityRefTwo;
+      if (path === mocks.processingMetaRef.path) return mocks.processingMetaRef;
+      return mocks.ref;
     },
     runTransaction: mocks.runTransaction,
     recursiveDelete: mocks.recursiveDelete,
@@ -402,16 +411,28 @@ describe('upsertWahooWorkoutQueueItem', () => {
     });
   });
 
-  it('recursively removes a rejected Wahoo event root and all linked activity trees', async () => {
-    mocks.activityQueryGet.mockResolvedValue({
-      docs: [{ ref: mocks.activityRefOne }, { ref: mocks.activityRefTwo }],
-    });
+  it('recursively removes only roots created by a rejected attempt, preserving older deterministic revisions', async () => {
+    await cleanupWahooPartialEventPersistence('firebase-1', 'event-1', [
+      mocks.activityRefTwo.path,
+      mocks.processingMetaRef.path,
+    ]);
 
-    await cleanupWahooPartialEventPersistence('firebase-1', 'event-1');
+    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.activityRefTwo);
+    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.processingMetaRef);
+    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.eventRef);
+    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.activityRefOne);
+  });
+
+  it('uses the created event root as the sole recursive cleanup root for its newly created metadata subtree', async () => {
+    await cleanupWahooPartialEventPersistence('firebase-1', 'event-1', [
+      mocks.eventRef.path,
+      mocks.processingMetaRef.path,
+      mocks.activityRefTwo.path,
+    ]);
 
     expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.eventRef);
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.activityRefOne);
     expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.activityRefTwo);
+    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.processingMetaRef);
   });
 
   it('lets the latest revision claim immediately after replacing an older worker lease', async () => {

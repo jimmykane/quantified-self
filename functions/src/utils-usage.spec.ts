@@ -319,6 +319,44 @@ describe('utils higher-level helpers', () => {
             expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef, { ready: true });
         });
 
+        it('records a created document only after its guarded transaction commits', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            const onDocumentCreated = vi.fn();
+            hoisted.transactionGet.mockResolvedValueOnce({ exists: false });
+
+            await setEventDocumentIfUserActive(
+                'user-1',
+                'wahoo_event_write',
+                docRef as any,
+                { ready: true },
+                undefined,
+                undefined,
+                undefined,
+                onDocumentCreated,
+            );
+
+            expect(onDocumentCreated).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not record a pre-existing deterministic document as attempt-created', async () => {
+            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
+            const onDocumentCreated = vi.fn();
+            hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ id: 'event-1' }) });
+
+            await setEventDocumentIfUserActive(
+                'user-1',
+                'wahoo_event_write',
+                docRef as any,
+                { ready: true },
+                undefined,
+                undefined,
+                undefined,
+                onDocumentCreated,
+            );
+
+            expect(onDocumentCreated).not.toHaveBeenCalled();
+        });
+
         it('can preserve existing event tags inside the guarded write transaction', async () => {
             const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
             hoisted.transactionGet.mockResolvedValueOnce({
@@ -417,6 +455,7 @@ describe('utils higher-level helpers', () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
             const transactionGuard = vi.fn().mockResolvedValue(true);
+            const createdDocumentPaths: string[][] = [];
             const event = {
                 getID: () => 'event-1',
                 setID: vi.fn(),
@@ -448,7 +487,11 @@ describe('utils higher-level helpers', () => {
                 undefined,
                 undefined,
                 undefined,
-                { transactionGuard, stageOriginalFilesUntilEventWrite: true },
+                {
+                    transactionGuard,
+                    stageOriginalFilesUntilEventWrite: true,
+                    onDocumentCreated: (path) => createdDocumentPaths.push([...path]),
+                },
             );
 
             const stagingPath = hoisted.bucketFile.mock.calls
@@ -461,6 +504,11 @@ describe('utils higher-level helpers', () => {
                 expect.objectContaining({ path: 'users/user-1/events/event-1/original.fit' }),
             );
             expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
+            expect(createdDocumentPaths).toEqual(expect.arrayContaining([
+                ['users', 'user-1', 'events', 'event-1'],
+                ['users', 'user-1', 'events', 'event-1', 'metaData', 'processing'],
+                ['users', 'user-1', 'events', 'event-1', 'metaData', 'WAHOOAPI'],
+            ]));
             expect(transactionGuard).toHaveBeenCalledTimes(4);
         });
 

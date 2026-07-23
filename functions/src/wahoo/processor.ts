@@ -62,6 +62,7 @@ export async function processWahooWorkoutQueueItem(
   }
   let eventID: string | undefined;
   let eventPublicationFence: WahooEventPublicationFence | undefined;
+  const createdDocumentPaths = new Set<string>();
   try {
     if (!(await hasProAccess(userID))) {
       return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
@@ -137,6 +138,7 @@ export async function processWahooWorkoutQueueItem(
       {
         transactionGuard: createWahooEventWriteOwnershipGuard(eventPublicationFence),
         stageOriginalFilesUntilEventWrite: true,
+        onDocumentCreated: (path) => createdDocumentPaths.add(path.join('/')),
       },
     );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
@@ -157,7 +159,7 @@ export async function processWahooWorkoutQueueItem(
     if (error instanceof EventWriteSkippedByTransactionGuardError) {
       if (eventID) {
         try {
-          await cleanupWahooPartialEventPersistence(userID, eventID);
+          await cleanupWahooPartialEventPersistence(userID, eventID, [...createdDocumentPaths]);
         } catch (cleanupError) {
           logger.error('Failed to clean up partially written Wahoo activity after ownership changed', {
             queueItemId: queueItem.id,

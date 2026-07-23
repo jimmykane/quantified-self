@@ -279,10 +279,20 @@ export class EventWriter {
             const eventPath = ['users', userID, 'events', <string>event.getID()];
             writePromises.push(this.writeDocWithContext(eventPath, eventJSON));
 
-            this.logger.info(`Starting Promise.all for ${writePromises.length} writes...`);
+            this.logger.info(`Starting write batch for ${writePromises.length} writes...`);
             const startWrites = Date.now();
-            await Promise.all(writePromises);
-            this.logger.info(`Promise.all complete in ${Date.now() - startWrites}ms`);
+            // A guarded write can reject after another concurrent write has
+            // committed. Wait for every write before surfacing the rejection
+            // so the caller's attempt-scoped compensation sees every root it
+            // may need to remove.
+            const writeResults = await Promise.allSettled(writePromises);
+            const rejectedWrite = writeResults.find(
+                (result): result is PromiseRejectedResult => result.status === 'rejected',
+            );
+            if (rejectedWrite) {
+                throw rejectedWrite.reason;
+            }
+            this.logger.info(`Write batch complete in ${Date.now() - startWrites}ms`);
             this.logger.info(`Total writeAllEventData execution time: ${Date.now() - startTotal}ms`);
             return persistedOriginalFiles;
         } catch (e) {

@@ -393,27 +393,36 @@ export async function releaseWahooEventPublicationLease(
 }
 
 /**
- * Event documents own a metadata subtree, while activities are stored in a
- * sibling collection. Both roots must be recursively removed if a Wahoo
- * ownership fence rejects after any individual write has committed.
+ * Removes only document roots that were created by the rejected Wahoo write
+ * attempt. Wahoo revision imports deliberately reuse deterministic event and
+ * activity IDs, so deleting by event ID would erase an already-imported
+ * workout when a later revision is interrupted by disconnect or ownership
+ * loss.
  */
 export async function cleanupWahooPartialEventPersistence(
   userID: string,
   eventID: string,
+  createdDocumentPaths: readonly string[],
 ): Promise<void> {
+  if (createdDocumentPaths.length === 0) return;
   const db = admin.firestore();
-  const eventRef = db.collection('users').doc(userID).collection('events').doc(eventID);
-  const activitiesSnapshot = await db
-    .collection('users')
-    .doc(userID)
-    .collection('activities')
-    .where('eventID', '==', eventID)
-    .get();
+  const eventRootPath = `users/${userID}/events/${eventID}`;
+  const activityRootPrefix = `users/${userID}/activities/`;
+  const createdPaths = [...new Set(createdDocumentPaths)]
+    .filter((path) => {
+      const normalized = `${path || ''}`.trim();
+      const pathSegments = normalized.split('/');
+      const isDocumentPath = pathSegments.length > 0 && pathSegments.length % 2 === 0;
+      return isDocumentPath
+        && (normalized === eventRootPath
+          || normalized.startsWith(`${eventRootPath}/`)
+          || (normalized.startsWith(activityRootPrefix) && pathSegments.length === 4));
+    });
+  const cleanupRoots = createdPaths.filter((path) => !createdPaths.some(
+    (otherPath) => otherPath !== path && path.startsWith(`${otherPath}/`),
+  ));
 
-  await Promise.all([
-    db.recursiveDelete(eventRef),
-    ...activitiesSnapshot.docs.map((activity) => db.recursiveDelete(activity.ref)),
-  ]);
+  await Promise.all(cleanupRoots.map((path) => db.recursiveDelete(db.doc(path))));
 }
 
 /**
