@@ -175,6 +175,23 @@ describe('Wahoo route uploads', () => {
     expect(mocks.exportRoutesToFit).not.toHaveBeenCalled();
   });
 
+  it.each(['Mountain Biking', 'mountain bike'])('classifies %s routes as biking in Wahoo', async (activityType) => {
+    mocks.parseRoutePayload.mockResolvedValue(routeFile({
+      getRoutes: () => [{
+        activityType,
+        getPointData: () => [{ latitudeDegrees: 60.1699, longitudeDegrees: 24.9384 }],
+      }],
+    }));
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { id: 42 } });
+
+    await uploadFitRouteToWahoo('user-1', Buffer.from('FIT'));
+
+    const [, , request] = mocks.requestWahooAPI.mock.calls[1];
+    expect(request.form.get('route[workout_type_family_id]')).toBe('0');
+  });
+
   it('converts a GPX route to FIT before creating an idempotent Wahoo route', async () => {
     mocks.parseRoutePayload.mockResolvedValue(routeFile({
       name: 'New Route File',

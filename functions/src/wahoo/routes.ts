@@ -221,8 +221,8 @@ function getWorkoutTypeFamilyId(routeFile: RouteFileInterface): number {
   if (activityType.includes('snow') || activityType.includes('ski')) return 4;
   if (activityType.includes('skate')) return 5;
   if (activityType.includes('gym') || activityType.includes('yoga')) return 6;
+  if (activityType.includes('bike') || activityType.includes('biking') || activityType.includes('cycl') || activityType.includes('road') || activityType.includes('gravel')) return 0;
   if (activityType.includes('walk') || activityType.includes('hike') || activityType.includes('mountain')) return 9;
-  if (activityType.includes('bike') || activityType.includes('cycl') || activityType.includes('road') || activityType.includes('gravel')) return 0;
   return 31;
 }
 
