@@ -121,7 +121,10 @@ export async function processWahooWorkoutQueueItem(
       undefined,
       undefined,
       undefined,
-      { transactionGuard: createWahooEventWriteOwnershipGuard(eventWriteOwnershipFence) },
+      {
+        transactionGuard: createWahooEventWriteOwnershipGuard(eventWriteOwnershipFence),
+        stageOriginalFilesUntilEventWrite: true,
+      },
     );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,

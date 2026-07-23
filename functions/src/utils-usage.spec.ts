@@ -4,6 +4,8 @@ import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
 
+type SetEventParameters = Parameters<typeof setEvent>;
+
 // Hoisted shared/id-generator mock
 vi.mock('./shared/id-generator', () => ({
     generateIDFromParts: vi.fn(async () => 'gen-part-id'),
@@ -22,10 +24,12 @@ const mockSavedOriginalFiles = [
     { path: 'users/user-1/events/event-1/original.fit' },
 ];
 const writeAllEventDataMock = vi.fn().mockResolvedValue(mockSavedOriginalFiles);
+const eventWriterConstructorMock = vi.fn();
 vi.mock('./shared/event-writer', () => ({
-    EventWriter: vi.fn().mockImplementation(() => ({
-        writeAllEventData: writeAllEventDataMock,
-    })),
+    EventWriter: vi.fn().mockImplementation((...constructorArgs: unknown[]) => {
+        eventWriterConstructorMock(...constructorArgs);
+        return { writeAllEventData: writeAllEventDataMock };
+    }),
     FirestoreAdapter: class { },
     StorageAdapter: class { },
     LogAdapter: class { },
@@ -80,13 +84,20 @@ const hoisted = vi.hoisted(() => {
     (firestore as any).FieldValue = { serverTimestamp };
 
     const bucketSave = vi.fn();
+    const bucketCopy = vi.fn();
+    const bucketDelete = vi.fn();
+    const bucketGetMetadata = vi.fn().mockResolvedValue([{ generation: '1' }]);
+    const bucketFile = vi.fn((path: string) => ({
+        path,
+        save: (data: unknown) => bucketSave(path, data),
+        copy: (destination: unknown) => bucketCopy(path, destination),
+        delete: (options: unknown) => bucketDelete(path, options),
+        getMetadata: bucketGetMetadata,
+    }));
     const storage = () => ({
         bucket: () => ({
             name: 'mock-bucket',
-            file: (path: string) => ({
-                path,
-                save: bucketSave,
-            }),
+            file: bucketFile,
         }),
     });
 
@@ -106,6 +117,9 @@ const hoisted = vi.hoisted(() => {
         getUser,
         setCount,
         bucketSave,
+        bucketCopy,
+        bucketDelete,
+        bucketFile,
         serverTimestamp,
         getUserDeletionGuardState,
         getUserDeletionGuardStateInTransaction,
@@ -161,6 +175,7 @@ describe('utils higher-level helpers', () => {
         hoisted.transactionSet.mockClear();
         hoisted.transactionGet.mockClear();
         hoisted.runTransaction.mockClear();
+        eventWriterConstructorMock.mockClear();
     });
 
     describe('checkEventUsageLimit', () => {
@@ -396,6 +411,151 @@ describe('utils higher-level helpers', () => {
 
             expect(writeAllEventDataMock).not.toHaveBeenCalled();
             expect(bulkWriter.set).not.toHaveBeenCalled();
+        });
+
+        it('promotes a staged original file only after all guarded writes succeed', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
+            const transactionGuard = vi.fn().mockResolvedValue(true);
+            const event = {
+                getID: () => 'event-1',
+                setID: vi.fn(),
+                getActivities: () => [],
+            };
+            const metaData = {
+                serviceName: 'WAHOOAPI',
+                toJSON: () => ({ meta: true }),
+            } as unknown as SetEventParameters[3];
+            const originalFile = {
+                data: Buffer.from('file'),
+                extension: 'fit',
+                startDate: new Date(),
+            };
+
+            writeAllEventDataMock.mockImplementationOnce(async () => {
+                const [adapter, storageAdapter] = eventWriterConstructorMock.mock.calls.at(-1);
+                await storageAdapter.uploadFile('users/user-1/events/event-1/original.fit', originalFile.data);
+                await adapter.setDoc(['users', 'user-1', 'events', 'event-1'], { id: 'event-1' });
+                return mockSavedOriginalFiles;
+            });
+
+            await setEvent(
+                'user-1',
+                'event-1',
+                event as unknown as SetEventParameters[2],
+                metaData,
+                originalFile,
+                undefined,
+                undefined,
+                undefined,
+                { transactionGuard, stageOriginalFilesUntilEventWrite: true },
+            );
+
+            const stagingPath = hoisted.bucketFile.mock.calls
+                .map(([path]: [string]) => path)
+                .find((path: string) => path.startsWith('event-write-staging/'));
+            expect(stagingPath).toBeDefined();
+            expect(hoisted.bucketSave).toHaveBeenCalledWith(stagingPath, originalFile.data);
+            expect(hoisted.bucketCopy).toHaveBeenCalledWith(
+                stagingPath,
+                expect.objectContaining({ path: 'users/user-1/events/event-1/original.fit' }),
+            );
+            expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
+            expect(transactionGuard).toHaveBeenCalledTimes(4);
+        });
+
+        it('removes the staged original file when a later ownership guard rejects', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
+            const transactionGuard = vi.fn()
+                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce(true)
+                .mockResolvedValueOnce(false);
+            const event = {
+                getID: () => 'event-1',
+                setID: vi.fn(),
+                getActivities: () => [],
+            };
+            const metaData = {
+                serviceName: 'WAHOOAPI',
+                toJSON: () => ({ meta: true }),
+            } as unknown as SetEventParameters[3];
+            const originalFile = {
+                data: Buffer.from('file'),
+                extension: 'fit',
+                startDate: new Date(),
+            };
+
+            writeAllEventDataMock.mockImplementationOnce(async () => {
+                const [adapter, storageAdapter] = eventWriterConstructorMock.mock.calls.at(-1);
+                await storageAdapter.uploadFile('users/user-1/events/event-1/original.fit', originalFile.data);
+                await adapter.setDoc(['users', 'user-1', 'events', 'event-1'], { id: 'event-1' });
+                return mockSavedOriginalFiles;
+            });
+
+            await expect(setEvent(
+                'user-1',
+                'event-1',
+                event as unknown as SetEventParameters[2],
+                metaData,
+                originalFile,
+                undefined,
+                undefined,
+                undefined,
+                { transactionGuard, stageOriginalFilesUntilEventWrite: true },
+            )).rejects.toBeInstanceOf(EventWriteSkippedByTransactionGuardError);
+
+            const stagingPath = hoisted.bucketFile.mock.calls
+                .map(([path]: [string]) => path)
+                .find((path: string) => path.startsWith('event-write-staging/'));
+            expect(stagingPath).toBeDefined();
+            expect(hoisted.bucketCopy).not.toHaveBeenCalled();
+            expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
+        });
+
+        it('removes a staging object when Storage reports an upload failure', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            hoisted.bucketSave.mockRejectedValueOnce(new Error('storage unavailable'));
+            const event = {
+                getID: () => 'event-1',
+                setID: vi.fn(),
+                getActivities: () => [],
+            };
+            const metaData = {
+                serviceName: 'WAHOOAPI',
+                toJSON: () => ({ meta: true }),
+            } as unknown as SetEventParameters[3];
+            const originalFile = {
+                data: Buffer.from('file'),
+                extension: 'fit',
+                startDate: new Date(),
+            };
+
+            writeAllEventDataMock.mockImplementationOnce(async () => {
+                const [, storageAdapter] = eventWriterConstructorMock.mock.calls.at(-1);
+                await storageAdapter.uploadFile('users/user-1/events/event-1/original.fit', originalFile.data);
+                return mockSavedOriginalFiles;
+            });
+
+            await expect(setEvent(
+                'user-1',
+                'event-1',
+                event as unknown as SetEventParameters[2],
+                metaData,
+                originalFile,
+                undefined,
+                undefined,
+                undefined,
+                { stageOriginalFilesUntilEventWrite: true },
+            )).rejects.toThrow('storage unavailable');
+
+            const stagingPath = hoisted.bucketFile.mock.calls
+                .map(([path]: [string]) => path)
+                .find((path: string) => path.startsWith('event-write-staging/'));
+            expect(stagingPath).toBeDefined();
+            expect(hoisted.bucketCopy).not.toHaveBeenCalled();
+            expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
         });
     });
 

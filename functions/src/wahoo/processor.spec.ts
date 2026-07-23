@@ -153,7 +153,10 @@ describe('processWahooWorkoutQueueItem', () => {
       undefined,
       undefined,
       undefined,
-      { transactionGuard: mocks.eventWriteGuard },
+      {
+        transactionGuard: mocks.eventWriteGuard,
+        stageOriginalFilesUntilEventWrite: true,
+      },
     );
     expect(mocks.createEventWriteGuard).toHaveBeenCalledWith(mocks.eventWriteFence);
     expect(mocks.enqueueActivitySyncAfterEventPersistence).toHaveBeenCalledWith({
