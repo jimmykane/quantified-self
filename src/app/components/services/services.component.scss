@@ -204,11 +204,9 @@
 }
 
 .service-data-flow__matrix-route {
-    display: grid;
     width: 100%;
     min-width: 0;
     padding: 4px;
-    gap: 2px;
     color: var(--mat-sys-on-surface);
     font-size: 0.8rem;
     font-weight: 650;
@@ -216,19 +214,22 @@
     text-align: center;
 }
 
-.service-data-flow__matrix-route--activity > span {
+.service-data-flow__matrix-route-content {
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+}
+
+.service-data-flow__matrix-route-label {
+    line-height: 1.25;
+}
+
+.service-data-flow__matrix-route--activity .service-data-flow__matrix-route-label {
     color: var(--mat-sys-primary);
 }
 
-.service-data-flow__matrix-route--route > span {
+.service-data-flow__matrix-route--route .service-data-flow__matrix-route-label {
     color: var(--mat-sys-tertiary);
-}
-
-.service-data-flow__matrix-route > span {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
 }
 
 .service-data-flow__matrix-route small {
@@ -243,7 +244,7 @@
 }
 
 .service-data-flow__matrix-route--attention,
-.service-data-flow__matrix-route--attention > span,
+.service-data-flow__matrix-route--attention .service-data-flow__matrix-route-label,
 .service-data-flow__matrix-route--attention small {
     color: var(--mat-sys-error);
 }
@@ -572,8 +573,8 @@
         text-align: right;
     }
 
-    .service-data-flow__mobile-matrix-target .service-data-flow__matrix-route > span {
-        justify-content: end;
+    .service-data-flow__mobile-matrix-target .service-data-flow__matrix-route-content {
+        justify-items: end;
     }
 
     .services-page-header h1 {

@@ -314,6 +314,23 @@ describe('ServicesComponent', () => {
         expect(matrix.querySelectorAll('.service-data-flow__matrix-route--active')).toHaveLength(1);
     });
 
+    it('keeps each matrix route label and state in an app-owned vertical layout wrapper', () => {
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.html'),
+            'utf8',
+        );
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8',
+        );
+        const routeContentRule = styles.match(/\.service-data-flow__matrix-route-content\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(template).toContain('class="service-data-flow__matrix-route-content"');
+        expect(template).toContain('class="service-data-flow__matrix-route-label"');
+        expect(routeContentRule).toContain('display: grid');
+        expect(routeContentRule).toContain('gap: 3px');
+    });
+
     it('shows a green connected status beside connected providers in the data-flow matrix', () => {
         component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, true);
         component.setServiceConnectionState('garmin', true);

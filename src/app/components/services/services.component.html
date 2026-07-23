@@ -90,14 +90,16 @@
                           [class.service-data-flow__matrix-route--attention]="route.state === 'attention'"
                           [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
                           (click)="openServiceTools(route.sourceSection, route)">
-                          <span>{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
-                          @if (route.state === 'active') {
-                          <small>On</small>
-                          } @else if (route.state === 'attention') {
-                          <small><mat-icon aria-hidden="true">sync_problem</mat-icon> Needs connection</small>
-                          } @else {
-                          <small>Available</small>
-                          }
+                          <span class="service-data-flow__matrix-route-content">
+                            <span class="service-data-flow__matrix-route-label">{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
+                            @if (route.state === 'active') {
+                            <small>On</small>
+                            } @else if (route.state === 'attention') {
+                            <small><mat-icon aria-hidden="true">sync_problem</mat-icon> Needs connection</small>
+                            } @else {
+                            <small>Available</small>
+                            }
+                          </span>
                         </button>
                         }
                       </div>
@@ -146,14 +148,16 @@
                       [class.service-data-flow__matrix-route--attention]="route.state === 'attention'"
                       [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
                       (click)="openServiceTools(route.sourceSection, route)">
-                      <span>{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
-                      @if (route.state === 'active') {
-                      <small>On</small>
-                      } @else if (route.state === 'attention') {
-                      <small><mat-icon aria-hidden="true">sync_problem</mat-icon> Needs connection</small>
-                      } @else {
-                      <small>Available</small>
-                      }
+                      <span class="service-data-flow__matrix-route-content">
+                        <span class="service-data-flow__matrix-route-label">{{ route.kind === 'activity' ? 'Activity' : 'Route' }}</span>
+                        @if (route.state === 'active') {
+                        <small>On</small>
+                        } @else if (route.state === 'attention') {
+                        <small><mat-icon aria-hidden="true">sync_problem</mat-icon> Needs connection</small>
+                        } @else {
+                        <small>Available</small>
+                        }
+                      </span>
                     </button>
                     }
                   </div>
