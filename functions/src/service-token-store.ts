@@ -16,6 +16,7 @@ function hasPendingOAuthFlowContext(snapshot: admin.firestore.DocumentSnapshot):
 
 export interface DeleteLocalServiceTokenOptions {
   preserveOAuthFlowContext?: boolean;
+  shouldDeleteInTransaction?: (transaction: admin.firestore.Transaction) => Promise<boolean>;
 }
 
 export function getServiceTokenRootDocumentRef(
@@ -33,12 +34,19 @@ export function getServiceTokenCollectionRef(
   return getServiceTokenRootDocumentRef(userID, serviceName).collection('tokens');
 }
 
+export interface DeleteLocalServiceTokenResult {
+  tokenRootDeleted: boolean;
+  tokenRootPreservedForOAuthFlow: boolean;
+  remainingTokenCount: number;
+  skippedByCondition: boolean;
+}
+
 export async function deleteLocalServiceToken(
   userID: string,
   serviceName: ServiceNames,
   tokenID: string,
   options: DeleteLocalServiceTokenOptions = {},
-): Promise<{ tokenRootDeleted: boolean; tokenRootPreservedForOAuthFlow: boolean; remainingTokenCount: number }> {
+): Promise<DeleteLocalServiceTokenResult> {
   logger.info(`Starting delete for local token ${tokenID} for ${userID} and serviceName ${serviceName}`);
 
   const userDocRef = getServiceTokenRootDocumentRef(userID, serviceName);
@@ -46,6 +54,15 @@ export async function deleteLocalServiceToken(
   const tokenDocRef = tokenCollectionRef.doc(tokenID);
 
   return admin.firestore().runTransaction(async (transaction) => {
+    if (options.shouldDeleteInTransaction && !(await options.shouldDeleteInTransaction(transaction))) {
+      return {
+        tokenRootDeleted: false,
+        tokenRootPreservedForOAuthFlow: false,
+        remainingTokenCount: 0,
+        skippedByCondition: true,
+      };
+    }
+
     const tokenRootSnapshot = await transaction.get(userDocRef);
     const tokenQuerySnapshot = await transaction.get(tokenCollectionRef);
     const remainingTokenCount = tokenQuerySnapshot.docs.filter((doc) => doc.id !== tokenID).length;
@@ -71,6 +88,7 @@ export async function deleteLocalServiceToken(
       tokenRootDeleted: remainingTokenCount === 0 && !tokenRootPreservedForOAuthFlow,
       tokenRootPreservedForOAuthFlow,
       remainingTokenCount,
+      skippedByCondition: false,
     };
   });
 }

@@ -545,6 +545,37 @@ describe('service-auth-lifecycle terminal auth handling', () => {
     );
   });
 
+  it('does not apply follow-up cleanup when a duplicate-token ownership guard becomes stale', async () => {
+    mockDeleteLocalServiceToken.mockResolvedValueOnce({
+      tokenRootDeleted: false,
+      tokenRootPreservedForOAuthFlow: false,
+      remainingTokenCount: 0,
+      skippedByCondition: true,
+    });
+
+    const guard = vi.fn().mockResolvedValue(false);
+    const outcome = await cleanupServiceTokenById(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      'wahoo-user',
+      SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup,
+      { shouldDeleteInTransaction: guard },
+    );
+
+    expect(mockDeleteLocalServiceToken).toHaveBeenCalledWith(
+      'firebase-user-123',
+      ServiceNames.WahooAPI,
+      'wahoo-user',
+      expect.objectContaining({ shouldDeleteInTransaction: guard }),
+    );
+    expect(mockCleanupProviderOperationalDocsForServiceToken).not.toHaveBeenCalled();
+    expect(mockClearServiceConnectionState).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      deletedTokenCount: 0,
+      skippedByCondition: true,
+    });
+  });
+
   it('cleans provider-keyed operational docs after targeted token deletion using captured token data', async () => {
     tokenDocumentGet.mockResolvedValueOnce({
       exists: true,

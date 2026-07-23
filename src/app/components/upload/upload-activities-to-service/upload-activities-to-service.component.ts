@@ -14,7 +14,15 @@ const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES = 20 * 1024 * 1024;
 const BASE64_CHUNK_SIZE = 0x8000;
 const SERVICE_ACTIVITY_UPLOAD_DELAY_MS = 2000;
 const WAHOO_STATUS_POLL_DELAY_MS = 2000;
+const WAHOO_STATUS_POLL_MAX_DELAY_MS = 60_000;
+const WAHOO_STATUS_POLL_MAX_ATTEMPTS = 8;
 const WAITING_FOR_NEXT_UPLOAD_MESSAGE = 'Waiting before next upload...';
+const RETRYABLE_WAHOO_STATUS_ERROR_CODES = new Set([
+  'aborted',
+  'deadline-exceeded',
+  'resource-exhausted',
+  'unavailable',
+]);
 
 type ServiceUploadStatus = 'queued' | 'uploading' | 'processing' | 'success' | 'duplicate' | 'failed';
 
@@ -71,6 +79,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private rowIdCounter = 0;
   private readonly wahooStatusPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly wahooStatusChecksInProgress = new Set<string>();
+  private readonly wahooStatusPollAttempts = new Map<string, number>();
+  private isDestroyed = false;
   private _serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   @Input() set serviceName(value: ServiceNames) {
@@ -91,6 +101,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   public callableFunction: FunctionName = 'importActivityToSuuntoApp';
   public uploadDelayMs = SERVICE_ACTIVITY_UPLOAD_DELAY_MS;
   public wahooStatusPollDelayMs = WAHOO_STATUS_POLL_DELAY_MS;
+  public wahooStatusPollMaxDelayMs = WAHOO_STATUS_POLL_MAX_DELAY_MS;
+  public wahooStatusPollMaxAttempts = WAHOO_STATUS_POLL_MAX_ATTEMPTS;
   public readonly displayedColumns = ['file', 'status', 'attempts', 'message', 'actions'];
   public readonly uploadRows = signal<ServiceUploadRow[]>([]);
   public readonly hasRows = computed(() => this.uploadRows().length > 0);
@@ -141,6 +153,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   ngOnDestroy(): void {
+    this.isDestroyed = true;
     this.clearAllWahooStatusPolls();
   }
 
@@ -189,7 +202,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   async refreshUpload(row: ServiceUploadRow): Promise<void> {
-    if (row.status !== 'processing'
+    if (this.isDestroyed
+      || row.status !== 'processing'
       || !row.uploadId
       || this.serviceName !== ServiceNames.WahooAPI
       || this.wahooStatusChecksInProgress.has(row.id)) {
@@ -198,6 +212,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
     this.clearWahooStatusPoll(row.id);
     this.wahooStatusChecksInProgress.add(row.id);
+    this.wahooStatusPollAttempts.set(row.id, (this.wahooStatusPollAttempts.get(row.id) || 0) + 1);
     this.updateRow(row.id, { message: 'Checking Wahoo processing status...' });
     try {
       const response = await this.functionsService.call<any, ServiceUploadCallableResponse>(
@@ -206,27 +221,34 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       );
       const result = this.toServiceUploadResult(response.data);
       if (result.pending) {
-        this.updateRow(row.id, { message: result.message || 'Wahoo is still processing the activity.' });
-        this.scheduleWahooStatusPoll(row.id);
+        this.scheduleNextWahooStatusPoll(row, result.message || 'Wahoo is still processing the activity.');
         return;
       }
       if (result.duplicate) {
         const message = result.message || `Activity already exists in ${this.destinationName}`;
         this.updateRow(row.id, { status: 'duplicate', progress: 100, message });
         this.processingService.updateJob(row.jobId || row.id, { status: 'duplicate', progress: 100, details: message });
-        this.clearWahooStatusPoll(row.id);
+        this.resetWahooStatusPolling(row.id);
         return;
       }
       const message = result.message || `Uploaded to ${this.destinationName}`;
       this.updateRow(row.id, { status: 'success', progress: 100, message });
       this.processingService.completeJob(row.jobId || row.id, message);
-      this.clearWahooStatusPoll(row.id);
+      this.resetWahooStatusPolling(row.id);
     } catch (error) {
       const message = this.getErrorMessage(error);
       this.logger.error(error);
+      if (this.isRetryableWahooStatusError(error)) {
+        this.scheduleNextWahooStatusPoll(
+          row,
+          message || 'Wahoo is temporarily unavailable.',
+          this.getWahooRetryAfterMs(error),
+        );
+        return;
+      }
       this.updateRow(row.id, { status: 'failed', progress: 0, message });
       this.processingService.failJob(row.jobId || row.id, message);
-      this.clearWahooStatusPoll(row.id);
+      this.resetWahooStatusPolling(row.id);
     } finally {
       this.wahooStatusChecksInProgress.delete(row.id);
     }
@@ -334,6 +356,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     }
 
     const jobId = this.processingService.addJob('upload', `Uploading ${row.name}...`);
+    this.resetWahooStatusPolling(row.id);
     const attempts = row.attempts + 1;
     this.updateRow(row.id, {
       jobId,
@@ -371,7 +394,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           uploadId: result.uploadId,
         });
         this.processingService.updateJob(jobId, { status: 'processing', progress: 75, details: message });
-        this.scheduleWahooStatusPoll(row.id);
+        this.startWahooStatusPolling(row.id);
         return true;
       }
 
@@ -447,21 +470,55 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     this.uploadRows.update((rows) => rows.map((row) => row.id === rowId ? { ...row, ...updates } : row));
   }
 
-  private scheduleWahooStatusPoll(rowId: string): void {
+  private startWahooStatusPolling(rowId: string): void {
+    this.resetWahooStatusPolling(rowId);
+    this.scheduleWahooStatusPoll(rowId);
+  }
+
+  private scheduleNextWahooStatusPoll(
+    row: ServiceUploadRow,
+    message: string,
+    retryAfterMs?: number,
+  ): void {
+    const delayMs = this.scheduleWahooStatusPoll(row.id, retryAfterMs);
+    const details = delayMs === undefined
+      ? `${message} Automatic status checks are paused to avoid rate limits. Use Refresh to check again.`
+      : `${message} Checking again in ${this.formatWahooStatusPollDelay(delayMs)}.`;
+    this.updateRow(row.id, { message: details });
+    this.processingService.updateJob(row.jobId || row.id, { status: 'processing', progress: 75, details });
+  }
+
+  private scheduleWahooStatusPoll(rowId: string, retryAfterMs?: number): number | undefined {
     const row = this.findRow(rowId);
-    if (this.serviceName !== ServiceNames.WahooAPI || row?.status !== 'processing' || !row.uploadId) {
-      return;
+    if (this.isDestroyed
+      || this.serviceName !== ServiceNames.WahooAPI
+      || row?.status !== 'processing'
+      || !row.uploadId) {
+      return undefined;
+    }
+
+    const pollAttemptCount = this.wahooStatusPollAttempts.get(rowId) || 0;
+    if (pollAttemptCount >= this.wahooStatusPollMaxAttempts) {
+      return undefined;
     }
 
     this.clearWahooStatusPoll(rowId);
+    const exponentialDelayMs = Math.min(
+      this.wahooStatusPollDelayMs * (2 ** pollAttemptCount),
+      this.wahooStatusPollMaxDelayMs,
+    );
+    const delayMs = retryAfterMs === undefined
+      ? exponentialDelayMs
+      : Math.max(exponentialDelayMs, retryAfterMs);
     const timer = setTimeout(() => {
       this.wahooStatusPollTimers.delete(rowId);
       const currentRow = this.findRow(rowId);
       if (currentRow) {
         void this.refreshUpload(currentRow);
       }
-    }, this.wahooStatusPollDelayMs);
+    }, delayMs);
     this.wahooStatusPollTimers.set(rowId, timer);
+    return delayMs;
   }
 
   private clearWahooStatusPoll(rowId: string): void {
@@ -475,6 +532,41 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private clearAllWahooStatusPolls(): void {
     this.wahooStatusPollTimers.forEach((timer) => clearTimeout(timer));
     this.wahooStatusPollTimers.clear();
+    this.wahooStatusPollAttempts.clear();
+    this.wahooStatusChecksInProgress.clear();
+  }
+
+  private resetWahooStatusPolling(rowId: string): void {
+    this.clearWahooStatusPoll(rowId);
+    this.wahooStatusPollAttempts.delete(rowId);
+    this.wahooStatusChecksInProgress.delete(rowId);
+  }
+
+  private formatWahooStatusPollDelay(delayMs: number): string {
+    const seconds = Math.ceil(delayMs / 1000);
+    return `${seconds} second${seconds === 1 ? '' : 's'}`;
+  }
+
+  private isRetryableWahooStatusError(error: unknown): boolean {
+    const code = `${(error as { code?: unknown } | null)?.code || ''}`
+      .trim()
+      .toLowerCase()
+      .replace(/^functions\//, '');
+    return RETRYABLE_WAHOO_STATUS_ERROR_CODES.has(code);
+  }
+
+  private getWahooRetryAfterMs(error: unknown): number | undefined {
+    const details = (error as { details?: unknown } | null)?.details;
+    if (!details || typeof details !== 'object') {
+      return undefined;
+    }
+
+    const retryAfterSeconds = Number((details as { retryAfterSeconds?: unknown }).retryAfterSeconds);
+    if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds < 0) {
+      return undefined;
+    }
+
+    return Math.ceil(retryAfterSeconds * 1000);
   }
 
   private findRow(rowId: string): ServiceUploadRow | undefined {

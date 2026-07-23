@@ -813,6 +813,7 @@ describe('OAuth2', () => {
                 tokenRootDeleted: true,
                 tokenRootPreservedForOAuthFlow: false,
                 remainingTokenCount: 0,
+                skippedByCondition: false,
             });
         });
 
@@ -826,6 +827,7 @@ describe('OAuth2', () => {
                 tokenRootDeleted: false,
                 tokenRootPreservedForOAuthFlow: false,
                 remainingTokenCount: 1,
+                skippedByCondition: false,
             });
         });
 
@@ -843,6 +845,7 @@ describe('OAuth2', () => {
                 tokenRootDeleted: false,
                 tokenRootPreservedForOAuthFlow: true,
                 remainingTokenCount: 0,
+                skippedByCondition: false,
             });
         });
 
@@ -862,6 +865,24 @@ describe('OAuth2', () => {
                 tokenRootDeleted: true,
                 tokenRootPreservedForOAuthFlow: false,
                 remainingTokenCount: 0,
+                skippedByCondition: false,
+            });
+        });
+
+        it('does not delete a token when the transaction-owned identity cleanup guard is stale', async () => {
+            const guard = vi.fn().mockResolvedValue(false);
+
+            const result = await deleteLocalServiceToken(userID, serviceName, tokenID, {
+                shouldDeleteInTransaction: guard,
+            });
+
+            expect(guard).toHaveBeenCalledTimes(1);
+            expect(transactionDeleteSpy).not.toHaveBeenCalled();
+            expect(result).toEqual({
+                tokenRootDeleted: false,
+                tokenRootPreservedForOAuthFlow: false,
+                remainingTokenCount: 0,
+                skippedByCondition: true,
             });
         });
 

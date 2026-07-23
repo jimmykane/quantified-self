@@ -17,6 +17,7 @@ import {
   PendingServiceDisconnectFailure,
 } from './service-disconnect-pending';
 import {
+  DeleteLocalServiceTokenOptions,
   deleteLocalServiceToken,
   getServiceTokenCollectionRef,
   getServiceTokenRootDocumentRef,
@@ -72,8 +73,13 @@ export interface ServiceAuthCleanupOutcome {
   localCleanupStatus: 'completed' | 'partial' | 'no_tokens_found';
   connectionStateUpdate: 'reconnect_required' | 'cleared' | 'unchanged';
   fallbackTokenRootCleanupPerformed: boolean;
+  skippedByCondition?: boolean;
   tokensToArchive?: ServiceAuthCleanupArchiveToken[];
   retryableDisconnectFailures?: PendingServiceDisconnectFailure[];
+}
+
+interface CleanupServiceTokenByIdOptions {
+  shouldDeleteInTransaction?: DeleteLocalServiceTokenOptions['shouldDeleteInTransaction'];
 }
 
 export interface ServiceAuthCleanupArchiveToken {
@@ -618,6 +624,7 @@ export async function cleanupServiceTokenById(
   serviceName: ServiceNames,
   tokenID: string,
   reason: ServiceAuthCleanupReason,
+  options: CleanupServiceTokenByIdOptions = {},
 ): Promise<ServiceAuthCleanupOutcome> {
   const outcome: ServiceAuthCleanupOutcome = {
     reason,
@@ -640,7 +647,13 @@ export async function cleanupServiceTokenById(
       preserveOAuthFlowContext: reason !== SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect
         && reason !== SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
         && reason !== SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement,
+      shouldDeleteInTransaction: options.shouldDeleteInTransaction,
     });
+    if (deleteResult.skippedByCondition) {
+      outcome.skippedByCondition = true;
+      logger.info(`Skipped stale duplicate-token cleanup for ${serviceName} user ${userID} token ${tokenID}.`);
+      return outcome;
+    }
     outcome.deletedTokenCount = 1;
     if (tokenDataForOperationalCleanup) {
       try {

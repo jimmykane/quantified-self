@@ -5,7 +5,11 @@ import {
   Auth2ServiceTokenInterface,
   ServiceNames,
 } from '@sports-alliance/sports-lib';
-import { ServiceAuthAdapter, ServiceTokenInput } from '../../auth/ServiceAuthAdapter';
+import {
+  PersistedServiceIdentity,
+  ServiceAuthAdapter,
+  ServiceTokenInput,
+} from '../../auth/ServiceAuthAdapter';
 import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
@@ -17,6 +21,13 @@ import {
 } from '../constants';
 import { WahooAPIAuth } from './auth';
 import { deauthorizeWahooUser, getWahooUserID } from './api';
+
+function getNextOwnershipVersion(value: unknown): number {
+  const currentVersion = typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : 0;
+  return currentVersion < Number.MAX_SAFE_INTEGER ? currentVersion + 1 : 1;
+}
 
 export class WahooAuthAdapter implements ServiceAuthAdapter {
   public serviceName = ServiceNames.WahooAPI;
@@ -66,10 +77,10 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
     return { uniqueId: await getWahooUserID(`${token.token.access_token || ''}`) };
   }
 
-  async onTokenPersisted(userId: string, externalUserId: string): Promise<{ previousOwnerUserID?: string }> {
+  async onTokenPersisted(userId: string, externalUserId: string): Promise<PersistedServiceIdentity> {
     const db = admin.firestore();
     const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(externalUserId);
-    const previousOwnerUserID = await db.runTransaction(async (transaction) => {
+    const persistedIdentity = await db.runTransaction(async (transaction) => {
       let deletionGuard;
       try {
         deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userId);
@@ -81,16 +92,35 @@ export class WahooAuthAdapter implements ServiceAuthAdapter {
       }
 
       const snapshot = await transaction.get(mappingRef);
-      const existingOwner = snapshot.exists ? `${snapshot.data()?.firebaseUserID || ''}` : '';
+      const existingMapping = snapshot.exists ? snapshot.data() : undefined;
+      const existingOwner = `${existingMapping?.firebaseUserID || ''}`;
+      const ownershipVersion = getNextOwnershipVersion(existingMapping?.ownershipVersion);
       transaction.set(mappingRef, {
         firebaseUserID: userId,
         wahooUserID: externalUserId,
         serviceName: this.serviceName,
+        ownershipVersion,
         updatedAt: FieldValue.serverTimestamp(),
       });
-      return existingOwner && existingOwner !== userId ? existingOwner : undefined;
+      return {
+        previousOwnerUserID: existingOwner && existingOwner !== userId ? existingOwner : undefined,
+        ownershipVersion,
+      };
     });
-    return { previousOwnerUserID };
+
+    if (!persistedIdentity.previousOwnerUserID) {
+      return {};
+    }
+
+    return {
+      previousOwnerUserID: persistedIdentity.previousOwnerUserID,
+      previousOwnerTokenCleanupGuard: async (transaction) => {
+        const currentMapping = await transaction.get(mappingRef);
+        const currentMappingData = currentMapping.exists ? currentMapping.data() : undefined;
+        return `${currentMappingData?.firebaseUserID || ''}` === userId
+          && currentMappingData?.ownershipVersion === persistedIdentity.ownershipVersion;
+      },
+    };
   }
 
   async deauthorize(token: Auth2ServiceTokenInterface): Promise<void> {

@@ -11,6 +11,7 @@ import {
 
 import { getTokenData } from './tokens';
 import { getServiceAdapter } from './auth/factory';
+import { PreviousOwnerTokenCleanupGuard } from './auth/ServiceAuthAdapter';
 import { markServiceConnected } from './service-connection-meta';
 import {
   cleanupServiceConnectionForUser,
@@ -328,6 +329,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
     let uniqueId: string | undefined;
     let previousOwnerUserID: string | undefined;
+    let previousOwnerTokenCleanupGuard: PreviousOwnerTokenCleanupGuard | undefined;
     try {
       await assertOAuthUserCanWriteServiceState(userID, serviceName, `oauth_token_process:${serviceName}`);
 
@@ -357,6 +359,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
         try {
           const persistedIdentity = await adapter.onTokenPersisted(userID, uniqueId);
           previousOwnerUserID = persistedIdentity?.previousOwnerUserID;
+          previousOwnerTokenCleanupGuard = persistedIdentity?.previousOwnerTokenCleanupGuard;
         } catch (error) {
           await cleanupServiceTokenById(
             userID,
@@ -412,6 +415,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
               serviceName,
               uniqueId,
               SERVICE_AUTH_CLEANUP_REASONS.DuplicateConnectionCleanup,
+              { shouldDeleteInTransaction: previousOwnerTokenCleanupGuard },
             );
           }
         } else {
