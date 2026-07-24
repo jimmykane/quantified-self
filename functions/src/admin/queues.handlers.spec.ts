@@ -346,7 +346,7 @@ describe('getQueueStats Cloud Function', () => {
             providerDisabled: 5,
             stuck: 5,
             dead: 5,
-            disabledProviders: ['COROS'],
+            disabledProviders: [],
             providers: [
                 { provider: 'Garmin', pending: 5, succeeded: 5, providerDisabled: 5, stuck: 5, dead: 5 },
                 { provider: 'Suunto', pending: 5, succeeded: 5, providerDisabled: 5, stuck: 5, dead: 5 },
