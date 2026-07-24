@@ -20,6 +20,9 @@
           [isMerge]="isMerge">
         </app-event-power-curve>
         }
+        @case ('powerSystemStrain') {
+        <app-event-power-system-strain [activities]="activities"></app-event-power-system-strain>
+        }
         @case ('durability') {
         <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
           [isMerge]="isMerge">
@@ -45,6 +48,9 @@
   <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"
     [isMerge]="isMerge">
   </app-event-power-curve>
+  }
+  @case ('powerSystemStrain') {
+  <app-event-power-system-strain [activities]="activities"></app-event-power-system-strain>
   }
   @case ('durability') {
   <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [darkTheme]="darkTheme"

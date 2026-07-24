@@ -2171,6 +2171,36 @@ describe('sports-lib-reparse.service', () => {
         expect(activityStats.get('generated')).toBe(generatedStat);
     });
 
+    it('reparseEventFromOriginalFiles should persist generated three-dimensional strain evidence', async () => {
+        const threeDimensionalStrainStat = { getType: () => 'Three Dimensional Strain Evidence' };
+        let activityStats = new Map<string, unknown>();
+        const parsedActivity: any = {
+            getID: vi.fn(() => 'a1'),
+            setID: vi.fn(),
+            creator: { name: 'A' },
+            getStats: vi.fn(() => activityStats),
+            clearStats: vi.fn(() => { activityStats = new Map<string, unknown>(); }),
+            getStat: vi.fn((type: string) => activityStats.get(type)),
+            addStat: vi.fn((stat: { getType: () => string }) => activityStats.set(stat.getType(), stat)),
+        };
+        const parsedEvent = makeEvent({ getActivities: vi.fn(() => [parsedActivity]) });
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementationOnce((activity: any) => {
+            activity.addStat(threeDimensionalStrainStat);
+        });
+
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            mode: 'regenerate',
+            eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+            activityDocs: [{ id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' } }) } as any],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        });
+
+        expect(result.status).toBe('completed');
+        expect(activityStats.get('Three Dimensional Strain Evidence')).toBe(threeDimensionalStrainStat);
+        expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith('u1', parsedEvent);
+    });
+
     it('reparseEventFromOriginalFiles should skip activity-level regeneration in reimport mode', async () => {
         const parsedEvent = makeEvent();
         hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);

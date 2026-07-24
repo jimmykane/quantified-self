@@ -118,6 +118,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
+    expect(trainingSection?.content).toContain('**Power-system strain** appears in an individual workout’s Performance area');
     expect(trainingSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
     expect(trainingSection?.content).toContain('intentional easing, terrain changes, coasting, or a pace change');
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');

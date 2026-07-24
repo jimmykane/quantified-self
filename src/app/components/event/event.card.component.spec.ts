@@ -19,7 +19,9 @@ import {
     DataPotentialStamina,
     DataSpeed,
     DataStamina,
-    LapTypes
+    LapTypes,
+    ActivityTypeGroups,
+    DataThreeDimensionalStrainEvidence,
 } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -567,6 +569,56 @@ describe('EventCardComponent', () => {
 
     it('should compute hasCadencePowerFlag as false when no cadence-power data exists', () => {
         expect(component.hasCadencePowerFlag()).toBe(false);
+    });
+
+    it('shows the performance area for persisted v2 power-system strain evidence', () => {
+        const threeDimensionalEvidence = {
+            protocolVersion: 2,
+            sourceFingerprint: 'three-dimensional-strain-v2:0000000000000001',
+            activityType: ActivityTypes.Rowing,
+            activityGroup: ActivityTypeGroups.WaterSportsGroup,
+            eligibility: { eligible: true, reason: 'eligible' },
+            input: {
+                powerSampleCount: 3600,
+                validPowerSampleCount: 3600,
+                candidateDurationSeconds: 3600,
+                recordedDurationSeconds: 3600,
+                coverageRatio: 1,
+                curvePointCount: 9,
+                hasShortDuration: true,
+                hasMediumDuration: true,
+                hasLongDuration: true,
+            },
+            fit: {
+                criticalPowerWatts: 250,
+                wPrimeJoules: 20000,
+                maximumPowerWatts: 1050,
+                sampleCount: 9,
+                rmseWatts: 4,
+                normalizedRmse: 0.02,
+                rSquared: 0.98,
+                iterations: 24,
+                converged: true,
+            },
+            evidence: {
+                total: 12,
+                criticalPower: 7,
+                wPrime: 3,
+                maximumPower: 2,
+                endingWPrimeBalanceJoules: 15000,
+                minimumWPrimeBalanceJoules: 12000,
+            },
+        };
+        component.selectedActivitiesInstant.set([{
+            ...mockActivity,
+            type: ActivityTypes.Rowing,
+            getStat: (type: string) => type === DataThreeDimensionalStrainEvidence.type
+                ? { getValue: () => threeDimensionalEvidence }
+                : null,
+        } as ActivityInterface]);
+
+        expect(component.hasPowerSystemStrainFlag()).toBe(true);
+        expect(component.hasPerformanceChartsFlag()).toBe(true);
     });
 
     it('should compute hasDevicesFlag as false when no devices', () => {
