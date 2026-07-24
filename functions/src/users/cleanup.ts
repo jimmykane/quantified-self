@@ -31,6 +31,7 @@ import {
     archiveOrphanedServiceToken,
     ORPHANED_SERVICE_TOKENS_COLLECTION_NAME,
 } from '../orphaned-service-tokens';
+import { cleanupMcpOAuthStateForUser } from '../mcp/oauth.service';
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
@@ -1011,6 +1012,7 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
     logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);
 
     await cleanupUserScopedGeneratedState(uid);
+    await cleanupMcpOAuthStateForUser(uid);
 
     // Cleanup Emails
     try {

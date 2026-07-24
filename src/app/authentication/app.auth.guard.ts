@@ -15,7 +15,11 @@ export const authGuard: CanMatchFn = (route, segments) => {
   const userService = inject(AppUserService);
   const router = inject(Router);
   const snackBar = inject(MatSnackBar);
-  const url = '/' + segments.map(s => s.path).join('/');
+  const segmentUrl = '/' + segments.map(s => s.path).join('/');
+  const navigationUrl = router.getCurrentNavigation()?.extractedUrl?.toString();
+  const url = navigationUrl?.startsWith('/') && !navigationUrl.startsWith('//')
+    ? navigationUrl
+    : segmentUrl;
 
   return combineLatest([
     authService.authState$,
@@ -57,7 +61,9 @@ export const authGuard: CanMatchFn = (route, segments) => {
         snackBar.open('You must login first', undefined, {
           duration: 2000,
         });
-        return router.createUrlTree(['/login']);
+        return router.createUrlTree(['/login'], {
+          queryParams: { returnUrl: url },
+        });
       }
       return true;
     })

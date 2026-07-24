@@ -5,6 +5,7 @@ import {
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
   POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
@@ -788,7 +789,16 @@ In Settings you can:
 
 - turn anonymous usage statistics on or off,
 - turn marketing emails on or off,
+- review and revoke authorized MCP clients under **Account**,
 - and customize charts, maps, and units.
+
+## MCP client access
+
+- An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics** and **Sleep summaries** are separate, optional read-only permissions.
+- Activity access covers persisted numeric activity metrics and ready Training-derived snapshots. Precise latitude/longitude metrics are excluded, and Training event/activity IDs, names, and labels are removed.
+- Sleep access covers normalized session summaries and day/week/month aggregates. It excludes provider user/session IDs, provider payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, or respiration samples.
+- Review or disconnect clients in **Settings -> Account -> MCP connections**. Disconnecting blocks future access, but the external client may retain data it already received under its own policy.
+- See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
 
 ## Account deletion
 
@@ -817,6 +827,7 @@ This action cannot be undone.
       { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
       { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },
       { label: 'COROS Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_COROS_DATA_FRAGMENT },
+      { label: 'MCP Client Access', icon: 'devices', kind: 'route', target: '/policies', fragment: POLICIES_MCP_CLIENTS_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Privacy Email', icon: 'shield', kind: 'external', target: PRIVACY_MAILTO },
     ],

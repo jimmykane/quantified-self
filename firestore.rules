@@ -305,6 +305,33 @@ service cloud.firestore {
           allow read: if request.auth.uid == userID;
           allow write: if false;
         }
+
+        // MCP connection summaries and all credential state are server-owned.
+        // The app uses authenticated, App-Check-protected callables to list
+        // and revoke connections without exposing token material.
+        match /mcpConnections/{connectionID} {
+          allow read, write: if false;
+        }
+    }
+
+    match /mcpOAuthAuthorizationRequests/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /mcpOAuthAuthorizationCodes/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /mcpOAuthAccessTokens/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /mcpOAuthRefreshTokens/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /mcpOAuthRateLimits/{document=**} {
+      allow read, write: if false;
     }
 
     // AI Insights repaired prompt backlog (global / server-owned only)

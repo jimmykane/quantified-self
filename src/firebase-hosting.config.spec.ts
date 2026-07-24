@@ -18,7 +18,11 @@ interface FirebaseHostingTarget {
   }>;
   rewrites?: Array<{
     source: string;
-    destination: string;
+    destination?: string;
+    function?: {
+      functionId: string;
+      region: string;
+    };
   }>;
 }
 
@@ -63,6 +67,14 @@ const robotsTxt = readFileSync(resolve(__dirname, 'robots.txt'), 'utf8');
 const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
+const expectedMcpFunctionRewriteSources = [
+  '/mcp',
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-protected-resource/mcp',
+  '/.well-known/oauth-authorization-server',
+  '/oauth/authorize',
+  '/oauth/token',
+];
 const siteOrigin = 'https://quantified-self.io';
 const betaNoIndexHeader = {
   key: 'X-Robots-Tag',
@@ -118,24 +130,36 @@ describe('Firebase Hosting configuration', () => {
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
     for (const target of firebaseConfig.hosting) {
       const rewrites = target.rewrites ?? [];
-      const sources = rewrites.map(rewrite => rewrite.source);
+      const csrRewrites = rewrites.filter(rewrite => rewrite.destination !== undefined);
+      const functionRewrites = rewrites.filter(rewrite => rewrite.function !== undefined);
+      const sources = csrRewrites.map(rewrite => rewrite.source);
 
       expect(target.public).toBe('dist/browser');
       expect(sources).toEqual(expectedCsrRewriteSources);
-      expect(new Set(sources).size).toBe(sources.length);
+      expect(functionRewrites.map(rewrite => rewrite.source)).toEqual(expectedMcpFunctionRewriteSources);
+      expect(new Set(rewrites.map(rewrite => rewrite.source)).size).toBe(rewrites.length);
       expect(sources).not.toContain('**');
       expect(sources).not.toContain('/**');
       expect(sources.every(source => !source.includes('**'))).toBe(true);
 
-      for (const rewrite of rewrites) {
+      for (const rewrite of csrRewrites) {
         expect(rewrite.destination).toBe('/index.csr.html');
+      }
+      for (const rewrite of functionRewrites) {
+        expect(rewrite.function).toEqual({
+          functionId: 'mcpApi',
+          region: 'europe-west2',
+        });
       }
     }
   });
 
   it('matches known CSR URLs without masking prerendered or unknown URLs', () => {
-    const sources = firebaseConfig.hosting[0]?.rewrites?.map(rewrite => rewrite.source) ?? [];
+    const sources = firebaseConfig.hosting[0]?.rewrites
+      ?.filter(rewrite => rewrite.destination !== undefined)
+      .map(rewrite => rewrite.source) ?? [];
 
+    expect(matchesAnyHostingSource(sources, '/mcp/authorize')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
@@ -157,7 +181,9 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('keeps all prerendered public routes out of Firebase and service-worker CSR fallbacks', () => {
-    const hostingSources = firebaseConfig.hosting[0]?.rewrites?.map(rewrite => rewrite.source) ?? [];
+    const hostingSources = firebaseConfig.hosting[0]?.rewrites
+      ?.filter(rewrite => rewrite.destination !== undefined)
+      .map(rewrite => rewrite.source) ?? [];
     const positiveNavigationUrls = serviceWorkerConfig.navigationUrls.filter(url => !url.startsWith('!'));
     const prerenderedPublicSources = PRERENDERED_PUBLIC_ROUTES.map(routePathToHostingSource);
 
@@ -209,9 +235,11 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
     expect(robotsTxt).toContain('Disallow: /routes');
     expect(robotsTxt).toContain('Disallow: /training');
+    expect(robotsTxt).toContain('Disallow: /mcp/authorize');
   });
 
   it('marks public share routes noindex at the hosting layer', () => {

@@ -23,6 +23,7 @@ const {
     collectionGroupMock,
     collectionGroupWhereMock,
     markQueueItemDeletedForUserCleanupMock,
+    cleanupMcpOAuthStateForUserMock,
 } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -148,7 +149,8 @@ const {
         limitGetMock,
         collectionGroupMock,
         collectionGroupWhereMock,
-        markQueueItemDeletedForUserCleanupMock: vi.fn().mockResolvedValue(true)
+        markQueueItemDeletedForUserCleanupMock: vi.fn().mockResolvedValue(true),
+        cleanupMcpOAuthStateForUserMock: vi.fn().mockResolvedValue(undefined),
     };
 });
 
@@ -183,6 +185,10 @@ vi.mock('../queue/cleanup-tombstone', () => ({
         AccountDeletionCleanup: 'account_deletion_cleanup',
         UserDeletionGuard: 'user_deletion_guard',
     },
+}));
+
+vi.mock('../mcp/oauth.service', () => ({
+    cleanupMcpOAuthStateForUser: cleanupMcpOAuthStateForUserMock,
 }));
 
 
@@ -282,6 +288,7 @@ describe('cleanupUserAccounts', () => {
             get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
         }));
         markQueueItemDeletedForUserCleanupMock.mockReset().mockResolvedValue(true);
+        cleanupMcpOAuthStateForUserMock.mockReset().mockResolvedValue(undefined);
         transactionDeleteMock.mockReset();
         runTransactionMock.mockReset().mockImplementation(async (handler: (transaction: {
             get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
@@ -327,6 +334,7 @@ describe('cleanupUserAccounts', () => {
             'account_deletion',
             { missingTokensBehavior: 'ignore' },
         );
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
         expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
             'testUser123',
             ServiceNames.COROSAPI,

@@ -1,0 +1,158 @@
+# MCP Metrics and Sleep Server
+
+## Purpose and boundary
+
+Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
+authenticated user's persisted numeric activity metrics, ready Training-derived snapshots, and normalized sleep
+summaries without granting browser or Firestore access.
+
+The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
+stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
+supported. The HTTP, OAuth, projection, and metric-catalog implementation lives under `functions/src/mcp/`.
+
+Functions pins `@modelcontextprotocol/sdk` and overrides its compatible `@hono/node-server` adapter to `2.0.11` so the
+runtime does not retain the older adapter's published path-traversal advisory. Keep the initialize-request adapter test
+and re-check this override whenever the MCP SDK changes.
+
+This is an outbound user-authorized data interface, not a fitness-provider integration. It does not import provider data,
+write activities, mutate Training state, or require a public `/integrations/<provider>` page.
+
+## Public endpoints
+
+Hosting routes these paths to `mcpApi`:
+
+| Path | Purpose |
+| --- | --- |
+| `/.well-known/oauth-protected-resource` | Protected-resource metadata for `/mcp` |
+| `/.well-known/oauth-protected-resource/mcp` | Path-specific metadata alias |
+| `/.well-known/oauth-authorization-server` | OAuth authorization-server metadata |
+| `/oauth/authorize` | Starts an authorization-code request |
+| `/oauth/token` | Exchanges or refreshes an OAuth token |
+| `/mcp` | Read-only MCP Streamable HTTP endpoint |
+
+`/mcp/authorize` is the authenticated Angular consent page. Account Settings lists active MCP connections and lets the
+user revoke one immediately.
+
+## OAuth and authorization
+
+The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
+
+- `metrics:read` for event metrics and ready Training-derived snapshots;
+- `sleep:read` for redacted sleep sessions and sleep summaries.
+
+The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
+to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
+SHA-256 hashes, expire after one hour, and are audience-bound. Refresh tokens expire after 30 days and rotate on use.
+Authorization codes are single-use and expire after five minutes.
+
+Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
+responses, private or loopback metadata hosts, unsupported grant types, and redirect URIs that were not registered.
+Loopback HTTP is allowed only for the client's redirect URI and is called out in the consent UI.
+
+Firestore holds short-lived OAuth records in:
+
+- `mcpOAuthAuthorizationRequests`;
+- `mcpOAuthAuthorizationCodes`;
+- `mcpOAuthAccessTokens`;
+- `mcpOAuthRefreshTokens`; and
+- `mcpOAuthRateLimits`.
+
+Active connection metadata lives at `users/{uid}/mcpConnections/{connectionId}`. Browser Firestore access to every MCP
+collection is denied; authenticated, App Check-protected callables mediate consent, listing, and revocation. Revocation
+deletes active tokens and codes. Account deletion recursively removes connection and OAuth state. All short-lived MCP
+collections use `expireAt` TTL configuration in `firestore.indexes.json`.
+
+## Tool contract
+
+| Tool | Scope | Result |
+| --- | --- | --- |
+| `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
+| `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
+| `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
+| `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
+| `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
+
+Every tool is annotated read-only, non-destructive, idempotent, and closed-world. The HTTP layer checks the required scope
+before the tool call, and only registers tools covered by the bearer token.
+
+## Sports Lib metric discovery
+
+`metric-catalog.ts` enumerates public Sports Lib `DataStore` classes. A metric is eligible only when:
+
+1. the class has a stable canonical type;
+2. constructing it with a numeric sentinel produces a finite numeric value;
+3. its validator accepts that numeric value;
+4. aliases resolve through `DynamicDataLoader`; and
+5. the canonical stat appears in the user's persisted event `stats`.
+
+This is intentionally not a curated MCP metric list. A correctly exported and persisted new numeric Sports Lib data class
+becomes discoverable without adding a second registry. Latitude and longitude remain explicitly excluded because they
+expose precise position.
+
+`query_metric` imports stored event JSON through `EventImporterJSON` and reuses the shared event-stat aggregation engine.
+It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing non-MCP callers keep
+their prior local-time behavior when they omit the timezone.
+
+When a Sports Lib metric is added or changed:
+
+1. follow `.agent/skills/mcp-metric-surface/SKILL.md` and
+   `.agent/skills/sports-lib-upgrade-and-reparse/SKILL.md`;
+2. verify the class is public in `DataStore`, canonical through `DynamicDataLoader`, numeric, and persisted;
+3. update both root and Functions to the exact same published Sports Lib version;
+4. decide whether historical source files need the existing reparse lifecycle;
+5. keep sensitive coordinate-like data explicitly excluded; and
+6. update automatic-discovery, alias, persistence, and query tests.
+
+The separate Sports Lib repository owns data-class semantics and parsers. Quantified Self owns availability from persisted
+events, privacy filtering, query bounds, and the MCP transport.
+
+## Training-derived metrics
+
+MCP reads only `status: "ready"` documents from `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from
+`DERIVED_METRIC_KINDS`; no second MCP kind registry exists. The response retains schema/freshness metadata but recursively
+removes event/activity IDs, names, and labels from the payload.
+
+Training calculation, schema, invalidation, rebuild, and extension guidance remains in
+[`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline and schema work plus
+an MCP redaction-contract test.
+
+## Sleep projection
+
+MCP reads normalized `users/{uid}/sleepSessions` documents and creates a new allowlisted response. Session output may
+include provider, sleep date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized
+score value/qualifier, and aggregate vitals.
+
+It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
+stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
+provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
+deliberately.
+
+## Bounds and operational controls
+
+- Event and sleep date ranges are at most 366 days.
+- An event metric query rejects matches above 2,000 events.
+- A sleep summary rejects matches above 1,000 sessions.
+- Sleep pages are at most 100 sessions and use an opaque cursor.
+- Metric discovery scans the latest 500 event stat maps and reports whether that scan was truncated.
+- An access token is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
+- Requests require valid IANA timezones where local date bucketing is relevant.
+- Logs must not contain bearer tokens, authorization codes, client payloads, event data, sleep data, or user IDs.
+
+## Local verification and release
+
+Use the Functions emulator and local Angular app for the OAuth/consent flow. At minimum run:
+
+```bash
+npm --prefix functions test -- src/mcp
+npm --prefix functions run build
+npx vitest run src/app/components/mcp-authorization/mcp-authorization.component.spec.ts \
+  src/app/components/mcp-connections/mcp-connections.component.spec.ts
+npm run test:rules
+npx tsc --noEmit -p src/tsconfig.app.json
+git diff --check
+```
+
+Production rollout is deliberately separate from implementation. Deploy Firestore indexes/TTL and rules, the MCP HTTP
+and callable Functions, and Hosting rewrites only after reviewing the target Firebase project. Verify discovery metadata,
+OAuth login/consent, scope denial, token refresh/rotation, revocation, query limits, timezone/DST behavior, redaction, and
+account cleanup before enabling clients.

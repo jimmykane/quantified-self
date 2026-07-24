@@ -12,6 +12,7 @@ import {
 import {
   buildEventStatAggregation,
   filterEventStatsForAggregation,
+  isValidIanaTimeZone,
   resolveAggregationCategoryKey,
   resolveAutoAggregationTimeInterval,
 } from '@shared/event-stat-aggregation';
@@ -514,6 +515,57 @@ describe('event-stat-aggregation shared core', () => {
     expectedSecondBucket.setMinutes(0, 0, 0);
     expect(aggregation.buckets[0].bucketKey).toBe(expectedFirstBucket.getTime());
     expect(aggregation.buckets[1].bucketKey).toBe(expectedSecondBucket.getTime());
+  });
+
+  it('should bucket dates at the requested IANA timezone boundary across DST', () => {
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        id: 'before-local-midnight',
+        startDate: new Date('2024-03-31T20:30:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+      makeEvent({
+        id: 'after-local-midnight',
+        startDate: new Date('2024-03-31T21:30:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(aggregation.buckets.map(bucket => bucket.bucketKey)).toEqual([
+      new Date('2024-03-30T22:00:00.000Z').getTime(),
+      new Date('2024-03-31T21:00:00.000Z').getTime(),
+    ]);
+    expect(aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([5, 10]);
+  });
+
+  it('should preserve existing local bucketing when no timezone is provided', () => {
+    const eventDate = new Date('2024-01-01T23:30:00.000Z');
+
+    expect(resolveAggregationCategoryKey(
+      makeEvent({
+        startDate: eventDate,
+        activityTypes: [ActivityTypes.Running],
+      }),
+      ChartDataCategoryTypes.DateType,
+      TimeIntervals.Daily,
+    )).toBe(new Date(
+      eventDate.getFullYear(),
+      eventDate.getMonth(),
+      eventDate.getDate(),
+    ).getTime());
+  });
+
+  it('should validate IANA timezone names', () => {
+    expect(isValidIanaTimeZone('Europe/Helsinki')).toBe(true);
+    expect(isValidIanaTimeZone('Not/A_Timezone')).toBe(false);
   });
 
   it('should warn and skip invalid date buckets when aggregating by date', () => {

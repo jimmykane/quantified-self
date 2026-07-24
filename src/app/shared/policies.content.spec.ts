@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONNECTED_SERVICES_POLICY_SECTION,
   POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
@@ -22,6 +23,22 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto activity sync');
+  });
+});
+
+describe('MCP client access policy', () => {
+  it('documents scope, redaction, credential, revocation, and recipient-retention boundaries', () => {
+    const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT);
+    const content = topic?.content.join(' ') || '';
+
+    expect(topic?.title).toBe('MCP Client Access');
+    expect(content).toContain('one or both requested read-only permissions');
+    expect(content).toContain('excludes precise latitude/longitude metrics');
+    expect(content).toContain('raw sleep-stage intervals');
+    expect(content).toContain('stored server-side only as hashes');
+    expect(content).toContain('Settings -> Account');
+    expect(content).toContain('retain data it already received');
   });
 });
 

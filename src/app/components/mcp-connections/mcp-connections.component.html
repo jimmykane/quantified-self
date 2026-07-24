@@ -1,0 +1,63 @@
+<mat-card appearance="outlined" class="mcp-connections">
+  <mat-card-header>
+    <mat-card-title>MCP connections</mat-card-title>
+    <mat-card-subtitle>Read-only clients you have authorized to access metrics or sleep summaries.</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    @if (loading()) {
+      <div class="mcp-connections__state" role="status">
+        <mat-spinner diameter="28"></mat-spinner>
+        <span>Loading connections…</span>
+      </div>
+    } @else if (error()) {
+      <div class="mcp-connections__state mcp-connections__state--error" role="alert">
+        <mat-icon>error</mat-icon>
+        <span>{{ error() }}</span>
+        <button mat-button type="button" (click)="loadConnections()">Retry</button>
+      </div>
+    } @else if (connections().length === 0) {
+      <div class="mcp-connections__state">
+        <mat-icon>link_off</mat-icon>
+        <span>No MCP clients are connected.</span>
+      </div>
+    } @else {
+      <div class="mcp-connections__list">
+        @for (connection of connections(); track connection.connectionId) {
+          <article class="mcp-connections__item">
+            <div class="mcp-connections__details">
+              <h3>{{ connection.clientName }}</h3>
+              <p>{{ connection.redirectHost }}</p>
+              <ul aria-label="Granted permissions">
+                @for (scope of connection.scopes; track scope) {
+                  <li>{{ scopeLabels[scope] }}</li>
+                }
+              </ul>
+              <p class="mcp-connections__dates">
+                Connected {{ connection.createdAtMs | date:'mediumDate' }}
+                @if (connection.lastUsedAtMs) {
+                  · Last used {{ connection.lastUsedAtMs | date:'medium' }}
+                }
+              </p>
+            </div>
+            <button
+              mat-stroked-button
+              type="button"
+              class="qs-mat-warn"
+              [disabled]="revokingConnectionId() !== null"
+              (click)="revoke(connection)">
+              <span class="mcp-connections__button-content">
+                @if (revokingConnectionId() === connection.connectionId) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                  <span>Disconnecting…</span>
+                } @else {
+                  <mat-icon>link_off</mat-icon>
+                  <span>Disconnect</span>
+                }
+              </span>
+            </button>
+          </article>
+        }
+      </div>
+    }
+  </mat-card-content>
+</mat-card>

@@ -40,6 +40,52 @@
       "trailingSlash": false,
       "rewrites": [
         {
+          "source": "/mcp/authorize",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/mcp",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-protected-resource",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-protected-resource/mcp",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-authorization-server",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/oauth/authorize",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/oauth/token",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
           "source": "/login",
           "destination": "/index.csr.html"
         },
@@ -199,6 +245,52 @@
       ],
       "trailingSlash": false,
       "rewrites": [
+        {
+          "source": "/mcp/authorize",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/mcp",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-protected-resource",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-protected-resource/mcp",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-authorization-server",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/oauth/authorize",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/oauth/token",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
         {
           "source": "/login",
           "destination": "/index.csr.html"

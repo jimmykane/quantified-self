@@ -6,6 +6,7 @@ import {
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
   POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
@@ -689,6 +690,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('[Garmin Data](/policies#garmin-data)');
     expect(dataAndPrivacySection?.content).toContain('[Suunto Data](/policies#suunto-data)');
     expect(dataAndPrivacySection?.content).toContain('[COROS Data](/policies#coros-data)');
+    expect(dataAndPrivacySection?.content).toContain('[Policies -> MCP Client Access](/policies#mcp-clients)');
     expect(dataAndPrivacySection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(dataAndPrivacySection?.links).toContainEqual({
       label: 'Garmin Data Privacy',
@@ -712,12 +714,29 @@ describe('help.content', () => {
       fragment: POLICIES_COROS_DATA_FRAGMENT,
     });
     expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'MCP Client Access',
+      icon: 'devices',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_MCP_CLIENTS_FRAGMENT,
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
       label: 'AI & Processors',
       icon: 'shield',
       kind: 'route',
       target: '/policies',
       fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
     });
+  });
+
+  it('documents MCP scopes, redaction, and revocation', () => {
+    const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
+
+    expect(dataAndPrivacySection?.content).toContain('**Activity and Training metrics**');
+    expect(dataAndPrivacySection?.content).toContain('**Sleep summaries**');
+    expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
+    expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
+    expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> MCP connections**');
   });
 
   it('directs account deletion to the Account settings section', () => {

@@ -1,0 +1,83 @@
+import { TestBed } from '@angular/core/testing';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppFunctionsService } from '../../services/app.functions.service';
+import { AppWindowService } from '../../services/app.window.service';
+import { LoggerService } from '../../services/logger.service';
+import { McpAuthorizationComponent } from './mcp-authorization.component';
+
+describe('McpAuthorizationComponent', () => {
+  const assign = vi.fn();
+  const functions = {
+    call: vi.fn(),
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    functions.call.mockImplementation((name: string) => {
+      if (name === 'getMcpAuthorizationRequest') {
+        return Promise.resolve({
+          data: {
+            requestId: 'request-1',
+            clientName: 'Training Copilot',
+            clientIdHost: 'client.example',
+            redirectUri: 'https://client.example/oauth/callback',
+            redirectHost: 'client.example',
+            scopes: ['metrics:read', 'sleep:read'],
+            expiresAtMs: Date.now() + 60_000,
+            loopbackRedirect: false,
+          },
+        });
+      }
+      return Promise.resolve({
+        data: { redirectUri: 'https://client.example/oauth/callback?code=code-1' },
+      });
+    });
+
+    await TestBed.configureTestingModule({
+      imports: [McpAuthorizationComponent, NoopAnimationsModule],
+      providers: [
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap({ request_id: 'request-1' }),
+            },
+          },
+        },
+        { provide: AppFunctionsService, useValue: functions },
+        { provide: AppWindowService, useValue: { windowRef: { location: { assign } } } },
+        { provide: LoggerService, useValue: { error: vi.fn() } },
+      ],
+    }).compileComponents();
+  });
+
+  it('shows the requesting client, redirect, and only the requested scopes', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const content = fixture.nativeElement.textContent as string;
+    expect(content).toContain('Training Copilot');
+    expect(content).toContain('https://client.example/oauth/callback');
+    expect(content).toContain('Activity and Training metrics');
+    expect(content).toContain('Sleep summaries');
+  });
+
+  it('submits the selected scopes and returns to the client', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await fixture.componentInstance.approve();
+
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'request-1',
+      approved: true,
+      grantedScopes: ['metrics:read', 'sleep:read'],
+    });
+    expect(assign).toHaveBeenCalledWith('https://client.example/oauth/callback?code=code-1');
+  });
+});

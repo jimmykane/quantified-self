@@ -1320,6 +1320,22 @@ skiing, and multisport aggregates need different fatigue models rather than this
 
 Do not read settings or sleep unconditionally in the worker. Source requirements are part of the performance contract.
 
+### Exposing Training snapshots through MCP
+
+The read-only MCP server does not recalculate Training metrics and does not scan activity history for a derived tool call.
+`get_training_metric` accepts only a kind registered in `DERIVED_METRIC_KINDS` and reads the normal
+`users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready` payload plus schema, update, and source-count
+metadata. Building, stale, failed, and missing snapshots remain unavailable instead of being interpreted as zero.
+
+There is deliberately no separate MCP-derived-kind registry. A newly registered kind is discoverable, but its payload must
+still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts`. The server recursively removes event/activity
+IDs, names, and labels, including identities nested under event- or activity-named parents. If a new payload introduces
+another identity-bearing field, extend the redaction contract before release rather than relying on client behavior.
+
+Use `.agent/skills/mcp-metric-surface/SKILL.md` for every derived-kind change. Add a focused MCP test that covers ready-state
+handling, schema metadata, and the payload's positive and negative disclosure contract. The transport, scopes, query
+bounds, sleep projection, and Sports Lib event-stat discovery are documented in `docs/mcp-server.md`.
+
 ## Testing and Verification
 
 ### Sports-lib
@@ -1484,6 +1500,7 @@ Before merging a Training change, confirm:
 - [ ] Settings writes are authenticated, App-Check protected, deletion guarded, normalized, and branch-scoped.
 - [ ] Source dependencies are fetched only for metric kinds that need them.
 - [ ] Snapshot schema and frontend normalizers agree.
+- [ ] New or changed derived kinds have an MCP ready-state and identity-redaction contract test.
 - [ ] Loading, failed, empty, updating, invalid, and ready states are readable.
 - [ ] Metric delta colors follow metric semantics.
 - [ ] Help content and this document are current.

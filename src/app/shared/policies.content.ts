@@ -17,6 +17,7 @@ export const POLICIES_GARMIN_DATA_FRAGMENT = 'garmin-data';
 export const POLICIES_SUUNTO_DATA_FRAGMENT = 'suunto-data';
 export const POLICIES_COROS_DATA_FRAGMENT = 'coros-data';
 export const POLICIES_WAHOO_DATA_FRAGMENT = 'wahoo-data';
+export const POLICIES_MCP_CLIENTS_FRAGMENT = 'mcp-clients';
 export const POLICIES_AI_AND_PROCESSORS_FRAGMENT = 'ai-and-third-party-processing';
 
 export type PolicyFragmentId =
@@ -25,6 +26,7 @@ export type PolicyFragmentId =
     | typeof POLICIES_SUUNTO_DATA_FRAGMENT
     | typeof POLICIES_COROS_DATA_FRAGMENT
     | typeof POLICIES_WAHOO_DATA_FRAGMENT
+    | typeof POLICIES_MCP_CLIENTS_FRAGMENT
     | typeof POLICIES_AI_AND_PROCESSORS_FRAGMENT;
 
 export interface ConnectedServicesPolicyAnchor {
@@ -53,7 +55,7 @@ export interface ConnectedServicesPolicySection {
 export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection = {
     id: POLICIES_CONNECTED_SERVICES_FRAGMENT,
     title: 'Connected Services, AI & Third-Party Processing',
-    summary: 'Provider-specific disclosures for Garmin, Suunto, COROS, Wahoo, AI Insights, infrastructure, payments, and analytics.',
+    summary: 'Disclosures for connected fitness services, user-authorized MCP clients, AI Insights, infrastructure, payments, and analytics.',
     content: [
         '<strong>What this section covers:</strong> This page explains what connected-service data Quantified Self collects, how it is used inside the product, what may be stored for exports, reprocessing, and sync tools, and which third parties process that data.',
         '<strong>Storage location:</strong> Imported provider data, saved route metadata, source-file references, and related processing metadata are stored in Quantified Self infrastructure on Google Cloud in the EU region.',
@@ -66,6 +68,7 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
         { id: POLICIES_SUUNTO_DATA_FRAGMENT, label: 'Suunto', icon: 'published_with_changes' },
         { id: POLICIES_COROS_DATA_FRAGMENT, label: 'COROS', icon: 'sync' },
         { id: POLICIES_WAHOO_DATA_FRAGMENT, label: 'Wahoo', icon: 'directions_bike' },
+        { id: POLICIES_MCP_CLIENTS_FRAGMENT, label: 'MCP Clients', icon: 'devices' },
         { id: POLICIES_AI_AND_PROCESSORS_FRAGMENT, label: 'AI & Processors', icon: 'shield' },
     ],
     topics: [
@@ -120,6 +123,19 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
             ],
         },
         {
+            id: POLICIES_MCP_CLIENTS_FRAGMENT,
+            title: 'MCP Client Access',
+            icon: 'devices',
+            summary: 'Read-only metric and sleep access granted to an MCP client by the account owner.',
+            content: [
+                '<strong>User-authorized access:</strong> An MCP client receives data only after you sign in to Quantified Self and approve one or both requested read-only permissions. The client cannot use MCP to write activities, settings, Training state, or sleep records.',
+                '<strong>Metric permission:</strong> Activity and Training access can return numeric metrics already stored for your activities and ready server-derived Training snapshots. Quantified Self excludes precise latitude/longitude metrics and removes event/activity identifiers, names, and labels from Training payloads.',
+                '<strong>Sleep permission:</strong> Sleep access can return normalized session summaries and day/week/month aggregates. It excludes provider user and session identifiers, provider-specific payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, and respiration samples.',
+                '<strong>Credentials and retention:</strong> MCP bearer and refresh credentials are opaque, stored server-side only as hashes, expire automatically, and are bound to your account and the MCP resource. Authorization metadata and active connection metadata are retained so the connection can operate and be audited.',
+                '<strong>Control and destination:</strong> Review or revoke MCP clients under Settings -> Account. Revocation blocks future access and removes active credentials; account deletion removes MCP connection and authorization state. A client may retain data it already received according to its own privacy and retention practices, so authorize only clients you trust.',
+            ],
+        },
+        {
             id: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
             title: 'AI & Third-Party Processing',
             icon: 'shield',
@@ -146,9 +162,9 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Encryption:</strong> Your data are stored and held encrypted by Google (Google Cloud).',
             '<strong>Control:</strong> Profile and activity visibility is managed by platform policy and is not configurable in the app UI.',
             '<strong>Default Privacy:</strong> Visibility defaults to private and is only seen by your account unless platform policy changes.',
-            '<strong>No Data Sales:</strong> We don\'t sell or send your data to any other 3rd party nor do we process your private data in any other way rather than allowing you to visualize them.',
+            '<strong>No Data Sales:</strong> We do not sell your data. Data is sent outside Quantified Self only when needed for a feature you explicitly use or authorize, such as connected-provider delivery, an approved MCP client, or the minimum derived AI Insights context described below.',
             '<strong>Legal Basis:</strong> We process your data based on: (a) your consent for optional features like analytics, (b) contractual necessity to provide the service you subscribed to, and (c) our legitimate interest in maintaining service security.',
-            '<strong>Third-Party Processors:</strong> Your data may be processed by Google Cloud (hosting and storage in the EU region), Stripe (payments), Google Analytics (only with consent), Mapbox (location resolution for AI queries), Google GenAI / Gemini (AI Insights using minimum derived stats only), and the connected fitness services you explicitly use. See <a href="#connected-services-data">Connected Services, AI &amp; Third-Party Processing</a> below for provider-specific details.'
+            '<strong>Third-Party Processors and Recipients:</strong> Your data may be processed by Google Cloud (hosting and storage in the EU region), Stripe (payments), Google Analytics (only with consent), Mapbox (location resolution for AI queries), Google GenAI / Gemini (AI Insights using minimum derived stats only), connected fitness services you explicitly use, and MCP clients you explicitly authorize. See <a href="#connected-services-data">Connected Services, AI &amp; Third-Party Processing</a> below for details.'
         ],
         checkboxLabel: 'I have read and agree to the Privacy Policy and acknowledge my data ownership rights.',
         formControlName: 'acceptPrivacyPolicy'

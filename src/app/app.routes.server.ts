@@ -49,6 +49,7 @@ export const PRERENDERED_PUBLIC_ROUTES = [
 ] as const;
 
 export const CLIENT_RENDERED_APP_ROUTES = [
+  'mcp/authorize',
   'login',
   'onboarding',
   'admin',

@@ -42,6 +42,116 @@ interface EventStatAggregationAccumulator {
   }>;
 }
 
+interface ZonedDateTimeParts {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+const zonedDateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getZonedDateTimeFormatter(timeZone: string): Intl.DateTimeFormat {
+  const existing = zonedDateTimeFormatters.get(timeZone);
+  if (existing) {
+    return existing;
+  }
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  zonedDateTimeFormatters.set(timeZone, formatter);
+  return formatter;
+}
+
+export function isValidIanaTimeZone(timeZone: string): boolean {
+  const normalized = `${timeZone || ''}`.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  try {
+    getZonedDateTimeFormatter(normalized).format(new Date(0));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getZonedDateTimeParts(date: Date, timeZone: string): ZonedDateTimeParts {
+  const values = Object.fromEntries(
+    getZonedDateTimeFormatter(timeZone)
+      .formatToParts(date)
+      .filter(part => part.type !== 'literal')
+      .map(part => [part.type, Number(part.value)]),
+  ) as Partial<ZonedDateTimeParts>;
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+  };
+}
+
+function zonedDateTimeToEpoch(parts: ZonedDateTimeParts, timeZone: string): number {
+  const targetCalendarTime = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  let candidate = targetCalendarTime;
+
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    const actual = getZonedDateTimeParts(new Date(candidate), timeZone);
+    const actualCalendarTime = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second,
+    );
+    const adjustment = targetCalendarTime - actualCalendarTime;
+    if (adjustment === 0) {
+      return candidate;
+    }
+    candidate += adjustment;
+  }
+
+  return candidate;
+}
+
+function getZonedCalendarDate(date: Date, timeZone: string): Date {
+  const parts = getZonedDateTimeParts(date, timeZone);
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour));
+}
+
+function zonedCalendarDateToEpoch(calendarDate: Date, timeZone: string): number {
+  return zonedDateTimeToEpoch({
+    year: calendarDate.getUTCFullYear(),
+    month: calendarDate.getUTCMonth() + 1,
+    day: calendarDate.getUTCDate(),
+    hour: calendarDate.getUTCHours(),
+    minute: 0,
+    second: 0,
+  }, timeZone);
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -195,7 +305,68 @@ function resolveSemesterlyBucketStart(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth() < 6 ? 0 : 6, 1).getTime();
 }
 
-function resolveDateBucketKey(date: Date, timeInterval: TimeIntervals): number {
+function resolveZonedDateBucketKey(date: Date, timeInterval: TimeIntervals, timeZone: string): number {
+  const calendarDate = getZonedCalendarDate(date, timeZone);
+  calendarDate.setUTCMinutes(0, 0, 0);
+
+  switch (timeInterval) {
+    case TimeIntervals.Yearly:
+      calendarDate.setUTCMonth(0, 1);
+      calendarDate.setUTCHours(0);
+      break;
+    case TimeIntervals.Monthly:
+      calendarDate.setUTCDate(1);
+      calendarDate.setUTCHours(0);
+      break;
+    case TimeIntervals.Weekly: {
+      calendarDate.setUTCHours(0);
+      const day = calendarDate.getUTCDay() || 7;
+      calendarDate.setUTCDate(calendarDate.getUTCDate() - day + 1);
+      break;
+    }
+    case TimeIntervals.BiWeekly: {
+      calendarDate.setUTCHours(0);
+      const day = calendarDate.getUTCDay() || 7;
+      calendarDate.setUTCDate(calendarDate.getUTCDate() - day + 1);
+      const weekReference = new Date(calendarDate.getTime());
+      weekReference.setUTCDate(weekReference.getUTCDate() + 3);
+      const isoWeekYear = weekReference.getUTCFullYear();
+      const isoWeekOneReference = new Date(Date.UTC(isoWeekYear, 0, 4));
+      const isoWeekOneDay = isoWeekOneReference.getUTCDay() || 7;
+      isoWeekOneReference.setUTCDate(isoWeekOneReference.getUTCDate() - isoWeekOneDay + 1);
+      const weeksFromIsoWeekOne = Math.floor(
+        (calendarDate.getTime() - isoWeekOneReference.getTime()) / WEEK_MS,
+      );
+      if (weeksFromIsoWeekOne % 2 !== 0) {
+        calendarDate.setUTCDate(calendarDate.getUTCDate() - 7);
+      }
+      break;
+    }
+    case TimeIntervals.Quarterly:
+      calendarDate.setUTCMonth(Math.floor(calendarDate.getUTCMonth() / 3) * 3, 1);
+      calendarDate.setUTCHours(0);
+      break;
+    case TimeIntervals.Semesterly:
+      calendarDate.setUTCMonth(calendarDate.getUTCMonth() < 6 ? 0 : 6, 1);
+      calendarDate.setUTCHours(0);
+      break;
+    case TimeIntervals.Daily:
+      calendarDate.setUTCHours(0);
+      break;
+    case TimeIntervals.Hourly:
+      break;
+    default:
+      return date.getTime();
+  }
+
+  return zonedCalendarDateToEpoch(calendarDate, timeZone);
+}
+
+function resolveDateBucketKey(date: Date, timeInterval: TimeIntervals, timeZone?: string): number {
+  if (timeZone) {
+    return resolveZonedDateBucketKey(date, timeInterval, timeZone);
+  }
+
   switch (timeInterval) {
     case TimeIntervals.Yearly:
       return new Date(date.getFullYear(), 0).getTime();
@@ -224,6 +395,17 @@ function resolveDateBucketKey(date: Date, timeInterval: TimeIntervals): number {
     default:
       return date.getTime();
   }
+}
+
+export function resolveDateAggregationBucketStart(
+  date: Date,
+  timeInterval: TimeIntervals,
+  timeZone?: string,
+): number {
+  if (timeZone && !isValidIanaTimeZone(timeZone)) {
+    throw new Error(`Invalid IANA timezone: ${timeZone}`);
+  }
+  return resolveDateBucketKey(date, timeInterval, timeZone);
 }
 
 function resolveAggregateValue(
@@ -301,7 +483,10 @@ export function filterEventStatsForAggregation(
   return sortEventsChronologically(events).filter(event => !shouldExcludeEventForMetric(event, dataType, preferences));
 }
 
-export function resolveAutoAggregationTimeInterval(events: EventStatAggregationEventInput): TimeIntervals {
+export function resolveAutoAggregationTimeInterval(
+  events: EventStatAggregationEventInput,
+  timeZone?: string,
+): TimeIntervals {
   const normalizedEvents = sortEventsChronologically(events);
   if (!normalizedEvents.length) {
     return TimeIntervals.Daily;
@@ -313,18 +498,27 @@ export function resolveAutoAggregationTimeInterval(events: EventStatAggregationE
     return TimeIntervals.Daily;
   }
 
-  if (endDate.getFullYear() !== startDate.getFullYear()) {
+  const startParts = timeZone ? getZonedDateTimeParts(startDate, timeZone) : null;
+  const endParts = timeZone ? getZonedDateTimeParts(endDate, timeZone) : null;
+  const startYear = startParts?.year ?? startDate.getFullYear();
+  const endYear = endParts?.year ?? endDate.getFullYear();
+  const startMonth = startParts?.month ?? startDate.getMonth();
+  const endMonth = endParts?.month ?? endDate.getMonth();
+  const startDay = startParts?.day ?? startDate.getDate();
+  const endDay = endParts?.day ?? endDate.getDate();
+
+  if (endYear !== startYear) {
     return TimeIntervals.Yearly;
   }
 
-  if (endDate.getMonth() !== startDate.getMonth()) {
+  if (endMonth !== startMonth) {
     if (endDate.getTime() <= startDate.getTime() + THIRTY_ONE_DAYS_MS) {
       return TimeIntervals.Daily;
     }
     return TimeIntervals.Monthly;
   }
 
-  if (endDate.getDate() !== startDate.getDate()) {
+  if (endDay !== startDay) {
     return TimeIntervals.Daily;
   }
 
@@ -336,6 +530,7 @@ export function resolveAggregationCategoryKey(
   categoryType: ChartDataCategoryTypes,
   resolvedTimeInterval: TimeIntervals,
   logger?: EventStatAggregationLogger,
+  timeZone?: string,
 ): string | number {
   if (categoryType === ChartDataCategoryTypes.ActivityType) {
     return resolveActivityKey(event, logger);
@@ -348,7 +543,7 @@ export function resolveAggregationCategoryKey(
     return NaN;
   }
 
-  return resolveDateBucketKey(event.startDate, resolvedTimeInterval);
+  return resolveDateAggregationBucketStart(event.startDate, resolvedTimeInterval, timeZone);
 }
 
 export function buildEventStatAggregation(
@@ -356,9 +551,13 @@ export function buildEventStatAggregation(
   request: EventStatAggregationRequest,
   logger?: EventStatAggregationLogger,
 ): EventStatAggregationResult {
+  if (request.timeZone && !isValidIanaTimeZone(request.timeZone)) {
+    throw new Error(`Invalid IANA timezone: ${request.timeZone}`);
+  }
+
   const filteredEvents = filterEventStatsForAggregation(events, request.dataType, request.preferences);
   const resolvedTimeInterval = request.requestedTimeInterval === undefined || request.requestedTimeInterval === TimeIntervals.Auto
-    ? resolveAutoAggregationTimeInterval(filteredEvents)
+    ? resolveAutoAggregationTimeInterval(filteredEvents, request.timeZone)
     : request.requestedTimeInterval;
 
   const accumulators = filteredEvents.reduce((bucketMap, event) => {
@@ -367,7 +566,13 @@ export function buildEventStatAggregation(
       return bucketMap;
     }
 
-    const bucketKey = resolveAggregationCategoryKey(event, request.categoryType, resolvedTimeInterval, logger);
+    const bucketKey = resolveAggregationCategoryKey(
+      event,
+      request.categoryType,
+      resolvedTimeInterval,
+      logger,
+      request.timeZone,
+    );
     if (typeof bucketKey === 'number' && !Number.isFinite(bucketKey)) {
       return bucketMap;
     }
