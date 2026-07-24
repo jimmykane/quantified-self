@@ -68,6 +68,12 @@ describe('HistoryImportFormComponent', () => {
                 endDate: '2026-04-30T12:00:00.000Z',
                 nextAllowedAtMs: 1_778_244_000_000,
             }),
+            backfillCorosSleepForCurrentUser: vi.fn().mockResolvedValue({
+                queued: 4,
+                startDate: '2026-01-30T12:00:00.000Z',
+                endDate: '2026-04-30T12:00:00.000Z',
+                nextAllowedAtMs: 1_778_244_000_000,
+            }),
             backfillGarminSleepForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 43,
                 startDate: '2016-01-01T00:00:00.000Z',
@@ -204,7 +210,7 @@ describe('HistoryImportFormComponent', () => {
         expect(fixture.nativeElement.textContent).not.toContain('Import Sleep History');
     });
 
-    it('should not render sleep backfill button for unsupported providers', async () => {
+    it('should render COROS sleep backfill for connected Pro users within the provider lookback', async () => {
         await fixture.whenStable();
         component.serviceName = ServiceNames.COROSAPI;
         component.userMetaForService = {} as UserServiceMetaInterface;
@@ -213,7 +219,11 @@ describe('HistoryImportFormComponent', () => {
         (component as any).processChanges();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.textContent).not.toContain('Import Sleep History');
+        const text = fixture.nativeElement.textContent;
+        expect(text).toContain('Import Sleep History');
+        expect(text).toContain('Imports available COROS sleep');
+        expect(text).toContain('up to three months');
+        expect(text).toContain('once every 7 days');
     });
 
     it('should disable sleep backfill during the provider cooldown', async () => {
@@ -256,6 +266,27 @@ describe('HistoryImportFormComponent', () => {
             source: 'history_import',
         });
         expect(component.pendingSleepBackfillResult()?.queued).toBe(135);
+    });
+
+    it('should queue COROS sleep backfill from the separate action', async () => {
+        await fixture.whenStable();
+        component.serviceName = ServiceNames.COROSAPI;
+        component.userMetaForService = {} as UserServiceMetaInterface;
+        component.providerConnected = true;
+        component.isPro = true;
+        (component as any).processChanges();
+
+        await component.onSleepBackfill({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        } as any);
+
+        expect(mockUserService.backfillCorosSleepForCurrentUser).toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('backfilled_sleep_history', {
+            method: ServiceNames.COROSAPI,
+            source: 'history_import',
+        });
+        expect(component.pendingSleepBackfillResult()?.queued).toBe(4);
     });
 
     it('should request Garmin sleep backfill from the separate action', async () => {

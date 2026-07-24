@@ -158,6 +158,11 @@
       Imports Garmin sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Records may appear
       gradually over the next few hours.
     </p>
+    } @else if (serviceName === serviceNames.COROSAPI) {
+    <p>
+      Imports available COROS sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today. COROS retains
+      daily data for up to three months.
+    </p>
     } @else {
     <p>
       Imports Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Existing records are

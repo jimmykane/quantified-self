@@ -361,7 +361,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       {
         icon: 'bedtime',
         title: 'Daily COROS sleep summaries',
-        copy: 'COROS sleep summaries import every 24 hours, including sleep timing and available heart-rate/HRV summaries. The current COROS API does not expose sleep stages.',
+        copy: 'COROS sleep summaries import every 24 hours, including sleep timing and available heart-rate/HRV summaries. Pro users can also request the available three-month sleep history from Connections. The current COROS API does not expose sleep stages.',
       },
       {
         icon: 'upload_file',

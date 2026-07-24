@@ -2117,6 +2117,22 @@ describe('AppUserService', () => {
             });
         });
 
+        describe('backfillCorosSleepForCurrentUser', () => {
+            it('should call cloud function for COROS sleep backfill', async () => {
+                const response = {
+                    queued: 4,
+                    startDate: '2026-01-30T12:00:00.000Z',
+                    endDate: '2026-04-30T12:00:00.000Z',
+                    nextAllowedAtMs: 1_778_244_000_000,
+                };
+                mockFunctionsService.call.mockResolvedValueOnce({ data: response });
+
+                await expect(service.backfillCorosSleepForCurrentUser()).resolves.toEqual(response);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillCorosAPISleep');
+            });
+        });
+
         describe('addSuuntoRoutesToQueueForCurrentUser', () => {
             it('should call cloud function for Suunto route catch-up', async () => {
                 const response = {

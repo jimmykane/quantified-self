@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     SLEEP_BACKFILL_COOLDOWN_MS,
     SLEEP_BACKFILL_START_DATE_ISO,
+    getCorosSleepBackfillStartMs,
     getSleepBackfillCooldownMs,
     getSleepBackfillWindowDays,
 } from '../../../shared/sleep-backfill';
@@ -20,6 +21,7 @@ const hoisted = vi.hoisted(() => ({
     getTokenData: vi.fn(),
     isSleepProviderEnabled: vi.fn(),
     isSleepSyncUserAllowed: vi.fn(),
+    isServiceUnavailableForSyncForUser: vi.fn(),
     addSleepSyncQueueItem: vi.fn(),
     updateSleepSyncState: vi.fn(),
     requestGet: vi.fn(),
@@ -130,6 +132,18 @@ vi.mock('firebase-admin', () => ({
                 };
             }
 
+            if (name === 'COROSAPIAccessTokens') {
+                return {
+                    doc: () => ({
+                        collection: () => ({
+                            get: vi.fn().mockResolvedValue({
+                                docs: hoisted.tokenDocs,
+                            }),
+                        }),
+                    }),
+                };
+            }
+
             if (name === 'users') {
                 return {
                     doc: (docId: string) => createDocRef(`users/${docId}`),
@@ -172,6 +186,10 @@ vi.mock('./provider-flags', () => ({
     isSleepSyncUserAllowed: hoisted.isSleepSyncUserAllowed,
 }));
 
+vi.mock('../service-connection-meta', () => ({
+    isServiceUnavailableForSyncForUser: hoisted.isServiceUnavailableForSyncForUser,
+}));
+
 vi.mock('./queue', () => ({
     addSleepSyncQueueItem: hoisted.addSleepSyncQueueItem,
 }));
@@ -184,7 +202,12 @@ vi.mock('../request-helper', () => ({
     get: hoisted.requestGet,
 }));
 
-import { backfillGarminAPISleep, backfillSuuntoAppSleep, chunkSleepBackfillRange } from './backfill';
+import {
+    backfillCorosAPISleep,
+    backfillGarminAPISleep,
+    backfillSuuntoAppSleep,
+    chunkSleepBackfillRange,
+} from './backfill';
 
 function createRequest(overrides: Partial<{
     app: object | null;
@@ -211,6 +234,13 @@ function seedGarminToken(id = 'garmin-user-1') {
     });
 }
 
+function seedCorosToken() {
+    hoisted.tokenDocs.push({
+        id: 'coros-token-1',
+        data: () => ({ serviceName: 'COROS API' }),
+    });
+}
+
 describe('backfillSuuntoAppSleep', () => {
     const nowMs = Date.parse('2026-04-30T12:00:00.000Z');
     const startMs = Date.parse(SLEEP_BACKFILL_START_DATE_ISO);
@@ -231,6 +261,7 @@ describe('backfillSuuntoAppSleep', () => {
         hoisted.getTokenData.mockResolvedValue({ userName: 'suunto-user-1' });
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.requestGet.mockResolvedValue(undefined);
@@ -400,6 +431,128 @@ describe('backfillSuuntoAppSleep', () => {
 
         expect(hoisted.transactionSet).not.toHaveBeenCalled();
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+});
+
+describe('backfillCorosAPISleep', () => {
+    const nowMs = Date.parse('2026-04-30T12:00:00.000Z');
+    const startMs = getCorosSleepBackfillStartMs(nowMs);
+    const windowDays = getSleepBackfillWindowDays(SLEEP_PROVIDERS.COROSAPI) || 0;
+    const cooldownMs = getSleepBackfillCooldownMs(SLEEP_PROVIDERS.COROSAPI) || 0;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(nowMs);
+        vi.clearAllMocks();
+        hoisted.tokenDocs.length = 0;
+        hoisted.stateData = null;
+        hoisted.transactionStateData = undefined;
+        hoisted.userExists = true;
+        hoisted.transactionUserExists = undefined;
+        hoisted.tombstoneData = null;
+        hoisted.transactionTombstoneData = undefined;
+        hoisted.hasProAccess.mockResolvedValue(true);
+        hoisted.getTokenData.mockResolvedValue({ openId: 'coros-user-1' });
+        hoisted.isSleepProviderEnabled.mockReturnValue(true);
+        hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
+        hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
+        hoisted.updateSleepSyncState.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('queues COROS sleep poll windows for the documented three-month provider lookback', async () => {
+        seedCorosToken();
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+
+        const result = await backfillCorosAPISleep(createRequest() as any);
+
+        expect(result).toEqual({
+            queued: expectedWindows.length,
+            startDate: new Date(startMs).toISOString(),
+            endDate: new Date(nowMs).toISOString(),
+            nextAllowedAtMs: nowMs + cooldownMs,
+        });
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), {
+            provider: SLEEP_PROVIDERS.COROSAPI,
+            status: 'ready',
+            lastBackfillQueuedAtMs: nowMs,
+            lastBackfillStartMs: startMs,
+            lastBackfillEndMs: nowMs,
+            lastBackfillQueueItems: 0,
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+            lastError: null,
+            updatedAtMs: nowMs,
+        }, { merge: true });
+        expect(hoisted.transactionSet.mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.addSleepSyncQueueItem.mock.invocationCallOrder[0]);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(1, {
+            type: 'coros_poll',
+            provider: SLEEP_PROVIDERS.COROSAPI,
+            userID: 'user-1',
+            providerUserId: 'coros-user-1',
+            rangeStartMs: expectedWindows[0].startMs,
+            rangeEndMs: expectedWindows[0].endMs,
+            dedupeKey: `sleep-backfill:user-1:${expectedWindows[0].startMs}:${expectedWindows[0].endMs}`,
+        });
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.COROSAPI, {
+            status: 'ready',
+            lastBackfillQueuedAtMs: nowMs,
+            lastBackfillStartMs: startMs,
+            lastBackfillEndMs: nowMs,
+            lastBackfillQueueItems: expectedWindows.length,
+            nextBackfillAllowedAtMs: nowMs + cooldownMs,
+            lastError: null,
+        }, nowMs);
+    });
+
+    it('requires App Check and an authenticated Pro user before accessing COROS tokens', async () => {
+        seedCorosToken();
+
+        await expect(backfillCorosAPISleep(createRequest({ app: null }) as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+        await expect(backfillCorosAPISleep(createRequest({ auth: null }) as any))
+            .rejects.toMatchObject({ code: 'unauthenticated' });
+        hoisted.hasProAccess.mockResolvedValue(false);
+        await expect(backfillCorosAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'permission-denied' });
+
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('rejects disabled, rollout-blocked, unavailable, unconnected, and cooling-down COROS accounts', async () => {
+        seedCorosToken();
+        hoisted.isSleepProviderEnabled.mockReturnValue(false);
+        await expect(backfillCorosAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        hoisted.isSleepProviderEnabled.mockReturnValue(true);
+        hoisted.isSleepSyncUserAllowed.mockReturnValue(false);
+        await expect(backfillCorosAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'permission-denied' });
+
+        hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(true);
+        await expect(backfillCorosAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
+        hoisted.tokenDocs.length = 0;
+        await expect(backfillCorosAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        seedCorosToken();
+        hoisted.stateData = { nextBackfillAllowedAtMs: nowMs + 60_000 };
+        await expect(backfillCorosAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'resource-exhausted' });
+
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
     });
 });
 

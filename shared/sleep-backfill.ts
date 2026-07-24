@@ -3,16 +3,19 @@ import { SLEEP_PROVIDERS, SleepProvider } from './sleep';
 export const SLEEP_BACKFILL_START_DATE_ISO = '2016-01-01T00:00:00.000Z';
 export const SLEEP_BACKFILL_COOLDOWN_DAYS = 7;
 export const SLEEP_BACKFILL_COOLDOWN_MS = SLEEP_BACKFILL_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+export const COROS_SLEEP_BACKFILL_LOOKBACK_MONTHS = 3;
 export const GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS = ['HISTORICAL_DATA_EXPORT', 'HEALTH_EXPORT'] as const;
 
 export const SLEEP_BACKFILL_PROVIDER_WINDOW_DAYS: Partial<Record<SleepProvider, number>> = {
   [SLEEP_PROVIDERS.GarminAPI]: 89,
   [SLEEP_PROVIDERS.SuuntoApp]: 28,
+  [SLEEP_PROVIDERS.COROSAPI]: 30,
 };
 
 export const SLEEP_BACKFILL_PROVIDER_COOLDOWN_DAYS: Partial<Record<SleepProvider, number>> = {
   [SLEEP_PROVIDERS.GarminAPI]: 30,
   [SLEEP_PROVIDERS.SuuntoApp]: SLEEP_BACKFILL_COOLDOWN_DAYS,
+  [SLEEP_PROVIDERS.COROSAPI]: SLEEP_BACKFILL_COOLDOWN_DAYS,
 };
 
 export interface SleepBackfillQueueResponse {
@@ -41,4 +44,24 @@ export function getSleepBackfillCooldownMs(provider: SleepProvider): number | nu
   return cooldownDays === null
     ? null
     : cooldownDays * 24 * 60 * 60 * 1000;
+}
+
+export function getCorosSleepBackfillStartMs(nowMs = Date.now()): number {
+  if (!Number.isFinite(nowMs)) {
+    throw new Error('Invalid COROS sleep backfill end time.');
+  }
+
+  const now = new Date(nowMs);
+  const targetYear = now.getUTCFullYear();
+  const targetMonth = now.getUTCMonth() - COROS_SLEEP_BACKFILL_LOOKBACK_MONTHS;
+  const targetMonthLastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  return Date.UTC(
+    targetYear,
+    targetMonth,
+    Math.min(now.getUTCDate(), targetMonthLastDay),
+    now.getUTCHours(),
+    now.getUTCMinutes(),
+    now.getUTCSeconds(),
+    now.getUTCMilliseconds(),
+  );
 }

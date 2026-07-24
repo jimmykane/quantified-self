@@ -74,6 +74,10 @@ the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in
 ## One-Off COROS Backfill
 
 COROS retains daily data for up to three months and permits a maximum 30-day range per request.
+Connected Pro users can choose **Import Sleep History** in COROS History Import. The user-requested
+backfill queues their available three-month window in 30-day ranges and is available once every
+seven days. It uses the same guarded sleep worker and normalized session writes as routine polling.
+
 The `backfill-coros-sleep` Functions script queues the current eligible COROS accounts through the
 normal sleep queue in 30-day windows. It neither logs tokens nor fetches raw provider data itself;
 the deployed sleep worker performs the guarded token use and session writes.

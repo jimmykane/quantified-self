@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
+import { getCorosSleepBackfillStartMs } from '../../../shared/sleep-backfill';
 import { COROS_DAILY_MAX_WINDOW_DAYS } from '../sleep/constants';
 import { chunkSleepBackfillRange } from '../sleep/backfill';
 import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provider-flags';
@@ -11,7 +12,6 @@ import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { isProviderQueueUserDeletedOrDeletingError } from '../queue/provider-queue-errors';
 
 const LOG_PREFIX = '[coros-sleep-backfill]';
-const COROS_SLEEP_MAX_LOOKBACK_MONTHS = 3;
 const DEFAULT_TOKEN_LIMIT = 100;
 const MAX_TOKEN_LIMIT = 1_000;
 
@@ -110,27 +110,11 @@ export function parseCorosSleepBackfillOptions(argv: string[]): CorosSleepBackfi
     };
 }
 
-function subtractUtcMonthsClamped(timestampMs: number, months: number): number {
-    const date = new Date(timestampMs);
-    const targetYear = date.getUTCFullYear();
-    const targetMonth = date.getUTCMonth() - months;
-    const targetMonthLastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-    return Date.UTC(
-        targetYear,
-        targetMonth,
-        Math.min(date.getUTCDate(), targetMonthLastDay),
-        date.getUTCHours(),
-        date.getUTCMinutes(),
-        date.getUTCSeconds(),
-        date.getUTCMilliseconds(),
-    );
-}
-
 export function resolveCorosSleepBackfillRange(
     options: Pick<CorosSleepBackfillOptions, 'startMs' | 'endMs'>,
     nowMs = Date.now(),
 ): CorosSleepBackfillRange {
-    const earliestProviderStartMs = subtractUtcMonthsClamped(nowMs, COROS_SLEEP_MAX_LOOKBACK_MONTHS);
+    const earliestProviderStartMs = getCorosSleepBackfillStartMs(nowMs);
     const requestedEndMs = options.endMs ?? nowMs;
     const endMs = Math.min(requestedEndMs, nowMs);
     const requestedStartMs = options.startMs ?? earliestProviderStartMs;

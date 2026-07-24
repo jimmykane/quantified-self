@@ -10,6 +10,7 @@ import {
     SleepProvider,
 } from '../../../shared/sleep';
 import {
+    getCorosSleepBackfillStartMs,
     GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
     getSleepBackfillCooldownMs,
     getSleepBackfillWindowDays,
@@ -29,6 +30,8 @@ import {
     getUserDeletionGuardStateInTransaction,
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
+import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -44,6 +47,10 @@ interface SuuntoSleepBackfillToken {
 
 interface GarminSleepBackfillToken {
     accessToken: string;
+    providerUserId: string;
+}
+
+interface CorosSleepBackfillToken {
     providerUserId: string;
 }
 
@@ -173,6 +180,28 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
         await markGarminSleepBackfillPermissionsMissing(userID, bestMissingPermissions);
     }
     throw new HttpsError('failed-precondition', 'Connected Garmin token is required for sleep backfill.');
+}
+
+async function getCorosSleepBackfillToken(userID: string): Promise<CorosSleepBackfillToken> {
+    const tokenSnapshot = await admin.firestore()
+        .collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME)
+        .doc(userID)
+        .collection('tokens')
+        .get();
+
+    for (const tokenDoc of tokenSnapshot.docs) {
+        try {
+            const tokenData = await getTokenData(tokenDoc, ServiceNames.COROSAPI) as { openId?: unknown };
+            const providerUserId = typeof tokenData.openId === 'string' ? tokenData.openId.trim() : '';
+            if (providerUserId) {
+                return { providerUserId };
+            }
+        } catch (error) {
+            logger.warn(`[SleepBackfill] Could not use COROS token ${tokenDoc.id} for ${userID}`, error);
+        }
+    }
+
+    throw new HttpsError('failed-precondition', 'Connected COROS token is required for sleep backfill.');
 }
 
 function getMissingGarminSleepBackfillPermissions(tokenData: { permissions?: unknown }): string[] {
@@ -600,6 +629,97 @@ export const backfillSuuntoAppSleep = onCall({
     }, nowMs);
 
     logger.info(`[SleepBackfill] Queued ${queued} Suunto sleep windows for ${userID}`);
+
+    return {
+        queued,
+        startDate: new Date(startMs).toISOString(),
+        endDate: new Date(nowMs).toISOString(),
+        nextAllowedAtMs,
+    };
+});
+
+export const backfillCorosAPISleep = onCall({
+    region: FUNCTIONS_MANIFEST.backfillCorosAPISleep.region,
+    cors: ALLOWED_CORS_ORIGINS,
+    memory: '512MiB',
+    timeoutSeconds: 540,
+    maxInstances: 5,
+}, async (request): Promise<SleepBackfillQueueResponse> => {
+    enforceAppCheck(request);
+
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be authenticated.');
+    }
+
+    const userID = request.auth.uid;
+    if (!(await hasProAccess(userID))) {
+        logger.warn(`[SleepBackfill] Blocking COROS sleep backfill for non-pro user ${userID}`);
+        throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+    }
+
+    if (!isSleepProviderEnabled(SLEEP_PROVIDERS.COROSAPI)) {
+        throw new HttpsError('failed-precondition', 'COROS sleep sync is disabled.');
+    }
+
+    if (!isSleepSyncUserAllowed(userID)) {
+        throw new HttpsError('permission-denied', 'Sleep sync is not enabled for this user.');
+    }
+
+    if (await isServiceUnavailableForSyncForUser(userID, ServiceNames.COROSAPI)) {
+        throw new HttpsError('failed-precondition', 'COROS is unavailable for sleep sync. Reconnect COROS and try again.');
+    }
+
+    const nowMs = Date.now();
+    await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.COROSAPI, nowMs);
+
+    const token = await getCorosSleepBackfillToken(userID);
+    const startMs = getCorosSleepBackfillStartMs(nowMs);
+    const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.COROSAPI, 'COROS');
+    const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+    const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.COROSAPI, 'COROS');
+    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.COROSAPI, startMs, nowMs, nextAllowedAtMs);
+    if (!cooldownClaimed) {
+        throw new HttpsError('failed-precondition', 'Sleep backfill is not available while account deletion is in progress.');
+    }
+
+    let queued = 0;
+    try {
+        for (const window of windows) {
+            await addSleepSyncQueueItem({
+                type: 'coros_poll',
+                provider: SLEEP_PROVIDERS.COROSAPI,
+                userID,
+                providerUserId: token.providerUserId,
+                rangeStartMs: window.startMs,
+                rangeEndMs: window.endMs,
+                dedupeKey: `sleep-backfill:${userID}:${window.startMs}:${window.endMs}`,
+            });
+            queued += 1;
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : `${error}`;
+        logger.error(`[SleepBackfill] Failed after queueing ${queued} COROS sleep windows for ${userID}`, error);
+        await updateSleepSyncState(userID, SLEEP_PROVIDERS.COROSAPI, {
+            status: SLEEP_SYNC_STATUSES.Failed,
+            lastBackfillQueuedAtMs: null,
+            lastBackfillQueueItems: queued,
+            nextBackfillAllowedAtMs: null,
+            lastError: message,
+        }, Date.now());
+        throw new HttpsError('internal', 'Could not queue COROS sleep backfill.');
+    }
+
+    await updateSleepSyncState(userID, SLEEP_PROVIDERS.COROSAPI, {
+        status: SLEEP_SYNC_STATUSES.Ready,
+        lastBackfillQueuedAtMs: nowMs,
+        lastBackfillStartMs: startMs,
+        lastBackfillEndMs: nowMs,
+        lastBackfillQueueItems: queued,
+        nextBackfillAllowedAtMs: nextAllowedAtMs,
+        lastError: null,
+    }, nowMs);
+
+    logger.info(`[SleepBackfill] Queued ${queued} COROS sleep windows for ${userID}`);
 
     return {
         queued,
