@@ -188,6 +188,13 @@ describe('MCP data service', () => {
           label: 'Private suggested workout',
           distanceMeters: 10000,
         }],
+        selection: {
+          mode: 'event',
+          durationWeeks: 12,
+          eventId: 'event-3',
+          selectionKey: 'event:12:event-3',
+          label: 'Private benchmark',
+        },
         activityLabel: 'Private label',
       },
     });
@@ -205,7 +212,12 @@ describe('MCP data service', () => {
       suggestedEvents: [{
         distanceMeters: 10000,
       }],
+      selection: {
+        mode: 'event',
+        durationWeeks: 12,
+      },
     });
+    expect(JSON.stringify(result.payload)).not.toContain('event-3');
   });
 
   it('redacts raw sleep samples, provider identifiers, stage intervals, and provider payloads', async () => {
@@ -215,6 +227,7 @@ describe('MCP data service', () => {
 
     const result = await createMcpDataService(dependencies).listSleepSessions({
       uid: 'user-1',
+      connectionId: 'connection-1',
       startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
       endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
     });
@@ -247,6 +260,50 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('stages');
   });
 
+  it('skips malformed normalized sleep sessions', async () => {
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({
+        sleepDate: 'not-a-date',
+      }),
+      sleepDocument({
+        sleepDate: '2024-02-31',
+      }),
+      sleepDocument({
+        startTimeMs: Date.parse('2024-04-01T05:00:00.000Z'),
+        endTimeMs: Date.parse('2024-04-01T04:00:00.000Z'),
+      }),
+      sleepDocument({
+        durationSeconds: 0,
+      }),
+    ]);
+
+    const result = await createMcpDataService(dependencies).listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+    });
+
+    expect(result.sessions).toEqual([]);
+  });
+
+  it('rejects plaintext or tampered pagination cursors', async () => {
+    const cursor = Buffer.from(JSON.stringify({
+      endTimeMs: Date.parse('2024-04-01T04:00:00.000Z'),
+      id: 'sleep-1',
+    }), 'utf8').toString('base64url');
+    await expect(createMcpDataService(dependencies).listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+      cursor,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchSleepDocuments).not.toHaveBeenCalled();
+  });
+
   it('returns a cursor when an entire sleep scan page is excluded by filters', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
       Array.from({ length: 126 }, (_, index) => sleepDocument({
@@ -260,6 +317,7 @@ describe('MCP data service', () => {
 
     const result = await createMcpDataService(dependencies).listSleepSessions({
       uid: 'user-1',
+      connectionId: 'connection-1',
       startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
       endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
       limit: 25,
@@ -268,6 +326,58 @@ describe('MCP data service', () => {
 
     expect(result.sessions).toEqual([]);
     expect(result.nextCursor).toEqual(expect.any(String));
+    expect(Buffer.from(result.nextCursor!, 'base64url').toString('utf8')).not.toContain('sleep-124');
+  });
+
+  it('binds opaque sleep cursors to the MCP connection', async () => {
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
+      Array.from({ length: 126 }, (_, index) => sleepDocument({
+        endTimeMs: Date.parse('2024-04-01T04:00:00.000Z') - index,
+        isNap: true,
+      })).map((document, index) => ({
+        ...document,
+        id: `sleep-${index}`,
+      })),
+    );
+    const service = createMcpDataService(dependencies);
+    const firstPage = await service.listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+      limit: 25,
+      includeNaps: false,
+    });
+
+    await service.listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+      cursor: firstPage.nextCursor!,
+      limit: 25,
+      includeNaps: false,
+    });
+    expect(dependencies.fetchSleepDocuments).toHaveBeenLastCalledWith(
+      'user-1',
+      Date.parse('2024-03-01T00:00:00.000Z'),
+      Date.parse('2024-05-01T00:00:00.000Z'),
+      126,
+      {
+        endTimeMs: Date.parse('2024-04-01T04:00:00.000Z') - 124,
+        id: 'sleep-124',
+      },
+    );
+
+    await expect(service.listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-2',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
   });
 
   it('aggregates sleep sessions by the requested local calendar day', async () => {

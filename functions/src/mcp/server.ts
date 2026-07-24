@@ -19,6 +19,13 @@ const SUPPORTED_PUBLIC_HOSTS = new Set([
   'www.quantified-self.io',
   'beta.quantified-self.io',
 ]);
+const MAX_MCP_REQUEST_BYTES = 64 * 1024;
+const MCP_ISO_DATE_TIME_SCHEMA = z.iso.datetime({ offset: true }).max(64);
+const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
+  SLEEP_PROVIDERS.GarminAPI,
+  SLEEP_PROVIDERS.SuuntoApp,
+  SLEEP_PROVIDERS.COROSAPI,
+]);
 
 interface AuthenticatedMcpRequest {
   uid: string;
@@ -32,12 +39,12 @@ function getOAuthService(): ReturnType<typeof createMcpOAuthService> {
   return oauthService;
 }
 
-function resolvePublicBaseUrl(request: Request): string {
+export function resolvePublicBaseUrl(request: Request): string {
   const forwardedHost = `${request.get('x-forwarded-host') || ''}`.split(',')[0].trim().toLowerCase();
   const requestHost = forwardedHost || `${request.get('host') || ''}`.trim().toLowerCase();
   const hostname = requestHost.replace(/:\d+$/, '');
   if (SUPPORTED_PUBLIC_HOSTS.has(hostname)) {
-    return `https://${requestHost}`;
+    return `https://${hostname}`;
   }
   if (
     process.env.FUNCTIONS_EMULATOR === 'true'
@@ -68,6 +75,11 @@ function sendOAuthError(
   const oauthError = error instanceof McpOAuthError
     ? error
     : new McpOAuthError('temporarily_unavailable', 'The authorization service is unavailable.', 503);
+  if (!(error instanceof McpOAuthError)) {
+    logger.error('[MCP OAuth] Request failed unexpectedly', {
+      errorName: error instanceof Error ? error.name : 'unknown',
+    });
+  }
   response.status(oauthError.statusCode).json({
     error: oauthError.code,
     error_description: oauthError.message,
@@ -86,10 +98,19 @@ function parseFormBody(request: Request): Record<string, unknown> {
   return Object.fromEntries(new URLSearchParams(raw));
 }
 
-function parseDateTime(value: string, field: string): number {
+export function parseMcpDateTime(value: string, field: string): number {
+  if (!MCP_ISO_DATE_TIME_SCHEMA.safeParse(value).success) {
+    throw new McpDataError(
+      'invalid_request',
+      `${field} must be an ISO-8601 date-time with a UTC offset.`,
+    );
+  }
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) {
-    throw new McpDataError('invalid_request', `${field} must be an ISO-8601 date-time.`);
+    throw new McpDataError(
+      'invalid_request',
+      `${field} must be an ISO-8601 date-time with a UTC offset.`,
+    );
   }
   return parsed;
 }
@@ -104,9 +125,11 @@ function toolResult(value: unknown) {
   };
 }
 
-function toolError(error: unknown) {
+export function formatMcpToolError(error: unknown) {
   const code = error instanceof McpDataError ? error.code : 'internal_error';
-  const message = error instanceof Error ? error.message : 'The MCP tool could not complete the request.';
+  const message = error instanceof McpDataError
+    ? error.message
+    : 'The MCP tool could not complete the request.';
   return {
     isError: true,
     content: [{
@@ -116,40 +139,38 @@ function toolError(error: unknown) {
   };
 }
 
-function registerReadOnlyTool(
-  server: McpServer,
+const READ_ONLY_TOOL_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+async function runReadOnlyTool(
   name: string,
-  config: Record<string, unknown>,
-  handler: (input: Record<string, unknown>) => Promise<unknown>,
-): void {
-  server.registerTool(name, {
-    ...config,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-    // The SDK's registerTool overload cannot infer a raw Zod shape after this
-    // shared config wrapper spreads it; each call site still supplies Zod schemas.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any, async (input: Record<string, unknown>) => {
-    try {
-      return toolResult(await handler(input));
-    } catch (error) {
-      return toolError(error);
+  operation: () => Promise<unknown>,
+) {
+  try {
+    return toolResult(await operation());
+  } catch (error) {
+    if (!(error instanceof McpDataError)) {
+      logger.error('[MCP] Tool execution failed', {
+        toolName: name,
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
     }
-  });
+    return formatMcpToolError(error);
+  }
 }
 
-function createServer(auth: AuthenticatedMcpRequest): McpServer {
+export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
   const server = new McpServer({
     name: 'quantified-self',
     version: '1.0.0',
   });
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
-    registerReadOnlyTool(server, 'list_metrics', {
+    server.registerTool('list_metrics', {
       title: 'List available metrics',
       description: 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities.',
       inputSchema: {
@@ -157,20 +178,21 @@ function createServer(auth: AuthenticatedMcpRequest): McpServer {
         cursor: z.string().max(256).optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
-    }, input => dataService.listMetrics({
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_metrics', () => dataService.listMetrics({
       uid: auth.uid,
-      search: input.search as string | undefined,
-      cursor: input.cursor as string | undefined,
-      limit: input.limit as number | undefined,
-    }));
+      search: input.search,
+      cursor: input.cursor,
+      limit: input.limit,
+    })));
 
-    registerReadOnlyTool(server, 'query_metric', {
+    server.registerTool('query_metric', {
       title: 'Query an event metric',
       description: 'Aggregate one persisted numeric Sports Lib event metric over a bounded date range.',
       inputSchema: {
         metric: z.string().min(1).max(160),
-        start: z.string().min(1).max(64),
-        end: z.string().min(1).max(64),
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
         aggregation: z.enum(['total', 'average', 'minimum', 'maximum']).default('average'),
         groupBy: z.enum(['date', 'activity_type']).default('date'),
         interval: z.enum([
@@ -187,69 +209,77 @@ function createServer(auth: AuthenticatedMcpRequest): McpServer {
         timeZone: z.string().min(1).max(80),
         activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
       },
-    }, input => dataService.queryMetric({
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('query_metric', () => dataService.queryMetric({
       uid: auth.uid,
-      metric: input.metric as string,
-      startTimeMs: parseDateTime(input.start as string, 'start'),
-      endTimeMs: parseDateTime(input.end as string, 'end'),
-      aggregation: input.aggregation as 'total' | 'average' | 'minimum' | 'maximum',
-      groupBy: input.groupBy as 'date' | 'activity_type',
-      interval: input.interval as 'auto' | 'hourly' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semesterly' | 'yearly',
-      timeZone: input.timeZone as string,
-      activityTypes: input.activityTypes as string[] | undefined,
-    }));
+      metric: input.metric,
+      startTimeMs: parseMcpDateTime(input.start, 'start'),
+      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      aggregation: input.aggregation,
+      groupBy: input.groupBy,
+      interval: input.interval,
+      timeZone: input.timeZone,
+      activityTypes: input.activityTypes,
+    })));
 
-    registerReadOnlyTool(server, 'get_training_metric', {
+    server.registerTool('get_training_metric', {
       title: 'Get a Training metric',
       description: 'Read one ready Training-derived snapshot without event or activity identifiers and labels.',
       inputSchema: {
         metricKind: z.string().min(1).max(120),
       },
-    }, input => dataService.getTrainingMetric(auth.uid, input.metricKind as string));
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_training_metric',
+      () => dataService.getTrainingMetric(auth.uid, input.metricKind),
+    ));
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
-    registerReadOnlyTool(server, 'list_sleep_sessions', {
+    server.registerTool('list_sleep_sessions', {
       title: 'List sleep sessions',
       description: 'List redacted normalized sleep-session summaries. Raw samples and provider payloads are never returned.',
       inputSchema: {
-        start: z.string().min(1).max(64),
-        end: z.string().min(1).max(64),
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
         includeNaps: z.boolean().default(false),
-        provider: z.enum(Object.values(SLEEP_PROVIDERS) as [string, ...string[]]).optional(),
+        provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
         cursor: z.string().max(512).optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
-    }, input => dataService.listSleepSessions({
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_sleep_sessions', () => dataService.listSleepSessions({
       uid: auth.uid,
-      startTimeMs: parseDateTime(input.start as string, 'start'),
-      endTimeMs: parseDateTime(input.end as string, 'end'),
-      includeNaps: input.includeNaps as boolean | undefined,
-      provider: input.provider as typeof SLEEP_PROVIDERS[keyof typeof SLEEP_PROVIDERS] | undefined,
-      cursor: input.cursor as string | undefined,
-      limit: input.limit as number | undefined,
-    }));
+      connectionId: auth.connectionId,
+      startTimeMs: parseMcpDateTime(input.start, 'start'),
+      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      includeNaps: input.includeNaps,
+      provider: input.provider,
+      cursor: input.cursor,
+      limit: input.limit,
+    })));
 
-    registerReadOnlyTool(server, 'query_sleep_summary', {
+    server.registerTool('query_sleep_summary', {
       title: 'Query sleep summary',
       description: 'Aggregate redacted sleep sessions by local day, week, or month.',
       inputSchema: {
-        start: z.string().min(1).max(64),
-        end: z.string().min(1).max(64),
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
         includeNaps: z.boolean().default(false),
-        provider: z.enum(Object.values(SLEEP_PROVIDERS) as [string, ...string[]]).optional(),
+        provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
         groupBy: z.enum(['day', 'week', 'month']).default('day'),
         timeZone: z.string().min(1).max(80),
       },
-    }, input => dataService.querySleepSummary({
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('query_sleep_summary', () => dataService.querySleepSummary({
       uid: auth.uid,
-      startTimeMs: parseDateTime(input.start as string, 'start'),
-      endTimeMs: parseDateTime(input.end as string, 'end'),
-      includeNaps: input.includeNaps as boolean | undefined,
-      provider: input.provider as typeof SLEEP_PROVIDERS[keyof typeof SLEEP_PROVIDERS] | undefined,
-      groupBy: input.groupBy as 'day' | 'week' | 'month',
-      timeZone: input.timeZone as string,
-    }));
+      startTimeMs: parseMcpDateTime(input.start, 'start'),
+      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      includeNaps: input.includeNaps,
+      provider: input.provider,
+      groupBy: input.groupBy,
+      timeZone: input.timeZone,
+    })));
   }
 
   return server;
@@ -278,6 +308,74 @@ export function requiredScopeForRequest(body: unknown): McpOAuthScope | null {
 
 export function supportsMcpTransportMethod(method: string): boolean {
   return method === 'POST';
+}
+
+export function isMcpRequestBodyWithinLimit(
+  body: unknown,
+  contentLength: string | undefined,
+): boolean {
+  const declaredLength = Number(contentLength);
+  if (contentLength && (!Number.isFinite(declaredLength) || declaredLength < 0)) {
+    return false;
+  }
+  if (declaredLength > MAX_MCP_REQUEST_BYTES) {
+    return false;
+  }
+
+  try {
+    const serialized = typeof body === 'string'
+      ? body
+      : JSON.stringify(body ?? null);
+    return Buffer.byteLength(serialized, 'utf8') <= MAX_MCP_REQUEST_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+export interface McpBearerFailure {
+  statusCode: 401 | 429 | 503;
+  error: 'invalid_token' | 'temporarily_unavailable';
+  challengeError?: 'invalid_token';
+  retryAfterSeconds?: number;
+}
+
+export function classifyMcpBearerFailure(error: unknown): McpBearerFailure {
+  if (error instanceof McpOAuthError && error.statusCode === 429) {
+    return {
+      statusCode: 429,
+      error: 'temporarily_unavailable',
+      retryAfterSeconds: 60,
+    };
+  }
+  if (error instanceof McpOAuthError && error.statusCode === 401) {
+    return {
+      statusCode: 401,
+      error: 'invalid_token',
+      challengeError: 'invalid_token',
+    };
+  }
+  return {
+    statusCode: 503,
+    error: 'temporarily_unavailable',
+  };
+}
+
+export function requireMcpTokenGrantType(
+  value: unknown,
+): 'authorization_code' | 'refresh_token' {
+  if (value === 'authorization_code' || value === 'refresh_token') {
+    return value;
+  }
+  throw new McpOAuthError(
+    'unsupported_grant_type',
+    'Only authorization_code and refresh_token grants are supported.',
+  );
+}
+
+export function parseMcpBearerToken(value: unknown): string | null {
+  const authorization = typeof value === 'string' ? value.trim() : '';
+  const match = authorization.match(/^Bearer[ \t]+(\S+)$/i);
+  return match?.[1] || null;
 }
 
 export const mcpApi = onRequest({
@@ -342,16 +440,19 @@ export const mcpApi = onRequest({
 
   if (request.method === 'POST' && path === '/oauth/token') {
     noStore(response);
+    if (!isMcpRequestBodyWithinLimit(request.body, request.get('content-length'))) {
+      response.status(413).json({
+        error: 'invalid_request',
+        error_description: 'The token request body is too large.',
+      });
+      return;
+    }
     try {
       const params = parseFormBody(request);
-      const grantType = `${params.grant_type || ''}`;
+      const grantType = requireMcpTokenGrantType(params.grant_type);
       const result = grantType === 'authorization_code'
         ? await getOAuthService().exchangeAuthorizationCode(params, baseUrl)
-        : grantType === 'refresh_token'
-          ? await getOAuthService().exchangeRefreshToken(params, baseUrl)
-          : (() => {
-            throw new McpOAuthError('invalid_request', 'Unsupported grant_type.');
-          })();
+        : await getOAuthService().exchangeRefreshToken(params, baseUrl);
       response.json(result);
     } catch (error) {
       sendOAuthError(response, error);
@@ -364,8 +465,22 @@ export const mcpApi = onRequest({
     return;
   }
   noStore(response);
-  const authorization = `${request.get('authorization') || ''}`;
-  if (!authorization.startsWith('Bearer ')) {
+  if (
+    request.method === 'POST'
+    && !isMcpRequestBodyWithinLimit(request.body, request.get('content-length'))
+  ) {
+    response.status(413).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Request body is too large.',
+      },
+      id: null,
+    });
+    return;
+  }
+  const bearerToken = parseMcpBearerToken(request.get('authorization'));
+  if (!bearerToken) {
     response.set(
       'WWW-Authenticate',
       `Bearer resource_metadata="${metadataUrl}", scope="${Object.values(MCP_OAUTH_SCOPES).join(' ')}"`,
@@ -376,16 +491,24 @@ export const mcpApi = onRequest({
 
   let auth: AuthenticatedMcpRequest;
   try {
-    auth = await getOAuthService().authenticateBearer(authorization.slice('Bearer '.length), resource);
+    auth = await getOAuthService().authenticateBearer(bearerToken, resource);
   } catch (error) {
-    const oauthError = error instanceof McpOAuthError ? error : null;
-    response.set(
-      'WWW-Authenticate',
-      `Bearer error="invalid_token", resource_metadata="${metadataUrl}"`,
-    );
-    response.status(oauthError?.statusCode === 429 ? 429 : 401).json({
-      error: oauthError?.statusCode === 429 ? 'temporarily_unavailable' : 'invalid_token',
-    });
+    const failure = classifyMcpBearerFailure(error);
+    if (failure.challengeError) {
+      response.set(
+        'WWW-Authenticate',
+        `Bearer error="${failure.challengeError}", resource_metadata="${metadataUrl}"`,
+      );
+    }
+    if (failure.retryAfterSeconds) {
+      response.set('Retry-After', `${failure.retryAfterSeconds}`);
+    }
+    if (failure.statusCode === 503) {
+      logger.error('[MCP] Bearer authentication failed unexpectedly', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+    response.status(failure.statusCode).json({ error: failure.error });
     return;
   }
 
@@ -411,7 +534,7 @@ export const mcpApi = onRequest({
     return;
   }
 
-  const server = createServer(auth);
+  const server = createMcpServer(auth);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

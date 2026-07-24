@@ -1,6 +1,12 @@
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto';
+import {
   ActivityTypes,
   ActivityTypesHelper,
   ChartDataCategoryTypes,
@@ -40,6 +46,9 @@ const MAX_EVENT_QUERY_DOCUMENTS = 2000;
 const METRIC_DISCOVERY_EVENT_LIMIT = 500;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
+const SLEEP_CURSOR_VERSION = 1;
+const SLEEP_CURSOR_NONCE_BYTES = 12;
+const SLEEP_CURSOR_AUTH_TAG_BYTES = 16;
 
 export type McpDataErrorCode =
   | 'invalid_request'
@@ -164,6 +173,27 @@ function asNonNegativeNumber(value: unknown): number | null {
   return numeric !== null && numeric >= 0 ? numeric : null;
 }
 
+function normalizeCalendarDate(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return null;
+  }
+  const dayMs = Date.parse(`${normalized}T00:00:00.000Z`);
+  return Number.isFinite(dayMs) && new Date(dayMs).toISOString().slice(0, 10) === normalized
+    ? normalized
+    : null;
+}
+
+function isValidFirestoreDocumentId(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length > 0
+    && value !== '.'
+    && value !== '..'
+    && !value.includes('/')
+    && !/^__.*__$/.test(value)
+    && Buffer.byteLength(value, 'utf8') <= 1_500;
+}
+
 function validateBoundedRange(startTimeMs: number, endTimeMs: number): void {
   if (
     !Number.isFinite(startTimeMs)
@@ -185,20 +215,68 @@ function requireTimeZone(timeZone: string): string {
   return normalized;
 }
 
-function encodeCursor(cursor: SleepCursor): string {
-  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+function deriveSleepCursorKey(uid: string, connectionId: string): Buffer {
+  return createHash('sha256')
+    .update('quantified-self:mcp:sleep-cursor:v1\0', 'utf8')
+    .update(uid, 'utf8')
+    .update('\0', 'utf8')
+    .update(connectionId, 'utf8')
+    .digest();
 }
 
-function decodeCursor(cursor: string | undefined): SleepCursor | undefined {
+function encodeCursor(cursor: SleepCursor, uid: string, connectionId: string): string {
+  const nonce = randomBytes(SLEEP_CURSOR_NONCE_BYTES);
+  const cipher = createCipheriv(
+    'aes-256-gcm',
+    deriveSleepCursorKey(uid, connectionId),
+    nonce,
+  );
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(cursor), 'utf8'),
+    cipher.final(),
+  ]);
+  return Buffer.concat([
+    Buffer.from([SLEEP_CURSOR_VERSION]),
+    nonce,
+    cipher.getAuthTag(),
+    ciphertext,
+  ]).toString('base64url');
+}
+
+function decodeCursor(
+  cursor: string | undefined,
+  uid: string,
+  connectionId: string,
+): SleepCursor | undefined {
   if (!cursor) {
     return undefined;
   }
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<SleepCursor>;
+    if (!/^[A-Za-z0-9_-]+$/.test(cursor)) {
+      throw new Error('invalid cursor encoding');
+    }
+    const encoded = Buffer.from(cursor, 'base64url');
+    const minimumLength = 1 + SLEEP_CURSOR_NONCE_BYTES + SLEEP_CURSOR_AUTH_TAG_BYTES + 1;
+    if (encoded.length < minimumLength || encoded[0] !== SLEEP_CURSOR_VERSION) {
+      throw new Error('invalid cursor envelope');
+    }
+    const nonceStart = 1;
+    const authTagStart = nonceStart + SLEEP_CURSOR_NONCE_BYTES;
+    const ciphertextStart = authTagStart + SLEEP_CURSOR_AUTH_TAG_BYTES;
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      deriveSleepCursorKey(uid, connectionId),
+      encoded.subarray(nonceStart, authTagStart),
+    );
+    decipher.setAuthTag(encoded.subarray(authTagStart, ciphertextStart));
+    const plaintext = Buffer.concat([
+      decipher.update(encoded.subarray(ciphertextStart)),
+      decipher.final(),
+    ]);
+    const parsed = JSON.parse(plaintext.toString('utf8')) as Partial<SleepCursor>;
     if (
-      !Number.isFinite(parsed.endTimeMs)
-      || typeof parsed.id !== 'string'
-      || !parsed.id
+      !Number.isSafeInteger(parsed.endTimeMs)
+      || !isValidFirestoreDocumentId(parsed.id)
     ) {
       throw new Error('invalid cursor');
     }
@@ -316,6 +394,7 @@ function redactDerivedPayload(value: unknown, parentKey = ''): unknown {
 
   const entries = Object.entries(value as Record<string, unknown>);
   const redactedKeys = /(?:event|activity).*(?:id|name|label)s?$/i;
+  const compositeIdentityKeys = /^(?:selectionKey)$/i;
   const nestedIdentityKeys = /^(?:id|name|label)s?$/i;
   const parentIsEventIdentity = /(?:event|activity)/i.test(parentKey);
   const objectHasEventIdentity = entries.some(([key]) => /(?:event|activity).*ids?$/i.test(key));
@@ -323,6 +402,7 @@ function redactDerivedPayload(value: unknown, parentKey = ''): unknown {
     entries
       .filter(([key]) => (
         !redactedKeys.test(key)
+        && !compositeIdentityKeys.test(key)
         && !((parentIsEventIdentity || objectHasEventIdentity) && nestedIdentityKeys.test(key))
       ))
       .map(([key, child]) => [key, redactDerivedPayload(child, key)]),
@@ -393,8 +473,16 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
   const startTimeMs = asFiniteNumber(data.startTimeMs);
   const endTimeMs = asFiniteNumber(data.endTimeMs);
   const durationSeconds = asNonNegativeNumber(data.durationSeconds);
-  const sleepDate = typeof data.sleepDate === 'string' ? data.sleepDate : '';
-  if (!provider || startTimeMs === null || endTimeMs === null || durationSeconds === null || !sleepDate) {
+  const sleepDate = normalizeCalendarDate(data.sleepDate);
+  if (
+    !provider
+    || startTimeMs === null
+    || endTimeMs === null
+    || endTimeMs <= startTimeMs
+    || durationSeconds === null
+    || durationSeconds <= 0
+    || sleepDate === null
+  ) {
     return null;
   }
 
@@ -402,7 +490,9 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     ? data.score as Record<string, unknown>
     : null;
   const scoreValue = rawScore ? asNonNegativeNumber(rawScore.value) : null;
-  const scoreQualifier = typeof rawScore?.qualifier === 'string' && rawScore.qualifier.trim()
+  const scoreQualifier = typeof rawScore?.qualifier === 'string'
+    && rawScore.qualifier.trim()
+    && rawScore.qualifier.trim().length <= 120
     ? rawScore.qualifier.trim()
     : null;
 
@@ -425,6 +515,7 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
 
 export interface ListSleepSessionsInput {
   uid: string;
+  connectionId: string;
   startTimeMs: number;
   endTimeMs: number;
   includeNaps?: boolean;
@@ -563,7 +654,7 @@ export function createMcpDataService(
     async listSleepSessions(input: ListSleepSessionsInput) {
       validateBoundedRange(input.startTimeMs, input.endTimeMs);
       const limit = Math.min(MAX_SLEEP_PAGE_SIZE, Math.max(1, Math.floor(input.limit || 25)));
-      const cursor = decodeCursor(input.cursor);
+      const cursor = decodeCursor(input.cursor, input.uid, input.connectionId);
       const scanLimit = Math.min(MAX_SLEEP_QUERY_DOCUMENTS, limit * 5);
       const docs = await dependencies.fetchSleepDocuments(
         input.uid,
@@ -593,12 +684,12 @@ export function createMcpDataService(
         ? encodeCursor({
             endTimeMs: lastPageEntry.session.endTimeMs,
             id: lastPageEntry.id,
-          })
+          }, input.uid, input.connectionId)
         : rawScanTruncated && lastScannedDoc && lastScannedEndTimeMs !== null
           ? encodeCursor({
               endTimeMs: lastScannedEndTimeMs,
               id: lastScannedDoc.id,
-            })
+            }, input.uid, input.connectionId)
           : null;
 
       return {

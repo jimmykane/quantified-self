@@ -20,7 +20,19 @@ import type {
 
 const THIRTY_ONE_DAYS_MS = 31 * 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const UNKNOWN_ACTIVITY_KEY = '??';
+const TIME_ZONE_OFFSET_PROBE_DELTAS_MS = [
+  -7 * DAY_MS,
+  -2 * DAY_MS,
+  -36 * 60 * 60 * 1000,
+  -12 * 60 * 60 * 1000,
+  0,
+  12 * 60 * 60 * 1000,
+  36 * 60 * 60 * 1000,
+  2 * DAY_MS,
+  7 * DAY_MS,
+] as const;
 
 type ActivityTypeStatLike = {
   getValue?: () => unknown;
@@ -105,8 +117,8 @@ function getZonedDateTimeParts(date: Date, timeZone: string): ZonedDateTimeParts
   };
 }
 
-function zonedDateTimeToEpoch(parts: ZonedDateTimeParts, timeZone: string): number {
-  const targetCalendarTime = Date.UTC(
+function calendarPartsToEpoch(parts: ZonedDateTimeParts): number {
+  return Date.UTC(
     parts.year,
     parts.month - 1,
     parts.day,
@@ -114,26 +126,50 @@ function zonedDateTimeToEpoch(parts: ZonedDateTimeParts, timeZone: string): numb
     parts.minute,
     parts.second,
   );
-  let candidate = targetCalendarTime;
+}
 
-  for (let iteration = 0; iteration < 4; iteration += 1) {
-    const actual = getZonedDateTimeParts(new Date(candidate), timeZone);
-    const actualCalendarTime = Date.UTC(
-      actual.year,
-      actual.month - 1,
-      actual.day,
-      actual.hour,
-      actual.minute,
-      actual.second,
+function zonedDateTimeToEpoch(parts: ZonedDateTimeParts, timeZone: string): number {
+  const targetCalendarTime = calendarPartsToEpoch(parts);
+  const offsets = new Set<number>();
+
+  TIME_ZONE_OFFSET_PROBE_DELTAS_MS.forEach((deltaMs) => {
+    const probeTime = targetCalendarTime + deltaMs;
+    const probeCalendarTime = calendarPartsToEpoch(
+      getZonedDateTimeParts(new Date(probeTime), timeZone),
     );
-    const adjustment = targetCalendarTime - actualCalendarTime;
-    if (adjustment === 0) {
-      return candidate;
-    }
-    candidate += adjustment;
+    offsets.add(probeCalendarTime - probeTime);
+  });
+
+  const candidates = [...offsets].map((offsetMs) => {
+    const epochMs = targetCalendarTime - offsetMs;
+    return {
+      epochMs,
+      calendarTimeMs: calendarPartsToEpoch(
+        getZonedDateTimeParts(new Date(epochMs), timeZone),
+      ),
+    };
+  });
+  const exactCandidates = candidates
+    .filter(candidate => candidate.calendarTimeMs === targetCalendarTime)
+    .sort((left, right) => left.epochMs - right.epochMs);
+  if (exactCandidates.length) {
+    // During a fall-back overlap, use the earlier occurrence.
+    return exactCandidates[0].epochMs;
   }
 
-  return candidate;
+  const compatibleCandidate = candidates
+    .filter(candidate => candidate.calendarTimeMs > targetCalendarTime)
+    .sort((left, right) => (
+      left.calendarTimeMs - right.calendarTimeMs
+      || left.epochMs - right.epochMs
+    ))[0];
+  if (compatibleCandidate) {
+    // During a spring-forward gap, use the first representable local time
+    // after the requested boundary.
+    return compatibleCandidate.epochMs;
+  }
+
+  throw new Error(`Could not resolve local date-time in IANA timezone: ${timeZone}`);
 }
 
 function getZonedCalendarDate(date: Date, timeZone: string): Date {
@@ -487,7 +523,11 @@ export function resolveAutoAggregationTimeInterval(
   events: EventStatAggregationEventInput,
   timeZone?: string,
 ): TimeIntervals {
-  const normalizedEvents = sortEventsChronologically(events);
+  const eventsWithValidDates = (events || []).filter(event => (
+    event?.startDate instanceof Date
+    && Number.isFinite(event.startDate.getTime())
+  ));
+  const normalizedEvents = sortEventsChronologically(eventsWithValidDates);
   if (!normalizedEvents.length) {
     return TimeIntervals.Daily;
   }
@@ -536,7 +576,10 @@ export function resolveAggregationCategoryKey(
     return resolveActivityKey(event, logger);
   }
 
-  if (!(event?.startDate instanceof Date)) {
+  if (
+    !(event?.startDate instanceof Date)
+    || !Number.isFinite(event.startDate.getTime())
+  ) {
     logger?.warn?.('[event-stat-aggregation] Event is missing a valid startDate', {
       eventID: event?.getID?.() || null,
     });

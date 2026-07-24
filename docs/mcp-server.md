@@ -43,6 +43,7 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
 SHA-256 hashes, expire after one hour, and are audience-bound. Refresh tokens expire after 30 days and rotate on use.
+Reuse of an already-rotated refresh token revokes the connection and makes active descendant tokens unusable.
 Authorization codes are single-use and expire after five minutes.
 
 Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
@@ -132,9 +133,10 @@ deliberately.
 - Event and sleep date ranges are at most 366 days.
 - An event metric query rejects matches above 2,000 events.
 - A sleep summary rejects matches above 1,000 sessions.
-- Sleep pages are at most 100 sessions and use an opaque cursor.
+- Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
+  document ID used to resume pagination.
 - Metric discovery scans the latest 500 event stat maps and reports whether that scan was truncated.
-- An access token is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
+- Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
 - Requests require valid IANA timezones where local date bucketing is relevant.
 - Logs must not contain bearer tokens, authorization codes, client payloads, event data, sleep data, or user IDs.
 

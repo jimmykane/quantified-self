@@ -1,9 +1,10 @@
 import * as admin from 'firebase-admin';
 import { createHash, randomBytes } from 'node:crypto';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { Agent } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import fetch from 'node-fetch';
+import * as logger from 'firebase-functions/logger';
 import {
   getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
@@ -30,12 +31,56 @@ const ACCESS_TOKEN_LIFETIME_MS = 60 * 60 * 1000;
 const REFRESH_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const MCP_REQUESTS_PER_MINUTE = 120;
 const CLIENT_METADATA_MAX_BYTES = 64 * 1024;
+const NON_PUBLIC_IPV4_ADDRESSES = new BlockList();
+const NON_PUBLIC_IPV6_ADDRESSES = new BlockList();
+
+[
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+].forEach(([network, prefix]) => {
+  NON_PUBLIC_IPV4_ADDRESSES.addSubnet(network as string, prefix as number, 'ipv4');
+});
+
+[
+  ['::', 128],
+  ['::1', 128],
+  ['::ffff:0:0', 96],
+  ['64:ff9b::', 96],
+  ['64:ff9b:1::', 48],
+  ['100::', 64],
+  ['2001::', 32],
+  ['2001:2::', 48],
+  ['2001:10::', 28],
+  ['2001:20::', 28],
+  ['2001:db8::', 32],
+  ['2002::', 16],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['fec0::', 10],
+  ['ff00::', 8],
+].forEach(([network, prefix]) => {
+  NON_PUBLIC_IPV6_ADDRESSES.addSubnet(network as string, prefix as number, 'ipv6');
+});
 
 export type OAuthErrorCode =
   | 'invalid_request'
   | 'invalid_client'
   | 'invalid_grant'
   | 'invalid_scope'
+  | 'unsupported_grant_type'
+  | 'unsupported_response_type'
   | 'access_denied'
   | 'temporarily_unavailable';
 
@@ -162,7 +207,7 @@ export interface McpOAuthStore {
   exchangeRefreshToken(input: RefreshExchangeInput): Promise<RefreshTokenRecord>;
   getAccessToken(tokenHash: string): Promise<AccessTokenRecord | null>;
   getConnection(uid: string, connectionId: string): Promise<McpConnection | null>;
-  recordAuthorizedRequest(tokenHash: string, token: AccessTokenRecord, nowMs: number): Promise<void>;
+  recordAuthorizedRequest(token: AccessTokenRecord, nowMs: number): Promise<void>;
   listConnections(uid: string): Promise<McpConnection[]>;
   revokeConnection(uid: string, connectionId: string, nowMs: number): Promise<void>;
 }
@@ -183,6 +228,22 @@ function buildDefaultStore(): McpOAuthStore {
     .doc(uid)
     .collection(MCP_OAUTH_COLLECTIONS.userConnections)
     .doc(connectionId);
+  const deleteCredentialStateForConnection = async (
+    uid: string,
+    connectionId: string,
+  ): Promise<void> => {
+    for (const collectionName of [
+      MCP_OAUTH_COLLECTIONS.accessTokens,
+      MCP_OAUTH_COLLECTIONS.refreshTokens,
+      MCP_OAUTH_COLLECTIONS.authorizationCodes,
+    ]) {
+      const snapshot = await collection(collectionName)
+        .where('uid', '==', uid)
+        .where('connectionId', '==', connectionId)
+        .get();
+      await Promise.all(snapshot.docs.map(doc => db.recursiveDelete(doc.ref)));
+    }
+  };
 
   return {
     async saveAuthorizationRequest(record) {
@@ -258,6 +319,13 @@ function buildDefaultStore(): McpOAuthStore {
         if (guard.shouldSkip) {
           throw new McpOAuthError('invalid_grant', 'The authorization grant is no longer valid.');
         }
+        const activeConnectionRef = connectionRef(code.uid, code.connectionId);
+        const connection = documentData<McpConnection>(
+          await transaction.get(activeConnectionRef),
+        );
+        if (!connection || connection.revokedAtMs !== null) {
+          throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.');
+        }
         transaction.delete(codeRef);
         transaction.create(
           collection(MCP_OAUTH_COLLECTIONS.accessTokens).doc(input.accessTokenHash),
@@ -280,7 +348,7 @@ function buildDefaultStore(): McpOAuthStore {
             expireAt: timestamp(input.refreshTokenRecord.expiresAtMs),
           },
         );
-        transaction.update(connectionRef(code.uid, code.connectionId), {
+        transaction.update(activeConnectionRef, {
           lastUsedAtMs: input.nowMs,
         });
         return code;
@@ -289,25 +357,43 @@ function buildDefaultStore(): McpOAuthStore {
 
     async exchangeRefreshToken(input) {
       const refreshRef = collection(MCP_OAUTH_COLLECTIONS.refreshTokens).doc(input.refreshTokenHash);
-      return db.runTransaction(async (transaction) => {
+      const outcome = await db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(refreshRef);
         const refresh = documentData<RefreshTokenRecord & { active?: boolean }>(snapshot);
         if (
           !refresh
-          || refresh.active !== true
           || refresh.expiresAtMs <= input.nowMs
           || refresh.clientId !== input.clientId
           || refresh.audience !== input.audience
-          || (
-            input.requestedScopes
-            && input.requestedScopes.some(scope => !refresh.scopes.includes(scope))
-          )
         ) {
           throw new McpOAuthError('invalid_grant', 'The refresh token is invalid or expired.');
         }
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, refresh.uid, input.nowMs);
         if (guard.shouldSkip) {
           throw new McpOAuthError('invalid_grant', 'The authorization grant is no longer valid.');
+        }
+        const activeConnectionRef = connectionRef(refresh.uid, refresh.connectionId);
+        const connection = documentData<McpConnection>(
+          await transaction.get(activeConnectionRef),
+        );
+        if (!connection || connection.revokedAtMs !== null) {
+          throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.');
+        }
+        if (refresh.active !== true) {
+          transaction.update(activeConnectionRef, {
+            revokedAtMs: input.nowMs,
+            lastUsedAtMs: input.nowMs,
+          });
+          return { refresh, replayed: true as const };
+        }
+        if (
+          input.requestedScopes
+          && input.requestedScopes.some(scope => !refresh.scopes.includes(scope))
+        ) {
+          throw new McpOAuthError(
+            'invalid_scope',
+            'The requested scope exceeds the refresh token grant.',
+          );
         }
         transaction.update(refreshRef, {
           active: false,
@@ -335,12 +421,29 @@ function buildDefaultStore(): McpOAuthStore {
             expireAt: timestamp(input.nextRefreshTokenRecord.expiresAtMs),
           },
         );
-        transaction.update(connectionRef(refresh.uid, refresh.connectionId), {
+        transaction.update(activeConnectionRef, {
           scopes: input.requestedScopes || refresh.scopes,
           lastUsedAtMs: input.nowMs,
         });
-        return refresh;
+        return { refresh, replayed: false as const };
       });
+      if (outcome.replayed) {
+        try {
+          await deleteCredentialStateForConnection(
+            outcome.refresh.uid,
+            outcome.refresh.connectionId,
+          );
+        } catch (error) {
+          logger.error('[MCP OAuth] Failed to delete credentials after refresh-token reuse', {
+            errorName: error instanceof Error ? error.name : 'unknown',
+          });
+        }
+        throw new McpOAuthError(
+          'invalid_grant',
+          'Refresh-token reuse was detected and the MCP connection was revoked.',
+        );
+      }
+      return outcome.refresh;
     },
 
     async getAccessToken(tokenHash) {
@@ -353,24 +456,31 @@ function buildDefaultStore(): McpOAuthStore {
       return documentData<McpConnection>(await connectionRef(uid, connectionId).get());
     },
 
-    async recordAuthorizedRequest(tokenHash, token, nowMs) {
+    async recordAuthorizedRequest(token, nowMs) {
       const windowStartMs = Math.floor(nowMs / 60000) * 60000;
-      const rateLimitId = hashOpaqueValue(`${tokenHash}:${windowStartMs}`);
+      const rateLimitId = buildMcpRateLimitBucketId(token, windowStartMs);
       const rateLimitRef = collection(MCP_OAUTH_COLLECTIONS.rateLimits).doc(rateLimitId);
+      const activeConnectionRef = connectionRef(token.uid, token.connectionId);
       await db.runTransaction(async (transaction) => {
         const rateLimit = documentData<{ count?: number }>(await transaction.get(rateLimitRef));
+        const connection = documentData<McpConnection>(
+          await transaction.get(activeConnectionRef),
+        );
+        if (!connection || connection.revokedAtMs !== null) {
+          throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
+        }
         const nextCount = Number(rateLimit?.count || 0) + 1;
         if (nextCount > MCP_REQUESTS_PER_MINUTE) {
           throw new McpOAuthError('temporarily_unavailable', 'The MCP request rate limit was exceeded.', 429);
         }
         transaction.set(rateLimitRef, {
           uid: token.uid,
-          tokenHash,
+          connectionId: token.connectionId,
           windowStartMs,
           count: nextCount,
           expireAt: timestamp(windowStartMs + 5 * 60 * 1000),
         });
-        transaction.update(connectionRef(token.uid, token.connectionId), {
+        transaction.update(activeConnectionRef, {
           lastUsedAtMs: nowMs,
         });
       });
@@ -383,8 +493,8 @@ function buildDefaultStore(): McpOAuthStore {
         .orderBy('createdAtMs', 'desc')
         .get();
       return snapshot.docs.map(doc => ({
-        connectionId: doc.id,
         ...doc.data(),
+        connectionId: doc.id,
       })) as McpConnection[];
     },
 
@@ -395,17 +505,7 @@ function buildDefaultStore(): McpOAuthStore {
         return;
       }
       await ref.set({ revokedAtMs: nowMs }, { merge: true });
-      for (const collectionName of [
-        MCP_OAUTH_COLLECTIONS.accessTokens,
-        MCP_OAUTH_COLLECTIONS.refreshTokens,
-        MCP_OAUTH_COLLECTIONS.authorizationCodes,
-      ]) {
-        const snapshot = await collection(collectionName)
-          .where('uid', '==', uid)
-          .where('connectionId', '==', connectionId)
-          .get();
-        await Promise.all(snapshot.docs.map(doc => db.recursiveDelete(doc.ref)));
-      }
+      await deleteCredentialStateForConnection(uid, connectionId);
     },
   };
 }
@@ -416,6 +516,13 @@ function randomOpaqueValue(byteLength = 32): string {
 
 export function hashOpaqueValue(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('base64url');
+}
+
+export function buildMcpRateLimitBucketId(
+  token: Pick<AccessTokenRecord, 'uid' | 'connectionId'>,
+  windowStartMs: number,
+): string {
+  return hashOpaqueValue(`${token.uid}:${token.connectionId}:${windowStartMs}`);
 }
 
 export function createPkceChallenge(verifier: string): string {
@@ -445,37 +552,14 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
 }
 
 export function isPrivateAddress(address: string): boolean {
-  if (isIP(address) === 4) {
-    const parts = address.split('.').map(Number);
-    return parts[0] === 10
-      || parts[0] === 127
-      || (parts[0] === 169 && parts[1] === 254)
-      || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)
-      || (parts[0] === 192 && parts[1] === 168)
-      || (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127)
-      || (parts[0] === 192 && parts[1] === 0 && parts[2] === 0)
-      || (parts[0] === 192 && parts[1] === 0 && parts[2] === 2)
-      || (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19))
-      || (parts[0] === 198 && parts[1] === 51 && parts[2] === 100)
-      || (parts[0] === 203 && parts[1] === 0 && parts[2] === 113)
-      || parts[0] === 0
-      || parts[0] >= 224;
+  const family = isIP(address);
+  if (family === 4) {
+    return NON_PUBLIC_IPV4_ADDRESSES.check(address, 'ipv4');
   }
-  const normalized = address.toLowerCase();
-  const mappedIpv4 = normalized.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)?.[1];
-  if (mappedIpv4 && isIP(mappedIpv4) === 4) {
-    return isPrivateAddress(mappedIpv4);
+  if (family === 6) {
+    return NON_PUBLIC_IPV6_ADDRESSES.check(address, 'ipv6');
   }
-  return normalized === '::1'
-    || normalized === '::'
-    || normalized.startsWith('fc')
-    || normalized.startsWith('fd')
-    || normalized.startsWith('fe8')
-    || normalized.startsWith('fe9')
-    || normalized.startsWith('fea')
-    || normalized.startsWith('feb')
-    || normalized.startsWith('ff')
-    || normalized.startsWith('2001:db8:');
+  return true;
 }
 
 function validateRedirectUri(value: string): URL {
@@ -495,6 +579,72 @@ function validateRedirectUri(value: string): URL {
     throw new McpOAuthError('invalid_client', 'Client redirect URIs cannot contain credentials or fragments.');
   }
   return uri;
+}
+
+function isBoundedStringArray(value: unknown, maxLength: number): value is string[] {
+  return Array.isArray(value)
+    && value.length > 0
+    && value.length <= maxLength
+    && value.every(item => typeof item === 'string');
+}
+
+export function validateClientMetadataDocument(
+  value: unknown,
+  clientId: string,
+): ClientMetadata {
+  const metadata = value && typeof value === 'object'
+    ? value as Partial<ClientMetadata>
+    : null;
+  if (
+    !metadata
+    || metadata.client_id !== clientId
+    || typeof metadata.client_name !== 'string'
+    || !metadata.client_name.trim()
+    || metadata.client_name.length > 120
+    || !isBoundedStringArray(metadata.redirect_uris, 20)
+    || (
+      metadata.grant_types !== undefined
+      && !isBoundedStringArray(metadata.grant_types, 20)
+    )
+    || (
+      metadata.response_types !== undefined
+      && !isBoundedStringArray(metadata.response_types, 20)
+    )
+    || (
+      metadata.token_endpoint_auth_method !== undefined
+      && typeof metadata.token_endpoint_auth_method !== 'string'
+    )
+  ) {
+    throw new McpOAuthError('invalid_client', 'The client metadata document is invalid.');
+  }
+
+  metadata.redirect_uris.forEach(validateRedirectUri);
+  if (
+    metadata.grant_types
+    && !metadata.grant_types.includes('authorization_code')
+  ) {
+    throw new McpOAuthError('invalid_client', 'The client does not support the authorization code grant.');
+  }
+  if (metadata.response_types && !metadata.response_types.includes('code')) {
+    throw new McpOAuthError('invalid_client', 'The client does not support authorization codes.');
+  }
+  if (
+    metadata.token_endpoint_auth_method !== undefined
+    && metadata.token_endpoint_auth_method !== 'none'
+  ) {
+    throw new McpOAuthError('invalid_client', 'Only public PKCE clients are supported.');
+  }
+
+  return {
+    client_id: metadata.client_id,
+    client_name: metadata.client_name.trim(),
+    redirect_uris: [...metadata.redirect_uris],
+    ...(metadata.grant_types ? { grant_types: [...metadata.grant_types] } : {}),
+    ...(metadata.response_types ? { response_types: [...metadata.response_types] } : {}),
+    ...(metadata.token_endpoint_auth_method !== undefined
+      ? { token_endpoint_auth_method: metadata.token_endpoint_auth_method }
+      : {}),
+  };
 }
 
 export async function fetchClientMetadataDocument(clientId: string): Promise<ClientMetadata> {
@@ -546,37 +696,10 @@ export async function fetchClientMetadataDocument(clientId: string): Promise<Cli
     throw new McpOAuthError('invalid_client', 'The client metadata document could not be retrieved.');
   }
 
-  const metadata = await response.json().catch(() => null) as Partial<ClientMetadata> | null;
-  if (
-    !metadata
-    || metadata.client_id !== clientId
-    || typeof metadata.client_name !== 'string'
-    || !metadata.client_name.trim()
-    || metadata.client_name.length > 120
-    || !Array.isArray(metadata.redirect_uris)
-    || !metadata.redirect_uris.length
-    || metadata.redirect_uris.length > 20
-  ) {
-    throw new McpOAuthError('invalid_client', 'The client metadata document is invalid.');
-  }
-  metadata.redirect_uris.forEach(validateRedirectUri);
-  if (
-    metadata.grant_types
-    && !metadata.grant_types.includes('authorization_code')
-  ) {
-    throw new McpOAuthError('invalid_client', 'The client does not support the authorization code grant.');
-  }
-  if (metadata.response_types && !metadata.response_types.includes('code')) {
-    throw new McpOAuthError('invalid_client', 'The client does not support authorization codes.');
-  }
-  if (
-    metadata.token_endpoint_auth_method
-    && metadata.token_endpoint_auth_method !== 'none'
-  ) {
-    throw new McpOAuthError('invalid_client', 'Only public PKCE clients are supported.');
-  }
-
-  return metadata as ClientMetadata;
+  return validateClientMetadataDocument(
+    await response.json().catch(() => null),
+    clientId,
+  );
 }
 
 export interface McpOAuthServiceDependencies {
@@ -600,7 +723,10 @@ export function createMcpOAuthService(
   return {
     async startAuthorization(params: Record<string, unknown>, baseUrl: string) {
       if (params.response_type !== 'code') {
-        throw new McpOAuthError('invalid_request', 'Only response_type=code is supported.');
+        throw new McpOAuthError(
+          'unsupported_response_type',
+          'Only response_type=code is supported.',
+        );
       }
       if (params.code_challenge_method !== 'S256') {
         throw new McpOAuthError('invalid_request', 'PKCE with code_challenge_method=S256 is required.');
@@ -614,7 +740,7 @@ export function createMcpOAuthService(
       if (audience !== expectedAudience) {
         throw new McpOAuthError('invalid_request', 'The resource does not identify this MCP server.');
       }
-      if (!/^[A-Za-z0-9_-]{43,128}$/.test(codeChallenge)) {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge)) {
         throw new McpOAuthError('invalid_request', 'The PKCE code challenge is invalid.');
       }
       const scopes = normalizeOAuthScopes(params.scope);
@@ -848,7 +974,7 @@ export function createMcpOAuthService(
       if (!connection || connection.revokedAtMs !== null) {
         throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
       }
-      await store.recordAuthorizedRequest(tokenHash, token, nowMs);
+      await store.recordAuthorizedRequest(token, nowMs);
       return {
         uid: token.uid,
         clientId: token.clientId,

@@ -111,6 +111,24 @@ describe('event-stat-aggregation shared core', () => {
     ])).toBe(TimeIntervals.Monthly);
   });
 
+  it('should ignore malformed dates when resolving the auto interval', () => {
+    expect(resolveAutoAggregationTimeInterval([
+      makeEvent({
+        startDate: new Date('2024-03-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+      makeEvent({
+        id: 'invalid-date',
+        startDate: new Date(Number.NaN),
+        activityTypes: [ActivityTypes.Running],
+      }),
+      makeEvent({
+        startDate: new Date('2024-01-01T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+    ], 'Europe/Helsinki')).toBe(TimeIntervals.Monthly);
+  });
+
   it('should resolve known, unknown and multisport activity category keys', () => {
     const logger = { error: vi.fn() };
 
@@ -546,6 +564,21 @@ describe('event-stat-aggregation shared core', () => {
     expect(aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([5, 10]);
   });
 
+  it('should move a nonexistent midnight boundary forward within the same local day', () => {
+    const bucketStart = resolveAggregationCategoryKey(
+      makeEvent({
+        startDate: new Date('2023-10-01T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+      ChartDataCategoryTypes.DateType,
+      TimeIntervals.Daily,
+      undefined,
+      'America/Asuncion',
+    );
+
+    expect(bucketStart).toBe(new Date('2023-10-01T04:00:00.000Z').getTime());
+  });
+
   it('should preserve existing local bucketing when no timezone is provided', () => {
     const eventDate = new Date('2024-01-01T23:30:00.000Z');
 
@@ -598,6 +631,30 @@ describe('event-stat-aggregation shared core', () => {
 
     expect(aggregation.buckets).toEqual([]);
     expect(logger.warn).toHaveBeenCalledOnce();
+  });
+
+  it('should skip invalid date buckets when an explicit timezone is provided', () => {
+    const logger = { warn: vi.fn() };
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        id: 'invalid-zoned-date',
+        startDate: new Date(Number.NaN),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Auto,
+      timeZone: 'Europe/Helsinki',
+    }, logger);
+
+    expect(aggregation.buckets).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[event-stat-aggregation] Event is missing a valid startDate',
+      { eventID: 'invalid-zoned-date' },
+    );
   });
 
   it('should log and bucket missing activity display values as unknown', () => {

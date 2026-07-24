@@ -1,4 +1,5 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import { createMcpOAuthService, McpOAuthError } from './oauth.service';
@@ -22,7 +23,34 @@ function requireAuthenticatedRequest(request: {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+export interface McpAuthorizationDecision {
+  approved: boolean;
+  grantedScopes?: string[];
+}
+
+export function parseMcpAuthorizationDecision(value: unknown): McpAuthorizationDecision {
+  const data = asRecord(value);
+  if (typeof data.approved !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'approved must be a boolean.');
+  }
+  if (
+    data.grantedScopes !== undefined
+    && (
+      !Array.isArray(data.grantedScopes)
+      || data.grantedScopes.some(scope => typeof scope !== 'string')
+    )
+  ) {
+    throw new HttpsError('invalid-argument', 'grantedScopes must be an array of strings.');
+  }
+  return {
+    approved: data.approved,
+    grantedScopes: data.grantedScopes as string[] | undefined,
+  };
 }
 
 function toHttpsError(error: unknown): never {
@@ -37,6 +65,9 @@ function toHttpsError(error: unknown): never {
         : 'invalid-argument';
     throw new HttpsError(code, error.message);
   }
+  logger.error('[MCP] Callable request failed unexpectedly', {
+    errorName: error instanceof Error ? error.name : 'unknown',
+  });
   throw new HttpsError('internal', 'The MCP connection request could not be completed.');
 }
 
@@ -58,13 +89,11 @@ export const decideMcpAuthorization = onCall({
   const uid = requireAuthenticatedRequest(request);
   try {
     const data = asRecord(request.data);
+    const decision = parseMcpAuthorizationDecision(data);
     return await getOAuthService().decideAuthorization({
       uid,
       requestId: `${data.requestId || ''}`,
-      approved: data.approved === true,
-      grantedScopes: Array.isArray(data.grantedScopes)
-        ? data.grantedScopes.map(scope => `${scope}`)
-        : undefined,
+      ...decision,
     });
   } catch (error) {
     return toHttpsError(error);
