@@ -498,6 +498,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('dashboard may offer a one-time action prompt to turn on automatic Garmin to Suunto activity sync');
     expect(serviceConnectionsSection?.content).toContain('Disconnecting Garmin, COROS, or Suunto turns off related automatic activity sync');
     expect(serviceConnectionsSection?.content).toContain('Sleep sync is server-owned health data');
+    expect(serviceConnectionsSection?.content).toContain('automatically importing daily sleep summaries from a rolling recent window');
+    expect(serviceConnectionsSection?.content).toContain('the COROS API does not expose sleep stages');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
     expect(serviceConnectionsSection?.content).toContain('overlays available vitals');

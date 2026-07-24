@@ -1,9 +1,13 @@
 # Sleep Sync Operations
 
 Sleep sync is controlled independently from activity sync. The v1 sleep pipeline supports
-Garmin, Suunto, and COROS, but Garmin and COROS are currently disabled in code while their
-sleep payloads are not actively testable. Suunto sleep sync is enabled for all connected
-Suunto users.
+Garmin, Suunto, and COROS. All three providers are enabled for every connected user.
+
+COROS runs `scheduleCOROSSleepSync` every 24 hours. It queues a rolling seven-day daily-data
+poll for each connected COROS account. The documented COROS endpoint provides sleep start/end
+times, average sleep heart rate, resting heart rate, overnight HRV, and optional HRV samples.
+It does not provide sleep-stage intervals, so COROS sessions retain their duration as an
+unknown stage rather than inferred Light, Deep, REM, or Awake stages.
 
 ## Provider Kill Switch
 
@@ -13,13 +17,10 @@ Sleep provider disablement is source controlled in:
 functions/src/sleep/provider-flags.ts
 ```
 
-Current temporary setting:
+Current setting:
 
 ```ts
-export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
-    SLEEP_PROVIDERS.GarminAPI,
-    SLEEP_PROVIDERS.COROSAPI,
-];
+export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [];
 ```
 
 This constant only affects sleep sync. Existing activity sync behavior for Garmin, Suunto,
@@ -57,39 +58,29 @@ enabled again, new webhooks and scheduled polling runs are expected to create fr
 COROS and Suunto polling use a rolling recent window, so recent data can be picked up on
 the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in v1.
 
-## Re-Enable Garmin And COROS Sleep
+## Routine Verification
 
-1. Edit `functions/src/sleep/provider-flags.ts`.
-2. Remove `SLEEP_PROVIDERS.GarminAPI` and `SLEEP_PROVIDERS.COROSAPI` from
-   `SLEEP_SYNC_DISABLED_PROVIDERS`.
-
-   ```ts
-   export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [];
-   ```
-
-3. Update the provider flag tests to match the new constant, then run the targeted sleep
-   Functions tests and the Functions build.
-4. Deploy or restart the Functions runtime so the changed constant is loaded.
-5. Verify logs no longer show `Provider disabled by SLEEP_SYNC_DISABLED_PROVIDERS` for
-   Garmin or COROS sleep work.
-6. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
+1. For COROS, wait for the next `scheduleCOROSSleepSync` run or trigger the scheduled
    function manually in the Firebase console.
-7. For Garmin, configure the Health API sleep endpoint as a Ping/Pull notification. Direct
+2. Verify new COROS queue items complete successfully and `users/{uid}/sleepSyncState/COROSAPI`
+   shows a recent `lastPollAtMs` and `lastSyncedAtMs`.
+3. Check `users/{uid}/sleepSessions` for sessions with the COROS source. The current endpoint
+   does not provide sleep stages, scores, naps, or in-bed duration.
+4. For Garmin, configure the Health API sleep endpoint as a Ping/Pull notification. Direct
    Push sleep summaries are rejected in v1 because Garmin does not provide an authenticated
    push signature in the local docs; the worker only persists Garmin sleep data after pulling
    it from a Garmin-owned callback URL with the user's stored token.
-8. Check `users/{uid}/sleepSyncState/{provider}` and `users/{uid}/sleepSessions` for new
-   sleep sync state and sessions.
 
-## Disable Again
+## Temporarily Disable A Provider
 
-To pause Garmin and COROS sleep sync again, restore:
+To pause COROS sleep sync, add it to the disabled-provider list:
 
 ```ts
 export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
-    SLEEP_PROVIDERS.GarminAPI,
     SLEEP_PROVIDERS.COROSAPI,
 ];
 ```
 
-Then deploy or restart the Functions runtime.
+Update the provider flag tests and deploy or restart the Functions runtime. Restore the empty
+list to re-enable it. Queued items skipped while disabled are intentionally not retried; the
+next daily COROS poll will request the rolling recent window again.

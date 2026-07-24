@@ -77,5 +77,9 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to Garmin courses?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to Wahoo?')).toBe(true);
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.suunto).not.toHaveProperty('keywords');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS sleep summaries')?.copy)
+      .toContain('every 24 hours');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS sleep summaries')?.copy)
+      .toContain('does not expose sleep stages');
   });
 });

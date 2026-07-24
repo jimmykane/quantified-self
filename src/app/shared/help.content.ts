@@ -678,7 +678,7 @@ COROS history import is limited to the last **3 months** because of API restrict
 COROS tools currently include:
 
 - connecting your account,
-- syncing recent sleep summaries,
+- automatically importing daily sleep summaries from a rolling recent window (sleep timing plus available average sleep HR, resting HR, and overnight HRV; the COROS API does not expose sleep stages),
 - importing history,
 - uploading FIT activities to COROS.
 
