@@ -932,7 +932,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryView.compactText).toBe('Sleep 1h 00m longer per night · Overnight HRV +10 ms');
     expect(recoveryView.metricRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Sleep / night', currentText: '8h 00m', deltaText: '+1h 00m', deltaTone: 'positive' }),
-      expect.objectContaining({ label: 'Typical sleep window', currentText: '22:00–06:00', referenceText: '22:15–06:15', deltaText: '15m earlier', deltaTone: 'neutral' }),
+      expect.objectContaining({ label: 'Typical sleep window', currentText: '22:00\n06:00', referenceText: '22:15\n06:15', deltaText: '15m earlier', deltaTone: 'neutral' }),
       expect.objectContaining({ label: 'Recorded nights', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Bedtime variation', deltaText: '15m steadier', deltaTone: 'positive' }),
       expect.objectContaining({ label: 'Overnight HRV', deltaText: '+10 ms', deltaTone: 'positive' }),

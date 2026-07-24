@@ -127,6 +127,7 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-recovery-table dt { color: var(--mat-sys-on-surface-variant); }
 .training-recovery-table > div:not(.training-recovery-table-heading) dt { font-size: var(--training-inter-body-font-size); }
 .training-recovery-table dd { font-weight: 650; text-align: right; }
+.training-recovery-table .training-recovery-sleep-window { line-height: 1.2; white-space: pre-line; }
 .training-comparison-delta[data-tone='positive'] { color: var(--mat-sys-primary); }
 .training-comparison-delta[data-tone='negative'] { color: var(--mat-sys-error); }
 .training-recovery-table-heading dt, .training-recovery-table-heading dd { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); font-weight: 650; text-transform: uppercase; }
