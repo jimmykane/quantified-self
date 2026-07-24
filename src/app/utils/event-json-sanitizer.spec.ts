@@ -174,6 +174,50 @@ describe('EventJSONSanitizer', () => {
         ]));
     });
 
+    it('should retain Three Dimensional Strain Evidence stats registered by the real sports-lib bundle', () => {
+        // Keep the persisted type literal here and avoid importing the data class. Importing it
+        // could register the type as a side effect and hide a production bundle regression.
+        const strainEvidenceType = 'Three Dimensional Strain Evidence';
+        const strainEvidence = {
+            protocolVersion: 2,
+            sourceFingerprint: 'three-dimensional-strain-v2:0000000000000001',
+            activityType: 'Rowing',
+            activityGroup: 'Water sports',
+            eligibility: { eligible: false, reason: 'insufficient-curve-points' },
+            input: {
+                powerSampleCount: 3600,
+                validPowerSampleCount: 3600,
+                candidateDurationSeconds: 3600,
+                recordedDurationSeconds: 3600,
+                coverageRatio: 1,
+                curvePointCount: 4,
+                hasShortDuration: true,
+                hasMediumDuration: false,
+                hasLongDuration: false,
+            },
+            fit: null,
+            evidence: null,
+        };
+        const json = {
+            stats: { [strainEvidenceType]: strainEvidence },
+            activities: [{ stats: { [strainEvidenceType]: strainEvidence } }],
+        };
+
+        const registeredClass = DynamicDataLoader.getDataClassFromDataType(strainEvidenceType);
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(registeredClass?.type).toBe(strainEvidenceType);
+        expect(sanitizedJson.stats[strainEvidenceType]).toEqual(strainEvidence);
+        expect(sanitizedJson.activities[0].stats[strainEvidenceType]).toEqual(strainEvidence);
+        expect(unknownTypes).not.toContain(strainEvidenceType);
+        expect(issues).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                type: strainEvidenceType,
+            }),
+        ]));
+    });
+
     it('should normalize generic type/data shape in Activity events', () => {
         setupMock();
         const json = {

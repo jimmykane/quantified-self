@@ -215,6 +215,10 @@
     border-inline-start-color: var(--mat-sys-error);
 }
 
+.status-disabled {
+    border-inline-start-color: var(--mat-sys-outline-variant);
+}
+
 .status-error-icon,
 .problem-cell {
     color: var(--mat-sys-error);
@@ -222,6 +226,10 @@
 
 .status-warning-icon {
     color: var(--mat-sys-tertiary);
+}
+
+.status-disabled-icon {
+    color: var(--mat-sys-on-surface-variant);
 }
 
 .spinner-container,
@@ -296,6 +304,10 @@ table td {
 
 .status-warning-row {
     background: color-mix(in srgb, var(--mat-sys-tertiary-container) 22%, transparent);
+}
+
+.status-disabled-row {
+    background: color-mix(in srgb, var(--mat-sys-surface-variant) 24%, transparent);
 }
 
 mat-chip-set {

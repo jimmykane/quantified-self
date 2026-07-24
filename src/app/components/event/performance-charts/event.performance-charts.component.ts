@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 
-type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePower';
+type PerformanceTabId = 'intensity' | 'powerCurve' | 'powerSystemStrain' | 'durability' | 'cadencePower';
 
 @Component({
   selector: 'app-event-performance-charts',
@@ -19,6 +19,7 @@ export class EventPerformanceChartsComponent {
 
   @Input() hasIntensity = false;
   @Input() hasPowerCurve = false;
+  @Input() hasPowerSystemStrain = false;
   @Input() hasDurability = false;
   @Input() hasCadencePower = false;
 
@@ -40,6 +41,9 @@ export class EventPerformanceChartsComponent {
     if (this.hasPowerCurve) {
       tabs.push('powerCurve');
     }
+    if (this.hasPowerSystemStrain) {
+      tabs.push('powerSystemStrain');
+    }
     if (this.hasDurability) {
       tabs.push('durability');
     }
@@ -56,6 +60,9 @@ export class EventPerformanceChartsComponent {
     if (tab === 'powerCurve') {
       return 'Power Curve';
     }
+    if (tab === 'powerSystemStrain') {
+      return 'Power-system strain';
+    }
     if (tab === 'durability') {
       return 'Durability';
     }
@@ -68,6 +75,9 @@ export class EventPerformanceChartsComponent {
     }
     if (tab === 'powerCurve') {
       return 'line_curve';
+    }
+    if (tab === 'powerSystemStrain') {
+      return 'bolt';
     }
     if (tab === 'durability') {
       return 'line_axis';

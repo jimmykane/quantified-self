@@ -175,11 +175,14 @@ export class RouteMapComponent extends MapAbstractDirective implements AfterView
       this.pendingFitBoundsTimeout = null;
     }
     this.cancelPendingMapInitialization();
-    this.mapManager.clearAll();
     const map = this.mapInstance();
-    this.mapboxAutoResizeService.unbind(map);
-    if (map?.remove) {
-      map.remove();
+    try {
+      this.mapManager.clearAll({ mapWillBeRemoved: true });
+      this.mapboxAutoResizeService.unbind(map);
+    } finally {
+      if (map?.remove) {
+        map.remove();
+      }
     }
   }
 

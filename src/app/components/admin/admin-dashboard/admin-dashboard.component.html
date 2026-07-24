@@ -149,7 +149,8 @@
                         <td mat-cell *matCellDef="let row">
                             <div class="queue-name-cell">
                                 <mat-icon [class.status-error-icon]="row.severity === 'error'"
-                                    [class.status-warning-icon]="row.severity === 'warning'">{{ row.icon }}</mat-icon>
+                                    [class.status-warning-icon]="row.severity === 'warning'"
+                                    [class.status-disabled-icon]="row.severity === 'disabled'">{{ row.icon }}</mat-icon>
                                 <span>{{ row.label }}</span>
                             </div>
                         </td>
@@ -233,7 +234,8 @@
                     <tr mat-header-row *matHeaderRowDef="queueDisplayedColumns"></tr>
                     <tr mat-row *matRowDef="let row; columns: queueDisplayedColumns;"
                         [class.status-error-row]="row.severity === 'error'"
-                        [class.status-warning-row]="row.severity === 'warning'"></tr>
+                        [class.status-warning-row]="row.severity === 'warning'"
+                        [class.status-disabled-row]="row.severity === 'disabled'"></tr>
                 </table>
             </div>
         </mat-card>
@@ -242,11 +244,13 @@
             @for (row of queueRows(); track row.id) {
             <mat-card class="queue-card" [class.status-error]="row.severity === 'error'"
                 [class.status-warning]="row.severity === 'warning'"
-                [class.status-ok]="row.severity === 'ok'">
+                [class.status-ok]="row.severity === 'ok'"
+                [class.status-disabled]="row.severity === 'disabled'">
                 <div class="queue-card-header">
                     <div class="queue-name-cell">
                         <mat-icon [class.status-error-icon]="row.severity === 'error'"
-                            [class.status-warning-icon]="row.severity === 'warning'">{{ row.icon }}</mat-icon>
+                            [class.status-warning-icon]="row.severity === 'warning'"
+                            [class.status-disabled-icon]="row.severity === 'disabled'">{{ row.icon }}</mat-icon>
                         <span>{{ row.label }}</span>
                     </div>
                     <button mat-icon-button class="qs-mat-primary" [routerLink]="row.route"

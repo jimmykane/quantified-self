@@ -9,7 +9,7 @@
     "@google-cloud/billing": "^5.1.1",
     "@google-cloud/billing-budgets": "^6.1.1",
     "@google-cloud/tasks": "^6.2.1",
-    "@sports-alliance/sports-lib": "17.3.0",
+    "@sports-alliance/sports-lib": "17.5.1",
     "blob": "^0.1.0",
     "bs58": "^4.0.1",
     "cors": "^2.8.5",
@@ -48,6 +48,7 @@
     "reparse-sports-lib-events": "ts-node -r dotenv/config src/scripts/reparse-sports-lib-events.ts",
     "migrate-storage-users-bucket": "ts-node -r dotenv/config src/scripts/migrate-storage-users-bucket.ts",
     "backfill-sports-lib-processing-code": "ts-node -r dotenv/config src/scripts/backfill-sports-lib-processing-code.ts",
+    "backfill-coros-sleep": "ts-node -r dotenv/config src/scripts/backfill-coros-sleep.ts",
     "backfill-event-processing-entity": "ts-node -r dotenv/config src/scripts/backfill-event-processing-entity.ts",
     "backfill-route-processing-entity": "ts-node -r dotenv/config src/scripts/backfill-route-processing-entity.ts",
     "replace-stripe-price": "ts-node -r dotenv/config src/scripts/replace-stripe-price.ts"

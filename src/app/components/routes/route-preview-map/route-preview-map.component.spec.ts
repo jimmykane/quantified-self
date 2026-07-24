@@ -109,6 +109,20 @@ describe('RoutePreviewMapComponent', () => {
     expect(mapboxAutoResizeMock.bind).not.toHaveBeenCalled();
   });
 
+  it('leaves style resource removal to Mapbox when destroying a live map', async () => {
+    fixture.detectChanges();
+    createMapResolve(mapMock);
+    await Promise.resolve();
+    await Promise.resolve();
+    const component = fixture.componentInstance as any;
+    const clearAllSpy = vi.spyOn(component.mapManager, 'clearAll');
+
+    fixture.destroy();
+
+    expect(clearAllSpy).toHaveBeenCalledWith({ mapWillBeRemoved: true });
+    expect(mapMock.remove).toHaveBeenCalledTimes(1);
+  });
+
   it('does not clear the parent-owned loading input when rendering an empty preview set', () => {
     const component = fixture.componentInstance as any;
     const loadedSpy = vi.spyOn(component, 'loaded');

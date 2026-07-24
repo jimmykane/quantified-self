@@ -1,0 +1,44 @@
+<section class="power-system-strain" aria-labelledby="power-system-strain-title">
+  <header class="power-system-strain-header">
+    <div>
+      <h3 id="power-system-strain-title">Power-system strain</h3>
+      <p>Each workout is scored separately from its recorded power. This is not TSS, FTP, or a fitness score.</p>
+    </div>
+  </header>
+
+  <div class="power-system-strain-list" aria-label="Power-system strain by workout">
+    @for (workout of workoutViewModels; track workout.activityId) {
+      <article class="power-system-strain-workout" [class.power-system-strain-ready]="workout.status === 'ready'">
+        <div class="power-system-strain-workout-header">
+          <strong>{{ workout.activityType }}</strong>
+          <span>{{ workout.statusText }}</span>
+        </div>
+        <p class="power-system-strain-detail">{{ workout.detailText }}</p>
+
+        @if (workout.score) {
+          <dl class="power-system-strain-scores">
+            @for (score of workout.score; track score.label) {
+              <div>
+                <dt>{{ score.label }}</dt>
+                <dd>{{ score.value }}</dd>
+              </div>
+            }
+          </dl>
+        }
+
+        @if (workout.fit) {
+          <dl class="power-system-strain-fit">
+            <div><dt>Fitted CP</dt><dd>{{ workout.fit.criticalPower }}</dd></div>
+            <div><dt>Fitted W′</dt><dd>{{ workout.fit.wPrime }}</dd></div>
+            <div><dt>Fitted Pmax</dt><dd>{{ workout.fit.maximumPower }}</dd></div>
+            <div><dt>Fit quality</dt><dd>{{ workout.fit.normalizedRmse }}</dd></div>
+          </dl>
+        }
+
+        @if (workout.inputText) {
+          <p class="power-system-strain-input">{{ workout.inputText }}</p>
+        }
+      </article>
+    }
+  </div>
+</section>

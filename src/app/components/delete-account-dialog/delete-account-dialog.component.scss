@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 .dialog-title {
     display: flex;
     align-items: center;
@@ -12,7 +14,7 @@
 
 mat-dialog-content {
     font-size: 14px;
-    min-width: 380px;
+    min-width: min(100%, 380px);
     max-width: 450px;
 
     p {
@@ -64,5 +66,41 @@ mat-checkbox {
 }
 
 mat-dialog-actions {
+    flex-wrap: wrap;
     padding-bottom: 8px;
+}
+
+@include bp.max-480 {
+    .dialog-title {
+        gap: 6px;
+        padding-top: 0;
+        font-size: 1.35rem;
+        line-height: 1.25;
+    }
+
+    mat-dialog-content {
+        min-width: 0;
+    }
+
+    .consequences-list li {
+        align-items: flex-start;
+
+        mat-icon {
+            flex: 0 0 18px;
+            margin-top: 1px;
+        }
+    }
+
+    .warning-text {
+        padding: 10px;
+    }
+
+    mat-dialog-actions {
+        gap: 8px;
+        padding-top: 8px;
+    }
+
+    mat-dialog-actions button {
+        flex: 1 1 136px;
+    }
 }

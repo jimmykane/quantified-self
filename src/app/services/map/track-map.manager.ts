@@ -98,6 +98,14 @@ export interface TrackMapManagerOptions {
   combineTrackLayers?: boolean;
 }
 
+export interface TrackMapClearOptions {
+  /**
+   * The caller will immediately destroy the Mapbox map, so Mapbox owns source
+   * and layer disposal. Skipping manual removal avoids teardown/style races.
+   */
+  mapWillBeRemoved?: boolean;
+}
+
 const TRACK_CLICK_HIT_STROKE_WIDTH = 18;
 const TRACK_CLICK_HIT_OPACITY = 0.001;
 const TRACK_MARKER_CLICK_CLEANUP = Symbol('trackMarkerClickCleanup');
@@ -209,14 +217,14 @@ export class TrackMapManager {
     this.cursorMarkers.clear();
   }
 
-  public clearAll(): void {
+  public clearAll(options: TrackMapClearOptions = {}): void {
     this.styleLoadHandlerCleanup?.();
     this.styleLoadHandlerCleanup = null;
     this.styleLoadHandler = null;
     this.styleReadyRenderCleanup?.();
     this.styleReadyRenderCleanup = null;
     clearDeferredTerrainToggleState(this.terrainToggleState);
-    this.clearTracksAndMarkers();
+    this.clearTracksAndMarkers(options.mapWillBeRemoved !== true);
     this.clearCursorMarkers();
     this.currentTracks = [];
     this.map = null;
@@ -862,20 +870,22 @@ export class TrackMapManager {
     });
   }
 
-  private clearTracksAndMarkers(): void {
+  private clearTracksAndMarkers(removeMapResources: boolean = true): void {
     if (!this.map) {
       return;
     }
 
-    this.removeCombinedTrackLayers();
-    this.activeLayersByTrackId.forEach((ids) => {
-      unbindLayerClicks(this.map, this.lineClickBindings, ids.hitLayerId);
-      unbindLayerClicks(this.map, this.lineClickBindings, ids.lineLayerId);
-      removeLayerIfExists(this.map, ids.arrowLayerId);
-      removeLayerIfExists(this.map, ids.hitLayerId);
-      removeLayerIfExists(this.map, ids.lineLayerId);
-      removeSourceIfExists(this.map, ids.sourceId);
-    });
+    if (removeMapResources) {
+      this.removeCombinedTrackLayers();
+      this.activeLayersByTrackId.forEach((ids) => {
+        unbindLayerClicks(this.map, this.lineClickBindings, ids.hitLayerId);
+        unbindLayerClicks(this.map, this.lineClickBindings, ids.lineLayerId);
+        removeLayerIfExists(this.map, ids.arrowLayerId);
+        removeLayerIfExists(this.map, ids.hitLayerId);
+        removeLayerIfExists(this.map, ids.lineLayerId);
+        removeSourceIfExists(this.map, ids.sourceId);
+      });
+    }
     unbindLayerClicks(this.map, this.lineClickBindings);
     this.activeLayersByTrackId.clear();
 

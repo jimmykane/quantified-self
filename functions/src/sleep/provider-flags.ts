@@ -1,8 +1,6 @@
-import { SLEEP_PROVIDERS, SleepProvider } from '../../../shared/sleep';
+import { SleepProvider } from '../../../shared/sleep';
 
-export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [
-    SLEEP_PROVIDERS.COROSAPI,
-];
+export const SLEEP_SYNC_DISABLED_PROVIDERS: readonly SleepProvider[] = [];
 
 // Empty list means all users; non-empty keeps the rollout scoped without scanning every token.
 export const SLEEP_SYNC_ALLOWED_USER_IDS: readonly string[] = [];

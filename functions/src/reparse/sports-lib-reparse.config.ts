@@ -18,9 +18,16 @@ export const SPORTS_LIB_REPARSE_HEAVY_REASONS = {
 export type SportsLibReparseHeavyReason = typeof SPORTS_LIB_REPARSE_HEAVY_REASONS[keyof typeof SPORTS_LIB_REPARSE_HEAVY_REASONS];
 
 export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
-    enabled: false,
+    enabled: true,
     // Higher defaults improve migration throughput while still allowing bounded scans.
     scanLimit: 1200,
     enqueueLimit: 1200,
+    uidAllowlist: [],
+} as const;
+
+export const SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS = {
+    enabled: false,
+    scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
+    enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
     uidAllowlist: [],
 } as const;

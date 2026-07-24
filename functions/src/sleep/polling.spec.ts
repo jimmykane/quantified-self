@@ -98,16 +98,30 @@ describe('sleep polling', () => {
         ]);
     });
 
-    it('skips polling for disabled sleep providers', async () => {
+    it('queues COROS token docs when sleep sync is open to all users', async () => {
+        const userID = 'coros-user-id';
+        const nowMs = Date.UTC(2026, 3, 28);
+        installCollectionGroupTokenMock([
+            createTokenDoc(userID, {
+                serviceName: ServiceNames.COROSAPI,
+                openId: 'coros-open-id-1',
+            }),
+        ]);
+
         const queued = await sleepPollingTestInternals.enqueueProviderPolls(
             SLEEP_PROVIDERS.COROSAPI,
             ServiceNames.COROSAPI,
             30,
-            Date.UTC(2026, 3, 28),
+            nowMs,
         );
 
-        expect(queued).toBe(0);
-        expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(queued).toBe(1);
+        expect(addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'coros_poll',
+            provider: SLEEP_PROVIDERS.COROSAPI,
+            userID,
+            providerUserId: 'coros-open-id-1',
+        }));
     });
 
     it('queries all Suunto token docs when sleep sync is open to all users', async () => {

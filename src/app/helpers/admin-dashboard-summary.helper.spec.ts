@@ -182,6 +182,7 @@ describe('admin-dashboard-summary helper', () => {
                 advanced: { throughput: 5, maxLagMs: 5_000, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] },
             },
             reparse: {
+                automaticScanEnabled: false,
                 queuePending: 0,
                 targetSportsLibVersion: '9.1.5',
                 jobs: { total: 20, pending: 6, processing: 2, completed: 12, failed: 1 },
@@ -197,6 +198,7 @@ describe('admin-dashboard-summary helper', () => {
                 recentFailures: [],
             },
             routeReparse: {
+                automaticScanEnabled: false,
                 queuePending: 2,
                 targetSportsLibVersion: '9.1.5',
                 jobs: { total: 10, pending: 7, processing: 0, completed: 8, skipped: 2, failed: 0 },
@@ -237,15 +239,18 @@ describe('admin-dashboard-summary helper', () => {
         expect(rows.find(row => row.id === 'reparse')?.pendingDb).toBe(6);
         expect(rows.find(row => row.id === 'reparse')?.cloudTasks).toBe(5);
         expect(rows.find(row => row.id === 'reparse')?.chips).toEqual([
-            'Queue: paused',
-            'Heavy: enabled',
-            'Processing: 2',
+            'Automatic scan: disabled',
+            'Normal Cloud Tasks: paused',
+            'Heavy Cloud Tasks: running',
             'Target 9.1.5',
         ]);
         expect(rows.find(row => row.id === 'route-reparse')?.pendingDb).toBe(7);
         expect(rows.find(row => row.id === 'route-reparse')?.cloudTasks).toBe(0);
-        expect(rows.find(row => row.id === 'route-reparse')?.chips).toContain('Queue: disabled');
-        expect(rows.find(row => row.id === 'route-reparse')?.severity).toBe('ok');
+        expect(rows.find(row => row.id === 'route-reparse')?.chips).toEqual(expect.arrayContaining([
+            'Automatic scan: disabled',
+            'Cloud Tasks: disabled',
+        ]));
+        expect(rows.find(row => row.id === 'route-reparse')?.severity).toBe('disabled');
         expect(rows.find(row => row.id === 'sleep-sync')?.chips).toContain('Disabled: Garmin');
         expect(rows.find(row => row.id === 'derived-metrics')?.cloudTasks).toBe(5);
         expect(rows.find(row => row.id === 'derived-metrics')?.chips).toEqual([

@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `11`
-- `@sports-alliance/sports-lib`: `17.1.2`
+- `@sports-alliance/sports-lib`: `17.5.1`
 - Training disciplines: Running, Cycling, and Swimming
 - Power/capacity disciplines: Running and Cycling only
 - Calendar boundaries: UTC unless a section explicitly says otherwise
@@ -46,6 +46,9 @@ The following rules are architectural constraints:
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
 - Durability shown on Training comes only from the persisted sports-lib `Durability Evidence` activity stat.
+- Power-system strain shown in event detail comes only from the persisted sports-lib `Three Dimensional Strain Evidence`
+  activity stat. It is separate from TSS, capacity, Form, Readiness, and FTP; Quantified Self does not combine distinct
+  activity types or infer an athlete-level response from it.
 - Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
   `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
@@ -60,6 +63,8 @@ The following rules are architectural constraints:
 | Activity-level durability input selection | sports-lib | `src/events/utilities/activity-durability.ts` |
 | Activity-level durability eligibility and formulas | sports-lib | `activity-durability.ts` and `data.durability-evidence.ts` |
 | Compact durability stat creation and invalidation | sports-lib | `activity.utilities.ts` and the durability source fingerprint |
+| Activity-level power-system strain fitting, scoring, and eligibility | sports-lib | `activity-three-dimensional-strain.ts` and `data.three-dimensional-strain-evidence.ts` |
+| Compact power-system strain stat creation and invalidation | sports-lib | `activity.utilities.ts` and the three-dimensional strain source fingerprint |
 | Power-curve interpolation and window comparison | sports-lib | `src/events/utilities/power-curve-sampling.ts` |
 | Curated Training disciplines | Quantified Self shared layer | `shared/training-disciplines.ts` |
 | Joining normalized activities to parent events | Quantified Self Functions | `functions/src/derived-metrics/derived-metrics.service.ts` |
@@ -90,6 +95,8 @@ flowchart TD
     B --> D["Normalized child activity documents"]
     B --> E["Compact Durability Evidence stat"]
     E --> D
+    B --> PS["Compact Three Dimensional Strain Evidence stat"]
+    PS --> D
     C --> F["Event/activity write ingress"]
     D --> F
     S["Sleep session write"] --> G["Targeted sleep ingress"]
@@ -899,6 +906,32 @@ header so the summary, chart title, benchmark values, and plot remain aligned at
 It also states the strongest supported conclusion before the chart, describes the number of recent/annual power workouts
 and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
 
+## Power-System Strain Event Detail
+
+Power-system strain is an activity-level Sports-lib result displayed only in the event Performance area. It is available
+for any canonical activity type when that workout has recorded power and a qualifying power curve; it is not limited to
+the Running and Cycling Training disciplines.
+
+The persisted stat is `DataThreeDimensionalStrainEvidence`, serialized as `Three Dimensional Strain Evidence`. Protocol
+v2 stores the canonical `activityType` and its `activityGroup`, an eligibility result, compact input diagnostics, an
+optional fitted three-parameter CP model, and—only when eligible—the total plus sustained-power, finite-capacity, and
+maximum-power strain components. It never stores streams or a timeline.
+
+Event detail reads that compact stat through Sports-lib's canonical normalizer. It never refits the model in Angular or
+reconstructs a score from summary power. Each selected workout keeps its own card; values are never summed or compared
+across activity types, even when their activity groups match. The view labels unavailable evidence with Sports-lib's
+primary reason and never displays a missing score as zero.
+
+Protocol-v1 records remain readable for historical data but are shown as previous-protocol evidence rather than a current
+score. A historic workout with a persisted power curve but no strain stat shows an explicit unavailable/reprocess state.
+Reprocessing from the original source file upgrades eligible records to v2. Activities with no original source remain
+honestly unavailable; no Firestore activity document is patched directly to manufacture the stat.
+
+This feature is deliberately not a Training-derived metric yet. It does not alter TSS, CTL, ATL, Form, Readiness, FTP,
+the capacity cards, or any current Training sport-visibility setting. Athlete-level fitness–fatigue response requires
+separate, independently measured dated CP/W′/Pmax observations and will be introduced only with an opt-in calibration
+contract.
+
 ## Durability Deep Dive
 
 Durability is shared between sports-lib, Training, Best Build, and event detail. It measures whether an athlete maintains
@@ -1323,6 +1356,13 @@ failure from blocking a loopback Training refresh; it does not weaken deployed e
 Derived metrics also require the Cloud Tasks emulator configuration used by this repository. When
 `CLOUD_TASKS_EMULATOR_HOST` is set, task lookup and queue statistics stay local and must not fall through to the production
 Cloud Tasks API.
+
+### Sports-lib reparse observability
+
+Admin reparse status reports automatic scanning separately from Cloud Tasks queue state. `automaticScanEnabled` controls
+whether the scheduled event or route scanner can discover and enqueue new candidates; a Cloud Tasks queue reports whether
+already queued work can dispatch. A `RUNNING` Cloud Tasks queue does not enable automatic reparse, and a disabled scanner
+does not pause Cloud Tasks. Keep these labels distinct in operational UI and diagnostics.
 
 When Training appears stuck on Preparing:
 

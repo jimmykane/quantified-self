@@ -9,7 +9,7 @@ import type {
 import type { ChangelogPost } from '../services/app.whats-new.service';
 import { coerceChangelogPostDate } from '../services/app.whats-new.service';
 
-export type AdminDashboardSeverity = 'ok' | 'warning' | 'error';
+export type AdminDashboardSeverity = 'ok' | 'warning' | 'error' | 'disabled';
 export type AdminDashboardValueKind = 'number' | 'compact' | 'text';
 
 export interface AdminDashboardKpiCard {
@@ -84,6 +84,7 @@ interface QueueRowBase {
     deadLabel?: string;
     throughput?: number | null;
     maxLagMs?: number | null;
+    automaticScanEnabled?: boolean;
     chips?: string[];
 }
 
@@ -255,11 +256,13 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             problemLabel: 'Failed',
             dead: 0,
             deadLabel: 'DLQ',
+            automaticScanEnabled: stats.reparse?.automaticScanEnabled,
             chips: [
-                ...queueStateChip('Queue', queues?.sportsLibReparse),
-                ...queueStateChip('Heavy', queues?.sportsLibReparseHeavy),
-                ...countChip('Processing', stats.reparse?.jobs.processing),
+                ...automaticScanChip(stats.reparse?.automaticScanEnabled),
+                ...cloudTaskQueueStateChip('Normal Cloud Tasks', queues?.sportsLibReparse),
+                ...cloudTaskQueueStateChip('Heavy Cloud Tasks', queues?.sportsLibReparseHeavy),
                 versionChip(stats.reparse?.targetSportsLibVersion),
+                ...countChip('Processing', stats.reparse?.jobs.processing),
             ],
         }),
         buildQueueRow({
@@ -275,11 +278,13 @@ export function buildAdminDashboardQueueRows(stats: QueueStats | null): AdminDas
             problemLabel: 'Failed',
             dead: 0,
             deadLabel: 'DLQ',
+            automaticScanEnabled: stats.routeReparse?.automaticScanEnabled,
             chips: [
-                ...queueStateChip('Queue', queues?.sportsLibRouteReparse),
-                ...countChip('Processing', stats.routeReparse?.jobs.processing),
+                ...automaticScanChip(stats.routeReparse?.automaticScanEnabled),
+                ...cloudTaskQueueStateChip('Cloud Tasks', queues?.sportsLibRouteReparse),
                 ...countChip('Skipped', stats.routeReparse?.jobs.skipped),
                 versionChip(stats.routeReparse?.targetSportsLibVersion),
+                ...countChip('Processing', stats.routeReparse?.jobs.processing),
             ],
         }),
         buildQueueRow({
@@ -439,22 +444,27 @@ function buildQueueRow(base: QueueRowBase): AdminDashboardQueueRow {
         deadLabel: base.deadLabel || 'Dead',
         throughput: normalizeNullableCount(base.throughput),
         maxLagMs: normalizeNullableCount(base.maxLagMs),
+        automaticScanEnabled: base.automaticScanEnabled,
         chips: compactChips(base.chips || EMPTY_CHIPS),
     };
 
     return {
         ...row,
         maxLagLabel: row.maxLagMs === null ? '-' : formatAdminDashboardDuration(row.maxLagMs),
-        severity: resolveQueueSeverity(row.problemCount, row.dead),
+        severity: resolveQueueSeverity(row.problemCount, row.dead, row.automaticScanEnabled),
     };
 }
 
 function resolveQueueSeverity(
     problemCount: number,
-    dead: number
+    dead: number,
+    automaticScanEnabled: boolean | undefined
 ): AdminDashboardSeverity {
     if (problemCount > 0 || dead > 0) {
         return 'error';
+    }
+    if (automaticScanEnabled === false) {
+        return 'disabled';
     }
     return 'ok';
 }
@@ -514,7 +524,14 @@ function countChip(label: string, value: unknown): string[] {
     return count > 0 ? [`${label}: ${count}`] : [];
 }
 
-function queueStateChip(
+function automaticScanChip(automaticScanEnabled: boolean | undefined): string[] {
+    if (typeof automaticScanEnabled !== 'boolean') {
+        return [];
+    }
+    return [`Automatic scan: ${automaticScanEnabled ? 'enabled' : 'disabled'}`];
+}
+
+function cloudTaskQueueStateChip(
     label: string,
     queue: { enabled?: boolean | null; state?: string } | null | undefined
 ): string[] {
@@ -523,13 +540,16 @@ function queueStateChip(
     }
 
     const state = `${queue.state || ''}`.trim().toUpperCase();
+    if (state) {
+        return [`${label}: ${state.toLowerCase()}`];
+    }
     if (queue.enabled === true) {
-        return [`${label}: enabled`];
+        return [`${label}: running`];
     }
     if (queue.enabled === false) {
-        return [`${label}: ${state === 'PAUSED' ? 'paused' : 'disabled'}`];
+        return [`${label}: disabled`];
     }
-    return [`${label}: ${state ? state.toLowerCase() : 'unknown'}`];
+    return [`${label}: unknown`];
 }
 
 function versionChip(version: string | null | undefined): string {

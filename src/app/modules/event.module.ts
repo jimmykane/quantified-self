@@ -21,6 +21,7 @@ import { EventPowerCurveComponent } from '../components/event/power-curve/event.
 import { EventDurabilityCurveComponent } from '../components/event/durability-curve/event.durability-curve.component';
 import { EventCadencePowerComponent } from '../components/event/cadence-power/event.cadence-power.component';
 import { EventPerformanceChartsComponent } from '../components/event/performance-charts/event.performance-charts.component';
+import { EventPowerSystemStrainComponent } from '../components/event/power-system-strain/event.power-system-strain.component';
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
 import { EventDetailsSummaryBottomSheetComponent } from '../components/event-summary/event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../components/event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
@@ -63,6 +64,7 @@ import { BenchmarkModule } from './benchmark.module';
         EventDurabilityCurveComponent,
         EventCadencePowerComponent,
         EventPerformanceChartsComponent,
+        EventPowerSystemStrainComponent,
         LapTypeIconComponent,
         JumpMarkerPopupComponent,
         DeviceNameEditDialogComponent,

@@ -1,0 +1,114 @@
+:host {
+  display: block;
+  height: var(--performance-chart-height, 30vh);
+  min-height: var(--performance-chart-min-height, 128px);
+}
+
+.power-system-strain {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+.power-system-strain-header {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.power-system-strain-header h3 {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.power-system-strain-header p {
+  margin: 2px 0 6px;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.power-system-strain-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 1px 2px;
+}
+
+.power-system-strain-workout {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.power-system-strain-ready {
+  border-color: var(--mat-sys-primary);
+}
+
+.power-system-strain-workout-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.power-system-strain-workout-header span {
+  color: var(--mat-sys-on-surface-variant);
+  text-align: right;
+}
+
+.power-system-strain-detail,
+.power-system-strain-input {
+  margin: 4px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.power-system-strain-scores,
+.power-system-strain-fit {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+  margin: 7px 0 0;
+}
+
+.power-system-strain-scores div,
+.power-system-strain-fit div {
+  min-width: 0;
+}
+
+.power-system-strain-scores dt,
+.power-system-strain-fit dt {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 9px;
+}
+
+.power-system-strain-scores dd,
+.power-system-strain-fit dd {
+  margin: 1px 0 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.power-system-strain-fit {
+  padding-top: 6px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+@media (max-width: 599.98px) {
+  .power-system-strain-list {
+    grid-template-columns: 1fr;
+  }
+}

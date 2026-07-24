@@ -321,6 +321,7 @@ describe('getQueueStats Cloud Function', () => {
             },
         });
         expect(result.routeReparse).toEqual(expect.objectContaining({
+            automaticScanEnabled: false,
             queuePending: 1,
             targetSportsLibVersion: expect.any(String),
             jobs: expect.objectContaining({
@@ -345,7 +346,7 @@ describe('getQueueStats Cloud Function', () => {
             providerDisabled: 5,
             stuck: 5,
             dead: 5,
-            disabledProviders: ['COROS'],
+            disabledProviders: [],
             providers: [
                 { provider: 'Garmin', pending: 5, succeeded: 5, providerDisabled: 5, stuck: 5, dead: 5 },
                 { provider: 'Suunto', pending: 5, succeeded: 5, providerDisabled: 5, stuck: 5, dead: 5 },
@@ -370,6 +371,7 @@ describe('getQueueStats Cloud Function', () => {
             },
         });
         expect(result.reparse).toEqual(expect.objectContaining({
+            automaticScanEnabled: true,
             queuePending: 10,
             targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
             jobs: {

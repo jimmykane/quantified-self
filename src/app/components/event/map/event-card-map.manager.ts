@@ -3,6 +3,7 @@ import { MarkerFactoryService } from '../../../services/map/marker-factory.servi
 import { LoggerService } from '../../../services/logger.service';
 import {
   TrackMapCursorRenderData,
+  TrackMapClearOptions,
   TrackMapExtraMarkerRenderData,
   TrackMapManager,
   TrackMapRenderData,
@@ -83,8 +84,8 @@ export class EventCardMapManager {
     this.trackManager.clearCursorMarkers();
   }
 
-  public clearAll(): void {
-    this.trackManager.clearAll();
+  public clearAll(options?: TrackMapClearOptions): void {
+    this.trackManager.clearAll(options);
   }
 
   public toggleTerrain(enable: boolean, animate: boolean = true): void {

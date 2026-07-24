@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sports-Lib Upgrade and Reparse"
+  short_description: "Ship library changes through historic data"
+  default_prompt: "Use $sports-lib-upgrade-and-reparse to deliver this sports-lib change safely."
