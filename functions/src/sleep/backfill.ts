@@ -31,6 +31,7 @@ import {
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
+import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -662,6 +663,10 @@ export const backfillCorosAPISleep = onCall({
 
     if (!isSleepSyncUserAllowed(userID)) {
         throw new HttpsError('permission-denied', 'Sleep sync is not enabled for this user.');
+    }
+
+    if (await isServiceUnavailableForSyncForUser(userID, ServiceNames.COROSAPI)) {
+        throw new HttpsError('failed-precondition', 'COROS is unavailable for sleep sync. Reconnect COROS and try again.');
     }
 
     const nowMs = Date.now();

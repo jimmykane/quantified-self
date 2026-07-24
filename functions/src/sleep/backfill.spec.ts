@@ -21,6 +21,7 @@ const hoisted = vi.hoisted(() => ({
     getTokenData: vi.fn(),
     isSleepProviderEnabled: vi.fn(),
     isSleepSyncUserAllowed: vi.fn(),
+    isServiceUnavailableForSyncForUser: vi.fn(),
     addSleepSyncQueueItem: vi.fn(),
     updateSleepSyncState: vi.fn(),
     requestGet: vi.fn(),
@@ -185,6 +186,10 @@ vi.mock('./provider-flags', () => ({
     isSleepSyncUserAllowed: hoisted.isSleepSyncUserAllowed,
 }));
 
+vi.mock('../service-connection-meta', () => ({
+    isServiceUnavailableForSyncForUser: hoisted.isServiceUnavailableForSyncForUser,
+}));
+
 vi.mock('./queue', () => ({
     addSleepSyncQueueItem: hoisted.addSleepSyncQueueItem,
 }));
@@ -256,6 +261,7 @@ describe('backfillSuuntoAppSleep', () => {
         hoisted.getTokenData.mockResolvedValue({ userName: 'suunto-user-1' });
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
         hoisted.requestGet.mockResolvedValue(undefined);
@@ -449,6 +455,7 @@ describe('backfillCorosAPISleep', () => {
         hoisted.getTokenData.mockResolvedValue({ openId: 'coros-user-1' });
         hoisted.isSleepProviderEnabled.mockReturnValue(true);
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
         hoisted.addSleepSyncQueueItem.mockResolvedValue({ id: 'queue-item' });
         hoisted.updateSleepSyncState.mockResolvedValue(undefined);
     });
@@ -518,7 +525,7 @@ describe('backfillCorosAPISleep', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
-    it('rejects disabled, rollout-blocked, unconnected, and cooling-down COROS accounts', async () => {
+    it('rejects disabled, rollout-blocked, unavailable, unconnected, and cooling-down COROS accounts', async () => {
         seedCorosToken();
         hoisted.isSleepProviderEnabled.mockReturnValue(false);
         await expect(backfillCorosAPISleep(createRequest() as any))
@@ -530,6 +537,11 @@ describe('backfillCorosAPISleep', () => {
             .rejects.toMatchObject({ code: 'permission-denied' });
 
         hoisted.isSleepSyncUserAllowed.mockReturnValue(true);
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(true);
+        await expect(backfillCorosAPISleep(createRequest() as any))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        hoisted.isServiceUnavailableForSyncForUser.mockResolvedValue(false);
         hoisted.tokenDocs.length = 0;
         await expect(backfillCorosAPISleep(createRequest() as any))
             .rejects.toMatchObject({ code: 'failed-precondition' });
@@ -540,6 +552,7 @@ describe('backfillCorosAPISleep', () => {
             .rejects.toMatchObject({ code: 'resource-exhausted' });
 
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.getTokenData).not.toHaveBeenCalled();
     });
 });
 
