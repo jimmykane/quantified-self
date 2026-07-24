@@ -1,0 +1,4 @@
+interface:
+  display_name: "Connected Provider Integration"
+  short_description: "Build provider lifecycle changes end to end"
+  default_prompt: "Use $connected-provider-integration to implement this provider change safely."
