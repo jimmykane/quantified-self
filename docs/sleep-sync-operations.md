@@ -71,6 +71,35 @@ the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in
    push signature in the local docs; the worker only persists Garmin sleep data after pulling
    it from a Garmin-owned callback URL with the user's stored token.
 
+## One-Off COROS Backfill
+
+COROS retains daily data for up to three months and permits a maximum 30-day range per request.
+The `backfill-coros-sleep` Functions script queues the current eligible COROS accounts through the
+normal sleep queue in 30-day windows. It neither logs tokens nor fetches raw provider data itself;
+the deployed sleep worker performs the guarded token use and session writes.
+
+Deploy the enabled scheduler and sleep worker before queueing a backfill:
+
+```bash
+npm --prefix functions run build && firebase deploy --only functions:scheduleCOROSSleepSync,functions:processSleepSyncTask
+```
+
+Inspect the account and queue-item count first:
+
+```bash
+npm --prefix functions run backfill-coros-sleep
+```
+
+Then explicitly queue the backfill for all eligible connected COROS accounts:
+
+```bash
+npm --prefix functions run backfill-coros-sleep -- --execute --confirm-all-users
+```
+
+Use `--uid <Firebase UID>` to limit the run to one user, or `--start YYYY-MM-DD` and
+`--end YYYY-MM-DD` to narrow the window. The script clamps any earlier start date to COROS's
+three-month retention boundary and exits nonzero if queueing a window fails.
+
 ## Temporarily Disable A Provider
 
 To pause COROS sleep sync, add it to the disabled-provider list:
