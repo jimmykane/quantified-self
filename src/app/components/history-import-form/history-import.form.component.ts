@@ -21,6 +21,7 @@ import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
 import {
+  getCorosSleepBackfillStartMs,
   GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
   getSleepBackfillCooldownDays,
   SLEEP_BACKFILL_COOLDOWN_DAYS,
@@ -72,7 +73,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
   public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
-  public sleepBackfillStartDate = new Date(SLEEP_BACKFILL_START_DATE_ISO);
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
   /** Stores the actual backend response for display (COROS/Suunto/Wahoo only). */
@@ -353,11 +353,27 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (this.serviceName === ServiceNames.GarminAPI) {
       return SLEEP_PROVIDERS.GarminAPI;
     }
+    if (this.serviceName === ServiceNames.COROSAPI) {
+      return SLEEP_PROVIDERS.COROSAPI;
+    }
     return null;
   }
 
   get sleepBackfillProviderLabel(): string {
-    return this.serviceName === ServiceNames.GarminAPI ? 'Garmin' : 'Suunto';
+    switch (this.serviceName) {
+      case ServiceNames.GarminAPI:
+        return 'Garmin';
+      case ServiceNames.COROSAPI:
+        return 'COROS';
+      default:
+        return 'Suunto';
+    }
+  }
+
+  get sleepBackfillStartDate(): Date {
+    return this.serviceName === ServiceNames.COROSAPI
+      ? new Date(getCorosSleepBackfillStartMs())
+      : new Date(SLEEP_BACKFILL_START_DATE_ISO);
   }
 
   get sleepBackfillCooldownDays(): number {
@@ -425,7 +441,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     try {
       const result = provider === SLEEP_PROVIDERS.GarminAPI
         ? await this.userService.backfillGarminSleepForCurrentUser()
-        : await this.userService.backfillSuuntoSleepForCurrentUser();
+        : provider === SLEEP_PROVIDERS.COROSAPI
+          ? await this.userService.backfillCorosSleepForCurrentUser()
+          : await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
       this.snackBar.open(`${this.sleepBackfillProviderLabel} sleep history import started for ${result.queued} date ranges.`, undefined, {
         duration: 3000,

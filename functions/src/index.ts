@@ -154,7 +154,7 @@ export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
 export { receiveGarminAPISleepData, receiveSuuntoAppSleepData } from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
 export { scheduleSuuntoSleepSync, scheduleCOROSSleepSync } from './sleep/polling';
-export { backfillGarminAPISleep, backfillSuuntoAppSleep } from './sleep/backfill';
+export { backfillCorosAPISleep, backfillGarminAPISleep, backfillSuuntoAppSleep } from './sleep/backfill';
 export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,

@@ -3,6 +3,7 @@ import {
     parseCorosSleepBackfillOptions,
     resolveCorosSleepBackfillRange,
 } from './backfill-coros-sleep';
+import { getCorosSleepBackfillStartMs } from '../../../shared/sleep-backfill';
 
 describe('backfill-coros-sleep', () => {
     it('requires an explicit confirmation before globally writing sleep backfill queue items', () => {
@@ -30,5 +31,10 @@ describe('backfill-coros-sleep', () => {
             endMs: nowMs,
             clampedToProviderLookback: true,
         });
+    });
+
+    it('uses calendar-month lookback without overflowing shorter months', () => {
+        expect(getCorosSleepBackfillStartMs(Date.UTC(2026, 4, 31, 12, 0, 0)))
+            .toBe(Date.UTC(2026, 1, 28, 12, 0, 0));
     });
 });

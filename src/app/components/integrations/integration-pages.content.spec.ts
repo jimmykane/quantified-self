@@ -80,6 +80,8 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS sleep summaries')?.copy)
       .toContain('every 24 hours');
     expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS sleep summaries')?.copy)
+      .toContain('three-month sleep history');
+    expect(PROVIDER_INTEGRATION_PAGES.coros.tools.find(tool => tool.title === 'Daily COROS sleep summaries')?.copy)
       .toContain('does not expose sleep stages');
   });
 });

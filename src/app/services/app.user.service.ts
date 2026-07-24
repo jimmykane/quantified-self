@@ -1280,6 +1280,11 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
+  async backfillCorosSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillCorosAPISleep');
+    return result.data;
+  }
+
   async addSuuntoRoutesToQueueForCurrentUser(): Promise<RouteSyncCatchUpSummary> {
     const result = await this.functionsService.call<undefined, RouteSyncCatchUpSummary>('addSuuntoAppRoutesToQueue');
     return result.data;
