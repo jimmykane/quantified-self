@@ -103,6 +103,23 @@ describe('EventPowerSystemStrainComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Combined');
   });
 
+  it('keeps a selected workout with missing evidence visible as unavailable', () => {
+    const missingEvidence = {
+      type: ActivityTypes.Sailing,
+      getID: () => 'sailing-missing',
+      getStat: () => null,
+    } as unknown as ActivityInterface;
+    component.activities = [activity(readyEvidence(), 'rowing-1'), missingEvidence];
+    fixture.detectChanges();
+
+    const workouts = Array.from(fixture.nativeElement.querySelectorAll('.power-system-strain-workout')) as HTMLElement[];
+
+    expect(workouts).toHaveLength(2);
+    expect(workouts[1].textContent).toContain(ActivityTypes.Sailing);
+    expect(workouts[1].textContent).toContain('No power-system strain evidence is stored');
+    expect(workouts[1].textContent).not.toContain('Total strain');
+  });
+
   it('explains unavailable evidence without a numeric strain score', () => {
     const unavailable = {
       ...readyEvidence(),

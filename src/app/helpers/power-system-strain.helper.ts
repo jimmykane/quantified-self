@@ -1,4 +1,6 @@
 import {
+  ActivityTypesHelper,
+  DataPowerCurve,
   DataThreeDimensionalStrainEvidence,
   normalizeThreeDimensionalStrainEvidenceValue,
   type ActivityInterface,
@@ -50,18 +52,41 @@ export function hasPowerSystemStrainEvidence(activities: readonly ActivityInterf
   return activities.some(activity => resolvePowerSystemStrainEvidence(activity) !== null);
 }
 
+/**
+ * Lets historic power-curve workouts explain that strain evidence needs a source reprocess. A
+ * stat is still required to show a current result; the power curve is only a durable signal that
+ * the dedicated tab can give a useful unavailable state instead of disappearing altogether.
+ */
+export function shouldShowPowerSystemStrain(activities: readonly ActivityInterface[]): boolean {
+  return activities.some(activity =>
+    resolvePowerSystemStrainEvidence(activity) !== null || hasPersistedPowerCurve(activity),
+  );
+}
+
 export function buildPowerSystemStrainWorkoutViewModels(
   activities: readonly ActivityInterface[],
 ): PowerSystemStrainWorkoutViewModel[] {
   return activities.flatMap<PowerSystemStrainWorkoutViewModel>((activity, index) => {
     const evidence = resolvePowerSystemStrainEvidence(activity);
     if (!evidence) {
-      return [];
+      return [{
+        activityId: resolveActivityId(activity, index),
+        activityType: resolveActivityType(activity),
+        status: 'unavailable' as const,
+        statusText: 'Unavailable',
+        detailText: hasPersistedPowerSystemStrainStat(activity)
+          ? 'Stored power-system strain evidence was invalid and cannot be shown. Reprocess its original source data to regenerate it.'
+          : 'No power-system strain evidence is stored for this workout. It may lack qualifying power data, or its original source needs reprocessing.',
+        inputText: null,
+        score: null,
+        fit: null,
+      }];
     }
 
-    const activityId = `${activity.getID?.() || `workout-${index + 1}`}`;
-    const activityType = `${evidence.protocolVersion === 2 ? evidence.activityType : activity.type || evidence.discipline}`.trim()
-      || 'Workout';
+    const activityId = resolveActivityId(activity, index);
+    const activityType = evidence.protocolVersion === 2
+      ? evidence.activityType
+      : resolveActivityType(activity, evidence.discipline);
     if (evidence.protocolVersion === 1) {
       return [{
         activityId,
@@ -105,6 +130,41 @@ export function buildPowerSystemStrainWorkoutViewModels(
       fit: formatFit(evidence.fit),
     }];
   });
+}
+
+function hasPersistedPowerCurve(activity: ActivityInterface): boolean {
+  try {
+    const stat = activity.getStat?.(DataPowerCurve.type);
+    const rawValue = (stat as unknown as { getValue?: () => unknown } | null | undefined)?.getValue?.();
+    return Array.isArray(rawValue) && rawValue.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function hasPersistedPowerSystemStrainStat(activity: ActivityInterface): boolean {
+  try {
+    const stat = activity.getStat?.(DataThreeDimensionalStrainEvidence.type);
+    return stat !== null && stat !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+function resolveActivityId(activity: ActivityInterface, index: number): string {
+  return `${activity.getID?.() || `workout-${index + 1}`}`;
+}
+
+function resolveActivityType(activity: ActivityInterface, fallback?: string): string {
+  const rawType = typeof activity.type === 'string' ? activity.type.trim() : '';
+  if (rawType) {
+    try {
+      return ActivityTypesHelper.resolveActivityType(rawType) || rawType;
+    } catch {
+      return rawType;
+    }
+  }
+  return fallback || 'Workout';
 }
 
 function formatInputText(evidence: ThreeDimensionalStrainEvidenceValue): string {

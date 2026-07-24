@@ -923,8 +923,9 @@ across activity types, even when their activity groups match. The view labels un
 primary reason and never displays a missing score as zero.
 
 Protocol-v1 records remain readable for historical data but are shown as previous-protocol evidence rather than a current
-score. Reprocessing from the original source file upgrades eligible records to v2. Activities with no original source
-remain honestly unavailable; no Firestore activity document is patched directly to manufacture the stat.
+score. A historic workout with a persisted power curve but no strain stat shows an explicit unavailable/reprocess state.
+Reprocessing from the original source file upgrades eligible records to v2. Activities with no original source remain
+honestly unavailable; no Firestore activity document is patched directly to manufacture the stat.
 
 This feature is deliberately not a Training-derived metric yet. It does not alter TSS, CTL, ATL, Form, Readiness, FTP,
 the capacity cards, or any current Training sport-visibility setting. Athlete-level fitness–fatigue response requires

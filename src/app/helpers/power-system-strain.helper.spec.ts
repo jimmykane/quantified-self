@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ActivityTypeGroups,
   ActivityTypes,
+  DataPowerCurve,
   DataThreeDimensionalStrainEvidence,
   type ActivityInterface,
   type ThreeDimensionalStrainEvidenceValue,
@@ -9,6 +10,7 @@ import {
 import {
   buildPowerSystemStrainWorkoutViewModels,
   hasPowerSystemStrainEvidence,
+  shouldShowPowerSystemStrain,
 } from './power-system-strain.helper';
 
 function evidence(
@@ -57,13 +59,20 @@ function evidence(
 function activity(
   value: ThreeDimensionalStrainEvidenceValue | null,
   id = 'a1',
+  hasPowerCurve = false,
 ): ActivityInterface {
   return {
     type: ActivityTypes.Rowing,
     getID: () => id,
-    getStat: (type: string) => type === DataThreeDimensionalStrainEvidence.type && value
-      ? { getValue: () => value }
-      : null,
+    getStat: (type: string) => {
+      if (type === DataThreeDimensionalStrainEvidence.type && value) {
+        return { getValue: () => value };
+      }
+      if (type === DataPowerCurve.type && hasPowerCurve) {
+        return { getValue: () => [{ duration: 5, power: 500 }] };
+      }
+      return null;
+    },
   } as unknown as ActivityInterface;
 }
 
@@ -158,25 +167,43 @@ describe('power-system-strain.helper', () => {
     });
   });
 
-  it('ignores activities without persisted evidence and preserves selected-workout order', () => {
+  it('shows missing evidence as unavailable and preserves selected-workout order', () => {
     const results = buildPowerSystemStrainWorkoutViewModels([
       activity(null, 'missing'),
       activity(evidence(), 'first'),
       activity(evidence({ activityType: ActivityTypes.Sailing }), 'second'),
     ]);
 
-    expect(results.map(result => result.activityId)).toEqual(['first', 'second']);
+    expect(results.map(result => result.activityId)).toEqual(['missing', 'first', 'second']);
+    expect(results[0]).toMatchObject({
+      status: 'unavailable',
+      score: null,
+      detailText: expect.stringContaining('No power-system strain evidence is stored'),
+    });
     expect(hasPowerSystemStrainEvidence([activity(null)])).toBe(false);
+    expect(shouldShowPowerSystemStrain([activity(null)])).toBe(false);
+    expect(shouldShowPowerSystemStrain([activity(null, 'historic-power-curve', true)])).toBe(true);
+    expect(shouldShowPowerSystemStrain([{
+      ...activity(null, 'empty-power-curve'),
+      getStat: (type: string) => type === DataPowerCurve.type ? { getValue: () => [] } : null,
+    }])).toBe(false);
   });
 
-  it('drops malformed persisted values rather than rendering untrusted data', () => {
+  it('does not render malformed persisted values and asks for a reprocess', () => {
     const malformed = {
       type: ActivityTypes.Rowing,
       getID: () => 'malformed',
-      getStat: () => ({ getValue: () => ({ protocolVersion: 2, evidence: { total: Infinity } }) }),
+      getStat: (type: string) => type === DataThreeDimensionalStrainEvidence.type
+        ? { getValue: () => ({ protocolVersion: 2, evidence: { total: Infinity } }) }
+        : null,
     } as unknown as ActivityInterface;
 
-    expect(buildPowerSystemStrainWorkoutViewModels([malformed])).toEqual([]);
+    expect(buildPowerSystemStrainWorkoutViewModels([malformed])).toEqual([expect.objectContaining({
+      status: 'unavailable',
+      score: null,
+      detailText: expect.stringContaining('was invalid and cannot be shown'),
+    })]);
     expect(hasPowerSystemStrainEvidence([malformed])).toBe(false);
+    expect(shouldShowPowerSystemStrain([malformed])).toBe(false);
   });
 });

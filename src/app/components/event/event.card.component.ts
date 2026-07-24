@@ -46,7 +46,7 @@ import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-t
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { EventResolverData } from '../../resolvers/event.resolver';
-import { hasPowerSystemStrainEvidence } from '../../helpers/power-system-strain.helper';
+import { shouldShowPowerSystemStrain } from '../../helpers/power-system-strain.helper';
 
 @Component({
   selector: 'app-event-card',
@@ -123,7 +123,7 @@ export class EventCardComponent implements OnInit {
   );
 
   public hasPowerSystemStrainFlag = computed(() =>
-    hasPowerSystemStrainEvidence(this.selectedActivitiesInstant())
+    shouldShowPowerSystemStrain(this.selectedActivitiesInstant())
   );
 
   public hasPerformanceChartsFlag = computed(() =>

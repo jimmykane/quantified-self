@@ -21,6 +21,7 @@ import {
     DataStamina,
     LapTypes,
     ActivityTypeGroups,
+    DataPowerCurve,
     DataThreeDimensionalStrainEvidence,
 } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -614,6 +615,19 @@ describe('EventCardComponent', () => {
             type: ActivityTypes.Rowing,
             getStat: (type: string) => type === DataThreeDimensionalStrainEvidence.type
                 ? { getValue: () => threeDimensionalEvidence }
+                : null,
+        } as ActivityInterface]);
+
+        expect(component.hasPowerSystemStrainFlag()).toBe(true);
+        expect(component.hasPerformanceChartsFlag()).toBe(true);
+    });
+
+    it('shows the performance area for a historic power curve that needs strain evidence reprocessing', () => {
+        component.selectedActivitiesInstant.set([{
+            ...mockActivity,
+            type: ActivityTypes.Rowing,
+            getStat: (type: string) => type === DataPowerCurve.type
+                ? { getValue: () => [{ duration: 5, power: 500 }] }
                 : null,
         } as ActivityInterface]);
 
