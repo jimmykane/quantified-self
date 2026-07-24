@@ -168,12 +168,15 @@ export class RoutePreviewMapComponent extends MapAbstractDirective implements Af
       clearTimeout(this.pendingFitBoundsTimeout);
       this.pendingFitBoundsTimeout = null;
     }
-    this.mapManager.clearAll();
     const map = this.mapInstance();
-    this.mapboxAutoResizeService.unbind(map);
-    this.detachMapLifecycleHandlers(map);
-    if (map?.remove) {
-      map.remove();
+    try {
+      this.mapManager.clearAll({ mapWillBeRemoved: true });
+      this.mapboxAutoResizeService.unbind(map);
+      this.detachMapLifecycleHandlers(map);
+    } finally {
+      if (map?.remove) {
+        map.remove();
+      }
     }
     this.mapInstance.set(null);
     this.mapStyleSynchronizer.set(undefined);
@@ -282,11 +285,14 @@ export class RoutePreviewMapComponent extends MapAbstractDirective implements Af
       clearTimeout(this.pendingFitBoundsTimeout);
       this.pendingFitBoundsTimeout = null;
     }
-    this.mapboxAutoResizeService.unbind(map);
-    this.detachMapLifecycleHandlers(map);
-    this.mapManager.clearAll();
-    if (map?.remove) {
-      map.remove();
+    try {
+      this.mapboxAutoResizeService.unbind(map);
+      this.detachMapLifecycleHandlers(map);
+      this.mapManager.clearAll({ mapWillBeRemoved: true });
+    } finally {
+      if (map?.remove) {
+        map.remove();
+      }
     }
     if (this.mapInstance() === map) {
       this.mapInstance.set(null);

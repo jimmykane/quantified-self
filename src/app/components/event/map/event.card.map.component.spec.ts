@@ -155,6 +155,15 @@ describe('EventCardMapComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('leaves style resource removal to Mapbox when destroyed', () => {
+    const clearAllSpy = vi.spyOn((component as any).mapManager, 'clearAll');
+
+    component.ngOnDestroy();
+
+    expect(clearAllSpy).toHaveBeenCalledWith({ mapWillBeRemoved: true });
+    expect(mockMap.remove).toHaveBeenCalledTimes(1);
+  });
+
   it('should initialize mapbox on view init', async () => {
     await component.ngAfterViewInit();
     expect(mockMapboxLoader.createMap).toHaveBeenCalled();

@@ -190,6 +190,31 @@ describe('TrackMapManager', () => {
     expect(map.addSource).not.toHaveBeenCalled();
   });
 
+  it('keeps Mapbox style resources intact when the map will be removed', () => {
+    manager.renderTrackData([{
+      id: 'route-destroy',
+      label: 'Destroying Route',
+      strokeColor: '#1e88e5',
+      positions: [
+        { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },
+        { latitudeDegrees: 40.2, longitudeDegrees: 22.2 },
+      ],
+    }], {
+      showArrows: true,
+      strokeWidth: 3,
+    });
+    map.removeLayer.mockClear();
+    map.removeSource.mockClear();
+
+    manager.clearAll({ mapWillBeRemoved: true });
+
+    expect(map.removeLayer).not.toHaveBeenCalled();
+    expect(map.removeSource).not.toHaveBeenCalled();
+    expect((manager as any).startMarkers.size).toBe(0);
+    expect((manager as any).endMarkers.size).toBe(0);
+    expect((manager as any).map).toBeNull();
+  });
+
   it('defers track layer rendering until the Mapbox style is ready', () => {
     map.isStyleLoaded.mockReturnValue(false);
 

@@ -425,12 +425,14 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       this.pendingJumpPopupCorrectionRaf = null;
     }
 
-    this.unbindMapPopupListeners();
-    this.mapManager.clearAll();
-
     const map = this.mapInstance();
-    if (map?.remove) {
-      map.remove();
+    try {
+      this.unbindMapPopupListeners();
+      this.mapManager.clearAll({ mapWillBeRemoved: true });
+    } finally {
+      if (map?.remove) {
+        map.remove();
+      }
     }
   }
 
