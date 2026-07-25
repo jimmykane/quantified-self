@@ -1324,8 +1324,9 @@ Do not read settings or sleep unconditionally in the worker. Source requirements
 
 The read-only MCP server does not recalculate Training metrics and does not scan activity history for a derived tool call.
 `get_training_metric` accepts only a kind registered in `DERIVED_METRIC_KINDS` and reads the normal
-`users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready` payload plus schema, update, and source-count
-metadata. Building, stale, failed, and missing snapshots remain unavailable instead of being interpreted as zero.
+`users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready`, current-schema payload plus schema, update,
+and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being
+interpreted as zero.
 
 There is deliberately no separate MCP-derived-kind registry. A newly registered kind is discoverable, but its payload must
 still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts`. The server recursively removes event/activity

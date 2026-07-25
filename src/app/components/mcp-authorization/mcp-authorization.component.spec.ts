@@ -80,4 +80,17 @@ describe('McpAuthorizationComponent', () => {
     });
     expect(assign).toHaveBeenCalledWith('https://client.example/oauth/callback?code=code-1');
   });
+
+  it('omits granted scopes when denying so Firebase does not encode them as null', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await fixture.componentInstance.deny();
+
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'request-1',
+      approved: false,
+    });
+  });
 });

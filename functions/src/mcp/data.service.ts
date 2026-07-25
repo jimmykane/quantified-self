@@ -644,13 +644,20 @@ export function createMcpDataService(
         throw new McpDataError('invalid_metric', 'Unknown Training-derived metric kind.');
       }
       const snapshot = await dependencies.fetchDerivedSnapshot(uid, metricKind);
-      if (!snapshot || snapshot.status !== 'ready' || snapshot.payload == null) {
+      const schemaVersion = asFiniteNumber(snapshot?.schemaVersion);
+      if (
+        !snapshot
+        || snapshot.status !== 'ready'
+        || snapshot.payload == null
+        || schemaVersion === null
+        || schemaVersion < DERIVED_METRIC_SCHEMA_VERSION
+      ) {
         throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
 
       return {
         metricKind,
-        schemaVersion: asFiniteNumber(snapshot.schemaVersion) ?? DERIVED_METRIC_SCHEMA_VERSION,
+        schemaVersion,
         updatedAtMs: asFiniteNumber(snapshot.updatedAtMs),
         sourceEventCount: asNonNegativeNumber(snapshot.sourceEventCount),
         payload: redactDerivedPayload(snapshot.payload),

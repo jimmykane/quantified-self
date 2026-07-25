@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { createHash, randomBytes } from 'node:crypto';
-import { BlockList, isIP } from 'node:net';
+import type { LookupAddress } from 'node:dns';
+import { BlockList, isIP, LookupFunction } from 'node:net';
 import { Agent } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import fetch from 'node-fetch';
@@ -479,7 +480,11 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
         );
-        if (!connection || connection.revokedAtMs !== null) {
+        if (
+          !connection
+          || connection.revokedAtMs !== null
+          || token.scopes.some(scope => !connection.scopes.includes(scope))
+        ) {
           throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
         }
         const nextCount = Number(rateLimit?.count || 0) + 1;
@@ -513,11 +518,26 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
 
     async revokeConnection(uid, connectionId, nowMs) {
       const ref = connectionRef(uid, connectionId);
-      const connection = await ref.get();
-      if (!connection.exists) {
+      const shouldDeleteCredentials = await db.runTransaction(async (transaction) => {
+        const guard = await getUserDeletionGuardStateInTransaction(
+          db,
+          transaction,
+          uid,
+          nowMs,
+        );
+        if (guard.shouldSkip) {
+          return false;
+        }
+        const connection = await transaction.get(ref);
+        if (!connection.exists) {
+          return false;
+        }
+        transaction.set(ref, { revokedAtMs: nowMs }, { merge: true });
+        return true;
+      });
+      if (!shouldDeleteCredentials) {
         return;
       }
-      await ref.set({ revokedAtMs: nowMs }, { merge: true });
       await deleteCredentialStateForConnection(uid, connectionId);
     },
   };
@@ -573,6 +593,39 @@ export function isPrivateAddress(address: string): boolean {
     return NON_PUBLIC_IPV6_ADDRESSES.check(address, 'ipv6');
   }
   return true;
+}
+
+export function createPinnedAddressLookup(
+  addresses: readonly LookupAddress[],
+): LookupFunction {
+  const pinnedAddresses = [
+    ...new Map(addresses.map(address => [
+      `${address.family}:${address.address}`,
+      { ...address },
+    ])).values(),
+  ];
+  return (_hostname, options, callback) => {
+    const requestedFamily = options.family === 'IPv4'
+      ? 4
+      : options.family === 'IPv6'
+        ? 6
+        : Number(options.family) || 0;
+    const matchingAddresses = pinnedAddresses.filter(candidate => (
+      requestedFamily === 0 || candidate.family === requestedFamily
+    ));
+    const address = matchingAddresses[0];
+    if (!address) {
+      const error = new Error('No pinned client metadata address is available.') as NodeJS.ErrnoException;
+      error.code = 'ENOTFOUND';
+      callback(error, '');
+      return;
+    }
+    if (options.all) {
+      callback(null, matchingAddresses);
+      return;
+    }
+    callback(null, address.address, address.family);
+  };
 }
 
 function validateRedirectUri(value: string): URL {
@@ -682,11 +735,8 @@ export async function fetchClientMetadataDocument(clientId: string): Promise<Cli
   if (!addresses.length || addresses.some(result => isPrivateAddress(result.address))) {
     throw new McpOAuthError('invalid_client', 'The client metadata host is not publicly routable.');
   }
-  const pinnedAddress = addresses[0];
   const agent = new Agent({
-    lookup: (_hostname, _options, callback) => {
-      callback(null, pinnedAddress.address, pinnedAddress.family);
-    },
+    lookup: createPinnedAddressLookup(addresses),
   });
 
   let response;
@@ -984,7 +1034,11 @@ export function createMcpOAuthService(
         throw new McpOAuthError('invalid_grant', 'The access token is invalid or expired.', 401);
       }
       const connection = await store.getConnection(token.uid, token.connectionId);
-      if (!connection || connection.revokedAtMs !== null) {
+      if (
+        !connection
+        || connection.revokedAtMs !== null
+        || token.scopes.some(scope => !connection.scopes.includes(scope))
+      ) {
         throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
       }
       await store.recordAuthorizedRequest(token, nowMs);

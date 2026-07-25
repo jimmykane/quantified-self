@@ -1,3 +1,4 @@
+import type { LookupAddress } from 'node:dns';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AccessTokenRecord,
@@ -5,6 +6,7 @@ import {
   AuthorizationRequestRecord,
   buildMcpRateLimitBucketId,
   ClientMetadata,
+  createPinnedAddressLookup,
   createMcpOAuthService,
   createPkceChallenge,
   fetchClientMetadataDocument,
@@ -142,6 +144,11 @@ function createMemoryStore(): McpOAuthStore & {
         familyId: refresh.familyId,
         active: true,
       });
+      connections.set(key, {
+        ...connection,
+        scopes,
+        lastUsedAtMs: input.nowMs,
+      });
       return refresh;
     },
     async getAccessToken(tokenHash) {
@@ -153,7 +160,11 @@ function createMemoryStore(): McpOAuthStore & {
     async recordAuthorizedRequest(token, nowMs) {
       const key = connectionKey(token.uid, token.connectionId);
       const connection = connections.get(key);
-      if (!connection || connection.revokedAtMs !== null) {
+      if (
+        !connection
+        || connection.revokedAtMs !== null
+        || token.scopes.some(scope => !connection.scopes.includes(scope))
+      ) {
         throw new McpOAuthError('invalid_grant', 'revoked connection', 401);
       }
       connections.set(key, { ...connection, lastUsedAtMs: nowMs });
@@ -213,6 +224,45 @@ function authorizationParams(verifier: string) {
 }
 
 describe('MCP OAuth service', () => {
+  it('pins every validated DNS address using the callback shape requested by Node', async () => {
+    const pinnedLookup = createPinnedAddressLookup([
+      { address: '2001:4860:4860::8888', family: 6 },
+      { address: '8.8.8.8', family: 4 },
+    ]);
+    const lookupWith = (
+      options: Parameters<typeof pinnedLookup>[1],
+    ): Promise<{
+      address: string | LookupAddress[];
+      family: number | undefined;
+    }> => new Promise((resolve, reject) => {
+      pinnedLookup('client.example', options, (error, address, family) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve({ address, family });
+      });
+    });
+
+    await expect(lookupWith({ all: true })).resolves.toEqual({
+      address: [
+        { address: '2001:4860:4860::8888', family: 6 },
+        { address: '8.8.8.8', family: 4 },
+      ],
+      family: undefined,
+    });
+    await expect(lookupWith({ family: 4 })).resolves.toEqual({
+      address: '8.8.8.8',
+      family: 4,
+    });
+    await expect(lookupWith({ all: true, family: 4 })).resolves.toEqual({
+      address: [
+        { address: '8.8.8.8', family: 4 },
+      ],
+      family: undefined,
+    });
+  });
+
   it('accepts only schema-valid Client ID Metadata array fields', () => {
     expect(validateClientMetadataDocument({
       ...metadata(),
@@ -378,6 +428,13 @@ describe('MCP OAuth service', () => {
       scope: 'metrics:read',
     }));
     expect(store.refreshTokens.get(hashOpaqueValue(tokens.refresh_token))?.active).toBe(false);
+    await expect(service.authenticateBearer(
+      tokens.access_token,
+      'https://quantified-self.io/mcp',
+    )).rejects.toMatchObject({
+      code: 'invalid_grant',
+      statusCode: 401,
+    });
 
     await expect(service.authenticateBearer(
       rotated.access_token,

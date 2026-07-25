@@ -7,7 +7,10 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import {
+  DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_SCHEMA_VERSION,
+} from '../../../shared/derived-metrics';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
   createMcpDataService,
@@ -172,7 +175,7 @@ describe('MCP data service', () => {
   it('returns ready Training snapshots without event or activity identifiers and labels', async () => {
     vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
       status: 'ready',
-      schemaVersion: 11,
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: 123,
       sourceEventCount: 3,
       payload: {
@@ -218,6 +221,28 @@ describe('MCP data service', () => {
       },
     });
     expect(JSON.stringify(result.payload)).not.toContain('event-3');
+  });
+
+  it.each([
+    undefined,
+    DERIVED_METRIC_SCHEMA_VERSION - 1,
+  ])('does not expose a ready Training snapshot with stale schema %s', async (schemaVersion) => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion,
+      updatedAtMs: 123,
+      sourceEventCount: 3,
+      payload: {
+        score: 88,
+      },
+    });
+
+    await expect(createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingReadiness,
+    )).rejects.toMatchObject<McpDataError>({
+      code: 'metric_not_ready',
+    });
   });
 
   it('redacts raw sleep samples, provider identifiers, stage intervals, and provider payloads', async () => {

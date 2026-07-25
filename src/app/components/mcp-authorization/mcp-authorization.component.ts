@@ -110,14 +110,15 @@ export class McpAuthorizationComponent implements OnInit {
     this.deciding.set(approved ? 'approve' : 'deny');
     this.error.set(null);
     try {
+      const decision = {
+        requestId: request.requestId,
+        approved,
+        ...(approved ? { grantedScopes: this.selectedScopes() } : {}),
+      };
       const result = await this.functions.call<
         { requestId: string; approved: boolean; grantedScopes?: McpScope[] },
         { redirectUri: string }
-      >('decideMcpAuthorization', {
-        requestId: request.requestId,
-        approved,
-        grantedScopes: approved ? this.selectedScopes() : undefined,
-      });
+      >('decideMcpAuthorization', decision);
       this.windowService.windowRef.location.assign(result.data.redirectUri);
     } catch (error) {
       this.logger.error('[McpAuthorizationComponent] Failed to decide authorization request', error);

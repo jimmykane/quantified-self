@@ -43,6 +43,7 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
 SHA-256 hashes, expire after one hour, and are audience-bound. Refresh tokens expire after 30 days and rotate on use.
+When a refresh request narrows the connection grant, previously issued access tokens with broader scopes stop working.
 Reuse of an already-rotated refresh token revokes the connection and makes active descendant tokens unusable.
 Authorization codes are single-use and expire after five minutes.
 
@@ -60,9 +61,10 @@ Firestore holds short-lived OAuth records in:
 
 Active connection metadata lives at `users/{uid}/mcpConnections/{connectionId}`. Browser Firestore access to every MCP
 collection is denied; authenticated, App Check-protected callables mediate consent, listing, and revocation. Revocation
-deletes active tokens and codes. Bearer authentication transactionally rechecks the user root and account-deletion
-tombstone before recording usage or running a tool, while account deletion recursively removes connection and OAuth
-state. All short-lived MCP collections use `expireAt` TTL configuration in `firestore.indexes.json`.
+transactionally rechecks account-deletion state before changing the connection, then deletes active tokens and codes.
+Bearer authentication performs the same account-deletion check before recording usage or running a tool, while account
+deletion recursively removes connection and OAuth state. All short-lived MCP collections use `expireAt` TTL configuration
+in `firestore.indexes.json`.
 
 ## Tool contract
 
@@ -110,9 +112,10 @@ events, privacy filtering, query bounds, and the MCP transport.
 
 ## Training-derived metrics
 
-MCP reads only `status: "ready"` documents from `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from
-`DERIVED_METRIC_KINDS`; no second MCP kind registry exists. The response retains schema/freshness metadata but recursively
-removes event/activity IDs, names, and labels from the payload.
+MCP reads only `status: "ready"` documents with a current compatible schema from
+`users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
+exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, and labels from
+the payload.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline and schema work plus
