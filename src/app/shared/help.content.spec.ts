@@ -120,6 +120,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
     expect(trainingSection?.content).toContain('**Power systems** estimates current CP, W′, and Pmax');
     expect(trainingSection?.content).toContain('preceding 42 completed UTC days');
+    expect(trainingSection?.content).toContain('smaller set of activities that actually supplied');
+    expect(trainingSection?.content).toContain('fitting-method disagreement separately');
     expect(trainingSection?.content).toContain('Parsing a workout no longer generates CP, W′, Pmax, or power-system strain');
     expect(trainingSection?.content).toContain('original continuous power stream');
     expect(trainingSection?.content).not.toContain('asks for reprocessing');

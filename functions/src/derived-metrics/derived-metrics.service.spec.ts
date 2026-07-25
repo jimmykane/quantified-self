@@ -33,6 +33,7 @@ import {
     DataVO2Max,
     DURABILITY_PROTOCOL_VERSION,
     fitThreeDimensionalCapacityModel,
+    type ThreeDimensionalCapacityFit,
 } from '@sports-alliance/sports-lib';
 import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
 import { POWER_CURVE_STAT_TYPE } from '../../../shared/power-curve';
@@ -1900,7 +1901,9 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 criticalPowerAnchorCount: expected.diagnostics.criticalPowerAnchorCount,
                 earlyCriticalPowerAnchorCount: expected.diagnostics.earlyCriticalPowerAnchorCount,
                 longCriticalPowerAnchorCount: expected.diagnostics.longCriticalPowerAnchorCount,
+                criticalPowerContributingSourceCount: 1,
                 maximumPowerAnchorCount: expected.diagnostics.maximumPowerAnchorCount,
+                maximumPowerContributingSourceCount: 1,
                 criticalPowerNormalizedRmse: expected.diagnostics.criticalPowerNormalizedRmse,
                 criticalPowerSpreadRatio: expected.diagnostics.criticalPowerSpreadRatio,
                 wPrimeSpreadRatio: expected.diagnostics.wPrimeSpreadRatio,
@@ -2122,6 +2125,95 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         expect(current.criticalPower.value).toBe(componentStatus === 'ready' ? 260 : null);
         expect(current.wPrime.value).toBe(componentStatus === 'ready' ? 18_500 : null);
         expect(current.maximumPower.value).toBe(status === 'ready' ? 1_200 : null);
+    });
+
+    it('reports envelope contributors and short anchors even when CP/W′ exits as unstable', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const baseFit = fitThreeDimensionalCapacityModel([], { effectiveDate: '2026-07-20' });
+        const criticalPowerDurations = [120, 180, 240, 300, 480, 900, 1200];
+        const maximumPowerDurations = [1, 2, 3, 5, 8, 12, 20, 30];
+        const unstableFit: ThreeDimensionalCapacityFit = {
+            ...baseFit,
+            status: 'unstable',
+            reason: 'unstable-critical-power-fit',
+            activityType: ActivityTypes.Cycling,
+            sourceFingerprint: 'capacity-v1:unstable',
+            criticalPower: {
+                status: 'unstable',
+                reason: 'unstable-critical-power-fit',
+                value: null,
+            },
+            wPrime: {
+                status: 'unstable',
+                reason: 'unstable-critical-power-fit',
+                value: null,
+            },
+            maximumPower: {
+                status: 'unstable',
+                reason: 'unstable-critical-power-fit',
+                value: null,
+            },
+            envelope: {
+                ...baseFit.envelope,
+                status: 'ready',
+                reason: null,
+                activityType: ActivityTypes.Cycling,
+                sourceCount: 9,
+                historyStartDate: '2026-06-21',
+                historyEndDate: '2026-07-19',
+                historySpanDays: 28,
+                sourceFingerprint: 'capacity-v1:unstable',
+                points: [
+                    ...criticalPowerDurations.map(durationSeconds => ({
+                        durationSeconds,
+                        powerWatts: 250 + (18_000 / durationSeconds),
+                        sourceId: 'sustained-test',
+                        sourceDate: '2026-06-29',
+                    })),
+                    ...maximumPowerDurations.map((durationSeconds, index) => ({
+                        durationSeconds,
+                        powerWatts: 250 + (18_000 / (durationSeconds + 15)),
+                        sourceId: index < 4 ? 'short-test-one' : 'short-test-two',
+                        sourceDate: index < 4 ? '2026-07-02' : '2026-07-11',
+                    })),
+                ],
+            },
+            diagnostics: {
+                ...baseFit.diagnostics,
+                sourceCount: 9,
+                historySpanDays: 28,
+                criticalPowerAnchorCount: 7,
+                earlyCriticalPowerAnchorCount: 4,
+                longCriticalPowerAnchorCount: 2,
+                maximumPowerAnchorCount: 0,
+                criticalPowerSpreadRatio: 0.041,
+                wPrimeSpreadRatio: 0.327,
+                criticalPowerLeaveOneOutSpreadRatio: 0.008,
+                wPrimeLeaveOneOutSpreadRatio: 0.095,
+            },
+        };
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('cycling', ActivityTypes.Cycling, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => unstableFit,
+        );
+
+        expect(result.payload.activityTypes[0].current).toMatchObject({
+            status: 'unstable',
+            reason: 'unstable-critical-power-fit',
+            diagnostics: {
+                sourceCount: 9,
+                criticalPowerAnchorCount: 7,
+                criticalPowerContributingSourceCount: 1,
+                maximumPowerAnchorCount: 8,
+                maximumPowerContributingSourceCount: 2,
+                criticalPowerSpreadRatio: 0.041,
+                wPrimeSpreadRatio: 0.327,
+                criticalPowerLeaveOneOutSpreadRatio: 0.008,
+                wPrimeLeaveOneOutSpreadRatio: 0.095,
+            },
+        });
     });
 
     it('degrades an internally invalid fitter result to one valid invalid-input snapshot', async () => {

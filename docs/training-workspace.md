@@ -870,7 +870,8 @@ The bounded payload persists:
 - current overall status and reason;
 - CP watts, W′ joules, and Pmax watts with independent component status and reason;
 - Sports-lib estimator version and source fingerprint;
-- source count, history span, rejected-point count, anchor coverage, fit error, candidate spread, and
+- usable-curve count, history span, rejected-point count, sustained/short anchor coverage, the distinct activities that
+  actually supplied each component's retained envelope anchors, fit error, candidate-method spread, and
   leave-one-anchor-out stability diagnostics;
 - compact dated component statuses and values for the 12-week sparse history; and
 - current-window candidate, usable-curve, and excluded-evidence counts.
@@ -882,14 +883,20 @@ inconsistent overall/component statuses, duplicate types, unsorted or out-of-ran
 does not equal the current result. A rejected `ready` payload is treated as stale so the normal snapshot self-healing
 path requests a rebuild.
 
+`sourceCount` means curves with usable standard-duration evidence; it does not mean every source determined the fit.
+The component contributor counts are the number of distinct activities that won at least one retained CP/W′ or Pmax
+envelope anchor. They disclose evidence concentration but are not a second QS readiness gate. An `unstable` result
+remains unavailable when Sports-lib's challenger methods disagree or leave-one-anchor-out sensitivity exceeds its
+limits. The UI reports method spread separately from anchor-removal sensitivity so the reason is not misidentified.
+
 The UI shows an exact activity-type selector, current CP/W′/Pmax cards, status/reason copy, evidence coverage,
-diagnostics, and three aligned sparse 12-week mini-trends in watts, kilojoules, and watts. It labels the model as
-capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
+contributor-aware diagnostics, and three aligned sparse 12-week mini-trends in watts, kilojoules, and watts. It labels
+the model as capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
 
 #### Parser and continuous-stream boundary
 
 Sports-lib 17.6.0 no longer generates CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
-Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 12 rebuilds existing
+Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 13 rebuilds existing
 snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
 

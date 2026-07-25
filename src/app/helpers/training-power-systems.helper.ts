@@ -263,7 +263,13 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
   const criticalPowerAnchorCount = nonNegativeInteger(raw.criticalPowerAnchorCount);
   const earlyCriticalPowerAnchorCount = nonNegativeInteger(raw.earlyCriticalPowerAnchorCount);
   const longCriticalPowerAnchorCount = nonNegativeInteger(raw.longCriticalPowerAnchorCount);
+  const criticalPowerContributingSourceCount = nonNegativeInteger(
+    raw.criticalPowerContributingSourceCount,
+  );
   const maximumPowerAnchorCount = nonNegativeInteger(raw.maximumPowerAnchorCount);
+  const maximumPowerContributingSourceCount = nonNegativeInteger(
+    raw.maximumPowerContributingSourceCount,
+  );
   const optionalDiagnostics = [
     nullableNonNegativeNumber(raw.criticalPowerNormalizedRmse),
     nullableNonNegativeNumber(raw.criticalPowerSpreadRatio),
@@ -284,8 +290,16 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     || longCriticalPowerAnchorCount === null
     || longCriticalPowerAnchorCount > criticalPowerAnchorCount
     || earlyCriticalPowerAnchorCount + longCriticalPowerAnchorCount > criticalPowerAnchorCount
+    || criticalPowerContributingSourceCount === null
+    || criticalPowerContributingSourceCount > sourceCount
+    || criticalPowerContributingSourceCount > criticalPowerAnchorCount
+    || ((criticalPowerAnchorCount === 0) !== (criticalPowerContributingSourceCount === 0))
     || maximumPowerAnchorCount === null
     || maximumPowerAnchorCount > THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS.length
+    || maximumPowerContributingSourceCount === null
+    || maximumPowerContributingSourceCount > sourceCount
+    || maximumPowerContributingSourceCount > maximumPowerAnchorCount
+    || ((maximumPowerAnchorCount === 0) !== (maximumPowerContributingSourceCount === 0))
     || optionalDiagnostics.some(item => item === undefined)
     || (
       sourceCount === 0
@@ -293,7 +307,9 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
         criticalPowerAnchorCount !== 0
         || earlyCriticalPowerAnchorCount !== 0
         || longCriticalPowerAnchorCount !== 0
+        || criticalPowerContributingSourceCount !== 0
         || maximumPowerAnchorCount !== 0
+        || maximumPowerContributingSourceCount !== 0
         || optionalDiagnostics.some(item => item !== null)
       )
     )
@@ -318,7 +334,9 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     criticalPowerAnchorCount,
     earlyCriticalPowerAnchorCount,
     longCriticalPowerAnchorCount,
+    criticalPowerContributingSourceCount,
     maximumPowerAnchorCount,
+    maximumPowerContributingSourceCount,
     criticalPowerNormalizedRmse: optionalDiagnostics[0] as number | null,
     criticalPowerSpreadRatio: optionalDiagnostics[1] as number | null,
     wPrimeSpreadRatio: optionalDiagnostics[2] as number | null,
@@ -597,7 +615,7 @@ function formatReason(reason: DerivedTrainingPowerSystemsReason | null): string 
     'insufficient-critical-power-range': 'The curve history does not cover enough sustained-power durations.',
     'insufficient-maximum-power-range': 'CP and W′ are usable, but short-duration evidence is not sufficient for Pmax.',
     'poor-critical-power-fit': 'The sustained-power curve does not fit the CP/W′ model closely enough.',
-    'unstable-critical-power-fit': 'CP or W′ changes too much when evidence anchors are removed.',
+    'unstable-critical-power-fit': 'The CP/W′ fitting methods disagree, or the estimate is too sensitive to the available sustained anchors.',
     'poor-maximum-power-fit': 'The short-duration curve does not fit the Pmax model closely enough.',
     'unstable-maximum-power-fit': 'Pmax changes too much when short-duration anchors are removed.',
   };
@@ -692,6 +710,15 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
     const stability = stabilityValues.length
       ? `${formatNumber(Math.max(...stabilityValues) * 100, 1)}% worst anchor-removal change`
       : null;
+    const methodSpread = [
+      current.diagnostics.criticalPowerSpreadRatio === null
+        ? null
+        : `${formatNumber(current.diagnostics.criticalPowerSpreadRatio * 100, 1)}% CP method spread`,
+      current.diagnostics.wPrimeSpreadRatio === null
+        ? null
+        : `${formatNumber(current.diagnostics.wPrimeSpreadRatio * 100, 1)}% W′ method spread`,
+    ];
+    const sourceLabel = (count: number): string => `${count} ${count === 1 ? 'activity' : 'activities'}`;
     return {
       activityType,
       status: current.status,
@@ -699,10 +726,11 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
       reasonText: formatReason(current.reason),
       evidenceText: `${evidenceCounts.usableCurveActivityCount} of ${evidenceCounts.candidateActivityCount} preceding 42-day workouts supplied usable power curves; ${evidenceCounts.excludedActivityCount} excluded.`,
       diagnosticsText: [
-        `${current.diagnostics.sourceCount} fitted sources over ${current.diagnostics.historySpanDays} days`,
-        `${current.diagnostics.criticalPowerAnchorCount}/${THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length} sustained anchors`,
-        `${current.diagnostics.maximumPowerAnchorCount}/${THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS.length} short anchors`,
+        `${current.diagnostics.sourceCount} usable power curves over ${current.diagnostics.historySpanDays} days`,
+        `${sourceLabel(current.diagnostics.criticalPowerContributingSourceCount)} supplied ${current.diagnostics.criticalPowerAnchorCount}/${THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length} sustained anchors`,
+        `${sourceLabel(current.diagnostics.maximumPowerContributingSourceCount)} supplied ${current.diagnostics.maximumPowerAnchorCount}/${THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS.length} short anchors`,
         fitError,
+        ...methodSpread,
         stability,
       ].filter(Boolean).join(' · '),
       cards: [

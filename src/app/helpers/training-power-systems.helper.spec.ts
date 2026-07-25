@@ -57,7 +57,9 @@ function entry(
       criticalPowerAnchorCount: 8,
       earlyCriticalPowerAnchorCount: 4,
       longCriticalPowerAnchorCount: 3,
+      criticalPowerContributingSourceCount: 2,
       maximumPowerAnchorCount: status === 'partial' ? 2 : 8,
+      maximumPowerContributingSourceCount: status === 'partial' ? 1 : 2,
       criticalPowerNormalizedRmse: status === 'insufficient-evidence' ? null : 0.02,
       criticalPowerSpreadRatio: status === 'insufficient-evidence' ? null : 0.01,
       wPrimeSpreadRatio: status === 'insufficient-evidence' ? null : 0.04,
@@ -148,7 +150,9 @@ describe('training-power-systems.helper', () => {
       criticalPowerAnchorCount: 0,
       earlyCriticalPowerAnchorCount: 0,
       longCriticalPowerAnchorCount: 0,
+      criticalPowerContributingSourceCount: 0,
       maximumPowerAnchorCount: 0,
+      maximumPowerContributingSourceCount: 0,
       criticalPowerNormalizedRmse: null,
       criticalPowerSpreadRatio: null,
       wPrimeSpreadRatio: null,
@@ -260,6 +264,14 @@ describe('training-power-systems.helper', () => {
       return value;
     },
     (value: any) => {
+      value.activityTypes[0].current.diagnostics.criticalPowerContributingSourceCount = 4;
+      return value;
+    },
+    (value: any) => {
+      value.activityTypes[0].current.diagnostics.maximumPowerContributingSourceCount = 0;
+      return value;
+    },
+    (value: any) => {
       value.activityTypes[0].history[0] = {
         ...value.activityTypes[0].history[0],
         status: 'partial',
@@ -293,6 +305,42 @@ describe('training-power-systems.helper', () => {
     } else {
       expect(view.cards.every(card => card.valueText === 'Unavailable')).toBe(true);
     }
+  });
+
+  it('explains method disagreement and distinguishes usable curves from envelope contributors', () => {
+    const unstable = entry('Cycling', 'unstable', 'unstable-critical-power-fit');
+    unstable.current.diagnostics = {
+      ...unstable.current.diagnostics,
+      sourceCount: 9,
+      historyStartDayMs: asOfDayMs - (29 * DAY_MS),
+      historySpanDays: 28,
+      criticalPowerAnchorCount: 7,
+      earlyCriticalPowerAnchorCount: 4,
+      longCriticalPowerAnchorCount: 2,
+      criticalPowerContributingSourceCount: 1,
+      maximumPowerAnchorCount: 8,
+      maximumPowerContributingSourceCount: 2,
+      criticalPowerSpreadRatio: 0.041,
+      wPrimeSpreadRatio: 0.327,
+      criticalPowerLeaveOneOutSpreadRatio: 0.008,
+      wPrimeLeaveOneOutSpreadRatio: 0.095,
+    };
+    unstable.evidenceCounts = {
+      candidateActivityCount: 11,
+      usableCurveActivityCount: 9,
+      excludedActivityCount: 2,
+    };
+    const normalized = resolveTrainingPowerSystemsMetricPayload(payload([unstable]));
+    const view = buildTrainingPowerSystemsActivityTypeViewModels(normalized)[0];
+
+    expect(view.reasonText).toContain('fitting methods disagree');
+    expect(view.diagnosticsText).toContain('9 usable power curves over 28 days');
+    expect(view.diagnosticsText).toContain('1 activity supplied 7/8 sustained anchors');
+    expect(view.diagnosticsText).toContain('2 activities supplied 8/8 short anchors');
+    expect(view.diagnosticsText).toContain('4.1% CP method spread');
+    expect(view.diagnosticsText).toContain('32.7% W′ method spread');
+    expect(view.diagnosticsText).toContain('9.5% worst anchor-removal change');
+    expect(view.diagnosticsText).not.toContain('fitted sources');
   });
 
   it('builds three aligned sparse trends and keeps today as the current endpoint', () => {

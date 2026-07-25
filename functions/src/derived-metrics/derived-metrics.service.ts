@@ -29,6 +29,8 @@ import {
     DataVO2Max,
     fitThreeDimensionalCapacityModel,
     normalizeDurabilityEvidenceValue,
+    THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
+    THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS,
     type DatedActivityPowerCurve,
     type ThreeDimensionalCapacityFit,
 } from '@sports-alliance/sports-lib';
@@ -1580,6 +1582,44 @@ interface TrainingPowerSystemsCandidate {
 
 type ThreeDimensionalCapacityFitter = typeof fitThreeDimensionalCapacityModel;
 
+function summarizeTrainingPowerSystemsEnvelope(fit: ThreeDimensionalCapacityFit): {
+    criticalPowerAnchorCount: number;
+    earlyCriticalPowerAnchorCount: number;
+    longCriticalPowerAnchorCount: number;
+    criticalPowerContributingSourceCount: number;
+    maximumPowerAnchorCount: number;
+    maximumPowerContributingSourceCount: number;
+} {
+    const criticalPowerAnchorSeconds = new Set<number>(
+        THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
+    );
+    const maximumPowerAnchorSeconds = new Set<number>(
+        THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS,
+    );
+    const criticalPowerPoints = fit.envelope.points.filter(
+        point => criticalPowerAnchorSeconds.has(point.durationSeconds),
+    );
+    const maximumPowerPoints = fit.envelope.points.filter(
+        point => maximumPowerAnchorSeconds.has(point.durationSeconds),
+    );
+    return {
+        criticalPowerAnchorCount: criticalPowerPoints.length,
+        earlyCriticalPowerAnchorCount: criticalPowerPoints.filter(
+            point => point.durationSeconds >= 120 && point.durationSeconds <= 300,
+        ).length,
+        longCriticalPowerAnchorCount: criticalPowerPoints.filter(
+            point => point.durationSeconds >= 720 && point.durationSeconds <= 1200,
+        ).length,
+        criticalPowerContributingSourceCount: new Set(
+            criticalPowerPoints.map(point => point.sourceId),
+        ).size,
+        maximumPowerAnchorCount: maximumPowerPoints.length,
+        maximumPowerContributingSourceCount: new Set(
+            maximumPowerPoints.map(point => point.sourceId),
+        ).size,
+    };
+}
+
 function resolveUtcDateKey(dayMs: number): string {
     return new Date(dayMs).toISOString().slice(0, 10);
 }
@@ -1701,6 +1741,7 @@ function serializeTrainingPowerSystemsFit(
     const criticalPower = serializeTrainingPowerSystemsComponent(fit.criticalPower);
     const wPrime = serializeTrainingPowerSystemsComponent(fit.wPrime);
     const maximumPower = serializeTrainingPowerSystemsComponent(fit.maximumPower);
+    const envelopeSummary = summarizeTrainingPowerSystemsEnvelope(fit);
     const hasInvalidFitContract = !isTrainingPowerSystemsFitContractConsistent(
         fit,
         activityType,
@@ -1730,10 +1771,7 @@ function serializeTrainingPowerSystemsFit(
             historyEndDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyEndDate),
             historySpanDays: fit.diagnostics.historySpanDays,
             rejectedPointCount: fit.envelope.rejectedPointCount,
-            criticalPowerAnchorCount: fit.diagnostics.criticalPowerAnchorCount,
-            earlyCriticalPowerAnchorCount: fit.diagnostics.earlyCriticalPowerAnchorCount,
-            longCriticalPowerAnchorCount: fit.diagnostics.longCriticalPowerAnchorCount,
-            maximumPowerAnchorCount: fit.diagnostics.maximumPowerAnchorCount,
+            ...envelopeSummary,
             criticalPowerNormalizedRmse: fit.diagnostics.criticalPowerNormalizedRmse,
             criticalPowerSpreadRatio: fit.diagnostics.criticalPowerSpreadRatio,
             wPrimeSpreadRatio: fit.diagnostics.wPrimeSpreadRatio,
