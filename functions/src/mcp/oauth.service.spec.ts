@@ -319,6 +319,40 @@ describe('MCP OAuth service', () => {
     }, windowStartMs));
   });
 
+  it('rejects malformed document IDs before accessing OAuth state', async () => {
+    const store = createMemoryStore();
+    const getAuthorizationRequest = vi.spyOn(store, 'getAuthorizationRequest');
+    const denyAuthorization = vi.spyOn(store, 'denyAuthorization');
+    const revokeConnection = vi.spyOn(store, 'revokeConnection');
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 1000,
+      randomToken: () => 'unused',
+    });
+
+    await expect(service.getConsentDetails('request/child')).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+    await expect(service.decideAuthorization({
+      uid: 'user-1',
+      requestId: 'request/child',
+      approved: false,
+    })).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+    expect(() => service.revokeConnection(
+      'user-1',
+      'connection/child',
+    )).toThrow(expect.objectContaining({
+      code: 'invalid_request',
+    }));
+
+    expect(getAuthorizationRequest).not.toHaveBeenCalled();
+    expect(denyAuthorization).not.toHaveBeenCalled();
+    expect(revokeConnection).not.toHaveBeenCalled();
+  });
+
   it('requires PKCE, the exact MCP resource, and an exact registered redirect', async () => {
     const store = createMemoryStore();
     const service = createMcpOAuthService({

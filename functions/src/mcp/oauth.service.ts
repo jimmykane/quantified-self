@@ -587,6 +587,14 @@ function requireString(value: unknown, name: string, maxLength = 2048): string {
   return exact;
 }
 
+function requireOpaqueDocumentId(value: unknown, name: string): string {
+  const exact = requireString(value, name, 256);
+  if (!/^[A-Za-z0-9_-]+$/.test(exact)) {
+    throw new McpOAuthError('invalid_request', `${name} is invalid.`);
+  }
+  return exact;
+}
+
 function readOptionalOAuthState(value: unknown): string | null {
   if (value === undefined || value === null || value === '') {
     return null;
@@ -908,7 +916,9 @@ export function createMcpOAuthService(
     },
 
     async getConsentDetails(requestId: string) {
-      const request = await store.getAuthorizationRequest(requireString(requestId, 'request_id', 256));
+      const request = await store.getAuthorizationRequest(
+        requireOpaqueDocumentId(requestId, 'request_id'),
+      );
       if (
         !request
         || request.status !== 'pending'
@@ -936,7 +946,7 @@ export function createMcpOAuthService(
       approved: boolean;
       grantedScopes?: readonly string[];
     }) {
-      const requestId = requireString(input.requestId, 'request_id', 256);
+      const requestId = requireOpaqueDocumentId(input.requestId, 'request_id');
       const nowMs = resolvedDependencies.now();
       if (!input.approved) {
         const request = await store.denyAuthorization(requestId, nowMs);
@@ -1143,7 +1153,7 @@ export function createMcpOAuthService(
     revokeConnection(uid: string, connectionId: string) {
       return store.revokeConnection(
         uid,
-        requireString(connectionId, 'connection_id', 256),
+        requireOpaqueDocumentId(connectionId, 'connection_id'),
         resolvedDependencies.now(),
       );
     },

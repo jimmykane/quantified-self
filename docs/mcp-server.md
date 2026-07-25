@@ -179,10 +179,10 @@ events, privacy filtering, query bounds, and the MCP transport.
 
 ## Training-derived metrics
 
-MCP reads only `status: "ready"` documents with a current compatible schema from
+MCP reads only `status: "ready"` documents with the exact current schema from
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
-exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, and labels from
-the payload.
+exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels, and
+identity-derived source fingerprints from the payload.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline and schema work plus

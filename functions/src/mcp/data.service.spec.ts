@@ -276,6 +276,15 @@ describe('MCP data service', () => {
           selectionKey: 'event:12:event-3',
           label: 'Private benchmark',
         },
+        powerSystems: {
+          activityTypes: [{
+            activityType: 'Cycling',
+            current: {
+              effectiveDayMs: Date.parse('2024-04-01T00:00:00.000Z'),
+              sourceFingerprint: 'three-dimensional-capacity-v1:private-fingerprint',
+            },
+          }],
+        },
         activityLabel: 'Private label',
       },
     });
@@ -303,14 +312,24 @@ describe('MCP data service', () => {
         mode: 'event',
         durationWeeks: 12,
       },
+      powerSystems: {
+        activityTypes: [{
+          activityType: 'Cycling',
+          current: {
+            effectiveDayMs: Date.parse('2024-04-01T00:00:00.000Z'),
+          },
+        }],
+      },
     });
     expect(JSON.stringify(result.payload)).not.toContain('event-3');
+    expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
   });
 
   it.each([
     undefined,
     DERIVED_METRIC_SCHEMA_VERSION - 1,
-  ])('does not expose a ready Training snapshot with stale schema %s', async (schemaVersion) => {
+    DERIVED_METRIC_SCHEMA_VERSION + 1,
+  ])('does not expose a ready Training snapshot with incompatible schema %s', async (schemaVersion) => {
     vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
       status: 'ready',
       schemaVersion,
@@ -422,6 +441,55 @@ describe('MCP data service', () => {
         averageInBedDurationSeconds: null,
         averageScore: null,
         averageVitals: {},
+      }),
+    ]);
+  });
+
+  it('does not expose invalid zero-valued sleep physiology or include it in averages', async () => {
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({
+        vitals: {
+          averageHeartRateBpm: 0,
+          minimumHeartRateBpm: 0,
+          restingHeartRateBpm: 0,
+          averageHrvMs: 0,
+          hrvSampleCount: 0,
+          overnightHrvMs: 0,
+          maxSpo2Percent: 0,
+          averageRespirationBrpm: 0,
+        },
+      }),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const range = {
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+    };
+
+    const sessions = await service.listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      ...range,
+    });
+    const summary = await service.querySleepSummary({
+      uid: 'user-1',
+      ...range,
+      groupBy: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(sessions.sessions).toEqual([
+      expect.objectContaining({
+        vitals: {
+          hrvSampleCount: 0,
+        },
+      }),
+    ]);
+    expect(summary.buckets).toEqual([
+      expect.objectContaining({
+        averageVitals: {
+          hrvSampleCount: 0,
+        },
       }),
     ]);
   });

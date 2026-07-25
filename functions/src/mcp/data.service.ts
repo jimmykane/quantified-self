@@ -461,7 +461,7 @@ function redactDerivedPayload(
 
   const entries = Object.entries(value as Record<string, unknown>);
   const redactedKeys = /(?:event|activity).*(?:id|name|label)s?$/i;
-  const compositeIdentityKeys = /^(?:selectionKey)$/i;
+  const compositeIdentityKeys = /^(?:selectionKey|sourceFingerprint)$/i;
   const nestedIdentityKeys = /^(?:id|name|label)s?$/i;
   const parentIsEventIdentity = /(?:event|activity)/i.test(parentKey);
   const objectHasEventIdentity = entries.some(([key]) => /(?:event|activity).*ids?$/i.test(key));
@@ -494,12 +494,20 @@ function normalizeSleepVitals(value: unknown): Partial<SleepVitals> | null {
     return null;
   }
   const raw = value as Record<string, unknown>;
-  const normalized = Object.fromEntries(
-    SAFE_SLEEP_VITAL_KEYS.flatMap((key) => {
-      const numeric = asNonNegativeNumber(raw[key]);
-      return numeric === null ? [] : [[key, numeric]];
-    }),
-  ) as Partial<SleepVitals>;
+  const entries: Array<[typeof SAFE_SLEEP_VITAL_KEYS[number], number]> = [];
+  SAFE_SLEEP_VITAL_KEYS.forEach((key) => {
+    const numeric = asNonNegativeNumber(raw[key]);
+    if (
+      numeric !== null
+      && (
+        (key === 'hrvSampleCount' && Number.isSafeInteger(numeric))
+        || (key !== 'hrvSampleCount' && numeric > 0)
+      )
+    ) {
+      entries.push([key, numeric]);
+    }
+  });
+  const normalized = Object.fromEntries(entries) as Partial<SleepVitals>;
   return Object.keys(normalized).length ? normalized : null;
 }
 
@@ -713,7 +721,7 @@ export function createMcpDataService(
         || snapshot.status !== 'ready'
         || snapshot.payload == null
         || schemaVersion === null
-        || schemaVersion < DERIVED_METRIC_SCHEMA_VERSION
+        || schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
       ) {
         throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
