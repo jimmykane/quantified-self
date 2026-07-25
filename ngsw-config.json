@@ -30,8 +30,6 @@
   ],
   "dataGroups": [],
   "navigationUrls": [
-    "/mcp/authorize",
-    "/login",
     "/onboarding",
     "/admin",
     "/admin/maintenance",

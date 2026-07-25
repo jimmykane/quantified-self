@@ -71,12 +71,12 @@ in `firestore.indexes.json`.
 
 ## Consent-page browser policy
 
-Firebase Hosting applies dedicated headers to the exact `/mcp/authorize` SPA entry point and to `/index.csr.html` on
-both production and beta. Header matching happens before the authorization route is rewritten to `index.csr.html`.
-The Angular service worker can satisfy a controlled authorization navigation from its cached `index.csr.html`, so the
-cached shell must carry the identical headers. Treat this as a policy for the full browser lifetime, not only the consent
-component: an unauthenticated authorization request continues to `/login`, and later client-side navigation keeps the
-response policy until the document reloads.
+Firebase Hosting applies identical dedicated headers to the exact `/mcp/authorize` and `/login` SPA entry points on
+both production and beta. Header matching happens before either route is rewritten to `index.csr.html`. Both routes are
+deliberately absent from the Angular service worker's `navigationUrls`, so a controlled navigation fetches the current
+document and headers instead of a cached app shell. This also covers Firebase's production sign-in redirect, which can
+reload `/login` before client-side navigation returns to consent. Treat the result as a policy for the full browser
+lifetime, not only the consent component: later client-side navigation keeps it until the document reloads.
 
 The enforced Content Security Policy intentionally starts with the high-confidence structural directives:
 
@@ -123,11 +123,9 @@ Before moving its source directives into the enforced policy:
 5. repeat with no unexplained violations, then enforce the candidate policy on beta first; and
 6. repeat the flow on beta before applying the same enforced policy to production.
 
-Keep the `/mcp/authorize` and `/index.csr.html` header entries identical across production and beta. When a frontend
-dependency introduces a new network, frame, worker, image, or script origin, update the report-only allowlist and its
-Hosting regression test in the same change. The test derives `qs-security-policy-version` from the complete header set;
-copy the expected value from a failing focused test into `src/index.html`. This changes the generated shell hash so an
-Angular service-worker update replaces cached responses carrying the previous headers. See the
+Keep the `/mcp/authorize` and `/login` header entries identical across production and beta, and keep both routes out of
+the service worker navigation fallback. When a frontend dependency introduces a new network, frame, worker, image, or
+script origin, update the report-only allowlist and its Hosting regression test in the same change. See the
 [Angular CSP guidance](https://angular.dev/best-practices/security#content-security-policy),
 [Firebase Hosting header configuration](https://firebase.google.com/docs/hosting/full-config#headers), and
 [reCAPTCHA CSP allowlist](https://developers.google.com/recaptcha/docs/faq#im_using_content-security-policy_csp_on_my_website_how_can_i_configure_it_to_work_with_recaptcha).

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -57,7 +56,6 @@ interface AngularConfig {
 }
 
 interface ServiceWorkerConfig {
-  index: string;
   navigationUrls: string[];
 }
 
@@ -91,6 +89,7 @@ const betaNoIndexHeader = {
   key: 'X-Robots-Tag',
   value: 'noindex, nofollow',
 };
+const networkOnlyAuthSources = ['/mcp/authorize', '/login'];
 const mcpAuthorizeEnforcedCsp = "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'";
 const mcpAuthorizeSecurityHeaders = {
   'Content-Security-Policy': mcpAuthorizeEnforcedCsp,
@@ -161,13 +160,6 @@ function getCspDirective(policy: string, directiveName: string): string | undefi
     .split(';')
     .map(directive => directive.trim())
     .find(directive => directive === directiveName || directive.startsWith(`${directiveName} `));
-}
-
-function getSecurityPolicyVersion(headers: Array<{ key: string; value: string }>): string {
-  return createHash('sha256')
-    .update(JSON.stringify(headers))
-    .digest('hex')
-    .slice(0, 16);
 }
 
 describe('Firebase Hosting configuration', () => {
@@ -295,14 +287,18 @@ describe('Firebase Hosting configuration', () => {
     expect(comparisonShareHeaders).toContainEqual(betaNoIndexHeader);
   });
 
-  it('hardens direct and service-worker-cached MCP authorization entry points', () => {
-    const protectedSources = ['/mcp/authorize', serviceWorkerConfig.index];
+  it('hardens network-only MCP authorization and login entry points', () => {
     const targetHeaderSets: Array<FirebaseHostingTarget['headers'][number]['headers']> = [];
 
-    for (const target of firebaseConfig.hosting) {
-      const protectedHeaderEntries = target.headers?.filter(header => protectedSources.includes(header.source)) ?? [];
+    for (const source of networkOnlyAuthSources) {
+      expect(serviceWorkerConfig.navigationUrls).not.toContain(source);
+    }
 
-      expect(protectedHeaderEntries.map(entry => entry.source)).toEqual(protectedSources);
+    for (const target of firebaseConfig.hosting) {
+      const protectedHeaderEntries = target.headers
+        ?.filter(header => networkOnlyAuthSources.includes(header.source)) ?? [];
+
+      expect(protectedHeaderEntries.map(entry => entry.source)).toEqual(networkOnlyAuthSources);
       expect(protectedHeaderEntries[1]?.headers).toEqual(protectedHeaderEntries[0]?.headers);
 
       const headers = protectedHeaderEntries[0]?.headers ?? [];
@@ -339,12 +335,6 @@ describe('Firebase Hosting configuration', () => {
     }
 
     expect(targetHeaderSets[1]).toEqual(targetHeaderSets[0]);
-
-    const indexHtml = readFileSync(resolve(__dirname, 'index.html'), 'utf8');
-    const securityPolicyVersion = getSecurityPolicyVersion(targetHeaderSets[0] ?? []);
-    expect(indexHtml).toContain(
-      `<meta name="qs-security-policy-version" content="${securityPolicyVersion}">`
-    );
   });
 
   it('keeps executable scripts and event handlers compatible with a strict script policy', () => {
@@ -418,8 +408,10 @@ describe('Firebase Hosting configuration', () => {
   it('keeps service-worker navigation fallback scoped to known CSR routes', () => {
     const navigationUrls = serviceWorkerConfig.navigationUrls;
     const positiveNavigationUrls = navigationUrls.filter(url => !url.startsWith('!'));
+    const cacheableCsrRewriteSources = expectedCsrRewriteSources
+      .filter(source => !networkOnlyAuthSources.includes(source));
 
-    expect(positiveNavigationUrls).toEqual(expectedCsrRewriteSources);
+    expect(positiveNavigationUrls).toEqual(cacheableCsrRewriteSources);
     expect(navigationUrls).not.toContain('/**');
     expect(positiveNavigationUrls.every(url => !url.includes('**'))).toBe(true);
     expect(navigationUrls).toContain('!/**/*.*');
