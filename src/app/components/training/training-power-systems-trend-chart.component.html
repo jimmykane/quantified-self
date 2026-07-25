@@ -1,0 +1,13 @@
+<div
+  #chartDiv
+  class="training-power-systems-trend-chart"
+  role="img"
+  [attr.aria-label]="chartAriaLabel">
+</div>
+@if (!hasReadyValues) {
+  <p class="training-power-systems-trend-empty">No ready values in this period</p>
+}
+<div class="training-power-systems-trend-range" aria-hidden="true">
+  <span>12 weeks ago</span>
+  <span>Today</span>
+</div>

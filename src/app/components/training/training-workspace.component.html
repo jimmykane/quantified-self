@@ -666,25 +666,10 @@
             @for (trend of powerSystems.trends; track trend.key) {
               <section class="training-power-systems-trend">
                 <header><strong>{{ trend.label }}</strong><span>{{ trend.unit }}</span></header>
-                <svg
-                  viewBox="0 0 100 32"
-                  preserveAspectRatio="none"
-                  role="img"
-                  [attr.aria-label]="trend.label + ' over the latest 12 weeks'">
-                  <line x1="0" y1="28" x2="100" y2="28"></line>
-                  @if (trend.path) {
-                    <path [attr.d]="trend.path"></path>
-                  }
-                  @for (point of trend.points; track point.dayMs) {
-                    <circle
-                      [attr.cx]="point.x"
-                      [attr.cy]="point.y"
-                      [attr.r]="point.isCurrent ? 2.2 : 1.5"
-                      [class.training-power-systems-current-point]="point.isCurrent">
-                    </circle>
-                  }
-                </svg>
-                <div class="training-power-systems-trend-range"><span>12 weeks ago</span><span>Today</span></div>
+                <app-training-power-systems-trend-chart
+                  [trend]="trend"
+                  [darkTheme]="isDarkTheme()">
+                </app-training-power-systems-trend-chart>
               </section>
             }
           </div>

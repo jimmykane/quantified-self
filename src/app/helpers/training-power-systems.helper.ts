@@ -64,9 +64,8 @@ export interface TrainingPowerSystemsCardViewModel {
 
 export interface TrainingPowerSystemsTrendPointViewModel {
   dayMs: number;
-  value: number;
-  x: number;
-  y: number;
+  value: number | null;
+  statusText: string;
   isCurrent: boolean;
 }
 
@@ -74,7 +73,8 @@ export interface TrainingPowerSystemsTrendViewModel {
   key: 'criticalPowerWatts' | 'wPrimeJoules' | 'maximumPowerWatts';
   label: string;
   unit: 'W' | 'kJ';
-  path: string | null;
+  rangeStartDayMs: number;
+  rangeEndDayMs: number;
   points: TrainingPowerSystemsTrendPointViewModel[];
 }
 
@@ -671,51 +671,25 @@ function buildTrend(
   unit: TrainingPowerSystemsTrendViewModel['unit'],
   valueScale = 1,
 ): TrainingPowerSystemsTrendViewModel {
-  const rawPoints = entry.history.map(point => ({
+  const statusKey = {
+    criticalPowerWatts: 'criticalPowerStatus',
+    wPrimeJoules: 'wPrimeStatus',
+    maximumPowerWatts: 'maximumPowerStatus',
+  }[key] as 'criticalPowerStatus' | 'wPrimeStatus' | 'maximumPowerStatus';
+  const rangeEndDayMs = entry.current.effectiveDayMs;
+  const rangeStartDayMs = rangeEndDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS * DAY_MS);
+  const points = entry.history.map(point => ({
     dayMs: point.effectiveDayMs,
     value: point[key] === null ? null : point[key] * valueScale,
+    statusText: formatComponentStatus(point[statusKey]),
+    isCurrent: point.effectiveDayMs === rangeEndDayMs,
   }));
-  const values = rawPoints.flatMap(point => point.value === null ? [] : [point.value]);
-  const minimum = values.length ? Math.min(...values) : 0;
-  const maximum = values.length ? Math.max(...values) : 0;
-  const span = maximum - minimum;
-  const historyStartDayMs = entry.current.effectiveDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS * DAY_MS);
-  const points = rawPoints.flatMap((point): TrainingPowerSystemsTrendPointViewModel[] => {
-    if (point.value === null) {
-      return [];
-    }
-    const x = ((point.dayMs - historyStartDayMs) / (DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS * DAY_MS)) * 100;
-    const y = span > 0 ? 28 - (((point.value - minimum) / span) * 24) : 16;
-    return [{
-      dayMs: point.dayMs,
-      value: point.value,
-      x,
-      y,
-      isCurrent: point.dayMs === entry.current.effectiveDayMs,
-    }];
-  });
-  const pointByDay = new Map(points.map(point => [point.dayMs, point]));
-  const pathSegments: string[] = [];
-  let currentSegment: string[] = [];
-  rawPoints.forEach((rawPoint) => {
-    const point = pointByDay.get(rawPoint.dayMs);
-    if (!point) {
-      if (currentSegment.length) {
-        pathSegments.push(currentSegment.join(' '));
-        currentSegment = [];
-      }
-      return;
-    }
-    currentSegment.push(`${currentSegment.length ? 'L' : 'M'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`);
-  });
-  if (currentSegment.length) {
-    pathSegments.push(currentSegment.join(' '));
-  }
   return {
     key,
     label,
     unit,
-    path: pathSegments.length ? pathSegments.join(' ') : null,
+    rangeStartDayMs,
+    rangeEndDayMs,
     points,
   };
 }

@@ -902,8 +902,11 @@ method spread, anchor-removal sensitivity, and whole-workout removal sensitivity
 misidentified.
 
 The UI shows an exact activity-type selector, current CP/W′/Pmax cards, status/reason copy, evidence coverage,
-contributor-aware diagnostics, and three aligned sparse 12-week mini-trends in watts, kilojoules, and watts. It labels
-the model as capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
+contributor-aware diagnostics, and three aligned sparse 12-week ECharts trends in watts, kilojoules, and watts. Their
+UTC time axes are fixed to the same 84-day interval, their value axes retain a zero baseline, unavailable observations
+remain gaps, and the chart hosts resize with the page. On narrow screens the three charts stack at a touch-readable
+height. The section labels the model as capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout
+prescription.
 
 #### Parser and continuous-stream boundary
 

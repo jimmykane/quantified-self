@@ -260,12 +260,6 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-power-systems-trend { min-width: 0; padding: 14px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; }
 .training-power-systems-trend header { display: flex; justify-content: space-between; gap: 12px; font-size: var(--training-inter-caption-font-size); }
 .training-power-systems-trend header span { color: var(--mat-sys-on-surface-variant); }
-.training-power-systems-trend svg { display: block; width: 100%; height: 86px; margin-top: 8px; overflow: visible; }
-.training-power-systems-trend svg line { stroke: var(--mat-sys-outline-variant); stroke-width: .5; vector-effect: non-scaling-stroke; }
-.training-power-systems-trend svg path { fill: none; stroke: var(--mat-sys-primary); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.75; vector-effect: non-scaling-stroke; }
-.training-power-systems-trend svg circle { fill: var(--mat-sys-surface); stroke: var(--mat-sys-primary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.training-power-systems-trend svg circle.training-power-systems-current-point { fill: var(--mat-sys-primary); }
-.training-power-systems-trend-range { display: flex; justify-content: space-between; gap: 12px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); }
 .training-power-systems-boundary { margin: 16px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.4; }
 .training-performance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .training-performance-grid:not(:has(.training-swim-performance-panel)):not(:has(.training-capacity-panel ~ .training-capacity-panel)) > .training-capacity-panel,

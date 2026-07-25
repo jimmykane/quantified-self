@@ -397,11 +397,13 @@ describe('training-power-systems.helper', () => {
       ['Maximum power', 'W'],
     ]);
     view.trends.forEach((trend) => {
-      expect(trend.points).toHaveLength(2);
+      expect(trend.points).toHaveLength(3);
+      expect(trend.points[1]).toMatchObject({ value: null, statusText: 'Not enough evidence' });
       expect(trend.points.at(-1)).toMatchObject({ dayMs: asOfDayMs, isCurrent: true });
-      expect(trend.path).toContain('M');
+      expect(trend.rangeStartDayMs).toBe(asOfDayMs - (84 * DAY_MS));
+      expect(trend.rangeEndDayMs).toBe(asOfDayMs);
     });
-    expect(view.trends[1].points.map(point => point.value)).toEqual([18, 18.5]);
+    expect(view.trends[1].points.map(point => point.value)).toEqual([18, null, 18.5]);
   });
 
   it('never creates an all-sports aggregate option', () => {
