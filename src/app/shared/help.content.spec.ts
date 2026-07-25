@@ -118,7 +118,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
-    expect(trainingSection?.content).toContain('**Power systems** estimates current CP, W′, and Pmax');
+    expect(trainingSection?.content).toContain('**Power systems** is shown only where it is available to your account');
+    expect(trainingSection?.content).toContain('It estimates current CP, W′, and Pmax');
     expect(trainingSection?.content).toContain('preceding 42 completed UTC days');
     expect(trainingSection?.content).toContain('smaller set of workouts that actually supplied');
     expect(trainingSection?.content).toContain('A type selector appears only when more than one exact activity type is available');

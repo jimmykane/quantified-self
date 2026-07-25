@@ -3,7 +3,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
-import { concat, NEVER, of, Subject, throwError } from 'rxjs';
+import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -18,7 +18,10 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import { TrainingWorkspaceComponent } from './training-workspace.component';
+import {
+  TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
+  TrainingWorkspaceComponent,
+} from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
@@ -101,7 +104,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
     expect(element.textContent).toContain('Preparing imported capacity markers');
-    expect(element.textContent).toContain('Preparing rolling power capacity');
+    expect(element.textContent).not.toContain('Preparing rolling power capacity');
+    expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
@@ -492,7 +496,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
     expect(fixture.nativeElement.textContent).toContain('Preparing cycling power profile');
-    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(7);
+    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-power-curve-chart')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
@@ -548,7 +553,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).not.toContain('186 W');
   });
 
-  it('renders exact-type rolling power systems independently of Training sport visibility', async () => {
+  it('renders exact-type rolling power systems for the designated account independently of Training sport visibility', async () => {
     const asOfDayMs = Date.UTC(2026, 6, 20);
     const powerSystemsEntry = (
       activityType: string,
@@ -654,6 +659,10 @@ describe('TrainingWorkspaceComponent', () => {
       },
     };
     const derivedStateSubject = new Subject<DashboardDerivedMetricsState>();
+    const authUser$ = new BehaviorSubject({
+      uid: TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
+      settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
+    });
     const derivedMetrics = {
       watch: vi.fn(() => derivedStateSubject.asObservable()),
       ensureForDashboard: vi.fn(),
@@ -664,7 +673,7 @@ describe('TrainingWorkspaceComponent', () => {
       providers: [
         {
           provide: AppAuthService,
-          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['swimming'] } } }) },
+          useValue: { user$: authUser$ },
         },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
@@ -708,6 +717,15 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Modeled sustained-power boundary');
     expect(fixture.nativeElement.querySelectorAll('.training-power-systems-evidence li').length)
       .toBeGreaterThan(3);
+
+    authUser$.next({
+      uid: 'user-1',
+      settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
+    });
+    fixture.detectChanges();
+
+    expect(component.hasTrainingPowerSystemsAccess).toBe(false);
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
   });
 
   it('filters every sport-specific module while leaving global training sections visible', async () => {

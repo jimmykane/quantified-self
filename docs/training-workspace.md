@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `14`
-- `@sports-alliance/sports-lib`: `17.7.0`
+- `@sports-alliance/sports-lib`: `17.8.0`
 - Training disciplines: Running, Cycling, and Swimming
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -52,6 +52,10 @@ The following rules are architectural constraints:
   Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
 - Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
   FTP, and only components that pass Sports-lib's `ready` gates expose a value.
+- The Power systems presentation is currently limited in the frontend to one designated account. This is a visibility
+  gate only: snapshot generation, persistence, and the fitting policy remain unchanged. The account identifier is kept
+  in the component source and intentionally omitted from this document. Do not treat this frontend condition as an
+  authorization boundary.
 - Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
   `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
@@ -849,6 +853,9 @@ Tablet and mobile retain the stacked responsive layout.
 `training_power_systems` is the capacity-first use of Sports-lib's dated three-dimensional capacity fitter. It supports
 every exact canonical activity type with a usable persisted Power Curve. This section is independent of the
 Running/Cycling/Swimming visibility setting and has no combined or all-sports option.
+
+The Training page renders this section only for the currently designated account. The derived metric continues to build
+for every account so removing the presentation gate later does not require a data migration or a policy change.
 
 Policy version 1 is fixed:
 
