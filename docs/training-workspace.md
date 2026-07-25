@@ -613,9 +613,10 @@ mislabel a new score as yesterday's. An open Training route schedules a narrow U
 require an event or activity scan.
 
 The compact chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes remain
-interpretable across days. Each scored SVG point is keyboard focusable and provides a native hover/focus tooltip with
-its UTC date, score, status, confidence, available-signal count, and recovery-baseline-night count. Missing scores have
-no point and therefore remain visible as gaps rather than being interpolated.
+interpretable across days. Each scored chart mark has a generous, keyboard-focusable HTML hit target and an Angular
+Material hover/focus tooltip with its UTC date, score, status, confidence, available-signal count, and
+recovery-baseline-night count. Missing scores have no point and therefore remain visible as gaps rather than being
+interpolated.
 
 #### Recovery remaining
 

@@ -183,9 +183,20 @@
                   }
                   @for (point of trainingReadiness.historyPoints; track point.dayMs) {
                     @if (point.y !== null) {
-                      <circle class="training-readiness-trend-point" [attr.cx]="point.x" [attr.cy]="point.y" r="3" tabindex="0" focusable="true" [attr.aria-label]="point.label">
-                        <title>{{ point.label }}</title>
-                      </circle>
+                      <circle
+                        class="training-readiness-trend-point training-readiness-trend-point-visible"
+                        [attr.cx]="point.x"
+                        [attr.cy]="point.y"
+                        r="3"
+                        aria-hidden="true"></circle>
+                      <foreignObject [attr.x]="point.x - 9" [attr.y]="point.y - 9" width="18" height="18">
+                        <button
+                          class="training-readiness-trend-tooltip-trigger"
+                          type="button"
+                          [attr.aria-label]="point.label"
+                          [matTooltip]="point.label"
+                          matTooltipPosition="above"></button>
+                      </foreignObject>
                     }
                   }
                 </svg>

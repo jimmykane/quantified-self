@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
 import { concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -32,7 +33,7 @@ describe('TrainingWorkspaceComponent', () => {
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
-      imports: [MatMenuModule],
+      imports: [MatMenuModule, MatTooltipModule],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
   });
@@ -284,10 +285,15 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('14/14 days scored');
       expect(panel.textContent).toContain('browser does not load workout history');
       expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
+      expect(panel.querySelectorAll('.training-readiness-trend-tooltip-trigger')).toHaveLength(14);
       expect(panel.querySelectorAll('.training-readiness-trend-axis-label')).toHaveLength(4);
       const readinessPoint = panel.querySelector('.training-readiness-trend-point');
-      expect(readinessPoint?.getAttribute('tabindex')).toBe('0');
-      expect(readinessPoint?.getAttribute('aria-label')).toContain('/100');
+      const readinessTooltipTrigger = panel.querySelector('.training-readiness-trend-tooltip-trigger');
+      expect(readinessPoint?.getAttribute('r')).toBe('3');
+      expect(readinessPoint?.getAttribute('aria-hidden')).toBe('true');
+      expect(readinessTooltipTrigger?.getAttribute('aria-label')).toContain('/100');
+      const readinessTooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+      expect(readinessTooltip.message).toContain('/100');
       expect(fixture.nativeElement.querySelector('.training-recovery-panel')).toBeNull();
       expect(fixture.nativeElement.querySelectorAll('.training-current-context-grid > article')).toHaveLength(1);
       fixture.destroy();
