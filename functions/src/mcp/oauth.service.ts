@@ -1163,50 +1163,60 @@ export function createMcpOAuthService(
   };
 }
 
-interface McpOAuthCleanupResult {
+interface McpOAuthCleanupPageResult {
   deletedCount: number;
   hasMore: boolean;
+}
+
+export class McpOAuthCleanupIncompleteError extends Error {
+  constructor(readonly deletedCount: number) {
+    super(
+      `MCP OAuth cleanup reached its ${MCP_OAUTH_CLEANUP_MAX_DOCUMENTS}-document budget and requires a retry.`,
+    );
+    this.name = 'McpOAuthCleanupIncompleteError';
+  }
 }
 
 async function cleanupMcpOAuthQuery(
   db: admin.firestore.Firestore,
   baseQuery: admin.firestore.Query,
   maxDocuments: number,
-): Promise<McpOAuthCleanupResult> {
-  let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
+): Promise<McpOAuthCleanupPageResult> {
   let deletedCount = 0;
 
   while (deletedCount < maxDocuments) {
-    const pageLimit = Math.min(
+    const pageSize = Math.min(
       MCP_OAUTH_CLEANUP_PAGE_SIZE,
       maxDocuments - deletedCount,
     );
-    let query = baseQuery
-      .orderBy(admin.firestore.FieldPath.documentId())
-      .limit(pageLimit + 1);
-    if (pageCursor) {
-      query = query.startAfter(pageCursor);
-    }
-
-    const snapshot = await query.get();
+    const snapshot = await baseQuery.limit(pageSize + 1).get();
     if (snapshot.empty) {
       return { deletedCount, hasMore: false };
     }
 
-    const docsToDelete = snapshot.docs.slice(0, pageLimit);
-    for (let index = 0; index < docsToDelete.length; index += MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY) {
-      await Promise.all(
+    const docsToDelete = snapshot.docs.slice(0, pageSize);
+    for (
+      let index = 0;
+      index < docsToDelete.length;
+      index += MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY
+    ) {
+      const results = await Promise.allSettled(
         docsToDelete
           .slice(index, index + MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY)
           .map(doc => db.recursiveDelete(doc.ref)),
       );
+      const failedDelete = results.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (failedDelete) {
+        throw failedDelete.reason;
+      }
     }
     deletedCount += docsToDelete.length;
 
-    if (snapshot.docs.length <= pageLimit) {
+    if (snapshot.docs.length <= pageSize) {
       return { deletedCount, hasMore: false };
     }
-    pageCursor = docsToDelete[docsToDelete.length - 1];
   }
 
   return { deletedCount, hasMore: true };
@@ -1214,7 +1224,7 @@ async function cleanupMcpOAuthQuery(
 
 export async function cleanupMcpOAuthStateForUser(uid: string): Promise<void> {
   const db = admin.firestore();
-  const queries = [
+  const queries: admin.firestore.Query[] = [
     db.collection(MCP_OAUTH_COLLECTIONS.authorizationRequests).where('uid', '==', uid),
     db.collection(MCP_OAUTH_COLLECTIONS.authorizationCodes).where('uid', '==', uid),
     db.collection(MCP_OAUTH_COLLECTIONS.accessTokens).where('uid', '==', uid),
@@ -1222,20 +1232,21 @@ export async function cleanupMcpOAuthStateForUser(uid: string): Promise<void> {
     db.collection(MCP_OAUTH_COLLECTIONS.rateLimits).where('uid', '==', uid),
     db.collection('users').doc(uid).collection(MCP_OAUTH_COLLECTIONS.userConnections),
   ];
-  let remainingDocumentBudget = MCP_OAUTH_CLEANUP_MAX_DOCUMENTS;
+  let deletedCount = 0;
 
   for (let index = 0; index < queries.length; index += 1) {
-    const query = queries[index];
-    const result = await cleanupMcpOAuthQuery(db, query, remainingDocumentBudget);
-    remainingDocumentBudget -= result.deletedCount;
-    if (result.hasMore || (
-      remainingDocumentBudget === 0
-      && index < queries.length - 1
-    )) {
-      logger.warn(
-        `[MCP OAuth] Account cleanup reached its ${MCP_OAUTH_CLEANUP_MAX_DOCUMENTS}-document limit for user ${uid}; remaining OAuth state requires a later cleanup run.`,
-      );
-      return;
+    const remainingBudget = MCP_OAUTH_CLEANUP_MAX_DOCUMENTS - deletedCount;
+    if (remainingBudget === 0) {
+      const remainingSnapshot = await queries[index].limit(1).get();
+      if (!remainingSnapshot.empty) {
+        throw new McpOAuthCleanupIncompleteError(deletedCount);
+      }
+      continue;
+    }
+    const result = await cleanupMcpOAuthQuery(db, queries[index], remainingBudget);
+    deletedCount += result.deletedCount;
+    if (result.hasMore) {
+      throw new McpOAuthCleanupIncompleteError(deletedCount);
     }
   }
 }

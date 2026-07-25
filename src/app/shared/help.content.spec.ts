@@ -735,6 +735,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('**Activity and Training metrics**');
     expect(dataAndPrivacySection?.content).toContain('**Sleep summaries**');
     expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
+    expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> MCP connections**');
   });

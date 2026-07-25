@@ -1330,8 +1330,10 @@ interpreted as zero.
 
 There is deliberately no separate MCP-derived-kind registry. A newly registered kind is discoverable, but its payload must
 still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts`. The server recursively removes event/activity
-IDs, names, and labels, including identities nested under event- or activity-named parents. If a new payload introduces
-another identity-bearing field, extend the redaction contract before release rather than relying on client behavior.
+IDs, names, and labels, including identities nested under event- or activity-named parents. It also removes source
+fingerprints and imported device/provider provenance (`sourceKey` and `previousSourceKey`). If a new payload introduces
+another identity- or provenance-bearing field, extend the redaction contract before release rather than relying on client
+behavior.
 
 Use `.agent/skills/mcp-metric-surface/SKILL.md` for every derived-kind change. Add a focused MCP test that covers ready-state
 handling, schema metadata, and the payload's positive and negative disclosure contract. The transport, scopes, query
@@ -1501,7 +1503,7 @@ Before merging a Training change, confirm:
 - [ ] Settings writes are authenticated, App-Check protected, deletion guarded, normalized, and branch-scoped.
 - [ ] Source dependencies are fetched only for metric kinds that need them.
 - [ ] Snapshot schema and frontend normalizers agree.
-- [ ] New or changed derived kinds have an MCP ready-state and identity-redaction contract test.
+- [ ] New or changed derived kinds have an MCP ready-state, identity-redaction, and device/provider-provenance contract test.
 - [ ] Loading, failed, empty, updating, invalid, and ready states are readable.
 - [ ] Metric delta colors follow metric semantics.
 - [ ] Help content and this document are current.

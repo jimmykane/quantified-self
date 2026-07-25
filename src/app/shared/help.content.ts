@@ -795,7 +795,7 @@ In Settings you can:
 ## MCP client access
 
 - An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics** and **Sleep summaries** are separate, optional read-only permissions.
-- Activity access covers persisted numeric activity metrics and ready Training-derived snapshots. Precise latitude/longitude metrics are excluded, and Training event/activity IDs, names, and labels are removed.
+- Activity access covers persisted numeric activity metrics and ready Training-derived snapshots. Precise latitude/longitude metrics are excluded, and Training event/activity IDs, names, labels, source fingerprints, and imported device/provider source keys are removed.
 - Sleep access covers normalized session summaries and day/week/month aggregates. It excludes provider user/session IDs, provider payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, or respiration samples.
 - Review or disconnect clients in **Settings -> Account -> MCP connections**. Disconnecting blocks future access, but the external client may retain data it already received under its own policy.
 - See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.

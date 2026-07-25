@@ -11,6 +11,7 @@ import {
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DataActivityTypes,
   DynamicDataLoader,
   EventImporterJSON,
   EventInterface,
@@ -44,6 +45,9 @@ import {
 
 const MAX_EVENT_QUERY_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
 const MAX_EVENT_QUERY_DOCUMENTS = 2000;
+const EVENT_QUERY_PAGE_SIZE = 25;
+const MAX_EVENT_QUERY_STATS_BYTES = 4 * 1024 * 1024;
+const MAX_EVENT_QUERY_STAT_ENTRIES = 20_000;
 const METRIC_DISCOVERY_EVENT_LIMIT = 500;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
@@ -81,6 +85,7 @@ export class McpDataError extends Error {
 interface RawDocument {
   id: string;
   data: Record<string, unknown>;
+  cursor?: unknown;
 }
 
 interface SleepCursor {
@@ -98,6 +103,7 @@ export interface McpDataServiceDependencies {
     startTimeMs: number,
     endTimeMs: number,
     limit: number,
+    cursor?: unknown,
   ) => Promise<RawDocument[]>;
   fetchDerivedSnapshot: (
     uid: string,
@@ -128,8 +134,8 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
-  fetchEventDocuments: async (uid, startTimeMs, endTimeMs, limit) => {
-    const snapshot = await admin.firestore()
+  fetchEventDocuments: async (uid, startTimeMs, endTimeMs, limit, cursor) => {
+    let query = admin.firestore()
       .collection('users')
       .doc(uid)
       .collection('events')
@@ -137,11 +143,15 @@ const defaultDependencies: McpDataServiceDependencies = {
       .where('startDate', '<=', endTimeMs)
       .orderBy('startDate', 'asc')
       .limit(limit)
-      .select('startDate', 'endDate', 'stats', 'mergeType', 'isMerge')
-      .get();
+      .select('startDate', 'endDate', 'stats', 'mergeType', 'isMerge');
+    if (cursor) {
+      query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
+    }
+    const snapshot = await query.get();
     return snapshot.docs.map(doc => ({
       id: doc.id,
       data: doc.data() as Record<string, unknown>,
+      cursor: doc,
     }));
   },
   fetchDerivedSnapshot: async (uid, metricKind) => {
@@ -386,17 +396,22 @@ function eventMatchesActivityFilter(event: EventInterface, activityTypes: readon
 
 function buildMetricAggregationEventJson(
   data: Record<string, unknown>,
+  metricType: string,
 ): EventJSONInterface {
   const rawStats = data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
     ? data.stats as Record<string, unknown>
     : {};
   const stats = Object.fromEntries(
-    Object.entries(rawStats).filter(([type, value]) => {
+    [metricType, DataActivityTypes.type].flatMap((type) => {
+      const value = rawStats[type];
+      if (value === undefined) {
+        return [];
+      }
       try {
         DynamicDataLoader.getDataInstanceFromDataType(type, value);
-        return true;
+        return [[type, value]];
       } catch {
-        return false;
+        return [];
       }
     }),
   );
@@ -404,11 +419,99 @@ function buildMetricAggregationEventJson(
   return {
     ...data,
     stats,
-    // MCP aggregates persisted event-level stats. Avoid importing irrelevant
-    // legacy nested activities or power curves that cannot affect this query.
+    // Only the requested metric and activity type cross the Sports Lib import
+    // boundary after the cumulative query budgets have passed.
     activities: [],
     powerCurve: null,
   } as unknown as EventJSONInterface;
+}
+
+function measureStatsWork(data: Record<string, unknown>): {
+  byteLength: number;
+  entryCount: number;
+} {
+  const stats = data.stats;
+  let serialized: string;
+  try {
+    const encoded = JSON.stringify(stats ?? null);
+    serialized = typeof encoded === 'string' ? encoded : 'null';
+  } catch {
+    throw new McpDataError(
+      'query_too_large',
+      'The query contains event stats that cannot be processed safely.',
+    );
+  }
+  return {
+    byteLength: Buffer.byteLength(serialized, 'utf8'),
+    entryCount: stats && typeof stats === 'object' && !Array.isArray(stats)
+      ? Object.keys(stats).length
+      : 0,
+  };
+}
+
+async function fetchBoundedEventDocuments(
+  dependencies: McpDataServiceDependencies,
+  input: Pick<QueryMetricInput, 'uid' | 'startTimeMs' | 'endTimeMs'>,
+): Promise<RawDocument[]> {
+  const documents: RawDocument[] = [];
+  let cursor: unknown;
+  let statsBytes = 0;
+  let statEntries = 0;
+
+  while (documents.length <= MAX_EVENT_QUERY_DOCUMENTS) {
+    const pageLimit = Math.min(
+      EVENT_QUERY_PAGE_SIZE,
+      MAX_EVENT_QUERY_DOCUMENTS + 1 - documents.length,
+    );
+    const page = await dependencies.fetchEventDocuments(
+      input.uid,
+      input.startTimeMs,
+      input.endTimeMs,
+      pageLimit,
+      cursor,
+    );
+    if (page.length > pageLimit) {
+      throw new McpDataError(
+        'query_too_large',
+        `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} events. Narrow the date range.`,
+      );
+    }
+
+    for (const document of page) {
+      const work = measureStatsWork(document.data);
+      statsBytes += work.byteLength;
+      statEntries += work.entryCount;
+      if (
+        statsBytes > MAX_EVENT_QUERY_STATS_BYTES
+        || statEntries > MAX_EVENT_QUERY_STAT_ENTRIES
+      ) {
+        throw new McpDataError(
+          'query_too_large',
+          'The query contains too much event metric data. Narrow the date range.',
+        );
+      }
+      documents.push({
+        id: document.id,
+        data: document.data,
+      });
+      if (documents.length > MAX_EVENT_QUERY_DOCUMENTS) {
+        throw new McpDataError(
+          'query_too_large',
+          `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} events. Narrow the date range.`,
+        );
+      }
+    }
+
+    if (page.length < pageLimit) {
+      return documents;
+    }
+    cursor = page[page.length - 1]?.cursor;
+    if (cursor === undefined) {
+      throw new Error('The MCP event query page did not provide a pagination cursor.');
+    }
+  }
+
+  return documents;
 }
 
 export interface ListMetricsInput {
@@ -461,7 +564,7 @@ function redactDerivedPayload(
 
   const entries = Object.entries(value as Record<string, unknown>);
   const redactedKeys = /(?:event|activity).*(?:id|name|label)s?$/i;
-  const compositeIdentityKeys = /^(?:selectionKey|sourceFingerprint)$/i;
+  const compositeIdentityKeys = /^(?:selectionKey|sourceFingerprint|sourceKey|previousSourceKey)$/i;
   const nestedIdentityKeys = /^(?:id|name|label)s?$/i;
   const parentIsEventIdentity = /(?:event|activity)/i.test(parentKey);
   const objectHasEventIdentity = entries.some(([key]) => /(?:event|activity).*ids?$/i.test(key));
@@ -667,18 +770,7 @@ export function createMcpDataService(
         throw new McpDataError('invalid_metric', 'The metric is not a supported numeric Sports Lib type.');
       }
       const activityTypes = resolveActivityTypes(input.activityTypes);
-      const docs = await dependencies.fetchEventDocuments(
-        input.uid,
-        input.startTimeMs,
-        input.endTimeMs,
-        MAX_EVENT_QUERY_DOCUMENTS + 1,
-      );
-      if (docs.length > MAX_EVENT_QUERY_DOCUMENTS) {
-        throw new McpDataError(
-          'query_too_large',
-          `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} events. Narrow the date range.`,
-        );
-      }
+      const docs = await fetchBoundedEventDocuments(dependencies, input);
 
       const events = docs.flatMap((doc) => {
         if (isBenchmarkEventForTrainingMetrics(doc.data)) {
@@ -686,7 +778,7 @@ export function createMcpDataService(
         }
         try {
           const event = dependencies.importEvent(
-            buildMetricAggregationEventJson(doc.data),
+            buildMetricAggregationEventJson(doc.data, metric.type),
             doc.id,
           );
           return eventMatchesActivityFilter(event, activityTypes) ? [event] : [];

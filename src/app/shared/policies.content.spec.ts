@@ -35,6 +35,7 @@ describe('MCP client access policy', () => {
     expect(topic?.title).toBe('MCP Client Access');
     expect(content).toContain('one or both requested read-only permissions');
     expect(content).toContain('excludes precise latitude/longitude metrics');
+    expect(content).toContain('imported device/provider source keys');
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('stored server-side only as hashes');
     expect(content).toContain('Settings -> Account');

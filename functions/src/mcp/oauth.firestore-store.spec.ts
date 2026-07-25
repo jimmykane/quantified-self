@@ -1,20 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const {
-  documentIdMock,
   firestoreMock,
   timestampFromMillisMock,
 } = vi.hoisted(() => ({
-  documentIdMock: vi.fn(() => 'document-id'),
   firestoreMock: vi.fn(),
   timestampFromMillisMock: vi.fn((milliseconds: number) => ({ milliseconds })),
 }));
 
 vi.mock('firebase-admin', () => ({
   firestore: Object.assign(firestoreMock, {
-    FieldPath: {
-      documentId: documentIdMock,
-    },
     Timestamp: {
       fromMillis: timestampFromMillisMock,
     },
@@ -25,6 +20,7 @@ import {
   AccessTokenRecord,
   buildFirestoreMcpOAuthStore,
   cleanupMcpOAuthStateForUser,
+  McpOAuthCleanupIncompleteError,
   McpOAuthError,
   MCP_OAUTH_COLLECTIONS,
   MCP_OAUTH_SCOPES,
@@ -58,119 +54,158 @@ function fakeSnapshot(
 }
 
 describe('Firestore MCP OAuth store', () => {
-  it('paginates UID-owned OAuth cleanup and bounds recursive deletion concurrency', async () => {
-    const firstPageDocs = Array.from({ length: 51 }, (_, index) => ({
-      ref: fakeDocumentReference(`mcpOAuthAuthorizationRequests/request-${index}`),
-    }));
-    const secondPageDocs = [firstPageDocs[50]];
-    const userConnectionDocs = [{
-      ref: fakeDocumentReference('users/user-1/mcpConnections/connection-1'),
-    }];
+  function buildCleanupFirestore(
+    initialDocuments: Partial<Record<string, string[]>>,
+  ) {
+    const documents = new Map<string, Array<{ ref: FakeDocumentReference }>>(
+      Object.entries(initialDocuments).map(([collectionName, paths]) => [
+        collectionName,
+        (paths || []).map(path => ({ ref: fakeDocumentReference(path) })),
+      ]),
+    );
+    const limitCalls: number[] = [];
+    const queryFor = (collectionName: string) => {
+      const query = {
+        where: vi.fn(() => query),
+        limit: vi.fn((limit: number) => {
+          limitCalls.push(limit);
+          return {
+            get: vi.fn(async () => {
+              const docs = documents.get(collectionName) || [];
+              return {
+                docs: docs.slice(0, limit),
+                empty: docs.length === 0,
+              };
+            }),
+          };
+        }),
+      };
+      return query;
+    };
     let activeDeletes = 0;
     let maxActiveDeletes = 0;
-    const recursiveDelete = vi.fn(async () => {
+    const recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
       activeDeletes += 1;
       maxActiveDeletes = Math.max(maxActiveDeletes, activeDeletes);
       await Promise.resolve();
+      for (const [collectionName, docs] of documents.entries()) {
+        const index = docs.findIndex(doc => doc.ref.path === ref.path);
+        if (index >= 0) {
+          docs.splice(index, 1);
+          documents.set(collectionName, docs);
+          break;
+        }
+      }
       activeDeletes -= 1;
     });
-    const createQuery = (pages: Array<Array<{ ref: FakeDocumentReference }>>) => {
-      const allDocs = pages.flat();
-      const directGet = vi.fn(async () => ({
-        docs: allDocs,
-        empty: allDocs.length === 0,
-      }));
-      let pageIndex = 0;
-      const get = vi.fn(async () => {
-        const docs = pages[pageIndex++] || [];
-        return { docs, empty: docs.length === 0 };
-      });
-      const startAfter = vi.fn(() => ({ get }));
-      const limit = vi.fn(() => ({ get, startAfter }));
-      const orderBy = vi.fn(() => ({ limit }));
-      const where = vi.fn(() => ({ directGet, get: directGet, orderBy }));
-      return { limit, orderBy, startAfter, where };
+    const queries = new Map<string, ReturnType<typeof queryFor>>();
+    const getQuery = (collectionName: string) => {
+      const existing = queries.get(collectionName);
+      if (existing) {
+        return existing;
+      }
+      const query = queryFor(collectionName);
+      queries.set(collectionName, query);
+      return query;
     };
-    const authorizationRequestsQuery = createQuery([firstPageDocs, secondPageDocs]);
-    const emptyQuery = createQuery([[]]);
-    const userConnectionsQuery = createQuery([userConnectionDocs]);
     const db = {
       collection: vi.fn((collectionName: string) => {
-        if (collectionName === MCP_OAUTH_COLLECTIONS.authorizationRequests) {
-          return { where: authorizationRequestsQuery.where };
-        }
         if (collectionName === 'users') {
           return {
             doc: vi.fn(() => ({
-              collection: vi.fn(() => ({ orderBy: userConnectionsQuery.orderBy })),
+              collection: vi.fn(() => getQuery(MCP_OAUTH_COLLECTIONS.userConnections)),
             })),
           };
         }
-        return { where: emptyQuery.where };
+        return getQuery(collectionName);
       }),
       recursiveDelete,
     };
     firestoreMock.mockReturnValue(db);
 
+    return {
+      documents,
+      limitCalls,
+      maxActiveDeletes: () => maxActiveDeletes,
+      recursiveDelete,
+    };
+  }
+
+  it('pages OAuth state cleanup and bounds recursive-delete concurrency', async () => {
+    const authorizationRequests = Array.from(
+      { length: 121 },
+      (_, index) => `${MCP_OAUTH_COLLECTIONS.authorizationRequests}/request-${index}`,
+    );
+    const connections = Array.from(
+      { length: 3 },
+      (_, index) => `users/user-1/${MCP_OAUTH_COLLECTIONS.userConnections}/connection-${index}`,
+    );
+    const cleanup = buildCleanupFirestore({
+      [MCP_OAUTH_COLLECTIONS.authorizationRequests]: authorizationRequests,
+      [MCP_OAUTH_COLLECTIONS.userConnections]: connections,
+    });
+
     await cleanupMcpOAuthStateForUser('user-1');
 
-    expect(documentIdMock).toHaveBeenCalled();
-    expect(authorizationRequestsQuery.limit).toHaveBeenCalledWith(51);
-    expect(authorizationRequestsQuery.startAfter).toHaveBeenCalledWith(firstPageDocs[49]);
-    expect(recursiveDelete).toHaveBeenCalledTimes(52);
-    expect(maxActiveDeletes).toBeLessThanOrEqual(10);
+    expect(cleanup.recursiveDelete).toHaveBeenCalledTimes(124);
+    expect(cleanup.maxActiveDeletes()).toBeLessThanOrEqual(10);
+    expect(Math.max(...cleanup.limitCalls)).toBe(51);
+    expect([...cleanup.documents.values()].flat()).toEqual([]);
   });
 
-  it('caps UID-owned OAuth cleanup work', async () => {
-    const pages = Array.from({ length: 5 }, (_, pageIndex) => Array.from(
-      { length: 51 },
-      (_, documentIndex) => ({
-        ref: fakeDocumentReference(
-          `mcpOAuthAuthorizationRequests/request-${pageIndex}-${documentIndex}`,
-        ),
-      }),
-    ));
-    pages.push([{
-      ref: fakeDocumentReference('mcpOAuthAuthorizationRequests/request-over-limit'),
-    }]);
-    let pageIndex = 0;
-    const get = vi.fn(async () => {
-      const docs = pages[pageIndex++] || [];
-      return { docs, empty: docs.length === 0 };
+  it('fails retryably at the total cleanup budget and completes idempotently on retry', async () => {
+    const authorizationRequests = Array.from(
+      { length: 251 },
+      (_, index) => `${MCP_OAUTH_COLLECTIONS.authorizationRequests}/request-${index}`,
+    );
+    const cleanup = buildCleanupFirestore({
+      [MCP_OAUTH_COLLECTIONS.authorizationRequests]: authorizationRequests,
     });
-    const startAfter = vi.fn(() => ({ get }));
-    const limit = vi.fn(() => ({ get, startAfter }));
-    const authorizationRequestsQuery = { orderBy: vi.fn(() => ({ limit })) };
-    const emptyQuery = {
-      orderBy: vi.fn(() => ({
-        limit: vi.fn(() => ({
-          get: vi.fn(async () => ({ docs: [], empty: true })),
-          startAfter: vi.fn(),
-        })),
-      })),
-    };
-    const db = {
-      collection: vi.fn((collectionName: string) => {
-        if (collectionName === MCP_OAUTH_COLLECTIONS.authorizationRequests) {
-          return { where: vi.fn(() => authorizationRequestsQuery) };
-        }
-        if (collectionName === 'users') {
-          return {
-            doc: vi.fn(() => ({
-              collection: vi.fn(() => emptyQuery),
-            })),
-          };
-        }
-        return { where: vi.fn(() => emptyQuery) };
-      }),
-      recursiveDelete: vi.fn(async () => undefined),
-    };
-    firestoreMock.mockReturnValue(db);
 
-    await cleanupMcpOAuthStateForUser('user-1');
+    await expect(cleanupMcpOAuthStateForUser('user-1')).rejects.toMatchObject<
+      McpOAuthCleanupIncompleteError
+    >({
+      name: 'McpOAuthCleanupIncompleteError',
+      deletedCount: 250,
+    });
+    expect(cleanup.recursiveDelete).toHaveBeenCalledTimes(250);
 
-    expect(authorizationRequestsQuery.orderBy).toHaveBeenCalledTimes(5);
-    expect(db.recursiveDelete).toHaveBeenCalledTimes(250);
+    await expect(cleanupMcpOAuthStateForUser('user-1')).resolves.toBeUndefined();
+    expect(cleanup.recursiveDelete).toHaveBeenCalledTimes(251);
+    expect([...cleanup.documents.values()].flat()).toEqual([]);
+  });
+
+  it('does not request a retry when exactly the total cleanup budget completes all state', async () => {
+    const authorizationRequests = Array.from(
+      { length: 250 },
+      (_, index) => `${MCP_OAUTH_COLLECTIONS.authorizationRequests}/request-${index}`,
+    );
+    const cleanup = buildCleanupFirestore({
+      [MCP_OAUTH_COLLECTIONS.authorizationRequests]: authorizationRequests,
+    });
+
+    await expect(cleanupMcpOAuthStateForUser('user-1')).resolves.toBeUndefined();
+    expect(cleanup.recursiveDelete).toHaveBeenCalledTimes(250);
+    expect([...cleanup.documents.values()].flat()).toEqual([]);
+  });
+
+  it('settles a bounded delete chunk and completes idempotently after a deletion failure', async () => {
+    const authorizationRequests = Array.from(
+      { length: 12 },
+      (_, index) => `${MCP_OAUTH_COLLECTIONS.authorizationRequests}/request-${index}`,
+    );
+    const cleanup = buildCleanupFirestore({
+      [MCP_OAUTH_COLLECTIONS.authorizationRequests]: authorizationRequests,
+    });
+    cleanup.recursiveDelete.mockRejectedValueOnce(new Error('recursive delete failed'));
+
+    await expect(cleanupMcpOAuthStateForUser('user-1')).rejects.toThrow(
+      'recursive delete failed',
+    );
+    expect(cleanup.recursiveDelete).toHaveBeenCalledTimes(10);
+
+    await expect(cleanupMcpOAuthStateForUser('user-1')).resolves.toBeUndefined();
+    expect([...cleanup.documents.values()].flat()).toEqual([]);
   });
 
   it.each([

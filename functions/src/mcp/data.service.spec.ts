@@ -196,9 +196,9 @@ describe('MCP data service', () => {
         },
       },
     }]);
-    dependencies.importEvent = (data, id) => (
+    dependencies.importEvent = vi.fn((data, id) => (
       EventImporterJSON.getEventFromJSON(data).setID(id)
-    );
+    ));
 
     const result = await createMcpDataService(dependencies).queryMetric({
       uid: 'user-1',
@@ -217,14 +217,32 @@ describe('MCP data service', () => {
         aggregateValue: 5000,
       }),
     ]);
+    expect(dependencies.importEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stats: {
+          [DataDistance.type]: 5000,
+          [DataActivityTypes.type]: [ActivityTypes.Running],
+        },
+      }),
+      'event-1',
+    );
   });
 
   it('fails explicitly when an event query exceeds the safety limit', async () => {
-    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue(
-      Array.from({ length: 2001 }, (_, index) => ({
-        id: `event-${index}`,
-        data: {},
-      })),
+    let nextEventIndex = 0;
+    vi.mocked(dependencies.fetchEventDocuments).mockImplementation(
+      async (_uid, _startTimeMs, _endTimeMs, limit) => Array.from(
+        { length: Math.min(limit, 2001 - nextEventIndex) },
+        () => {
+          const index = nextEventIndex;
+          nextEventIndex += 1;
+          return {
+            id: `event-${index}`,
+            data: {},
+            cursor: `cursor-${index}`,
+          };
+        },
+      ),
     );
 
     await expect(createMcpDataService(dependencies).queryMetric({
@@ -239,6 +257,116 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledTimes(81);
+    expect(dependencies.importEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects aggregate stat work above the cumulative entry budget before Sports Lib import', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
+      id: 'event-1',
+      data: {
+        stats: Object.fromEntries(
+          Array.from({ length: 20_001 }, (_, index) => [`Untrusted Stat ${index}`, index]),
+        ),
+      },
+    }]);
+
+    await expect(createMcpDataService(dependencies).queryMetric({
+      uid: 'user-1',
+      metric: DataDistance.type,
+      startTimeMs: Date.parse('2024-01-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-02-01T00:00:00.000Z'),
+      aggregation: 'average',
+      groupBy: 'activity_type',
+      interval: 'auto',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.importEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects aggregate stat bytes above the cumulative budget before Sports Lib import', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
+      id: 'event-1',
+      data: {
+        stats: {
+          [DataDistance.type]: 1000,
+          'Oversized owner-controlled stat': 'x'.repeat((4 * 1024 * 1024) + 1),
+        },
+      },
+    }]);
+
+    await expect(createMcpDataService(dependencies).queryMetric({
+      uid: 'user-1',
+      metric: DataDistance.type,
+      startTimeMs: Date.parse('2024-01-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-02-01T00:00:00.000Z'),
+      aggregation: 'average',
+      groupBy: 'activity_type',
+      interval: 'auto',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.importEvent).not.toHaveBeenCalled();
+  });
+
+  it('pages event reads before materializing and importing a bounded query', async () => {
+    const firstPage = Array.from({ length: 25 }, (_, index) => ({
+      id: `event-${index}`,
+      data: {
+        stats: {
+          [DataDistance.type]: 1000,
+        },
+      },
+      cursor: `cursor-${index}`,
+    }));
+    const secondPage = [{
+      id: 'event-25',
+      data: {
+        stats: {
+          [DataDistance.type]: 1000,
+        },
+      },
+      cursor: 'cursor-25',
+    }];
+    vi.mocked(dependencies.fetchEventDocuments)
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(secondPage);
+    vi.mocked(dependencies.importEvent).mockReturnValue(
+      makeEvent('2024-01-01T00:00:00.000Z', 1000),
+    );
+
+    const result = await createMcpDataService(dependencies).queryMetric({
+      uid: 'user-1',
+      metric: DataDistance.type,
+      startTimeMs: Date.parse('2024-01-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-02-01T00:00:00.000Z'),
+      aggregation: 'average',
+      groupBy: 'activity_type',
+      interval: 'auto',
+      timeZone: 'UTC',
+    });
+
+    expect(result.matchedEventCount).toBe(26);
+    expect(dependencies.fetchEventDocuments).toHaveBeenNthCalledWith(
+      1,
+      'user-1',
+      Date.parse('2024-01-01T00:00:00.000Z'),
+      Date.parse('2024-02-01T00:00:00.000Z'),
+      25,
+      undefined,
+    );
+    expect(dependencies.fetchEventDocuments).toHaveBeenNthCalledWith(
+      2,
+      'user-1',
+      Date.parse('2024-01-01T00:00:00.000Z'),
+      Date.parse('2024-02-01T00:00:00.000Z'),
+      25,
+      'cursor-24',
+    );
+    expect(dependencies.importEvent).toHaveBeenCalledTimes(26);
   });
 
   it('returns ready Training snapshots without event or activity identifiers and labels', async () => {
@@ -323,6 +451,67 @@ describe('MCP data service', () => {
     });
     expect(JSON.stringify(result.payload)).not.toContain('event-3');
     expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
+  });
+
+  it('removes imported device provenance from Training capacity while preserving metrics', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 3,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2024-04-01T00:00:00.000Z'),
+        excludesMergedEvents: true,
+        disciplines: [{
+          discipline: 'cycling',
+          ftpSetting: {
+            kind: 'ftp-setting',
+            value: 275,
+            sourceKey: 'garmin / edge 840',
+            provenance: 'imported-activity-stat',
+            firstSeenAtMs: 100,
+            lastSeenAtMs: 200,
+            observationCount: 2,
+            previousValue: 260,
+            previousAtMs: 90,
+            previousSourceKey: 'garmin / edge 830',
+            changePct: 5.77,
+          },
+          importedVo2Max: null,
+        }],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingCapacity,
+    );
+    const serialized = JSON.stringify(result.payload);
+
+    expect(result.payload).toEqual({
+      dayBoundary: 'UTC',
+      asOfDayMs: Date.parse('2024-04-01T00:00:00.000Z'),
+      excludesMergedEvents: true,
+      disciplines: [{
+        discipline: 'cycling',
+        ftpSetting: {
+          kind: 'ftp-setting',
+          value: 275,
+          provenance: 'imported-activity-stat',
+          firstSeenAtMs: 100,
+          lastSeenAtMs: 200,
+          observationCount: 2,
+          previousValue: 260,
+          previousAtMs: 90,
+          changePct: 5.77,
+        },
+        importedVo2Max: null,
+      }],
+    });
+    expect(serialized).not.toContain('sourceKey');
+    expect(serialized).not.toContain('edge 840');
+    expect(serialized).not.toContain('edge 830');
   });
 
   it.each([

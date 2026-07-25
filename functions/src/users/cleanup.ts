@@ -945,7 +945,14 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     logger.info(`[Cleanup] Completed top-level queue state cleanup for user ${uid}`);
 }
 
-export const cleanupUserAccounts = functions.region('europe-west2').auth.user().onDelete(async (user) => {
+export const ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS = {
+    failurePolicy: true,
+} as const;
+
+export const cleanupUserAccounts = functions
+    .region('europe-west2')
+    .runWith(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS)
+    .auth.user().onDelete(async (user) => {
     const uid = user.uid;
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
 
@@ -1012,10 +1019,14 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
     logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);
 
     await cleanupUserScopedGeneratedState(uid);
+    let mcpOAuthCleanupFailed = false;
+    let mcpOAuthCleanupError: unknown = null;
     try {
         await cleanupMcpOAuthStateForUser(uid);
     } catch (error) {
-        logger.error(`[Cleanup] Failed to clean up MCP OAuth state for user ${uid}; continuing account cleanup.`, error);
+        mcpOAuthCleanupFailed = true;
+        mcpOAuthCleanupError = error;
+        logger.error('[Cleanup] MCP OAuth cleanup did not complete; continuing remaining account cleanup before retry.', error);
     }
 
     // Cleanup Emails
@@ -1073,4 +1084,9 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
     await collectArchivedProviderIdentifiersForUser(uid, providerIdentifiers);
     await cleanupTopLevelQueueState(uid, providerIdentifiers);
 
+    if (mcpOAuthCleanupFailed) {
+        throw mcpOAuthCleanupError instanceof Error
+            ? mcpOAuthCleanupError
+            : new Error('MCP OAuth cleanup did not complete.');
+    }
 });

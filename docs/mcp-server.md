@@ -66,8 +66,11 @@ Active connection metadata lives at `users/{uid}/mcpConnections/{connectionId}`.
 collection is denied; authenticated, App Check-protected callables mediate consent, listing, and revocation. Revocation
 transactionally rechecks account-deletion state before changing the connection, then deletes active tokens and codes.
 Bearer authentication performs the same account-deletion check before recording usage or running a tool, while account
-deletion recursively removes connection and OAuth state. All short-lived MCP collections use `expireAt` TTL configuration
-in `firestore.indexes.json`.
+deletion recursively removes connection and OAuth state. OAuth cleanup reads at most 51 documents per page, deletes at
+most 10 document roots concurrently, and caps one trigger attempt at 250 deletions. The Auth deletion trigger continues
+mail, provider-identifier, and queue cleanup if that bounded pass fails or has more work, then fails retryably so Firebase
+durably invokes the idempotent cleanup again. All short-lived MCP collections use `expireAt` TTL configuration in
+`firestore.indexes.json`.
 
 ## Consent-page browser policy
 
@@ -181,8 +184,9 @@ events, privacy filtering, query bounds, and the MCP transport.
 
 MCP reads only `status: "ready"` documents with the exact current schema from
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
-exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels, and
-identity-derived source fingerprints from the payload.
+exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels,
+identity-derived source fingerprints, and imported device/provider provenance (`sourceKey` and `previousSourceKey`) from
+the payload.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline and schema work plus
@@ -205,7 +209,10 @@ deliberately.
 ## Bounds and operational controls
 
 - Event and sleep date ranges are at most 366 days.
-- An event metric query rejects matches above 2,000 events.
+- An event metric query reads at most 25 events per Firestore page and rejects matches above 2,000 events, more than
+  4 MiB of cumulative serialized event stats, or more than 20,000 cumulative top-level stat entries.
+- Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the
+  activity-type stat needed for filtering.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
