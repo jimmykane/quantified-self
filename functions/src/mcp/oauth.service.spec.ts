@@ -41,6 +41,9 @@ function createMemoryStore(): McpOAuthStore & {
     accessTokens,
     refreshTokens,
     connections,
+    async consumeAuthorizationStartRateLimit() {
+      return;
+    },
     async saveAuthorizationRequest(record) {
       requests.set(record.requestId, record);
     },
@@ -351,6 +354,42 @@ describe('MCP OAuth service', () => {
     expect(getAuthorizationRequest).not.toHaveBeenCalled();
     expect(denyAuthorization).not.toHaveBeenCalled();
     expect(revokeConnection).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits authorization starts before fetching client metadata or saving state', async () => {
+    const store = createMemoryStore();
+    const consumeAuthorizationStartRateLimit = vi
+      .spyOn(store, 'consumeAuthorizationStartRateLimit')
+      .mockRejectedValueOnce(new McpOAuthError(
+        'temporarily_unavailable',
+        'authorization rate limit exceeded',
+        429,
+      ));
+    const saveAuthorizationRequest = vi.spyOn(store, 'saveAuthorizationRequest');
+    const fetchClientMetadata = vi.fn().mockResolvedValue(metadata());
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata,
+      now: () => 61_000,
+      randomToken: () => 'request-id',
+    });
+
+    await expect(service.startAuthorization(
+      authorizationParams('v'.repeat(43)),
+      'https://quantified-self.io',
+      { requesterKey: '203.0.113.10' },
+    )).rejects.toMatchObject({
+      code: 'temporarily_unavailable',
+      statusCode: 429,
+    });
+
+    expect(consumeAuthorizationStartRateLimit).toHaveBeenCalledWith({
+      clientId: metadata().client_id,
+      requesterKey: '203.0.113.10',
+      nowMs: 61_000,
+    });
+    expect(fetchClientMetadata).not.toHaveBeenCalled();
+    expect(saveAuthorizationRequest).not.toHaveBeenCalled();
   });
 
   it('requires PKCE, the exact MCP resource, and an exact registered redirect', async () => {

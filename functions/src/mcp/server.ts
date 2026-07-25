@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
+import { isIP } from 'node:net';
 import { z } from 'zod';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { createMcpDataService, McpDataError } from './data.service';
@@ -61,6 +62,21 @@ function requestPath(request: Request): string {
   return `${request.path || request.url || '/'}`.split('?')[0].replace(/\/+$/, '') || '/';
 }
 
+export function resolveMcpAuthorizationRequesterKey(request: {
+  get: (name: string) => string | undefined;
+  ip?: string;
+}): string {
+  const forwardedClient = `${request.get('x-forwarded-for') || ''}`
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+  if (isIP(forwardedClient)) {
+    return forwardedClient;
+  }
+  const requestIp = `${request.ip || ''}`.trim().toLowerCase();
+  return isIP(requestIp) ? requestIp : 'unknown';
+}
+
 function noStore(response: {
   set: (name: string, value: string) => unknown;
 }): void {
@@ -70,6 +86,7 @@ function noStore(response: {
 
 function sendOAuthError(
   response: {
+    set: (name: string, value: string) => unknown;
     status: (statusCode: number) => { json: (body: unknown) => unknown };
   },
   error: unknown,
@@ -81,6 +98,9 @@ function sendOAuthError(
     logger.error('[MCP OAuth] Request failed unexpectedly', {
       errorName: error instanceof Error ? error.name : 'unknown',
     });
+  }
+  if (oauthError.statusCode === 429) {
+    response.set('Retry-After', '60');
   }
   response.status(oauthError.statusCode).json({
     error: oauthError.code,
@@ -474,6 +494,9 @@ export const mcpApi = onRequest({
       const started = await getOAuthService().startAuthorization(
         request.query as Record<string, unknown>,
         baseUrl,
+        {
+          requesterKey: resolveMcpAuthorizationRequesterKey(request),
+        },
       );
       response.redirect(302, started.consentUrl);
     } catch (error) {

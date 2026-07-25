@@ -53,6 +53,9 @@ parameters.
 Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
 responses, private or loopback metadata hosts, unsupported grant types, and redirect URIs that were not registered.
 Loopback HTTP is allowed only for the client's redirect URI and is called out in the consent UI.
+Before any client-metadata DNS lookup or HTTPS fetch, authorization starts consume transactional fixed-window limits keyed
+by a hash of the Client ID Metadata URL and a separate hash of the Cloud Functions requester address. The rate-limit
+documents never store either raw value and expire through the existing OAuth TTL policy.
 
 Firestore holds short-lived OAuth records in:
 
@@ -219,6 +222,8 @@ deliberately.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was
   truncated.
 - Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
+- Public authorization starts are limited before client-metadata retrieval to 10 per client ID and 30 per requester
+  address per minute.
 - Requests require valid IANA timezones where local date bucketing is relevant.
 - Logs must not contain bearer tokens, authorization codes, client payloads, event data, sleep data, or user IDs.
 

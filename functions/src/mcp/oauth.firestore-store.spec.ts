@@ -18,6 +18,7 @@ vi.mock('firebase-admin', () => ({
 
 import {
   AccessTokenRecord,
+  buildMcpAuthorizationStartRateLimitBucketId,
   buildFirestoreMcpOAuthStore,
   cleanupMcpOAuthStateForUser,
   McpOAuthCleanupIncompleteError,
@@ -54,6 +55,90 @@ function fakeSnapshot(
 }
 
 describe('Firestore MCP OAuth store', () => {
+  function buildAuthorizationStartRateLimitFirestore() {
+    const documents = new Map<string, Record<string, unknown>>();
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        const data = documents.get(ref.path);
+        return fakeSnapshot(Boolean(data), data);
+      }),
+      set: vi.fn((
+        ref: FakeDocumentReference,
+        data: Record<string, unknown>,
+      ) => {
+        documents.set(ref.path, data);
+      }),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+    return {
+      documents,
+      transaction,
+    };
+  }
+
+  it('bounds authorization starts by client before metadata retrieval', async () => {
+    const rateLimits = buildAuthorizationStartRateLimitFirestore();
+    const store = buildFirestoreMcpOAuthStore();
+    const input = {
+      clientId: 'https://client.example/mcp.json',
+      requesterKey: '203.0.113.10',
+      nowMs: 61_000,
+    };
+
+    for (let count = 0; count < 10; count++) {
+      await store.consumeAuthorizationStartRateLimit(input);
+    }
+    await expect(store.consumeAuthorizationStartRateLimit(input)).rejects.toMatchObject<
+      McpOAuthError
+    >({
+      code: 'temporarily_unavailable',
+      statusCode: 429,
+    });
+
+    const clientBucketId = buildMcpAuthorizationStartRateLimitBucketId(
+      'authorization_start_client',
+      input.clientId,
+      60_000,
+    );
+    expect(rateLimits.documents.get(
+      `${MCP_OAUTH_COLLECTIONS.rateLimits}/${clientBucketId}`,
+    )).toEqual(expect.objectContaining({
+      rateLimitType: 'authorization_start_client',
+      windowStartMs: 60_000,
+      count: 10,
+    }));
+    expect(JSON.stringify([...rateLimits.documents])).not.toContain(input.clientId);
+    expect(JSON.stringify([...rateLimits.documents])).not.toContain(input.requesterKey);
+  });
+
+  it('bounds authorization starts across rotating client IDs from one requester', async () => {
+    buildAuthorizationStartRateLimitFirestore();
+    const store = buildFirestoreMcpOAuthStore();
+    const requesterKey = '203.0.113.10';
+
+    for (let count = 0; count < 30; count++) {
+      await store.consumeAuthorizationStartRateLimit({
+        clientId: `https://client-${count}.example/mcp.json`,
+        requesterKey,
+        nowMs: 61_000,
+      });
+    }
+    await expect(store.consumeAuthorizationStartRateLimit({
+      clientId: 'https://client-over-limit.example/mcp.json',
+      requesterKey,
+      nowMs: 61_000,
+    })).rejects.toMatchObject<McpOAuthError>({
+      code: 'temporarily_unavailable',
+      statusCode: 429,
+    });
+  });
+
   function buildCleanupFirestore(
     initialDocuments: Partial<Record<string, string[]>>,
   ) {

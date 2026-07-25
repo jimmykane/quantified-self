@@ -31,6 +31,9 @@ const AUTHORIZATION_CODE_LIFETIME_MS = 5 * 60 * 1000;
 const ACCESS_TOKEN_LIFETIME_MS = 60 * 60 * 1000;
 const REFRESH_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const MCP_REQUESTS_PER_MINUTE = 120;
+const MCP_AUTHORIZATION_STARTS_PER_CLIENT_PER_MINUTE = 10;
+const MCP_AUTHORIZATION_STARTS_PER_REQUESTER_PER_MINUTE = 30;
+const MCP_RATE_LIMIT_DOCUMENT_LIFETIME_MS = 5 * 60 * 1000;
 const MCP_OAUTH_CLEANUP_PAGE_SIZE = 50;
 const MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY = 10;
 const MCP_OAUTH_CLEANUP_MAX_DOCUMENTS = 250;
@@ -213,7 +216,14 @@ interface RefreshExchangeInput {
   nowMs: number;
 }
 
+export interface AuthorizationStartRateLimitInput {
+  clientId: string;
+  requesterKey: string;
+  nowMs: number;
+}
+
 export interface McpOAuthStore {
+  consumeAuthorizationStartRateLimit(input: AuthorizationStartRateLimitInput): Promise<void>;
   saveAuthorizationRequest(record: AuthorizationRequestRecord): Promise<void>;
   getAuthorizationRequest(requestId: string): Promise<AuthorizationRequestRecord | null>;
   approveAuthorization(input: AuthorizationApprovalInput): Promise<AuthorizationRequestRecord>;
@@ -261,6 +271,59 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
   };
 
   return {
+    async consumeAuthorizationStartRateLimit(input) {
+      const windowStartMs = Math.floor(input.nowMs / 60000) * 60000;
+      const clientRateLimitRef = collection(MCP_OAUTH_COLLECTIONS.rateLimits).doc(
+        buildMcpAuthorizationStartRateLimitBucketId(
+          'authorization_start_client',
+          input.clientId,
+          windowStartMs,
+        ),
+      );
+      const requesterRateLimitRef = collection(MCP_OAUTH_COLLECTIONS.rateLimits).doc(
+        buildMcpAuthorizationStartRateLimitBucketId(
+          'authorization_start_requester',
+          input.requesterKey,
+          windowStartMs,
+        ),
+      );
+
+      await db.runTransaction(async (transaction) => {
+        const clientRateLimit = documentData<{ count?: number }>(
+          await transaction.get(clientRateLimitRef),
+        );
+        const requesterRateLimit = documentData<{ count?: number }>(
+          await transaction.get(requesterRateLimitRef),
+        );
+        const nextClientCount = Number(clientRateLimit?.count || 0) + 1;
+        const nextRequesterCount = Number(requesterRateLimit?.count || 0) + 1;
+        if (
+          nextClientCount > MCP_AUTHORIZATION_STARTS_PER_CLIENT_PER_MINUTE
+          || nextRequesterCount > MCP_AUTHORIZATION_STARTS_PER_REQUESTER_PER_MINUTE
+        ) {
+          throw new McpOAuthError(
+            'temporarily_unavailable',
+            'The authorization request rate limit was exceeded.',
+            429,
+          );
+        }
+
+        const expireAt = timestamp(windowStartMs + MCP_RATE_LIMIT_DOCUMENT_LIFETIME_MS);
+        transaction.set(clientRateLimitRef, {
+          rateLimitType: 'authorization_start_client',
+          windowStartMs,
+          count: nextClientCount,
+          expireAt,
+        });
+        transaction.set(requesterRateLimitRef, {
+          rateLimitType: 'authorization_start_requester',
+          windowStartMs,
+          count: nextRequesterCount,
+          expireAt,
+        });
+      });
+    },
+
     async saveAuthorizationRequest(record) {
       await collection(MCP_OAUTH_COLLECTIONS.authorizationRequests).doc(record.requestId).create({
         ...record,
@@ -516,7 +579,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           connectionId: token.connectionId,
           windowStartMs,
           count: nextCount,
-          expireAt: timestamp(windowStartMs + 5 * 60 * 1000),
+          expireAt: timestamp(windowStartMs + MCP_RATE_LIMIT_DOCUMENT_LIFETIME_MS),
         });
         transaction.update(activeConnectionRef, {
           lastUsedAtMs: nowMs,
@@ -576,6 +639,18 @@ export function buildMcpRateLimitBucketId(
   windowStartMs: number,
 ): string {
   return hashOpaqueValue(`${token.uid}:${token.connectionId}:${windowStartMs}`);
+}
+
+export type McpAuthorizationStartRateLimitType =
+  | 'authorization_start_client'
+  | 'authorization_start_requester';
+
+export function buildMcpAuthorizationStartRateLimitBucketId(
+  rateLimitType: McpAuthorizationStartRateLimitType,
+  key: string,
+  windowStartMs: number,
+): string {
+  return hashOpaqueValue(`${rateLimitType}:${key}:${windowStartMs}`);
 }
 
 export function createPkceChallenge(verifier: string): string {
@@ -832,6 +907,16 @@ export interface McpOAuthServiceDependencies {
   randomToken: (byteLength?: number) => string;
 }
 
+export interface McpAuthorizationStartContext {
+  requesterKey?: string;
+}
+
+function normalizeAuthorizationRequesterKey(value: unknown): string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 128
+    ? value
+    : 'unknown';
+}
+
 export function createMcpOAuthService(
   dependencies?: McpOAuthServiceDependencies,
 ) {
@@ -844,9 +929,19 @@ export function createMcpOAuthService(
   const { store } = resolvedDependencies;
 
   return {
-    async startAuthorization(params: Record<string, unknown>, baseUrl: string) {
+    async startAuthorization(
+      params: Record<string, unknown>,
+      baseUrl: string,
+      context?: McpAuthorizationStartContext,
+    ) {
       const clientId = requireString(params.client_id, 'client_id');
       const redirectUri = requireString(params.redirect_uri, 'redirect_uri');
+      const nowMs = resolvedDependencies.now();
+      await store.consumeAuthorizationStartRateLimit({
+        clientId,
+        requesterKey: normalizeAuthorizationRequesterKey(context?.requesterKey),
+        nowMs,
+      });
       const metadata = await resolvedDependencies.fetchClientMetadata(clientId);
       if (!metadata.redirect_uris.includes(redirectUri)) {
         throw new McpOAuthError('invalid_client', 'redirect_uri is not registered by the client metadata document.');
@@ -895,7 +990,6 @@ export function createMcpOAuthService(
           redirect.toString(),
         );
       }
-      const nowMs = resolvedDependencies.now();
       const requestId = resolvedDependencies.randomToken(24);
       const record: AuthorizationRequestRecord = {
         requestId,

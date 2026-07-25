@@ -20,6 +20,7 @@ import {
   parseMcpDateTime,
   parseMcpFormEncodedBody,
   requiredScopeForRequest,
+  resolveMcpAuthorizationRequesterKey,
   resolvePublicBaseUrl,
   requireMcpTokenGrantType,
   supportsMcpTransportMethod,
@@ -37,6 +38,28 @@ describe('MCP HTTP scope enforcement', () => {
       .toBe('https://quantified-self.io');
     expect(resolvePublicBaseUrl(requestWithHost('attacker.example')))
       .toBe('https://quantified-self.io');
+  });
+
+  it('uses the Cloud Functions client address for public authorization rate limits', () => {
+    const request = (
+      forwardedFor: string | undefined,
+      ip?: string,
+    ) => ({
+      get: (name: string) => name.toLowerCase() === 'x-forwarded-for'
+        ? forwardedFor
+        : undefined,
+      ip,
+    });
+
+    expect(resolveMcpAuthorizationRequesterKey(
+      request('203.0.113.10, 10.0.0.1', '10.0.0.2'),
+    )).toBe('203.0.113.10');
+    expect(resolveMcpAuthorizationRequesterKey(
+      request('not-an-ip', '2001:db8::10'),
+    )).toBe('2001:db8::10');
+    expect(resolveMcpAuthorizationRequesterKey(
+      request(undefined, undefined),
+    )).toBe('unknown');
   });
 
   it('requires metrics scope for metrics tools', () => {
