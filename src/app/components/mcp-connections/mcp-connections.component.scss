@@ -43,6 +43,36 @@ mat-card-content {
   }
 }
 
+.mcp-connections__icon-downloads {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+
+  img {
+    flex: 0 0 48px;
+    height: 48px;
+    width: 48px;
+  }
+
+  h4 {
+    color: var(--mat-sys-on-surface);
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
+  p {
+    margin-top: 4px;
+  }
+}
+
+.mcp-connections__icon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .mcp-connections__setup-note {
   font-size: 0.8rem;
 }
@@ -132,5 +162,10 @@ mat-card-content {
 
   .mcp-connections__item button {
     justify-self: start;
+  }
+
+  .mcp-connections__icon-downloads {
+    align-items: center;
+    flex-direction: column;
   }
 }

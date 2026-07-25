@@ -24,6 +24,16 @@ const SUPPORTED_PUBLIC_HOSTS = new Set([
 ]);
 const MAX_MCP_REQUEST_BYTES = 64 * 1024;
 const MCP_ISO_DATE_TIME_SCHEMA = z.iso.datetime({ offset: true }).max(64);
+const MCP_SERVER_ICON_VARIANTS = [
+  {
+    path: '/assets/favicons/android-chrome-96x96.png',
+    sizes: ['96x96'],
+  },
+  {
+    path: '/assets/favicons/android-chrome-192x192.png',
+    sizes: ['192x192'],
+  },
+] as const;
 const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
   SLEEP_PROVIDERS.GarminAPI,
   SLEEP_PROVIDERS.SuuntoApp,
@@ -221,10 +231,21 @@ async function runReadOnlyTool(
   }
 }
 
-export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
+export function createMcpServer(
+  auth: AuthenticatedMcpRequest,
+  publicBaseUrl: string,
+): McpServer {
   const server = new McpServer({
     name: 'quantified-self',
+    title: 'Quantified Self',
     version: '1.0.0',
+    description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+    websiteUrl: publicBaseUrl,
+    icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
+      src: `${publicBaseUrl}${icon.path}`,
+      mimeType: 'image/png',
+      sizes: [...icon.sizes],
+    })),
   });
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
@@ -613,7 +634,7 @@ export const mcpApi = onRequest({
     return;
   }
 
-  const server = createMcpServer(auth);
+  const server = createMcpServer(auth, baseUrl);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

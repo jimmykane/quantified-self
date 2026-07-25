@@ -84,7 +84,7 @@ describe('MCP HTTP scope enforcement', () => {
         clientId: 'https://client.example/mcp.json',
         connectionId: 'connection-1',
         scopes,
-      });
+      }, 'https://beta.quantified-self.io');
       const client = new Client({
         name: 'scope-test-client',
         version: '1.0.0',
@@ -108,6 +108,48 @@ describe('MCP HTTP scope enforcement', () => {
       'list_sleep_sessions',
       'query_sleep_summary',
     ]);
+  });
+
+  it('advertises compact hosted app icons for MCP clients', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://beta.quantified-self.io');
+    const client = new Client({
+      name: 'icon-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getServerVersion()).toEqual({
+        name: 'quantified-self',
+        title: 'Quantified Self',
+        version: '1.0.0',
+        description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+        websiteUrl: 'https://beta.quantified-self.io',
+        icons: [
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-96x96.png',
+            mimeType: 'image/png',
+            sizes: ['96x96'],
+          },
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-192x192.png',
+            mimeType: 'image/png',
+            sizes: ['192x192'],
+          },
+        ],
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('does not assign a scope to protocol messages or unknown tools', () => {
