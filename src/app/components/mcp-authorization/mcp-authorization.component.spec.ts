@@ -24,7 +24,12 @@ describe('McpAuthorizationComponent', () => {
             clientIdHost: 'client.example',
             redirectUri: 'https://client.example/oauth/callback',
             redirectHost: 'client.example',
-            scopes: ['metrics:read', 'sleep:read'],
+            scopes: [
+              'metrics:read',
+              'sleep:read',
+              'activity-details:read',
+              'routes:read',
+            ],
             expiresAtMs: Date.now() + 60_000,
             loopbackRedirect: false,
           },
@@ -64,6 +69,12 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('https://client.example/oauth/callback');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Sleep summaries');
+    expect(content).toContain('Individual activity details');
+    expect(content).toContain('MTB jumps with exact coordinates');
+    expect(content).toContain('Saved routes and waypoints');
+    expect(content).toContain('waypoint coordinates');
+    expect(content).toContain('Raw streams');
+    expect(content).toContain('stable account/event or route paths');
   });
 
   it('submits the selected scopes and returns to the client', async () => {
@@ -76,7 +87,12 @@ describe('McpAuthorizationComponent', () => {
     expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
       requestId: 'request-1',
       approved: true,
-      grantedScopes: ['metrics:read', 'sleep:read'],
+      grantedScopes: [
+        'metrics:read',
+        'sleep:read',
+        'activity-details:read',
+        'routes:read',
+      ],
     });
     expect(assign).toHaveBeenCalledWith('https://client.example/oauth/callback?code=code-1');
   });

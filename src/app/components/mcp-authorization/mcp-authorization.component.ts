@@ -10,7 +10,33 @@ import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 
-type McpScope = 'metrics:read' | 'sleep:read';
+type McpScope =
+  | 'metrics:read'
+  | 'sleep:read'
+  | 'activity-details:read'
+  | 'routes:read';
+
+const MCP_SCOPE_CONTENT: Record<McpScope, {
+  title: string;
+  description: string;
+}> = {
+  'metrics:read': {
+    title: 'Activity and Training metrics',
+    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots.',
+  },
+  'sleep:read': {
+    title: 'Sleep summaries',
+    description: 'Read redacted sleep sessions and aggregated sleep summaries.',
+  },
+  'activity-details:read': {
+    title: 'Individual activity details',
+    description: 'Read activity summaries, laps, swim lengths, MTB jumps with exact coordinates, and signed-in links containing stable account/event paths.',
+  },
+  'routes:read': {
+    title: 'Saved routes and waypoints',
+    description: 'Read saved-route names, metrics, exact bounds, preview geometry, waypoint coordinates, and signed-in links containing stable account/route paths.',
+  },
+};
 
 interface McpAuthorizationRequest {
   requestId: string;
@@ -53,10 +79,7 @@ export class McpAuthorizationComponent implements OnInit {
     return (this.request()?.scopes || []).map(scope => ({
       scope,
       selected: selected.has(scope),
-      title: scope === 'metrics:read' ? 'Activity and Training metrics' : 'Sleep summaries',
-      description: scope === 'metrics:read'
-        ? 'Read persisted numeric activity metrics and redacted Training-derived snapshots.'
-        : 'Read redacted sleep sessions and aggregated sleep summaries.',
+      ...MCP_SCOPE_CONTENT[scope],
     }));
   });
 

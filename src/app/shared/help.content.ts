@@ -794,9 +794,11 @@ In Settings you can:
 
 ## MCP client access
 
-- An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics** and **Sleep summaries** are separate, optional read-only permissions.
+- An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics**, **Individual activity details**, **Sleep summaries**, and **Saved routes and waypoints** are separate, optional read-only permissions.
 - Activity access covers persisted numeric activity metrics and ready Training-derived snapshots. Precise latitude/longitude metrics are excluded, and Training event/activity IDs, names, labels, source fingerprints, and imported device/provider source keys are removed.
+- Individual activity detail access covers bounded activity summaries, laps, swim lengths, MTB jumps, and signed-in app links containing stable account/event paths. Jump records can include exact latitude/longitude coordinates. Raw streams, activity names and notes, original files, device/provider provenance, and arbitrary stored stats are excluded.
 - Sleep access covers normalized session summaries and day/week/month aggregates. It excludes provider user/session IDs, provider payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, or respiration samples.
+- Saved-route access covers route names, bounded metrics and counts, exact bounds, simplified polyline previews, waypoint coordinates, and signed-in app links containing stable account/route paths. It excludes original route files, raw track points and streams, waypoint names/comments, Storage paths, provider provenance, and delivery metadata.
 - Review or disconnect clients in **Settings -> Account -> MCP connections**. Disconnecting blocks future access, but the external client may retain data it already received under its own policy.
 - See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
 
@@ -805,7 +807,7 @@ In Settings you can:
 1. In ChatGPT on the web, turn on Developer mode and create a custom app.
 2. Use the Quantified Self MCP endpoint: **https://quantified-self.io/mcp**.
 3. Let ChatGPT scan the available tools, then sign in to Quantified Self and approve the read-only permissions you want to grant.
-4. Start a new chat, select the Quantified Self app, and ask about your metrics or sleep summaries.
+4. Start a new chat, select the Quantified Self app, and ask about your metrics, activity details, sleep summaries, or saved routes.
 
 You can copy the endpoint and manage connected clients in **Settings -> Account -> MCP connections**. ChatGPT is an external client, so authorize only the data you are comfortable sharing and review its own data-retention policy.
 

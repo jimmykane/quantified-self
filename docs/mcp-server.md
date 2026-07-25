@@ -1,10 +1,11 @@
-# MCP Metrics and Sleep Server
+# Read-only MCP Server
 
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
-authenticated user's persisted numeric activity metrics, ready Training-derived snapshots, and normalized sleep
-summaries without granting browser or Firestore access.
+authenticated user's persisted numeric activity metrics, ready Training-derived snapshots, normalized sleep summaries,
+explicitly authorized individual activity details, and saved-route previews without granting browser or Firestore
+access.
 
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
 stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
@@ -38,7 +39,14 @@ user revoke one immediately.
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
 - `metrics:read` for event metrics and ready Training-derived snapshots;
-- `sleep:read` for redacted sleep sessions and sleep summaries.
+- `sleep:read` for redacted sleep sessions and sleep summaries;
+- `activity-details:read` for bounded activity summaries, laps, swim lengths, and MTB jumps; and
+- `routes:read` for saved-route summaries, preview geometry, and waypoints.
+
+The last two scopes are independent grants. Existing metric or sleep connections do not acquire them automatically; the
+client must start a new authorization request and the user must approve the requested scope. Activity-detail consent
+states that individual jumps can include exact coordinates. Saved-route consent states that route bounds, simplified
+geometry, and waypoint coordinates can expose exact locations.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -148,6 +156,13 @@ The analytics and map entries follow the
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
+| `list_activities` | `activity-details:read` | Paginated safe activity summaries, opaque references, and signed-in app links |
+| `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
+| `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements, including exact coordinates when present |
+| `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
+| `list_routes` | `routes:read` | Paginated saved-route summaries, exact bounds, opaque references, and signed-in app links |
+| `get_route_geometry` | `routes:read` | Bounded persisted `polyline5` preview geometry |
+| `list_route_waypoints` | `routes:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
 Every tool is annotated read-only, non-destructive, idempotent, and closed-world. The HTTP layer checks the required scope
 before the tool call, and only registers tools covered by the bearer token.
@@ -182,6 +197,46 @@ When a Sports Lib metric is added or changed:
 
 The separate Sports Lib repository owns data-class semantics and parsers. Quantified Self owns availability from persisted
 events, privacy filtering, query bounds, and the MCP transport.
+
+## Individual activity-detail projection
+
+`activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. List queries select
+only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a signed-in app link,
+and a fixed set of numeric summary stats. Detail calls select exactly one persisted array: `laps`, `events` for jumps, or
+`swimLengths`. They never hydrate a whole activity document.
+
+The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
+average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
+distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
+height, hang time, speed, rotations, score, and latitude/longitude. Activity names and notes, raw streams, arbitrary
+stats, internal ID fields, device/provider creator data, source keys, original files, and parser extensions are excluded.
+
+`list_activities` returns an encrypted `activityRef`, not the activity or event document ID. References and detail
+cursors use authenticated encryption and are bound to the UID and MCP connection, so another connection cannot replay
+them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
+the user's normal application sign-in; it contains no MCP credential or authorization bypass.
+
+## Saved-route projection
+
+`routes:read` lists `users/{uid}/routes` through a field mask containing the route name, timestamps, activity types,
+counts, bounds, and the same fixed summary-stat allowlist. It excludes source/delivery provenance, provider IDs, Storage
+metadata, creator data, route comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and
+cursors use the same UID-and-connection-bound authenticated-encryption design as activity references.
+
+`get_route_geometry` reads only the persisted Sports Lib route preview. The response fixes the contract to preview
+version 1, `polyline5`, precision 5, exact bounds, at most 20 segments and 5,000 decoded preview points. Segment IDs and
+names are excluded. This is the deliberately simplified preview, not the source route's raw point stream.
+
+`list_route_waypoints` reads only the server-owned source metadata needed to find the saved FIT/GPX object. The Storage
+read is restricted to the owning user's route path and default project bucket, streamed to a 2 MiB compressed/raw limit,
+and decompressed to at most 8 MiB before Sports Lib parsing. At most 500 waypoints are accepted. Output contains only
+validated coordinates, altitude, distance, route/point indexes, and a short normalized type; names, comments,
+descriptions, links, extensions, raw source bytes, and track points are never returned. The direct route URL uses the
+existing `/user/{uid}/route/{routeId}` page and still requires normal sign-in.
+
+The activity list orders and ranges on `eventStartDate`; the route list orders on `importedAt`. In both cases the
+document name is only a deterministic pagination tie-breaker. These query shapes use Firestore's automatic single-field
+indexes, so the MCP surface adds no composite index or index configuration.
 
 ## Training-derived metrics
 
@@ -219,6 +274,12 @@ deliberately.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
+- Activity date ranges are at most 366 days. Activity and route list pages are at most 100 entries, scan at most 500
+  projected documents, and reject more than 512 KiB of cumulative selected data.
+- Lap, jump, and swim-length arrays are limited to 10,000 raw entries and 512 KiB before projection; responses are at
+  most 100 entries and 256 KiB per page.
+- Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
+  decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was
   truncated.
 - Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.

@@ -13,6 +13,8 @@ import {
 export const MCP_OAUTH_SCOPES = {
   MetricsRead: 'metrics:read',
   SleepRead: 'sleep:read',
+  ActivityDetailsRead: 'activity-details:read',
+  RoutesRead: 'routes:read',
 } as const;
 
 export type McpOAuthScope = typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES];
@@ -692,7 +694,10 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
     !unique.length
     || unique.some(scope => !Object.values(MCP_OAUTH_SCOPES).includes(scope as McpOAuthScope))
   ) {
-    throw new McpOAuthError('invalid_scope', 'Only metrics:read and sleep:read can be requested.');
+    throw new McpOAuthError(
+      'invalid_scope',
+      `Only ${Object.values(MCP_OAUTH_SCOPES).join(', ')} can be requested.`,
+    );
   }
   return unique as McpOAuthScope[];
 }

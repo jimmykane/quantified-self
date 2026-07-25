@@ -76,6 +76,17 @@ describe('MCP HTTP scope enforcement', () => {
     })).toBe(MCP_OAUTH_SCOPES.SleepRead);
   });
 
+  it('requires separate activity-detail and route scopes for granular tools', () => {
+    expect(requiredScopeForRequest({
+      method: 'tools/call',
+      params: { name: 'list_activity_jumps' },
+    })).toBe(MCP_OAUTH_SCOPES.ActivityDetailsRead);
+    expect(requiredScopeForRequest({
+      method: 'tools/call',
+      params: { name: 'get_route_geometry' },
+    })).toBe(MCP_OAUTH_SCOPES.RoutesRead);
+  });
+
   it('registers only the tools granted by the bearer scopes', async () => {
     const listToolNames = async (scopes: Array<typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES]>) => {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -84,6 +95,7 @@ describe('MCP HTTP scope enforcement', () => {
         clientId: 'https://client.example/mcp.json',
         connectionId: 'connection-1',
         scopes,
+        baseUrl: 'https://quantified-self.io',
       });
       const client = new Client({
         name: 'scope-test-client',
@@ -107,6 +119,17 @@ describe('MCP HTTP scope enforcement', () => {
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
       'list_sleep_sessions',
       'query_sleep_summary',
+    ]);
+    await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
+      'list_activities',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
+    ]);
+    await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
+      'get_route_geometry',
+      'list_route_waypoints',
+      'list_routes',
     ]);
   });
 

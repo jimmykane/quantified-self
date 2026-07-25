@@ -14,7 +14,17 @@ describe('McpConnectionsComponent', () => {
     clientId: 'https://client.example/metadata.json',
     clientName: 'Training Copilot',
     redirectHost: 'client.example',
-    scopes: ['metrics:read', 'sleep:read'] as Array<'metrics:read' | 'sleep:read'>,
+    scopes: [
+      'metrics:read',
+      'sleep:read',
+      'activity-details:read',
+      'routes:read',
+    ] as Array<
+      | 'metrics:read'
+      | 'sleep:read'
+      | 'activity-details:read'
+      | 'routes:read'
+    >,
     createdAtMs: 1_700_000_000_000,
     lastUsedAtMs: 1_700_001_000_000,
   };
@@ -55,6 +65,8 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Training Copilot');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Sleep summaries');
+    expect(content).toContain('Individual activity details');
+    expect(content).toContain('Saved routes and waypoints');
   });
 
   it('shows the ChatGPT setup steps and copies the public endpoint', async () => {

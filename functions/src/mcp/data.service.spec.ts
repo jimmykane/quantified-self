@@ -2,7 +2,15 @@ import {
   ActivityTypes,
   ChartDataCategoryTypes,
   DataActivityTypes,
+  DataAscent,
+  DataCadenceAvg,
   DataDistance,
+  DataDuration,
+  DataEnergy,
+  DataHeartRateAvg,
+  DataJumpEvent,
+  DataPowerAvg,
+  DataSpeedAvg,
   EventImporterJSON,
   EventInterface,
   TimeIntervals,
@@ -17,6 +25,7 @@ import {
   createMcpDataService,
   McpDataError,
   McpDataServiceDependencies,
+  resolveMcpRouteSourcePath,
 } from './data.service';
 
 function makeEvent(
@@ -77,6 +86,66 @@ function sleepDocument(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function activityDocument(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'activity-1',
+    data: {
+      eventID: 'event-1',
+      eventStartDate: new Date('2026-07-01T08:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+      type: ActivityTypes.Cycling,
+      name: 'Private MTB workout',
+      creator: { name: 'Private device' },
+      sourceActivityKey: 'private-source-key',
+      powerMeter: true,
+      trainer: false,
+      stats: {
+        [DataDuration.type]: 3600,
+        [DataDistance.type]: 20_000,
+        [DataAscent.type]: 600,
+        [DataSpeedAvg.type]: 5.5,
+        [DataHeartRateAvg.type]: 145,
+        [DataPowerAvg.type]: 220,
+        [DataCadenceAvg.type]: 82,
+        [DataEnergy.type]: 700,
+        'Jump Count': 2,
+        'Owner controlled private stat': 'do-not-return',
+      },
+      ...overrides,
+    },
+  };
+}
+
+function routeDocument(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'route-1',
+    data: {
+      name: 'Ridge loop',
+      createdAt: new Date('2026-06-30T10:00:00.000Z'),
+      importedAt: new Date('2026-07-01T10:00:00.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      routeCount: 1,
+      waypointCount: 2,
+      pointCount: 200,
+      bounds: {
+        minLatitudeDegrees: 39.6,
+        maxLatitudeDegrees: 39.8,
+        minLongitudeDegrees: 20.7,
+        maxLongitudeDegrees: 20.9,
+      },
+      stats: {
+        [DataDistance.type]: 30_000,
+        [DataAscent.type]: 900,
+        'Owner controlled private stat': 'do-not-return',
+      },
+      sourceSummary: { providerRouteId: 'private-provider-route' },
+      deliverySummaries: [{ destination: 'private-destination' }],
+      ...overrides,
+    },
+  };
+}
+
 describe('MCP data service', () => {
   let dependencies: McpDataServiceDependencies;
 
@@ -86,8 +155,605 @@ describe('MCP data service', () => {
       fetchEventDocuments: vi.fn().mockResolvedValue([]),
       fetchDerivedSnapshot: vi.fn().mockResolvedValue(null),
       fetchSleepDocuments: vi.fn().mockResolvedValue([]),
+      fetchActivityDocuments: vi.fn().mockResolvedValue([]),
+      fetchActivityDetailDocument: vi.fn().mockResolvedValue(null),
+      fetchRouteDocuments: vi.fn().mockResolvedValue([]),
+      fetchRouteDocument: vi.fn().mockResolvedValue(null),
+      downloadRouteSource: vi.fn().mockResolvedValue(Buffer.from('route')),
+      parseRouteWaypoints: vi.fn().mockResolvedValue([]),
       importEvent: vi.fn(),
     };
+  });
+
+  it('restricts route source reads to the owning route path and project bucket', () => {
+    expect(resolveMcpRouteSourcePath(
+      'user-1',
+      'route-1',
+      {
+        path: 'users/user-1/routes/route-1/uploads/attempt/original.gpx',
+        bucket: 'project.appspot.com',
+      },
+      'project.appspot.com',
+    )).toBe('users/user-1/routes/route-1/uploads/attempt/original.gpx');
+    expect(() => resolveMcpRouteSourcePath(
+      'user-1',
+      'route-1',
+      {
+        path: 'users/user-1/routes/route-2/uploads/attempt/original.gpx',
+        bucket: 'project.appspot.com',
+      },
+      'project.appspot.com',
+    )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
+    expect(() => resolveMcpRouteSourcePath(
+      'user-1',
+      'route-1',
+      {
+        path: 'users/user-1/routes/route-1/uploads/attempt/original.gpx',
+        bucket: 'other-project.appspot.com',
+      },
+      'project.appspot.com',
+    )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
+  });
+
+  it('projects activity summaries and exact MTB jump coordinates without leaking raw activity data', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+
+    expect(activities.activities).toEqual([{
+      activityRef: expect.any(String),
+      appUrl: 'https://quantified-self.io/user/user-1/event/event-1',
+      startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-01T09:00:00.000Z'),
+      activityType: ActivityTypes.Cycling,
+      powerMeter: true,
+      trainer: false,
+      jumpCount: 2,
+      supportedDetailKinds: ['laps', 'jumps', 'swim_lengths'],
+      stats: expect.objectContaining({
+        durationSeconds: 3600,
+        distanceMeters: 20_000,
+        ascentMeters: 600,
+        averageSpeedMetersPerSecond: 5.5,
+        averageHeartRateBpm: 145,
+        averagePowerWatts: 220,
+        averageCadenceRpm: 82,
+        energyKilocalories: 700,
+      }),
+    }]);
+    const activityRef = activities.activities[0].activityRef;
+    expect(Buffer.from(activityRef, 'base64url').toString('utf8')).not.toContain('activity-1');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('Private device');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-key');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('Owner controlled');
+
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        events: [{
+          [DataJumpEvent.type]: {
+            timestamp: Date.parse('2026-07-01T08:30:00.000Z'),
+            jumpData: {
+              distance: 2.069,
+              height: 0.42,
+              hang_time: 0.36,
+              speed: 5.748,
+              rotations: 0.2,
+              score: 62.44,
+              position_lat: 39.6679,
+              position_long: 20.8382,
+              providerPayload: 'private',
+            },
+          },
+          otherPrivateEventField: true,
+        }, {
+          'Timer Event': {
+            timestamp: 1,
+            providerPayload: 'private',
+          },
+        }],
+      },
+    });
+
+    const jumps = await service.listActivityJumps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+    });
+
+    expect(jumps).toEqual({
+      items: [{
+        index: 0,
+        timestampMs: Date.parse('2026-07-01T08:30:00.000Z'),
+        distanceMeters: 2.069,
+        heightMeters: 0.42,
+        hangTimeSeconds: 0.36,
+        speedMetersPerSecond: 5.748,
+        rotations: 0.2,
+        score: 62.44,
+        latitudeDegrees: 39.6679,
+        longitudeDegrees: 20.8382,
+      }],
+      nextCursor: null,
+    });
+    expect(JSON.stringify(jumps)).not.toContain('providerPayload');
+    expect(dependencies.fetchActivityDetailDocument).toHaveBeenCalledWith(
+      'user-1',
+      'activity-1',
+      'jumps',
+    );
+  });
+
+  it('binds activity references and detail cursors to the MCP connection', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    const activityRef = activities.activities[0].activityRef;
+
+    await expect(service.listActivityLaps({
+      uid: 'user-1',
+      connectionId: 'connection-2',
+      activityRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityDetailDocument).not.toHaveBeenCalled();
+
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        laps: [{
+          lapId: 1,
+          type: 'Manual',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T08:10:00.000Z'),
+          stats: { [DataDistance.type]: 1000 },
+        }, {
+          lapId: 2,
+          type: 'Manual',
+          startDate: Date.parse('2026-07-01T08:10:00.000Z'),
+          endDate: Date.parse('2026-07-01T08:20:00.000Z'),
+          stats: { [DataDistance.type]: 1100 },
+        }],
+      },
+    });
+    const firstPage = await service.listActivityLaps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      limit: 1,
+    });
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    await expect(service.listActivityLaps({
+      uid: 'user-1',
+      connectionId: 'connection-2',
+      activityRef,
+      cursor: firstPage.nextCursor!,
+      limit: 1,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    const secondPage = await service.listActivityLaps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      cursor: firstPage.nextCursor!,
+      limit: 1,
+    });
+    expect(secondPage.items).toEqual([
+      expect.objectContaining({
+        index: 1,
+        lapNumber: 2,
+        stats: expect.objectContaining({ distanceMeters: 1100 }),
+      }),
+    ]);
+    expect(secondPage.nextCursor).toBeNull();
+  });
+
+  it('projects swim lengths through an explicit field allowlist', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        swimLengths: [{
+          index: 4,
+          lapIndex: 1,
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T08:00:30.000Z'),
+          type: 'active',
+          stroke: 'freestyle',
+          strokes: 18,
+          elapsedTime: 30,
+          timerTime: 29,
+          distance: 25,
+          poolLength: 25,
+          avgSpeed: 0.83,
+          avgCadence: 36,
+          avgHeartRate: 130,
+          maxHeartRate: 142,
+          swolf: 48,
+          calories: 5,
+          privateExtension: { source: 'provider' },
+        }],
+      },
+    });
+
+    const result = await service.listActivitySwimLengths({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    });
+
+    expect(result.items).toEqual([{
+      index: 0,
+      sourceIndex: 4,
+      lapIndex: 1,
+      startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-01T08:00:30.000Z'),
+      type: 'active',
+      stroke: 'freestyle',
+      strokeCount: 18,
+      elapsedTimeSeconds: 30,
+      timerTimeSeconds: 29,
+      distanceMeters: 25,
+      poolLengthMeters: 25,
+      averageSpeedMetersPerSecond: 0.83,
+      averageCadenceRpm: 36,
+      averageHeartRateBpm: 130,
+      maximumHeartRateBpm: 142,
+      swolf: 48,
+      energyKilocalories: 5,
+    }]);
+    expect(JSON.stringify(result)).not.toContain('privateExtension');
+  });
+
+  it('rejects oversized activity list and detail materialization', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument({
+        stats: {
+          [DataDuration.type]: 'x'.repeat((512 * 1024) + 1),
+        },
+      }),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listInput = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    };
+    await expect(service.listActivities(listInput)).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const activities = await service.listActivities(listInput);
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        laps: [{
+          privatePayload: 'x'.repeat((512 * 1024) + 1),
+        }],
+      },
+    });
+    await expect(service.listActivityLaps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+  });
+
+  it('projects saved-route summaries and polyline geometry without route provenance', async () => {
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      routeDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const routes = await service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    });
+
+    expect(routes.routes).toEqual([{
+      routeRef: expect.any(String),
+      appUrl: 'https://quantified-self.io/user/user-1/route/route-1',
+      name: 'Ridge loop',
+      createdAtMs: Date.parse('2026-06-30T10:00:00.000Z'),
+      importedAtMs: Date.parse('2026-07-01T10:00:00.000Z'),
+      activityTypes: [ActivityTypes.Cycling],
+      routeCount: 1,
+      waypointCount: 2,
+      pointCount: 200,
+      bounds: {
+        minLatitudeDegrees: 39.6,
+        maxLatitudeDegrees: 39.8,
+        minLongitudeDegrees: 20.7,
+        maxLongitudeDegrees: 20.9,
+      },
+      stats: expect.objectContaining({
+        distanceMeters: 30_000,
+        ascentMeters: 900,
+      }),
+    }]);
+    expect(JSON.stringify(routes)).not.toContain('private-provider-route');
+    expect(JSON.stringify(routes)).not.toContain('private-destination');
+    const routeRef = routes.routes[0].routeRef;
+    expect(Buffer.from(routeRef, 'base64url').toString('utf8')).not.toContain('route-1');
+
+    vi.mocked(dependencies.fetchRouteDocument).mockResolvedValue({
+      id: 'route-1',
+      data: {
+        preview: {
+          version: 1,
+          encoding: 'polyline5',
+          precision: 5,
+          sourcePointCount: 200,
+          pointCount: 2,
+          bounds: routeDocument().data.bounds,
+          segments: [{
+            id: 'private-segment-id',
+            name: 'Private segment name',
+            activityType: ActivityTypes.Cycling,
+            sourcePointCount: 200,
+            pointCount: 2,
+            encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+          }],
+        },
+      },
+    });
+    const geometry = await service.getRouteGeometry({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    });
+
+    expect(geometry.geometry).toMatchObject({
+      version: 1,
+      encoding: 'polyline5',
+      precision: 5,
+      sourcePointCount: 200,
+      pointCount: 2,
+      segments: [{
+        segmentIndex: 0,
+        activityType: ActivityTypes.Cycling,
+        encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+      }],
+    });
+    expect(JSON.stringify(geometry)).not.toContain('private-segment-id');
+    expect(JSON.stringify(geometry)).not.toContain('Private segment name');
+  });
+
+  it('returns only safe route waypoint coordinates from a bounded source parse', async () => {
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      routeDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const routes = await service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    });
+    vi.mocked(dependencies.fetchRouteDocument).mockResolvedValue({
+      id: 'route-1',
+      data: {
+        srcFileType: 'gpx',
+        originalFiles: [{
+          path: 'users/user-1/routes/route-1/uploads/attempt/original.gpx',
+          bucket: 'private-bucket-name',
+          extension: 'gpx',
+          originalFilename: 'Private route name.gpx',
+        }],
+      },
+    });
+    vi.mocked(dependencies.parseRouteWaypoints).mockResolvedValue([
+      {
+        latitudeDegrees: 39.6679,
+        longitudeDegrees: 20.8382,
+        altitude: 900,
+        distance: 1500,
+        routeIndex: 0,
+        routePointIndex: 12,
+        type: 'left',
+        name: 'Private waypoint',
+        comment: 'Private comment',
+        description: 'Private description',
+        links: [{ href: 'https://private.example' }],
+        extensions: { provider: 'private' },
+      },
+    ]);
+
+    const result = await service.listRouteWaypoints({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef: routes.routes[0].routeRef,
+    });
+
+    expect(result).toEqual({
+      waypoints: [{
+        index: 0,
+        latitudeDegrees: 39.6679,
+        longitudeDegrees: 20.8382,
+        altitudeMeters: 900,
+        distanceMeters: 1500,
+        routeIndex: 0,
+        routePointIndex: 12,
+        type: 'left',
+      }],
+      waypointCount: 1,
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('Private waypoint');
+    expect(serialized).not.toContain('Private comment');
+    expect(serialized).not.toContain('private.example');
+    expect(dependencies.downloadRouteSource).toHaveBeenCalledWith(
+      'user-1',
+      'route-1',
+      expect.objectContaining({
+        path: 'users/user-1/routes/route-1/uploads/attempt/original.gpx',
+      }),
+      2 * 1024 * 1024,
+    );
+    expect(dependencies.parseRouteWaypoints).toHaveBeenCalledWith(
+      Buffer.from('route'),
+      'gpx',
+    );
+  });
+
+  it('binds route references to a connection and rejects oversized route detail', async () => {
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      routeDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const routes = await service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    });
+    const routeRef = routes.routes[0].routeRef;
+
+    await expect(service.getRouteGeometry({
+      uid: 'user-1',
+      connectionId: 'connection-2',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchRouteDocument).not.toHaveBeenCalled();
+
+    vi.mocked(dependencies.fetchRouteDocument).mockResolvedValue({
+      id: 'route-1',
+      data: {
+        preview: {
+          version: 1,
+          encoding: 'polyline5',
+          precision: 5,
+          sourcePointCount: 10_000,
+          pointCount: 5_001,
+          segments: [{
+            sourcePointCount: 10_000,
+            pointCount: 5_001,
+            encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+          }],
+        },
+      },
+    });
+    await expect(service.getRouteGeometry({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+
+    vi.mocked(dependencies.fetchRouteDocument).mockResolvedValue({
+      id: 'route-1',
+      data: {
+        preview: {
+          version: 1,
+          encoding: 'polyline5',
+          precision: 5,
+          sourcePointCount: 1,
+          pointCount: 1,
+          segments: [{
+            sourcePointCount: 1,
+            pointCount: 1,
+            encodedPolyline: '?'.repeat(13),
+          }],
+        },
+      },
+    });
+    await expect(service.getRouteGeometry({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'detail_not_available',
+    });
+  });
+
+  it('rejects oversized route source files and waypoint sets', async () => {
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      routeDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const routes = await service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    });
+    const routeRef = routes.routes[0].routeRef;
+    vi.mocked(dependencies.fetchRouteDocument).mockResolvedValue({
+      id: 'route-1',
+      data: {
+        srcFileType: 'gpx',
+        originalFiles: [{
+          path: 'users/user-1/routes/route-1/uploads/attempt/original.gpx',
+          extension: 'gpx',
+        }],
+      },
+    });
+    vi.mocked(dependencies.downloadRouteSource).mockResolvedValue(
+      Buffer.alloc((2 * 1024 * 1024) + 1),
+    );
+    await expect(service.listRouteWaypoints({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.parseRouteWaypoints).not.toHaveBeenCalled();
+
+    vi.mocked(dependencies.downloadRouteSource).mockResolvedValue(Buffer.from('route'));
+    vi.mocked(dependencies.parseRouteWaypoints).mockResolvedValue(
+      Array.from({ length: 501 }, () => ({
+        latitudeDegrees: 39.6,
+        longitudeDegrees: 20.8,
+      })),
+    );
+    await expect(service.listRouteWaypoints({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
   });
 
   it('lists only numeric Sports Lib stats that are persisted for the user', async () => {

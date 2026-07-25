@@ -743,9 +743,17 @@ describe('help.content', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
     expect(dataAndPrivacySection?.content).toContain('**Activity and Training metrics**');
+    expect(dataAndPrivacySection?.content).toContain('**Individual activity details**');
     expect(dataAndPrivacySection?.content).toContain('**Sleep summaries**');
+    expect(dataAndPrivacySection?.content).toContain('**Saved routes and waypoints**');
     expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
+    expect(dataAndPrivacySection?.content).toContain('Jump records can include exact latitude/longitude coordinates');
+    expect(dataAndPrivacySection?.content).toContain('stable account/event paths');
+    expect(dataAndPrivacySection?.content).toContain('stable account/route paths');
+    expect(dataAndPrivacySection?.content).toContain('simplified polyline previews');
+    expect(dataAndPrivacySection?.content).toContain('waypoint coordinates');
+    expect(dataAndPrivacySection?.content).toContain('original route files');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> MCP connections**');
   });

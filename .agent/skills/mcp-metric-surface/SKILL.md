@@ -1,6 +1,6 @@
 ---
 name: mcp-metric-surface
-description: Keep the read-only Quantified Self MCP surface aligned when Sports Lib event metrics, Training-derived metric kinds, sleep sessions, or their persisted contracts change.
+description: Keep the read-only Quantified Self MCP surface aligned when Sports Lib metrics, activity details, routes, Training-derived kinds, sleep sessions, or their persisted contracts change.
 ---
 
 # MCP Metric Surface
@@ -22,6 +22,13 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 - **Sleep field or provider:** update the normalized contract in `shared/sleep.ts`, then deliberately decide whether it
   belongs in the MCP safe projection. Never forward provider user/session identifiers, provider payloads, raw stage
   intervals, or raw HRV, SpO2, or respiration samples.
+- **Activity-detail field:** decide whether it belongs in the explicit activity summary, lap, jump, or swim-length
+  projection. Never forward whole activity documents, raw streams, creator/device metadata, source keys, names/notes,
+  internal identifier fields, arbitrary stats, or parser extensions. Exact jump coordinates require the
+  `activity-details:read` scope and matching consent/policy wording.
+- **Saved-route field or parser output:** decide whether it belongs in the explicit route summary, preview, or waypoint
+  projection. Never forward original files, raw points/streams, Storage paths, source/delivery provenance, waypoint text,
+  links, or extensions. Exact route bounds, preview geometry, and waypoint coordinates require `routes:read`.
 
 ## Implementation Contract
 
@@ -32,8 +39,12 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    aggregation callers that omit a timezone.
 4. Treat `functions/src/mcp/metric-catalog.ts` and `functions/src/mcp/data.service.ts` as the MCP projection boundary.
    Expand allowlists deliberately; do not return whole Firestore documents.
-5. Keep OAuth scopes least-privilege (`metrics:read` and `sleep:read`), queries bounded, tokens UID-bound, and tools
-   read-only. Update consent, Settings, Help, privacy wording, and `docs/mcp-server.md` when the user-visible contract moves.
+5. Keep OAuth scopes least-privilege: `metrics:read`, `sleep:read`, `activity-details:read`, and `routes:read` remain
+   independent grants. Keep queries bounded, references/cursors UID-and-connection-bound, and tools read-only. Update
+   OAuth metadata, consent, Settings, Help, policies, and `docs/mcp-server.md` when the user-visible contract moves.
+6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby
+   sensitive fields, confirm historical persistence/reparse expectations, review the Firestore query/index shape, and
+   document units and operational limits. A Sports Lib export alone never authorizes MCP exposure.
 
 ## Verify
 
@@ -43,6 +54,7 @@ Add or update focused tests for:
 - persistence availability and any reparse expectation;
 - Training ready-state handling and identity redaction;
 - sleep safe projection and explicit raw/provider-field exclusion;
+- activity-detail and route allowlists, exact-coordinate consent, opaque-reference binding, and source/response limits;
 - IANA timezone/DST bucketing;
 - scope denial and query limits.
 

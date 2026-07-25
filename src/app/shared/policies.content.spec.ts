@@ -33,9 +33,16 @@ describe('MCP client access policy', () => {
     const content = topic?.content.join(' ') || '';
 
     expect(topic?.title).toBe('MCP Client Access');
-    expect(content).toContain('one or both requested read-only permissions');
+    expect(content).toContain('one or more requested read-only permissions');
     expect(content).toContain('excludes precise latitude/longitude metrics');
     expect(content).toContain('imported device/provider source keys');
+    expect(content).toContain('MTB jump measurements');
+    expect(content).toContain('exact latitude and longitude');
+    expect(content).toContain('stable account/event paths');
+    expect(content).toContain('stable account/route paths');
+    expect(content).toContain('simplified polyline preview geometry');
+    expect(content).toContain('parsed waypoint coordinates');
+    expect(content).toContain('Original route files');
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('stored server-side only as hashes');
     expect(content).toContain('Settings -> Account');

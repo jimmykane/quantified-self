@@ -15,7 +15,12 @@ interface McpConnection {
   clientId: string;
   clientName: string;
   redirectHost: string;
-  scopes: Array<'metrics:read' | 'sleep:read'>;
+  scopes: Array<
+    | 'metrics:read'
+    | 'sleep:read'
+    | 'activity-details:read'
+    | 'routes:read'
+  >;
   createdAtMs: number;
   lastUsedAtMs: number | null;
 }
@@ -48,6 +53,8 @@ export class McpConnectionsComponent implements OnInit {
   readonly scopeLabels: Record<McpConnection['scopes'][number], string> = {
     'metrics:read': 'Activity and Training metrics',
     'sleep:read': 'Sleep summaries',
+    'activity-details:read': 'Individual activity details',
+    'routes:read': 'Saved routes and waypoints',
   };
   readonly mcpEndpoint = `${this.windowService.currentDomain}/mcp`;
 

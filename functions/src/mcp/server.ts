@@ -24,6 +24,8 @@ const SUPPORTED_PUBLIC_HOSTS = new Set([
 ]);
 const MAX_MCP_REQUEST_BYTES = 64 * 1024;
 const MCP_ISO_DATE_TIME_SCHEMA = z.iso.datetime({ offset: true }).max(64);
+const MCP_OPAQUE_REFERENCE_SCHEMA = z.string().min(1).max(512);
+const MCP_CURSOR_SCHEMA = z.string().min(1).max(512);
 const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
   SLEEP_PROVIDERS.GarminAPI,
   SLEEP_PROVIDERS.SuuntoApp,
@@ -35,6 +37,7 @@ interface AuthenticatedMcpRequest {
   clientId: string;
   connectionId: string;
   scopes: McpOAuthScope[];
+  baseUrl: string;
 }
 
 function getOAuthService(): ReturnType<typeof createMcpOAuthService> {
@@ -340,6 +343,126 @@ export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
     })));
   }
 
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
+    server.registerTool('list_activities', {
+      title: 'List activities',
+      description: 'List bounded activity summaries with opaque references and direct authenticated app links.',
+      inputSchema: {
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+        limit: z.number().int().min(1).max(100).default(25),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_activities', () => dataService.listActivities({
+      uid: auth.uid,
+      connectionId: auth.connectionId,
+      appBaseUrl: auth.baseUrl,
+      startTimeMs: parseMcpDateTime(input.start, 'start'),
+      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      cursor: input.cursor,
+      limit: input.limit,
+    })));
+
+    server.registerTool('list_activity_laps', {
+      title: 'List activity laps',
+      description: 'List allowlisted lap timing and performance fields for one activity.',
+      inputSchema: {
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_activity_laps', () => dataService.listActivityLaps({
+      uid: auth.uid,
+      connectionId: auth.connectionId,
+      activityRef: input.activityRef,
+      cursor: input.cursor,
+      limit: input.limit,
+    })));
+
+    server.registerTool('list_activity_jumps', {
+      title: 'List activity jumps',
+      description: 'List MTB jump measurements for one activity, including exact coordinates when present.',
+      inputSchema: {
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_activity_jumps', () => dataService.listActivityJumps({
+      uid: auth.uid,
+      connectionId: auth.connectionId,
+      activityRef: input.activityRef,
+      cursor: input.cursor,
+      limit: input.limit,
+    })));
+
+    server.registerTool('list_activity_swim_lengths', {
+      title: 'List activity swim lengths',
+      description: 'List allowlisted pool length, stroke, timing, and performance fields for one activity.',
+      inputSchema: {
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'list_activity_swim_lengths',
+      () => dataService.listActivitySwimLengths({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        activityRef: input.activityRef,
+        cursor: input.cursor,
+        limit: input.limit,
+      }),
+    ));
+  }
+
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
+    server.registerTool('list_routes', {
+      title: 'List saved routes',
+      description: 'List bounded saved-route summaries, exact bounds, opaque references, and direct authenticated app links.',
+      inputSchema: {
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+        limit: z.number().int().min(1).max(100).default(25),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_routes', () => dataService.listRoutes({
+      uid: auth.uid,
+      connectionId: auth.connectionId,
+      appBaseUrl: auth.baseUrl,
+      cursor: input.cursor,
+      limit: input.limit,
+    })));
+
+    server.registerTool('get_route_geometry', {
+      title: 'Get saved-route geometry',
+      description: 'Get the bounded polyline5 preview geometry and exact bounds for one saved route.',
+      inputSchema: {
+        routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_route_geometry', () => dataService.getRouteGeometry({
+      uid: auth.uid,
+      connectionId: auth.connectionId,
+      routeRef: input.routeRef,
+    })));
+
+    server.registerTool('list_route_waypoints', {
+      title: 'List saved-route waypoints',
+      description: 'List bounded, allowlisted waypoint coordinates parsed from one saved FIT or GPX route source.',
+      inputSchema: {
+        routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_route_waypoints', () => dataService.listRouteWaypoints({
+      uid: auth.uid,
+      connectionId: auth.connectionId,
+      routeRef: input.routeRef,
+    })));
+  }
+
   return server;
 }
 
@@ -357,6 +480,21 @@ export function requiredScopeForRequest(body: unknown): McpOAuthScope | null {
     : '';
   if (['list_sleep_sessions', 'query_sleep_summary'].includes(toolName)) {
     return MCP_OAUTH_SCOPES.SleepRead;
+  }
+  if ([
+    'list_activities',
+    'list_activity_laps',
+    'list_activity_jumps',
+    'list_activity_swim_lengths',
+  ].includes(toolName)) {
+    return MCP_OAUTH_SCOPES.ActivityDetailsRead;
+  }
+  if ([
+    'list_routes',
+    'get_route_geometry',
+    'list_route_waypoints',
+  ].includes(toolName)) {
+    return MCP_OAUTH_SCOPES.RoutesRead;
   }
   if (['list_metrics', 'query_metric', 'get_training_metric'].includes(toolName)) {
     return MCP_OAUTH_SCOPES.MetricsRead;
@@ -568,7 +706,7 @@ export const mcpApi = onRequest({
     return;
   }
 
-  let auth: AuthenticatedMcpRequest;
+  let auth: Omit<AuthenticatedMcpRequest, 'baseUrl'>;
   try {
     auth = await getOAuthService().authenticateBearer(bearerToken, resource);
   } catch (error) {
@@ -613,7 +751,10 @@ export const mcpApi = onRequest({
     return;
   }
 
-  const server = createMcpServer(auth);
+  const server = createMcpServer({
+    ...auth,
+    baseUrl,
+  });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

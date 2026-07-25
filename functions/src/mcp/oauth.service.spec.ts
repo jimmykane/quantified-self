@@ -17,6 +17,7 @@ import {
   McpOAuthError,
   McpOAuthStore,
   MCP_OAUTH_SCOPES,
+  normalizeOAuthScopes,
   RefreshTokenRecord,
   validateClientMetadataDocument,
 } from './oauth.service';
@@ -230,6 +231,20 @@ function authorizationParams(verifier: string) {
 }
 
 describe('MCP OAuth service', () => {
+  it('accepts the separate activity-detail and saved-route read scopes', () => {
+    expect(normalizeOAuthScopes(
+      'metrics:read activity-details:read routes:read sleep:read',
+    )).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ]);
+    expect(() => normalizeOAuthScopes('activity-details:write')).toThrow(
+      expect.objectContaining({ code: 'invalid_scope' }),
+    );
+  });
+
   it('pins every validated DNS address using the callback shape requested by Node', async () => {
     const pinnedLookup = createPinnedAddressLookup([
       { address: '2001:4860:4860::8888', family: 6 },
