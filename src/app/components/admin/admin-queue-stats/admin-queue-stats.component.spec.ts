@@ -883,6 +883,7 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('event-1');
             expect(host.textContent).toContain('Heavy');
             expect(host.textContent).toContain('Duration > 32h');
+            expect(host.textContent).toContain('Event Duration');
             expect(host.textContent).toContain('33h 0m');
             expect(host.textContent).toContain('Parse failed');
         });
