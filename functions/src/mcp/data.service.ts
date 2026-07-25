@@ -164,7 +164,13 @@ const defaultDependencies: McpDataServiceDependencies = {
 };
 
 function asFiniteNumber(value: unknown): number | null {
-  const numeric = typeof value === 'number' ? value : Number(value);
+  if (
+    typeof value !== 'number'
+    && (typeof value !== 'string' || !value.trim())
+  ) {
+    return null;
+  }
+  const numeric = typeof value === 'number' ? value : Number(value.trim());
   return Number.isFinite(numeric) ? numeric : null;
 }
 

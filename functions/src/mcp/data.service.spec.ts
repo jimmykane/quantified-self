@@ -260,6 +260,63 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('stages');
   });
 
+  it('preserves missing optional sleep measurements instead of treating them as zero', async () => {
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({
+        source: {
+          provider: SLEEP_PROVIDERS.COROSAPI,
+          sourceSessionKey: 'private-source-key',
+          providerUserId: 'private-provider-user',
+        },
+        inBedDurationSeconds: null,
+        score: {
+          value: null,
+          qualifier: null,
+        },
+        vitals: {
+          averageHeartRateBpm: null,
+          overnightHrvMs: null,
+        },
+      }),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const range = {
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+    };
+
+    const sessions = await service.listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      ...range,
+    });
+    const summary = await service.querySleepSummary({
+      uid: 'user-1',
+      ...range,
+      groupBy: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(sessions.sessions).toEqual([
+      expect.objectContaining({
+        provider: SLEEP_PROVIDERS.COROSAPI,
+        inBedDurationSeconds: null,
+        score: {
+          value: null,
+          qualifier: null,
+        },
+        vitals: null,
+      }),
+    ]);
+    expect(summary.buckets).toEqual([
+      expect.objectContaining({
+        averageInBedDurationSeconds: null,
+        averageScore: null,
+        averageVitals: {},
+      }),
+    ]);
+  });
+
   it('skips malformed normalized sleep sessions', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
       sleepDocument({

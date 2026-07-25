@@ -220,7 +220,7 @@ function documentData<T>(snapshot: admin.firestore.DocumentSnapshot): T | null {
   return snapshot.exists ? snapshot.data() as T : null;
 }
 
-function buildDefaultStore(): McpOAuthStore {
+export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
   const db = admin.firestore();
   const collection = (name: string) => db.collection(name);
   const connectionRef = (uid: string, connectionId: string) => db
@@ -462,6 +462,19 @@ function buildDefaultStore(): McpOAuthStore {
       const rateLimitRef = collection(MCP_OAUTH_COLLECTIONS.rateLimits).doc(rateLimitId);
       const activeConnectionRef = connectionRef(token.uid, token.connectionId);
       await db.runTransaction(async (transaction) => {
+        const guard = await getUserDeletionGuardStateInTransaction(
+          db,
+          transaction,
+          token.uid,
+          nowMs,
+        );
+        if (guard.shouldSkip) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP account is no longer available.',
+            401,
+          );
+        }
         const rateLimit = documentData<{ count?: number }>(await transaction.get(rateLimitRef));
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
@@ -713,7 +726,7 @@ export function createMcpOAuthService(
   dependencies?: McpOAuthServiceDependencies,
 ) {
   const resolvedDependencies = dependencies || {
-    store: buildDefaultStore(),
+    store: buildFirestoreMcpOAuthStore(),
     fetchClientMetadata: fetchClientMetadataDocument,
     now: () => Date.now(),
     randomToken: randomOpaqueValue,

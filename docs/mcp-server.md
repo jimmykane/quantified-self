@@ -60,8 +60,9 @@ Firestore holds short-lived OAuth records in:
 
 Active connection metadata lives at `users/{uid}/mcpConnections/{connectionId}`. Browser Firestore access to every MCP
 collection is denied; authenticated, App Check-protected callables mediate consent, listing, and revocation. Revocation
-deletes active tokens and codes. Account deletion recursively removes connection and OAuth state. All short-lived MCP
-collections use `expireAt` TTL configuration in `firestore.indexes.json`.
+deletes active tokens and codes. Bearer authentication transactionally rechecks the user root and account-deletion
+tombstone before recording usage or running a tool, while account deletion recursively removes connection and OAuth
+state. All short-lived MCP collections use `expireAt` TTL configuration in `firestore.indexes.json`.
 
 ## Tool contract
 
@@ -121,7 +122,8 @@ an MCP redaction-contract test.
 
 MCP reads normalized `users/{uid}/sleepSessions` documents and creates a new allowlisted response. Session output may
 include provider, sleep date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized
-score value/qualifier, and aggregate vitals.
+score value/qualifier, and aggregate vitals. Missing optional numeric measurements remain unavailable and do not
+contribute zeroes to summary averages.
 
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
