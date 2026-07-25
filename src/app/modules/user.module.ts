@@ -6,6 +6,7 @@ import { UserRoutingModule } from '../user.routing.module';
 import { UserComponent } from '../components/user/user.component';
 import { UserActionsComponent } from '../components/user-actions/user.actions.component';
 import { UserSettingsComponent } from '../components/user-settings/user-settings.component';
+import { McpConnectionsComponent } from '../components/mcp-connections/mcp-connections.component';
 
 
 
@@ -14,7 +15,8 @@ import { UserSettingsComponent } from '../components/user-settings/user-settings
         CommonModule,
         SharedModule,
         MaterialModule,
-        UserRoutingModule
+        UserRoutingModule,
+        McpConnectionsComponent,
     ],
     exports: [],
     declarations: [

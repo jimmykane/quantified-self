@@ -338,6 +338,11 @@
     background-color: color-mix(in srgb, var(--mat-sys-error) 3%, var(--mat-sys-surface));
 }
 
+.settings-account-body {
+    display: grid;
+    gap: 20px;
+}
+
 .danger-title {
     color: var(--mat-sys-error);
     display: flex;

@@ -6,6 +6,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 // Hoist mocks
 const {
     authBuilderMock,
+    runWithMock,
     deauthorizeServiceMock,
     cleanupServiceConnectionForUserMock,
     firestoreMock,
@@ -23,10 +24,12 @@ const {
     collectionGroupMock,
     collectionGroupWhereMock,
     markQueueItemDeletedForUserCleanupMock,
+    cleanupMcpOAuthStateForUserMock,
 } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
+    const authBuilderMock = { user: userMock };
 
     const deleteMock = vi.fn().mockResolvedValue({});
     const setMock = vi.fn().mockResolvedValue({});
@@ -128,9 +131,13 @@ const {
 
     const deauthorizeServiceMock = vi.fn();
     const cleanupServiceConnectionForUserMock = vi.fn((uid: string, serviceName: ServiceNames) => deauthorizeServiceMock(uid, serviceName));
+    const runWithMock = vi.fn(() => ({
+        auth: authBuilderMock,
+    }));
 
     return {
-        authBuilderMock: { user: userMock },
+        authBuilderMock,
+        runWithMock,
         deauthorizeServiceMock,
         cleanupServiceConnectionForUserMock,
 
@@ -148,7 +155,8 @@ const {
         limitGetMock,
         collectionGroupMock,
         collectionGroupWhereMock,
-        markQueueItemDeletedForUserCleanupMock: vi.fn().mockResolvedValue(true)
+        markQueueItemDeletedForUserCleanupMock: vi.fn().mockResolvedValue(true),
+        cleanupMcpOAuthStateForUserMock: vi.fn().mockResolvedValue(undefined),
     };
 });
 
@@ -156,7 +164,8 @@ const {
 vi.mock('firebase-functions/v1', () => ({
     auth: authBuilderMock,
     region: vi.fn().mockImplementation(() => ({
-        auth: authBuilderMock
+        auth: authBuilderMock,
+        runWith: runWithMock,
     })),
 }));
 
@@ -185,12 +194,21 @@ vi.mock('../queue/cleanup-tombstone', () => ({
     },
 }));
 
+vi.mock('../mcp/oauth.service', () => ({
+    cleanupMcpOAuthStateForUser: cleanupMcpOAuthStateForUserMock,
+}));
+
 
 
 // Import function under test
-import { cleanupUserAccounts, ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from './cleanup';
+import {
+    ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS,
+    cleanupUserAccounts,
+    ORPHANED_SERVICE_TOKENS_COLLECTION_NAME,
+} from './cleanup';
 
 const testEnv = functionsTest();
+const registeredCleanupRuntimeOptions = runWithMock.mock.calls[0]?.[0];
 
 function createPaginatedLimitQueryMock(pages: Array<{ docs: unknown[]; empty?: boolean }>) {
     const get = vi.fn();
@@ -282,6 +300,7 @@ describe('cleanupUserAccounts', () => {
             get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
         }));
         markQueueItemDeletedForUserCleanupMock.mockReset().mockResolvedValue(true);
+        cleanupMcpOAuthStateForUserMock.mockReset().mockResolvedValue(undefined);
         transactionDeleteMock.mockReset();
         runTransactionMock.mockReset().mockImplementation(async (handler: (transaction: {
             get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
@@ -327,6 +346,7 @@ describe('cleanupUserAccounts', () => {
             'account_deletion',
             { missingTokensBehavior: 'ignore' },
         );
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
         expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
             'testUser123',
             ServiceNames.COROSAPI,
@@ -345,6 +365,44 @@ describe('cleanupUserAccounts', () => {
             'account_deletion',
             { missingTokensBehavior: 'ignore' },
         );
+    });
+
+    it('registers durable retry for account-deletion cleanup', () => {
+        expect(ACCOUNT_DELETION_CLEANUP_RUNTIME_OPTIONS).toEqual({
+            failurePolicy: true,
+        });
+        expect(registeredCleanupRuntimeOptions).toEqual({
+            failurePolicy: true,
+        });
+    });
+
+    it('continues later deletion stages and requests a retry when MCP OAuth cleanup fails', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        cleanupMcpOAuthStateForUserMock.mockRejectedValueOnce(new Error('MCP OAuth cleanup failed'));
+
+        await expect(
+            wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext),
+        ).rejects.toThrow('MCP OAuth cleanup failed');
+
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
+        expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', 'testUser123');
+        expect(firestoreMock().collection).toHaveBeenCalledWith(ORPHANED_SERVICE_TOKENS_COLLECTION_NAME);
+        expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
+    });
+
+    it('requests a retry even when MCP OAuth cleanup rejects without an Error object', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        cleanupMcpOAuthStateForUserMock.mockRejectedValueOnce(undefined);
+
+        await expect(
+            wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext),
+        ).rejects.toThrow('MCP OAuth cleanup did not complete.');
+
+        expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('activitySyncQueue');
     });
 
     it('should force delete Suunto tokens even if deauthorization fails', async () => {

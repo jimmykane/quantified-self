@@ -1,0 +1,102 @@
+<main class="mcp-authorization">
+  <mat-card appearance="outlined" class="mcp-authorization__card">
+    <mat-card-header>
+      <mat-card-title>Connect an MCP client</mat-card-title>
+      <mat-card-subtitle>Choose exactly what this client may read from your account.</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (loading()) {
+        <div class="mcp-authorization__state" role="status">
+          <mat-spinner diameter="32"></mat-spinner>
+          <span>Loading authorization request…</span>
+        </div>
+      } @else if (request(); as authorizationRequest) {
+        <section class="mcp-authorization__client" aria-labelledby="mcp-client-name">
+          <mat-icon>devices</mat-icon>
+          <div>
+            <h1 id="mcp-client-name">{{ authorizationRequest.clientName }}</h1>
+            <dl>
+              <div>
+                <dt>Client metadata</dt>
+                <dd>{{ authorizationRequest.clientIdHost }}</dd>
+              </div>
+              <div>
+                <dt>Return address</dt>
+                <dd>{{ authorizationRequest.redirectUri }}</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        @if (authorizationRequest.loopbackRedirect) {
+          <div class="mcp-authorization__warning" role="note">
+            <mat-icon>warning</mat-icon>
+            <span>This client will return to a program running on your device. Only continue if you started it.</span>
+          </div>
+        }
+
+        <section class="mcp-authorization__permissions" aria-labelledby="mcp-permissions-title">
+          <h2 id="mcp-permissions-title">Requested permissions</h2>
+          @for (option of scopeOptions(); track option.scope) {
+            <mat-checkbox
+              [checked]="option.selected"
+              [disabled]="deciding() !== null"
+              (change)="toggleScope(option.scope, $event)">
+              <span class="mcp-authorization__permission-copy">
+                <strong>{{ option.title }}</strong>
+                <span>{{ option.description }}</span>
+              </span>
+            </mat-checkbox>
+          }
+          <p class="mcp-authorization__privacy">
+            This connection is read-only. It does not expose precise route coordinates, raw sleep samples,
+            provider payloads, or activity identifiers through these tools.
+          </p>
+        </section>
+      } @else {
+        <div class="mcp-authorization__state mcp-authorization__state--error" role="alert">
+          <mat-icon>error</mat-icon>
+          <span>{{ error() }}</span>
+        </div>
+      }
+
+      @if (error() && request()) {
+        <div class="mcp-authorization__error" role="alert">
+          <mat-icon>error</mat-icon>
+          <span>{{ error() }}</span>
+        </div>
+      }
+    </mat-card-content>
+
+    @if (request()) {
+      <mat-card-actions align="end">
+        <button mat-button type="button" [disabled]="deciding() !== null" (click)="deny()">
+          <span class="mcp-authorization__button-content">
+            @if (deciding() === 'deny') {
+              <mat-spinner diameter="18"></mat-spinner>
+              <span>Denying…</span>
+            } @else {
+              <span>Deny</span>
+            }
+          </span>
+        </button>
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="deciding() !== null || selectedScopes().length === 0"
+          (click)="approve()">
+          <span class="mcp-authorization__button-content">
+            @if (deciding() === 'approve') {
+              <mat-spinner diameter="18"></mat-spinner>
+              <span>Connecting…</span>
+            } @else {
+              <mat-icon>link</mat-icon>
+              <span>Allow selected access</span>
+            }
+          </span>
+        </button>
+      </mat-card-actions>
+    }
+  </mat-card>
+</main>

@@ -57,6 +57,25 @@ export abstract class UploadAbstractDirective implements OnInit {
     return 'Activity already exists';
   }
 
+  public handleDragEnter(event: DragEvent): void {
+    this.preventDragDefaults(event);
+  }
+
+  public handleDragOver(event: DragEvent): void {
+    this.preventDragDefaults(event);
+    (event.currentTarget as HTMLElement | null)?.classList.add('drag');
+  }
+
+  public handleDragLeave(event: DragEvent): void {
+    this.preventDragDefaults(event);
+    (event.currentTarget as HTMLElement | null)?.classList.remove('drag');
+  }
+
+  private preventDragDefaults(event: DragEvent): void {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
   /**
    * This can be called multiple times as the user drops more files etc
    * @param event

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -18,7 +18,11 @@ interface FirebaseHostingTarget {
   }>;
   rewrites?: Array<{
     source: string;
-    destination: string;
+    destination?: string;
+    function?: {
+      functionId: string;
+      region: string;
+    };
   }>;
 }
 
@@ -30,12 +34,21 @@ interface AngularBuildOptions {
   assets: Array<string | { glob: string; input: string; output: string }>;
 }
 
+interface AngularBuildConfiguration {
+  optimization?: boolean | {
+    styles?: {
+      inlineCritical?: boolean;
+    };
+  };
+}
+
 interface AngularConfig {
   projects: {
     'track-tools': {
       architect: {
         build: {
           options: AngularBuildOptions;
+          configurations: Record<string, AngularBuildConfiguration>;
         };
       };
     };
@@ -63,10 +76,26 @@ const robotsTxt = readFileSync(resolve(__dirname, 'robots.txt'), 'utf8');
 const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
+const expectedMcpFunctionRewriteSources = [
+  '/mcp',
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-protected-resource/mcp',
+  '/.well-known/oauth-authorization-server',
+  '/oauth/authorize',
+  '/oauth/token',
+];
 const siteOrigin = 'https://quantified-self.io';
 const betaNoIndexHeader = {
   key: 'X-Robots-Tag',
   value: 'noindex, nofollow',
+};
+const networkOnlyAuthSources = ['/mcp/authorize', '/login'];
+const mcpAuthorizeEnforcedCsp = "base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'";
+const mcpAuthorizeSecurityHeaders = {
+  'Content-Security-Policy': mcpAuthorizeEnforcedCsp,
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
 };
 
 function routePathToHostingSource(path: string): string {
@@ -114,28 +143,59 @@ function isAllowedByRobots(source: string): boolean {
   ));
 }
 
+function findHtmlFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const entryPath = resolve(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      return findHtmlFiles(entryPath);
+    }
+
+    return entry.isFile() && entry.name.endsWith('.html') ? [entryPath] : [];
+  });
+}
+
+function getCspDirective(policy: string, directiveName: string): string | undefined {
+  return policy
+    .split(';')
+    .map(directive => directive.trim())
+    .find(directive => directive === directiveName || directive.startsWith(`${directiveName} `));
+}
+
 describe('Firebase Hosting configuration', () => {
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
     for (const target of firebaseConfig.hosting) {
       const rewrites = target.rewrites ?? [];
-      const sources = rewrites.map(rewrite => rewrite.source);
+      const csrRewrites = rewrites.filter(rewrite => rewrite.destination !== undefined);
+      const functionRewrites = rewrites.filter(rewrite => rewrite.function !== undefined);
+      const sources = csrRewrites.map(rewrite => rewrite.source);
 
       expect(target.public).toBe('dist/browser');
       expect(sources).toEqual(expectedCsrRewriteSources);
-      expect(new Set(sources).size).toBe(sources.length);
+      expect(functionRewrites.map(rewrite => rewrite.source)).toEqual(expectedMcpFunctionRewriteSources);
+      expect(new Set(rewrites.map(rewrite => rewrite.source)).size).toBe(rewrites.length);
       expect(sources).not.toContain('**');
       expect(sources).not.toContain('/**');
       expect(sources.every(source => !source.includes('**'))).toBe(true);
 
-      for (const rewrite of rewrites) {
+      for (const rewrite of csrRewrites) {
         expect(rewrite.destination).toBe('/index.csr.html');
+      }
+      for (const rewrite of functionRewrites) {
+        expect(rewrite.function).toEqual({
+          functionId: 'mcpApi',
+          region: 'europe-west2',
+        });
       }
     }
   });
 
   it('matches known CSR URLs without masking prerendered or unknown URLs', () => {
-    const sources = firebaseConfig.hosting[0]?.rewrites?.map(rewrite => rewrite.source) ?? [];
+    const sources = firebaseConfig.hosting[0]?.rewrites
+      ?.filter(rewrite => rewrite.destination !== undefined)
+      .map(rewrite => rewrite.source) ?? [];
 
+    expect(matchesAnyHostingSource(sources, '/mcp/authorize')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
@@ -157,7 +217,9 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('keeps all prerendered public routes out of Firebase and service-worker CSR fallbacks', () => {
-    const hostingSources = firebaseConfig.hosting[0]?.rewrites?.map(rewrite => rewrite.source) ?? [];
+    const hostingSources = firebaseConfig.hosting[0]?.rewrites
+      ?.filter(rewrite => rewrite.destination !== undefined)
+      .map(rewrite => rewrite.source) ?? [];
     const positiveNavigationUrls = serviceWorkerConfig.navigationUrls.filter(url => !url.startsWith('!'));
     const prerenderedPublicSources = PRERENDERED_PUBLIC_ROUTES.map(routePathToHostingSource);
 
@@ -209,9 +271,11 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
     expect(robotsTxt).toContain('Disallow: /routes');
     expect(robotsTxt).toContain('Disallow: /training');
+    expect(robotsTxt).toContain('Disallow: /mcp/authorize');
   });
 
   it('marks public share routes noindex at the hosting layer', () => {
@@ -221,6 +285,88 @@ describe('Firebase Hosting configuration', () => {
 
     expect(eventShareHeaders).toContainEqual(betaNoIndexHeader);
     expect(comparisonShareHeaders).toContainEqual(betaNoIndexHeader);
+  });
+
+  it('hardens network-only MCP authorization and login entry points', () => {
+    const targetHeaderSets: Array<FirebaseHostingTarget['headers'][number]['headers']> = [];
+
+    for (const source of networkOnlyAuthSources) {
+      expect(serviceWorkerConfig.navigationUrls).not.toContain(source);
+    }
+
+    for (const target of firebaseConfig.hosting) {
+      const protectedHeaderEntries = target.headers
+        ?.filter(header => networkOnlyAuthSources.includes(header.source)) ?? [];
+
+      expect(protectedHeaderEntries.map(entry => entry.source)).toEqual(networkOnlyAuthSources);
+      expect(protectedHeaderEntries[1]?.headers).toEqual(protectedHeaderEntries[0]?.headers);
+
+      const headers = protectedHeaderEntries[0]?.headers ?? [];
+      const headersByKey = Object.fromEntries(headers.map(header => [header.key, header.value]));
+      targetHeaderSets.push(headers);
+
+      expect(new Set(headers.map(header => header.key)).size).toBe(headers.length);
+      expect(headersByKey).toMatchObject(mcpAuthorizeSecurityHeaders);
+
+      const reportOnlyPolicy = headersByKey['Content-Security-Policy-Report-Only'];
+      expect(reportOnlyPolicy).toBeDefined();
+      expect(getCspDirective(reportOnlyPolicy, 'default-src')).toBe("default-src 'self'");
+      expect(getCspDirective(reportOnlyPolicy, 'base-uri')).toBe("base-uri 'self'");
+      expect(getCspDirective(reportOnlyPolicy, 'frame-ancestors')).toBe("frame-ancestors 'none'");
+      expect(getCspDirective(reportOnlyPolicy, 'object-src')).toBe("object-src 'none'");
+      expect(getCspDirective(reportOnlyPolicy, 'form-action')).toBe("form-action 'self'");
+      expect(getCspDirective(reportOnlyPolicy, 'script-src-attr')).toBe("script-src-attr 'none'");
+      expect(getCspDirective(reportOnlyPolicy, 'style-src')).toBe("style-src 'self' 'unsafe-inline'");
+      expect(getCspDirective(reportOnlyPolicy, 'worker-src')).toBe("worker-src 'self' blob:");
+      expect(reportOnlyPolicy).toContain('https://*.googleapis.com');
+      expect(reportOnlyPolicy).toContain('https://*.firebaseio.com');
+      expect(reportOnlyPolicy).toContain('https://*.cloudfunctions.net');
+      expect(reportOnlyPolicy).toContain('https://*.ingest.sentry.io');
+      expect(reportOnlyPolicy).toContain('https://*.g.doubleclick.net');
+      expect(reportOnlyPolicy).toContain('https://api.mapbox.com');
+      expect(reportOnlyPolicy).toContain('https://www.googletagmanager.com');
+      expect(reportOnlyPolicy).toContain('https://www.google.com/recaptcha/');
+      expect(reportOnlyPolicy).toContain('https://recaptcha.google.com/recaptcha/');
+      expect(getCspDirective(reportOnlyPolicy, 'script-src')).toContain("'wasm-unsafe-eval'");
+      expect(reportOnlyPolicy).not.toContain("'unsafe-eval'");
+      expect(reportOnlyPolicy).not.toContain('default-src *');
+      expect(reportOnlyPolicy).not.toContain('script-src https:');
+      expect(reportOnlyPolicy).not.toContain('https://*.mapbox.com');
+    }
+
+    expect(targetHeaderSets[1]).toEqual(targetHeaderSets[0]);
+  });
+
+  it('keeps executable scripts and event handlers compatible with a strict script policy', () => {
+    const indexHtml = readFileSync(resolve(__dirname, 'index.html'), 'utf8');
+    const aiInsightsContract = readFileSync(
+      resolve(__dirname, '../shared/ai-insights-response.contract.ts'),
+      'utf8'
+    );
+    const appHtmlFiles = findHtmlFiles(resolve(__dirname, 'app'));
+    const filesWithInlineHandlers = appHtmlFiles.filter(filePath => (
+      /\son[a-z]+\s*=/i.test(readFileSync(filePath, 'utf8'))
+    ));
+
+    expect(indexHtml).toContain('<script src="assets/theme-init.js"></script>');
+    expect(indexHtml).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/i);
+    expect(aiInsightsContract).toContain("if (typeof window !== 'undefined')");
+    expect(aiInsightsContract.indexOf('z.config({ jitless: true });')).toBeGreaterThan(-1);
+    expect(aiInsightsContract.indexOf('z.config({ jitless: true });')).toBeLessThan(
+      aiInsightsContract.indexOf('z.object({')
+    );
+    expect(filesWithInlineHandlers).toEqual([]);
+
+    for (const configurationName of ['production', 'beta']) {
+      expect(
+        angularConfig.projects['track-tools'].architect.build
+          .configurations[configurationName]?.optimization
+      ).toMatchObject({
+        styles: {
+          inlineCritical: false,
+        },
+      });
+    }
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {
@@ -262,8 +408,10 @@ describe('Firebase Hosting configuration', () => {
   it('keeps service-worker navigation fallback scoped to known CSR routes', () => {
     const navigationUrls = serviceWorkerConfig.navigationUrls;
     const positiveNavigationUrls = navigationUrls.filter(url => !url.startsWith('!'));
+    const cacheableCsrRewriteSources = expectedCsrRewriteSources
+      .filter(source => !networkOnlyAuthSources.includes(source));
 
-    expect(positiveNavigationUrls).toEqual(expectedCsrRewriteSources);
+    expect(positiveNavigationUrls).toEqual(cacheableCsrRewriteSources);
     expect(navigationUrls).not.toContain('/**');
     expect(positiveNavigationUrls.every(url => !url.includes('**'))).toBe(true);
     expect(navigationUrls).toContain('!/**/*.*');

@@ -30,7 +30,6 @@
   ],
   "dataGroups": [],
   "navigationUrls": [
-    "/login",
     "/onboarding",
     "/admin",
     "/admin/maintenance",

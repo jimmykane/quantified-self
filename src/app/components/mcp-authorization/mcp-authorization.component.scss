@@ -1,0 +1,132 @@
+:host {
+  display: block;
+  min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
+}
+
+.mcp-authorization {
+  display: flex;
+  justify-content: center;
+  padding: 48px 20px;
+}
+
+.mcp-authorization__card {
+  width: min(100%, 680px);
+}
+
+mat-card-content {
+  display: grid;
+  gap: 24px;
+  padding-top: 24px;
+}
+
+.mcp-authorization__client {
+  align-items: flex-start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr);
+
+  > mat-icon {
+    color: var(--mat-sys-primary);
+  }
+
+  h1 {
+    color: var(--mat-sys-on-surface);
+    font-size: 1.25rem;
+    margin: 0 0 12px;
+  }
+
+  dl {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+  }
+
+  dl > div {
+    display: grid;
+    gap: 2px;
+  }
+
+  dt {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.8rem;
+  }
+
+  dd {
+    color: var(--mat-sys-on-surface);
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.mcp-authorization__permissions {
+  display: grid;
+  gap: 12px;
+
+  h2 {
+    color: var(--mat-sys-on-surface);
+    font-size: 1.05rem;
+    margin: 0;
+  }
+
+  mat-checkbox {
+    width: 100%;
+  }
+}
+
+.mcp-authorization__permission-copy {
+  display: grid;
+  gap: 2px;
+  white-space: normal;
+
+  span {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+}
+
+.mcp-authorization__privacy {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.mcp-authorization__state,
+.mcp-authorization__warning,
+.mcp-authorization__error {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.mcp-authorization__state {
+  justify-content: center;
+  min-height: 160px;
+}
+
+.mcp-authorization__warning {
+  background: var(--mat-sys-secondary-container);
+  border-radius: 12px;
+  color: var(--mat-sys-on-secondary-container);
+  padding: 16px;
+}
+
+.mcp-authorization__error,
+.mcp-authorization__state--error {
+  color: var(--mat-sys-error);
+}
+
+.mcp-authorization__button-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-width: 72px;
+}
+
+@media (max-width: 599px) {
+  .mcp-authorization {
+    padding: 24px 12px;
+  }
+}

@@ -148,6 +148,17 @@ describe('SideNavComponent', () => {
         openSpy.mockRestore();
     });
 
+    it('should open support and bug-report destinations through Angular handlers', () => {
+        const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+        component.contactSupport();
+        component.reportBug();
+
+        expect(openSpy).toHaveBeenNthCalledWith(1, 'mailto:support@quantified-self.io');
+        expect(openSpy).toHaveBeenNthCalledWith(2, 'https://github.com/jimmykane/quantified-self/issues');
+        openSpy.mockRestore();
+    });
+
     it('should trigger haptics when logging out', async () => {
         await component.logout();
 

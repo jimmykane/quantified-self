@@ -87,6 +87,15 @@ describe('AppRoutingModule routes', () => {
     expect(routesRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
+  it('should keep MCP consent authenticated and out of search indexes', () => {
+    const mcpAuthorizationRoute = routes.find(route => route.path === 'mcp/authorize');
+
+    expect(mcpAuthorizationRoute).toBeTruthy();
+    expect(mcpAuthorizationRoute?.canMatch).toEqual([authGuard]);
+    expect(mcpAuthorizationRoute?.loadComponent).toBeTypeOf('function');
+    expect(mcpAuthorizationRoute?.data?.['robots']).toBe('noindex, nofollow');
+  });
+
   it('should define unguarded noindexed public share routes', () => {
     const eventShareRoute = routes.find(route => route.path === 'share/event/:userID/:eventID');
     const comparisonShareRoute = routes.find(route => route.path === 'share/comparison/:userID/:eventID');

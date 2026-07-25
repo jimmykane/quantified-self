@@ -918,7 +918,7 @@ capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout presc
 
 #### Parser and continuous-stream boundary
 
-Sports-lib 17.7.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
+Sports-lib 17.8.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
 Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 14 rebuilds existing
 snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
@@ -1327,6 +1327,25 @@ skiing, and multisport aggregates need different fatigue models rather than this
 
 Do not read settings or sleep unconditionally in the worker. Source requirements are part of the performance contract.
 
+### Exposing Training snapshots through MCP
+
+The read-only MCP server does not recalculate Training metrics and does not scan activity history for a derived tool call.
+`get_training_metric` accepts only a kind registered in `DERIVED_METRIC_KINDS` and reads the normal
+`users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready`, current-schema payload plus schema, update,
+and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being
+interpreted as zero.
+
+There is deliberately no separate MCP-derived-kind registry. A newly registered kind is discoverable, but its payload must
+still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts`. The server recursively removes event/activity
+IDs, names, and labels, including identities nested under event- or activity-named parents. It also removes source
+fingerprints and imported device/provider provenance (`sourceKey` and `previousSourceKey`). If a new payload introduces
+another identity- or provenance-bearing field, extend the redaction contract before release rather than relying on client
+behavior.
+
+Use `.agent/skills/mcp-metric-surface/SKILL.md` for every derived-kind change. Add a focused MCP test that covers ready-state
+handling, schema metadata, and the payload's positive and negative disclosure contract. The transport, scopes, query
+bounds, sleep projection, and Sports Lib event-stat discovery are documented in `docs/mcp-server.md`.
+
 ## Testing and Verification
 
 ### Sports-lib
@@ -1491,6 +1510,7 @@ Before merging a Training change, confirm:
 - [ ] Settings writes are authenticated, App-Check protected, deletion guarded, normalized, and branch-scoped.
 - [ ] Source dependencies are fetched only for metric kinds that need them.
 - [ ] Snapshot schema and frontend normalizers agree.
+- [ ] New or changed derived kinds have an MCP ready-state, identity-redaction, and device/provider-provenance contract test.
 - [ ] Loading, failed, empty, updating, invalid, and ready states are readable.
 - [ ] Metric delta colors follow metric semantics.
 - [ ] Help content and this document are current.

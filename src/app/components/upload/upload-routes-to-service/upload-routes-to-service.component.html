@@ -1,7 +1,7 @@
 <section class="mat-elevation-z0" (drop)="getFiles($event);"
-  ondragenter="event.stopPropagation(); event.preventDefault();"
-  ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
-  ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
+  (dragenter)="handleDragEnter($event)"
+  (dragover)="handleDragOver($event)"
+  (dragleave)="handleDragLeave($event)">
   <button mat-flat-button class="qs-mat-primary" (click)="inputFile.click()" [disabled]="!hasProAccess || isUploading">
     <span class="upload-routes-to-service__button-content">
       @if (isUploading) {

@@ -209,6 +209,13 @@ export { scheduleSportsLibRouteReparseScan } from './schedule/sports-lib-route-r
 export { dispatchRouteDeliverySyncQueue } from './route-delivery-sync/dispatcher';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
+export { mcpApi } from './mcp/server';
+export {
+  getMcpAuthorizationRequest,
+  decideMcpAuthorization,
+  listMcpConnections,
+  revokeMcpConnection,
+} from './mcp/callables';
 export { listUsers, getQueueStats, getUserCount, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
 
 // Tasks

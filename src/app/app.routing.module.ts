@@ -420,6 +420,16 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard],
   },
   {
+    path: 'mcp/authorize',
+    loadComponent: () => import('./components/mcp-authorization/mcp-authorization.component')
+      .then(module => module.McpAuthorizationComponent),
+    data: {
+      title: 'Authorize MCP connection',
+      robots: 'noindex, nofollow',
+    },
+    canMatch: [authGuard],
+  },
+  {
     path: 'share/event/:userID/:eventID',
     loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
     data: {

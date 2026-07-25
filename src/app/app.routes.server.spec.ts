@@ -84,6 +84,7 @@ describe('serverRoutes', () => {
         .map(route => route.path)
     );
     expect(prerenderedPaths.has('')).toBe(true);
+    expect(prerenderedPaths.has('mcp/authorize')).toBe(false);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);
@@ -125,6 +126,7 @@ describe('serverRoutes', () => {
       status: 404,
     });
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'pricing')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'tools/compare/saved')?.status).toBeUndefined();

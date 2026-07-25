@@ -21,6 +21,7 @@ Allow: /guides/centralize-garmin-suunto-coros-workout-data
 Allow: /releases
 Disallow: /user
 Disallow: /user/
+Disallow: /mcp/authorize
 Disallow: /settings
 Disallow: /dashboard
 Disallow: /training
