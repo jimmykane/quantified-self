@@ -8,11 +8,13 @@ import { McpDataError } from './data.service';
 import {
   McpOAuthError,
   MCP_OAUTH_SCOPES,
+  rejectRepeatedOAuthParameters,
 } from './oauth.service';
 import {
   classifyMcpBearerFailure,
   createMcpServer,
   formatMcpToolError,
+  isMcpFormUrlEncodedContentType,
   isMcpRequestBodyWithinLimit,
   parseMcpBearerToken,
   parseMcpDateTime,
@@ -103,12 +105,37 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
   it('preserves repeated form parameters for strict OAuth validation', () => {
-    expect(parseMcpFormEncodedBody(
+    const parsed = parseMcpFormEncodedBody(
       'grant_type=refresh_token&scope=metrics%3Aread&scope=sleep%3Aread',
-    )).toEqual({
+    );
+    expect(parsed).toEqual({
       grant_type: 'refresh_token',
       scope: ['metrics:read', 'sleep:read'],
     });
+    expect(() => rejectRepeatedOAuthParameters(parsed)).toThrow(
+      expect.objectContaining({ code: 'invalid_request' }),
+    );
+  });
+
+  it('accepts only form-encoded OAuth token requests', () => {
+    expect(isMcpFormUrlEncodedContentType('application/x-www-form-urlencoded')).toBe(true);
+    expect(isMcpFormUrlEncodedContentType(
+      'Application/X-Www-Form-Urlencoded; charset=UTF-8',
+    )).toBe(true);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset="utf8"',
+    )).toBe(true);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset=ISO-8859-1',
+    )).toBe(false);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset=UTF-8; charset=UTF-8',
+    )).toBe(false);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset=""',
+    )).toBe(false);
+    expect(isMcpFormUrlEncodedContentType('application/json')).toBe(false);
+    expect(isMcpFormUrlEncodedContentType(undefined)).toBe(false);
   });
 
   it('requires unambiguous ISO date-times with a UTC offset', () => {
@@ -167,6 +194,12 @@ describe('MCP HTTP scope enforcement', () => {
   it('reports unsupported OAuth token grants with the standard error code', () => {
     expect(requireMcpTokenGrantType('authorization_code')).toBe('authorization_code');
     expect(requireMcpTokenGrantType('refresh_token')).toBe('refresh_token');
+    expect(() => requireMcpTokenGrantType('')).toThrow(
+      expect.objectContaining({ code: 'invalid_request' }),
+    );
+    expect(() => requireMcpTokenGrantType(['refresh_token', 'refresh_token'])).toThrow(
+      expect.objectContaining({ code: 'invalid_request' }),
+    );
     expect(() => requireMcpTokenGrantType('client_credentials')).toThrow(
       expect.objectContaining({ code: 'unsupported_grant_type' }),
     );

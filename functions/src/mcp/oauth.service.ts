@@ -96,6 +96,17 @@ export class McpOAuthError extends Error {
   }
 }
 
+export class McpOAuthAuthorizationRedirectError extends McpOAuthError {
+  constructor(
+    code: OAuthErrorCode,
+    message: string,
+    readonly redirectUri: string,
+  ) {
+    super(code, message);
+    this.name = 'McpOAuthAuthorizationRedirectError';
+  }
+}
+
 export interface ClientMetadata {
   client_id: string;
   client_name: string;
@@ -577,7 +588,7 @@ function requireString(value: unknown, name: string, maxLength = 2048): string {
 }
 
 function readOptionalOAuthState(value: unknown): string | null {
-  if (value === undefined || value === null) {
+  if (value === undefined || value === null || value === '') {
     return null;
   }
   if (typeof value !== 'string' || !/^[\x20-\x7E]{1,512}$/.test(value)) {
@@ -598,6 +609,15 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
     throw new McpOAuthError('invalid_scope', 'Only metrics:read and sleep:read can be requested.');
   }
   return unique as McpOAuthScope[];
+}
+
+export function rejectRepeatedOAuthParameters(params: Record<string, unknown>): void {
+  if (Object.values(params).some(Array.isArray)) {
+    throw new McpOAuthError(
+      'invalid_request',
+      'OAuth request parameters must not be included more than once.',
+    );
+  }
 }
 
 function normalizeOAuthScopeParameter(value: unknown): McpOAuthScope[] {
@@ -814,33 +834,56 @@ export function createMcpOAuthService(
 
   return {
     async startAuthorization(params: Record<string, unknown>, baseUrl: string) {
-      if (params.response_type !== 'code') {
-        throw new McpOAuthError(
-          'unsupported_response_type',
-          'Only response_type=code is supported.',
-        );
-      }
-      if (params.code_challenge_method !== 'S256') {
-        throw new McpOAuthError('invalid_request', 'PKCE with code_challenge_method=S256 is required.');
-      }
       const clientId = requireString(params.client_id, 'client_id');
       const redirectUri = requireString(params.redirect_uri, 'redirect_uri');
-      const codeChallenge = requireString(params.code_challenge, 'code_challenge', 128);
-      const state = readOptionalOAuthState(params.state);
-      const audience = requireString(params.resource, 'resource');
-      const expectedAudience = `${baseUrl}/mcp`;
-      if (audience !== expectedAudience) {
-        throw new McpOAuthError('invalid_request', 'The resource does not identify this MCP server.');
-      }
-      if (!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge)) {
-        throw new McpOAuthError('invalid_request', 'The PKCE code challenge is invalid.');
-      }
-      const scopes = normalizeOAuthScopeParameter(params.scope);
       const metadata = await resolvedDependencies.fetchClientMetadata(clientId);
       if (!metadata.redirect_uris.includes(redirectUri)) {
         throw new McpOAuthError('invalid_client', 'redirect_uri is not registered by the client metadata document.');
       }
       const redirectHost = validateRedirectUri(redirectUri).host;
+      let state: string | null = null;
+      let codeChallenge: string;
+      let audience: string;
+      let scopes: McpOAuthScope[];
+      try {
+        rejectRepeatedOAuthParameters(params);
+        state = readOptionalOAuthState(params.state);
+        if (params.response_type === undefined || params.response_type === null || params.response_type === '') {
+          throw new McpOAuthError('invalid_request', 'response_type is required.');
+        }
+        if (params.response_type !== 'code') {
+          throw new McpOAuthError(
+            'unsupported_response_type',
+            'Only response_type=code is supported.',
+          );
+        }
+        if (params.code_challenge_method !== 'S256') {
+          throw new McpOAuthError('invalid_request', 'PKCE with code_challenge_method=S256 is required.');
+        }
+        codeChallenge = requireString(params.code_challenge, 'code_challenge', 128);
+        audience = requireString(params.resource, 'resource');
+        if (audience !== `${baseUrl}/mcp`) {
+          throw new McpOAuthError('invalid_request', 'The resource does not identify this MCP server.');
+        }
+        if (!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge)) {
+          throw new McpOAuthError('invalid_request', 'The PKCE code challenge is invalid.');
+        }
+        scopes = normalizeOAuthScopeParameter(params.scope);
+      } catch (error) {
+        if (!(error instanceof McpOAuthError)) {
+          throw error;
+        }
+        const redirect = new URL(redirectUri);
+        redirect.searchParams.set('error', error.code);
+        if (state !== null) {
+          redirect.searchParams.set('state', state);
+        }
+        throw new McpOAuthAuthorizationRedirectError(
+          error.code,
+          error.message,
+          redirect.toString(),
+        );
+      }
       const nowMs = resolvedDependencies.now();
       const requestId = resolvedDependencies.randomToken(24);
       const record: AuthorizationRequestRecord = {
@@ -953,6 +996,7 @@ export function createMcpOAuthService(
     },
 
     async exchangeAuthorizationCode(params: Record<string, unknown>, baseUrl: string) {
+      rejectRepeatedOAuthParameters(params);
       const code = requireString(params.code, 'code');
       const clientId = requireString(params.client_id, 'client_id');
       const redirectUri = requireString(params.redirect_uri, 'redirect_uri');
@@ -1010,13 +1054,14 @@ export function createMcpOAuthService(
     },
 
     async exchangeRefreshToken(params: Record<string, unknown>, baseUrl: string) {
+      rejectRepeatedOAuthParameters(params);
       const rawRefreshToken = requireString(params.refresh_token, 'refresh_token');
       const clientId = requireString(params.client_id, 'client_id');
       const audience = requireString(params.resource, 'resource');
       if (audience !== `${baseUrl}/mcp`) {
         throw new McpOAuthError('invalid_grant', 'The token audience is invalid.');
       }
-      const requestedScopes = params.scope === undefined || params.scope === null
+      const requestedScopes = params.scope === undefined || params.scope === null || params.scope === ''
         ? null
         : normalizeOAuthScopeParameter(params.scope);
       const nowMs = resolvedDependencies.now();

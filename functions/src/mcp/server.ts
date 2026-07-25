@@ -7,9 +7,11 @@ import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import { createMcpDataService, McpDataError } from './data.service';
 import {
   createMcpOAuthService,
+  McpOAuthAuthorizationRedirectError,
   McpOAuthError,
   McpOAuthScope,
   MCP_OAUTH_SCOPES,
+  rejectRepeatedOAuthParameters,
 } from './oauth.service';
 
 const dataService = createMcpDataService();
@@ -99,6 +101,27 @@ export function parseMcpFormEncodedBody(raw: string): Record<string, unknown> {
     }
   }
   return Object.fromEntries(values);
+}
+
+export function isMcpFormUrlEncodedContentType(value: string | undefined): boolean {
+  const [mediaType, ...parameters] = `${value || ''}`.split(';');
+  if (mediaType.trim().toLowerCase() !== 'application/x-www-form-urlencoded') {
+    return false;
+  }
+  const charsetParameters = parameters
+    .map(parameter => parameter.trim())
+    .filter(parameter => /^charset\b/i.test(parameter));
+  if (charsetParameters.length === 0) {
+    return true;
+  }
+  if (charsetParameters.length !== 1) {
+    return false;
+  }
+  const match = charsetParameters[0].match(
+    /^charset\s*=\s*(?:"([^"]+)"|([^";\s]+))\s*$/i,
+  );
+  const charset = match?.[1] || match?.[2];
+  return Boolean(charset && /^utf-?8$/i.test(charset));
 }
 
 function parseFormBody(request: Request): Record<string, unknown> {
@@ -378,6 +401,12 @@ export function classifyMcpBearerFailure(error: unknown): McpBearerFailure {
 export function requireMcpTokenGrantType(
   value: unknown,
 ): 'authorization_code' | 'refresh_token' {
+  if (value === undefined || value === null || value === '') {
+    throw new McpOAuthError('invalid_request', 'grant_type is required.');
+  }
+  if (typeof value !== 'string') {
+    throw new McpOAuthError('invalid_request', 'grant_type must not be repeated.');
+  }
   if (value === 'authorization_code' || value === 'refresh_token') {
     return value;
   }
@@ -448,6 +477,10 @@ export const mcpApi = onRequest({
       );
       response.redirect(302, started.consentUrl);
     } catch (error) {
+      if (error instanceof McpOAuthAuthorizationRedirectError) {
+        response.redirect(302, error.redirectUri);
+        return;
+      }
       sendOAuthError(response, error);
     }
     return;
@@ -455,6 +488,13 @@ export const mcpApi = onRequest({
 
   if (request.method === 'POST' && path === '/oauth/token') {
     noStore(response);
+    if (!isMcpFormUrlEncodedContentType(request.get('content-type'))) {
+      response.status(400).json({
+        error: 'invalid_request',
+        error_description: 'The token request must use application/x-www-form-urlencoded.',
+      });
+      return;
+    }
     if (!isMcpRequestBodyWithinLimit(request.body, request.get('content-length'))) {
       response.status(413).json({
         error: 'invalid_request',
@@ -464,6 +504,7 @@ export const mcpApi = onRequest({
     }
     try {
       const params = parseFormBody(request);
+      rejectRepeatedOAuthParameters(params);
       const grantType = requireMcpTokenGrantType(params.grant_type);
       const result = grantType === 'authorization_code'
         ? await getOAuthService().exchangeAuthorizationCode(params, baseUrl)

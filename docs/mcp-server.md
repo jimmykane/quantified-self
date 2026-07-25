@@ -45,8 +45,10 @@ to server-side token records; a UID is never accepted from MCP input. OAuth acce
 SHA-256 hashes, expire after one hour, and are audience-bound. Refresh tokens expire after 30 days and rotate on use.
 When a refresh request narrows the connection grant, previously issued access tokens with broader scopes stop working.
 Reuse of an already-rotated refresh token revokes the connection and makes active descendant tokens unusable.
-Authorization codes are single-use and expire after five minutes. OAuth `state` is optional; when supplied, it must be
-1–512 visible ASCII characters and is echoed exactly.
+Authorization codes are single-use and expire after five minutes. A valueless OAuth `state` parameter is treated as
+omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoed exactly.
+The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
+parameters.
 
 Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
 responses, private or loopback metadata hosts, unsupported grant types, and redirect URIs that were not registered.

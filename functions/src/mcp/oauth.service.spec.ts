@@ -13,6 +13,7 @@ import {
   hashOpaqueValue,
   isPrivateAddress,
   McpConnection,
+  McpOAuthAuthorizationRedirectError,
   McpOAuthError,
   McpOAuthStore,
   MCP_OAUTH_SCOPES,
@@ -328,12 +329,19 @@ describe('MCP OAuth service', () => {
     });
     const verifier = 'v'.repeat(43);
 
-    await expect(service.startAuthorization({
+    const responseTypeError = await service.startAuthorization({
       ...authorizationParams(verifier),
       response_type: 'token',
-    }, 'https://quantified-self.io')).rejects.toMatchObject({
+    }, 'https://quantified-self.io').then(
+      () => null,
+      error => error as { code: string; redirectUri: string },
+    );
+    expect(responseTypeError).toMatchObject({
       code: 'unsupported_response_type',
+      redirectUri: expect.stringContaining('error=unsupported_response_type'),
     });
+    expect(new URL(responseTypeError!.redirectUri).searchParams.get('state'))
+      .toBe('client-state');
 
     await expect(service.startAuthorization({
       ...authorizationParams(verifier),
@@ -350,10 +358,12 @@ describe('MCP OAuth service', () => {
       resource: 'https://other.example/mcp',
     }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_request' });
 
-    await expect(service.startAuthorization({
+    const invalidRedirectError = await service.startAuthorization({
       ...authorizationParams(verifier),
       redirect_uri: 'https://evil.example/callback',
-    }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_client' });
+    }, 'https://quantified-self.io').then(() => null, error => error);
+    expect(invalidRedirectError).toMatchObject({ code: 'invalid_client' });
+    expect(invalidRedirectError).not.toBeInstanceOf(McpOAuthAuthorizationRedirectError);
 
     await expect(service.startAuthorization({
       ...authorizationParams(verifier),
@@ -363,7 +373,12 @@ describe('MCP OAuth service', () => {
     await expect(service.startAuthorization({
       ...authorizationParams(verifier),
       scope: ['metrics:read', 'sleep:read'],
-    }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_scope' });
+    }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_request' });
+
+    await expect(service.startAuthorization({
+      ...authorizationParams(verifier),
+      response_type: '',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_request' });
   });
 
   it('preserves optional OAuth state exactly in authorization responses', async () => {
@@ -392,11 +407,12 @@ describe('MCP OAuth service', () => {
     expect(approvalParams.get('code')).toEqual(expect.any(String));
 
     const withoutStateStore = createMemoryStore();
+    let requestCounter = 0;
     const withoutStateService = createMcpOAuthService({
       store: withoutStateStore,
       fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
       now: () => 1000,
-      randomToken: () => 'request-without-state',
+      randomToken: () => `request-without-state-${++requestCounter}`,
     });
     const withoutState = await withoutStateService.startAuthorization({
       ...authorizationParams(verifier),
@@ -411,12 +427,18 @@ describe('MCP OAuth service', () => {
     });
     expect(new URL(deniedWithoutState.redirectUri).searchParams.has('state')).toBe(false);
 
-    await expect(withoutStateService.startAuthorization({
+    const withValuelessState = await withoutStateService.startAuthorization({
       ...authorizationParams(verifier),
       state: '',
-    }, 'https://quantified-self.io')).rejects.toMatchObject({
-      code: 'invalid_request',
+    }, 'https://quantified-self.io');
+    expect(withoutStateStore.requests.get(withValuelessState.requestId)?.state).toBeNull();
+    const deniedWithValuelessState = await withoutStateService.decideAuthorization({
+      uid: 'user-1',
+      requestId: withValuelessState.requestId,
+      approved: false,
     });
+    expect(new URL(deniedWithValuelessState.redirectUri).searchParams.has('state')).toBe(false);
+
     await expect(withoutStateService.startAuthorization({
       ...authorizationParams(verifier),
       state: 'line one\nline two',
@@ -450,6 +472,8 @@ describe('MCP OAuth service', () => {
       'reused-refresh-token',
       'replay-detected-access-token',
       'replay-detected-refresh-token',
+      'final-replay-access-token',
+      'final-replay-refresh-token',
     ];
     const service = createMcpOAuthService({
       store,
@@ -532,31 +556,35 @@ describe('MCP OAuth service', () => {
       scopes: [MCP_OAUTH_SCOPES.MetricsRead],
     }));
 
-    await expect(service.exchangeRefreshToken({
+    const retainedScope = await service.exchangeRefreshToken({
       grant_type: 'refresh_token',
       refresh_token: rotated.refresh_token,
       client_id: metadata().client_id,
       scope: '',
       resource: 'https://quantified-self.io/mcp',
-    }, 'https://quantified-self.io')).rejects.toMatchObject({
-      code: 'invalid_scope',
-    });
-    expect(store.refreshTokens.get(hashOpaqueValue(rotated.refresh_token))?.active).toBe(true);
+    }, 'https://quantified-self.io');
+    expect(retainedScope).toEqual(expect.objectContaining({
+      access_token: 'reused-access-token',
+      refresh_token: 'reused-refresh-token',
+      scope: 'metrics:read',
+    }));
+    expect(store.refreshTokens.get(hashOpaqueValue(rotated.refresh_token))?.active).toBe(false);
+    expect(store.refreshTokens.get(hashOpaqueValue(retainedScope.refresh_token))?.active).toBe(true);
 
     await expect(service.exchangeRefreshToken({
       grant_type: 'refresh_token',
-      refresh_token: rotated.refresh_token,
+      refresh_token: retainedScope.refresh_token,
       client_id: metadata().client_id,
       scope: ['metrics:read'],
       resource: 'https://quantified-self.io/mcp',
     }, 'https://quantified-self.io')).rejects.toMatchObject({
-      code: 'invalid_scope',
+      code: 'invalid_request',
     });
-    expect(store.refreshTokens.get(hashOpaqueValue(rotated.refresh_token))?.active).toBe(true);
+    expect(store.refreshTokens.get(hashOpaqueValue(retainedScope.refresh_token))?.active).toBe(true);
 
     await expect(service.exchangeRefreshToken({
       grant_type: 'refresh_token',
-      refresh_token: rotated.refresh_token,
+      refresh_token: retainedScope.refresh_token,
       client_id: metadata().client_id,
       scope: 'metrics:read sleep:read',
       resource: 'https://quantified-self.io/mcp',
@@ -573,7 +601,7 @@ describe('MCP OAuth service', () => {
       code: 'invalid_grant',
     });
     await expect(service.authenticateBearer(
-      rotated.access_token,
+      retainedScope.access_token,
       'https://quantified-self.io/mcp',
     )).rejects.toMatchObject({ statusCode: 401 });
   });
