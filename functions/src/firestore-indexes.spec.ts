@@ -135,20 +135,7 @@ describe('firestore indexes', () => {
             collectionGroup: 'sportsLibRouteReparseJobs',
             fieldPath: 'expireAt',
             ttl: true,
-            indexes: [
-                {
-                    order: 'ASCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    order: 'DESCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    arrayConfig: 'CONTAINS',
-                    queryScope: 'COLLECTION',
-                },
-            ],
+            indexes: [],
         });
     });
 
@@ -168,6 +155,15 @@ describe('firestore indexes', () => {
                 ttl: true,
                 indexes: [],
             });
+        }
+    });
+
+    it('exempts every TTL-only expiration field from automatic indexing', () => {
+        const config = loadFirestoreIndexes();
+
+        for (const fieldOverride of config.fieldOverrides.filter(field => field.ttl === true)) {
+            expect(fieldOverride.fieldPath).toBe('expireAt');
+            expect(fieldOverride.indexes).toEqual([]);
         }
     });
 
@@ -259,20 +255,7 @@ describe('firestore indexes', () => {
             collectionGroup: 'routeDeliverySyncQueue',
             fieldPath: 'expireAt',
             ttl: true,
-            indexes: [
-                {
-                    order: 'ASCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    order: 'DESCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    arrayConfig: 'CONTAINS',
-                    queryScope: 'COLLECTION',
-                },
-            ],
+            indexes: [],
         });
     });
 });
