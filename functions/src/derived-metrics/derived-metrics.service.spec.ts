@@ -1919,6 +1919,42 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         });
     });
 
+    it('discovers a same-day powered type without using that workout in today’s fit', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+
+        const result = buildTrainingPowerSystemsMetricPayload([
+            source('same-day-rowing', ActivityTypes.Rowing, asOfDayMs),
+        ], nowMs);
+        const rowing = result.payload.activityTypes[0];
+
+        expect(rowing).toMatchObject({
+            activityType: ActivityTypes.Rowing,
+            current: {
+                effectiveDayMs: asOfDayMs,
+                status: 'insufficient-evidence',
+                reason: 'no-evidence',
+                sourceFingerprint: null,
+                diagnostics: {
+                    sourceCount: 0,
+                    historyStartDayMs: null,
+                    historyEndDayMs: null,
+                    historySpanDays: 0,
+                },
+            },
+            evidenceCounts: {
+                candidateActivityCount: 0,
+                usableCurveActivityCount: 0,
+                excludedActivityCount: 0,
+            },
+        });
+        expect(rowing.history).toHaveLength(1);
+        expect(rowing.history[0]).toMatchObject({
+            effectiveDayMs: asOfDayMs,
+            status: 'insufficient-evidence',
+            reason: 'no-evidence',
+        });
+    });
+
     it('is deterministic under shuffled input and caches each exact type/date fit', async () => {
         const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
         const activities = [
@@ -2121,6 +2157,54 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             criticalPowerWatts: null,
             wPrimeJoules: null,
             maximumPowerWatts: null,
+        });
+    });
+
+    it.each([
+        {
+            name: 'an impossible overall status and reason pairing',
+            mutate: (fit: any) => ({
+                ...fit,
+                status: 'poor-fit',
+                reason: 'invalid-source',
+                criticalPower: { status: 'poor-fit', reason: 'invalid-source', value: null },
+                wPrime: { status: 'poor-fit', reason: 'invalid-source', value: null },
+                maximumPower: { status: 'poor-fit', reason: 'invalid-source', value: null },
+            }),
+        },
+        {
+            name: 'a partial reason that disagrees with the maximum-power status',
+            mutate: (fit: any) => ({
+                ...fit,
+                status: 'partial',
+                reason: 'poor-maximum-power-fit',
+                criticalPower: { status: 'ready', reason: null, value: 260 },
+                wPrime: { status: 'ready', reason: null, value: 18_500 },
+                maximumPower: {
+                    status: 'insufficient-evidence',
+                    reason: 'poor-maximum-power-fit',
+                    value: null,
+                },
+            }),
+        },
+    ])('degrades $name before persistence', async ({ mutate }) => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const fit = fitThreeDimensionalCapacityModel([
+            datedCurve('rowing', ActivityTypes.Rowing, asOfDayMs - DAY_MS),
+        ], { effectiveDate: '2026-07-20' });
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('rowing', ActivityTypes.Rowing, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => mutate(fit),
+        );
+
+        expect(result.payload.activityTypes[0].current).toMatchObject({
+            status: 'invalid-input',
+            reason: 'invalid-source',
+            criticalPower: { status: 'invalid-input', reason: 'invalid-source', value: null },
+            wPrime: { status: 'invalid-input', reason: 'invalid-source', value: null },
+            maximumPower: { status: 'invalid-input', reason: 'invalid-source', value: null },
         });
     });
 

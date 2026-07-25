@@ -58,6 +58,7 @@ import {
     DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
     DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
     DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
+    isDerivedTrainingPowerSystemsStatusReasonPair,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedFormDailyLoadEntry,
@@ -1657,6 +1658,7 @@ function isTrainingPowerSystemsFitContractConsistent(
     if (
         fit.effectiveDate !== resolveUtcDateKey(effectiveDayMs)
         || (fit.diagnostics.sourceCount > 0 && fit.activityType !== activityType)
+        || !isDerivedTrainingPowerSystemsStatusReasonPair(fit.status, fit.reason)
     ) {
         return false;
     }
@@ -1667,10 +1669,18 @@ function isTrainingPowerSystemsFitContractConsistent(
             && maximumPower.status === 'ready';
     }
     if (fit.status === 'partial') {
+        const expectedMaximumPowerStatus =
+            fit.reason === 'insufficient-maximum-power-range'
+                ? 'insufficient-evidence'
+                : fit.reason === 'poor-maximum-power-fit'
+                    ? 'poor-fit'
+                    : fit.reason === 'unstable-maximum-power-fit'
+                        ? 'unstable'
+                        : null;
         return fit.reason !== null
             && criticalPower.status === 'ready'
             && wPrime.status === 'ready'
-            && maximumPower.status !== 'ready'
+            && maximumPower.status === expectedMaximumPowerStatus
             && maximumPower.reason === fit.reason;
     }
     const expectedComponentStatus = fit.status;

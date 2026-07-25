@@ -8,6 +8,7 @@ import {
   DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
   DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
   DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
+  isDerivedTrainingPowerSystemsStatusReasonPair,
   type DerivedTrainingPowerSystemsActivityType,
   type DerivedTrainingPowerSystemsComponent,
   type DerivedTrainingPowerSystemsComponentStatus,
@@ -146,7 +147,11 @@ function resolveStatusAndReason(
 ): { status: DerivedTrainingPowerSystemsStatus; reason: DerivedTrainingPowerSystemsReason | null } | null {
   const status = resolveOverallStatus(statusValue);
   const reason = resolveReason(reasonValue);
-  if (!status || reason === undefined || (status === 'ready' ? reason !== null : reason === null)) {
+  if (
+    !status
+    || reason === undefined
+    || !isDerivedTrainingPowerSystemsStatusReasonPair(status, reason)
+  ) {
     return null;
   }
   return { status, reason };
@@ -190,10 +195,18 @@ function componentStatusesMatchOverall(
       && maximumPowerStatus === 'ready';
   }
   if (status === 'partial') {
+    const expectedMaximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus | null =
+      reason === 'insufficient-maximum-power-range'
+        ? 'insufficient-evidence'
+        : reason === 'poor-maximum-power-fit'
+          ? 'poor-fit'
+          : reason === 'unstable-maximum-power-fit'
+            ? 'unstable'
+            : null;
     return reason !== null
       && criticalPowerStatus === 'ready'
       && wPrimeStatus === 'ready'
-      && maximumPowerStatus !== 'ready'
+      && maximumPowerStatus === expectedMaximumPowerStatus
       && maximumPower.reason === reason;
   }
   const expectedComponentStatus: DerivedTrainingPowerSystemsComponentStatus = status;
@@ -208,6 +221,7 @@ function componentStatusesMatchOverall(
 
 function historyComponentStatusesMatchOverall(
   status: DerivedTrainingPowerSystemsStatus,
+  reason: DerivedTrainingPowerSystemsReason | null,
   criticalPowerStatus: DerivedTrainingPowerSystemsComponentStatus,
   wPrimeStatus: DerivedTrainingPowerSystemsComponentStatus,
   maximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus,
@@ -218,9 +232,17 @@ function historyComponentStatusesMatchOverall(
       && maximumPowerStatus === 'ready';
   }
   if (status === 'partial') {
+    const expectedMaximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus | null =
+      reason === 'insufficient-maximum-power-range'
+        ? 'insufficient-evidence'
+        : reason === 'poor-maximum-power-fit'
+          ? 'poor-fit'
+          : reason === 'unstable-maximum-power-fit'
+            ? 'unstable'
+            : null;
     return criticalPowerStatus === 'ready'
       && wPrimeStatus === 'ready'
-      && maximumPowerStatus !== 'ready';
+      && maximumPowerStatus === expectedMaximumPowerStatus;
   }
   const expectedComponentStatus: DerivedTrainingPowerSystemsComponentStatus = status;
   return criticalPowerStatus === expectedComponentStatus
@@ -261,13 +283,25 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     || earlyCriticalPowerAnchorCount > criticalPowerAnchorCount
     || longCriticalPowerAnchorCount === null
     || longCriticalPowerAnchorCount > criticalPowerAnchorCount
+    || earlyCriticalPowerAnchorCount + longCriticalPowerAnchorCount > criticalPowerAnchorCount
     || maximumPowerAnchorCount === null
     || maximumPowerAnchorCount > THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS.length
     || optionalDiagnostics.some(item => item === undefined)
+    || (
+      sourceCount === 0
+      && (
+        criticalPowerAnchorCount !== 0
+        || earlyCriticalPowerAnchorCount !== 0
+        || longCriticalPowerAnchorCount !== 0
+        || maximumPowerAnchorCount !== 0
+        || optionalDiagnostics.some(item => item !== null)
+      )
+    )
     || ((historyStartDayMs === null) !== (historyEndDayMs === null))
     || (historyStartDayMs !== null && (!isUtcDayMs(historyStartDayMs) || !isUtcDayMs(historyEndDayMs as number)))
     || (historyStartDayMs !== null && historyStartDayMs > (historyEndDayMs as number))
-    || (historyStartDayMs === null && (sourceCount !== 0 || historySpanDays !== 0))
+    || ((historyStartDayMs === null) !== (sourceCount === 0))
+    || (historyStartDayMs === null && historySpanDays !== 0)
     || (
       historyStartDayMs !== null
       && historySpanDays !== Math.round(((historyEndDayMs as number) - historyStartDayMs) / DAY_MS)
@@ -332,7 +366,7 @@ function resolveSnapshot(
     )
     || !diagnostics
     || sourceFingerprint === undefined
-    || (diagnostics.sourceCount > 0 && sourceFingerprint === null)
+    || ((diagnostics.sourceCount === 0) !== (sourceFingerprint === null))
   ) {
     return null;
   }
@@ -378,6 +412,7 @@ function resolveHistoryPoint(value: unknown): DerivedTrainingPowerSystemsHistory
     || !maximumPower
     || !historyComponentStatusesMatchOverall(
       statusAndReason.status,
+      statusAndReason.reason,
       criticalPower.status,
       wPrime.status,
       maximumPower.status,

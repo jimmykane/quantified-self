@@ -136,6 +136,37 @@ describe('training-power-systems.helper', () => {
     });
   });
 
+  it('accepts a discovered same-day type with no preceding evidence as a valid unavailable state', () => {
+    const unavailable = entry('Rowing', 'insufficient-evidence', 'no-evidence');
+    unavailable.current.sourceFingerprint = null;
+    unavailable.current.diagnostics = {
+      ...unavailable.current.diagnostics,
+      sourceCount: 0,
+      historyStartDayMs: null,
+      historyEndDayMs: null,
+      historySpanDays: 0,
+      criticalPowerAnchorCount: 0,
+      earlyCriticalPowerAnchorCount: 0,
+      longCriticalPowerAnchorCount: 0,
+      maximumPowerAnchorCount: 0,
+      criticalPowerNormalizedRmse: null,
+      criticalPowerSpreadRatio: null,
+      wPrimeSpreadRatio: null,
+      criticalPowerLeaveOneOutSpreadRatio: null,
+      wPrimeLeaveOneOutSpreadRatio: null,
+      maximumPowerNormalizedRmse: null,
+      maximumPowerLeaveOneOutSpreadRatio: null,
+    };
+    unavailable.history = [unavailable.history.at(-1)!];
+    unavailable.evidenceCounts = {
+      candidateActivityCount: 0,
+      usableCurveActivityCount: 0,
+      excludedActivityCount: 0,
+    };
+
+    expect(resolveTrainingPowerSystemsMetricPayload(payload([unavailable]))).not.toBeNull();
+  });
+
   it.each([
     (value: any) => ({ ...value, windowDays: 41 }),
     (value: any) => ({ ...value, activityTypes: [value.activityTypes[0], value.activityTypes[0]] }),
@@ -179,6 +210,63 @@ describe('training-power-systems.helper', () => {
       const unavailable = entry('Rowing', 'poor-fit', 'poor-critical-power-fit');
       unavailable.current.criticalPower.reason = 'invalid-source';
       value.activityTypes = [unavailable];
+      return value;
+    },
+    (value: any) => {
+      const unavailable = entry('Rowing', 'poor-fit', 'poor-critical-power-fit');
+      unavailable.current.reason = 'invalid-source';
+      unavailable.current.criticalPower.reason = 'invalid-source';
+      unavailable.current.wPrime.reason = 'invalid-source';
+      unavailable.current.maximumPower.reason = 'invalid-source';
+      const endpoint = unavailable.history.at(-1)!;
+      endpoint.reason = 'invalid-source';
+      value.activityTypes = [unavailable];
+      return value;
+    },
+    (value: any) => {
+      const partial = entry('Rowing', 'partial', 'poor-maximum-power-fit');
+      partial.current.maximumPower = component(
+        'insufficient-evidence',
+        1_200,
+        'poor-maximum-power-fit',
+      );
+      partial.history.at(-1)!.maximumPowerStatus = 'insufficient-evidence';
+      value.activityTypes = [partial];
+      return value;
+    },
+    (value: any) => {
+      value.activityTypes[0].current.diagnostics.sourceCount = 0;
+      value.activityTypes[0].current.diagnostics.historyStartDayMs = null;
+      value.activityTypes[0].current.diagnostics.historyEndDayMs = null;
+      value.activityTypes[0].current.diagnostics.historySpanDays = 0;
+      value.activityTypes[0].evidenceCounts.usableCurveActivityCount = 0;
+      value.activityTypes[0].evidenceCounts.excludedActivityCount = 5;
+      return value;
+    },
+    (value: any) => {
+      value.activityTypes[0].current.diagnostics.sourceCount = 0;
+      value.activityTypes[0].current.diagnostics.historyStartDayMs = null;
+      value.activityTypes[0].current.diagnostics.historyEndDayMs = null;
+      value.activityTypes[0].current.diagnostics.historySpanDays = 0;
+      value.activityTypes[0].current.sourceFingerprint = null;
+      value.activityTypes[0].evidenceCounts.usableCurveActivityCount = 0;
+      value.activityTypes[0].evidenceCounts.excludedActivityCount = 5;
+      return value;
+    },
+    (value: any) => {
+      value.activityTypes[0].current.diagnostics.criticalPowerAnchorCount = 5;
+      value.activityTypes[0].current.diagnostics.earlyCriticalPowerAnchorCount = 4;
+      value.activityTypes[0].current.diagnostics.longCriticalPowerAnchorCount = 4;
+      return value;
+    },
+    (value: any) => {
+      value.activityTypes[0].history[0] = {
+        ...value.activityTypes[0].history[0],
+        status: 'partial',
+        reason: 'poor-maximum-power-fit',
+        maximumPowerStatus: 'insufficient-evidence',
+        maximumPowerWatts: null,
+      };
       return value;
     },
   ])('rejects malformed or internally inconsistent payloads for snapshot self-healing', (mutate) => {

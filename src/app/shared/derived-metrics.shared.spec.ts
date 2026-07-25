@@ -17,6 +17,7 @@ import {
   getDerivedMetricDocId,
   getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
+  isDerivedTrainingPowerSystemsStatusReasonPair,
   normalizeTrainingBuildEventId,
   normalizeTrainingBuildPeriodEndDayMs,
   isDerivedMetricKind,
@@ -57,6 +58,13 @@ describe('derived-metrics shared helpers', () => {
   it('registers rolling power systems for default and UTC-calendar rebuilds', () => {
     expect(DEFAULT_DERIVED_METRIC_KINDS).toContain(DERIVED_METRIC_KINDS.TrainingPowerSystems);
     expect(CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS).toContain(DERIVED_METRIC_KINDS.TrainingPowerSystems);
+  });
+
+  it('keeps Sports-lib capacity statuses paired with only their valid reasons', () => {
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('ready', null)).toBe(true);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('partial', 'poor-maximum-power-fit')).toBe(true);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('poor-fit', 'invalid-source')).toBe(false);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('invalid-input', 'insufficient-history')).toBe(false);
   });
 
   it('keeps strict normalization empty for missing or invalid inputs', () => {

@@ -537,6 +537,45 @@ export type DerivedTrainingPowerSystemsReason =
   | 'poor-maximum-power-fit'
   | 'unstable-maximum-power-fit';
 
+const DERIVED_TRAINING_POWER_SYSTEMS_REASONS_BY_STATUS: Record<
+  Exclude<DerivedTrainingPowerSystemsStatus, 'ready'>,
+  readonly DerivedTrainingPowerSystemsReason[]
+> = {
+  partial: [
+    'insufficient-maximum-power-range',
+    'poor-maximum-power-fit',
+    'unstable-maximum-power-fit',
+  ],
+  'insufficient-evidence': [
+    'no-evidence',
+    'insufficient-history',
+    'insufficient-critical-power-range',
+  ],
+  'poor-fit': ['poor-critical-power-fit'],
+  unstable: ['unstable-critical-power-fit'],
+  'invalid-input': [
+    'invalid-effective-date',
+    'invalid-source',
+    'duplicate-source',
+    'invalid-date',
+    'future-evidence',
+    'invalid-activity-type',
+    'mixed-activity-types',
+    'invalid-power-curve',
+  ],
+};
+
+export function isDerivedTrainingPowerSystemsStatusReasonPair(
+  status: DerivedTrainingPowerSystemsStatus,
+  reason: DerivedTrainingPowerSystemsReason | null,
+): boolean {
+  if (status === 'ready') {
+    return reason === null;
+  }
+  return reason !== null
+    && DERIVED_TRAINING_POWER_SYSTEMS_REASONS_BY_STATUS[status].includes(reason);
+}
+
 export interface DerivedTrainingPowerSystemsComponent {
   status: DerivedTrainingPowerSystemsComponentStatus;
   reason: DerivedTrainingPowerSystemsReason | null;
