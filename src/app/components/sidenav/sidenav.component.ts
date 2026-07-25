@@ -102,6 +102,14 @@ export class SideNavComponent {
     window.open('https://www.facebook.com/groups/quantifiedself.io');
   }
 
+  contactSupport(): void {
+    window.open('mailto:support@quantified-self.io');
+  }
+
+  reportBug(): void {
+    window.open('https://github.com/jimmykane/quantified-self/issues');
+  }
+
   async logout() {
     this.analyticsService.logEvent('logout', {});
     this.hapticsService.selection();

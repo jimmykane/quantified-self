@@ -1,8 +1,8 @@
 <ng-container *ngIf="hasProAccess || (uploadCount !== null && uploadLimit !== null && uploadCount < uploadLimit)">
   <button mat-flat-button (drop)="getFiles($event);" (click)="inputFile.click()"
-    ondragenter="event.stopPropagation(); event.preventDefault();"
-    ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
-    ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');"
+    (dragenter)="handleDragEnter($event)"
+    (dragover)="handleDragOver($event)"
+    (dragleave)="handleDragLeave($event)"
     [disabled]="disabled"
     [class.upload-cta]="!promptAction"
     [class.prompt-action]="promptAction"

@@ -1,8 +1,8 @@
 <div class="service-upload">
   <section class="upload-dropzone" (drop)="getFiles($event);"
-    ondragenter="event.stopPropagation(); event.preventDefault();"
-    ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
-    ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
+    (dragenter)="handleDragEnter($event)"
+    (dragover)="handleDragOver($event)"
+    (dragleave)="handleDragLeave($event)">
     <button mat-flat-button type="button" class="qs-mat-primary service-upload-button" (click)="inputFile.click()"
       [disabled]="!hasProAccess || isUploading">
       <span class="upload-button-content">
