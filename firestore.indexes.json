@@ -1414,96 +1414,31 @@
       "collectionGroup": "mcpOAuthAuthorizationRequests",
       "fieldPath": "expireAt",
       "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "mcpOAuthAuthorizationCodes",
       "fieldPath": "expireAt",
       "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "mcpOAuthAccessTokens",
       "fieldPath": "expireAt",
       "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "mcpOAuthRefreshTokens",
       "fieldPath": "expireAt",
       "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "mcpOAuthRateLimits",
       "fieldPath": "expireAt",
       "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "aiInsightsPromptRepairs",

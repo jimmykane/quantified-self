@@ -152,6 +152,25 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('keeps MCP OAuth TTL fields deployable without unnecessary automatic indexes', () => {
+        const config = loadFirestoreIndexes();
+
+        for (const collectionGroup of [
+            'mcpOAuthAuthorizationRequests',
+            'mcpOAuthAuthorizationCodes',
+            'mcpOAuthAccessTokens',
+            'mcpOAuthRefreshTokens',
+            'mcpOAuthRateLimits',
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup,
+                fieldPath: 'expireAt',
+                ttl: true,
+                indexes: [],
+            });
+        }
+    });
+
     it('keeps dashboard route preview recency query deployable', () => {
         const config = loadFirestoreIndexes();
 
