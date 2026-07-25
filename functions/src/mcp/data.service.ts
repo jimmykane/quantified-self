@@ -83,14 +83,12 @@ const SLEEP_CURSOR_AUTH_TAG_BYTES = 16;
 const OPAQUE_VALUE_VERSION = 1;
 const OPAQUE_VALUE_NONCE_BYTES = 12;
 const OPAQUE_VALUE_AUTH_TAG_BYTES = 16;
-const MAX_ACTIVITY_LIST_SCAN_DOCUMENTS = 500;
 const MAX_ACTIVITY_LIST_BYTES = 512 * 1024;
 const MAX_ACTIVITY_PAGE_SIZE = 100;
 const MAX_ACTIVITY_DETAIL_ENTRIES = 10_000;
 const MAX_ACTIVITY_DETAIL_BYTES = 512 * 1024;
 const MAX_ACTIVITY_DETAIL_RESPONSE_BYTES = 256 * 1024;
 const MAX_ACTIVITY_DETAIL_PAGE_SIZE = 100;
-const MAX_ROUTE_LIST_SCAN_DOCUMENTS = 500;
 const MAX_ROUTE_LIST_BYTES = 512 * 1024;
 const MAX_ROUTE_PAGE_SIZE = 100;
 const MAX_ROUTE_PREVIEW_SEGMENTS = 20;
@@ -162,6 +160,11 @@ interface SleepCursor {
 interface OrderedDocumentCursor {
   timeMs: number;
   id: string;
+}
+
+interface ActivityListCursor extends OrderedDocumentCursor {
+  startTimeMs: number;
+  endTimeMs: number;
 }
 
 type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
@@ -695,7 +698,7 @@ function decodeOpaqueValue(
 }
 
 function decodeOrderedCursor(
-  kind: 'activity_cursor' | 'route_cursor',
+  kind: 'route_cursor',
   cursor: string | undefined,
   uid: string,
   connectionId: string,
@@ -717,12 +720,57 @@ function decodeOrderedCursor(
 }
 
 function encodeOrderedCursor(
-  kind: 'activity_cursor' | 'route_cursor',
+  kind: 'route_cursor',
   cursor: OrderedDocumentCursor,
   uid: string,
   connectionId: string,
 ): string {
   return encodeOpaqueValue(kind, cursor as unknown as Record<string, unknown>, uid, connectionId);
+}
+
+function decodeActivityListCursor(
+  cursor: string | undefined,
+  input: Pick<
+    ListActivitiesInput,
+    'uid' | 'connectionId' | 'startTimeMs' | 'endTimeMs'
+  >,
+): OrderedDocumentCursor | undefined {
+  if (!cursor) {
+    return undefined;
+  }
+  const parsed = decodeOpaqueValue(
+    'activity_cursor',
+    cursor,
+    input.uid,
+    input.connectionId,
+    'pagination cursor',
+  ) as unknown as Partial<ActivityListCursor>;
+  if (
+    !Number.isSafeInteger(parsed.timeMs)
+    || !isValidFirestoreDocumentId(parsed.id)
+    || parsed.startTimeMs !== input.startTimeMs
+    || parsed.endTimeMs !== input.endTimeMs
+  ) {
+    throw new McpDataError('invalid_request', 'The pagination cursor is invalid.');
+  }
+  return {
+    timeMs: Number(parsed.timeMs),
+    id: parsed.id,
+  };
+}
+
+function encodeActivityListCursor(
+  cursor: OrderedDocumentCursor,
+  input: Pick<
+    ListActivitiesInput,
+    'uid' | 'connectionId' | 'startTimeMs' | 'endTimeMs'
+  >,
+): string {
+  return encodeOpaqueValue('activity_cursor', {
+    ...cursor,
+    startTimeMs: input.startTimeMs,
+    endTimeMs: input.endTimeMs,
+  }, input.uid, input.connectionId);
 }
 
 function decodeActivityReference(
@@ -1104,9 +1152,27 @@ function projectRoutePreview(value: unknown) {
     );
     return segmentPointCount === null ? Number.NaN : sum + segmentPointCount;
   }, 0);
+  const declaredSegmentSourcePointCount = segments.reduce((sum, candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return Number.NaN;
+    }
+    const segment = candidate as Record<string, unknown>;
+    const segmentSourcePointCount = asSafeInteger(segment.sourcePointCount);
+    const segmentPointCount = asSafeInteger(segment.pointCount);
+    return (
+      segmentSourcePointCount === null
+      || segmentPointCount === null
+      || segmentSourcePointCount < segmentPointCount
+    )
+      ? Number.NaN
+      : sum + segmentSourcePointCount;
+  }, 0);
   if (
     !Number.isSafeInteger(declaredSegmentPointCount)
     || declaredSegmentPointCount !== pointCount
+    || sourcePointCount < pointCount
+    || !Number.isSafeInteger(declaredSegmentSourcePointCount)
+    || declaredSegmentSourcePointCount !== sourcePointCount
   ) {
     throw new McpDataError(
       'detail_not_available',
@@ -1967,16 +2033,8 @@ export function createMcpDataService(
         MAX_ACTIVITY_PAGE_SIZE,
         Math.max(1, Math.floor(input.limit || 25)),
       );
-      const cursor = decodeOrderedCursor(
-        'activity_cursor',
-        input.cursor,
-        input.uid,
-        input.connectionId,
-      );
-      const scanLimit = Math.min(
-        MAX_ACTIVITY_LIST_SCAN_DOCUMENTS,
-        limit * 5,
-      );
+      const cursor = decodeActivityListCursor(input.cursor, input);
+      const scanLimit = limit;
       const documents = await dependencies.fetchActivityDocuments(
         input.uid,
         input.startTimeMs,
@@ -2007,24 +2065,18 @@ export function createMcpDataService(
         return entry ? [entry] : [];
       });
       const page = entries.slice(0, limit);
-      const lastPageEntry = page[page.length - 1];
       const scanTruncated = documents.length > scanLimit;
       const lastScannedDocument = scannedDocuments[scannedDocuments.length - 1];
       const lastScannedTimeMs = asTimestampMs(lastScannedDocument?.data.eventStartDate);
-      const nextCursor = entries.length > page.length && lastPageEntry
-        ? encodeOrderedCursor('activity_cursor', {
-            timeMs: lastPageEntry.sortTimeMs,
-            id: lastPageEntry.id,
-          }, input.uid, input.connectionId)
-        : scanTruncated
-          && lastScannedDocument
-          && lastScannedTimeMs !== null
-          && isValidFirestoreDocumentId(lastScannedDocument.id)
-          ? encodeOrderedCursor('activity_cursor', {
-              timeMs: lastScannedTimeMs,
-              id: lastScannedDocument.id,
-            }, input.uid, input.connectionId)
-          : null;
+      const nextCursor = scanTruncated
+        && lastScannedDocument
+        && lastScannedTimeMs !== null
+        && isValidFirestoreDocumentId(lastScannedDocument.id)
+        ? encodeActivityListCursor({
+            timeMs: lastScannedTimeMs,
+            id: lastScannedDocument.id,
+          }, input)
+        : null;
 
       return {
         activities: page.map(entry => entry.summary),
@@ -2055,7 +2107,7 @@ export function createMcpDataService(
         input.uid,
         input.connectionId,
       );
-      const scanLimit = Math.min(MAX_ROUTE_LIST_SCAN_DOCUMENTS, limit * 5);
+      const scanLimit = limit;
       const documents = await dependencies.fetchRouteDocuments(
         input.uid,
         scanLimit + 1,
@@ -2084,24 +2136,18 @@ export function createMcpDataService(
         return entry ? [entry] : [];
       });
       const page = entries.slice(0, limit);
-      const lastPageEntry = page[page.length - 1];
       const scanTruncated = documents.length > scanLimit;
       const lastScannedDocument = scannedDocuments[scannedDocuments.length - 1];
       const lastScannedTimeMs = asTimestampMs(lastScannedDocument?.data.importedAt);
-      const nextCursor = entries.length > page.length && lastPageEntry
+      const nextCursor = scanTruncated
+        && lastScannedDocument
+        && lastScannedTimeMs !== null
+        && isValidFirestoreDocumentId(lastScannedDocument.id)
         ? encodeOrderedCursor('route_cursor', {
-            timeMs: lastPageEntry.sortTimeMs,
-            id: lastPageEntry.id,
+            timeMs: lastScannedTimeMs,
+            id: lastScannedDocument.id,
           }, input.uid, input.connectionId)
-        : scanTruncated
-          && lastScannedDocument
-          && lastScannedTimeMs !== null
-          && isValidFirestoreDocumentId(lastScannedDocument.id)
-          ? encodeOrderedCursor('route_cursor', {
-              timeMs: lastScannedTimeMs,
-              id: lastScannedDocument.id,
-            }, input.uid, input.connectionId)
-          : null;
+        : null;
 
       return {
         routes: page.map(entry => entry.summary),
@@ -2208,6 +2254,12 @@ export function createMcpDataService(
             'The saved route source exceeds the MCP parsing limit.',
           );
         }
+        throw new McpDataError(
+          'detail_not_available',
+          'Saved route waypoints are not available.',
+        );
+      }
+      if (!Array.isArray(rawWaypoints)) {
         throw new McpDataError(
           'detail_not_available',
           'Saved route waypoints are not available.',

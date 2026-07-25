@@ -369,6 +369,55 @@ describe('MCP data service', () => {
     expect(secondPage.nextCursor).toBeNull();
   });
 
+  it('binds activity list cursors to the original date range', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    const service = createMcpDataService(dependencies);
+    const originalInput = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+      limit: 1,
+    };
+    const firstPage = await service.listActivities(originalInput);
+
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    await expect(service.listActivities({
+      ...originalInput,
+      endTimeMs: Date.parse('2026-07-03T00:00:00.000Z'),
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(1);
+
+    await service.listActivities({
+      ...originalInput,
+      cursor: firstPage.nextCursor!,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenLastCalledWith(
+      'user-1',
+      originalInput.startTimeMs,
+      originalInput.endTimeMs,
+      2,
+      {
+        timeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        id: 'activity-1',
+      },
+    );
+  });
+
   it('projects swim lengths through an explicit field allowlist', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
@@ -513,6 +562,11 @@ describe('MCP data service', () => {
     }]);
     expect(JSON.stringify(routes)).not.toContain('private-provider-route');
     expect(JSON.stringify(routes)).not.toContain('private-destination');
+    expect(dependencies.fetchRouteDocuments).toHaveBeenCalledWith(
+      'user-1',
+      26,
+      undefined,
+    );
     const routeRef = routes.routes[0].routeRef;
     expect(Buffer.from(routeRef, 'base64url').toString('utf8')).not.toContain('route-1');
 
@@ -705,6 +759,31 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'detail_not_available',
     });
+
+    vi.mocked(dependencies.fetchRouteDocument).mockResolvedValue({
+      id: 'route-1',
+      data: {
+        preview: {
+          version: 1,
+          encoding: 'polyline5',
+          precision: 5,
+          sourcePointCount: 1,
+          pointCount: 2,
+          segments: [{
+            sourcePointCount: 1,
+            pointCount: 2,
+            encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+          }],
+        },
+      },
+    });
+    await expect(service.getRouteGeometry({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'detail_not_available',
+    });
   });
 
   it('rejects oversized route source files and waypoint sets', async () => {
@@ -753,6 +832,17 @@ describe('MCP data service', () => {
       routeRef,
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
+    });
+
+    vi.mocked(dependencies.parseRouteWaypoints).mockResolvedValue(
+      null as unknown as never[],
+    );
+    await expect(service.listRouteWaypoints({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'detail_not_available',
     });
   });
 

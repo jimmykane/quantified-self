@@ -274,8 +274,8 @@ deliberately.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
-- Activity date ranges are at most 366 days. Activity and route list pages are at most 100 entries, scan at most 500
-  projected documents, and reject more than 512 KiB of cumulative selected data.
+- Activity date ranges are at most 366 days. Activity and route list pages are at most 100 entries, read only one page
+  plus a continuation sentinel per call, and reject more than 512 KiB of cumulative selected data.
 - Lap, jump, and swim-length arrays are limited to 10,000 raw entries and 512 KiB before projection; responses are at
   most 100 entries and 256 KiB per page.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
