@@ -45,7 +45,8 @@ to server-side token records; a UID is never accepted from MCP input. OAuth acce
 SHA-256 hashes, expire after one hour, and are audience-bound. Refresh tokens expire after 30 days and rotate on use.
 When a refresh request narrows the connection grant, previously issued access tokens with broader scopes stop working.
 Reuse of an already-rotated refresh token revokes the connection and makes active descendant tokens unusable.
-Authorization codes are single-use and expire after five minutes.
+Authorization codes are single-use and expire after five minutes. OAuth `state` is optional; when supplied, it must be
+1–512 visible ASCII characters and is echoed exactly.
 
 Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
 responses, private or loopback metadata hosts, unsupported grant types, and redirect URIs that were not registered.
@@ -87,7 +88,7 @@ before the tool call, and only registers tools covered by the bearer token.
 2. constructing it with a numeric sentinel produces a finite numeric value;
 3. its validator accepts that numeric value;
 4. aliases resolve through `DynamicDataLoader`; and
-5. the canonical stat appears in the user's persisted event `stats`.
+5. the canonical stat appears in a non-benchmark persisted event `stats`.
 
 This is intentionally not a curated MCP metric list. A correctly exported and persisted new numeric Sports Lib data class
 becomes discoverable without adding a second registry. Latitude and longitude remain explicitly excluded because they
@@ -123,10 +124,12 @@ an MCP redaction-contract test.
 
 ## Sleep projection
 
-MCP reads normalized `users/{uid}/sleepSessions` documents and creates a new allowlisted response. Session output may
-include provider, sleep date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized
-score value/qualifier, and aggregate vitals. Missing optional numeric measurements remain unavailable and do not
-contribute zeroes to summary averages.
+MCP reads normalized `users/{uid}/sleepSessions` documents through a Firestore field mask and creates a new allowlisted
+response. The read projection includes only the provider name and fields eligible for that response; raw samples,
+provider identifiers, and score components do not enter the MCP process. Session output may include provider, sleep
+date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized score value/qualifier,
+and aggregate vitals. Missing optional numeric measurements remain unavailable and do not contribute zeroes to summary
+averages.
 
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
@@ -140,7 +143,8 @@ deliberately.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
-- Metric discovery scans the latest 500 event stat maps and reports whether that scan was truncated.
+- Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was
+  truncated.
 - Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
 - Requests require valid IANA timezones where local date bucketing is relevant.
 - Logs must not contain bearer tokens, authorization codes, client payloads, event data, sleep data, or user IDs.

@@ -16,6 +16,7 @@ import {
   isMcpRequestBodyWithinLimit,
   parseMcpBearerToken,
   parseMcpDateTime,
+  parseMcpFormEncodedBody,
   requiredScopeForRequest,
   resolvePublicBaseUrl,
   requireMcpTokenGrantType,
@@ -99,6 +100,15 @@ describe('MCP HTTP scope enforcement', () => {
     expect(isMcpRequestBodyWithinLimit({ method: 'initialize' }, '24')).toBe(true);
     expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(70_000) }, undefined)).toBe(false);
     expect(isMcpRequestBodyWithinLimit({}, 'not-a-number')).toBe(false);
+  });
+
+  it('preserves repeated form parameters for strict OAuth validation', () => {
+    expect(parseMcpFormEncodedBody(
+      'grant_type=refresh_token&scope=metrics%3Aread&scope=sleep%3Aread',
+    )).toEqual({
+      grant_type: 'refresh_token',
+      scope: ['metrics:read', 'sleep:read'],
+    });
   });
 
   it('requires unambiguous ISO date-times with a UTC offset', () => {

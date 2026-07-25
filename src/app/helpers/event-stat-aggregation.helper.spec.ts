@@ -598,7 +598,41 @@ describe('event-stat-aggregation shared core', () => {
 
   it('should validate IANA timezone names', () => {
     expect(isValidIanaTimeZone('Europe/Helsinki')).toBe(true);
+    expect(isValidIanaTimeZone('  Europe/Helsinki  ')).toBe(true);
+    expect(isValidIanaTimeZone('')).toBe(false);
     expect(isValidIanaTimeZone('Not/A_Timezone')).toBe(false);
+  });
+
+  it.each(['', '   ', 'Not/A_Timezone'])(
+    'should reject an explicitly invalid timezone %j',
+    (timeZone) => {
+      expect(() => buildEventStatAggregation([], {
+        dataType: DataDistance.type,
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Daily,
+        timeZone,
+      })).toThrow(`Invalid IANA timezone: ${timeZone}`);
+    },
+  );
+
+  it('should use the same normalized timezone value that validation accepts', () => {
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        startDate: new Date('2024-03-31T21:30:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+      timeZone: '  Europe/Helsinki  ',
+    });
+
+    expect(aggregation.buckets[0]?.bucketKey)
+      .toBe(new Date('2024-03-31T21:00:00.000Z').getTime());
   });
 
   it('should warn and skip invalid date buckets when aggregating by date', () => {

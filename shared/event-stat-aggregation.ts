@@ -65,6 +65,10 @@ interface ZonedDateTimeParts {
 
 const zonedDateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
 
+function normalizeIanaTimeZone(timeZone: string): string {
+  return `${timeZone || ''}`.trim();
+}
+
 function getZonedDateTimeFormatter(timeZone: string): Intl.DateTimeFormat {
   const existing = zonedDateTimeFormatters.get(timeZone);
   if (existing) {
@@ -86,7 +90,7 @@ function getZonedDateTimeFormatter(timeZone: string): Intl.DateTimeFormat {
 }
 
 export function isValidIanaTimeZone(timeZone: string): boolean {
-  const normalized = `${timeZone || ''}`.trim();
+  const normalized = normalizeIanaTimeZone(timeZone);
   if (!normalized) {
     return false;
   }
@@ -438,10 +442,17 @@ export function resolveDateAggregationBucketStart(
   timeInterval: TimeIntervals,
   timeZone?: string,
 ): number {
-  if (timeZone && !isValidIanaTimeZone(timeZone)) {
+  const hasExplicitTimeZone = timeZone !== undefined;
+  const normalizedTimeZone = hasExplicitTimeZone
+    ? normalizeIanaTimeZone(timeZone)
+    : undefined;
+  if (
+    hasExplicitTimeZone
+    && (!normalizedTimeZone || !isValidIanaTimeZone(normalizedTimeZone))
+  ) {
     throw new Error(`Invalid IANA timezone: ${timeZone}`);
   }
-  return resolveDateBucketKey(date, timeInterval, timeZone);
+  return resolveDateBucketKey(date, timeInterval, normalizedTimeZone);
 }
 
 function resolveAggregateValue(
@@ -523,6 +534,16 @@ export function resolveAutoAggregationTimeInterval(
   events: EventStatAggregationEventInput,
   timeZone?: string,
 ): TimeIntervals {
+  const hasExplicitTimeZone = timeZone !== undefined;
+  const normalizedTimeZone = hasExplicitTimeZone
+    ? normalizeIanaTimeZone(timeZone)
+    : undefined;
+  if (
+    hasExplicitTimeZone
+    && (!normalizedTimeZone || !isValidIanaTimeZone(normalizedTimeZone))
+  ) {
+    throw new Error(`Invalid IANA timezone: ${timeZone}`);
+  }
   const eventsWithValidDates = (events || []).filter(event => (
     event?.startDate instanceof Date
     && Number.isFinite(event.startDate.getTime())
@@ -538,8 +559,12 @@ export function resolveAutoAggregationTimeInterval(
     return TimeIntervals.Daily;
   }
 
-  const startParts = timeZone ? getZonedDateTimeParts(startDate, timeZone) : null;
-  const endParts = timeZone ? getZonedDateTimeParts(endDate, timeZone) : null;
+  const startParts = normalizedTimeZone
+    ? getZonedDateTimeParts(startDate, normalizedTimeZone)
+    : null;
+  const endParts = normalizedTimeZone
+    ? getZonedDateTimeParts(endDate, normalizedTimeZone)
+    : null;
   const startYear = startParts?.year ?? startDate.getFullYear();
   const endYear = endParts?.year ?? endDate.getFullYear();
   const startMonth = startParts?.month ?? startDate.getMonth();
@@ -594,13 +619,21 @@ export function buildEventStatAggregation(
   request: EventStatAggregationRequest,
   logger?: EventStatAggregationLogger,
 ): EventStatAggregationResult {
-  if (request.timeZone && !isValidIanaTimeZone(request.timeZone)) {
-    throw new Error(`Invalid IANA timezone: ${request.timeZone}`);
+  const requestedTimeZone = request.timeZone;
+  const hasExplicitTimeZone = requestedTimeZone !== undefined;
+  const timeZone = requestedTimeZone !== undefined
+    ? normalizeIanaTimeZone(requestedTimeZone)
+    : undefined;
+  if (
+    hasExplicitTimeZone
+    && (!timeZone || !isValidIanaTimeZone(timeZone))
+  ) {
+    throw new Error(`Invalid IANA timezone: ${requestedTimeZone}`);
   }
 
   const filteredEvents = filterEventStatsForAggregation(events, request.dataType, request.preferences);
   const resolvedTimeInterval = request.requestedTimeInterval === undefined || request.requestedTimeInterval === TimeIntervals.Auto
-    ? resolveAutoAggregationTimeInterval(filteredEvents, request.timeZone)
+    ? resolveAutoAggregationTimeInterval(filteredEvents, timeZone)
     : request.requestedTimeInterval;
 
   const accumulators = filteredEvents.reduce((bucketMap, event) => {
@@ -614,7 +647,7 @@ export function buildEventStatAggregation(
       request.categoryType,
       resolvedTimeInterval,
       logger,
-      request.timeZone,
+      timeZone,
     );
     if (typeof bucketKey === 'number' && !Number.isFinite(bucketKey)) {
       return bucketMap;

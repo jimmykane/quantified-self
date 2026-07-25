@@ -86,6 +86,21 @@ function sendOAuthError(
   });
 }
 
+export function parseMcpFormEncodedBody(raw: string): Record<string, unknown> {
+  const values = new Map<string, string | string[]>();
+  for (const [key, value] of new URLSearchParams(raw)) {
+    const existing = values.get(key);
+    if (existing === undefined) {
+      values.set(key, value);
+    } else if (Array.isArray(existing)) {
+      existing.push(value);
+    } else {
+      values.set(key, [existing, value]);
+    }
+  }
+  return Object.fromEntries(values);
+}
+
 function parseFormBody(request: Request): Record<string, unknown> {
   if (request.body && typeof request.body === 'object' && !Buffer.isBuffer(request.body)) {
     return request.body as Record<string, unknown>;
@@ -95,7 +110,7 @@ function parseFormBody(request: Request): Record<string, unknown> {
     : typeof request.body === 'string'
       ? request.body
       : '';
-  return Object.fromEntries(new URLSearchParams(raw));
+  return parseMcpFormEncodedBody(raw);
 }
 
 export function parseMcpDateTime(value: string, field: string): number {

@@ -112,7 +112,7 @@ export interface AuthorizationRequestRecord {
   redirectUri: string;
   redirectHost: string;
   codeChallenge: string;
-  state: string;
+  state: string | null;
   scopes: McpOAuthScope[];
   audience: string;
   createdAtMs: number;
@@ -483,9 +483,15 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         if (
           !connection
           || connection.revokedAtMs !== null
-          || token.scopes.some(scope => !connection.scopes.includes(scope))
         ) {
           throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
+        }
+        if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP connection no longer authorizes this access token.',
+            401,
+          );
         }
         const nextCount = Number(rateLimit?.count || 0) + 1;
         if (nextCount > MCP_REQUESTS_PER_MINUTE) {
@@ -563,11 +569,21 @@ export function createPkceChallenge(verifier: string): string {
 }
 
 function requireString(value: unknown, name: string, maxLength = 2048): string {
-  const normalized = typeof value === 'string' ? value.trim() : '';
-  if (!normalized || normalized.length > maxLength) {
+  const exact = typeof value === 'string' ? value : '';
+  if (!exact || !exact.trim() || exact.length > maxLength) {
     throw new McpOAuthError('invalid_request', `${name} is required.`);
   }
-  return normalized;
+  return exact;
+}
+
+function readOptionalOAuthState(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== 'string' || !/^[\x20-\x7E]{1,512}$/.test(value)) {
+    throw new McpOAuthError('invalid_request', 'state is invalid.');
+  }
+  return value;
 }
 
 export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
@@ -582,6 +598,13 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
     throw new McpOAuthError('invalid_scope', 'Only metrics:read and sleep:read can be requested.');
   }
   return unique as McpOAuthScope[];
+}
+
+function normalizeOAuthScopeParameter(value: unknown): McpOAuthScope[] {
+  if (typeof value !== 'string') {
+    throw new McpOAuthError('invalid_scope', 'OAuth scope must be a single space-delimited string.');
+  }
+  return normalizeOAuthScopes(value);
 }
 
 export function isPrivateAddress(address: string): boolean {
@@ -629,6 +652,9 @@ export function createPinnedAddressLookup(
 }
 
 function validateRedirectUri(value: string): URL {
+  if (value !== value.trim()) {
+    throw new McpOAuthError('invalid_client', 'Client metadata contains an invalid redirect URI.');
+  }
   let uri: URL;
   try {
     uri = new URL(value);
@@ -714,6 +740,9 @@ export function validateClientMetadataDocument(
 }
 
 export async function fetchClientMetadataDocument(clientId: string): Promise<ClientMetadata> {
+  if (clientId !== clientId.trim()) {
+    throw new McpOAuthError('invalid_client', 'client_id must be an HTTPS metadata document URL with a path.');
+  }
   let clientUrl: URL;
   try {
     clientUrl = new URL(clientId);
@@ -797,7 +826,7 @@ export function createMcpOAuthService(
       const clientId = requireString(params.client_id, 'client_id');
       const redirectUri = requireString(params.redirect_uri, 'redirect_uri');
       const codeChallenge = requireString(params.code_challenge, 'code_challenge', 128);
-      const state = requireString(params.state, 'state', 512);
+      const state = readOptionalOAuthState(params.state);
       const audience = requireString(params.resource, 'resource');
       const expectedAudience = `${baseUrl}/mcp`;
       if (audience !== expectedAudience) {
@@ -806,7 +835,7 @@ export function createMcpOAuthService(
       if (!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge)) {
         throw new McpOAuthError('invalid_request', 'The PKCE code challenge is invalid.');
       }
-      const scopes = normalizeOAuthScopes(params.scope);
+      const scopes = normalizeOAuthScopeParameter(params.scope);
       const metadata = await resolvedDependencies.fetchClientMetadata(clientId);
       if (!metadata.redirect_uris.includes(redirectUri)) {
         throw new McpOAuthError('invalid_client', 'redirect_uri is not registered by the client metadata document.');
@@ -870,7 +899,9 @@ export function createMcpOAuthService(
         const request = await store.denyAuthorization(requestId, nowMs);
         const redirect = new URL(request.redirectUri);
         redirect.searchParams.set('error', 'access_denied');
-        redirect.searchParams.set('state', request.state);
+        if (request.state !== null) {
+          redirect.searchParams.set('state', request.state);
+        }
         return { redirectUri: redirect.toString() };
       }
 
@@ -915,7 +946,9 @@ export function createMcpOAuthService(
       });
       const redirect = new URL(request.redirectUri);
       redirect.searchParams.set('code', rawCode);
-      redirect.searchParams.set('state', request.state);
+      if (request.state !== null) {
+        redirect.searchParams.set('state', request.state);
+      }
       return { redirectUri: redirect.toString() };
     },
 
@@ -983,7 +1016,9 @@ export function createMcpOAuthService(
       if (audience !== `${baseUrl}/mcp`) {
         throw new McpOAuthError('invalid_grant', 'The token audience is invalid.');
       }
-      const requestedScopes = params.scope ? normalizeOAuthScopes(params.scope) : null;
+      const requestedScopes = params.scope === undefined || params.scope === null
+        ? null
+        : normalizeOAuthScopeParameter(params.scope);
       const nowMs = resolvedDependencies.now();
       const nextRawAccessToken = resolvedDependencies.randomToken();
       const nextRawRefreshToken = resolvedDependencies.randomToken();
@@ -1037,9 +1072,15 @@ export function createMcpOAuthService(
       if (
         !connection
         || connection.revokedAtMs !== null
-        || token.scopes.some(scope => !connection.scopes.includes(scope))
       ) {
         throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
+      }
+      if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
+        throw new McpOAuthError(
+          'invalid_grant',
+          'The MCP connection no longer authorizes this access token.',
+          401,
+        );
       }
       await store.recordAuthorizedRequest(token, nowMs);
       return {

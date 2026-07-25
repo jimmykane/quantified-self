@@ -32,7 +32,7 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    aggregation callers that omit a timezone.
 4. Treat `functions/src/mcp/metric-catalog.ts` and `functions/src/mcp/data.service.ts` as the MCP projection boundary.
    Expand allowlists deliberately; do not return whole Firestore documents.
-5. Keep OAuth scopes least-privilege (`metrics:read` and `sleep:read`), queries bounded, tokens UID-derived, and tools
+5. Keep OAuth scopes least-privilege (`metrics:read` and `sleep:read`), queries bounded, tokens UID-bound, and tools
    read-only. Update consent, Settings, Help, privacy wording, and `docs/mcp-server.md` when the user-visible contract moves.
 
 ## Verify

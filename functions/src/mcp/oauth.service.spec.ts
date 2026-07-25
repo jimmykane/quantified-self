@@ -163,9 +163,11 @@ function createMemoryStore(): McpOAuthStore & {
       if (
         !connection
         || connection.revokedAtMs !== null
-        || token.scopes.some(scope => !connection.scopes.includes(scope))
       ) {
         throw new McpOAuthError('invalid_grant', 'revoked connection', 401);
+      }
+      if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
+        throw new McpOAuthError('invalid_grant', 'scope no longer authorized', 401);
       }
       connections.set(key, { ...connection, lastUsedAtMs: nowMs });
     },
@@ -285,6 +287,12 @@ describe('MCP OAuth service', () => {
     }));
     expect(() => validateClientMetadataDocument({
       ...metadata(),
+      redirect_uris: [' https://client.example/oauth/callback '],
+    }, metadata().client_id)).toThrow(expect.objectContaining({
+      code: 'invalid_client',
+    }));
+    expect(() => validateClientMetadataDocument({
+      ...metadata(),
       token_endpoint_auth_method: '',
     }, metadata().client_id)).toThrow(expect.objectContaining({
       code: 'invalid_client',
@@ -346,6 +354,81 @@ describe('MCP OAuth service', () => {
       ...authorizationParams(verifier),
       redirect_uri: 'https://evil.example/callback',
     }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_client' });
+
+    await expect(service.startAuthorization({
+      ...authorizationParams(verifier),
+      redirect_uri: ` ${metadata().redirect_uris[0]} `,
+    }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_client' });
+
+    await expect(service.startAuthorization({
+      ...authorizationParams(verifier),
+      scope: ['metrics:read', 'sleep:read'],
+    }, 'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_scope' });
+  });
+
+  it('preserves optional OAuth state exactly in authorization responses', async () => {
+    const verifier = 'v'.repeat(43);
+    const exactState = ' state with leading and trailing spaces ';
+    const withStateStore = createMemoryStore();
+    const withStateService = createMcpOAuthService({
+      store: withStateStore,
+      fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
+      now: () => 1000,
+      randomToken: () => 'request-with-state',
+    });
+    const withState = await withStateService.startAuthorization({
+      ...authorizationParams(verifier),
+      state: exactState,
+    }, 'https://quantified-self.io');
+
+    expect(withStateStore.requests.get(withState.requestId)?.state).toBe(exactState);
+    const approvedWithState = await withStateService.decideAuthorization({
+      uid: 'user-1',
+      requestId: withState.requestId,
+      approved: true,
+    });
+    const approvalParams = new URL(approvedWithState.redirectUri).searchParams;
+    expect(approvalParams.get('state')).toBe(exactState);
+    expect(approvalParams.get('code')).toEqual(expect.any(String));
+
+    const withoutStateStore = createMemoryStore();
+    const withoutStateService = createMcpOAuthService({
+      store: withoutStateStore,
+      fetchClientMetadata: vi.fn().mockResolvedValue(metadata()),
+      now: () => 1000,
+      randomToken: () => 'request-without-state',
+    });
+    const withoutState = await withoutStateService.startAuthorization({
+      ...authorizationParams(verifier),
+      state: undefined,
+    }, 'https://quantified-self.io');
+
+    expect(withoutStateStore.requests.get(withoutState.requestId)?.state).toBeNull();
+    const deniedWithoutState = await withoutStateService.decideAuthorization({
+      uid: 'user-1',
+      requestId: withoutState.requestId,
+      approved: false,
+    });
+    expect(new URL(deniedWithoutState.redirectUri).searchParams.has('state')).toBe(false);
+
+    await expect(withoutStateService.startAuthorization({
+      ...authorizationParams(verifier),
+      state: '',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+    await expect(withoutStateService.startAuthorization({
+      ...authorizationParams(verifier),
+      state: 'line one\nline two',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+    await expect(withoutStateService.startAuthorization({
+      ...authorizationParams(verifier),
+      state: 'unicode-\u2603',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
   });
 
   it('issues one-time opaque tokens, rotates refresh tokens, and enforces audience binding', async () => {
@@ -448,6 +531,28 @@ describe('MCP OAuth service', () => {
       uid: 'user-1',
       scopes: [MCP_OAUTH_SCOPES.MetricsRead],
     }));
+
+    await expect(service.exchangeRefreshToken({
+      grant_type: 'refresh_token',
+      refresh_token: rotated.refresh_token,
+      client_id: metadata().client_id,
+      scope: '',
+      resource: 'https://quantified-self.io/mcp',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_scope',
+    });
+    expect(store.refreshTokens.get(hashOpaqueValue(rotated.refresh_token))?.active).toBe(true);
+
+    await expect(service.exchangeRefreshToken({
+      grant_type: 'refresh_token',
+      refresh_token: rotated.refresh_token,
+      client_id: metadata().client_id,
+      scope: ['metrics:read'],
+      resource: 'https://quantified-self.io/mcp',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_scope',
+    });
+    expect(store.refreshTokens.get(hashOpaqueValue(rotated.refresh_token))?.active).toBe(true);
 
     await expect(service.exchangeRefreshToken({
       grant_type: 'refresh_token',

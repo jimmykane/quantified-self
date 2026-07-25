@@ -11,6 +11,7 @@ import {
   ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  DynamicDataLoader,
   EventImporterJSON,
   EventInterface,
   EventJSONInterface,
@@ -49,6 +50,16 @@ const MAX_SLEEP_PAGE_SIZE = 100;
 const SLEEP_CURSOR_VERSION = 1;
 const SLEEP_CURSOR_NONCE_BYTES = 12;
 const SLEEP_CURSOR_AUTH_TAG_BYTES = 16;
+const SAFE_SLEEP_VITAL_KEYS = [
+  'averageHeartRateBpm',
+  'minimumHeartRateBpm',
+  'restingHeartRateBpm',
+  'averageHrvMs',
+  'hrvSampleCount',
+  'overnightHrvMs',
+  'maxSpo2Percent',
+  'averageRespirationBrpm',
+] as const satisfies readonly (keyof SleepVitals)[];
 
 export type McpDataErrorCode =
   | 'invalid_request'
@@ -110,7 +121,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .collection('events')
       .orderBy('startDate', 'desc')
       .limit(limit)
-      .select('stats')
+      .select('stats', 'mergeType', 'isMerge')
       .get();
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -126,6 +137,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .where('startDate', '<=', endTimeMs)
       .orderBy('startDate', 'asc')
       .limit(limit)
+      .select('startDate', 'endDate', 'stats', 'mergeType', 'isMerge')
       .get();
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -150,7 +162,21 @@ const defaultDependencies: McpDataServiceDependencies = {
       .where('endTimeMs', '<=', endTimeMs)
       .orderBy('endTimeMs', 'desc')
       .orderBy(FieldPath.documentId(), 'desc')
-      .limit(limit);
+      .limit(limit)
+      .select(
+        new FieldPath('source', 'provider'),
+        'sleepDate',
+        'startTimeMs',
+        'endTimeMs',
+        'durationSeconds',
+        'inBedDurationSeconds',
+        'isNap',
+        ...Object.values(SLEEP_STAGES)
+          .map(stage => new FieldPath('stageDurationsSeconds', stage)),
+        new FieldPath('score', 'value'),
+        new FieldPath('score', 'qualifier'),
+        ...SAFE_SLEEP_VITAL_KEYS.map(key => new FieldPath('vitals', key)),
+      );
     if (cursor) {
       query = query.startAfter(cursor.endTimeMs, cursor.id);
     }
@@ -358,6 +384,33 @@ function eventMatchesActivityFilter(event: EventInterface, activityTypes: readon
   return activityTypes.some(activityType => eventActivityTypes.includes(activityType));
 }
 
+function buildMetricAggregationEventJson(
+  data: Record<string, unknown>,
+): EventJSONInterface {
+  const rawStats = data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
+    ? data.stats as Record<string, unknown>
+    : {};
+  const stats = Object.fromEntries(
+    Object.entries(rawStats).filter(([type, value]) => {
+      try {
+        DynamicDataLoader.getDataInstanceFromDataType(type, value);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  );
+
+  return {
+    ...data,
+    stats,
+    // MCP aggregates persisted event-level stats. Avoid importing irrelevant
+    // legacy nested activities or power curves that cannot affect this query.
+    activities: [],
+    powerCurve: null,
+  } as unknown as EventJSONInterface;
+}
+
 export interface ListMetricsInput {
   uid: string;
   search?: string;
@@ -390,9 +443,17 @@ export interface QueryMetricInput {
   activityTypes?: readonly string[];
 }
 
-function redactDerivedPayload(value: unknown, parentKey = ''): unknown {
+function redactDerivedPayload(
+  value: unknown,
+  parentKey = '',
+  inheritedEventIdentityContext = false,
+): unknown {
   if (Array.isArray(value)) {
-    return value.map(child => redactDerivedPayload(child, parentKey));
+    return value.map(child => redactDerivedPayload(
+      child,
+      parentKey,
+      inheritedEventIdentityContext,
+    ));
   }
   if (!value || typeof value !== 'object') {
     return value;
@@ -404,14 +465,21 @@ function redactDerivedPayload(value: unknown, parentKey = ''): unknown {
   const nestedIdentityKeys = /^(?:id|name|label)s?$/i;
   const parentIsEventIdentity = /(?:event|activity)/i.test(parentKey);
   const objectHasEventIdentity = entries.some(([key]) => /(?:event|activity).*ids?$/i.test(key));
+  const objectIsEventIdentity = entries.some(([key]) => /^(?:event|activity)Ids?$/i.test(key));
+  const eventIdentityContext = inheritedEventIdentityContext
+    || parentIsEventIdentity
+    || objectIsEventIdentity;
   return Object.fromEntries(
     entries
       .filter(([key]) => (
         !redactedKeys.test(key)
         && !compositeIdentityKeys.test(key)
-        && !((parentIsEventIdentity || objectHasEventIdentity) && nestedIdentityKeys.test(key))
+        && !((eventIdentityContext || objectHasEventIdentity) && nestedIdentityKeys.test(key))
       ))
-      .map(([key, child]) => [key, redactDerivedPayload(child, key)]),
+      .map(([key, child]) => [
+        key,
+        redactDerivedPayload(child, key, eventIdentityContext),
+      ]),
   );
 }
 
@@ -426,18 +494,8 @@ function normalizeSleepVitals(value: unknown): Partial<SleepVitals> | null {
     return null;
   }
   const raw = value as Record<string, unknown>;
-  const keys: Array<keyof SleepVitals> = [
-    'averageHeartRateBpm',
-    'minimumHeartRateBpm',
-    'restingHeartRateBpm',
-    'averageHrvMs',
-    'hrvSampleCount',
-    'overnightHrvMs',
-    'maxSpo2Percent',
-    'averageRespirationBrpm',
-  ];
   const normalized = Object.fromEntries(
-    keys.flatMap((key) => {
+    SAFE_SLEEP_VITAL_KEYS.flatMap((key) => {
       const numeric = asNonNegativeNumber(raw[key]);
       return numeric === null ? [] : [[key, numeric]];
     }),
@@ -568,7 +626,9 @@ export function createMcpDataService(
       const eventScanTruncated = docs.length > METRIC_DISCOVERY_EVENT_LIMIT;
       const scannedDocs = docs.slice(0, METRIC_DISCOVERY_EVENT_LIMIT);
       const available = resolveAvailableSportsLibMetrics(
-        scannedDocs.map(doc => doc.data.stats as Record<string, unknown> | undefined),
+        scannedDocs
+          .filter(doc => !isBenchmarkEventForTrainingMetrics(doc.data))
+          .map(doc => doc.data.stats as Record<string, unknown> | undefined),
       );
       const search = `${input.search || ''}`.trim().toLowerCase();
       const filtered = available.filter(metric => (
@@ -617,7 +677,10 @@ export function createMcpDataService(
           return [];
         }
         try {
-          const event = dependencies.importEvent(doc.data as unknown as EventJSONInterface, doc.id);
+          const event = dependencies.importEvent(
+            buildMetricAggregationEventJson(doc.data),
+            doc.id,
+          );
           return eventMatchesActivityFilter(event, activityTypes) ? [event] : [];
         } catch {
           return [];

@@ -3,6 +3,7 @@ import {
   ChartDataCategoryTypes,
   DataActivityTypes,
   DataDistance,
+  EventImporterJSON,
   EventInterface,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -116,6 +117,29 @@ describe('MCP data service', () => {
     expect(result.sleepCapabilities.providers).toContain(SLEEP_PROVIDERS.GarminAPI);
   });
 
+  it('does not advertise metrics that exist only on benchmark merges', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([
+      {
+        id: 'benchmark-1',
+        data: {
+          isMerge: true,
+          stats: {
+            [DataDistance.type]: 1000,
+          },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).listMetrics({
+      uid: 'user-1',
+      search: 'distance',
+      limit: 10,
+    });
+
+    expect(result.eventMetrics).toEqual([]);
+    expect(result.scannedEventCount).toBe(1);
+  });
+
   it('queries a canonical metric, excludes benchmark merges, and applies timezone bucketing', async () => {
     vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
       { id: 'event-1', data: { startDate: 1 } },
@@ -148,6 +172,51 @@ describe('MCP data service', () => {
       }),
     ]);
     expect(dependencies.importEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores unrelated legacy event fields that Sports Lib cannot import', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
+      id: 'event-1',
+      data: {
+        name: 'Private workout',
+        startDate: Date.parse('2024-04-01T08:00:00.000Z'),
+        endDate: Date.parse('2024-04-01T09:00:00.000Z'),
+        stats: {
+          [DataDistance.type]: 5000,
+          [DataActivityTypes.type]: [ActivityTypes.Running],
+          'Removed legacy stat': { malformed: true },
+        },
+        activities: [{
+          stats: {
+            'Removed nested stat': { malformed: true },
+          },
+        }],
+        powerCurve: {
+          unexpected: true,
+        },
+      },
+    }]);
+    dependencies.importEvent = (data, id) => (
+      EventImporterJSON.getEventFromJSON(data).setID(id)
+    );
+
+    const result = await createMcpDataService(dependencies).queryMetric({
+      uid: 'user-1',
+      metric: DataDistance.type,
+      startTimeMs: Date.parse('2024-04-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-02T00:00:00.000Z'),
+      aggregation: 'total',
+      groupBy: 'date',
+      interval: 'daily',
+      timeZone: 'UTC',
+    });
+
+    expect(result.matchedEventCount).toBe(1);
+    expect(result.aggregation.buckets).toEqual([
+      expect.objectContaining({
+        aggregateValue: 5000,
+      }),
+    ]);
   });
 
   it('fails explicitly when an event query exceeds the safety limit', async () => {
@@ -185,11 +254,20 @@ describe('MCP data service', () => {
           id: 'event-1',
           name: 'Private workout',
           value: 42,
+          metadata: {
+            id: 'nested-event-id',
+            label: 'Nested private workout',
+            value: 7,
+          },
         },
         suggestedEvents: [{
           eventId: 'event-2',
           label: 'Private suggested workout',
           distanceMeters: 10000,
+          metadata: {
+            name: 'Nested private suggestion',
+            distanceMeters: 5000,
+          },
         }],
         selection: {
           mode: 'event',
@@ -211,9 +289,15 @@ describe('MCP data service', () => {
       score: 88,
       event: {
         value: 42,
+        metadata: {
+          value: 7,
+        },
       },
       suggestedEvents: [{
         distanceMeters: 10000,
+        metadata: {
+          distanceMeters: 5000,
+        },
       }],
       selection: {
         mode: 'event',
