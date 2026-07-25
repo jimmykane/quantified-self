@@ -1012,7 +1012,11 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
     logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);
 
     await cleanupUserScopedGeneratedState(uid);
-    await cleanupMcpOAuthStateForUser(uid);
+    try {
+        await cleanupMcpOAuthStateForUser(uid);
+    } catch (error) {
+        logger.error(`[Cleanup] Failed to clean up MCP OAuth state for user ${uid}; continuing account cleanup.`, error);
+    }
 
     // Cleanup Emails
     try {

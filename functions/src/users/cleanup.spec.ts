@@ -355,6 +355,20 @@ describe('cleanupUserAccounts', () => {
         );
     });
 
+    it('continues account cleanup when MCP OAuth cleanup fails', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        cleanupMcpOAuthStateForUserMock.mockRejectedValueOnce(new Error('MCP OAuth cleanup failed'));
+
+        await expect(
+            wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext),
+        ).resolves.toBeUndefined();
+
+        expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
+        expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', 'testUser123');
+    });
+
     it('should force delete Suunto tokens even if deauthorization fails', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });

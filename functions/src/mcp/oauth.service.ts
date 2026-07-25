@@ -31,6 +31,9 @@ const AUTHORIZATION_CODE_LIFETIME_MS = 5 * 60 * 1000;
 const ACCESS_TOKEN_LIFETIME_MS = 60 * 60 * 1000;
 const REFRESH_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const MCP_REQUESTS_PER_MINUTE = 120;
+const MCP_OAUTH_CLEANUP_PAGE_SIZE = 50;
+const MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY = 10;
+const MCP_OAUTH_CLEANUP_MAX_DOCUMENTS = 250;
 const CLIENT_METADATA_MAX_BYTES = 64 * 1024;
 const NON_PUBLIC_IPV4_ADDRESSES = new BlockList();
 const NON_PUBLIC_IPV6_ADDRESSES = new BlockList();
@@ -1160,19 +1163,79 @@ export function createMcpOAuthService(
   };
 }
 
+interface McpOAuthCleanupResult {
+  deletedCount: number;
+  hasMore: boolean;
+}
+
+async function cleanupMcpOAuthQuery(
+  db: admin.firestore.Firestore,
+  baseQuery: admin.firestore.Query,
+  maxDocuments: number,
+): Promise<McpOAuthCleanupResult> {
+  let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
+  let deletedCount = 0;
+
+  while (deletedCount < maxDocuments) {
+    const pageLimit = Math.min(
+      MCP_OAUTH_CLEANUP_PAGE_SIZE,
+      maxDocuments - deletedCount,
+    );
+    let query = baseQuery
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(pageLimit + 1);
+    if (pageCursor) {
+      query = query.startAfter(pageCursor);
+    }
+
+    const snapshot = await query.get();
+    if (snapshot.empty) {
+      return { deletedCount, hasMore: false };
+    }
+
+    const docsToDelete = snapshot.docs.slice(0, pageLimit);
+    for (let index = 0; index < docsToDelete.length; index += MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY) {
+      await Promise.all(
+        docsToDelete
+          .slice(index, index + MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY)
+          .map(doc => db.recursiveDelete(doc.ref)),
+      );
+    }
+    deletedCount += docsToDelete.length;
+
+    if (snapshot.docs.length <= pageLimit) {
+      return { deletedCount, hasMore: false };
+    }
+    pageCursor = docsToDelete[docsToDelete.length - 1];
+  }
+
+  return { deletedCount, hasMore: true };
+}
+
 export async function cleanupMcpOAuthStateForUser(uid: string): Promise<void> {
   const db = admin.firestore();
-  for (const collectionName of [
-    MCP_OAUTH_COLLECTIONS.authorizationRequests,
-    MCP_OAUTH_COLLECTIONS.authorizationCodes,
-    MCP_OAUTH_COLLECTIONS.accessTokens,
-    MCP_OAUTH_COLLECTIONS.refreshTokens,
-    MCP_OAUTH_COLLECTIONS.rateLimits,
-  ]) {
-    const snapshot = await db.collection(collectionName).where('uid', '==', uid).get();
-    await Promise.all(snapshot.docs.map(doc => db.recursiveDelete(doc.ref)));
-  }
-  await db.recursiveDelete(
+  const queries = [
+    db.collection(MCP_OAUTH_COLLECTIONS.authorizationRequests).where('uid', '==', uid),
+    db.collection(MCP_OAUTH_COLLECTIONS.authorizationCodes).where('uid', '==', uid),
+    db.collection(MCP_OAUTH_COLLECTIONS.accessTokens).where('uid', '==', uid),
+    db.collection(MCP_OAUTH_COLLECTIONS.refreshTokens).where('uid', '==', uid),
+    db.collection(MCP_OAUTH_COLLECTIONS.rateLimits).where('uid', '==', uid),
     db.collection('users').doc(uid).collection(MCP_OAUTH_COLLECTIONS.userConnections),
-  );
+  ];
+  let remainingDocumentBudget = MCP_OAUTH_CLEANUP_MAX_DOCUMENTS;
+
+  for (let index = 0; index < queries.length; index += 1) {
+    const query = queries[index];
+    const result = await cleanupMcpOAuthQuery(db, query, remainingDocumentBudget);
+    remainingDocumentBudget -= result.deletedCount;
+    if (result.hasMore || (
+      remainingDocumentBudget === 0
+      && index < queries.length - 1
+    )) {
+      logger.warn(
+        `[MCP OAuth] Account cleanup reached its ${MCP_OAUTH_CLEANUP_MAX_DOCUMENTS}-document limit for user ${uid}; remaining OAuth state requires a later cleanup run.`,
+      );
+      return;
+    }
+  }
 }
