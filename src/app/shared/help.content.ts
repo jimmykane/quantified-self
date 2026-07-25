@@ -800,6 +800,15 @@ In Settings you can:
 - Review or disconnect clients in **Settings -> Account -> MCP connections**. Disconnecting blocks future access, but the external client may retain data it already received under its own policy.
 - See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
 
+## Use with ChatGPT
+
+1. In ChatGPT on the web, turn on Developer mode and create a custom app.
+2. Use the Quantified Self MCP endpoint: **https://quantified-self.io/mcp**.
+3. Let ChatGPT scan the available tools, then sign in to Quantified Self and approve the read-only permissions you want to grant.
+4. Start a new chat, select the Quantified Self app, and ask about your metrics or sleep summaries.
+
+You can copy the endpoint and manage connected clients in **Settings -> Account -> MCP connections**. ChatGPT is an external client, so authorize only the data you are comfortable sharing and review its own data-retention policy.
+
 ## Account deletion
 
 You can delete your account from **Settings -> Account -> Danger Zone**.

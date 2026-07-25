@@ -6,6 +6,47 @@ mat-card-content {
   padding-top: 20px;
 }
 
+.mcp-connections__setup {
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+
+  h3 {
+    color: var(--mat-sys-on-surface);
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  p,
+  ol {
+    color: var(--mat-sys-on-surface-variant);
+    margin: 8px 0 0;
+  }
+
+  ol {
+    padding-left: 20px;
+  }
+}
+
+.mcp-connections__endpoint {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+
+  code {
+    background: var(--mat-sys-surface-container-high);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+    padding: 8px 12px;
+  }
+}
+
+.mcp-connections__setup-note {
+  font-size: 0.8rem;
+}
+
 .mcp-connections__state {
   align-items: center;
   color: var(--mat-sys-on-surface-variant);
@@ -75,6 +116,15 @@ mat-card-content {
 }
 
 @media (max-width: 599px) {
+  .mcp-connections__endpoint {
+    align-items: stretch;
+    flex-direction: column;
+
+    button {
+      align-self: flex-start;
+    }
+  }
+
   .mcp-connections__item {
     align-items: stretch;
     grid-template-columns: 1fr;

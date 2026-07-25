@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { Clipboard, ClipboardModule } from '@angular/cdk/clipboard';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -6,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppFunctionsService } from '../../services/app.functions.service';
+import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 
 interface McpConnection {
@@ -23,6 +25,7 @@ interface McpConnection {
   standalone: true,
   imports: [
     CommonModule,
+    ClipboardModule,
     MatButtonModule,
     MatCardModule,
     MatIconModule,
@@ -32,9 +35,11 @@ interface McpConnection {
   styleUrls: ['./mcp-connections.component.scss'],
 })
 export class McpConnectionsComponent implements OnInit {
+  private readonly clipboard = inject(Clipboard);
   private readonly functions = inject(AppFunctionsService);
   private readonly logger = inject(LoggerService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly windowService = inject(AppWindowService);
 
   readonly connections = signal<McpConnection[]>([]);
   readonly loading = signal(true);
@@ -44,6 +49,7 @@ export class McpConnectionsComponent implements OnInit {
     'metrics:read': 'Activity and Training metrics',
     'sleep:read': 'Sleep summaries',
   };
+  readonly mcpEndpoint = `${this.windowService.currentDomain}/mcp`;
 
   ngOnInit(): void {
     void this.loadConnections();
@@ -64,6 +70,15 @@ export class McpConnectionsComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  copyEndpoint(): void {
+    if (this.clipboard.copy(this.mcpEndpoint)) {
+      this.snackBar.open('MCP endpoint copied.', undefined, { duration: 4000 });
+      return;
+    }
+
+    this.snackBar.open('Could not copy the MCP endpoint. Please copy it manually.', undefined, { duration: 5000 });
   }
 
   async revoke(connection: McpConnection): Promise<void> {

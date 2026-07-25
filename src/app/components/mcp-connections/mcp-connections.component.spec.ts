@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Clipboard } from '@angular/cdk/clipboard';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFunctionsService } from '../../services/app.functions.service';
+import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { McpConnectionsComponent } from './mcp-connections.component';
 
@@ -16,6 +18,7 @@ describe('McpConnectionsComponent', () => {
     createdAtMs: 1_700_000_000_000,
     lastUsedAtMs: 1_700_001_000_000,
   };
+  const clipboard = { copy: vi.fn(() => true) };
   const functions = {
     call: vi.fn(),
   };
@@ -34,6 +37,8 @@ describe('McpConnectionsComponent', () => {
       imports: [McpConnectionsComponent, NoopAnimationsModule],
       providers: [
         { provide: AppFunctionsService, useValue: functions },
+        { provide: AppWindowService, useValue: { currentDomain: 'https://quantified-self.io' } },
+        { provide: Clipboard, useValue: clipboard },
         { provide: LoggerService, useValue: { error: vi.fn() } },
         { provide: MatSnackBar, useValue: snackBar },
       ],
@@ -50,6 +55,27 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Training Copilot');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Sleep summaries');
+  });
+
+  it('shows the ChatGPT setup steps and copies the public endpoint', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const content = fixture.nativeElement.textContent as string;
+    expect(content).toContain('Connect ChatGPT');
+    expect(content).toContain('https://quantified-self.io/mcp');
+    expect(content).toContain('Copy endpoint');
+
+    fixture.componentInstance.copyEndpoint();
+
+    expect(clipboard.copy).toHaveBeenCalledWith('https://quantified-self.io/mcp');
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'MCP endpoint copied.',
+      undefined,
+      { duration: 4000 },
+    );
   });
 
   it('revokes a connection and removes it from the list', async () => {

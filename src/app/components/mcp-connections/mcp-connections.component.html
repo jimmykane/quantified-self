@@ -4,6 +4,26 @@
     <mat-card-subtitle>Read-only clients you have authorized to access metrics or sleep summaries.</mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
+    <section class="mcp-connections__setup" aria-labelledby="mcp-chatgpt-title">
+      <h3 id="mcp-chatgpt-title">Connect ChatGPT</h3>
+      <p>In ChatGPT on the web, turn on Developer mode and create a custom app with this endpoint.</p>
+      <div class="mcp-connections__endpoint">
+        <code>{{ mcpEndpoint }}</code>
+        <button mat-stroked-button type="button" (click)="copyEndpoint()">
+          <span class="mcp-connections__button-content">
+            <mat-icon>content_copy</mat-icon>
+            <span>Copy endpoint</span>
+          </span>
+        </button>
+      </div>
+      <ol>
+        <li>Let ChatGPT scan the available tools.</li>
+        <li>Sign in to Quantified Self when prompted.</li>
+        <li>Choose the read-only metric and sleep permissions you want to grant.</li>
+      </ol>
+      <p class="mcp-connections__setup-note">You can review or disconnect the client below at any time.</p>
+    </section>
+
     @if (loading()) {
       <div class="mcp-connections__state" role="status">
         <mat-spinner diameter="28"></mat-spinner>

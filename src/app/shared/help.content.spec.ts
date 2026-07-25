@@ -46,6 +46,15 @@ describe('help.content', () => {
     });
   });
 
+  it('should document the ChatGPT MCP setup path and production endpoint', () => {
+    const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
+
+    expect(dataAndPrivacySection?.content).toContain('Use with ChatGPT');
+    expect(dataAndPrivacySection?.content).toContain('Developer mode');
+    expect(dataAndPrivacySection?.content).toContain('https://quantified-self.io/mcp');
+    expect(dataAndPrivacySection?.content).toContain('Settings -> Account -> MCP connections');
+  });
+
   it('should expose four unique global support actions', () => {
     expect(HELP_ACTIONS).toHaveLength(4);
 
