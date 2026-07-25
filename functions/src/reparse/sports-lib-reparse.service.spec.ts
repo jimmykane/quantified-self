@@ -305,8 +305,8 @@ describe('sports-lib-reparse.service', () => {
         );
     });
 
-    it('enables only the event reparse scanner by default', () => {
-        expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(true);
+    it('keeps the event reparse scanner disabled by default', () => {
+        expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(false);
         expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist).toEqual([]);
     });
 
