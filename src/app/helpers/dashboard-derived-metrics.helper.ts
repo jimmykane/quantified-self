@@ -571,108 +571,6 @@ function resolveDashboardTrainingCapacityImportedMetric(
   };
 }
 
-function resolveDashboardModeledCriticalPower(
-  value: unknown,
-): DashboardTrainingCapacityDiscipline['modeledCriticalPower'] | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  const raw = value as Partial<DashboardTrainingCapacityDiscipline['modeledCriticalPower']>;
-  const valueWatts = toFiniteNumber(raw.valueWatts);
-  const valueWattsPerKg = toFiniteNumber(raw.valueWattsPerKg);
-  const wPrimeJoules = toFiniteNumber(raw.wPrimeJoules);
-  const sourceEventCount = toFiniteNumber(raw.sourceEventCount);
-  const anchorPointCount = toFiniteNumber(raw.anchorPointCount);
-  const minDurationSeconds = toFiniteNumber(raw.minDurationSeconds);
-  const maxDurationSeconds = toFiniteNumber(raw.maxDurationSeconds);
-  const rSquared = toFiniteNumber(raw.rSquared);
-  const normalizedRmse = toFiniteNumber(raw.normalizedRmse);
-  const status = raw.status === 'ready' || raw.status === 'insufficient-evidence' || raw.status === 'poor-fit'
-    ? raw.status
-    : null;
-  const confidence = raw.confidence === 'high' || raw.confidence === 'medium' || raw.confidence === 'low'
-    ? raw.confidence
-    : null;
-  if (
-    status === null
-    || raw.windowDays !== 90
-    || sourceEventCount === null
-    || sourceEventCount < 0
-    || !Number.isInteger(sourceEventCount)
-    || anchorPointCount === null
-    || anchorPointCount < 0
-    || !Number.isInteger(anchorPointCount)
-    || (valueWattsPerKg !== null && valueWattsPerKg <= 0)
-    || (minDurationSeconds !== null && minDurationSeconds <= 0)
-    || (maxDurationSeconds !== null && maxDurationSeconds <= 0)
-    || (minDurationSeconds !== null && maxDurationSeconds !== null && minDurationSeconds > maxDurationSeconds)
-    || (rSquared !== null && (rSquared < -1 || rSquared > 1))
-    || (normalizedRmse !== null && normalizedRmse < 0)
-  ) {
-    return null;
-  }
-  if (
-    status === 'ready'
-    && (
-      valueWatts === null
-      || valueWatts <= 0
-      || wPrimeJoules === null
-      || wPrimeJoules <= 0
-      || (confidence !== 'high' && confidence !== 'medium')
-      || sourceEventCount < (confidence === 'high' ? 3 : 1)
-      || anchorPointCount !== 5
-      || minDurationSeconds === null
-      || minDurationSeconds > 180
-      || maxDurationSeconds === null
-      || maxDurationSeconds < 1_200
-      || rSquared === null
-      || rSquared < 0.9
-      || normalizedRmse === null
-      || normalizedRmse > 0.07
-    )
-  ) {
-    return null;
-  }
-  if (
-    status === 'insufficient-evidence'
-    && (
-      raw.valueWatts !== null
-      || raw.valueWattsPerKg !== null
-      || raw.wPrimeJoules !== null
-      || raw.confidence !== null
-      || anchorPointCount >= 5
-    )
-  ) {
-    return null;
-  }
-  if (
-    status === 'poor-fit'
-    && (
-      raw.valueWatts !== null
-      || raw.valueWattsPerKg !== null
-      || raw.wPrimeJoules !== null
-      || confidence !== 'low'
-      || anchorPointCount !== 5
-    )
-  ) {
-    return null;
-  }
-  return {
-    status,
-    valueWatts: status === 'ready' ? valueWatts : null,
-    valueWattsPerKg: status === 'ready' && valueWattsPerKg !== null && valueWattsPerKg > 0 ? valueWattsPerKg : null,
-    wPrimeJoules: status === 'ready' && wPrimeJoules !== null && wPrimeJoules > 0 ? wPrimeJoules : null,
-    confidence,
-    windowDays: 90,
-    sourceEventCount: Math.floor(sourceEventCount),
-    anchorPointCount: Math.floor(anchorPointCount),
-    minDurationSeconds,
-    maxDurationSeconds,
-    rSquared,
-    normalizedRmse,
-  };
-}
-
 export function resolveDashboardTrainingCapacityContext(payload: unknown): DashboardTrainingCapacityContext | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
@@ -683,7 +581,11 @@ export function resolveDashboardTrainingCapacityContext(payload: unknown): Dashb
     return null;
   }
   const disciplines = raw.disciplines.flatMap((candidate) => {
-    if (!candidate || (candidate.discipline !== 'running' && candidate.discipline !== 'cycling')) {
+    if (
+      !candidate
+      || (candidate.discipline !== 'running' && candidate.discipline !== 'cycling')
+      || Object.prototype.hasOwnProperty.call(candidate, 'modeledCriticalPower')
+    ) {
       return [];
     }
     const ftpSetting = candidate.ftpSetting === null
@@ -692,11 +594,10 @@ export function resolveDashboardTrainingCapacityContext(payload: unknown): Dashb
     const importedVo2Max = candidate.importedVo2Max === null
       ? null
       : resolveDashboardTrainingCapacityImportedMetric(candidate.importedVo2Max, 'vo2-max');
-    const modeledCriticalPower = resolveDashboardModeledCriticalPower(candidate.modeledCriticalPower);
-    if ((candidate.ftpSetting !== null && !ftpSetting) || (candidate.importedVo2Max !== null && !importedVo2Max) || !modeledCriticalPower) {
+    if ((candidate.ftpSetting !== null && !ftpSetting) || (candidate.importedVo2Max !== null && !importedVo2Max)) {
       return [];
     }
-    return [{ discipline: candidate.discipline, ftpSetting, importedVo2Max, modeledCriticalPower }];
+    return [{ discipline: candidate.discipline, ftpSetting, importedVo2Max }];
   });
   const disciplineKinds = new Set(disciplines.map(discipline => discipline.discipline));
   if (disciplines.length !== 2 || disciplineKinds.size !== 2) {

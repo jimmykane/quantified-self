@@ -186,6 +186,7 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         SwimmingGroup: 'swimming_group',
     },
     ActivityTypesHelper: {
+        resolveActivityType: actual.ActivityTypesHelper.resolveActivityType.bind(actual.ActivityTypesHelper),
         getActivityTypesForActivityGroup: (group: string) => {
             switch (group) {
                 case 'cycling_group':

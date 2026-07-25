@@ -6,6 +6,7 @@ import { TrainingSportVisibilityDialogComponent } from '../components/training/t
 import { TrainingSwimPerformanceChartComponent } from '../components/training/training-swim-performance-chart.component';
 import { TrainingDurabilityTrajectoryChartComponent } from '../components/training/training-durability-trajectory-chart.component';
 import { TrainingMetricTextComponent } from '../components/training/training-metric-text.component';
+import { TrainingPowerSystemsTrendChartComponent } from '../components/training/training-power-systems-trend-chart.component';
 import { TrainingRoutingModule } from '../training.routing.module';
 import { AppChartsModule } from './app-charts.module';
 import { MaterialModule } from './material.module';
@@ -20,6 +21,7 @@ import { SharedModule } from './shared.module';
     TrainingSwimPerformanceChartComponent,
     TrainingDurabilityTrajectoryChartComponent,
     TrainingMetricTextComponent,
+    TrainingPowerSystemsTrendChartComponent,
   ],
 })
 export class TrainingModule {}

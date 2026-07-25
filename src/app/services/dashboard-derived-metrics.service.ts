@@ -45,6 +45,7 @@ import {
   resolveTrainingExplanationMetricPayload,
   resolveTrainingReadinessMetricPayload,
 } from '../helpers/training-derived-metrics.helper';
+import { resolveTrainingPowerSystemsMetricPayload } from '../helpers/training-power-systems.helper';
 import type { DashboardDerivedMetricStatus } from '../helpers/derived-metric-status.helper';
 import { AppFunctionsService } from './app.functions.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -59,6 +60,7 @@ import {
   type DerivedTrainingDurabilityMetricPayload,
   type DerivedTrainingExplanationMetricPayload,
   type DerivedTrainingReadinessMetricPayload,
+  type DerivedTrainingPowerSystemsMetricPayload,
   type EnsureDerivedMetricsRequest,
   type EnsureDerivedMetricsResponse,
 } from '@shared/derived-metrics';
@@ -80,6 +82,7 @@ export interface DashboardDerivedMetricsState {
   trainingSummary: DashboardTrainingSummaryContext | null;
   trainingBuildComparison: DashboardTrainingBuildComparisonContext | null;
   trainingCapacity: DashboardTrainingCapacityContext | null;
+  trainingPowerSystems: DerivedTrainingPowerSystemsMetricPayload | null;
   trainingExplanation: DerivedTrainingExplanationMetricPayload | null;
   trainingDurability: DerivedTrainingDurabilityMetricPayload | null;
   trainingReadiness: DerivedTrainingReadinessMetricPayload | null;
@@ -101,6 +104,7 @@ export interface DashboardDerivedMetricsState {
   trainingSummaryStatus: DashboardDerivedMetricStatus;
   trainingBuildComparisonStatus: DashboardDerivedMetricStatus;
   trainingCapacityStatus: DashboardDerivedMetricStatus;
+  trainingPowerSystemsStatus: DashboardDerivedMetricStatus;
   trainingExplanationStatus: DashboardDerivedMetricStatus;
   trainingDurabilityStatus: DashboardDerivedMetricStatus;
   trainingReadinessStatus: DashboardDerivedMetricStatus;
@@ -126,6 +130,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     trainingSummary: null,
     trainingBuildComparison: null,
     trainingCapacity: null,
+    trainingPowerSystems: null,
     trainingExplanation: null,
     trainingDurability: null,
     trainingReadiness: null,
@@ -147,6 +152,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     trainingSummaryStatus: 'missing',
     trainingBuildComparisonStatus: 'missing',
     trainingCapacityStatus: 'missing',
+    trainingPowerSystemsStatus: 'missing',
     trainingExplanationStatus: 'missing',
     trainingDurabilityStatus: 'missing',
     trainingReadinessStatus: 'missing',
@@ -175,6 +181,7 @@ type DerivedMetricStateContextKey =
   | 'trainingSummary'
   | 'trainingBuildComparison'
   | 'trainingCapacity'
+  | 'trainingPowerSystems'
   | 'trainingExplanation'
   | 'trainingDurability'
   | 'trainingReadiness'
@@ -198,6 +205,7 @@ type DerivedMetricStateStatusKey =
   | 'trainingSummaryStatus'
   | 'trainingBuildComparisonStatus'
   | 'trainingCapacityStatus'
+  | 'trainingPowerSystemsStatus'
   | 'trainingExplanationStatus'
   | 'trainingDurabilityStatus'
   | 'trainingReadinessStatus'
@@ -219,6 +227,7 @@ const ALL_DERIVED_METRIC_KINDS = Object.values(DERIVED_METRIC_KINDS) as DerivedM
 const DASHBOARD_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
   kind => kind !== DERIVED_METRIC_KINDS.TrainingBuildComparison
     && kind !== DERIVED_METRIC_KINDS.TrainingCapacity
+    && kind !== DERIVED_METRIC_KINDS.TrainingPowerSystems
     && kind !== DERIVED_METRIC_KINDS.TrainingExplanation
     && kind !== DERIVED_METRIC_KINDS.TrainingDurability
     && kind !== DERIVED_METRIC_KINDS.TrainingReadiness
@@ -338,6 +347,11 @@ export class DashboardDerivedMetricsService {
         contextKey: 'trainingCapacity',
         statusKey: 'trainingCapacityStatus',
         resolveContext: (snapshot) => resolveDashboardTrainingCapacityContext(this.resolveSnapshotPayload(snapshot)),
+      },
+      [DERIVED_METRIC_KINDS.TrainingPowerSystems]: {
+        contextKey: 'trainingPowerSystems',
+        statusKey: 'trainingPowerSystemsStatus',
+        resolveContext: (snapshot) => resolveTrainingPowerSystemsMetricPayload(this.resolveSnapshotPayload(snapshot)),
       },
       [DERIVED_METRIC_KINDS.TrainingExplanation]: {
         contextKey: 'trainingExplanation',
@@ -550,6 +564,14 @@ export class DashboardDerivedMetricsService {
       status === 'ready'
       && metricKind === DERIVED_METRIC_KINDS.TrainingCapacity
       && !resolveDashboardTrainingCapacityContext(this.resolveSnapshotPayload(snapshot))
+    ) {
+      return 'stale';
+    }
+
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.TrainingPowerSystems
+      && !resolveTrainingPowerSystemsMetricPayload(this.resolveSnapshotPayload(snapshot))
     ) {
       return 'stale';
     }

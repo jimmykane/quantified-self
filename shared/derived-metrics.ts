@@ -24,6 +24,7 @@ export const DERIVED_METRIC_KINDS = {
   EfficiencyTrend: 'efficiency_trend',
   TrainingSummary: 'training_summary',
   TrainingCapacity: 'training_capacity',
+  TrainingPowerSystems: 'training_power_systems',
   PowerCurve: 'power_curve',
   TrainingExplanation: 'training_explanation',
   TrainingDurability: 'training_durability',
@@ -50,6 +51,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.EfficiencyTrend,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingCapacity,
+  DERIVED_METRIC_KINDS.TrainingPowerSystems,
   DERIVED_METRIC_KINDS.PowerCurve,
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingDurability,
@@ -76,6 +78,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   ...PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingCapacity,
+  DERIVED_METRIC_KINDS.TrainingPowerSystems,
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingDurability,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
@@ -84,7 +87,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 11;
+export const DERIVED_METRIC_SCHEMA_VERSION = 14;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -484,29 +487,10 @@ export interface DerivedTrainingCapacityImportedMetric {
   changePct: number | null;
 }
 
-export type DerivedModeledCriticalPowerStatus = 'ready' | 'insufficient-evidence' | 'poor-fit';
-export type DerivedModeledCriticalPowerConfidence = 'high' | 'medium' | 'low' | null;
-
-export interface DerivedModeledCriticalPower {
-  status: DerivedModeledCriticalPowerStatus;
-  valueWatts: number | null;
-  valueWattsPerKg: number | null;
-  wPrimeJoules: number | null;
-  confidence: DerivedModeledCriticalPowerConfidence;
-  windowDays: 90;
-  sourceEventCount: number;
-  anchorPointCount: number;
-  minDurationSeconds: number | null;
-  maxDurationSeconds: number | null;
-  rSquared: number | null;
-  normalizedRmse: number | null;
-}
-
 export interface DerivedTrainingCapacityDiscipline {
   discipline: DerivedPowerCapacityDiscipline;
   ftpSetting: DerivedTrainingCapacityImportedMetric | null;
   importedVo2Max: DerivedTrainingCapacityImportedMetric | null;
-  modeledCriticalPower: DerivedModeledCriticalPower;
 }
 
 export interface DerivedTrainingCapacityMetricPayload {
@@ -514,6 +498,165 @@ export interface DerivedTrainingCapacityMetricPayload {
   asOfDayMs: number;
   excludesMergedEvents: boolean;
   disciplines: DerivedTrainingCapacityDiscipline[];
+}
+
+export const DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION = 1 as const;
+export const DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS = 42 as const;
+export const DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS = 84 as const;
+
+export type DerivedTrainingPowerSystemsStatus =
+  | 'ready'
+  | 'partial'
+  | 'insufficient-evidence'
+  | 'poor-fit'
+  | 'unstable'
+  | 'invalid-input';
+
+export type DerivedTrainingPowerSystemsComponentStatus =
+  | 'ready'
+  | 'insufficient-evidence'
+  | 'poor-fit'
+  | 'unstable'
+  | 'invalid-input';
+
+export type DerivedTrainingPowerSystemsReason =
+  | 'no-evidence'
+  | 'invalid-effective-date'
+  | 'invalid-source'
+  | 'duplicate-source'
+  | 'invalid-date'
+  | 'future-evidence'
+  | 'invalid-activity-type'
+  | 'mixed-activity-types'
+  | 'invalid-power-curve'
+  | 'insufficient-history'
+  | 'insufficient-critical-power-range'
+  | 'insufficient-maximum-power-range'
+  | 'poor-critical-power-fit'
+  | 'unstable-critical-power-fit'
+  | 'unstable-w-prime-fit'
+  | 'poor-maximum-power-fit'
+  | 'unstable-maximum-power-fit';
+
+const DERIVED_TRAINING_POWER_SYSTEMS_REASONS_BY_STATUS: Record<
+  Exclude<DerivedTrainingPowerSystemsStatus, 'ready'>,
+  readonly DerivedTrainingPowerSystemsReason[]
+> = {
+  partial: [
+    'unstable-w-prime-fit',
+    'insufficient-maximum-power-range',
+    'poor-maximum-power-fit',
+    'unstable-maximum-power-fit',
+  ],
+  'insufficient-evidence': [
+    'no-evidence',
+    'insufficient-history',
+    'insufficient-critical-power-range',
+  ],
+  'poor-fit': ['poor-critical-power-fit'],
+  unstable: ['unstable-critical-power-fit'],
+  'invalid-input': [
+    'invalid-effective-date',
+    'invalid-source',
+    'duplicate-source',
+    'invalid-date',
+    'future-evidence',
+    'invalid-activity-type',
+    'mixed-activity-types',
+    'invalid-power-curve',
+  ],
+};
+
+export function isDerivedTrainingPowerSystemsStatusReasonPair(
+  status: DerivedTrainingPowerSystemsStatus,
+  reason: DerivedTrainingPowerSystemsReason | null,
+): boolean {
+  if (status === 'ready') {
+    return reason === null;
+  }
+  return reason !== null
+    && DERIVED_TRAINING_POWER_SYSTEMS_REASONS_BY_STATUS[status].includes(reason);
+}
+
+export interface DerivedTrainingPowerSystemsComponent {
+  status: DerivedTrainingPowerSystemsComponentStatus;
+  reason: DerivedTrainingPowerSystemsReason | null;
+  value: number | null;
+}
+
+export interface DerivedTrainingPowerSystemsDiagnostics {
+  sourceCount: number;
+  historyStartDayMs: number | null;
+  historyEndDayMs: number | null;
+  historySpanDays: number;
+  rejectedPointCount: number;
+  rejectedShortPowerSpikePointCount: number;
+  criticalPowerAnchorCount: number;
+  earlyCriticalPowerAnchorCount: number;
+  longCriticalPowerAnchorCount: number;
+  criticalPowerContributingSourceCount: number;
+  maximumPowerAnchorCount: number;
+  maximumPowerContributingSourceCount: number;
+  criticalPowerNormalizedRmse: number | null;
+  criticalPowerSpreadRatio: number | null;
+  wPrimeSpreadRatio: number | null;
+  criticalPowerLeaveOneOutSpreadRatio: number | null;
+  wPrimeLeaveOneOutSpreadRatio: number | null;
+  criticalPowerSourceRemovalFitCount: number;
+  criticalPowerSourceRemovalFailureCount: number;
+  criticalPowerSourceRemovalMaximumChangeRatio: number | null;
+  wPrimeSourceRemovalMaximumChangeRatio: number | null;
+  maximumPowerNormalizedRmse: number | null;
+  maximumPowerLeaveOneOutSpreadRatio: number | null;
+}
+
+export interface DerivedTrainingPowerSystemsSnapshot {
+  effectiveDayMs: number;
+  status: DerivedTrainingPowerSystemsStatus;
+  reason: DerivedTrainingPowerSystemsReason | null;
+  activityType: string;
+  sourceFingerprint: string | null;
+  criticalPower: DerivedTrainingPowerSystemsComponent;
+  wPrime: DerivedTrainingPowerSystemsComponent;
+  maximumPower: DerivedTrainingPowerSystemsComponent;
+  diagnostics: DerivedTrainingPowerSystemsDiagnostics;
+}
+
+export interface DerivedTrainingPowerSystemsHistoryPoint {
+  effectiveDayMs: number;
+  status: DerivedTrainingPowerSystemsStatus;
+  reason: DerivedTrainingPowerSystemsReason | null;
+  criticalPowerStatus: DerivedTrainingPowerSystemsComponentStatus;
+  criticalPowerWatts: number | null;
+  wPrimeStatus: DerivedTrainingPowerSystemsComponentStatus;
+  wPrimeJoules: number | null;
+  maximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus;
+  maximumPowerWatts: number | null;
+}
+
+export interface DerivedTrainingPowerSystemsEvidenceCounts {
+  candidateActivityCount: number;
+  usableCurveActivityCount: number;
+  excludedActivityCount: number;
+}
+
+export interface DerivedTrainingPowerSystemsActivityType {
+  activityType: string;
+  current: DerivedTrainingPowerSystemsSnapshot;
+  history: DerivedTrainingPowerSystemsHistoryPoint[];
+  evidenceCounts: DerivedTrainingPowerSystemsEvidenceCounts;
+}
+
+export interface DerivedTrainingPowerSystemsMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  policyVersion: typeof DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION;
+  windowDays: typeof DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS;
+  historyDays: typeof DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS;
+  cadence: 'workout-date';
+  excludesEffectiveDay: true;
+  excludesMergedEvents: true;
+  activityTypes: DerivedTrainingPowerSystemsActivityType[];
 }
 
 export interface DerivedTrainingExplanationLoadCoverage {
@@ -911,6 +1054,7 @@ export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBa
 export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
 export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSummaryMetricPayload>;
 export type DerivedTrainingCapacityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingCapacityMetricPayload>;
+export type DerivedTrainingPowerSystemsMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingPowerSystemsMetricPayload>;
 export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedPowerCurveMetricPayload>;
 export type DerivedTrainingExplanationMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingExplanationMetricPayload>;
 export type DerivedTrainingDurabilityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingDurabilityMetricPayload>;
@@ -933,6 +1077,7 @@ export type DerivedMetricSnapshot =
   | DerivedEfficiencyTrendMetricSnapshot
   | DerivedTrainingSummaryMetricSnapshot
   | DerivedTrainingCapacityMetricSnapshot
+  | DerivedTrainingPowerSystemsMetricSnapshot
   | DerivedPowerCurveMetricSnapshot
   | DerivedTrainingExplanationMetricSnapshot
   | DerivedTrainingDurabilityMetricSnapshot

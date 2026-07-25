@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     DERIVED_METRIC_KINDS,
+    DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
+    DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
 } from '../../../shared/derived-metrics';
 import {
     ActivityTypeGroups,
@@ -29,6 +32,8 @@ import {
     DataSwimPaceAvg,
     DataVO2Max,
     DURABILITY_PROTOCOL_VERSION,
+    fitThreeDimensionalCapacityModel,
+    type ThreeDimensionalCapacityFit,
 } from '@sports-alliance/sports-lib';
 import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
 import { POWER_CURVE_STAT_TYPE } from '../../../shared/power-curve';
@@ -483,6 +488,20 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
 
         expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingCapacity])).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+            needsTrainingActivityDocs: true,
+            needsTrainingSwimLengths: false,
+            needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
+        });
+    });
+
+    it('uses parent events and every canonical child activity for the power-systems snapshot', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.TrainingPowerSystems])).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: false,
             needsTrainingActivityDocs: true,
@@ -1577,7 +1596,7 @@ describe('buildPowerCurveMetricPayload', () => {
 
 describe('buildTrainingCapacityMetricPayload', () => {
     const nowMs = Date.UTC(2026, 6, 10, 12, 0, 0);
-    const modeledCurve = [180, 300, 600, 900, 1200].map(duration => ({
+    const sessionPowerCurve = [180, 300, 600, 900, 1200].map(duration => ({
         duration,
         power: 240 + (18_000 / duration),
         wattsPerKg: 3.2 + (240 / duration),
@@ -1586,7 +1605,7 @@ describe('buildTrainingCapacityMetricPayload', () => {
         id: string,
         dayMs: number,
         overrides: Record<string, unknown> = {},
-        curve: unknown = modeledCurve,
+        curve: unknown = null,
         creatorName = 'Edge 1050',
     ) => ({
         id,
@@ -1603,8 +1622,8 @@ describe('buildTrainingCapacityMetricPayload', () => {
         }),
     });
 
-    it('deduplicates carried settings and models CP from the 90-day aggregate curve', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+    it('deduplicates carried imported settings without adding a modeled capacity value', async () => {
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const docs = [
             createDoc('old-setting', Date.UTC(2026, 0, 1), {
                 [DataFTP.type]: 210,
@@ -1631,9 +1650,8 @@ describe('buildTrainingCapacityMetricPayload', () => {
             }),
         ];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
         expect(cycling?.ftpSetting).toMatchObject({
@@ -1653,21 +1671,11 @@ describe('buildTrainingCapacityMetricPayload', () => {
             observationCount: 4,
             previousValue: 54,
         });
-        expect(cycling?.modeledCriticalPower).toMatchObject({
-            status: 'ready',
-            valueWatts: 240,
-            valueWattsPerKg: 3.2,
-            wPrimeJoules: 18_000,
-            confidence: 'high',
-            sourceEventCount: 3,
-            anchorPointCount: 5,
-            rSquared: 1,
-            normalizedRmse: 0,
-        });
+        expect(cycling).not.toHaveProperty('modeledCriticalPower');
     });
 
-    it('withholds modeled CP when the aggregate curve lacks long-duration evidence', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+    it('keeps imported capacity independent of incomplete power curves', async () => {
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const docs = [
             createDoc('short-only', Date.UTC(2026, 6, 8), {
                 [DataCriticalPower.type]: 400,
@@ -1678,32 +1686,27 @@ describe('buildTrainingCapacityMetricPayload', () => {
             ]),
         ];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
-        expect(cycling?.modeledCriticalPower).toMatchObject({
-            status: 'insufficient-evidence',
-            valueWatts: null,
-            confidence: null,
-            sourceEventCount: 1,
-            anchorPointCount: 3,
-            minDurationSeconds: 180,
-            maxDurationSeconds: 600,
-        });
+        expect(cycling).toEqual(expect.objectContaining({
+            discipline: 'cycling',
+            ftpSetting: null,
+            importedVo2Max: null,
+        }));
+        expect(cycling).not.toHaveProperty('modeledCriticalPower');
     });
 
     it('does not call a source change a comparable setting change', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const docs = [
             createDoc('garmin', Date.UTC(2026, 5, 1), { [DataFTP.type]: 210 }, null, 'Edge 1050'),
             createDoc('wahoo', Date.UTC(2026, 6, 1), { [DataFTP.type]: 230 }, null, 'Wahoo Kickr'),
         ];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
         expect(cycling?.ftpSetting).toMatchObject({
@@ -1716,43 +1719,40 @@ describe('buildTrainingCapacityMetricPayload', () => {
     });
 
     it('keeps provider-only provenance when device metadata is unavailable', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const docs = [createDoc('provider-only', Date.UTC(2026, 6, 8), { [DataFTP.type]: 222 }, null, '')];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
         expect(cycling?.ftpSetting).toMatchObject({ sourceKey: 'garmin', value: 222 });
     });
 
     it('does not present a session-derived 20-minute FTP estimate as an imported setting', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const docs = [createDoc('derived-ftp', Date.UTC(2026, 6, 8), {
-            [DataFTP.type]: Math.round(modeledCurve.find(point => point.duration === 1_200)!.power * 0.95),
-        })];
+            [DataFTP.type]: Math.round(sessionPowerCurve.find(point => point.duration === 1_200)!.power * 0.95),
+        }, sessionPowerCurve)];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
         expect(cycling?.ftpSetting).toBeNull();
-        expect(cycling?.modeledCriticalPower.status).toBe('ready');
+        expect(cycling).not.toHaveProperty('modeledCriticalPower');
     });
 
     it('resolves equal-timestamp imported settings deterministically by event id', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const timestamp = Date.UTC(2026, 6, 8);
         const docs = [
             createDoc('setting-b', timestamp, { [DataFTP.type]: 220 }, null),
             createDoc('setting-a', timestamp, { [DataFTP.type]: 210 }, null),
         ];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
         expect(cycling?.ftpSetting).toMatchObject({
@@ -1763,7 +1763,7 @@ describe('buildTrainingCapacityMetricPayload', () => {
     });
 
     it('uses activity groups for sport capacity and excludes merged events', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const docs = [
             createDoc('trail-run', Date.UTC(2026, 6, 7), {
                 [DataActivityTypes.type]: [ActivityTypes.TrailRunning],
@@ -1786,9 +1786,8 @@ describe('buildTrainingCapacityMetricPayload', () => {
             },
         ];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const running = result.payload.disciplines.find(item => item.discipline === 'running');
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
@@ -1797,76 +1796,653 @@ describe('buildTrainingCapacityMetricPayload', () => {
         expect(result.sourceEventCount).toBe(2);
     });
 
-    it('ignores future settings and withholds an unreliable relative-power fit', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
-        const relativePower = [4, 3.4, 3.6, 3.1, 3.3];
-        const unreliableRelativeCurve = modeledCurve.map((point, index) => ({
-            ...point,
-            wattsPerKg: relativePower[index],
-        }));
+    it('ignores future imported settings', async () => {
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
         const docs = [
-            createDoc('recent-one', Date.UTC(2026, 6, 1), { [DataFTP.type]: 222 }, unreliableRelativeCurve),
-            createDoc('recent-two', Date.UTC(2026, 6, 5), { [DataFTP.type]: 222 }, unreliableRelativeCurve),
-            createDoc('recent-three', Date.UTC(2026, 6, 8), { [DataFTP.type]: 222 }, unreliableRelativeCurve),
-            createDoc('future', Date.UTC(2026, 6, 20), { [DataFTP.type]: 300 }, modeledCurve),
+            createDoc('recent-one', Date.UTC(2026, 6, 1), { [DataFTP.type]: 222 }),
+            createDoc('recent-two', Date.UTC(2026, 6, 5), { [DataFTP.type]: 222 }),
+            createDoc('recent-three', Date.UTC(2026, 6, 8), { [DataFTP.type]: 222 }),
+            createDoc('future', Date.UTC(2026, 6, 20), { [DataFTP.type]: 300 }),
         ];
         const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
+        const result = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
 
         expect(cycling?.ftpSetting).toMatchObject({ value: 222, observationCount: 3 });
-        expect(cycling?.modeledCriticalPower).toMatchObject({
-            status: 'ready',
-            valueWatts: 240,
-            valueWattsPerKg: null,
+        expect(cycling).not.toHaveProperty('modeledCriticalPower');
+    });
+});
+
+describe('buildTrainingPowerSystemsMetricPayload', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.UTC(2026, 6, 20, 12);
+    const asOfDayMs = Date.UTC(2026, 6, 20);
+    const powerCurve = [
+        1, 2, 3, 5, 8, 12, 20, 30,
+        120, 180, 240, 300, 480, 720, 900, 1200,
+    ].map(duration => ({
+        duration,
+        power: duration <= 30
+            ? 250 + (18_000 / (duration + 15))
+            : 250 + (18_000 / duration),
+    }));
+    const source = (
+        id: string,
+        activityType: ActivityTypes,
+        dayMs: number,
+        curve: unknown = powerCurve,
+    ): any => ({
+        activityId: id,
+        eventId: `event-${id}`,
+        discipline: resolveTrainingDisciplineFromActivityType(activityType),
+        activityData: {
+            type: activityType,
+            startDate: dayMs,
+            stats: {
+                [DataDuration.type]: 3600,
+                [POWER_CURVE_STAT_TYPE]: curve,
+            },
+        },
+        eventData: { startDate: dayMs },
+        startMs: dayMs,
+        startDayMs: dayMs,
+        eventStartMs: dayMs,
+        eventStartDayMs: dayMs,
+    });
+    const datedCurve = (id: string, activityType: ActivityTypes, dayMs: number) => ({
+        sourceId: id,
+        activityType,
+        date: new Date(dayMs).toISOString().slice(0, 10),
+        powerCurve,
+    });
+
+    it('uses the exact closed-open 42-day window and matches the Sports-lib public fitter', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [
+            source('outside', ActivityTypes.Cycling, asOfDayMs - (43 * DAY_MS)),
+            source('boundary', ActivityTypes.Cycling, asOfDayMs - (42 * DAY_MS)),
+            source('middle', ActivityTypes.Cycling, asOfDayMs - (20 * DAY_MS)),
+            source('latest', ActivityTypes.Cycling, asOfDayMs - DAY_MS),
+            source('same-day', ActivityTypes.Cycling, asOfDayMs),
+            source('future', ActivityTypes.Cycling, asOfDayMs + DAY_MS),
+        ];
+
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs);
+        const cycling = result.payload.activityTypes.find(item => item.activityType === ActivityTypes.Cycling);
+        const expected = fitThreeDimensionalCapacityModel([
+            datedCurve('boundary', ActivityTypes.Cycling, asOfDayMs - (42 * DAY_MS)),
+            datedCurve('middle', ActivityTypes.Cycling, asOfDayMs - (20 * DAY_MS)),
+            datedCurve('latest', ActivityTypes.Cycling, asOfDayMs - DAY_MS),
+        ], { effectiveDate: '2026-07-20' });
+
+        expect(result.payload).toMatchObject({
+            asOfDayMs,
+            windowDays: DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
+            historyDays: DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
+            excludesEffectiveDay: true,
+        });
+        expect(cycling?.current).toEqual({
+            effectiveDayMs: asOfDayMs,
+            status: expected.status,
+            reason: expected.reason,
+            activityType: ActivityTypes.Cycling,
+            sourceFingerprint: expected.sourceFingerprint,
+            criticalPower: expected.criticalPower,
+            wPrime: expected.wPrime,
+            maximumPower: expected.maximumPower,
+            diagnostics: {
+                sourceCount: expected.diagnostics.sourceCount,
+                historyStartDayMs: Date.parse(`${expected.envelope.historyStartDate}T00:00:00.000Z`),
+                historyEndDayMs: Date.parse(`${expected.envelope.historyEndDate}T00:00:00.000Z`),
+                historySpanDays: expected.diagnostics.historySpanDays,
+                rejectedPointCount: expected.envelope.rejectedPointCount,
+                rejectedShortPowerSpikePointCount:
+                    expected.envelope.rejectedShortPowerSpikePointCount,
+                criticalPowerAnchorCount: expected.diagnostics.criticalPowerAnchorCount,
+                earlyCriticalPowerAnchorCount: expected.diagnostics.earlyCriticalPowerAnchorCount,
+                longCriticalPowerAnchorCount: expected.diagnostics.longCriticalPowerAnchorCount,
+                criticalPowerContributingSourceCount: 1,
+                maximumPowerAnchorCount: expected.diagnostics.maximumPowerAnchorCount,
+                maximumPowerContributingSourceCount: 1,
+                criticalPowerNormalizedRmse: expected.diagnostics.criticalPowerNormalizedRmse,
+                criticalPowerSpreadRatio: expected.diagnostics.criticalPowerSpreadRatio,
+                wPrimeSpreadRatio: expected.diagnostics.wPrimeSpreadRatio,
+                criticalPowerLeaveOneOutSpreadRatio:
+                    expected.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
+                wPrimeLeaveOneOutSpreadRatio: expected.diagnostics.wPrimeLeaveOneOutSpreadRatio,
+                criticalPowerSourceRemovalFitCount:
+                    expected.diagnostics.criticalPowerSourceRemovalFitCount,
+                criticalPowerSourceRemovalFailureCount:
+                    expected.diagnostics.criticalPowerSourceRemovalFailureCount,
+                criticalPowerSourceRemovalMaximumChangeRatio:
+                    expected.diagnostics.criticalPowerSourceRemovalMaximumChangeRatio,
+                wPrimeSourceRemovalMaximumChangeRatio:
+                    expected.diagnostics.wPrimeSourceRemovalMaximumChangeRatio,
+                maximumPowerNormalizedRmse: expected.diagnostics.maximumPowerNormalizedRmse,
+                maximumPowerLeaveOneOutSpreadRatio:
+                    expected.diagnostics.maximumPowerLeaveOneOutSpreadRatio,
+            },
+        });
+        expect(cycling?.current).not.toHaveProperty('estimatorVersion');
+        expect(cycling?.evidenceCounts).toEqual({
+            candidateActivityCount: 3,
+            usableCurveActivityCount: 3,
+            excludedActivityCount: 0,
         });
     });
 
-    it('does not manufacture a model by interpolating across a sparse duration gap', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
-        const sparseCurve = modeledCurve.filter(point => point.duration === 180 || point.duration === 1_200);
-        const docs = [
-            createDoc('sparse-one', Date.UTC(2026, 6, 1), {}, sparseCurve),
-            createDoc('sparse-two', Date.UTC(2026, 6, 5), {}, sparseCurve),
-            createDoc('sparse-three', Date.UTC(2026, 6, 8), {}, sparseCurve),
+    it('preserves valid no-evidence diagnostics when a stored curve contains only an isolated spike', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [
+            source(
+                'spike-only',
+                ActivityTypes.Cycling,
+                asOfDayMs - DAY_MS,
+                [
+                    { duration: 1, power: 900 },
+                    { duration: 2, power: 450 },
+                    { duration: 3, power: 300 },
+                ],
+            ),
         ];
-        const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
-        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs);
+        const cycling = result.payload.activityTypes[0];
 
-        expect(cycling?.modeledCriticalPower).toMatchObject({
+        expect(cycling.current).toMatchObject({
             status: 'insufficient-evidence',
-            valueWatts: null,
-            anchorPointCount: 2,
+            reason: 'no-evidence',
+            sourceFingerprint: null,
+            diagnostics: {
+                sourceCount: 0,
+                rejectedPointCount: 0,
+                rejectedShortPowerSpikePointCount: 3,
+            },
+        });
+        expect(cycling.evidenceCounts).toEqual({
+            candidateActivityCount: 1,
+            usableCurveActivityCount: 0,
+            excludedActivityCount: 1,
         });
     });
 
-    it('withholds W/kg when aggregate anchors imply inconsistent body weights', async () => {
-        const { buildPowerCurveMetricPayload, buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
-        const inconsistentWeightCurve = modeledCurve.map(point => ({
-            ...point,
-            wattsPerKg: 3.2 + (180 / point.duration),
-        }));
-        const docs = [
-            createDoc('weight-one', Date.UTC(2026, 6, 1), {}, inconsistentWeightCurve),
-            createDoc('weight-two', Date.UTC(2026, 6, 5), {}, inconsistentWeightCurve),
-            createDoc('weight-three', Date.UTC(2026, 6, 8), {}, inconsistentWeightCurve),
-        ];
-        const trainingActivities = buildTrainingActivitySources(docs);
-        const powerCurve = buildPowerCurveMetricPayload(trainingActivities, nowMs);
+    it('discovers a same-day powered type without using that workout in today’s fit', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
 
-        const result = buildTrainingCapacityMetricPayload(trainingActivities, powerCurve.payload, nowMs);
-        const cycling = result.payload.disciplines.find(item => item.discipline === 'cycling');
+        const result = buildTrainingPowerSystemsMetricPayload([
+            source('same-day-rowing', ActivityTypes.Rowing, asOfDayMs),
+        ], nowMs);
+        const rowing = result.payload.activityTypes[0];
 
-        expect(cycling?.modeledCriticalPower).toMatchObject({
-            status: 'ready',
-            valueWatts: 240,
-            valueWattsPerKg: null,
+        expect(rowing).toMatchObject({
+            activityType: ActivityTypes.Rowing,
+            current: {
+                effectiveDayMs: asOfDayMs,
+                status: 'insufficient-evidence',
+                reason: 'no-evidence',
+                sourceFingerprint: null,
+                diagnostics: {
+                    sourceCount: 0,
+                    historyStartDayMs: null,
+                    historyEndDayMs: null,
+                    historySpanDays: 0,
+                },
+            },
+            evidenceCounts: {
+                candidateActivityCount: 0,
+                usableCurveActivityCount: 0,
+                excludedActivityCount: 0,
+            },
         });
+        expect(rowing.history).toHaveLength(1);
+        expect(rowing.history[0]).toMatchObject({
+            effectiveDayMs: asOfDayMs,
+            status: 'insufficient-evidence',
+            reason: 'no-evidence',
+        });
+    });
+
+    it('is deterministic under shuffled input and caches each exact type/date fit', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [
+            source('one', ActivityTypes.Cycling, asOfDayMs - (40 * DAY_MS)),
+            source('two', ActivityTypes.Cycling, asOfDayMs - (25 * DAY_MS)),
+            source('three', ActivityTypes.Cycling, asOfDayMs - (15 * DAY_MS)),
+            source('four', ActivityTypes.Cycling, asOfDayMs - DAY_MS),
+        ];
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+
+        const ordered = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+        const shuffleWithSeed = (seed: number) => {
+            const shuffled = [...activities];
+            let state = seed;
+            for (let index = shuffled.length - 1; index > 0; index -= 1) {
+                state = ((state * 1_664_525) + 1_013_904_223) >>> 0;
+                const swapIndex = state % (index + 1);
+                [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+            }
+            return shuffled;
+        };
+
+        for (let seed = 1; seed <= 12; seed += 1) {
+            expect(buildTrainingPowerSystemsMetricPayload(shuffleWithSeed(seed), nowMs)).toEqual(ordered);
+        }
+        expect(fitSpy).toHaveBeenCalledTimes(5);
+        expect(fitSpy.mock.calls.map(([, options]) => options.effectiveDate)).toEqual([
+            '2026-07-20',
+            '2026-06-10',
+            '2026-06-25',
+            '2026-07-05',
+            '2026-07-19',
+        ]);
+    });
+
+    it('keeps related cycling types and a non-Training power sport completely separate', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activityTypes = [
+            ActivityTypes.Cycling,
+            ActivityTypes.IndoorCycling,
+            ActivityTypes.Rowing,
+        ];
+        const activities = activityTypes.flatMap((activityType, typeIndex) => (
+            [40, 20, 1].map((daysAgo, index) => source(
+                `${typeIndex}-${index}`,
+                activityType,
+                asOfDayMs - (daysAgo * DAY_MS),
+            ))
+        ));
+
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs);
+
+        expect(result.payload.activityTypes.map(item => item.activityType)).toEqual([
+            ActivityTypes.Cycling,
+            ActivityTypes.IndoorCycling,
+            ActivityTypes.Rowing,
+        ].sort());
+        result.payload.activityTypes.forEach((entry) => {
+            expect(entry.current.diagnostics.sourceCount).toBe(3);
+            expect(entry.current.activityType).toBe(entry.activityType);
+            expect(entry.evidenceCounts.usableCurveActivityCount).toBe(3);
+        });
+        expect(new Set(result.payload.activityTypes.map(entry => entry.current.sourceFingerprint)).size).toBe(3);
+    });
+
+    it('bounds historical effective dates to 12 weeks while retaining today as the endpoint', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [
+            source('before-history', ActivityTypes.Cycling, asOfDayMs - (85 * DAY_MS)),
+            source('history-boundary', ActivityTypes.Cycling, asOfDayMs - (84 * DAY_MS)),
+            source('recent', ActivityTypes.Cycling, asOfDayMs - DAY_MS),
+        ];
+
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs);
+        const historyDays = result.payload.activityTypes[0].history.map(point => point.effectiveDayMs);
+
+        expect(historyDays).toEqual([
+            asOfDayMs - (84 * DAY_MS),
+            asOfDayMs - DAY_MS,
+            asOfDayMs,
+        ]);
+    });
+
+    it('handles malformed and missing curves without throwing or turning them into zero evidence', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [
+            source('valid', ActivityTypes.Rowing, asOfDayMs - DAY_MS),
+            source('malformed', ActivityTypes.Rowing, asOfDayMs - (2 * DAY_MS), [
+                null,
+                { duration: 'bad', power: Number.NaN },
+                { duration: -1, power: 400 },
+            ]),
+            source('missing', ActivityTypes.Rowing, asOfDayMs - (3 * DAY_MS), null),
+            source('no-standard-anchor', ActivityTypes.Rowing, asOfDayMs - (4 * DAY_MS), [
+                { duration: 45, power: 420 },
+            ]),
+            {
+                ...source('invalid-type', ActivityTypes.Rowing, asOfDayMs - (5 * DAY_MS)),
+                activityData: {
+                    ...source('invalid-type', ActivityTypes.Rowing, asOfDayMs - (5 * DAY_MS)).activityData,
+                    type: Symbol('invalid activity type'),
+                },
+            },
+        ];
+
+        expect(() => buildTrainingPowerSystemsMetricPayload(activities, nowMs)).not.toThrow();
+        const rowing = buildTrainingPowerSystemsMetricPayload(activities, nowMs).payload.activityTypes[0];
+        expect(rowing.evidenceCounts).toEqual({
+            candidateActivityCount: 4,
+            usableCurveActivityCount: 1,
+            excludedActivityCount: 3,
+        });
+        expect(rowing.current).toMatchObject({
+            status: 'insufficient-evidence',
+            reason: 'insufficient-history',
+            criticalPower: { value: null },
+            wPrime: { value: null },
+            maximumPower: { value: null },
+        });
+    });
+
+    it.each([
+        'ready',
+        'partial',
+        'insufficient-evidence',
+        'poor-fit',
+        'unstable',
+        'invalid-input',
+    ] as const)('preserves the %s fitter state and exposes only ready component values', async (status) => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const baseFit = fitThreeDimensionalCapacityModel([], { effectiveDate: '2026-07-20' });
+        const componentStatus = status === 'partial' ? 'ready' : status === 'ready' ? 'ready' : status;
+        const reason = status === 'ready'
+            ? null
+            : status === 'partial'
+                ? 'insufficient-maximum-power-range'
+                : status === 'insufficient-evidence'
+                    ? 'insufficient-history'
+                    : status === 'poor-fit'
+                        ? 'poor-critical-power-fit'
+                        : status === 'unstable'
+                            ? 'unstable-critical-power-fit'
+                            : 'invalid-source';
+        const fit = {
+            ...baseFit,
+            status,
+            reason,
+            activityType: ActivityTypes.Rowing,
+            sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
+            criticalPower: {
+                status: componentStatus,
+                reason: componentStatus === 'ready' ? null : reason,
+                value: componentStatus === 'ready' ? 260 : null,
+            },
+            wPrime: {
+                status: componentStatus,
+                reason: componentStatus === 'ready' ? null : reason,
+                value: componentStatus === 'ready' ? 18_500 : null,
+            },
+            maximumPower: status === 'partial'
+                ? { status: 'insufficient-evidence', reason, value: null }
+                : {
+                    status: componentStatus,
+                    reason: componentStatus === 'ready' ? null : reason,
+                    value: componentStatus === 'ready' ? 1_200 : null,
+                },
+        } as any;
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('rowing', ActivityTypes.Rowing, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => fit,
+        );
+        const current = result.payload.activityTypes[0].current;
+
+        expect(current.status).toBe(status);
+        expect(current.criticalPower.value).toBe(componentStatus === 'ready' ? 260 : null);
+        expect(current.wPrime.value).toBe(componentStatus === 'ready' ? 18_500 : null);
+        expect(current.maximumPower.value).toBe(status === 'ready' ? 1_200 : null);
+    });
+
+    it('preserves a ready CP when Sports-lib rejects W′ stability and dependent Pmax', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const baseFit = fitThreeDimensionalCapacityModel([], { effectiveDate: '2026-07-20' });
+        const fit: ThreeDimensionalCapacityFit = {
+            ...baseFit,
+            status: 'partial',
+            reason: 'unstable-w-prime-fit',
+            activityType: ActivityTypes.Cycling,
+            sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
+            criticalPower: { status: 'ready', reason: null, value: 224.13 },
+            wPrime: { status: 'unstable', reason: 'unstable-w-prime-fit', value: null },
+            maximumPower: {
+                status: 'insufficient-evidence',
+                reason: 'unstable-w-prime-fit',
+                value: null,
+            },
+        };
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('cycling', ActivityTypes.Cycling, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => fit,
+        );
+
+        expect(result.payload.activityTypes[0].current).toMatchObject({
+            status: 'partial',
+            reason: 'unstable-w-prime-fit',
+            criticalPower: { status: 'ready', reason: null, value: 224.13 },
+            wPrime: { status: 'unstable', reason: 'unstable-w-prime-fit', value: null },
+            maximumPower: {
+                status: 'insufficient-evidence',
+                reason: 'unstable-w-prime-fit',
+                value: null,
+            },
+        });
+    });
+
+    it('reports envelope contributors and short anchors even when CP/W′ exits as unstable', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const baseFit = fitThreeDimensionalCapacityModel([], { effectiveDate: '2026-07-20' });
+        const criticalPowerDurations = [120, 180, 240, 300, 480, 900, 1200];
+        const maximumPowerDurations = [1, 2, 3, 5, 8, 12, 20, 30];
+        const unstableFit: ThreeDimensionalCapacityFit = {
+            ...baseFit,
+            status: 'unstable',
+            reason: 'unstable-critical-power-fit',
+            activityType: ActivityTypes.Cycling,
+            sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
+            criticalPower: {
+                status: 'unstable',
+                reason: 'unstable-critical-power-fit',
+                value: null,
+            },
+            wPrime: {
+                status: 'unstable',
+                reason: 'unstable-critical-power-fit',
+                value: null,
+            },
+            maximumPower: {
+                status: 'unstable',
+                reason: 'unstable-critical-power-fit',
+                value: null,
+            },
+            envelope: {
+                ...baseFit.envelope,
+                status: 'ready',
+                reason: null,
+                activityType: ActivityTypes.Cycling,
+                sourceCount: 9,
+                historyStartDate: '2026-06-21',
+                historyEndDate: '2026-07-19',
+                historySpanDays: 28,
+                sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
+                points: [
+                    ...criticalPowerDurations.map(durationSeconds => ({
+                        durationSeconds,
+                        powerWatts: 250 + (18_000 / durationSeconds),
+                        sourceId: 'sustained-test',
+                        sourceDate: '2026-06-29',
+                    })),
+                    ...maximumPowerDurations.map((durationSeconds, index) => ({
+                        durationSeconds,
+                        powerWatts: 250 + (18_000 / (durationSeconds + 15)),
+                        sourceId: index < 4 ? 'short-test-one' : 'short-test-two',
+                        sourceDate: index < 4 ? '2026-07-02' : '2026-07-11',
+                    })),
+                ],
+            },
+            diagnostics: {
+                ...baseFit.diagnostics,
+                sourceCount: 9,
+                historySpanDays: 28,
+                criticalPowerAnchorCount: 7,
+                earlyCriticalPowerAnchorCount: 4,
+                longCriticalPowerAnchorCount: 2,
+                maximumPowerAnchorCount: 0,
+                criticalPowerSpreadRatio: 0.041,
+                wPrimeSpreadRatio: 0.327,
+                criticalPowerLeaveOneOutSpreadRatio: 0.008,
+                wPrimeLeaveOneOutSpreadRatio: 0.095,
+            },
+        };
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('cycling', ActivityTypes.Cycling, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => unstableFit,
+        );
+
+        expect(result.payload.activityTypes[0].current).toMatchObject({
+            status: 'unstable',
+            reason: 'unstable-critical-power-fit',
+            diagnostics: {
+                sourceCount: 9,
+                criticalPowerAnchorCount: 7,
+                criticalPowerContributingSourceCount: 1,
+                maximumPowerAnchorCount: 8,
+                maximumPowerContributingSourceCount: 2,
+                criticalPowerSpreadRatio: 0.041,
+                wPrimeSpreadRatio: 0.327,
+                criticalPowerLeaveOneOutSpreadRatio: 0.008,
+                wPrimeLeaveOneOutSpreadRatio: 0.095,
+            },
+        });
+    });
+
+    it('degrades an internally invalid fitter result to one valid invalid-input snapshot', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const fit = fitThreeDimensionalCapacityModel([
+            datedCurve('rowing', ActivityTypes.Rowing, asOfDayMs - DAY_MS),
+        ], { effectiveDate: '2026-07-20' });
+        const invalidFit = {
+            ...fit,
+            status: 'ready',
+            reason: null,
+            criticalPower: { status: 'ready', reason: null, value: Number.NaN },
+            wPrime: { status: 'ready', reason: null, value: 18_500 },
+            maximumPower: { status: 'ready', reason: null, value: 1_200 },
+        } as any;
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('rowing', ActivityTypes.Rowing, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => invalidFit,
+        );
+        const current = result.payload.activityTypes[0].current;
+
+        expect(current).toMatchObject({
+            status: 'invalid-input',
+            reason: 'invalid-source',
+            criticalPower: { status: 'invalid-input', reason: 'invalid-source', value: null },
+            wPrime: { status: 'invalid-input', reason: 'invalid-source', value: null },
+            maximumPower: { status: 'invalid-input', reason: 'invalid-source', value: null },
+        });
+        expect(result.payload.activityTypes[0].history.at(-1)).toMatchObject({
+            status: 'invalid-input',
+            criticalPowerWatts: null,
+            wPrimeJoules: null,
+            maximumPowerWatts: null,
+        });
+    });
+
+    it.each([
+        {
+            name: 'an impossible overall status and reason pairing',
+            mutate: (fit: any) => ({
+                ...fit,
+                status: 'poor-fit',
+                reason: 'invalid-source',
+                criticalPower: { status: 'poor-fit', reason: 'invalid-source', value: null },
+                wPrime: { status: 'poor-fit', reason: 'invalid-source', value: null },
+                maximumPower: { status: 'poor-fit', reason: 'invalid-source', value: null },
+            }),
+        },
+        {
+            name: 'a partial reason that disagrees with the maximum-power status',
+            mutate: (fit: any) => ({
+                ...fit,
+                status: 'partial',
+                reason: 'poor-maximum-power-fit',
+                criticalPower: { status: 'ready', reason: null, value: 260 },
+                wPrime: { status: 'ready', reason: null, value: 18_500 },
+                maximumPower: {
+                    status: 'insufficient-evidence',
+                    reason: 'poor-maximum-power-fit',
+                    value: null,
+                },
+            }),
+        },
+        {
+            name: 'a ready component carrying an unavailable reason',
+            mutate: (fit: any) => ({
+                ...fit,
+                status: 'ready',
+                reason: null,
+                criticalPower: { status: 'ready', reason: 'invalid-source', value: 260 },
+                wPrime: { status: 'ready', reason: null, value: 18_500 },
+                maximumPower: { status: 'ready', reason: null, value: 1_200 },
+            }),
+        },
+    ])('degrades $name before persistence', async ({ mutate }) => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const fit = fitThreeDimensionalCapacityModel([
+            datedCurve('rowing', ActivityTypes.Rowing, asOfDayMs - DAY_MS),
+        ], { effectiveDate: '2026-07-20' });
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('rowing', ActivityTypes.Rowing, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => mutate(fit),
+        );
+
+        expect(result.payload.activityTypes[0].current).toMatchObject({
+            status: 'invalid-input',
+            reason: 'invalid-source',
+            criticalPower: { status: 'invalid-input', reason: 'invalid-source', value: null },
+            wPrime: { status: 'invalid-input', reason: 'invalid-source', value: null },
+            maximumPower: { status: 'invalid-input', reason: 'invalid-source', value: null },
+        });
+    });
+
+    it('inherits merged-event and malformed-date exclusion from the canonical parent/activity join', async () => {
+        const {
+            buildTrainingPowerSystemsMetricPayload,
+            joinTrainingActivitySources,
+        } = await import('./derived-metrics.service');
+        const eventDoc = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
+        const activityDoc = (id: string, eventID: string, data: Record<string, unknown>) => ({
+            id,
+            data: () => ({ eventID, ...data }),
+        });
+        const events = [
+            eventDoc('valid', { startDate: asOfDayMs - DAY_MS }),
+            eventDoc('merged', { startDate: asOfDayMs - DAY_MS, mergeType: 'benchmark' }),
+            eventDoc('bad-date', { startDate: 'not-a-date' }),
+        ];
+        const activities = [
+            activityDoc('valid-activity', 'valid', {
+                type: ActivityTypes.Rowing,
+                stats: { [DataDuration.type]: 3600, [POWER_CURVE_STAT_TYPE]: powerCurve },
+            }),
+            activityDoc('merged-activity', 'merged', {
+                type: ActivityTypes.Rowing,
+                stats: { [DataDuration.type]: 3600, [POWER_CURVE_STAT_TYPE]: powerCurve },
+            }),
+            activityDoc('bad-date-activity', 'bad-date', {
+                type: ActivityTypes.Rowing,
+                stats: { [DataDuration.type]: 3600, [POWER_CURVE_STAT_TYPE]: powerCurve },
+            }),
+        ];
+
+        const joined = joinTrainingActivitySources(activities as never, events as never, {
+            includeUnclassified: true,
+        });
+        const result = buildTrainingPowerSystemsMetricPayload(joined, nowMs);
+
+        expect(joined.map(item => item.activityId)).toEqual(['valid-activity']);
+        expect(result.sourceEventCount).toBe(1);
+        expect(result.payload.activityTypes[0].evidenceCounts.candidateActivityCount).toBe(1);
     });
 });
 
@@ -2321,7 +2897,6 @@ describe('activity-level Training sources and swimming performance', () => {
 
     it('falls back to parent provenance without copying parent fields into activity metrics', async () => {
         const {
-            buildPowerCurveMetricPayload,
             buildTrainingCapacityMetricPayload,
             joinTrainingActivitySources,
         } = await import('./derived-metrics.service');
@@ -2338,8 +2913,7 @@ describe('activity-level Training sources and swimming performance', () => {
             stats: { [DataFTP.type]: 222 },
         })];
         const sources = joinTrainingActivitySources(activityDocs as never, eventDocs as never);
-        const powerCurve = buildPowerCurveMetricPayload(sources, nowMs);
-        const capacity = buildTrainingCapacityMetricPayload(sources, powerCurve.payload, nowMs);
+        const capacity = buildTrainingCapacityMetricPayload(sources, nowMs);
 
         expect(sources[0].activityData).not.toHaveProperty('sourceServiceName');
         expect(sources[0].activityData).not.toHaveProperty('creator');
@@ -3219,6 +3793,73 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 { discipline: 'cycling', current28d: { activityCount: 0 } },
                 { discipline: 'swimming', current28d: { activityCount: 0 } },
             ],
+        });
+    });
+
+    it('writes a schema-compatible rolling power-systems snapshot through the targeted lifecycle', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 20, 12);
+        const activityDayMs = Date.UTC(2026, 6, 19);
+        vi.useFakeTimers();
+        vi.setSystemTime(nowMs);
+        const powerCurve = [
+            { duration: 5, power: 900 },
+            { duration: 180, power: 350 },
+            { duration: 1_200, power: 260 },
+        ];
+        const trainingActivities = buildTrainingActivitySources([{
+            id: 'cycling-event',
+            data: () => ({
+                startDate: activityDayMs,
+                stats: {
+                    [DataActivityTypes.type]: [ActivityTypes.Cycling],
+                    [DataDuration.type]: 3_600,
+                    [POWER_CURVE_STAT_TYPE]: powerCurve,
+                },
+            }),
+        }]);
+
+        await writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.TrainingPowerSystems],
+            {
+                formDocs: [],
+                trainingActivityDocs: [],
+                trainingActivities,
+            },
+            {
+                buildAtMs: nowMs,
+                builtFromEventMutationVersion: 73,
+            },
+        );
+
+        const persisted = findPersistedPayload(DERIVED_METRIC_KINDS.TrainingPowerSystems);
+        expect(persisted).toMatchObject({
+            entryType: 'snapshot',
+            metricKind: DERIVED_METRIC_KINDS.TrainingPowerSystems,
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            status: 'ready',
+            builtFromEventMutationVersion: 73,
+            sourceEventCount: 1,
+            lastError: null,
+        });
+        expect(persisted.payload).toMatchObject({
+            asOfDayMs: Date.UTC(2026, 6, 20),
+            policyVersion: 1,
+            windowDays: 42,
+            historyDays: 84,
+            activityTypes: [{
+                activityType: ActivityTypes.Cycling,
+                current: {
+                    effectiveDayMs: Date.UTC(2026, 6, 20),
+                    status: 'insufficient-evidence',
+                    diagnostics: { sourceCount: 1 },
+                },
+                history: [
+                    { effectiveDayMs: activityDayMs, status: 'insufficient-evidence' },
+                    { effectiveDayMs: Date.UTC(2026, 6, 20), status: 'insufficient-evidence' },
+                ],
+            }],
         });
     });
 

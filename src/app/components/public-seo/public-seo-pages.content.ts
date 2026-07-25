@@ -255,8 +255,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         items: [
           {
             icon: 'directions_run',
-            title: 'Running and cycling evidence',
-            copy: 'Inspect intensity mix, imported FTP and VO₂ max provenance, modeled critical power, and power-profile retention where the underlying data supports those views.',
+            title: 'Power and capacity evidence',
+            copy: 'Inspect imported Running and Cycling FTP/VO₂ max provenance, power-profile retention, and exact-type CP, W′, and Pmax capacity from the preceding 42 completed UTC days where stored power curves support it.',
           },
           {
             icon: 'pool',

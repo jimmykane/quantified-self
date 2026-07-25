@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
-import { concat, NEVER, of, Subject, throwError } from 'rxjs';
+import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
+import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -16,7 +18,10 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import { TrainingWorkspaceComponent } from './training-workspace.component';
+import {
+  TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
+  TrainingWorkspaceComponent,
+} from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
@@ -31,7 +36,7 @@ describe('TrainingWorkspaceComponent', () => {
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
-      imports: [MatMenuModule],
+      imports: [MatMenuModule, MatTooltipModule],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
   });
@@ -98,7 +103,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
-    expect(element.textContent).toContain('Preparing capacity evidence');
+    expect(element.textContent).toContain('Preparing imported capacity markers');
+    expect(element.textContent).not.toContain('Preparing rolling power capacity');
+    expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
@@ -282,10 +289,15 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('14/14 days scored');
       expect(panel.textContent).toContain('browser does not load workout history');
       expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
+      expect(panel.querySelectorAll('.training-readiness-trend-tooltip-trigger')).toHaveLength(14);
       expect(panel.querySelectorAll('.training-readiness-trend-axis-label')).toHaveLength(4);
       const readinessPoint = panel.querySelector('.training-readiness-trend-point');
-      expect(readinessPoint?.getAttribute('tabindex')).toBe('0');
-      expect(readinessPoint?.getAttribute('aria-label')).toContain('/100');
+      const readinessTooltipTrigger = panel.querySelector('.training-readiness-trend-tooltip-trigger');
+      expect(readinessPoint?.getAttribute('r')).toBe('3');
+      expect(readinessPoint?.getAttribute('aria-hidden')).toBe('true');
+      expect(readinessTooltipTrigger?.getAttribute('aria-label')).toContain('/100');
+      const readinessTooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
+      expect(readinessTooltip.message).toContain('/100');
       expect(fixture.nativeElement.querySelector('.training-recovery-panel')).toBeNull();
       expect(fixture.nativeElement.querySelectorAll('.training-current-context-grid > article')).toHaveLength(1);
       fixture.destroy();
@@ -485,6 +497,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
     expect(fixture.nativeElement.textContent).toContain('Preparing cycling power profile');
     expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-power-curve-chart')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
@@ -494,7 +507,7 @@ describe('TrainingWorkspaceComponent', () => {
     );
   });
 
-  it('renders FTP as an imported setting and a lower modeled CP as unvalidated evidence', async () => {
+  it('renders FTP only as an imported setting and does not retain the old modeled CP card', async () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       trainingSummaryStatus: 'ready',
@@ -504,11 +517,6 @@ describe('TrainingWorkspaceComponent', () => {
         asOfDayMs: Date.UTC(2026, 6, 13),
         disciplines: [{
           discipline: 'running', ftpSetting: null, importedVo2Max: null,
-          modeledCriticalPower: {
-            status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-            confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-            minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-          },
         }, {
           discipline: 'cycling',
           ftpSetting: {
@@ -517,11 +525,6 @@ describe('TrainingWorkspaceComponent', () => {
             previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
           },
           importedVo2Max: null,
-          modeledCriticalPower: {
-            status: 'ready', valueWatts: 186, valueWattsPerKg: null, wPrimeJoules: 18_000,
-            confidence: 'high', windowDays: 90, sourceEventCount: 4, anchorPointCount: 5,
-            minDurationSeconds: 180, maxDurationSeconds: 1_200, rSquared: 0.98, normalizedRmse: 0.03,
-          },
         }],
       },
     };
@@ -545,11 +548,184 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).toContain('FTP setting');
     expect(text).toContain('Cycling capacity evidence');
     expect(text).toContain('222 W');
-    expect(text).toContain('Modeled critical power');
-    expect(text).toContain('186 W');
-    expect(text).toContain('Recent efforts have not validated this FTP yet');
-    expect(text).toContain('model sits below the imported setting');
-    expect(text).toContain('does not show that fitness declined.');
+    expect(text).toContain('not a new Quantified Self estimate');
+    expect(text).not.toContain('Modeled critical power');
+    expect(text).not.toContain('186 W');
+  });
+
+  it('renders exact-type rolling power systems for the designated account independently of Training sport visibility', async () => {
+    const asOfDayMs = Date.UTC(2026, 6, 20);
+    const powerSystemsEntry = (
+      activityType: string,
+      criticalPowerWatts: number,
+      wPrimeUnstable = false,
+    ) => {
+      const current = {
+        effectiveDayMs: asOfDayMs,
+        status: wPrimeUnstable ? 'partial' as const : 'ready' as const,
+        reason: wPrimeUnstable ? 'unstable-w-prime-fit' as const : null,
+        activityType,
+        sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
+        criticalPower: { status: 'ready' as const, reason: null, value: criticalPowerWatts },
+        wPrime: wPrimeUnstable
+          ? {
+              status: 'unstable' as const,
+              reason: 'unstable-w-prime-fit' as const,
+              value: null,
+            }
+          : { status: 'ready' as const, reason: null, value: 18_500 },
+        maximumPower: wPrimeUnstable
+          ? {
+              status: 'insufficient-evidence' as const,
+              reason: 'unstable-w-prime-fit' as const,
+              value: null,
+            }
+          : { status: 'ready' as const, reason: null, value: 1_200 },
+        diagnostics: {
+          sourceCount: 3,
+          historyStartDayMs: asOfDayMs - (30 * 24 * 60 * 60 * 1000),
+          historyEndDayMs: asOfDayMs - (24 * 60 * 60 * 1000),
+          historySpanDays: 29,
+          rejectedPointCount: 0,
+          rejectedShortPowerSpikePointCount: 0,
+          criticalPowerAnchorCount: 8,
+          earlyCriticalPowerAnchorCount: 4,
+          longCriticalPowerAnchorCount: 3,
+          criticalPowerContributingSourceCount: 2,
+          maximumPowerAnchorCount: 8,
+          maximumPowerContributingSourceCount: 2,
+          criticalPowerNormalizedRmse: 0.02,
+          criticalPowerSpreadRatio: 0.01,
+          wPrimeSpreadRatio: 0.04,
+          criticalPowerLeaveOneOutSpreadRatio: 0.02,
+          wPrimeLeaveOneOutSpreadRatio: 0.08,
+          criticalPowerSourceRemovalFitCount: 2,
+          criticalPowerSourceRemovalFailureCount: 0,
+          criticalPowerSourceRemovalMaximumChangeRatio: 0.03,
+          wPrimeSourceRemovalMaximumChangeRatio: 0.1,
+          maximumPowerNormalizedRmse: 0.02,
+          maximumPowerLeaveOneOutSpreadRatio: 0.04,
+        },
+      };
+      return {
+        activityType,
+        current,
+        history: [{
+          effectiveDayMs: asOfDayMs - (7 * 24 * 60 * 60 * 1000),
+          status: 'ready' as const,
+          reason: null,
+          criticalPowerStatus: 'ready' as const,
+          criticalPowerWatts: criticalPowerWatts - 5,
+          wPrimeStatus: 'ready' as const,
+          wPrimeJoules: 18_000,
+          maximumPowerStatus: 'ready' as const,
+          maximumPowerWatts: 1_180,
+        }, {
+          effectiveDayMs: asOfDayMs,
+          status: current.status,
+          reason: current.reason,
+          criticalPowerStatus: current.criticalPower.status,
+          criticalPowerWatts: current.criticalPower.value,
+          wPrimeStatus: current.wPrime.status,
+          wPrimeJoules: current.wPrime.value,
+          maximumPowerStatus: current.maximumPower.status,
+          maximumPowerWatts: current.maximumPower.value,
+        }],
+        evidenceCounts: {
+          candidateActivityCount: 4,
+          usableCurveActivityCount: 3,
+          excludedActivityCount: 1,
+        },
+      };
+    };
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: { asOfDayMs, currentWindowDays: 28, baselineWindowDays: 84, disciplines: [] },
+      trainingPowerSystemsStatus: 'ready',
+      trainingPowerSystems: {
+        dayBoundary: 'UTC',
+        asOfDayMs,
+        policyVersion: 1,
+        windowDays: 42,
+        historyDays: 84,
+        cadence: 'workout-date',
+        excludesEffectiveDay: true,
+        excludesMergedEvents: true,
+        activityTypes: [
+          powerSystemsEntry('Cycling', 260, true),
+          powerSystemsEntry('Rowing', 280),
+        ],
+      },
+    };
+    const derivedStateSubject = new Subject<DashboardDerivedMetricsState>();
+    const authUser$ = new BehaviorSubject({
+      uid: TRAINING_POWER_SYSTEMS_ACCESS_USER_ID,
+      settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
+    });
+    const derivedMetrics = {
+      watch: vi.fn(() => derivedStateSubject.asObservable()),
+      ensureForDashboard: vi.fn(),
+    };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        {
+          provide: AppAuthService,
+          useValue: { user$: authUser$ },
+        },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    derivedStateSubject.next(derivedState);
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    expect(component.trainingPowerSystemsActivityTypes.map(item => item.activityType)).toEqual(['Cycling', 'Rowing']);
+    expect(component.selectedTrainingPowerSystemsActivityType).toBe('Cycling');
+    expect(fixture.nativeElement.querySelectorAll('.training-power-systems-trend')).toHaveLength(3);
+    expect(fixture.nativeElement.textContent).toContain('260 W');
+    expect(fixture.nativeElement.textContent).toContain('Critical power is usable');
+    expect(fixture.nativeElement.textContent).toContain('W′ changes too much');
+    expect(fixture.nativeElement.textContent).toContain('Unavailable');
+    expect(fixture.nativeElement.textContent).not.toContain('All sports');
+
+    fixture.debugElement.query(By.css('mat-select')).triggerEventHandler('selectionChange', { value: 'Rowing' });
+    fixture.detectChanges();
+
+    expect(component.selectedTrainingPowerSystems?.activityType).toBe('Rowing');
+    expect(fixture.nativeElement.textContent).toContain('Rowing');
+    expect(fixture.nativeElement.textContent).toContain('280 W');
+    expect(fixture.nativeElement.textContent).toContain('not TSS, FTP, fitness, fatigue, or readiness');
+
+    derivedStateSubject.next({
+      ...derivedState,
+      trainingPowerSystems: {
+        ...derivedState.trainingPowerSystems!,
+        activityTypes: [derivedState.trainingPowerSystems!.activityTypes[1]],
+      },
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Modeled sustained-power boundary');
+    expect(fixture.nativeElement.querySelectorAll('.training-power-systems-evidence li').length)
+      .toBeGreaterThan(3);
+
+    authUser$.next({
+      uid: 'user-1',
+      settings: { trainingSettings: { visibleDisciplines: ['swimming'] } },
+    });
+    fixture.detectChanges();
+
+    expect(component.hasTrainingPowerSystemsAccess).toBe(false);
+    expect(fixture.nativeElement.querySelector('.training-power-systems-section')).toBeNull();
   });
 
   it('filters every sport-specific module while leaving global training sections visible', async () => {
@@ -576,19 +752,9 @@ describe('TrainingWorkspaceComponent', () => {
         disciplines: [
           {
             discipline: 'running', ftpSetting: null, importedVo2Max: null,
-            modeledCriticalPower: {
-              status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-              confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-              minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-            },
           },
           {
             discipline: 'cycling', ftpSetting: null, importedVo2Max: null,
-            modeledCriticalPower: {
-              status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-              confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-              minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-            },
           },
         ],
       },

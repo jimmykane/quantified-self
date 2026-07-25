@@ -1,0 +1,35 @@
+:host {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.training-power-systems-trend-chart {
+  width: 100%;
+  height: 112px;
+  margin-top: 4px;
+}
+
+.training-power-systems-trend-empty {
+  position: absolute;
+  inset: 50px 8px auto;
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: var(--training-inter-fine-font-size, 11px);
+  text-align: center;
+  pointer-events: none;
+}
+
+.training-power-systems-trend-range {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: var(--training-inter-fine-font-size, 11px);
+}
+
+@media (max-width: 640px) {
+  .training-power-systems-trend-chart {
+    height: 132px;
+  }
+}

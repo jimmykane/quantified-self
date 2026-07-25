@@ -291,6 +291,38 @@ describe('processDerivedMetricsTask', () => {
         });
     });
 
+    it('retains unclassified Training disciplines for exact-type power-system fitting', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingPowerSystems],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 12,
+        });
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-power-systems', generation: 92 },
+        });
+
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledWith('user-power-systems');
+        expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledWith('user-power-systems', {
+            includeSwimLengths: false,
+        });
+        expect(hoisted.joinTrainingActivitySources).toHaveBeenCalledWith(
+            [{ id: 'activity-doc' }],
+            [{ id: 'form-doc' }],
+            { includeUnclassified: true },
+        );
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith(
+            'user-power-systems',
+            [DERIVED_METRIC_KINDS.TrainingPowerSystems],
+            expect.objectContaining({
+                trainingActivities: [{ activityId: 'joined-activity' }],
+            }),
+            expect.objectContaining({
+                builtFromEventMutationVersion: 12,
+            }),
+        );
+    });
+
     it('includes swim lengths only when swimming performance is requested', async () => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingSwimPerformance],

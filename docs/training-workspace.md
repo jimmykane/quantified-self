@@ -6,10 +6,11 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `11`
-- `@sports-alliance/sports-lib`: `17.5.1`
+- Quantified Self derived-metric schema: `14`
+- `@sports-alliance/sports-lib`: `17.8.0`
 - Training disciplines: Running, Cycling, and Swimming
-- Power/capacity disciplines: Running and Cycling only
+- Imported FTP/VO2 capacity disciplines: Running and Cycling only
+- Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
 - Calendar boundaries: UTC unless a section explicitly says otherwise
 
 ## Product Contract
@@ -19,7 +20,8 @@ Training is a curated analytical workspace, not a second configurable dashboard.
 1. What is the athlete doing now compared with their normal training?
 2. What caused the change in load?
 3. How are fitness, fatigue, freshness, and intensity changing?
-4. What recent performance evidence supports imported settings such as FTP or VO2 max?
+4. What recent performance evidence supports imported settings such as FTP or VO2 max, and what does the rolling
+   power-duration evidence support for CP, W′, and Pmax?
 5. Is long-session durability changing?
 6. How does the current build compare with a deliberately selected historical build?
 7. What recovery and sleep context was recorded alongside those builds?
@@ -46,9 +48,14 @@ The following rules are architectural constraints:
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
 - Durability shown on Training comes only from the persisted sports-lib `Durability Evidence` activity stat.
-- Power-system strain shown in event detail comes only from the persisted sports-lib `Three Dimensional Strain Evidence`
-  activity stat. It is separate from TSS, capacity, Form, Readiness, and FTP; Quantified Self does not combine distinct
-  activity types or infer an athlete-level response from it.
+- The parser does not generate CP, W′, Pmax, or three-dimensional workout strain. Rolling power-system capacity is a
+  Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
+- Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
+  FTP, and only components that pass Sports-lib's `ready` gates expose a value.
+- The Power systems presentation is currently limited in the frontend to one designated account. This is a visibility
+  gate only: snapshot generation, persistence, and the fitting policy remain unchanged. The account identifier is kept
+  in the component source and intentionally omitted from this document. Do not treat this frontend condition as an
+  authorization boundary.
 - Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
   `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
   workout prescription. Numeric tables remain compact source-of-truth comparisons and retain their deltas.
@@ -63,11 +70,11 @@ The following rules are architectural constraints:
 | Activity-level durability input selection | sports-lib | `src/events/utilities/activity-durability.ts` |
 | Activity-level durability eligibility and formulas | sports-lib | `activity-durability.ts` and `data.durability-evidence.ts` |
 | Compact durability stat creation and invalidation | sports-lib | `activity.utilities.ts` and the durability source fingerprint |
-| Activity-level power-system strain fitting, scoring, and eligibility | sports-lib | `activity-three-dimensional-strain.ts` and `data.three-dimensional-strain-evidence.ts` |
-| Compact power-system strain stat creation and invalidation | sports-lib | `activity.utilities.ts` and the three-dimensional strain source fingerprint |
 | Power-curve interpolation and window comparison | sports-lib | `src/events/utilities/power-curve-sampling.ts` |
+| Dated power-duration envelope and confidence-gated CP/W′/Pmax fitting | sports-lib | `src/events/utilities/three-dimensional-capacity.ts` |
 | Curated Training disciplines | Quantified Self shared layer | `shared/training-disciplines.ts` |
 | Joining normalized activities to parent events | Quantified Self Functions | `functions/src/derived-metrics/derived-metrics.service.ts` |
+| Exact-type 42-day window policy and rolling capacity history | Quantified Self Functions | `training_power_systems` builder in `derived-metrics.service.ts` |
 | Current, usual, weekly, and benchmark windows | Quantified Self Functions | derived-metric builders |
 | Derived snapshot persistence and refresh | Quantified Self Functions | coordinator, triggers, ingress worker, and derived worker |
 | User visibility and benchmark settings | Quantified Self Functions/shared contracts | authenticated callables and `shared/derived-metrics.ts` |
@@ -79,12 +86,12 @@ The following rules are architectural constraints:
 In short:
 
 ```text
-sports-lib answers:       Is this individual activity valid evidence, and what is the result?
-Quantified Self answers:  How should valid evidence be grouped, compared, refreshed, and explained to the user?
+sports-lib answers:       Is durability valid, and what CP/W′/Pmax fit is supported by the dated curves supplied?
+Quantified Self answers:  Which exact-type curves belong in each 42-day window, and how is the result persisted and shown?
 ```
 
-Do not duplicate sports-lib durability formulas inside Functions. Do not move Training history queries into the
-frontend.
+Do not duplicate sports-lib durability formulas or the CP/W′/Pmax fitter inside Functions. Functions owns the dated
+window policy and passes the resulting curves to Sports-lib. Do not move Training history queries into the frontend.
 
 ## Architecture Overview
 
@@ -95,8 +102,6 @@ flowchart TD
     B --> D["Normalized child activity documents"]
     B --> E["Compact Durability Evidence stat"]
     E --> D
-    B --> PS["Compact Three Dimensional Strain Evidence stat"]
-    PS --> D
     C --> F["Event/activity write ingress"]
     D --> F
     S["Sleep session write"] --> G["Targeted sleep ingress"]
@@ -113,6 +118,8 @@ flowchart TD
     S --> K
     K --> R["training_readiness: Form seed + bounded sleep envelope"]
     R --> L["Per-kind derived snapshot documents"]
+    K --> PS["training_power_systems: exact-type [D-42, D) capacity fits"]
+    PS --> L
     K --> L
     L --> M["Angular snapshot listeners"]
     M --> N["Payload normalizers and view-model helpers"]
@@ -180,7 +187,8 @@ Frontend transformation responsibilities are intentionally split into focused he
 | --- | --- |
 | `training-analysis.helper.ts` | Overall 28-day comparison and state inputs |
 | `current-training-state.helper.ts` | Shared current Form/ramp source selection, CTL/ATL context, and TSS-only Training state for Training and Dashboard Today |
-| `training-capacity.helper.ts` | Imported-marker provenance and FTP/CP interpretation |
+| `training-capacity.helper.ts` | Imported FTP/VO2 marker provenance |
+| `training-power-systems.helper.ts` | Strict rolling-capacity normalization, exact-type selector data, cards, and sparse trends |
 | `training-derived-metrics.helper.ts` | Strict normalization of explanation, durability, and readiness-history payloads |
 | `training-durability-view.helper.ts` | Context grouping, comparison rows, tones, and weekly trajectory models |
 | `training-explanation-view.helper.ts` | Load, contributor, sport-driver, rhythm, and coverage cards |
@@ -216,21 +224,21 @@ The shared classifier treats `mergeType: 'benchmark'` and legacy `isMerge: true`
 ### Activities
 
 Normalized child activity documents provide sport-specific stats and activity types. They are joined to their parent using
-`eventID`. A child activity is ignored by curated Training builders when:
+`eventID`. A child activity is ignored when:
 
 - `eventID` is missing;
 - its parent event does not exist;
 - the parent is a merged benchmark event;
-- its activity type cannot be assigned to Running, Cycling, or Swimming; or
 - its effective date is missing.
 
 The join deliberately uses activity-level stats. Parent stats and `endDate` must not leak into a child leg. Provider and
 device provenance may fall back to the parent when the child does not carry it. Functions creates one canonical joined
 activity source per valid parent/child relationship. When Training Explanation is dirty, unsupported activity types
-remain in that source with no curated discipline so it can report them as Other or Unclassified. Other metric-only
-batches discard those unsupported wrappers during the join. Discipline-specific builders ignore unclassified sources
-when they share an Explanation build. The join retains references to the selected child and parent data instead of
-cloning a second activity metric object.
+remain in that source with no curated discipline so it can report them as Other or Unclassified. When
+`training_power_systems` is dirty, those sources are also retained so every canonical activity type with a usable power
+curve can be fitted independently. Discipline-specific builders still ignore sources outside Running, Cycling, and
+Swimming. The join retains references to the selected child and parent data instead of cloning a second activity metric
+object.
 
 ### Sleep sessions
 
@@ -331,7 +339,8 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
 | `intensity_distribution` | Global intensity chart | Parent event power/HR zones |
 | `training_summary` | Overall comparison and discipline Training Mix | Joined normalized activities |
-| `training_capacity` | FTP, VO2 max, and critical-power evidence | Joined activities plus `power_curve` |
+| `training_capacity` | Imported FTP and VO2 max observations | Joined activities |
+| `training_power_systems` | Exact-type current CP/W′/Pmax capacity and 12-week sparse history | Persisted activity power curves plus parent event eligibility |
 | `power_curve` | Running/Cycling one-year curves and 90-day retention | Persisted activity power curves |
 | `training_explanation` | What drove this | Parent events plus joined child activities |
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
@@ -344,8 +353,9 @@ scope. They are not standalone Training cards. Do not assume every requested sna
 
 Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which is all registered derived kinds. Training-only
 kinds are excluded from the default Dashboard subscription and freshness scope. Dashboard adds `training_capacity` or
-`training_durability` to that scope only while a matching explicitly configured tile exists. Opening a normal Dashboard
-therefore does not create a hidden Training dependency or freshness probe for those kinds.
+`training_durability` to that scope only while a matching explicitly configured tile exists.
+`training_power_systems` has no Dashboard tile and is never added to normal Dashboard subscriptions. Opening a normal
+Dashboard therefore does not create a hidden Training dependency or freshness probe for those kinds.
 
 ### Shared Dashboard and Training insight reuse
 
@@ -353,8 +363,8 @@ The configurable Dashboard can present a narrow, read-only view of selected Trai
 Training state and Readiness are fixed inside the optional Today summary:
 
 - **Aerobic Capacity** selects the most recent imported running or cycling VO2 max, displays its provider/source
-  provenance, and compares only observations from the same source. FTP settings and modeled critical power never become
-  VO2 values.
+  provenance, and compares only observations from the same source. FTP settings and rolling CP/W′/Pmax capacity never
+  become VO2 values.
 - **Aerobic Durability** uses the persisted `training_durability` payload and the existing sports-lib evidence protocol.
   The card selects the current context with the most eligible samples, then uses eligibility ratio and discipline priority
   as deterministic tie-breakers, followed by the lexical context key when every meaningful signal is equal. Running,
@@ -485,7 +495,7 @@ Visibility affects:
 
 - Best Build cards;
 - discipline Training Mix cards;
-- capacity cards;
+- imported capacity cards;
 - Swimming Pace;
 - durability tabs; and
 - Running/Cycling power profiles.
@@ -496,7 +506,8 @@ Visibility does not affect:
 - training time and workout comparison used by that state section;
 - What drove this;
 - global form/freshness/load charts; or
-- the all-eligible-activity intensity-distribution chart.
+- the all-eligible-activity intensity-distribution chart; or
+- the exact-type Power systems selector and its rolling capacity evidence.
 
 ## Page Sections and Calculations
 
@@ -606,9 +617,10 @@ mislabel a new score as yesterday's. An open Training route schedules a narrow U
 require an event or activity scan.
 
 The compact chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes remain
-interpretable across days. Each scored SVG point is keyboard focusable and provides a native hover/focus tooltip with
-its UTC date, score, status, confidence, available-signal count, and recovery-baseline-night count. Missing scores have
-no point and therefore remain visible as gaps rather than being interpolated.
+interpretable across days. Each scored chart mark has a generous, keyboard-focusable HTML hit target and an Angular
+Material hover/focus tooltip with its UTC date, score, status, confidence, available-signal count, and
+recovery-baseline-night count. Missing scores have no point and therefore remain visible as gaps rather than being
+interpolated.
 
 #### Recovery remaining
 
@@ -836,32 +848,114 @@ capacity metrics just to fill the card. The chart's nested loading host particip
 occupies the remaining canvas. Two and three disciplines use compact balanced summary rows with the global chart below.
 Tablet and mobile retain the stacked responsive layout.
 
-### 6. Settings vs Recent Evidence
+### 6. Power Systems
 
-This section contains capacity evidence, swimming performance, durability, and power profiles.
+`training_power_systems` is the capacity-first use of Sports-lib's dated three-dimensional capacity fitter. It supports
+every exact canonical activity type with a usable persisted Power Curve. This section is independent of the
+Running/Cycling/Swimming visibility setting and has no combined or all-sports option.
 
-#### Capacity evidence
+The Training page renders this section only for the currently designated account. The derived metric continues to build
+for every account so removing the presentation gate later does not require a data migration or a policy change.
 
-Capacity is limited to Running and Cycling. Swimming must not render FTP, critical power, or a power curve.
+Policy version 1 is fixed:
+
+- For an effective UTC day `D`, supply only same-type power curves in the closed-open interval `[D - 42 days, D)`.
+- The workout on `D`, later workouts on `D`, and every future workout are excluded. A result can therefore be used for
+  that workout date without learning from the workout itself.
+- The current snapshot is effective today.
+- Historical points are calculated only for distinct qualifying workout UTC dates in the latest 84 days, plus today.
+  Rest dates are not manufactured as chart points.
+- Related sports remain separate. Cycling, Indoor Cycling, Mountain Biking, Rowing, and every other canonical type each
+  get their own input history and fit.
+- Repeated type/day calculations are cached within one build.
+- Functions passes the dated curves directly to `fitThreeDimensionalCapacityModel`. There is no fallback window, FTP
+  substitution, population default, or Quantified Self fitting formula.
+
+The bounded payload persists:
+
+- policy version, UTC boundary, 42-day window, 84-day history bound, and effective-day exclusion;
+- exact canonical activity type;
+- current overall status and reason;
+- CP watts, W′ joules, and Pmax watts with independent component status and reason;
+- Sports-lib source fingerprint;
+- usable-curve count, history span, malformed and isolated-spike rejected-point counts, sustained/short anchor coverage,
+  the distinct activities that actually supplied each component's retained envelope anchors, fit error,
+  candidate-method spread, leave-one-anchor-out stability, and whole-workout source-removal diagnostics;
+- compact dated component statuses and values for the 12-week sparse history; and
+- current-window candidate, usable-curve, and excluded-evidence counts.
+
+The Sports-lib fingerprint identifies the dated curve inputs and contains no estimator-generation label. Quantified
+Self's derived schema and pinned Sports-lib package are the compatibility boundary: a future fitting-behavior change
+must increment `DERIVED_METRIC_SCHEMA_VERSION` so existing snapshots rebuild.
+
+A component value exists only when Sports-lib marks that component `ready`. `partial`, `insufficient-evidence`,
+`poor-fit`, `unstable`, and `invalid-input` remain explicit states and are never converted to zero. The frontend rejects
+non-canonical types, invalid dates, malformed source fingerprints, impossible count/diagnostic combinations,
+inconsistent overall/component statuses, duplicate types, unsorted or out-of-range history, and a history endpoint that
+does not equal the current result. A rejected `ready` payload is treated as stale so the normal snapshot self-healing
+path requests a rebuild.
+
+`sourceCount` means curves with usable standard-duration evidence; it does not mean every source determined the fit.
+The component contributor counts are the number of distinct activities that won at least one retained CP/W′ or Pmax
+envelope anchor. Sports-lib also attempts a CP/W′ refit after removing each complete sustained-envelope source, reporting
+successful/failed refits and the largest component change. This exposes dependence on one workout without treating
+several duration anchors from that workout as independent efforts. These diagnostics are not a second QS readiness
+gate.
+
+CP and W′ stability are independent after the shared fit-error gate passes. Stable CP remains visible in a `partial`
+result when W′ method or anchor sensitivity exceeds its limit; W′ is `unstable`, Pmax is unavailable because it depends
+on W′, and the complete model remains absent. A top-level `unstable` result now identifies unstable CP. The UI reports
+method spread, anchor-removal sensitivity, and whole-workout removal sensitivity separately so the reason is not
+misidentified.
+
+The UI shows an exact activity-type selector only when multiple types are available, current CP/W′/Pmax cards with
+plain-language modeled-parameter descriptions, status/reason copy, evidence coverage, contributor-aware diagnostics grouped as
+a semantic list, and three aligned sparse 12-week ECharts trends in watts, kilojoules, and watts. Their UTC time axes
+are fixed to the same 84-day interval, their value axes retain a zero baseline, unavailable observations remain gaps,
+and the chart hosts resize with the page. Each canvas exposes an accessible summary of ready-value count and current
+availability. On narrow screens the three charts stack at a touch-readable height. The section labels the model as
+capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
+
+#### Parser and continuous-stream boundary
+
+Sports-lib 17.7.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
+Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 14 rebuilds existing
+snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
+remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
+
+The capacity estimator includes 720 seconds in newly generated default curves. New curve calculation removes isolated
+one-sample recording artifacts from a calculation copy before persistence without mutating the activity stream.
+The fitter also rejects and counts the corresponding 1–3-second arithmetic-decay signature in older stored curves, so
+existing curves remain usable without reprocessing; older curves that lack an exact 720-second point can still provide
+the other sustained anchors and report their actual coverage.
+
+A power curve is sufficient for capacity estimation but not for later workout-strain reconstruction: it records the best
+mean power achieved at each duration and discards the second-by-second ordering of work and recovery. A future strain
+phase must read each workout's original continuous power stream, select the capacity snapshot effective on that workout's
+date, and calculate strain without allowing that workout into its own capacity window. Activities without an original
+continuous stream will remain unavailable. This release does not reparse files, calculate strain, aggregate strain, or
+calibrate fitness/fatigue response.
+
+### 7. Settings vs Recent Evidence
+
+This section contains imported capacity observations, swimming performance, durability, and Running/Cycling power
+profiles.
+
+#### Imported capacity observations
+
+Imported capacity observations are limited to Running and Cycling. Swimming must not render FTP or a power curve.
 
 For each power discipline:
 
-- FTP setting: the latest stable imported FTP observation, with provider/device provenance and prior value when comparable.
+- FTP setting: the latest stable imported FTP observation, with provider/device provenance and prior value when
+  comparable.
 - Imported VO2 max: the latest stable source-matched observation.
-- Modeled critical power: a 90-day model using best recorded power-curve efforts from 3 to 20 minutes.
 
 An FTP value that exactly matches the session-derived `95% of 20-minute power` heuristic is not treated as an imported
-long-lived setting. The critical-power model reports evidence count, fit confidence, R-squared, normalized error, W', and
-W/kg only when the implied weights are consistent.
+long-lived setting. `training_capacity` does not fit CP or W′ and does not read the aggregate `power_curve` snapshot.
 
-The frontend compares modeled CP with imported FTP using a 5% tolerance:
-
-- Model above FTP: the FTP setting may be conservative.
-- Model below FTP: recent efforts have not validated FTP; this is not automatically fitness loss.
-- Within 5%: recent power supports the setting.
-
-VO2 max is never directly compared with FTP or critical power because it answers a different question and may originate
-from a device estimate or laboratory observation.
+VO2 max is never directly compared with FTP or rolling power-system capacity because it answers a different question and
+may originate from a device estimate or laboratory observation.
 
 #### Swimming pace and SWOLF
 
@@ -906,32 +1000,6 @@ header so the summary, chart title, benchmark values, and plot remain aligned at
 
 It also states the strongest supported conclusion before the chart, describes the number of recent/annual power workouts
 and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
-
-## Power-System Strain Event Detail
-
-Power-system strain is an activity-level Sports-lib result displayed only in the event Performance area. It is available
-for any canonical activity type when that workout has recorded power and a qualifying power curve; it is not limited to
-the Running and Cycling Training disciplines.
-
-The persisted stat is `DataThreeDimensionalStrainEvidence`, serialized as `Three Dimensional Strain Evidence`. Protocol
-v2 stores the canonical `activityType` and its `activityGroup`, an eligibility result, compact input diagnostics, an
-optional fitted three-parameter CP model, and—only when eligible—the total plus sustained-power, finite-capacity, and
-maximum-power strain components. It never stores streams or a timeline.
-
-Event detail reads that compact stat through Sports-lib's canonical normalizer. It never refits the model in Angular or
-reconstructs a score from summary power. Each selected workout keeps its own card; values are never summed or compared
-across activity types, even when their activity groups match. The view labels unavailable evidence with Sports-lib's
-primary reason and never displays a missing score as zero.
-
-Protocol-v1 records remain readable for historical data but are shown as previous-protocol evidence rather than a current
-score. A historic workout with a persisted power curve but no strain stat shows an explicit unavailable/reprocess state.
-Reprocessing from the original source file upgrades eligible records to v2. Activities with no original source remain
-honestly unavailable; no Firestore activity document is patched directly to manufacture the stat.
-
-This feature is deliberately not a Training-derived metric yet. It does not alter TSS, CTL, ATL, Form, Readiness, FTP,
-the capacity cards, or any current Training sport-visibility setting. Athlete-level fitness–fatigue response requires
-separate, independently measured dated CP/W′/Pmax observations and will be introduced only with an opt-in calibration
-contract.
 
 ## Durability Deep Dive
 
@@ -1226,8 +1294,9 @@ This is intentionally larger than adding a card. Update:
 - help content; and
 - backend, frontend, shared-contract, rules, and browser tests.
 
-Power/capacity support must remain independently modeled. Do not automatically add a new discipline to
-`POWER_CAPACITY_DISCIPLINES`.
+Imported FTP/VO2 capacity support must remain independently modeled. Do not automatically add a new discipline to
+`POWER_CAPACITY_DISCIPLINES`. Rolling power-system capacity does not require a curated Training discipline; a canonical
+exact activity type and a usable persisted power curve are its capability boundary.
 
 ### Adding a new durability context
 
@@ -1267,7 +1336,8 @@ From `../sports-lib`:
 ```bash
 npm test -- --runInBand \
   src/events/utilities/activity-durability.spec.ts \
-  src/events/utilities/power-curve-sampling.spec.ts
+  src/events/utilities/power-curve-sampling.spec.ts \
+  src/events/utilities/three-dimensional-capacity.spec.ts
 npm run build
 ```
 
@@ -1300,6 +1370,7 @@ training-build-benchmark-dialog.component.spec.ts
 training-sport-visibility-dialog.component.spec.ts
 training-analysis.helper.spec.ts
 training-capacity.helper.spec.ts
+training-power-systems.helper.spec.ts
 training-derived-metrics.helper.spec.ts
 training-durability-view.helper.spec.ts
 training-explanation-view.helper.spec.ts
@@ -1335,7 +1406,9 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - Dashboard Today Training state and Readiness with full, partial, and missing evidence, matching Form/ramp fallbacks,
   plus Today hidden and retired local-preview tile cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;
-- one and multiple capacity/power cards;
+- one and multiple imported-capacity cards;
+- no, one, and multiple exact Power systems types, including non-Running/Cycling types;
+- Power systems ready, partial, insufficient-evidence, poor-fit, unstable, invalid-input, and stale-payload states;
 - loading, stale, failed, and valid empty snapshots;
 - dark and light themes;
 - no horizontal overflow; and
@@ -1393,12 +1466,14 @@ When a Training change depends on a new sports-lib version:
 2. Publish the exact sports-lib version.
 3. Install that published version in both root and `functions`, then verify both lockfiles resolve the same artifact.
 4. Deploy Functions before the frontend so new-schema clients do not read old builders.
-5. Allow the existing sports-lib reparse process to populate newly introduced activity stats where original sources exist.
+5. If the release introduced a parser-owned activity stat, allow the existing reparse process to populate it where
+   original sources exist. Rolling power-system capacity does not use this step because it rebuilds from stored curves.
 6. Deploy the frontend.
-7. Verify a real account with ready, sparse, and missing-data states.
+7. Verify a real account with ready, partial, sparse, and missing-data states.
 
-Existing snapshots rebuild lazily after a schema bump. A new activity-level sports-lib stat may additionally require a
-reparse; changing only the derived schema cannot create missing activity evidence.
+Existing snapshots rebuild lazily after a schema bump. Schema 14 is sufficient for rolling power-system capacity when
+persisted curves already exist. A new parser-owned activity stat may additionally require a reparse; changing only the
+derived schema cannot create a missing activity stat or reconstruct a missing continuous stream.
 
 ## Maintenance Checklist
 
@@ -1411,6 +1486,8 @@ Before merging a Training change, confirm:
 - [ ] Optional values remain null instead of zero.
 - [ ] The frontend does not query activity/event history or raw streams.
 - [ ] sports-lib remains the only durability calculation owner.
+- [ ] Sports-lib remains the only CP/W′/Pmax fitting owner; Quantified Self owns only the documented dated-window policy.
+- [ ] Power-system capacity is isolated by exact canonical activity type and excludes its effective day.
 - [ ] Settings writes are authenticated, App-Check protected, deletion guarded, normalized, and branch-scoped.
 - [ ] Source dependencies are fetched only for metric kinds that need them.
 - [ ] Snapshot schema and frontend normalizers agree.

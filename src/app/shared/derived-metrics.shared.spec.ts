@@ -11,11 +11,13 @@ import {
   DERIVED_TRAINING_RECOVERY_MIN_REGULARITY_NIGHTS,
   DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
   DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
+  CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
   DEFAULT_DERIVED_METRIC_KINDS,
   buildDerivedFormDailyLoads,
   getDerivedMetricDocId,
   getDerivedTrainingRecoveryMinimumComparableNights,
   getTrainingBuildBenchmarkSelectionKey,
+  isDerivedTrainingPowerSystemsStatusReasonPair,
   normalizeTrainingBuildEventId,
   normalizeTrainingBuildPeriodEndDayMs,
   isDerivedMetricKind,
@@ -51,6 +53,19 @@ describe('derived-metrics shared helpers', () => {
     expect(normalizeDerivedMetricKinds([])).toEqual(DEFAULT_DERIVED_METRIC_KINDS);
     expect(normalizeDerivedMetricKinds(['unknown'])).toEqual(DEFAULT_DERIVED_METRIC_KINDS);
     expect(normalizeDerivedMetricKinds(null)).toEqual(DEFAULT_DERIVED_METRIC_KINDS);
+  });
+
+  it('registers rolling power systems for default and UTC-calendar rebuilds', () => {
+    expect(DEFAULT_DERIVED_METRIC_KINDS).toContain(DERIVED_METRIC_KINDS.TrainingPowerSystems);
+    expect(CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS).toContain(DERIVED_METRIC_KINDS.TrainingPowerSystems);
+  });
+
+  it('keeps Sports-lib capacity statuses paired with only their valid reasons', () => {
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('ready', null)).toBe(true);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('partial', 'poor-maximum-power-fit')).toBe(true);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('partial', 'unstable-w-prime-fit')).toBe(true);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('poor-fit', 'invalid-source')).toBe(false);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('invalid-input', 'insufficient-history')).toBe(false);
   });
 
   it('keeps strict normalization empty for missing or invalid inputs', () => {
@@ -125,7 +140,7 @@ describe('derived-metrics shared helpers', () => {
   });
 
   it('exposes recovery lookback constants for bounded derived recovery scans', () => {
-    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(11);
+    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(14);
     expect(DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS).toBe(14 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS).toBe(2 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS).toBe(

@@ -46,7 +46,6 @@ import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-t
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { EventResolverData } from '../../resolvers/event.resolver';
-import { shouldShowPowerSystemStrain } from '../../helpers/power-system-strain.helper';
 
 @Component({
   selector: 'app-event-card',
@@ -122,14 +121,9 @@ export class EventCardComponent implements OnInit {
     this.performanceCurveAvailability().hasCadencePower
   );
 
-  public hasPowerSystemStrainFlag = computed(() =>
-    shouldShowPowerSystemStrain(this.selectedActivitiesInstant())
-  );
-
   public hasPerformanceChartsFlag = computed(() =>
     this.hasIntensityZonesFlag()
       || this.performanceCurveAvailability().hasAny
-      || this.hasPowerSystemStrainFlag()
   );
 
   public hasDevicesFlag = computed(() =>
