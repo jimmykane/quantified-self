@@ -1416,7 +1416,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (typicalLocalStartMinutes === null || typicalLocalEndMinutes === null) {
       return '--';
     }
-    return `${this.formatTrainingRecoveryClockTime(typicalLocalStartMinutes)}–${this.formatTrainingRecoveryClockTime(typicalLocalEndMinutes)}`;
+    return `${this.formatTrainingRecoveryClockTime(typicalLocalStartMinutes)}\n${this.formatTrainingRecoveryClockTime(typicalLocalEndMinutes)}`;
   }
 
   private formatTrainingRecoverySleepStartDelta(current: number | null, reference: number | null): string {

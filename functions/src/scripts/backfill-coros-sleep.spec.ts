@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    createCorosSleepBackfillQueueInput,
     parseCorosSleepBackfillOptions,
     resolveCorosSleepBackfillRange,
 } from './backfill-coros-sleep';
@@ -36,5 +37,20 @@ describe('backfill-coros-sleep', () => {
     it('uses calendar-month lookback without overflowing shorter months', () => {
         expect(getCorosSleepBackfillStartMs(Date.UTC(2026, 4, 31, 12, 0, 0)))
             .toBe(Date.UTC(2026, 1, 28, 12, 0, 0));
+    });
+
+    it('queues bulk backfill work for the deployed reconciliation dispatcher', () => {
+        expect(createCorosSleepBackfillQueueInput(
+            { userID: 'user-1', providerUserID: 'coros-user-1' },
+            { startMs: 1_777_000_000_000, endMs: 1_777_086_400_000 },
+        )).toEqual({
+            type: 'coros_poll',
+            provider: 'COROSAPI',
+            userID: 'user-1',
+            providerUserId: 'coros-user-1',
+            rangeStartMs: 1_777_000_000_000,
+            rangeEndMs: 1_777_086_400_000,
+            dedupeKey: 'coros-sleep-backfill-v1:user-1:coros-user-1:1777000000000:1777086400000',
+        });
     });
 });

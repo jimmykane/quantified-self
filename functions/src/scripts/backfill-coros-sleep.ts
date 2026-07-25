@@ -53,6 +53,27 @@ export interface CorosSleepBackfillSummary {
     failed: number;
 }
 
+/**
+ * Bulk jobs deliberately rely on the deployed reconciliation scheduler to
+ * dispatch their Cloud Tasks. That keeps the script limited to durable queue
+ * writes and avoids treating a local task-dispatch failure as a failed
+ * backfill after the item has already been persisted.
+ */
+export function createCorosSleepBackfillQueueInput(
+    target: CorosSleepBackfillTarget,
+    window: { startMs: number; endMs: number },
+) {
+    return {
+        type: 'coros_poll' as const,
+        provider: SLEEP_PROVIDERS.COROSAPI,
+        userID: target.userID,
+        providerUserId: target.providerUserID,
+        rangeStartMs: window.startMs,
+        rangeEndMs: window.endMs,
+        dedupeKey: `coros-sleep-backfill-v1:${target.userID}:${target.providerUserID}:${window.startMs}:${window.endMs}`,
+    };
+}
+
 function readArgValue(argv: string[], key: string): string | undefined {
     const equalsPrefix = `${key}=`;
     for (let index = 0; index < argv.length; index += 1) {
@@ -229,16 +250,7 @@ export async function runCorosSleepBackfillScript(argv: string[]): Promise<Coros
         let queuedForAccount = 0;
         for (const window of windows) {
             try {
-                await addSleepSyncQueueItem({
-                    type: 'coros_poll',
-                    provider: SLEEP_PROVIDERS.COROSAPI,
-                    userID: target.userID,
-                    providerUserId: target.providerUserID,
-                    rangeStartMs: window.startMs,
-                    rangeEndMs: window.endMs,
-                    dedupeKey: `coros-sleep-backfill-v1:${target.userID}:${target.providerUserID}:${window.startMs}:${window.endMs}`,
-                    dispatchImmediately: true,
-                });
+                await addSleepSyncQueueItem(createCorosSleepBackfillQueueInput(target, window));
                 summary.queueItemsQueued += 1;
                 queuedForAccount += 1;
             } catch (error) {

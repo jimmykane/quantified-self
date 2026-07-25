@@ -638,7 +638,8 @@ prefers a valid normalized `timezoneOffsetSeconds` before falling back to its em
 evidence, and older backfilled records can predate offset persistence. Those nights still contribute valid duration and
 overnight HRV when available, but not local timing metrics. The typical sleep window is the circular-medoid local start
 and end clock time across at least five main sleeps with both trustworthy local endpoints; it is a representative clock
-pattern, not a duration-derived or UTC-inferred time. The table compares a start-time shift as earlier/later without
+pattern, not a duration-derived or UTC-inferred time. Recovery-comparison tables render the start and end clock times on
+separate lines for each window. The table compares a start-time shift as earlier/later without
 presenting one direction as inherently better. The frontend must therefore accept missing sleep-window and bedtime-
 variation evidence independently of total recorded-night count. It renders only the missing metric as unavailable,
 explains the local-time or HRV evidence requirement, and keeps other valid recovery metrics visible. Comparison copy must

@@ -263,8 +263,8 @@
                   @for (row of trainingRecovery.metricRows; track row.label) {
                     <div>
                       <dt>{{ row.label }}</dt>
-                      <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
-                      <dd><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
+                      <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
+                      <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
                       <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
                     </div>
                   }
@@ -395,8 +395,8 @@
                         @for (row of recovery.metricRows; track row.label) {
                           <div>
                             <dt>{{ row.label }}</dt>
-                            <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
-                            <dd><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
+                            <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
+                            <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
                             <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
                           </div>
                         }
