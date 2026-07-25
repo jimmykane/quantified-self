@@ -409,7 +409,7 @@ describe('MCP data service', () => {
             activityType: 'Cycling',
             current: {
               effectiveDayMs: Date.parse('2024-04-01T00:00:00.000Z'),
-              sourceFingerprint: 'three-dimensional-capacity-v1:private-fingerprint',
+              sourceFingerprint: 'three-dimensional-capacity:private-fingerprint',
             },
           }],
         },
@@ -512,6 +512,81 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('sourceKey');
     expect(serialized).not.toContain('edge 840');
     expect(serialized).not.toContain('edge 830');
+  });
+
+  it('preserves current Training power-system diagnostics while removing the source fingerprint', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 4,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-20T00:00:00.000Z'),
+        policyVersion: 1,
+        activityTypes: [{
+          activityType: 'Cycling',
+          current: {
+            effectiveDayMs: Date.parse('2026-07-20T00:00:00.000Z'),
+            status: 'partial',
+            reason: 'unstable-w-prime-fit',
+            sourceFingerprint: 'three-dimensional-capacity:private-input-fingerprint',
+            criticalPower: {
+              status: 'ready',
+              reason: null,
+              value: 275,
+            },
+            wPrime: {
+              status: 'unstable',
+              reason: 'unstable-w-prime-fit',
+              value: null,
+            },
+            diagnostics: {
+              rejectedShortPowerSpikePointCount: 3,
+              criticalPowerSourceRemovalFitCount: 2,
+              criticalPowerSourceRemovalFailureCount: 1,
+              criticalPowerSourceRemovalMaximumChangeRatio: 0.04,
+              wPrimeSourceRemovalMaximumChangeRatio: 0.19,
+            },
+          },
+        }],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingPowerSystems,
+    );
+
+    expect(result).toMatchObject({
+      metricKind: DERIVED_METRIC_KINDS.TrainingPowerSystems,
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: {
+        activityTypes: [{
+          current: {
+            status: 'partial',
+            reason: 'unstable-w-prime-fit',
+            criticalPower: {
+              status: 'ready',
+              value: 275,
+            },
+            wPrime: {
+              status: 'unstable',
+              value: null,
+            },
+            diagnostics: {
+              rejectedShortPowerSpikePointCount: 3,
+              criticalPowerSourceRemovalFitCount: 2,
+              criticalPowerSourceRemovalFailureCount: 1,
+              criticalPowerSourceRemovalMaximumChangeRatio: 0.04,
+              wPrimeSourceRemovalMaximumChangeRatio: 0.19,
+            },
+          },
+        }],
+      },
+    });
+    expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
+    expect(JSON.stringify(result.payload)).not.toContain('private-input-fingerprint');
   });
 
   it.each([

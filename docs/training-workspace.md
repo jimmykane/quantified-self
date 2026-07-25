@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `14`
-- `@sports-alliance/sports-lib`: `17.7.0`
+- `@sports-alliance/sports-lib`: `17.8.0`
 - Training disciplines: Running, Cycling, and Swimming
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -911,7 +911,7 @@ capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout presc
 
 #### Parser and continuous-stream boundary
 
-Sports-lib 17.7.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
+Sports-lib 17.8.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
 Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 14 rebuilds existing
 snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
