@@ -51,6 +51,7 @@ const REASONS = new Set<DerivedTrainingPowerSystemsReason>([
   'insufficient-maximum-power-range',
   'poor-critical-power-fit',
   'unstable-critical-power-fit',
+  'unstable-w-prime-fit',
   'poor-maximum-power-fit',
   'unstable-maximum-power-fit',
 ]);
@@ -195,6 +196,13 @@ function componentStatusesMatchOverall(
       && maximumPowerStatus === 'ready';
   }
   if (status === 'partial') {
+    if (reason === 'unstable-w-prime-fit') {
+      return criticalPowerStatus === 'ready'
+        && wPrimeStatus === 'unstable'
+        && wPrime.reason === reason
+        && maximumPowerStatus === 'insufficient-evidence'
+        && maximumPower.reason === reason;
+    }
     const expectedMaximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus | null =
       reason === 'insufficient-maximum-power-range'
         ? 'insufficient-evidence'
@@ -232,6 +240,11 @@ function historyComponentStatusesMatchOverall(
       && maximumPowerStatus === 'ready';
   }
   if (status === 'partial') {
+    if (reason === 'unstable-w-prime-fit') {
+      return criticalPowerStatus === 'ready'
+        && wPrimeStatus === 'unstable'
+        && maximumPowerStatus === 'insufficient-evidence';
+    }
     const expectedMaximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus | null =
       reason === 'insufficient-maximum-power-range'
         ? 'insufficient-evidence'
@@ -260,6 +273,9 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
   const historyEndDayMs = raw.historyEndDayMs === null ? null : finiteNumber(raw.historyEndDayMs);
   const historySpanDays = nonNegativeInteger(raw.historySpanDays);
   const rejectedPointCount = nonNegativeInteger(raw.rejectedPointCount);
+  const rejectedShortPowerSpikePointCount = nonNegativeInteger(
+    raw.rejectedShortPowerSpikePointCount,
+  );
   const criticalPowerAnchorCount = nonNegativeInteger(raw.criticalPowerAnchorCount);
   const earlyCriticalPowerAnchorCount = nonNegativeInteger(raw.earlyCriticalPowerAnchorCount);
   const longCriticalPowerAnchorCount = nonNegativeInteger(raw.longCriticalPowerAnchorCount);
@@ -270,12 +286,20 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
   const maximumPowerContributingSourceCount = nonNegativeInteger(
     raw.maximumPowerContributingSourceCount,
   );
+  const criticalPowerSourceRemovalFitCount = nonNegativeInteger(
+    raw.criticalPowerSourceRemovalFitCount,
+  );
+  const criticalPowerSourceRemovalFailureCount = nonNegativeInteger(
+    raw.criticalPowerSourceRemovalFailureCount,
+  );
   const optionalDiagnostics = [
     nullableNonNegativeNumber(raw.criticalPowerNormalizedRmse),
     nullableNonNegativeNumber(raw.criticalPowerSpreadRatio),
     nullableNonNegativeNumber(raw.wPrimeSpreadRatio),
     nullableNonNegativeNumber(raw.criticalPowerLeaveOneOutSpreadRatio),
     nullableNonNegativeNumber(raw.wPrimeLeaveOneOutSpreadRatio),
+    nullableNonNegativeNumber(raw.criticalPowerSourceRemovalMaximumChangeRatio),
+    nullableNonNegativeNumber(raw.wPrimeSourceRemovalMaximumChangeRatio),
     nullableNonNegativeNumber(raw.maximumPowerNormalizedRmse),
     nullableNonNegativeNumber(raw.maximumPowerLeaveOneOutSpreadRatio),
   ] as const;
@@ -283,6 +307,7 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     sourceCount === null
     || historySpanDays === null
     || rejectedPointCount === null
+    || rejectedShortPowerSpikePointCount === null
     || criticalPowerAnchorCount === null
     || criticalPowerAnchorCount > THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length
     || earlyCriticalPowerAnchorCount === null
@@ -300,6 +325,18 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     || maximumPowerContributingSourceCount > sourceCount
     || maximumPowerContributingSourceCount > maximumPowerAnchorCount
     || ((maximumPowerAnchorCount === 0) !== (maximumPowerContributingSourceCount === 0))
+    || criticalPowerSourceRemovalFitCount === null
+    || criticalPowerSourceRemovalFailureCount === null
+    || criticalPowerSourceRemovalFitCount + criticalPowerSourceRemovalFailureCount
+      > criticalPowerContributingSourceCount
+    || (
+      criticalPowerSourceRemovalFitCount === 0
+      && (optionalDiagnostics[5] !== null || optionalDiagnostics[6] !== null)
+    )
+    || (
+      criticalPowerSourceRemovalFitCount > 0
+      && (optionalDiagnostics[5] === null || optionalDiagnostics[6] === null)
+    )
     || optionalDiagnostics.some(item => item === undefined)
     || (
       sourceCount === 0
@@ -310,6 +347,8 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
         || criticalPowerContributingSourceCount !== 0
         || maximumPowerAnchorCount !== 0
         || maximumPowerContributingSourceCount !== 0
+        || criticalPowerSourceRemovalFitCount !== 0
+        || criticalPowerSourceRemovalFailureCount !== 0
         || optionalDiagnostics.some(item => item !== null)
       )
     )
@@ -331,6 +370,7 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     historyEndDayMs,
     historySpanDays,
     rejectedPointCount,
+    rejectedShortPowerSpikePointCount,
     criticalPowerAnchorCount,
     earlyCriticalPowerAnchorCount,
     longCriticalPowerAnchorCount,
@@ -342,8 +382,12 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     wPrimeSpreadRatio: optionalDiagnostics[2] as number | null,
     criticalPowerLeaveOneOutSpreadRatio: optionalDiagnostics[3] as number | null,
     wPrimeLeaveOneOutSpreadRatio: optionalDiagnostics[4] as number | null,
-    maximumPowerNormalizedRmse: optionalDiagnostics[5] as number | null,
-    maximumPowerLeaveOneOutSpreadRatio: optionalDiagnostics[6] as number | null,
+    criticalPowerSourceRemovalFitCount,
+    criticalPowerSourceRemovalFailureCount,
+    criticalPowerSourceRemovalMaximumChangeRatio: optionalDiagnostics[5] as number | null,
+    wPrimeSourceRemovalMaximumChangeRatio: optionalDiagnostics[6] as number | null,
+    maximumPowerNormalizedRmse: optionalDiagnostics[7] as number | null,
+    maximumPowerLeaveOneOutSpreadRatio: optionalDiagnostics[8] as number | null,
   };
 }
 
@@ -362,7 +406,8 @@ function resolveSnapshot(
   const diagnostics = raw ? resolveDiagnostics(raw.diagnostics) : null;
   const sourceFingerprint = raw?.sourceFingerprint === null
     ? null
-    : typeof raw?.sourceFingerprint === 'string' && raw.sourceFingerprint.trim()
+    : typeof raw?.sourceFingerprint === 'string'
+      && /^three-dimensional-capacity-v1:[0-9a-f]{16}$/.test(raw.sourceFingerprint)
       ? raw.sourceFingerprint
       : undefined;
   if (
@@ -615,7 +660,8 @@ function formatReason(reason: DerivedTrainingPowerSystemsReason | null): string 
     'insufficient-critical-power-range': 'The curve history does not cover enough sustained-power durations.',
     'insufficient-maximum-power-range': 'CP and W′ are usable, but short-duration evidence is not sufficient for Pmax.',
     'poor-critical-power-fit': 'The sustained-power curve does not fit the CP/W′ model closely enough.',
-    'unstable-critical-power-fit': 'The CP/W′ fitting methods disagree, or the estimate is too sensitive to the available sustained anchors.',
+    'unstable-critical-power-fit': 'Critical-power fitting methods disagree, or CP is too sensitive to the available sustained anchors.',
+    'unstable-w-prime-fit': 'Critical power is usable, but W′ changes too much across fitting methods or sustained anchors.',
     'poor-maximum-power-fit': 'The short-duration curve does not fit the Pmax model closely enough.',
     'unstable-maximum-power-fit': 'Pmax changes too much when short-duration anchors are removed.',
   };
@@ -718,6 +764,20 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
         ? null
         : `${formatNumber(current.diagnostics.wPrimeSpreadRatio * 100, 1)}% W′ method spread`,
     ];
+    const sourceRemoval = [
+      current.diagnostics.criticalPowerSourceRemovalMaximumChangeRatio === null
+        ? null
+        : `${formatNumber(current.diagnostics.criticalPowerSourceRemovalMaximumChangeRatio * 100, 1)}% CP worst whole-workout removal change`,
+      current.diagnostics.wPrimeSourceRemovalMaximumChangeRatio === null
+        ? null
+        : `${formatNumber(current.diagnostics.wPrimeSourceRemovalMaximumChangeRatio * 100, 1)}% W′ worst whole-workout removal change`,
+      current.diagnostics.criticalPowerSourceRemovalFailureCount > 0
+        ? `${current.diagnostics.criticalPowerSourceRemovalFailureCount} whole-workout removal ${current.diagnostics.criticalPowerSourceRemovalFailureCount === 1 ? 'refit' : 'refits'} unavailable`
+        : null,
+    ];
+    const rejectedShortSpikes = current.diagnostics.rejectedShortPowerSpikePointCount > 0
+      ? `${current.diagnostics.rejectedShortPowerSpikePointCount} isolated short-power ${current.diagnostics.rejectedShortPowerSpikePointCount === 1 ? 'point' : 'points'} rejected`
+      : null;
     const sourceLabel = (count: number): string => `${count} ${count === 1 ? 'activity' : 'activities'}`;
     return {
       activityType,
@@ -732,6 +792,8 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
         fitError,
         ...methodSpread,
         stability,
+        ...sourceRemoval,
+        rejectedShortSpikes,
       ].filter(Boolean).join(' · '),
       cards: [
         buildComponentCard('criticalPower', 'Critical power', current.criticalPower, value => `${formatNumber(value)} W`),

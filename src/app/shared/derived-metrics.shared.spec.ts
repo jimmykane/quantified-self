@@ -63,6 +63,7 @@ describe('derived-metrics shared helpers', () => {
   it('keeps Sports-lib capacity statuses paired with only their valid reasons', () => {
     expect(isDerivedTrainingPowerSystemsStatusReasonPair('ready', null)).toBe(true);
     expect(isDerivedTrainingPowerSystemsStatusReasonPair('partial', 'poor-maximum-power-fit')).toBe(true);
+    expect(isDerivedTrainingPowerSystemsStatusReasonPair('partial', 'unstable-w-prime-fit')).toBe(true);
     expect(isDerivedTrainingPowerSystemsStatusReasonPair('poor-fit', 'invalid-source')).toBe(false);
     expect(isDerivedTrainingPowerSystemsStatusReasonPair('invalid-input', 'insufficient-history')).toBe(false);
   });
@@ -139,7 +140,7 @@ describe('derived-metrics shared helpers', () => {
   });
 
   it('exposes recovery lookback constants for bounded derived recovery scans', () => {
-    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(13);
+    expect(DERIVED_METRIC_SCHEMA_VERSION).toBe(14);
     expect(DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS).toBe(14 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS).toBe(2 * 24 * 60 * 60);
     expect(DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS).toBe(

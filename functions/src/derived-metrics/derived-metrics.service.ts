@@ -30,6 +30,7 @@ import {
     fitThreeDimensionalCapacityModel,
     normalizeDurabilityEvidenceValue,
     THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
+    THREE_DIMENSIONAL_CAPACITY_ESTIMATOR_VERSION,
     THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS,
     type DatedActivityPowerCurve,
     type ThreeDimensionalCapacityFit,
@@ -1673,7 +1674,13 @@ function serializeTrainingPowerSystemsComponent(
         && (component.value as number) > 0
         ? component.value
         : null;
-    if (component.status === 'ready' && value === null) {
+    if (
+        (component.status === 'ready' && (value === null || component.reason !== null))
+        || (
+            component.status !== 'ready'
+            && (component.reason === null || component.value !== null)
+        )
+    ) {
         return {
             status: 'invalid-input',
             reason: 'invalid-source',
@@ -1696,7 +1703,8 @@ function isTrainingPowerSystemsFitContractConsistent(
     maximumPower: DerivedTrainingPowerSystemsComponent,
 ): boolean {
     if (
-        fit.effectiveDate !== resolveUtcDateKey(effectiveDayMs)
+        fit.estimatorVersion !== THREE_DIMENSIONAL_CAPACITY_ESTIMATOR_VERSION
+        || fit.effectiveDate !== resolveUtcDateKey(effectiveDayMs)
         || (fit.diagnostics.sourceCount > 0 && fit.activityType !== activityType)
         || !isDerivedTrainingPowerSystemsStatusReasonPair(fit.status, fit.reason)
     ) {
@@ -1709,6 +1717,13 @@ function isTrainingPowerSystemsFitContractConsistent(
             && maximumPower.status === 'ready';
     }
     if (fit.status === 'partial') {
+        if (fit.reason === 'unstable-w-prime-fit') {
+            return criticalPower.status === 'ready'
+                && wPrime.status === 'unstable'
+                && wPrime.reason === fit.reason
+                && maximumPower.status === 'insufficient-evidence'
+                && maximumPower.reason === fit.reason;
+        }
         const expectedMaximumPowerStatus =
             fit.reason === 'insufficient-maximum-power-range'
                 ? 'insufficient-evidence'
@@ -1771,12 +1786,21 @@ function serializeTrainingPowerSystemsFit(
             historyEndDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyEndDate),
             historySpanDays: fit.diagnostics.historySpanDays,
             rejectedPointCount: fit.envelope.rejectedPointCount,
+            rejectedShortPowerSpikePointCount: fit.envelope.rejectedShortPowerSpikePointCount,
             ...envelopeSummary,
             criticalPowerNormalizedRmse: fit.diagnostics.criticalPowerNormalizedRmse,
             criticalPowerSpreadRatio: fit.diagnostics.criticalPowerSpreadRatio,
             wPrimeSpreadRatio: fit.diagnostics.wPrimeSpreadRatio,
             criticalPowerLeaveOneOutSpreadRatio: fit.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
             wPrimeLeaveOneOutSpreadRatio: fit.diagnostics.wPrimeLeaveOneOutSpreadRatio,
+            criticalPowerSourceRemovalFitCount:
+                fit.diagnostics.criticalPowerSourceRemovalFitCount,
+            criticalPowerSourceRemovalFailureCount:
+                fit.diagnostics.criticalPowerSourceRemovalFailureCount,
+            criticalPowerSourceRemovalMaximumChangeRatio:
+                fit.diagnostics.criticalPowerSourceRemovalMaximumChangeRatio,
+            wPrimeSourceRemovalMaximumChangeRatio:
+                fit.diagnostics.wPrimeSourceRemovalMaximumChangeRatio,
             maximumPowerNormalizedRmse: fit.diagnostics.maximumPowerNormalizedRmse,
             maximumPowerLeaveOneOutSpreadRatio: fit.diagnostics.maximumPowerLeaveOneOutSpreadRatio,
         },

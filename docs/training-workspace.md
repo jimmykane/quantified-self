@@ -6,8 +6,8 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `12`
-- `@sports-alliance/sports-lib`: `17.6.0`
+- Quantified Self derived-metric schema: `14`
+- `@sports-alliance/sports-lib`: `17.7.0`
 - Training disciplines: Running, Cycling, and Swimming
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -870,9 +870,9 @@ The bounded payload persists:
 - current overall status and reason;
 - CP watts, W′ joules, and Pmax watts with independent component status and reason;
 - Sports-lib estimator version and source fingerprint;
-- usable-curve count, history span, rejected-point count, sustained/short anchor coverage, the distinct activities that
-  actually supplied each component's retained envelope anchors, fit error, candidate-method spread, and
-  leave-one-anchor-out stability diagnostics;
+- usable-curve count, history span, malformed and isolated-spike rejected-point counts, sustained/short anchor coverage,
+  the distinct activities that actually supplied each component's retained envelope anchors, fit error,
+  candidate-method spread, leave-one-anchor-out stability, and whole-workout source-removal diagnostics;
 - compact dated component statuses and values for the 12-week sparse history; and
 - current-window candidate, usable-curve, and excluded-evidence counts.
 
@@ -885,9 +885,16 @@ path requests a rebuild.
 
 `sourceCount` means curves with usable standard-duration evidence; it does not mean every source determined the fit.
 The component contributor counts are the number of distinct activities that won at least one retained CP/W′ or Pmax
-envelope anchor. They disclose evidence concentration but are not a second QS readiness gate. An `unstable` result
-remains unavailable when Sports-lib's challenger methods disagree or leave-one-anchor-out sensitivity exceeds its
-limits. The UI reports method spread separately from anchor-removal sensitivity so the reason is not misidentified.
+envelope anchor. Sports-lib also attempts a CP/W′ refit after removing each complete sustained-envelope source, reporting
+successful/failed refits and the largest component change. This exposes dependence on one workout without treating
+several duration anchors from that workout as independent efforts. These diagnostics are not a second QS readiness
+gate.
+
+CP and W′ stability are independent after the shared fit-error gate passes. Stable CP remains visible in a `partial`
+result when W′ method or anchor sensitivity exceeds its limit; W′ is `unstable`, Pmax is unavailable because it depends
+on W′, and the complete model remains absent. A top-level `unstable` result now identifies unstable CP. The UI reports
+method spread, anchor-removal sensitivity, and whole-workout removal sensitivity separately so the reason is not
+misidentified.
 
 The UI shows an exact activity-type selector, current CP/W′/Pmax cards, status/reason copy, evidence coverage,
 contributor-aware diagnostics, and three aligned sparse 12-week mini-trends in watts, kilojoules, and watts. It labels
@@ -895,10 +902,16 @@ the model as capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a 
 
 #### Parser and continuous-stream boundary
 
-Sports-lib 17.6.0 no longer generates CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
-Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 13 rebuilds existing
+Sports-lib 17.7.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
+Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 14 rebuilds existing
 snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
+
+Estimator contract version 1 includes 720 seconds in newly generated default curves. New curve calculation removes
+isolated one-sample recording artifacts from a calculation copy before persistence without mutating the activity stream.
+The fitter also rejects and counts the corresponding 1–3-second arithmetic-decay signature in older stored curves, so
+existing curves remain usable without reprocessing; older curves that lack an exact 720-second point can still provide
+the other sustained anchors and report their actual coverage.
 
 A power curve is sufficient for capacity estimation but not for later workout-strain reconstruction: it records the best
 mean power achieved at each duration and discards the second-by-second ordering of work and recovery. A future strain
@@ -1442,7 +1455,7 @@ When a Training change depends on a new sports-lib version:
 6. Deploy the frontend.
 7. Verify a real account with ready, partial, sparse, and missing-data states.
 
-Existing snapshots rebuild lazily after a schema bump. Schema 12 is sufficient for rolling power-system capacity when
+Existing snapshots rebuild lazily after a schema bump. Schema 14 is sufficient for rolling power-system capacity when
 persisted curves already exist. A new parser-owned activity stat may additionally require a reparse; changing only the
 derived schema cannot create a missing activity stat or reconstruct a missing continuous stream.
 

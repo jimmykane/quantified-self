@@ -1898,6 +1898,8 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 historyEndDayMs: Date.parse(`${expected.envelope.historyEndDate}T00:00:00.000Z`),
                 historySpanDays: expected.diagnostics.historySpanDays,
                 rejectedPointCount: expected.envelope.rejectedPointCount,
+                rejectedShortPowerSpikePointCount:
+                    expected.envelope.rejectedShortPowerSpikePointCount,
                 criticalPowerAnchorCount: expected.diagnostics.criticalPowerAnchorCount,
                 earlyCriticalPowerAnchorCount: expected.diagnostics.earlyCriticalPowerAnchorCount,
                 longCriticalPowerAnchorCount: expected.diagnostics.longCriticalPowerAnchorCount,
@@ -1910,6 +1912,14 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 criticalPowerLeaveOneOutSpreadRatio:
                     expected.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
                 wPrimeLeaveOneOutSpreadRatio: expected.diagnostics.wPrimeLeaveOneOutSpreadRatio,
+                criticalPowerSourceRemovalFitCount:
+                    expected.diagnostics.criticalPowerSourceRemovalFitCount,
+                criticalPowerSourceRemovalFailureCount:
+                    expected.diagnostics.criticalPowerSourceRemovalFailureCount,
+                criticalPowerSourceRemovalMaximumChangeRatio:
+                    expected.diagnostics.criticalPowerSourceRemovalMaximumChangeRatio,
+                wPrimeSourceRemovalMaximumChangeRatio:
+                    expected.diagnostics.wPrimeSourceRemovalMaximumChangeRatio,
                 maximumPowerNormalizedRmse: expected.diagnostics.maximumPowerNormalizedRmse,
                 maximumPowerLeaveOneOutSpreadRatio:
                     expected.diagnostics.maximumPowerLeaveOneOutSpreadRatio,
@@ -1919,6 +1929,41 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             candidateActivityCount: 3,
             usableCurveActivityCount: 3,
             excludedActivityCount: 0,
+        });
+    });
+
+    it('preserves valid no-evidence diagnostics when a stored curve contains only an isolated spike', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [
+            source(
+                'spike-only',
+                ActivityTypes.Cycling,
+                asOfDayMs - DAY_MS,
+                [
+                    { duration: 1, power: 900 },
+                    { duration: 2, power: 450 },
+                    { duration: 3, power: 300 },
+                ],
+            ),
+        ];
+
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs);
+        const cycling = result.payload.activityTypes[0];
+
+        expect(cycling.current).toMatchObject({
+            status: 'insufficient-evidence',
+            reason: 'no-evidence',
+            sourceFingerprint: null,
+            diagnostics: {
+                sourceCount: 0,
+                rejectedPointCount: 0,
+                rejectedShortPowerSpikePointCount: 3,
+            },
+        });
+        expect(cycling.evidenceCounts).toEqual({
+            candidateActivityCount: 1,
+            usableCurveActivityCount: 0,
+            excludedActivityCount: 1,
         });
     });
 
@@ -2106,12 +2151,24 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             status,
             reason,
             activityType: ActivityTypes.Rowing,
-            sourceFingerprint: 'capacity-v1:test',
-            criticalPower: { status: componentStatus, reason: componentStatus === 'ready' ? null : reason, value: 260 },
-            wPrime: { status: componentStatus, reason: componentStatus === 'ready' ? null : reason, value: 18_500 },
+            sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+            criticalPower: {
+                status: componentStatus,
+                reason: componentStatus === 'ready' ? null : reason,
+                value: componentStatus === 'ready' ? 260 : null,
+            },
+            wPrime: {
+                status: componentStatus,
+                reason: componentStatus === 'ready' ? null : reason,
+                value: componentStatus === 'ready' ? 18_500 : null,
+            },
             maximumPower: status === 'partial'
-                ? { status: 'insufficient-evidence', reason, value: 1_200 }
-                : { status: componentStatus, reason: componentStatus === 'ready' ? null : reason, value: 1_200 },
+                ? { status: 'insufficient-evidence', reason, value: null }
+                : {
+                    status: componentStatus,
+                    reason: componentStatus === 'ready' ? null : reason,
+                    value: componentStatus === 'ready' ? 1_200 : null,
+                },
         } as any;
 
         const result = buildTrainingPowerSystemsMetricPayload(
@@ -2127,6 +2184,43 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         expect(current.maximumPower.value).toBe(status === 'ready' ? 1_200 : null);
     });
 
+    it('preserves a ready CP when Sports-lib rejects W′ stability and dependent Pmax', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const baseFit = fitThreeDimensionalCapacityModel([], { effectiveDate: '2026-07-20' });
+        const fit: ThreeDimensionalCapacityFit = {
+            ...baseFit,
+            status: 'partial',
+            reason: 'unstable-w-prime-fit',
+            activityType: ActivityTypes.Cycling,
+            sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+            criticalPower: { status: 'ready', reason: null, value: 224.13 },
+            wPrime: { status: 'unstable', reason: 'unstable-w-prime-fit', value: null },
+            maximumPower: {
+                status: 'insufficient-evidence',
+                reason: 'unstable-w-prime-fit',
+                value: null,
+            },
+        };
+
+        const result = buildTrainingPowerSystemsMetricPayload(
+            [source('cycling', ActivityTypes.Cycling, asOfDayMs - DAY_MS)],
+            nowMs,
+            () => fit,
+        );
+
+        expect(result.payload.activityTypes[0].current).toMatchObject({
+            status: 'partial',
+            reason: 'unstable-w-prime-fit',
+            criticalPower: { status: 'ready', reason: null, value: 224.13 },
+            wPrime: { status: 'unstable', reason: 'unstable-w-prime-fit', value: null },
+            maximumPower: {
+                status: 'insufficient-evidence',
+                reason: 'unstable-w-prime-fit',
+                value: null,
+            },
+        });
+    });
+
     it('reports envelope contributors and short anchors even when CP/W′ exits as unstable', async () => {
         const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
         const baseFit = fitThreeDimensionalCapacityModel([], { effectiveDate: '2026-07-20' });
@@ -2137,7 +2231,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             status: 'unstable',
             reason: 'unstable-critical-power-fit',
             activityType: ActivityTypes.Cycling,
-            sourceFingerprint: 'capacity-v1:unstable',
+            sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
             criticalPower: {
                 status: 'unstable',
                 reason: 'unstable-critical-power-fit',
@@ -2162,7 +2256,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 historyStartDate: '2026-06-21',
                 historyEndDate: '2026-07-19',
                 historySpanDays: 28,
-                sourceFingerprint: 'capacity-v1:unstable',
+                sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
                 points: [
                     ...criticalPowerDurations.map(durationSeconds => ({
                         durationSeconds,
@@ -2277,6 +2371,24 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                     reason: 'poor-maximum-power-fit',
                     value: null,
                 },
+            }),
+        },
+        {
+            name: 'a ready component carrying an unavailable reason',
+            mutate: (fit: any) => ({
+                ...fit,
+                status: 'ready',
+                reason: null,
+                criticalPower: { status: 'ready', reason: 'invalid-source', value: 260 },
+                wPrime: { status: 'ready', reason: null, value: 18_500 },
+                maximumPower: { status: 'ready', reason: null, value: 1_200 },
+            }),
+        },
+        {
+            name: 'an obsolete estimator contract',
+            mutate: (fit: any) => ({
+                ...fit,
+                estimatorVersion: 0,
             }),
         },
     ])('degrades $name before persistence', async ({ mutate }) => {

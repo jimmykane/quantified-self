@@ -544,23 +544,40 @@ describe('TrainingWorkspaceComponent', () => {
 
   it('renders exact-type rolling power systems independently of Training sport visibility', async () => {
     const asOfDayMs = Date.UTC(2026, 6, 20);
-    const powerSystemsEntry = (activityType: string, criticalPowerWatts: number) => {
+    const powerSystemsEntry = (
+      activityType: string,
+      criticalPowerWatts: number,
+      wPrimeUnstable = false,
+    ) => {
       const current = {
         effectiveDayMs: asOfDayMs,
-        status: 'ready' as const,
-        reason: null,
+        status: wPrimeUnstable ? 'partial' as const : 'ready' as const,
+        reason: wPrimeUnstable ? 'unstable-w-prime-fit' as const : null,
         estimatorVersion: 1,
         activityType,
-        sourceFingerprint: `capacity-v1:${activityType}`,
+        sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
         criticalPower: { status: 'ready' as const, reason: null, value: criticalPowerWatts },
-        wPrime: { status: 'ready' as const, reason: null, value: 18_500 },
-        maximumPower: { status: 'ready' as const, reason: null, value: 1_200 },
+        wPrime: wPrimeUnstable
+          ? {
+              status: 'unstable' as const,
+              reason: 'unstable-w-prime-fit' as const,
+              value: null,
+            }
+          : { status: 'ready' as const, reason: null, value: 18_500 },
+        maximumPower: wPrimeUnstable
+          ? {
+              status: 'insufficient-evidence' as const,
+              reason: 'unstable-w-prime-fit' as const,
+              value: null,
+            }
+          : { status: 'ready' as const, reason: null, value: 1_200 },
         diagnostics: {
           sourceCount: 3,
           historyStartDayMs: asOfDayMs - (30 * 24 * 60 * 60 * 1000),
           historyEndDayMs: asOfDayMs - (24 * 60 * 60 * 1000),
           historySpanDays: 29,
           rejectedPointCount: 0,
+          rejectedShortPowerSpikePointCount: 0,
           criticalPowerAnchorCount: 8,
           earlyCriticalPowerAnchorCount: 4,
           longCriticalPowerAnchorCount: 3,
@@ -572,6 +589,10 @@ describe('TrainingWorkspaceComponent', () => {
           wPrimeSpreadRatio: 0.04,
           criticalPowerLeaveOneOutSpreadRatio: 0.02,
           wPrimeLeaveOneOutSpreadRatio: 0.08,
+          criticalPowerSourceRemovalFitCount: 2,
+          criticalPowerSourceRemovalFailureCount: 0,
+          criticalPowerSourceRemovalMaximumChangeRatio: 0.03,
+          wPrimeSourceRemovalMaximumChangeRatio: 0.1,
           maximumPowerNormalizedRmse: 0.02,
           maximumPowerLeaveOneOutSpreadRatio: 0.04,
         },
@@ -622,7 +643,7 @@ describe('TrainingWorkspaceComponent', () => {
         excludesEffectiveDay: true,
         excludesMergedEvents: true,
         activityTypes: [
-          powerSystemsEntry('Cycling', 260),
+          powerSystemsEntry('Cycling', 260, true),
           powerSystemsEntry('Rowing', 280),
         ],
       },
@@ -651,6 +672,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.selectedTrainingPowerSystemsActivityType).toBe('Cycling');
     expect(fixture.nativeElement.querySelectorAll('.training-power-systems-trend')).toHaveLength(3);
     expect(fixture.nativeElement.textContent).toContain('260 W');
+    expect(fixture.nativeElement.textContent).toContain('Critical power is usable');
+    expect(fixture.nativeElement.textContent).toContain('W′ changes too much');
+    expect(fixture.nativeElement.textContent).toContain('Unavailable');
     expect(fixture.nativeElement.textContent).not.toContain('All sports');
 
     fixture.debugElement.query(By.css('mat-select')).triggerEventHandler('selectionChange', { value: 'Rowing' });

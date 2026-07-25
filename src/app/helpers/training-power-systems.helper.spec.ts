@@ -29,24 +29,26 @@ function entry(
   status: DerivedTrainingPowerSystemsStatus = 'ready',
   reason: DerivedTrainingPowerSystemsReason | null = null,
 ) {
-  const componentStatus: DerivedTrainingPowerSystemsComponentStatus = status === 'partial' || status === 'ready'
-    ? 'ready'
-    : status;
-  const maximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus = status === 'partial'
-    ? 'insufficient-evidence'
-    : componentStatus;
   const resolvedReason = status === 'ready'
     ? null
     : reason ?? (status === 'partial' ? 'insufficient-maximum-power-range' : 'insufficient-history');
+  const componentStatus: DerivedTrainingPowerSystemsComponentStatus = status === 'partial' || status === 'ready'
+    ? 'ready'
+    : status;
+  const wPrimeStatus: DerivedTrainingPowerSystemsComponentStatus =
+    resolvedReason === 'unstable-w-prime-fit' ? 'unstable' : componentStatus;
+  const maximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus = status === 'partial'
+    ? 'insufficient-evidence'
+    : componentStatus;
   const current = {
     effectiveDayMs: asOfDayMs,
     status,
     reason: resolvedReason,
     estimatorVersion: 1,
     activityType,
-    sourceFingerprint: 'capacity-v1:test',
+    sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
     criticalPower: component(componentStatus, 260, resolvedReason ?? 'insufficient-history'),
-    wPrime: component(componentStatus, 18_500, resolvedReason ?? 'insufficient-history'),
+    wPrime: component(wPrimeStatus, 18_500, resolvedReason ?? 'insufficient-history'),
     maximumPower: component(maximumPowerStatus, 1_200, resolvedReason ?? 'insufficient-history'),
     diagnostics: {
       sourceCount: 3,
@@ -54,6 +56,7 @@ function entry(
       historyEndDayMs: asOfDayMs - DAY_MS,
       historySpanDays: 29,
       rejectedPointCount: 0,
+      rejectedShortPowerSpikePointCount: 0,
       criticalPowerAnchorCount: 8,
       earlyCriticalPowerAnchorCount: 4,
       longCriticalPowerAnchorCount: 3,
@@ -65,6 +68,10 @@ function entry(
       wPrimeSpreadRatio: status === 'insufficient-evidence' ? null : 0.04,
       criticalPowerLeaveOneOutSpreadRatio: status === 'insufficient-evidence' ? null : 0.02,
       wPrimeLeaveOneOutSpreadRatio: status === 'insufficient-evidence' ? null : 0.08,
+      criticalPowerSourceRemovalFitCount: 2,
+      criticalPowerSourceRemovalFailureCount: 0,
+      criticalPowerSourceRemovalMaximumChangeRatio: 0.03,
+      wPrimeSourceRemovalMaximumChangeRatio: 0.1,
       maximumPowerNormalizedRmse: status === 'ready' ? 0.02 : null,
       maximumPowerLeaveOneOutSpreadRatio: status === 'ready' ? 0.04 : null,
     },
@@ -147,6 +154,7 @@ describe('training-power-systems.helper', () => {
       historyStartDayMs: null,
       historyEndDayMs: null,
       historySpanDays: 0,
+      rejectedShortPowerSpikePointCount: 3,
       criticalPowerAnchorCount: 0,
       earlyCriticalPowerAnchorCount: 0,
       longCriticalPowerAnchorCount: 0,
@@ -158,6 +166,10 @@ describe('training-power-systems.helper', () => {
       wPrimeSpreadRatio: null,
       criticalPowerLeaveOneOutSpreadRatio: null,
       wPrimeLeaveOneOutSpreadRatio: null,
+      criticalPowerSourceRemovalFitCount: 0,
+      criticalPowerSourceRemovalFailureCount: 0,
+      criticalPowerSourceRemovalMaximumChangeRatio: null,
+      wPrimeSourceRemovalMaximumChangeRatio: null,
       maximumPowerNormalizedRmse: null,
       maximumPowerLeaveOneOutSpreadRatio: null,
     };
@@ -168,7 +180,9 @@ describe('training-power-systems.helper', () => {
       excludedActivityCount: 0,
     };
 
-    expect(resolveTrainingPowerSystemsMetricPayload(payload([unavailable]))).not.toBeNull();
+    const normalized = resolveTrainingPowerSystemsMetricPayload(payload([unavailable]));
+
+    expect(normalized?.activityTypes[0].current.diagnostics.rejectedShortPowerSpikePointCount).toBe(3);
   });
 
   it.each([
@@ -272,6 +286,14 @@ describe('training-power-systems.helper', () => {
       return value;
     },
     (value: any) => {
+      value.activityTypes[0].current.sourceFingerprint = 'three-dimensional-capacity-v0:0123456789abcdef';
+      return value;
+    },
+    (value: any) => {
+      value.activityTypes[0].current.diagnostics.criticalPowerSourceRemovalFitCount = 0;
+      return value;
+    },
+    (value: any) => {
       value.activityTypes[0].history[0] = {
         ...value.activityTypes[0].history[0],
         status: 'partial',
@@ -307,6 +329,24 @@ describe('training-power-systems.helper', () => {
     }
   });
 
+  it('shows stable CP while withholding unstable W′ and dependent Pmax', () => {
+    const normalized = resolveTrainingPowerSystemsMetricPayload(payload([
+      entry('Cycling', 'partial', 'unstable-w-prime-fit'),
+    ]));
+    const view = buildTrainingPowerSystemsActivityTypeViewModels(normalized)[0];
+
+    expect(view).toMatchObject({
+      status: 'partial',
+      statusText: 'Partial',
+      cards: [
+        { label: 'Critical power', valueText: '260 W', statusText: 'Ready' },
+        { label: 'W′', valueText: 'Unavailable', statusText: 'Unstable' },
+        { label: 'Maximum power', valueText: 'Unavailable', statusText: 'Not enough evidence' },
+      ],
+    });
+    expect(view.reasonText).toContain('Critical power is usable');
+  });
+
   it('explains method disagreement and distinguishes usable curves from envelope contributors', () => {
     const unstable = entry('Cycling', 'unstable', 'unstable-critical-power-fit');
     unstable.current.diagnostics = {
@@ -324,6 +364,10 @@ describe('training-power-systems.helper', () => {
       wPrimeSpreadRatio: 0.327,
       criticalPowerLeaveOneOutSpreadRatio: 0.008,
       wPrimeLeaveOneOutSpreadRatio: 0.095,
+      criticalPowerSourceRemovalFitCount: 0,
+      criticalPowerSourceRemovalFailureCount: 1,
+      criticalPowerSourceRemovalMaximumChangeRatio: null,
+      wPrimeSourceRemovalMaximumChangeRatio: null,
     };
     unstable.evidenceCounts = {
       candidateActivityCount: 11,
@@ -340,6 +384,7 @@ describe('training-power-systems.helper', () => {
     expect(view.diagnosticsText).toContain('4.1% CP method spread');
     expect(view.diagnosticsText).toContain('32.7% W′ method spread');
     expect(view.diagnosticsText).toContain('9.5% worst anchor-removal change');
+    expect(view.diagnosticsText).toContain('1 whole-workout removal refit unavailable');
     expect(view.diagnosticsText).not.toContain('fitted sources');
   });
 

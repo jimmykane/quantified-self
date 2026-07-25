@@ -87,7 +87,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 13;
+export const DERIVED_METRIC_SCHEMA_VERSION = 14;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -534,6 +534,7 @@ export type DerivedTrainingPowerSystemsReason =
   | 'insufficient-maximum-power-range'
   | 'poor-critical-power-fit'
   | 'unstable-critical-power-fit'
+  | 'unstable-w-prime-fit'
   | 'poor-maximum-power-fit'
   | 'unstable-maximum-power-fit';
 
@@ -542,6 +543,7 @@ const DERIVED_TRAINING_POWER_SYSTEMS_REASONS_BY_STATUS: Record<
   readonly DerivedTrainingPowerSystemsReason[]
 > = {
   partial: [
+    'unstable-w-prime-fit',
     'insufficient-maximum-power-range',
     'poor-maximum-power-fit',
     'unstable-maximum-power-fit',
@@ -588,6 +590,7 @@ export interface DerivedTrainingPowerSystemsDiagnostics {
   historyEndDayMs: number | null;
   historySpanDays: number;
   rejectedPointCount: number;
+  rejectedShortPowerSpikePointCount: number;
   criticalPowerAnchorCount: number;
   earlyCriticalPowerAnchorCount: number;
   longCriticalPowerAnchorCount: number;
@@ -599,6 +602,10 @@ export interface DerivedTrainingPowerSystemsDiagnostics {
   wPrimeSpreadRatio: number | null;
   criticalPowerLeaveOneOutSpreadRatio: number | null;
   wPrimeLeaveOneOutSpreadRatio: number | null;
+  criticalPowerSourceRemovalFitCount: number;
+  criticalPowerSourceRemovalFailureCount: number;
+  criticalPowerSourceRemovalMaximumChangeRatio: number | null;
+  wPrimeSourceRemovalMaximumChangeRatio: number | null;
   maximumPowerNormalizedRmse: number | null;
   maximumPowerLeaveOneOutSpreadRatio: number | null;
 }
