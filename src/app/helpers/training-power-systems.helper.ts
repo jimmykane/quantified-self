@@ -12,6 +12,7 @@ import {
   type DerivedTrainingPowerSystemsComponent,
   type DerivedTrainingPowerSystemsComponentStatus,
   type DerivedTrainingPowerSystemsDiagnostics,
+  type DerivedTrainingPowerSystemsEvidenceCounts,
   type DerivedTrainingPowerSystemsHistoryPoint,
   type DerivedTrainingPowerSystemsMetricPayload,
   type DerivedTrainingPowerSystemsReason,
@@ -58,6 +59,7 @@ const REASONS = new Set<DerivedTrainingPowerSystemsReason>([
 export interface TrainingPowerSystemsCardViewModel {
   key: 'criticalPower' | 'wPrime' | 'maximumPower';
   label: string;
+  description: string;
   valueText: string;
   statusText: string;
 }
@@ -84,7 +86,7 @@ export interface TrainingPowerSystemsActivityTypeViewModel {
   statusText: string;
   reasonText: string;
   evidenceText: string;
-  diagnosticsText: string;
+  diagnostics: string[];
   cards: TrainingPowerSystemsCardViewModel[];
   trends: TrainingPowerSystemsTrendViewModel[];
 }
@@ -697,17 +699,35 @@ function buildTrend(
 function buildComponentCard(
   key: TrainingPowerSystemsCardViewModel['key'],
   label: string,
+  description: string,
   component: DerivedTrainingPowerSystemsComponent,
   formatValue: (value: number) => string,
 ): TrainingPowerSystemsCardViewModel {
   return {
     key,
     label,
+    description,
     valueText: component.status === 'ready' && component.value !== null
       ? formatValue(component.value)
       : 'Unavailable',
     statusText: formatComponentStatus(component.status),
   };
+}
+
+function formatEvidenceText(evidenceCounts: DerivedTrainingPowerSystemsEvidenceCounts): string {
+  if (evidenceCounts.candidateActivityCount === 0) {
+    return 'No workouts fall inside the preceding 42-day window.';
+  }
+  if (evidenceCounts.excludedActivityCount === 0) {
+    return evidenceCounts.candidateActivityCount === 1
+      ? 'The workout in the preceding 42 days supplied a usable power curve.'
+      : `All ${evidenceCounts.candidateActivityCount} workouts in the preceding 42 days supplied usable power curves.`;
+  }
+  const workoutLabel = evidenceCounts.candidateActivityCount === 1 ? 'workout' : 'workouts';
+  return [
+    `${evidenceCounts.usableCurveActivityCount} of ${evidenceCounts.candidateActivityCount} ${workoutLabel}`,
+    `in the preceding 42 days supplied usable power curves; ${evidenceCounts.excludedActivityCount} could not supply one.`,
+  ].join(' ');
 }
 
 export function buildTrainingPowerSystemsActivityTypeViewModels(
@@ -748,14 +768,14 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
     const rejectedShortSpikes = current.diagnostics.rejectedShortPowerSpikePointCount > 0
       ? `${current.diagnostics.rejectedShortPowerSpikePointCount} isolated short-power ${current.diagnostics.rejectedShortPowerSpikePointCount === 1 ? 'point' : 'points'} rejected`
       : null;
-    const sourceLabel = (count: number): string => `${count} ${count === 1 ? 'activity' : 'activities'}`;
+    const sourceLabel = (count: number): string => `${count} ${count === 1 ? 'workout' : 'workouts'}`;
     return {
       activityType,
       status: current.status,
       statusText: formatOverallStatus(current.status),
       reasonText: formatReason(current.reason),
-      evidenceText: `${evidenceCounts.usableCurveActivityCount} of ${evidenceCounts.candidateActivityCount} preceding 42-day workouts supplied usable power curves; ${evidenceCounts.excludedActivityCount} excluded.`,
-      diagnosticsText: [
+      evidenceText: formatEvidenceText(evidenceCounts),
+      diagnostics: [
         `${current.diagnostics.sourceCount} usable power curves over ${current.diagnostics.historySpanDays} days`,
         `${sourceLabel(current.diagnostics.criticalPowerContributingSourceCount)} supplied ${current.diagnostics.criticalPowerAnchorCount}/${THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length} sustained anchors`,
         `${sourceLabel(current.diagnostics.maximumPowerContributingSourceCount)} supplied ${current.diagnostics.maximumPowerAnchorCount}/${THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS.length} short anchors`,
@@ -764,11 +784,29 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
         stability,
         ...sourceRemoval,
         rejectedShortSpikes,
-      ].filter(Boolean).join(' · '),
+      ].filter((item): item is string => Boolean(item)),
       cards: [
-        buildComponentCard('criticalPower', 'Critical power', current.criticalPower, value => `${formatNumber(value)} W`),
-        buildComponentCard('wPrime', 'W′', current.wPrime, value => `${formatNumber(value / 1000, 1)} kJ`),
-        buildComponentCard('maximumPower', 'Maximum power', current.maximumPower, value => `${formatNumber(value)} W`),
+        buildComponentCard(
+          'criticalPower',
+          'Critical power (CP)',
+          'Modeled sustained-power boundary',
+          current.criticalPower,
+          value => `${formatNumber(value)} W`,
+        ),
+        buildComponentCard(
+          'wPrime',
+          'W′',
+          'Modeled work capacity above CP',
+          current.wPrime,
+          value => `${formatNumber(value / 1000, 1)} kJ`,
+        ),
+        buildComponentCard(
+          'maximumPower',
+          'Maximum power (Pmax)',
+          'Modeled short-duration power ceiling',
+          current.maximumPower,
+          value => `${formatNumber(value)} W`,
+        ),
       ],
       trends: [
         buildTrend(entry, 'criticalPowerWatts', 'Critical power', 'W'),

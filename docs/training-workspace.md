@@ -901,12 +901,13 @@ on W′, and the complete model remains absent. A top-level `unstable` result no
 method spread, anchor-removal sensitivity, and whole-workout removal sensitivity separately so the reason is not
 misidentified.
 
-The UI shows an exact activity-type selector, current CP/W′/Pmax cards, status/reason copy, evidence coverage,
-contributor-aware diagnostics, and three aligned sparse 12-week ECharts trends in watts, kilojoules, and watts. Their
-UTC time axes are fixed to the same 84-day interval, their value axes retain a zero baseline, unavailable observations
-remain gaps, and the chart hosts resize with the page. On narrow screens the three charts stack at a touch-readable
-height. The section labels the model as capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout
-prescription.
+The UI shows an exact activity-type selector only when multiple types are available, current CP/W′/Pmax cards with
+plain-language modeled-parameter descriptions, status/reason copy, evidence coverage, contributor-aware diagnostics grouped as
+a semantic list, and three aligned sparse 12-week ECharts trends in watts, kilojoules, and watts. Their UTC time axes
+are fixed to the same 84-day interval, their value axes retain a zero baseline, unavailable observations remain gaps,
+and the chart hosts resize with the page. Each canvas exposes an accessible summary of ready-value count and current
+availability. On narrow screens the three charts stack at a touch-readable height. The section labels the model as
+capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
 
 #### Parser and continuous-stream boundary
 

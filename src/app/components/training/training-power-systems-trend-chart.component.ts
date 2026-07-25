@@ -49,10 +49,20 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
   @Input()
   public set trend(value: TrainingPowerSystemsTrendViewModel | null) {
     this.trendValue = value;
-    this.hasReadyValues = Boolean(value?.points.some(point => point.value !== null));
-    this.chartAriaLabel = value
-      ? `${value.label} over the latest 12 weeks${this.hasReadyValues ? '' : '; no ready values in this period'}`
-      : 'Twelve-week power-system capacity history';
+    const readyPoints = value?.points.filter(point => point.value !== null) || [];
+    this.hasReadyValues = readyPoints.length > 0;
+    if (!value) {
+      this.chartAriaLabel = 'Twelve-week power-system capacity history';
+      return;
+    }
+    const currentPoint = value.points.find(point => point.isCurrent) || null;
+    const readyPointText = `${readyPoints.length} ready ${readyPoints.length === 1 ? 'value' : 'values'}`;
+    const currentText = currentPoint?.value === null || !currentPoint
+      ? 'current value unavailable'
+      : `current value ${formatTrendValue(currentPoint.value, value.unit)} ${value.unit}`;
+    this.chartAriaLabel = `${value.label} over the latest 12 weeks; ${
+      this.hasReadyValues ? readyPointText : '0 ready values'
+    }; ${currentText}`;
   }
   public get trend(): TrainingPowerSystemsTrendViewModel | null {
     return this.trendValue;
@@ -127,7 +137,14 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
       animation: false,
       backgroundColor: 'transparent',
       textStyle: { color: style.textColor, fontFamily: ECHARTS_GLOBAL_FONT_FAMILY },
-      grid: { left: 8, right: 10, top: 8, bottom: 6, containLabel: true },
+      grid: {
+        left: 8,
+        right: 10,
+        top: 8,
+        bottom: 6,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
+      },
       tooltip: {
         trigger: 'axis',
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),

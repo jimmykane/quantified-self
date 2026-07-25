@@ -653,7 +653,11 @@ describe('TrainingWorkspaceComponent', () => {
         ],
       },
     };
-    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+    const derivedStateSubject = new Subject<DashboardDerivedMetricsState>();
+    const derivedMetrics = {
+      watch: vi.fn(() => derivedStateSubject.asObservable()),
+      ensureForDashboard: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
@@ -670,6 +674,8 @@ describe('TrainingWorkspaceComponent', () => {
     }).compileComponents();
 
     const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    derivedStateSubject.next(derivedState);
     fixture.detectChanges();
 
     const component = fixture.componentInstance;
@@ -689,6 +695,19 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Rowing');
     expect(fixture.nativeElement.textContent).toContain('280 W');
     expect(fixture.nativeElement.textContent).toContain('not TSS, FTP, fitness, fatigue, or readiness');
+
+    derivedStateSubject.next({
+      ...derivedState,
+      trainingPowerSystems: {
+        ...derivedState.trainingPowerSystems!,
+        activityTypes: [derivedState.trainingPowerSystems!.activityTypes[1]],
+      },
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Modeled sustained-power boundary');
+    expect(fixture.nativeElement.querySelectorAll('.training-power-systems-evidence li').length)
+      .toBeGreaterThan(3);
   });
 
   it('filters every sport-specific module while leaving global training sections visible', async () => {

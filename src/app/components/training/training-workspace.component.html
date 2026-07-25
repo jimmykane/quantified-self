@@ -611,7 +611,7 @@
           <p>Power systems</p>
           <h2 id="training-power-systems-title">42-day rolling capacity</h2>
         </div>
-        @if (trainingPowerSystemsActivityTypes.length) {
+        @if (trainingPowerSystemsActivityTypes.length > 1) {
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-power-systems-selector">
             <mat-label>Activity type</mat-label>
             <mat-select
@@ -653,13 +653,18 @@
                 <dt>{{ card.label }}</dt>
                 <dd><app-training-metric-text [text]="card.valueText"></app-training-metric-text></dd>
                 <small>{{ card.statusText }}</small>
+                <span class="training-power-systems-card-description">{{ card.description }}</span>
               </div>
             }
           </dl>
 
           <div class="training-power-systems-evidence">
             <p>{{ powerSystems.evidenceText }}</p>
-            <small>{{ powerSystems.diagnosticsText }}</small>
+            <ul aria-label="Capacity model diagnostics">
+              @for (diagnostic of powerSystems.diagnostics; track $index) {
+                <li>{{ diagnostic }}</li>
+              }
+            </ul>
           </div>
 
           <div class="training-power-systems-trends" aria-label="Twelve-week power-system capacity history">

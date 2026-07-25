@@ -180,8 +180,25 @@ describe('training-power-systems.helper', () => {
     };
 
     const normalized = resolveTrainingPowerSystemsMetricPayload(payload([unavailable]));
+    const view = buildTrainingPowerSystemsActivityTypeViewModels(normalized)[0];
 
     expect(normalized?.activityTypes[0].current.diagnostics.rejectedShortPowerSpikePointCount).toBe(3);
+    expect(view.evidenceText).toBe('No workouts fall inside the preceding 42-day window.');
+    expect(view.cards.every(card => card.valueText === 'Unavailable')).toBe(true);
+  });
+
+  it('uses natural evidence copy when every preceding workout has a usable curve', () => {
+    const available = entry('Cycling');
+    available.evidenceCounts = {
+      candidateActivityCount: 3,
+      usableCurveActivityCount: 3,
+      excludedActivityCount: 0,
+    };
+
+    const normalized = resolveTrainingPowerSystemsMetricPayload(payload([available]));
+    const view = buildTrainingPowerSystemsActivityTypeViewModels(normalized)[0];
+
+    expect(view.evidenceText).toBe('All 3 workouts in the preceding 42 days supplied usable power curves.');
   });
 
   it.each([
@@ -338,9 +355,24 @@ describe('training-power-systems.helper', () => {
       status: 'partial',
       statusText: 'Partial',
       cards: [
-        { label: 'Critical power', valueText: '260 W', statusText: 'Ready' },
-        { label: 'W′', valueText: 'Unavailable', statusText: 'Unstable' },
-        { label: 'Maximum power', valueText: 'Unavailable', statusText: 'Not enough evidence' },
+        {
+          label: 'Critical power (CP)',
+          description: 'Modeled sustained-power boundary',
+          valueText: '260 W',
+          statusText: 'Ready',
+        },
+        {
+          label: 'W′',
+          description: 'Modeled work capacity above CP',
+          valueText: 'Unavailable',
+          statusText: 'Unstable',
+        },
+        {
+          label: 'Maximum power (Pmax)',
+          description: 'Modeled short-duration power ceiling',
+          valueText: 'Unavailable',
+          statusText: 'Not enough evidence',
+        },
       ],
     });
     expect(view.reasonText).toContain('Critical power is usable');
@@ -377,14 +409,16 @@ describe('training-power-systems.helper', () => {
     const view = buildTrainingPowerSystemsActivityTypeViewModels(normalized)[0];
 
     expect(view.reasonText).toContain('fitting methods disagree');
-    expect(view.diagnosticsText).toContain('9 usable power curves over 28 days');
-    expect(view.diagnosticsText).toContain('1 activity supplied 7/8 sustained anchors');
-    expect(view.diagnosticsText).toContain('2 activities supplied 8/8 short anchors');
-    expect(view.diagnosticsText).toContain('4.1% CP method spread');
-    expect(view.diagnosticsText).toContain('32.7% W′ method spread');
-    expect(view.diagnosticsText).toContain('9.5% worst anchor-removal change');
-    expect(view.diagnosticsText).toContain('1 whole-workout removal refit unavailable');
-    expect(view.diagnosticsText).not.toContain('fitted sources');
+    expect(view.diagnostics).toContain('9 usable power curves over 28 days');
+    expect(view.diagnostics).toContain('1 workout supplied 7/8 sustained anchors');
+    expect(view.diagnostics).toContain('2 workouts supplied 8/8 short anchors');
+    expect(view.diagnostics).toContain('4.1% CP method spread');
+    expect(view.diagnostics).toContain('32.7% W′ method spread');
+    expect(view.diagnostics).toContain('9.5% worst anchor-removal change');
+    expect(view.diagnostics).toContain('1 whole-workout removal refit unavailable');
+    expect(view.diagnostics.join(' ')).not.toContain('fitted sources');
+    expect(view.evidenceText)
+      .toBe('9 of 11 workouts in the preceding 42 days supplied usable power curves; 2 could not supply one.');
   });
 
   it('builds three aligned sparse trends and keeps today as the current endpoint', () => {

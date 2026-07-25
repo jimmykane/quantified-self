@@ -77,6 +77,11 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
     expect(fixture.nativeElement.querySelector('.training-power-systems-trend-empty')?.textContent)
       .toContain('No ready values in this period');
 
+    fixture.componentRef.setInput('darkTheme', true);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(eChartsLoader.init).toHaveBeenLastCalledWith(chartElement, 'dark', undefined));
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(3));
+
     fixture.destroy();
     expect(eChartsLoader.dispose).toHaveBeenCalledWith(chart);
   });
@@ -96,6 +101,11 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
       max: currentDayMs,
     }));
     expect(option.yAxis.min).toBe(0);
+    expect(option.grid).toEqual(expect.objectContaining({
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
+    }));
+    expect(option.grid).not.toHaveProperty('containLabel');
     expect(option.series[0].connectNulls).toBe(false);
     expect(option.series[0].data).toEqual([
       [currentDayMs - (14 * DAY_MS), 210],
@@ -105,7 +115,8 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
     expect(option.series[0].symbolSize(null, { dataIndex: 0 })).toBe(6);
     expect(option.series[0].symbolSize(null, { dataIndex: 2 })).toBe(9);
     expect(component.hasReadyValues).toBe(true);
-    expect(component.chartAriaLabel).toBe('Critical power over the latest 12 weeks');
+    expect(component.chartAriaLabel)
+      .toBe('Critical power over the latest 12 weeks; 2 ready values; current value 224 W');
   });
 
   it('renders app-standard tooltips for ready and unavailable observations', async () => {
@@ -137,7 +148,8 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
     const option = (component as any).buildOption();
 
     expect(component.hasReadyValues).toBe(false);
-    expect(component.chartAriaLabel).toContain('no ready values in this period');
+    expect(component.chartAriaLabel)
+      .toBe('Critical power over the latest 12 weeks; 0 ready values; current value unavailable');
     expect(option.series[0].data.every((point: [number, number | null]) => point[1] === null)).toBe(true);
   });
 });

@@ -250,12 +250,15 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-power-systems-cards > div { min-width: 0; padding: 16px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-power-systems-cards > div:first-child { padding-left: 0; border-left: 0; }
 .training-power-systems-cards > div:last-child { padding-right: 0; }
-.training-power-systems-cards dt, .training-power-systems-cards dd, .training-power-systems-cards small { display: block; }
+.training-power-systems-cards dt, .training-power-systems-cards dd, .training-power-systems-cards small, .training-power-systems-card-description { display: block; }
 .training-power-systems-cards dd { font-size: 24px; }
 .training-power-systems-cards small { margin-top: 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
+.training-power-systems-card-description { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); line-height: 1.35; }
 .training-power-systems-evidence { margin-top: 16px; }
 .training-power-systems-evidence p { margin: 0; font-size: var(--training-inter-body-font-size); line-height: 1.45; }
-.training-power-systems-evidence small { display: block; margin-top: 5px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); line-height: 1.4; }
+.training-power-systems-evidence ul { display: flex; flex-wrap: wrap; gap: 5px 16px; margin: 7px 0 0; padding: 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); line-height: 1.4; list-style: none; }
+.training-power-systems-evidence li { position: relative; padding-left: 10px; }
+.training-power-systems-evidence li::before { position: absolute; top: .58em; left: 0; width: 3px; height: 3px; border-radius: 50%; background: currentColor; content: ''; opacity: .7; }
 .training-power-systems-trends { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
 .training-power-systems-trend { min-width: 0; padding: 14px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; }
 .training-power-systems-trend header { display: flex; justify-content: space-between; gap: 12px; font-size: var(--training-inter-caption-font-size); }
