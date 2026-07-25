@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -98,7 +99,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
     expect(element.textContent).toContain('No eligible running, cycling or swimming workouts in the last 28 days.');
-    expect(element.textContent).toContain('Preparing capacity evidence');
+    expect(element.textContent).toContain('Preparing imported capacity markers');
+    expect(element.textContent).toContain('Preparing rolling power capacity');
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
@@ -484,7 +486,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
     expect(fixture.nativeElement.textContent).toContain('Preparing load chart');
     expect(fixture.nativeElement.textContent).toContain('Preparing cycling power profile');
-    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelectorAll('.training-chart-state')).toHaveLength(7);
     expect(fixture.nativeElement.querySelector('app-form-chart')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-power-curve-chart')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
@@ -494,7 +496,7 @@ describe('TrainingWorkspaceComponent', () => {
     );
   });
 
-  it('renders FTP as an imported setting and a lower modeled CP as unvalidated evidence', async () => {
+  it('renders FTP only as an imported setting and does not retain the old modeled CP card', async () => {
     const derivedState: DashboardDerivedMetricsState = {
       ...createDashboardDerivedMetricsMissingState(),
       trainingSummaryStatus: 'ready',
@@ -504,11 +506,6 @@ describe('TrainingWorkspaceComponent', () => {
         asOfDayMs: Date.UTC(2026, 6, 13),
         disciplines: [{
           discipline: 'running', ftpSetting: null, importedVo2Max: null,
-          modeledCriticalPower: {
-            status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-            confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-            minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-          },
         }, {
           discipline: 'cycling',
           ftpSetting: {
@@ -517,11 +514,6 @@ describe('TrainingWorkspaceComponent', () => {
             previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
           },
           importedVo2Max: null,
-          modeledCriticalPower: {
-            status: 'ready', valueWatts: 186, valueWattsPerKg: null, wPrimeJoules: 18_000,
-            confidence: 'high', windowDays: 90, sourceEventCount: 4, anchorPointCount: 5,
-            minDurationSeconds: 180, maxDurationSeconds: 1_200, rSquared: 0.98, normalizedRmse: 0.03,
-          },
         }],
       },
     };
@@ -545,11 +537,127 @@ describe('TrainingWorkspaceComponent', () => {
     expect(text).toContain('FTP setting');
     expect(text).toContain('Cycling capacity evidence');
     expect(text).toContain('222 W');
-    expect(text).toContain('Modeled critical power');
-    expect(text).toContain('186 W');
-    expect(text).toContain('Recent efforts have not validated this FTP yet');
-    expect(text).toContain('model sits below the imported setting');
-    expect(text).toContain('does not show that fitness declined.');
+    expect(text).toContain('not a new Quantified Self estimate');
+    expect(text).not.toContain('Modeled critical power');
+    expect(text).not.toContain('186 W');
+  });
+
+  it('renders exact-type rolling power systems independently of Training sport visibility', async () => {
+    const asOfDayMs = Date.UTC(2026, 6, 20);
+    const powerSystemsEntry = (activityType: string, criticalPowerWatts: number) => {
+      const current = {
+        effectiveDayMs: asOfDayMs,
+        status: 'ready' as const,
+        reason: null,
+        estimatorVersion: 1,
+        activityType,
+        sourceFingerprint: `capacity-v1:${activityType}`,
+        criticalPower: { status: 'ready' as const, reason: null, value: criticalPowerWatts },
+        wPrime: { status: 'ready' as const, reason: null, value: 18_500 },
+        maximumPower: { status: 'ready' as const, reason: null, value: 1_200 },
+        diagnostics: {
+          sourceCount: 3,
+          historyStartDayMs: asOfDayMs - (30 * 24 * 60 * 60 * 1000),
+          historyEndDayMs: asOfDayMs - (24 * 60 * 60 * 1000),
+          historySpanDays: 29,
+          rejectedPointCount: 0,
+          criticalPowerAnchorCount: 8,
+          earlyCriticalPowerAnchorCount: 4,
+          longCriticalPowerAnchorCount: 3,
+          maximumPowerAnchorCount: 8,
+          criticalPowerNormalizedRmse: 0.02,
+          criticalPowerSpreadRatio: 0.01,
+          wPrimeSpreadRatio: 0.04,
+          criticalPowerLeaveOneOutSpreadRatio: 0.02,
+          wPrimeLeaveOneOutSpreadRatio: 0.08,
+          maximumPowerNormalizedRmse: 0.02,
+          maximumPowerLeaveOneOutSpreadRatio: 0.04,
+        },
+      };
+      return {
+        activityType,
+        current,
+        history: [{
+          effectiveDayMs: asOfDayMs - (7 * 24 * 60 * 60 * 1000),
+          status: 'ready' as const,
+          reason: null,
+          criticalPowerStatus: 'ready' as const,
+          criticalPowerWatts: criticalPowerWatts - 5,
+          wPrimeStatus: 'ready' as const,
+          wPrimeJoules: 18_000,
+          maximumPowerStatus: 'ready' as const,
+          maximumPowerWatts: 1_180,
+        }, {
+          effectiveDayMs: asOfDayMs,
+          status: current.status,
+          reason: current.reason,
+          criticalPowerStatus: current.criticalPower.status,
+          criticalPowerWatts: current.criticalPower.value,
+          wPrimeStatus: current.wPrime.status,
+          wPrimeJoules: current.wPrime.value,
+          maximumPowerStatus: current.maximumPower.status,
+          maximumPowerWatts: current.maximumPower.value,
+        }],
+        evidenceCounts: {
+          candidateActivityCount: 4,
+          usableCurveActivityCount: 3,
+          excludedActivityCount: 1,
+        },
+      };
+    };
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: { asOfDayMs, currentWindowDays: 28, baselineWindowDays: 84, disciplines: [] },
+      trainingPowerSystemsStatus: 'ready',
+      trainingPowerSystems: {
+        dayBoundary: 'UTC',
+        asOfDayMs,
+        policyVersion: 1,
+        windowDays: 42,
+        historyDays: 84,
+        cadence: 'workout-date',
+        excludesEffectiveDay: true,
+        excludesMergedEvents: true,
+        activityTypes: [
+          powerSystemsEntry('Cycling', 260),
+          powerSystemsEntry('Rowing', 280),
+        ],
+      },
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        {
+          provide: AppAuthService,
+          useValue: { user$: of({ uid: 'user-1', settings: { trainingSettings: { visibleDisciplines: ['swimming'] } } }) },
+        },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    expect(component.trainingPowerSystemsActivityTypes.map(item => item.activityType)).toEqual(['Cycling', 'Rowing']);
+    expect(component.selectedTrainingPowerSystemsActivityType).toBe('Cycling');
+    expect(fixture.nativeElement.querySelectorAll('.training-power-systems-trend')).toHaveLength(3);
+    expect(fixture.nativeElement.textContent).toContain('260 W');
+    expect(fixture.nativeElement.textContent).not.toContain('All sports');
+
+    fixture.debugElement.query(By.css('mat-select')).triggerEventHandler('selectionChange', { value: 'Rowing' });
+    fixture.detectChanges();
+
+    expect(component.selectedTrainingPowerSystems?.activityType).toBe('Rowing');
+    expect(fixture.nativeElement.textContent).toContain('Rowing');
+    expect(fixture.nativeElement.textContent).toContain('280 W');
+    expect(fixture.nativeElement.textContent).toContain('not TSS, FTP, fitness, fatigue, or readiness');
   });
 
   it('filters every sport-specific module while leaving global training sections visible', async () => {
@@ -576,19 +684,9 @@ describe('TrainingWorkspaceComponent', () => {
         disciplines: [
           {
             discipline: 'running', ftpSetting: null, importedVo2Max: null,
-            modeledCriticalPower: {
-              status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-              confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-              minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-            },
           },
           {
             discipline: 'cycling', ftpSetting: null, importedVo2Max: null,
-            modeledCriticalPower: {
-              status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-              confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-              minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-            },
           },
         ],
       },

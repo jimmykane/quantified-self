@@ -118,14 +118,18 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
-    expect(trainingSection?.content).toContain('**Power-system strain** appears in an individual workout’s Performance area');
+    expect(trainingSection?.content).toContain('**Power systems** estimates current CP, W′, and Pmax');
+    expect(trainingSection?.content).toContain('preceding 42 completed UTC days');
+    expect(trainingSection?.content).toContain('Parsing a workout no longer generates CP, W′, Pmax, or power-system strain');
+    expect(trainingSection?.content).toContain('original continuous power stream');
+    expect(trainingSection?.content).not.toContain('asks for reprocessing');
     expect(trainingSection?.content).toContain('Weeks without a comparable session explain their primary exclusions');
     expect(trainingSection?.content).toContain('intentional easing, terrain changes, coasting, or a pace change');
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
     expect(trainingSection?.content).toContain('**Sports shown**');
     expect(trainingSection?.content).toContain('activities in the latest 28 days and any saved sport benchmark');
     expect(trainingSection?.content).toContain('**Use automatic selection**');
-    expect(trainingSection?.content).toContain('does not filter the overall comparison or **What drove this**');
+    expect(trainingSection?.content).toContain('does not filter the overall comparison, **What drove this**, or **Power systems**');
     expect(trainingSection?.content).toContain('Mountain Biking groups');
     expect(trainingSection?.content).toContain('one activity leg at a time');
     expect(trainingSection?.content).toContain('shown first as quick picks');
@@ -156,11 +160,10 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('does not infer Critical Swim Speed');
     expect(trainingSection?.content).toContain('zero-session result');
     expect(trainingSection?.content).toContain('Imported VO₂ max');
-    expect(trainingSection?.content).toContain('aggregate best 3–20 minute power curve');
     expect(trainingSection?.content).toContain("95% of that activity's 20-minute best");
-    expect(trainingSection?.content).toContain('without large interpolation gaps');
-    expect(trainingSection?.content).toContain('inconsistent body weights');
-    expect(trainingSection?.content).toContain('does not by itself mean fitness declined');
+    expect(trainingSection?.content).toContain('The selector has no all-sports value');
+    expect(trainingSection?.content).toContain('partial, insufficient, poor-fit, unstable, and invalid evidence');
+    expect(trainingSection?.content).not.toContain('aggregate best 3–20 minute power curve');
     expect(trainingSection?.content).toContain('never a readiness score');
     expect(trainingSection?.links).toContainEqual({
       label: 'Open Training',

@@ -1481,7 +1481,6 @@ describe('dashboard-tile-view-model.helper', () => {
           disciplines: [{
             discipline: 'running',
             ftpSetting: null,
-            modeledCriticalPower: null,
             importedVo2Max: {
               value: 54,
               sourceKey: 'garmin / watch',

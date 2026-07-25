@@ -22,7 +22,6 @@ import {
     LapTypes,
     ActivityTypeGroups,
     DataPowerCurve,
-    DataThreeDimensionalStrainEvidence,
 } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -572,7 +571,7 @@ describe('EventCardComponent', () => {
         expect(component.hasCadencePowerFlag()).toBe(false);
     });
 
-    it('shows the performance area for persisted v2 power-system strain evidence', () => {
+    it('does not expose the performance area for historical strain evidence alone', () => {
         const threeDimensionalEvidence = {
             protocolVersion: 2,
             sourceFingerprint: 'three-dimensional-strain-v2:0000000000000001',
@@ -613,16 +612,23 @@ describe('EventCardComponent', () => {
         component.selectedActivitiesInstant.set([{
             ...mockActivity,
             type: ActivityTypes.Rowing,
-            getStat: (type: string) => type === DataThreeDimensionalStrainEvidence.type
+            getStat: (type: string) => type === 'Three Dimensional Strain Evidence'
                 ? { getValue: () => threeDimensionalEvidence }
                 : null,
         } as ActivityInterface]);
 
-        expect(component.hasPowerSystemStrainFlag()).toBe(true);
-        expect(component.hasPerformanceChartsFlag()).toBe(true);
+        expect(component.hasPerformanceChartsFlag()).toBe(false);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).not.toContain('Power-system strain');
     });
 
-    it('shows the performance area for a historic power curve that needs strain evidence reprocessing', () => {
+    it('shows a historic power curve without promising strain reprocessing', () => {
+        mockPerformanceCurveDataService.getAvailability.mockReturnValue({
+            hasPowerCurve: true,
+            hasDurability: false,
+            hasCadencePower: false,
+            hasAny: true,
+        });
         component.selectedActivitiesInstant.set([{
             ...mockActivity,
             type: ActivityTypes.Rowing,
@@ -631,8 +637,10 @@ describe('EventCardComponent', () => {
                 : null,
         } as ActivityInterface]);
 
-        expect(component.hasPowerSystemStrainFlag()).toBe(true);
+        expect(component.hasPowerCurveFlag()).toBe(true);
         expect(component.hasPerformanceChartsFlag()).toBe(true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).not.toContain('Power-system strain');
     });
 
     it('should compute hasDevicesFlag as false when no devices', () => {

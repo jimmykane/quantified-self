@@ -27,8 +27,10 @@ import {
     DataSwimDistance,
     DataSwimPaceAvg,
     DataVO2Max,
+    fitThreeDimensionalCapacityModel,
     normalizeDurabilityEvidenceValue,
-    samplePowerCurveAtDuration,
+    type DatedActivityPowerCurve,
+    type ThreeDimensionalCapacityFit,
 } from '@sports-alliance/sports-lib';
 import {
     buildPowerCurveEnvelope,
@@ -44,6 +46,9 @@ import {
     DERIVED_METRICS_COLLECTION_ID,
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
+    DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
     DERIVED_METRICS_ENTRY_TYPES,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS,
@@ -79,6 +84,11 @@ import {
     type DerivedTrainingCapacityImportedMetric,
     type DerivedTrainingCapacityImportedMetricKind,
     type DerivedTrainingCapacityMetricPayload,
+    type DerivedTrainingPowerSystemsActivityType,
+    type DerivedTrainingPowerSystemsComponent,
+    type DerivedTrainingPowerSystemsHistoryPoint,
+    type DerivedTrainingPowerSystemsMetricPayload,
+    type DerivedTrainingPowerSystemsSnapshot,
     type DerivedTrainingBuildDurabilityComparison,
     type DerivedTrainingDiscipline,
     type DerivedTrainingDisciplineSummary,
@@ -196,10 +206,7 @@ const TRAINING_RECOVERY_CURRENT_WINDOW_DAYS = 28;
 const TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS = 84;
 const TRAINING_READINESS_HISTORY_DAYS = 14 as const;
 const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
-const TRAINING_CAPACITY_MODEL_WINDOW_DAYS = 90 as const;
-const TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS = [180, 300, 600, 900, 1200] as const;
 const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
-const TRAINING_CAPACITY_MAX_IMPLIED_WEIGHT_RATIO = 1.05;
 const POWER_CURVE_MAX_STORED_POINTS = 128;
 const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600] as const;
 type PowerCurveDurationRange = Exclude<DerivedPowerCurveRange, 'thisWeek' | 'thisMonth' | 'all'>;
@@ -317,6 +324,7 @@ interface DerivedMetricBuildExecutionContext {
     getEfficiencyTrendBuildResult: () => DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload>;
     getTrainingSummaryBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload>;
     getTrainingCapacityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload>;
+    getTrainingPowerSystemsBuildResult: () => DerivedMetricBuildResult<DerivedTrainingPowerSystemsMetricPayload>;
     getPowerCurveBuildResult: () => DerivedMetricBuildResult<DerivedPowerCurveMetricPayload>;
     getTrainingExplanationBuildResult: () => DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload>;
     getTrainingDurabilityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload>;
@@ -1499,179 +1507,6 @@ function buildTrainingCapacityImportedMetric(
     };
 }
 
-function deserializeTrainingCapacityPowerCurve(series: DerivedPowerCurvePointSeries): PowerCurvePoint[] {
-    const points: PowerCurvePoint[] = [];
-    for (let index = 0; index < series.length; index += 3) {
-        const duration = toFinitePositiveNumber(series[index]);
-        const power = toFinitePositiveNumber(series[index + 1]);
-        const wattsPerKg = toFinitePositiveNumber(series[index + 2]);
-        if (duration === null || power === null) {
-            continue;
-        }
-        points.push({
-            duration,
-            power,
-            ...(wattsPerKg !== null ? { wattsPerKg } : {}),
-        });
-    }
-    return points.sort((left, right) => left.duration - right.duration);
-}
-
-function interpolateTrainingCapacityPowerCurveValue(
-    points: readonly PowerCurvePoint[],
-    duration: number,
-    key: 'power' | 'wattsPerKg',
-): number | null {
-    return samplePowerCurveAtDuration(points, duration, { key });
-}
-
-interface CriticalPowerModelFit {
-    criticalPower: number;
-    wPrime: number;
-    rSquared: number;
-    normalizedRmse: number;
-}
-
-function fitTrainingCapacityCriticalPowerModel(
-    samples: readonly { duration: number; value: number }[],
-): CriticalPowerModelFit | null {
-    if (samples.length < 3) {
-        return null;
-    }
-    const xValues = samples.map(sample => 1 / sample.duration);
-    const meanX = xValues.reduce((sum, value) => sum + value, 0) / samples.length;
-    const meanY = samples.reduce((sum, sample) => sum + sample.value, 0) / samples.length;
-    const covariance = samples.reduce((sum, sample, index) => (
-        sum + ((xValues[index] - meanX) * (sample.value - meanY))
-    ), 0);
-    const varianceX = xValues.reduce((sum, value) => sum + Math.pow(value - meanX, 2), 0);
-    if (!Number.isFinite(varianceX) || varianceX <= 0 || !Number.isFinite(meanY) || meanY <= 0) {
-        return null;
-    }
-
-    const wPrime = covariance / varianceX;
-    const criticalPower = meanY - (wPrime * meanX);
-    if (!Number.isFinite(wPrime) || !Number.isFinite(criticalPower) || wPrime <= 0 || criticalPower <= 0) {
-        return null;
-    }
-
-    const residualSumSquares = samples.reduce((sum, sample) => {
-        const predicted = criticalPower + (wPrime / sample.duration);
-        return sum + Math.pow(sample.value - predicted, 2);
-    }, 0);
-    const totalSumSquares = samples.reduce((sum, sample) => sum + Math.pow(sample.value - meanY, 2), 0);
-    if (!Number.isFinite(residualSumSquares) || totalSumSquares <= 0) {
-        return null;
-    }
-
-    const rSquared = 1 - (residualSumSquares / totalSumSquares);
-    const normalizedRmse = Math.sqrt(residualSumSquares / samples.length) / meanY;
-    if (!Number.isFinite(rSquared) || !Number.isFinite(normalizedRmse)) {
-        return null;
-    }
-    return { criticalPower, wPrime, rSquared, normalizedRmse };
-}
-
-function buildModeledCriticalPower(
-    snapshot: DerivedPowerCurveRangeSnapshot | null | undefined,
-): DerivedTrainingCapacityMetricPayload['disciplines'][number]['modeledCriticalPower'] {
-    const points = deserializeTrainingCapacityPowerCurve(snapshot?.bestPoints || []);
-    const minDurationSeconds = points.length ? points[0].duration : null;
-    const maxDurationSeconds = points.length ? points[points.length - 1].duration : null;
-    const wattAnchors = TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.flatMap((duration) => {
-        const value = interpolateTrainingCapacityPowerCurveValue(points, duration, 'power');
-        return value === null ? [] : [{ duration, value }];
-    });
-    const base = {
-        windowDays: TRAINING_CAPACITY_MODEL_WINDOW_DAYS,
-        sourceEventCount: snapshot?.matchedEventCount || 0,
-        anchorPointCount: wattAnchors.length,
-        minDurationSeconds,
-        maxDurationSeconds,
-    } as const;
-    if (wattAnchors.length !== TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.length) {
-        return {
-            ...base,
-            status: 'insufficient-evidence',
-            valueWatts: null,
-            valueWattsPerKg: null,
-            wPrimeJoules: null,
-            confidence: null,
-            rSquared: null,
-            normalizedRmse: null,
-        };
-    }
-
-    const fit = fitTrainingCapacityCriticalPowerModel(wattAnchors);
-    const lowestAnchorPower = Math.min(...wattAnchors.map(anchor => anchor.value));
-    if (!fit || fit.criticalPower >= lowestAnchorPower) {
-        return {
-            ...base,
-            status: 'poor-fit',
-            valueWatts: null,
-            valueWattsPerKg: null,
-            wPrimeJoules: null,
-            confidence: 'low',
-            rSquared: fit ? toRoundedNumber(fit.rSquared, 4) : null,
-            normalizedRmse: fit ? toRoundedNumber(fit.normalizedRmse, 4) : null,
-        };
-    }
-
-    const sourceEventCount = snapshot?.matchedEventCount || 0;
-    const confidence = sourceEventCount >= 3 && fit.rSquared >= 0.97 && fit.normalizedRmse <= 0.04
-        ? 'high'
-        : sourceEventCount >= 1 && fit.rSquared >= 0.9 && fit.normalizedRmse <= 0.07
-            ? 'medium'
-            : 'low';
-    if (confidence === 'low') {
-        return {
-            ...base,
-            status: 'poor-fit',
-            valueWatts: null,
-            valueWattsPerKg: null,
-            wPrimeJoules: null,
-            confidence,
-            rSquared: toRoundedNumber(fit.rSquared, 4),
-            normalizedRmse: toRoundedNumber(fit.normalizedRmse, 4),
-        };
-    }
-
-    const wattsPerKgAnchors = TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.flatMap((duration) => {
-        const value = interpolateTrainingCapacityPowerCurveValue(points, duration, 'wattsPerKg');
-        return value === null ? [] : [{ duration, value }];
-    });
-    const wattsPerKgFit = wattsPerKgAnchors.length === TRAINING_CAPACITY_MODEL_ANCHOR_DURATIONS_SECONDS.length
-        ? fitTrainingCapacityCriticalPowerModel(wattsPerKgAnchors)
-        : null;
-    const impliedWeights = wattsPerKgAnchors.map((anchor, index) => (
-        wattAnchors[index].value / anchor.value
-    ));
-    const minImpliedWeight = impliedWeights.length ? Math.min(...impliedWeights) : null;
-    const maxImpliedWeight = impliedWeights.length ? Math.max(...impliedWeights) : null;
-    const hasConsistentImpliedWeight = minImpliedWeight !== null
-        && maxImpliedWeight !== null
-        && minImpliedWeight > 0
-        && (maxImpliedWeight / minImpliedWeight) <= TRAINING_CAPACITY_MAX_IMPLIED_WEIGHT_RATIO;
-    const wattsPerKgFitIsReliable = !!wattsPerKgFit
-        && hasConsistentImpliedWeight
-        && wattsPerKgFit.criticalPower < Math.min(...wattsPerKgAnchors.map(anchor => anchor.value))
-        && wattsPerKgFit.rSquared >= 0.9
-        && wattsPerKgFit.normalizedRmse <= 0.07;
-
-    return {
-        ...base,
-        status: 'ready',
-        valueWatts: Math.round(fit.criticalPower),
-        valueWattsPerKg: wattsPerKgFitIsReliable
-            ? toRoundedNumber(wattsPerKgFit.criticalPower, 2)
-            : null,
-        wPrimeJoules: Math.round(fit.wPrime),
-        confidence,
-        rSquared: toRoundedNumber(fit.rSquared, 4),
-        normalizedRmse: toRoundedNumber(fit.normalizedRmse, 4),
-    };
-}
-
 function isTrainingCapacitySessionDerivedFtp(
     eventData: Record<string, unknown>,
     ftp: number,
@@ -1687,7 +1522,6 @@ function isTrainingCapacitySessionDerivedFtp(
 
 export function buildTrainingCapacityMetricPayload(
     activities: readonly DerivedTrainingActivitySource[],
-    powerCurvePayload: DerivedPowerCurveMetricPayload,
     nowMs = Date.now(),
 ): DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> {
     const observations: Record<DerivedPowerCurveScope, {
@@ -1722,9 +1556,6 @@ export function buildTrainingCapacityMetricPayload(
         discipline,
         ftpSetting: buildTrainingCapacityImportedMetric('ftp-setting', observations[discipline].ftpSetting),
         importedVo2Max: buildTrainingCapacityImportedMetric('vo2-max', observations[discipline].importedVo2Max),
-        modeledCriticalPower: buildModeledCriticalPower(
-            powerCurvePayload.scopes[discipline].ranges['90d'],
-        ),
     }));
 
     return {
@@ -1734,6 +1565,306 @@ export function buildTrainingCapacityMetricPayload(
             asOfDayMs: resolveUtcDayStartMs(nowMs),
             excludesMergedEvents: true,
             disciplines,
+        },
+    };
+}
+
+interface TrainingPowerSystemsCandidate {
+    activityType: ActivityTypes;
+    sourceId: string;
+    eventId: string;
+    startDayMs: number;
+    datedCurve: DatedActivityPowerCurve | null;
+}
+
+type ThreeDimensionalCapacityFitter = typeof fitThreeDimensionalCapacityModel;
+
+function resolveUtcDateKey(dayMs: number): string {
+    return new Date(dayMs).toISOString().slice(0, 10);
+}
+
+function resolveUtcDateKeyDayMs(dateKey: string | null): number | null {
+    if (!dateKey) {
+        return null;
+    }
+    const parsed = Date.parse(`${dateKey}T00:00:00.000Z`);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function prepareTrainingPowerSystemsCandidate(
+    activity: DerivedTrainingActivitySource,
+): TrainingPowerSystemsCandidate | null {
+    let activityType: ActivityTypes | null = null;
+    try {
+        activityType = ActivityTypesHelper.resolveActivityType(activity.activityData.type);
+    } catch {
+        return null;
+    }
+    if (!activityType) {
+        return null;
+    }
+    const sourceId = `${activity.activityId || ''}`.trim();
+    const points = filterPowerCurvePointsByMaxDuration(
+        normalizePowerCurvePoints(resolveRawStatValue(activity.activityData, POWER_CURVE_STAT_TYPE)).points,
+        resolvePowerCurveDurationSeconds(activity.activityData),
+    );
+    return {
+        activityType,
+        sourceId,
+        eventId: activity.eventId,
+        startDayMs: activity.startDayMs,
+        datedCurve: sourceId && points.length
+            ? {
+                sourceId,
+                activityType,
+                date: resolveUtcDateKey(activity.startDayMs),
+                powerCurve: points,
+            }
+            : null,
+    };
+}
+
+function serializeTrainingPowerSystemsComponent(
+    component: ThreeDimensionalCapacityFit['criticalPower'],
+): DerivedTrainingPowerSystemsComponent {
+    const value = component.status === 'ready'
+        && Number.isFinite(component.value)
+        && (component.value as number) > 0
+        ? component.value
+        : null;
+    if (component.status === 'ready' && value === null) {
+        return {
+            status: 'invalid-input',
+            reason: 'invalid-source',
+            value: null,
+        };
+    }
+    return {
+        status: component.status,
+        reason: component.reason,
+        value,
+    };
+}
+
+function isTrainingPowerSystemsFitContractConsistent(
+    fit: ThreeDimensionalCapacityFit,
+    activityType: ActivityTypes,
+    effectiveDayMs: number,
+    criticalPower: DerivedTrainingPowerSystemsComponent,
+    wPrime: DerivedTrainingPowerSystemsComponent,
+    maximumPower: DerivedTrainingPowerSystemsComponent,
+): boolean {
+    if (
+        fit.effectiveDate !== resolveUtcDateKey(effectiveDayMs)
+        || (fit.diagnostics.sourceCount > 0 && fit.activityType !== activityType)
+    ) {
+        return false;
+    }
+    if (fit.status === 'ready') {
+        return fit.reason === null
+            && criticalPower.status === 'ready'
+            && wPrime.status === 'ready'
+            && maximumPower.status === 'ready';
+    }
+    if (fit.status === 'partial') {
+        return fit.reason !== null
+            && criticalPower.status === 'ready'
+            && wPrime.status === 'ready'
+            && maximumPower.status !== 'ready'
+            && maximumPower.reason === fit.reason;
+    }
+    const expectedComponentStatus = fit.status;
+    return fit.reason !== null
+        && criticalPower.status === expectedComponentStatus
+        && wPrime.status === expectedComponentStatus
+        && maximumPower.status === expectedComponentStatus
+        && criticalPower.reason === fit.reason
+        && wPrime.reason === fit.reason
+        && maximumPower.reason === fit.reason;
+}
+
+function serializeTrainingPowerSystemsFit(
+    fit: ThreeDimensionalCapacityFit,
+    activityType: ActivityTypes,
+    effectiveDayMs: number,
+): DerivedTrainingPowerSystemsSnapshot {
+    const criticalPower = serializeTrainingPowerSystemsComponent(fit.criticalPower);
+    const wPrime = serializeTrainingPowerSystemsComponent(fit.wPrime);
+    const maximumPower = serializeTrainingPowerSystemsComponent(fit.maximumPower);
+    const hasInvalidFitContract = !isTrainingPowerSystemsFitContractConsistent(
+        fit,
+        activityType,
+        effectiveDayMs,
+        criticalPower,
+        wPrime,
+        maximumPower,
+    );
+    const invalidComponent: DerivedTrainingPowerSystemsComponent = {
+        status: 'invalid-input',
+        reason: 'invalid-source',
+        value: null,
+    };
+    return {
+        effectiveDayMs,
+        status: hasInvalidFitContract ? 'invalid-input' : fit.status,
+        reason: hasInvalidFitContract ? 'invalid-source' : fit.reason,
+        estimatorVersion: fit.estimatorVersion,
+        activityType,
+        sourceFingerprint: fit.sourceFingerprint,
+        criticalPower: hasInvalidFitContract ? invalidComponent : criticalPower,
+        wPrime: hasInvalidFitContract ? { ...invalidComponent } : wPrime,
+        maximumPower: hasInvalidFitContract ? { ...invalidComponent } : maximumPower,
+        diagnostics: {
+            sourceCount: fit.diagnostics.sourceCount,
+            historyStartDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyStartDate),
+            historyEndDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyEndDate),
+            historySpanDays: fit.diagnostics.historySpanDays,
+            rejectedPointCount: fit.envelope.rejectedPointCount,
+            criticalPowerAnchorCount: fit.diagnostics.criticalPowerAnchorCount,
+            earlyCriticalPowerAnchorCount: fit.diagnostics.earlyCriticalPowerAnchorCount,
+            longCriticalPowerAnchorCount: fit.diagnostics.longCriticalPowerAnchorCount,
+            maximumPowerAnchorCount: fit.diagnostics.maximumPowerAnchorCount,
+            criticalPowerNormalizedRmse: fit.diagnostics.criticalPowerNormalizedRmse,
+            criticalPowerSpreadRatio: fit.diagnostics.criticalPowerSpreadRatio,
+            wPrimeSpreadRatio: fit.diagnostics.wPrimeSpreadRatio,
+            criticalPowerLeaveOneOutSpreadRatio: fit.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
+            wPrimeLeaveOneOutSpreadRatio: fit.diagnostics.wPrimeLeaveOneOutSpreadRatio,
+            maximumPowerNormalizedRmse: fit.diagnostics.maximumPowerNormalizedRmse,
+            maximumPowerLeaveOneOutSpreadRatio: fit.diagnostics.maximumPowerLeaveOneOutSpreadRatio,
+        },
+    };
+}
+
+function serializeTrainingPowerSystemsHistoryPoint(
+    snapshot: DerivedTrainingPowerSystemsSnapshot,
+): DerivedTrainingPowerSystemsHistoryPoint {
+    return {
+        effectiveDayMs: snapshot.effectiveDayMs,
+        status: snapshot.status,
+        reason: snapshot.reason,
+        criticalPowerStatus: snapshot.criticalPower.status,
+        criticalPowerWatts: snapshot.criticalPower.value,
+        wPrimeStatus: snapshot.wPrime.status,
+        wPrimeJoules: snapshot.wPrime.value,
+        maximumPowerStatus: snapshot.maximumPower.status,
+        maximumPowerWatts: snapshot.maximumPower.value,
+    };
+}
+
+export function buildTrainingPowerSystemsMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs = Date.now(),
+    fitCapacityModel: ThreeDimensionalCapacityFitter = fitThreeDimensionalCapacityModel,
+): DerivedMetricBuildResult<DerivedTrainingPowerSystemsMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const historyStartDayMs = asOfDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS * DAY_MS);
+    const earliestInputDayMs = historyStartDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
+    const candidates = activities
+        .filter(activity => (
+            Number.isFinite(activity.startDayMs)
+            && activity.startMs <= nowMs
+            && activity.startDayMs >= earliestInputDayMs
+            && activity.startDayMs <= asOfDayMs
+        ))
+        .map(prepareTrainingPowerSystemsCandidate)
+        .filter((candidate): candidate is TrainingPowerSystemsCandidate => candidate !== null)
+        .sort((left, right) => (
+            left.startDayMs - right.startDayMs
+            || left.activityType.localeCompare(right.activityType)
+            || left.sourceId.localeCompare(right.sourceId)
+            || left.eventId.localeCompare(right.eventId)
+        ));
+    const discoveredActivityTypes = [...new Set(
+        candidates
+            .filter(candidate => (
+                candidate.datedCurve !== null
+                && candidate.startDayMs >= historyStartDayMs
+                && candidate.startDayMs <= asOfDayMs
+            ))
+            .map(candidate => candidate.activityType),
+    )].sort((left, right) => left.localeCompare(right));
+    const fitCache = new Map<string, DerivedTrainingPowerSystemsSnapshot>();
+
+    const fitForActivityTypeAndDay = (
+        activityType: ActivityTypes,
+        effectiveDayMs: number,
+    ): DerivedTrainingPowerSystemsSnapshot => {
+        const cacheKey = `${activityType}\u0000${effectiveDayMs}`;
+        const cached = fitCache.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+        const windowStartDayMs = effectiveDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
+        const curves = candidates
+            .filter(candidate => (
+                candidate.activityType === activityType
+                && candidate.datedCurve !== null
+                && candidate.startDayMs >= windowStartDayMs
+                && candidate.startDayMs < effectiveDayMs
+            ))
+            .map(candidate => candidate.datedCurve as DatedActivityPowerCurve);
+        const snapshot = serializeTrainingPowerSystemsFit(
+            fitCapacityModel(curves, { effectiveDate: resolveUtcDateKey(effectiveDayMs) }),
+            activityType,
+            effectiveDayMs,
+        );
+        fitCache.set(cacheKey, snapshot);
+        return snapshot;
+    };
+
+    const activityTypes: DerivedTrainingPowerSystemsActivityType[] = discoveredActivityTypes.map((activityType) => {
+        const currentWindowStartDayMs = asOfDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
+        const currentCandidates = candidates.filter(candidate => (
+            candidate.activityType === activityType
+            && candidate.startDayMs >= currentWindowStartDayMs
+            && candidate.startDayMs < asOfDayMs
+        ));
+        const effectiveDays = [...new Set([
+            ...candidates
+                .filter(candidate => (
+                    candidate.activityType === activityType
+                    && candidate.datedCurve !== null
+                    && candidate.startDayMs >= historyStartDayMs
+                    && candidate.startDayMs <= asOfDayMs
+                ))
+                .map(candidate => candidate.startDayMs),
+            asOfDayMs,
+        ])].sort((left, right) => left - right);
+        const current = fitForActivityTypeAndDay(activityType, asOfDayMs);
+        return {
+            activityType,
+            current,
+            history: effectiveDays.map(effectiveDayMs => (
+                serializeTrainingPowerSystemsHistoryPoint(
+                    fitForActivityTypeAndDay(activityType, effectiveDayMs),
+                )
+            )),
+            evidenceCounts: {
+                candidateActivityCount: currentCandidates.length,
+                usableCurveActivityCount: current.diagnostics.sourceCount,
+                excludedActivityCount: currentCandidates.length - current.diagnostics.sourceCount,
+            },
+        };
+    });
+    const sourceEventCount = new Set(
+        candidates
+            .filter(candidate => discoveredActivityTypes.includes(candidate.activityType))
+            .map(candidate => candidate.eventId)
+            .filter(Boolean),
+    ).size;
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+            windowDays: DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
+            historyDays: DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
+            cadence: 'workout-date',
+            excludesEffectiveDay: true,
+            excludesMergedEvents: true,
+            activityTypes,
         },
     };
 }
@@ -4201,6 +4332,10 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => context.getTrainingCapacityBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.TrainingPowerSystems]: {
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        build: (context) => context.getTrainingPowerSystemsBuildResult(),
+    },
     [DERIVED_METRIC_KINDS.PowerCurve]: {
         sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => context.getPowerCurveBuildResult(),
@@ -4250,6 +4385,7 @@ function createDerivedMetricBuildExecutionContext(
     let efficiencyTrendBuildResultCache: DerivedMetricBuildResult<DerivedEfficiencyTrendMetricPayload> | null = null;
     let trainingSummaryBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSummaryMetricPayload> | null = null;
     let trainingCapacityBuildResultCache: DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> | null = null;
+    let trainingPowerSystemsBuildResultCache: DerivedMetricBuildResult<DerivedTrainingPowerSystemsMetricPayload> | null = null;
     let powerCurveBuildResultCache: DerivedMetricBuildResult<DerivedPowerCurveMetricPayload> | null = null;
     let trainingExplanationBuildResultCache: DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload> | null = null;
     let trainingDurabilityBuildResultCache: DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload> | null = null;
@@ -4327,12 +4463,16 @@ function createDerivedMetricBuildExecutionContext(
         if (trainingCapacityBuildResultCache) {
             return trainingCapacityBuildResultCache;
         }
-        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(
-            trainingActivities,
-            getPowerCurveBuildResult().payload,
-            nowMs,
-        );
+        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
         return trainingCapacityBuildResultCache;
+    };
+
+    const getTrainingPowerSystemsBuildResult = (): DerivedMetricBuildResult<DerivedTrainingPowerSystemsMetricPayload> => {
+        if (trainingPowerSystemsBuildResultCache) {
+            return trainingPowerSystemsBuildResultCache;
+        }
+        trainingPowerSystemsBuildResultCache = buildTrainingPowerSystemsMetricPayload(trainingActivities, nowMs);
+        return trainingPowerSystemsBuildResultCache;
     };
 
     const getTrainingExplanationBuildResult = (): DerivedMetricBuildResult<DerivedTrainingExplanationMetricPayload> => {
@@ -4404,6 +4544,7 @@ function createDerivedMetricBuildExecutionContext(
         getEfficiencyTrendBuildResult,
         getTrainingSummaryBuildResult,
         getTrainingCapacityBuildResult,
+        getTrainingPowerSystemsBuildResult,
         getPowerCurveBuildResult,
         getTrainingExplanationBuildResult,
         getTrainingDurabilityBuildResult,

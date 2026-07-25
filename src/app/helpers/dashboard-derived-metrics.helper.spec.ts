@@ -276,7 +276,7 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(resolveDashboardTrainingSummaryContext({ ...payload, excludesMergedEvents: false })).toBeNull();
   });
 
-  it('normalizes imported capacity markers separately from modeled critical power', () => {
+  it('normalizes imported capacity markers without a QS-owned power model', () => {
     const context = resolveDashboardTrainingCapacityContext({
       dayBoundary: 'UTC',
       asOfDayMs: Date.UTC(2026, 6, 13),
@@ -289,11 +289,6 @@ describe('dashboard-derived-metrics.helper', () => {
           firstSeenAtMs: Date.UTC(2026, 0, 1), lastSeenAtMs: Date.UTC(2026, 6, 12), observationCount: 14,
           previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
         },
-        modeledCriticalPower: {
-          status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-          confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-          minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-        },
       }, {
         discipline: 'cycling',
         ftpSetting: {
@@ -302,19 +297,12 @@ describe('dashboard-derived-metrics.helper', () => {
           previousValue: 215, previousAtMs: Date.UTC(2025, 9, 30), previousSourceKey: 'garmin', changePct: 3.26,
         },
         importedVo2Max: null,
-        modeledCriticalPower: {
-          status: 'ready', valueWatts: 240, valueWattsPerKg: 3.2, wPrimeJoules: 18_000,
-          confidence: 'high', windowDays: 90, sourceEventCount: 5, anchorPointCount: 5,
-          minDurationSeconds: 180, maxDurationSeconds: 1_200, rSquared: 0.99, normalizedRmse: 0.02,
-        },
       }],
     });
 
     expect(context?.disciplines[0].importedVo2Max?.value).toBe(55.9);
     expect(context?.disciplines[1].ftpSetting).toMatchObject({ value: 222, observationCount: 28 });
-    expect(context?.disciplines[1].modeledCriticalPower).toMatchObject({
-      status: 'ready', valueWatts: 240, confidence: 'high', sourceEventCount: 5,
-    });
+    expect(context?.disciplines[1]).not.toHaveProperty('modeledCriticalPower');
   });
 
   it('rejects malformed capacity snapshots so they can self-heal', () => {
@@ -322,11 +310,6 @@ describe('dashboard-derived-metrics.helper', () => {
       discipline,
       ftpSetting: null,
       importedVo2Max: null,
-      modeledCriticalPower: {
-        status: 'insufficient-evidence', valueWatts: null, valueWattsPerKg: null, wPrimeJoules: null,
-        confidence: null, windowDays: 90, sourceEventCount: 0, anchorPointCount: 0,
-        minDurationSeconds: null, maxDurationSeconds: null, rSquared: null, normalizedRmse: null,
-      },
     });
 
     expect(resolveDashboardTrainingCapacityContext({
@@ -337,42 +320,28 @@ describe('dashboard-derived-metrics.helper', () => {
       dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
       disciplines: [emptyDiscipline('running'), {
         ...emptyDiscipline('cycling'),
-        modeledCriticalPower: {
-          ...emptyDiscipline('cycling').modeledCriticalPower,
-          status: 'ready', valueWatts: 240, confidence: 'low',
-        },
+        ftpSetting: { kind: 'ftp-setting', value: -1 },
       }],
     })).toBeNull();
     expect(resolveDashboardTrainingCapacityContext({
       dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
       disciplines: [{
         ...emptyDiscipline('running'),
-        modeledCriticalPower: {
-          ...emptyDiscipline('running').modeledCriticalPower,
-          valueWatts: 200,
-        },
+        importedVo2Max: { kind: 'vo2-max', value: Number.NaN },
       }, emptyDiscipline('cycling')],
     })).toBeNull();
     expect(resolveDashboardTrainingCapacityContext({
       dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
       disciplines: [emptyDiscipline('running'), {
         ...emptyDiscipline('cycling'),
-        modeledCriticalPower: {
-          status: 'ready', valueWatts: 240, valueWattsPerKg: null, wPrimeJoules: 18_000,
-          confidence: 'high', windowDays: 90, sourceEventCount: 1, anchorPointCount: 5,
-          minDurationSeconds: 180, maxDurationSeconds: 1_200, rSquared: 0.99, normalizedRmse: 0.02,
-        },
+        modeledCriticalPower: { status: 'ready' },
       }],
     })).toBeNull();
     expect(resolveDashboardTrainingCapacityContext({
       dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 13), excludesMergedEvents: true,
       disciplines: [emptyDiscipline('running'), {
         ...emptyDiscipline('cycling'),
-        modeledCriticalPower: {
-          ...emptyDiscipline('cycling').modeledCriticalPower,
-          minDurationSeconds: 1_200,
-          maxDurationSeconds: 180,
-        },
+        ftpSetting: undefined,
       }],
     })).toBeNull();
   });

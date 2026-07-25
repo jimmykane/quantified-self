@@ -55,6 +55,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingSummary: null,
     trainingBuildComparison: null,
     trainingCapacity: null,
+    trainingPowerSystems: null,
     trainingExplanation: null,
     trainingDurability: null,
     trainingReadiness: null,
@@ -76,6 +77,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingSummaryStatus: 'missing',
     trainingBuildComparisonStatus: 'missing',
     trainingCapacityStatus: 'missing',
+    trainingPowerSystemsStatus: 'missing',
     trainingExplanationStatus: 'missing',
     trainingDurabilityStatus: 'missing',
     trainingReadinessStatus: 'missing',
@@ -391,27 +393,13 @@ describe('DashboardDerivedMetricsService', () => {
     const uid = 'user-1';
     const today = new Date();
     const asOfDayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-    const emptyModel = {
-      status: 'insufficient-evidence' as const,
-      valueWatts: null,
-      valueWattsPerKg: null,
-      wPrimeJoules: null,
-      confidence: null,
-      windowDays: 90,
-      sourceEventCount: 0,
-      anchorPointCount: 0,
-      minDurationSeconds: null,
-      maxDurationSeconds: null,
-      rSquared: null,
-      normalizedRmse: null,
-    };
     const validPayload = {
       dayBoundary: 'UTC',
       asOfDayMs,
       excludesMergedEvents: true,
       disciplines: [
-        { discipline: 'running', ftpSetting: null, importedVo2Max: null, modeledCriticalPower: emptyModel },
-        { discipline: 'cycling', ftpSetting: null, importedVo2Max: null, modeledCriticalPower: emptyModel },
+        { discipline: 'running', ftpSetting: null, importedVo2Max: null },
+        { discipline: 'cycling', ftpSetting: null, importedVo2Max: null },
       ],
     };
     hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
@@ -431,6 +419,103 @@ describe('DashboardDerivedMetricsService', () => {
       status: 'ready',
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       payload: { ...validPayload, disciplines: validPayload.disciplines.slice(0, 1) },
+    })).toBe('stale');
+  });
+
+  it('maps a valid Training power-systems snapshot and marks inconsistent component values stale', async () => {
+    const uid = 'user-1';
+    const today = new Date();
+    const asOfDayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    const unavailableComponent = {
+      status: 'insufficient-evidence',
+      reason: 'no-evidence',
+      value: null,
+    };
+    const current = {
+      effectiveDayMs: asOfDayMs,
+      status: 'insufficient-evidence',
+      reason: 'no-evidence',
+      estimatorVersion: 1,
+      activityType: 'Rowing',
+      sourceFingerprint: null,
+      criticalPower: unavailableComponent,
+      wPrime: unavailableComponent,
+      maximumPower: unavailableComponent,
+      diagnostics: {
+        sourceCount: 0,
+        historyStartDayMs: null,
+        historyEndDayMs: null,
+        historySpanDays: 0,
+        rejectedPointCount: 0,
+        criticalPowerAnchorCount: 0,
+        earlyCriticalPowerAnchorCount: 0,
+        longCriticalPowerAnchorCount: 0,
+        maximumPowerAnchorCount: 0,
+        criticalPowerNormalizedRmse: null,
+        criticalPowerSpreadRatio: null,
+        wPrimeSpreadRatio: null,
+        criticalPowerLeaveOneOutSpreadRatio: null,
+        wPrimeLeaveOneOutSpreadRatio: null,
+        maximumPowerNormalizedRmse: null,
+        maximumPowerLeaveOneOutSpreadRatio: null,
+      },
+    };
+    const validPayload = {
+      dayBoundary: 'UTC',
+      asOfDayMs,
+      policyVersion: 1,
+      windowDays: 42,
+      historyDays: 84,
+      cadence: 'workout-date',
+      excludesEffectiveDay: true,
+      excludesMergedEvents: true,
+      activityTypes: [{
+        activityType: 'Rowing',
+        current,
+        history: [{
+          effectiveDayMs: asOfDayMs,
+          status: 'insufficient-evidence',
+          reason: 'no-evidence',
+          criticalPowerStatus: 'insufficient-evidence',
+          criticalPowerWatts: null,
+          wPrimeStatus: 'insufficient-evidence',
+          wPrimeJoules: null,
+          maximumPowerStatus: 'insufficient-evidence',
+          maximumPowerWatts: null,
+        }],
+        evidenceCounts: {
+          candidateActivityCount: 0,
+          usableCurveActivityCount: 0,
+          excludedActivityCount: 0,
+        },
+      }],
+    };
+    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
+    hoisted.docDataMock.mockReturnValue(of({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: validPayload,
+    }));
+
+    const state = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingPowerSystems],
+    }));
+
+    expect(state.trainingPowerSystemsStatus).toBe('ready');
+    expect(state.trainingPowerSystems?.activityTypes[0].activityType).toBe('Rowing');
+    expect((service as any).resolveSnapshotStatus(DERIVED_METRIC_KINDS.TrainingPowerSystems, {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: {
+        ...validPayload,
+        activityTypes: [{
+          ...validPayload.activityTypes[0],
+          current: {
+            ...current,
+            criticalPower: { ...unavailableComponent, value: 0 },
+          },
+        }],
+      },
     })).toBe('stale');
   });
 
@@ -640,6 +725,7 @@ describe('DashboardDerivedMetricsService', () => {
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingExplanation))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingDurability))).toBe(true);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingPowerSystems))).toBe(true);
     service.ensureForDashboard({ uid }, state, {
       metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
     });
@@ -734,6 +820,7 @@ describe('DashboardDerivedMetricsService', () => {
     expect(mockFunctionsService.call).toHaveBeenLastCalledWith<EnsureDerivedMetricsRequest, unknown>('ensureDerivedMetrics', {
       metricKinds: [
         DERIVED_METRIC_KINDS.TrainingCapacity,
+        DERIVED_METRIC_KINDS.TrainingPowerSystems,
         DERIVED_METRIC_KINDS.TrainingExplanation,
         DERIVED_METRIC_KINDS.TrainingDurability,
         DERIVED_METRIC_KINDS.TrainingBuildComparison,

@@ -89,6 +89,10 @@ import {
   type TrainingPowerProfileViewModel,
 } from '../../helpers/training-power-profile.helper';
 import {
+  buildTrainingPowerSystemsActivityTypeViewModels,
+  type TrainingPowerSystemsActivityTypeViewModel,
+} from '../../helpers/training-power-systems.helper';
+import {
   buildTrainingBuildGuidance,
   buildTrainingLoadGuidance,
   buildTrainingMixGuidance,
@@ -273,6 +277,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public runningPowerCurve: DashboardPowerCurveContext | null = null;
   public cyclingPowerProfile: TrainingPowerProfileViewModel | null = null;
   public runningPowerProfile: TrainingPowerProfileViewModel | null = null;
+  public trainingPowerSystemsActivityTypes: TrainingPowerSystemsActivityTypeViewModel[] = [];
+  public selectedTrainingPowerSystemsActivityType: string | null = null;
+  public selectedTrainingPowerSystems: TrainingPowerSystemsActivityTypeViewModel | null = null;
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
@@ -492,6 +499,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.runningPowerCurve = null;
     this.cyclingPowerProfile = null;
     this.runningPowerProfile = null;
+    this.trainingPowerSystemsActivityTypes = [];
+    this.selectedTrainingPowerSystemsActivityType = null;
+    this.selectedTrainingPowerSystems = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
     this.trainingComparisonState = 'preparing';
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
@@ -546,8 +556,28 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     });
     this.cyclingPowerProfile = buildTrainingPowerProfileViewModel(cycling90dPowerCurve, this.cyclingPowerCurve);
     this.runningPowerProfile = buildTrainingPowerProfileViewModel(running90dPowerCurve, this.runningPowerCurve);
+    this.refreshTrainingPowerSystemsViewModels();
     this.refreshDerivedViewModels();
     this.refreshSportSpecificViewModels();
+  }
+
+  private refreshTrainingPowerSystemsViewModels(): void {
+    this.trainingPowerSystemsActivityTypes = buildTrainingPowerSystemsActivityTypeViewModels(
+      this.derivedState.trainingPowerSystems,
+    );
+    const selectedActivityType = this.trainingPowerSystemsActivityTypes.some(
+      item => item.activityType === this.selectedTrainingPowerSystemsActivityType,
+    )
+      ? this.selectedTrainingPowerSystemsActivityType
+      : this.trainingPowerSystemsActivityTypes[0]?.activityType ?? null;
+    this.selectTrainingPowerSystemsActivityType(selectedActivityType);
+  }
+
+  public selectTrainingPowerSystemsActivityType(activityType: string | null): void {
+    this.selectedTrainingPowerSystemsActivityType = activityType;
+    this.selectedTrainingPowerSystems = this.trainingPowerSystemsActivityTypes.find(
+      item => item.activityType === activityType,
+    ) ?? null;
   }
 
   private refreshSportSpecificViewModels(): void {

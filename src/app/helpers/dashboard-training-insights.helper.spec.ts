@@ -55,7 +55,6 @@ describe('dashboard-training-insights.helper', () => {
         {
           discipline: 'running',
           ftpSetting: null,
-          modeledCriticalPower: {} as never,
           importedVo2Max: {
             kind: 'vo2-max',
             value: 54,
@@ -73,7 +72,6 @@ describe('dashboard-training-insights.helper', () => {
         {
           discipline: 'cycling',
           ftpSetting: null,
-          modeledCriticalPower: {} as never,
           importedVo2Max: null,
         },
       ],
@@ -98,7 +96,6 @@ describe('dashboard-training-insights.helper', () => {
       disciplines: [{
         discipline: 'running',
         ftpSetting: null,
-        modeledCriticalPower: null,
         importedVo2Max: {
           kind: 'vo2-max',
           value: 54,

@@ -123,7 +123,8 @@ export const processDerivedMetricsTask = onTaskDispatched({
             : [];
         const trainingActivities = sourceRequirements.needsTrainingActivityDocs
             ? joinTrainingActivitySources(trainingActivityDocs, formDocs, {
-                includeUnclassified: dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingExplanation),
+                includeUnclassified: dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingExplanation)
+                    || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingPowerSystems),
             })
             : [];
         const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings

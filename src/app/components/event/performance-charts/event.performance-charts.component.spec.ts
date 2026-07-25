@@ -27,7 +27,6 @@ describe('EventPerformanceChartsComponent', () => {
   it('should render tabs in locked order when multiple charts are available', async () => {
     component.hasIntensity = true;
     component.hasPowerCurve = true;
-    component.hasPowerSystemStrain = true;
     component.hasDurability = true;
     component.hasCadencePower = true;
 
@@ -41,39 +40,23 @@ describe('EventPerformanceChartsComponent', () => {
 
     const intensityIndex = fullText.indexOf('Intensity');
     const powerIndex = fullText.indexOf('Power Curve');
-    const strainIndex = fullText.indexOf('Power-system strain');
     const durabilityIndex = fullText.indexOf('Durability');
     const cadenceIndex = fullText.indexOf('Cadence vs Power');
 
     expect(intensityIndex).toBeGreaterThanOrEqual(0);
     expect(powerIndex).toBeGreaterThan(intensityIndex);
-    expect(strainIndex).toBeGreaterThan(powerIndex);
-    expect(durabilityIndex).toBeGreaterThan(strainIndex);
+    expect(durabilityIndex).toBeGreaterThan(powerIndex);
     expect(cadenceIndex).toBeGreaterThan(durabilityIndex);
 
     const icons = Array.from(nativeElement.querySelectorAll('.performance-tab-icon'))
       .map((icon) => icon.textContent?.trim())
       .filter((value): value is string => !!value);
-    expect(icons).toEqual(['stacked_bar_chart', 'line_curve', 'bolt', 'line_axis', 'key_visualizer']);
-  });
-
-  it('renders power-system strain directly when it is the only available performance insight', () => {
-    component.hasIntensity = false;
-    component.hasPowerCurve = false;
-    component.hasPowerSystemStrain = true;
-    component.hasDurability = false;
-    component.hasCadencePower = false;
-
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
-    expect(fixture.nativeElement.querySelector('app-event-power-system-strain')).not.toBeNull();
+    expect(icons).toEqual(['stacked_bar_chart', 'line_curve', 'line_axis', 'key_visualizer']);
   });
 
   it('should render direct durability chart without tabs when only durability is available', () => {
     component.hasIntensity = false;
     component.hasPowerCurve = false;
-    component.hasPowerSystemStrain = false;
     component.hasDurability = true;
     component.hasCadencePower = false;
 
@@ -88,7 +71,6 @@ describe('EventPerformanceChartsComponent', () => {
   it('should render direct cadence-power chart without tabs when only cadence-power is available', () => {
     component.hasIntensity = false;
     component.hasPowerCurve = false;
-    component.hasPowerSystemStrain = false;
     component.hasDurability = false;
     component.hasCadencePower = true;
 
@@ -103,7 +85,6 @@ describe('EventPerformanceChartsComponent', () => {
   it('should render nothing when no charts are available', () => {
     component.hasIntensity = false;
     component.hasPowerCurve = false;
-    component.hasPowerSystemStrain = false;
     component.hasDurability = false;
     component.hasCadencePower = false;
 
@@ -117,6 +98,16 @@ describe('EventPerformanceChartsComponent', () => {
     expect(nativeElement.querySelector('app-event-power-system-strain')).toBeNull();
     expect(nativeElement.querySelector('app-event-durability-curve')).toBeNull();
     expect(nativeElement.querySelector('app-event-cadence-power')).toBeNull();
+  });
+
+  it('never exposes the retired power-system strain tab', () => {
+    component.hasPowerCurve = true;
+    component.hasDurability = true;
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Power-system strain');
+    expect(fixture.nativeElement.querySelector('app-event-power-system-strain')).toBeNull();
   });
 
   it('should reserve the taller shared performance chart height', () => {

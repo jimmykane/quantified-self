@@ -594,13 +594,111 @@
       </div>
     </section>
 
+    <section class="training-section training-power-systems-section" aria-labelledby="training-power-systems-title">
+      <div class="training-section-heading training-power-systems-heading">
+        <div>
+          <p>Power systems</p>
+          <h2 id="training-power-systems-title">42-day rolling capacity</h2>
+        </div>
+        @if (trainingPowerSystemsActivityTypes.length) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-power-systems-selector">
+            <mat-label>Activity type</mat-label>
+            <mat-select
+              [value]="selectedTrainingPowerSystemsActivityType"
+              (selectionChange)="selectTrainingPowerSystemsActivityType($event.value)">
+              @for (activityType of trainingPowerSystemsActivityTypes; track activityType.activityType) {
+                <mat-option [value]="activityType.activityType">{{ activityType.activityType }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+      </div>
+
+      @if (derivedState.trainingPowerSystemsStatus === 'failed') {
+        <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
+          <mat-icon aria-hidden="true">error_outline</mat-icon>
+          <div>
+            <strong>Power-system capacity is unavailable</strong>
+            <p>Refresh to request the 42-day capacity snapshot again.</p>
+          </div>
+        </article>
+      } @else if (selectedTrainingPowerSystems; as powerSystems) {
+        <article class="training-power-systems-panel qs-glass-card-panel">
+          @if (derivedState.trainingPowerSystemsStatus !== 'ready') {
+            <p class="training-recovery-update" role="status">Updating rolling capacity…</p>
+          }
+          <header class="training-power-systems-summary">
+            <div>
+              <span class="training-power-systems-status" [attr.data-status]="powerSystems.status">{{ powerSystems.statusText }}</span>
+              <h3 class="qs-dashboard-chart-title">{{ powerSystems.activityType }}</h3>
+              <p>{{ powerSystems.reasonText }}</p>
+            </div>
+            <span>Preceding 42 completed UTC days</span>
+          </header>
+
+          <dl class="training-power-systems-cards">
+            @for (card of powerSystems.cards; track card.key) {
+              <div [attr.data-component-status]="card.statusText">
+                <dt>{{ card.label }}</dt>
+                <dd><app-training-metric-text [text]="card.valueText"></app-training-metric-text></dd>
+                <small>{{ card.statusText }}</small>
+              </div>
+            }
+          </dl>
+
+          <div class="training-power-systems-evidence">
+            <p>{{ powerSystems.evidenceText }}</p>
+            <small>{{ powerSystems.diagnosticsText }}</small>
+          </div>
+
+          <div class="training-power-systems-trends" aria-label="Twelve-week power-system capacity history">
+            @for (trend of powerSystems.trends; track trend.key) {
+              <section class="training-power-systems-trend">
+                <header><strong>{{ trend.label }}</strong><span>{{ trend.unit }}</span></header>
+                <svg
+                  viewBox="0 0 100 32"
+                  preserveAspectRatio="none"
+                  role="img"
+                  [attr.aria-label]="trend.label + ' over the latest 12 weeks'">
+                  <line x1="0" y1="28" x2="100" y2="28"></line>
+                  @if (trend.path) {
+                    <path [attr.d]="trend.path"></path>
+                  }
+                  @for (point of trend.points; track point.dayMs) {
+                    <circle
+                      [attr.cx]="point.x"
+                      [attr.cy]="point.y"
+                      [attr.r]="point.isCurrent ? 2.2 : 1.5"
+                      [class.training-power-systems-current-point]="point.isCurrent">
+                    </circle>
+                  }
+                </svg>
+                <div class="training-power-systems-trend-range"><span>12 weeks ago</span><span>Today</span></div>
+              </section>
+            }
+          </div>
+          <p class="training-power-systems-boundary">Capacity is isolated by exact activity type and calculated from workout power curves. It is not TSS, FTP, fitness, fatigue, or readiness.</p>
+        </article>
+      } @else if (derivedState.trainingPowerSystemsStatus === 'ready') {
+        <p class="training-empty-state">No canonical activity type has a usable power curve in the latest 12 weeks.</p>
+      } @else {
+        <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
+          <mat-spinner diameter="24"></mat-spinner>
+          <div>
+            <strong>Preparing rolling power capacity</strong>
+            <p>Fitting each exact activity type from its preceding 42 completed UTC days.</p>
+          </div>
+        </article>
+      }
+    </section>
+
     <section class="training-section" aria-labelledby="performance-title">
       <div class="training-section-heading">
         <div>
           <p>Performance markers</p>
           <h2 id="performance-title">Settings vs recent evidence</h2>
         </div>
-        <span class="training-section-note">Source, time window, and fit quality stay visible</span>
+        <span class="training-section-note">Imported source and observation timing stay visible</span>
       </div>
       <div class="training-performance-grid">
         @if (hasPowerCapacityVisible) {
@@ -613,18 +711,11 @@
                 <div>
                   <h3 class="qs-dashboard-chart-title">{{ discipline.label }} capacity evidence</h3>
                 </div>
-                <span class="training-capacity-window">90-day performance</span>
+                <span class="training-capacity-window">Imported observations</span>
               </header>
 
-              <div
-                class="training-card-guidance training-capacity-interpretation"
-                [class.training-capacity-interpretation-positive]="discipline.interpretation.tone === 'positive'"
-                [class.training-capacity-interpretation-caution]="discipline.interpretation.tone === 'caution'">
-                <p><strong>{{ discipline.interpretation.title }}:</strong>&nbsp;{{ discipline.interpretation.description }}</p>
-                <small>{{ discipline.evidenceText }}</small>
-                @if (discipline.nextStepText) {
-                  <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ discipline.nextStepText }}</p>
-                }
+              <div class="training-card-guidance training-capacity-interpretation">
+                <p><strong>Source observations:</strong>&nbsp;{{ discipline.evidenceText }}</p>
               </div>
 
               <div class="training-capacity-markers">
@@ -635,11 +726,6 @@
                     <small>{{ ftpSetting.detailText }}</small>
                   </div>
                 }
-                <div class="training-capacity-marker">
-                  <span>{{ discipline.modeledCriticalPower.label }}</span>
-                  <strong><app-training-metric-text [text]="discipline.modeledCriticalPower.valueText"></app-training-metric-text></strong>
-                  <small>{{ discipline.modeledCriticalPower.detailText }}</small>
-                </div>
                 @if (discipline.importedVo2Max; as importedVo2Max) {
                   <div class="training-capacity-marker training-capacity-aerobic-marker">
                     <span>{{ importedVo2Max.label }}</span>
@@ -656,7 +742,7 @@
           } @else {
             <div class="training-capacity-loading qs-glass-card-panel" role="status">
               <mat-spinner diameter="24"></mat-spinner>
-              <div><strong>Preparing capacity evidence</strong><p>Reading imported markers and the derived 90-day power curve.</p></div>
+              <div><strong>Preparing imported capacity markers</strong><p>Reading source-provided FTP and VO₂ max observations.</p></div>
             </div>
           }
         }
