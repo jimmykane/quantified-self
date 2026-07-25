@@ -869,16 +869,20 @@ The bounded payload persists:
 - exact canonical activity type;
 - current overall status and reason;
 - CP watts, W′ joules, and Pmax watts with independent component status and reason;
-- Sports-lib estimator version and source fingerprint;
+- Sports-lib source fingerprint;
 - usable-curve count, history span, malformed and isolated-spike rejected-point counts, sustained/short anchor coverage,
   the distinct activities that actually supplied each component's retained envelope anchors, fit error,
   candidate-method spread, leave-one-anchor-out stability, and whole-workout source-removal diagnostics;
 - compact dated component statuses and values for the 12-week sparse history; and
 - current-window candidate, usable-curve, and excluded-evidence counts.
 
+The Sports-lib fingerprint identifies the dated curve inputs and contains no estimator-generation label. Quantified
+Self's derived schema and pinned Sports-lib package are the compatibility boundary: a future fitting-behavior change
+must increment `DERIVED_METRIC_SCHEMA_VERSION` so existing snapshots rebuild.
+
 A component value exists only when Sports-lib marks that component `ready`. `partial`, `insufficient-evidence`,
 `poor-fit`, `unstable`, and `invalid-input` remain explicit states and are never converted to zero. The frontend rejects
-non-canonical types, invalid dates, unsupported estimator versions, impossible count/diagnostic combinations,
+non-canonical types, invalid dates, malformed source fingerprints, impossible count/diagnostic combinations,
 inconsistent overall/component statuses, duplicate types, unsorted or out-of-range history, and a history endpoint that
 does not equal the current result. A rejected `ready` payload is treated as stale so the normal snapshot self-healing
 path requests a rebuild.
@@ -907,8 +911,8 @@ Self uses the already persisted mean-max Power Curve summary for rolling capacit
 snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
 
-Estimator contract version 1 includes 720 seconds in newly generated default curves. New curve calculation removes
-isolated one-sample recording artifacts from a calculation copy before persistence without mutating the activity stream.
+The capacity estimator includes 720 seconds in newly generated default curves. New curve calculation removes isolated
+one-sample recording artifacts from a calculation copy before persistence without mutating the activity stream.
 The fitter also rejects and counts the corresponding 1–3-second arithmetic-decay signature in older stored curves, so
 existing curves remain usable without reprocessing; older curves that lack an exact 720-second point can still provide
 the other sustained anchors and report their actual coverage.

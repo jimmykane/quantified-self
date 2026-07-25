@@ -614,7 +614,6 @@ export interface DerivedTrainingPowerSystemsSnapshot {
   effectiveDayMs: number;
   status: DerivedTrainingPowerSystemsStatus;
   reason: DerivedTrainingPowerSystemsReason | null;
-  estimatorVersion: number;
   activityType: string;
   sourceFingerprint: string | null;
   criticalPower: DerivedTrainingPowerSystemsComponent;

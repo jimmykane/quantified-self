@@ -30,7 +30,6 @@ import {
     fitThreeDimensionalCapacityModel,
     normalizeDurabilityEvidenceValue,
     THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
-    THREE_DIMENSIONAL_CAPACITY_ESTIMATOR_VERSION,
     THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS,
     type DatedActivityPowerCurve,
     type ThreeDimensionalCapacityFit,
@@ -1703,8 +1702,7 @@ function isTrainingPowerSystemsFitContractConsistent(
     maximumPower: DerivedTrainingPowerSystemsComponent,
 ): boolean {
     if (
-        fit.estimatorVersion !== THREE_DIMENSIONAL_CAPACITY_ESTIMATOR_VERSION
-        || fit.effectiveDate !== resolveUtcDateKey(effectiveDayMs)
+        fit.effectiveDate !== resolveUtcDateKey(effectiveDayMs)
         || (fit.diagnostics.sourceCount > 0 && fit.activityType !== activityType)
         || !isDerivedTrainingPowerSystemsStatusReasonPair(fit.status, fit.reason)
     ) {
@@ -1774,7 +1772,6 @@ function serializeTrainingPowerSystemsFit(
         effectiveDayMs,
         status: hasInvalidFitContract ? 'invalid-input' : fit.status,
         reason: hasInvalidFitContract ? 'invalid-source' : fit.reason,
-        estimatorVersion: fit.estimatorVersion,
         activityType,
         sourceFingerprint: fit.sourceFingerprint,
         criticalPower: hasInvalidFitContract ? invalidComponent : criticalPower,

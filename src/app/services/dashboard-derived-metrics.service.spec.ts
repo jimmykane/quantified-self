@@ -435,7 +435,6 @@ describe('DashboardDerivedMetricsService', () => {
       effectiveDayMs: asOfDayMs,
       status: 'insufficient-evidence',
       reason: 'no-evidence',
-      estimatorVersion: 1,
       activityType: 'Rowing',
       sourceFingerprint: null,
       criticalPower: unavailableComponent,

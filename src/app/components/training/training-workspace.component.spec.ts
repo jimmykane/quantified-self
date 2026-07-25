@@ -553,9 +553,8 @@ describe('TrainingWorkspaceComponent', () => {
         effectiveDayMs: asOfDayMs,
         status: wPrimeUnstable ? 'partial' as const : 'ready' as const,
         reason: wPrimeUnstable ? 'unstable-w-prime-fit' as const : null,
-        estimatorVersion: 1,
         activityType,
-        sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+        sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
         criticalPower: { status: 'ready' as const, reason: null, value: criticalPowerWatts },
         wPrime: wPrimeUnstable
           ? {

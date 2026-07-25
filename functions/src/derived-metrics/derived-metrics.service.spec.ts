@@ -1886,7 +1886,6 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             effectiveDayMs: asOfDayMs,
             status: expected.status,
             reason: expected.reason,
-            estimatorVersion: expected.estimatorVersion,
             activityType: ActivityTypes.Cycling,
             sourceFingerprint: expected.sourceFingerprint,
             criticalPower: expected.criticalPower,
@@ -1925,6 +1924,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                     expected.diagnostics.maximumPowerLeaveOneOutSpreadRatio,
             },
         });
+        expect(cycling?.current).not.toHaveProperty('estimatorVersion');
         expect(cycling?.evidenceCounts).toEqual({
             candidateActivityCount: 3,
             usableCurveActivityCount: 3,
@@ -2151,7 +2151,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             status,
             reason,
             activityType: ActivityTypes.Rowing,
-            sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+            sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
             criticalPower: {
                 status: componentStatus,
                 reason: componentStatus === 'ready' ? null : reason,
@@ -2192,7 +2192,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             status: 'partial',
             reason: 'unstable-w-prime-fit',
             activityType: ActivityTypes.Cycling,
-            sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+            sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
             criticalPower: { status: 'ready', reason: null, value: 224.13 },
             wPrime: { status: 'unstable', reason: 'unstable-w-prime-fit', value: null },
             maximumPower: {
@@ -2231,7 +2231,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             status: 'unstable',
             reason: 'unstable-critical-power-fit',
             activityType: ActivityTypes.Cycling,
-            sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+            sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
             criticalPower: {
                 status: 'unstable',
                 reason: 'unstable-critical-power-fit',
@@ -2256,7 +2256,7 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 historyStartDate: '2026-06-21',
                 historyEndDate: '2026-07-19',
                 historySpanDays: 28,
-                sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+                sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
                 points: [
                     ...criticalPowerDurations.map(durationSeconds => ({
                         durationSeconds,
@@ -2382,13 +2382,6 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 criticalPower: { status: 'ready', reason: 'invalid-source', value: 260 },
                 wPrime: { status: 'ready', reason: null, value: 18_500 },
                 maximumPower: { status: 'ready', reason: null, value: 1_200 },
-            }),
-        },
-        {
-            name: 'an obsolete estimator contract',
-            mutate: (fit: any) => ({
-                ...fit,
-                estimatorVersion: 0,
             }),
         },
     ])('degrades $name before persistence', async ({ mutate }) => {

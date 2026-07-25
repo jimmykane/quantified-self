@@ -1,7 +1,6 @@
 import {
   ActivityTypesHelper,
   THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
-  THREE_DIMENSIONAL_CAPACITY_ESTIMATOR_VERSION,
   THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS,
 } from '@sports-alliance/sports-lib';
 import {
@@ -399,7 +398,6 @@ function resolveSnapshot(
   const raw = asRecord(value);
   const statusAndReason = raw ? resolveStatusAndReason(raw.status, raw.reason) : null;
   const effectiveDayMs = raw ? finiteNumber(raw.effectiveDayMs) : null;
-  const estimatorVersion = raw ? finiteNumber(raw.estimatorVersion) : null;
   const criticalPower = raw ? resolveComponent(raw.criticalPower) : null;
   const wPrime = raw ? resolveComponent(raw.wPrime) : null;
   const maximumPower = raw ? resolveComponent(raw.maximumPower) : null;
@@ -407,7 +405,7 @@ function resolveSnapshot(
   const sourceFingerprint = raw?.sourceFingerprint === null
     ? null
     : typeof raw?.sourceFingerprint === 'string'
-      && /^three-dimensional-capacity-v1:[0-9a-f]{16}$/.test(raw.sourceFingerprint)
+      && /^three-dimensional-capacity:[0-9a-f]{16}$/.test(raw.sourceFingerprint)
       ? raw.sourceFingerprint
       : undefined;
   if (
@@ -415,7 +413,6 @@ function resolveSnapshot(
     || !statusAndReason
     || effectiveDayMs !== asOfDayMs
     || !isUtcDayMs(effectiveDayMs)
-    || estimatorVersion !== THREE_DIMENSIONAL_CAPACITY_ESTIMATOR_VERSION
     || raw.activityType !== activityType
     || !criticalPower
     || !wPrime
@@ -437,7 +434,6 @@ function resolveSnapshot(
     effectiveDayMs,
     status: statusAndReason.status,
     reason: statusAndReason.reason,
-    estimatorVersion,
     activityType,
     sourceFingerprint,
     criticalPower,

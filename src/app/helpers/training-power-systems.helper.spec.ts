@@ -44,9 +44,8 @@ function entry(
     effectiveDayMs: asOfDayMs,
     status,
     reason: resolvedReason,
-    estimatorVersion: 1,
     activityType,
-    sourceFingerprint: 'three-dimensional-capacity-v1:0123456789abcdef',
+    sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
     criticalPower: component(componentStatus, 260, resolvedReason ?? 'insufficient-history'),
     wPrime: component(wPrimeStatus, 18_500, resolvedReason ?? 'insufficient-history'),
     maximumPower: component(maximumPowerStatus, 1_200, resolvedReason ?? 'insufficient-history'),
@@ -286,7 +285,7 @@ describe('training-power-systems.helper', () => {
       return value;
     },
     (value: any) => {
-      value.activityTypes[0].current.sourceFingerprint = 'three-dimensional-capacity-v0:0123456789abcdef';
+      value.activityTypes[0].current.sourceFingerprint = 'invalid-capacity-fingerprint';
       return value;
     },
     (value: any) => {
