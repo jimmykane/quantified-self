@@ -144,6 +144,11 @@ describe('MCP HTTP scope enforcement', () => {
             mimeType: 'image/png',
             sizes: ['192x192'],
           },
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-512x512.png',
+            mimeType: 'image/png',
+            sizes: ['512x512'],
+          },
         ],
       });
     } finally {

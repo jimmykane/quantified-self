@@ -33,6 +33,10 @@ const MCP_SERVER_ICON_VARIANTS = [
     path: '/assets/favicons/android-chrome-192x192.png',
     sizes: ['192x192'],
   },
+  {
+    path: '/assets/favicons/android-chrome-512x512.png',
+    sizes: ['512x512'],
+  },
 ] as const;
 const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
   SLEEP_PROVIDERS.GarminAPI,

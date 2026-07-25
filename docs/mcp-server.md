@@ -41,11 +41,13 @@ The MCP initialize response identifies the server as **Quantified Self** and adv
 | --- | --- | --- | --- |
 | `/assets/favicons/android-chrome-96x96.png` | 96 x 96 | 3.3 KB | Compact ChatGPT upload and MCP client metadata |
 | `/assets/favicons/android-chrome-192x192.png` | 192 x 192 | 9.9 KB | Higher-density ChatGPT upload and MCP client metadata |
+| `/assets/favicons/android-chrome-512x512.png` | 512 x 512 | 47.8 KB | High-density MCP client metadata only |
 
-Both files stay below ChatGPT's current 10 KB icon-upload limit. They must remain public, square PNGs and below that
-limit. MCP clients may render the metadata automatically, but rendering is optional; the Account MCP setup card and Help
-page therefore also offer direct downloads for ChatGPT's manual icon upload. Keep the metadata, both download links, and
-the focused MCP/frontend tests aligned whenever either asset changes.
+All three files must remain public, square transparent PNGs. The 96px and 192px assets stay below ChatGPT's current 10 KB
+icon-upload limit; the 512px asset is intentionally advertised only in MCP metadata. MCP clients may render the metadata
+automatically, but rendering is optional; the Account MCP setup card and Help page therefore also offer direct downloads
+for ChatGPT's manual icon upload. Keep the metadata, both download links, and the focused MCP/frontend tests aligned
+whenever any asset changes.
 
 ## OAuth and authorization
 
