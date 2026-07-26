@@ -27,6 +27,8 @@ import {
   DataNumberOfSatellitesAvg,
   DataNumberOfSatellitesMax,
   DataNumberOfSatellitesMin,
+  DataPaceMax,
+  DataPaceMin,
   DataPowerAvg,
   DataPowerWork,
   DataSatellite5BestSNR,
@@ -34,6 +36,8 @@ import {
   DataSatellite5BestSNRMax,
   DataSatellite5BestSNRMin,
   DataSpeedAvg,
+  DataSpeedMax,
+  DataSpeedMin,
   DataStrydDistance,
   DataSwimPaceAvg,
   DataTotalGrit,
@@ -159,6 +163,24 @@ EVENT_SUMMARY_METRIC_GROUPS.forEach((summaryGroup) => {
       parentGroupLabel: summaryGroup.label,
       order: EVENT_LAP_CATALOG_METRICS.length,
     });
+  });
+});
+
+[
+  DataSpeedMin.type,
+  DataSpeedMax.type,
+  DataPaceMin.type,
+  DataPaceMax.type,
+].forEach((type) => {
+  if (EXCLUDED_EVENT_LAP_METRIC_TYPES.has(type) || EVENT_LAP_METRIC_TYPES.has(type)) {
+    return;
+  }
+  EVENT_LAP_METRIC_TYPES.add(type);
+  EVENT_LAP_CATALOG_METRICS.push({
+    type,
+    parentGroupID: 'performance',
+    parentGroupLabel: 'Performance',
+    order: EVENT_LAP_CATALOG_METRICS.length,
   });
 });
 

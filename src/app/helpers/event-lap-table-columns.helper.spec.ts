@@ -2,6 +2,8 @@ import {
   DataDistance,
   DataEnergy,
   DataPaceAvg,
+  DataPaceMax,
+  DataPaceMin,
   DataEHPE,
   DataEVPE,
   DataHeartRateAvg,
@@ -10,6 +12,8 @@ import {
   DataNumberOfSatellites,
   DataSatellite5BestSNR,
   DataSpeedAvg,
+  DataSpeedMax,
+  DataSpeedMin,
   DataSwimPaceAvg,
   LapInterface,
   PaceUnits,
@@ -85,7 +89,8 @@ describe('event lap table columns helper', () => {
 
     expect(optionGroups.map((group) => group.id)).toContain('overall');
     expect(optionGroups.map((group) => group.id)).toContain('performance');
-    expect(optionGroups[0]?.metrics.map((metric) => metric.type)).toContain(DataPaceAvg.type);
+    expect(optionGroups.flatMap((group) => group.metrics).map((metric) => metric.type))
+      .toContain(DataPaceAvg.type);
     expect(optionGroups.flatMap((group) => group.metrics).filter((metric) => metric.type === DataSpeedAvg.type)).toHaveLength(1);
   });
 
@@ -93,6 +98,8 @@ describe('event lap table columns helper', () => {
     const optionGroups = getEventLapMetricOptionGroups();
     const options = optionGroups.flatMap((group) => group.metrics);
     const heartRateGroup = optionGroups.find((group) => group.label === 'Heart Rate');
+    const speedGroup = optionGroups.find((group) => group.label === 'Speed');
+    const paceGroup = optionGroups.find((group) => group.label === 'Pace');
 
     expect(options.map((metric) => metric.type)).not.toEqual(expect.arrayContaining([
       DataEHPE.type,
@@ -105,8 +112,23 @@ describe('event lap table columns helper', () => {
       { type: DataHeartRateMax.type, label: 'Maximum' },
       { type: DataHeartRateMin.type, label: 'Minimum' },
     ]));
-    expect(normalizeEventLapMetricTypes([DataPaceAvg.type, DataEVPE.type, DataNumberOfSatellites.type]))
-      .toEqual([DataPaceAvg.type]);
+    expect(speedGroup?.metrics).toEqual([
+      { type: DataSpeedAvg.type, label: 'Average' },
+      { type: DataSpeedMin.type, label: 'Minimum' },
+      { type: DataSpeedMax.type, label: 'Maximum' },
+    ]);
+    expect(paceGroup?.metrics).toEqual([
+      { type: DataPaceAvg.type, label: 'Average' },
+      { type: DataPaceMin.type, label: 'Minimum' },
+      { type: DataPaceMax.type, label: 'Maximum' },
+    ]);
+    expect(normalizeEventLapMetricTypes([
+      DataPaceAvg.type,
+      DataSpeedMin.type,
+      DataPaceMax.type,
+      DataEVPE.type,
+      DataNumberOfSatellites.type,
+    ])).toEqual([DataPaceAvg.type, DataSpeedMin.type, DataPaceMax.type]);
   });
 
   it('formats pace, speed, and swim pace with the saved unit preferences', () => {

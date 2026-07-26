@@ -8,6 +8,8 @@ import {
     DataDuration,
     DataPaceAvg,
     DataSpeedAvg,
+    DataSpeedMax,
+    DataSpeedMin,
     EventInterface,
     LapInterface,
     LapTypes,
@@ -223,6 +225,57 @@ describe('EventCardLapsComponent', () => {
 
         expect(component.getColumns(activity, LapTypes.Manual)).toContain(DataSpeedAvg.type);
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataSpeedAvg.type]).toBe('18.00 km/h');
+    });
+
+    it('renders selected cycling speed minimum and maximum lap metrics', async () => {
+        const activity = {
+            ...createActivity([{
+                ...createRenderableLap(LapTypes.Manual),
+                getStat: (type: string) => {
+                    if (type === DataSpeedAvg.type) {
+                        return new DataSpeedAvg(5);
+                    }
+                    if (type === DataSpeedMin.type) {
+                        return new DataSpeedMin(1);
+                    }
+                    if (type === DataSpeedMax.type) {
+                        return new DataSpeedMax(10);
+                    }
+                    return undefined;
+                },
+            } as unknown as LapInterface]),
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+        await component.onLapColumnSelectionChange(
+            'cycling',
+            createLapColumnSelectionChange([DataSpeedAvg.type, DataSpeedMin.type, DataSpeedMax.type]),
+        );
+
+        expect(component.getColumns(activity, LapTypes.Manual)).toEqual([
+            '#',
+            DataSpeedAvg.type,
+            DataSpeedMin.type,
+            DataSpeedMax.type,
+        ]);
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data).toEqual([
+            {
+                '#': 'Avg',
+                isLapAverage: true,
+                [DataSpeedAvg.type]: '18.00 km/h',
+                [DataSpeedMin.type]: '3.60 km/h',
+                [DataSpeedMax.type]: '36.00 km/h',
+            },
+            {
+                '#': 1,
+                [DataSpeedAvg.type]: '18.00 km/h',
+                [DataSpeedMin.type]: '3.60 km/h',
+                [DataSpeedMax.type]: '36.00 km/h',
+            },
+        ]);
     });
 
     it('updates an owner-selected sport family column layout immediately and persists it', async () => {
