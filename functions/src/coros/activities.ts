@@ -11,7 +11,7 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, PRODUCTION_URL, SERVICE_NAME, S
 import { getTokenData } from '../tokens';
 import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 import { getCOROSUserId } from './auth/api';
-import { MAX_ACTIVITY_UPLOAD_BYTES, MAX_ACTIVITY_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
+import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES, MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
 
 const COROS_UPLOAD_SUCCESS_CODE = '0000';
 const COROS_UPLOAD_DUPLICATE_CODE = '5082';
@@ -272,8 +272,8 @@ export const importActivityToCOROSAPI = onCall({
     throw new HttpsError('invalid-argument', 'File content is empty');
   }
 
-  if (fileBuffer.length > MAX_ACTIVITY_UPLOAD_BYTES) {
-    throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL}`);
+  if (fileBuffer.length > MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES) {
+    throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL}`);
   }
 
   return uploadActivityFileToCOROS(userID, fileBuffer);

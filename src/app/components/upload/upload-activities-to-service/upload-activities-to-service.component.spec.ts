@@ -378,8 +378,8 @@ describe('UploadActivitiesToServiceComponent', () => {
         await expect(component.processAndUploadFile(file)).rejects.toThrow('Only FIT files are supported.');
     });
 
-    it('should reject fit files larger than 30MB before calling the service function', async () => {
-        const oversizedPayload = new ArrayBuffer((30 * 1024 * 1024) + 1);
+    it('should reject fit files larger than 20MB before calling the service function', async () => {
+        const oversizedPayload = new ArrayBuffer((20 * 1024 * 1024) + 1);
         const mockFileReader = {
             result: oversizedPayload,
             onload: null as (() => void) | null,
@@ -400,7 +400,7 @@ describe('UploadActivitiesToServiceComponent', () => {
             jobId: '1'
         };
 
-        await expect(component.processAndUploadFile(file)).rejects.toThrow('Cannot upload activity because the size is greater than 30MB');
+        await expect(component.processAndUploadFile(file)).rejects.toThrow('Cannot upload activity because the size is greater than 20MB');
 
         expect(mockFunctionsService.call).not.toHaveBeenCalled();
         fileReaderSpy.mockRestore();

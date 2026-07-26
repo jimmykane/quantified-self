@@ -1,5 +1,9 @@
 export const MAX_ACTIVITY_UPLOAD_BYTES = 30 * 1024 * 1024;
 export const MAX_ACTIVITY_UPLOAD_BYTES_LABEL = '30MB';
+// Callable upload-to-service paths send base64 inside JSON, so a 30MB FIT can
+// exceed the 32MB v2 HTTP request cap before the function handler runs.
+export const MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES = 20 * 1024 * 1024;
+export const MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL = '20MB';
 export const MAX_ACTIVITY_DECOMPRESSED_BYTES = 512 * 1024 * 1024;
 export const MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL = '512MB';
 
