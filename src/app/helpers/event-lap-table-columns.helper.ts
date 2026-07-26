@@ -1,9 +1,12 @@
 import {
   ActivityTypeGroups,
   ActivityTypesHelper,
+  DataAccumulatedPower,
   DataAscent,
+  DataAscentTime,
   DataCadenceAvg,
   DataDescent,
+  DataDescentTime,
   DataDistance,
   DataDuration,
   DataEnergy,
@@ -18,17 +21,22 @@ import {
   DataHeartRateAvg,
   DataHeartRateMax,
   DataInterface,
+  DataGNSSDistance,
+  DataMovingTime,
   DataNumberOfSatellites,
   DataNumberOfSatellitesAvg,
   DataNumberOfSatellitesMax,
   DataNumberOfSatellitesMin,
   DataPowerAvg,
+  DataPowerWork,
   DataSatellite5BestSNR,
   DataSatellite5BestSNRAvg,
   DataSatellite5BestSNRMax,
   DataSatellite5BestSNRMin,
   DataSpeedAvg,
+  DataStrydDistance,
   DataSwimPaceAvg,
+  DataTotalGrit,
   DynamicDataLoader,
   LapInterface,
   type UserUnitSettingsInterface,
@@ -203,6 +211,22 @@ const CORE_LAP_METRIC_TYPES = [
   DataDescent.type,
   DataEnergy.type,
 ];
+
+const ACCUMULATED_LAP_METRIC_TYPES = new Set([
+  DataDuration.type,
+  DataMovingTime.type,
+  DataDistance.type,
+  DataGNSSDistance.type,
+  DataStrydDistance.type,
+  DataAscent.type,
+  DataAscentTime.type,
+  DataDescent.type,
+  DataDescentTime.type,
+  DataEnergy.type,
+  DataAccumulatedPower.type,
+  DataPowerWork.type,
+  DataTotalGrit.type,
+]);
 
 export const EVENT_LAP_TABLE_FIXED_COLUMN = '#';
 
@@ -380,6 +404,10 @@ export const getAverageEventLapMetrics = (
   activityType: unknown,
 ): EventLapAverageMetric[] => (
   metricTypes.reduce<EventLapAverageMetric[]>((averages, metricType) => {
+    if (ACCUMULATED_LAP_METRIC_TYPES.has(metricType)) {
+      return averages;
+    }
+
     const values = laps
       .map((lap) => getEventLapMetricStat(lap, metricType)?.getValue?.())
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));

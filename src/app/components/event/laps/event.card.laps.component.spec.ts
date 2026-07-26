@@ -133,6 +133,26 @@ describe('EventCardLapsComponent', () => {
         expect(rows?.[1]?.['#']).toBe(1);
     });
 
+    it('does not average accumulated lap totals', () => {
+        const activity = createActivity([120, 180].map((duration, index) => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getDuration: () => new DataDuration(duration),
+            getStat: (type: string) => type === DataPaceAvg.type
+                ? new DataPaceAvg(index === 0 ? 300 : 330)
+                : undefined,
+        } as unknown as LapInterface)));
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        const averageRow = component.getDataSource(activity, LapTypes.Manual)?.data[0];
+        expect(averageRow).toMatchObject({
+            '#': 'Avg',
+            [DataPaceAvg.type]: '05:15 min/km',
+        });
+        expect(averageRow).not.toHaveProperty(DataDuration.type);
+    });
+
     it('keeps table average rows sport-aware', () => {
         const running = createActivity([{
             ...createRenderableLap(LapTypes.Manual),

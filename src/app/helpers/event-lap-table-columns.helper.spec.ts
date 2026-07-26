@@ -1,4 +1,6 @@
 import {
+  DataDistance,
+  DataEnergy,
   DataPaceAvg,
   DataEHPE,
   DataEVPE,
@@ -116,12 +118,26 @@ describe('event lap table columns helper', () => {
       .toBe('01:22 min/100yd');
   });
 
-  it('formats header averages with the saved metric units', () => {
-    const laps = [300, 330].map((pace) => ({
-      getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
+  it('formats averages with saved units while excluding accumulated lap totals', () => {
+    const laps = [
+      { duration: 120, distance: 1000, energy: 300, pace: 300 },
+      { duration: 180, distance: 1200, energy: 400, pace: 330 },
+    ].map(({ duration, distance, energy, pace }) => ({
+      getDuration: () => new DataDuration(duration),
+      getDistance: () => new DataDistance(distance),
+      getStat: (type: string) => type === DataPaceAvg.type
+        ? new DataPaceAvg(pace)
+        : type === DataEnergy.type
+          ? new DataEnergy(energy)
+          : undefined,
     } as unknown as LapInterface));
 
-    expect(getAverageEventLapMetrics(laps, [DataPaceAvg.type], unitSettings, 'Running')).toEqual([
+    expect(getAverageEventLapMetrics(
+      laps,
+      [DataDuration.type, DataDistance.type, DataEnergy.type, DataPaceAvg.type],
+      unitSettings,
+      'Running',
+    )).toEqual([
       { type: DataPaceAvg.type, display: '08:26 min/m' },
     ]);
   });
