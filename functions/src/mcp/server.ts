@@ -5,7 +5,11 @@ import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
 import { z } from 'zod';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
-import { createMcpDataService, McpDataError } from './data.service';
+import {
+  createMcpDataService,
+  MAX_ACTIVITY_METRICS_PER_REQUEST,
+  McpDataError,
+} from './data.service';
 import {
   createMcpOAuthService,
   McpOAuthAuthorizationRedirectError,
@@ -479,10 +483,12 @@ export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
   ) {
     server.registerTool('get_activity_metrics', {
       title: 'Get activity metrics',
-      description: 'Read up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Requires both metric and activity-detail access.',
+      description: `Read up to ${MAX_ACTIVITY_METRICS_PER_REQUEST} explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Requires both metric and activity-detail access.`,
       inputSchema: {
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-        metrics: z.array(z.string().min(1).max(120)).min(1).max(25),
+        metrics: z.array(z.string().min(1).max(120))
+          .min(1)
+          .max(MAX_ACTIVITY_METRICS_PER_REQUEST),
       },
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(

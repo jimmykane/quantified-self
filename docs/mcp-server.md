@@ -344,8 +344,8 @@ deliberately.
   decoded preview points, and return at most 10 matches and 256 KiB.
 - Lap, jump, and swim-length arrays are limited to 10,000 raw entries and 512 KiB before projection; responses are at
   most 100 entries and 256 KiB per page.
-- Per-activity metric calls accept at most 25 requested types, read at most 64 KiB of selected fields, and return at most
-  32 KiB.
+- Per-activity metric calls accept at most 25 requested types, process at most 64 KiB of selected document data, and
+  return at most 32 KiB.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
   decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was

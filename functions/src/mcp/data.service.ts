@@ -109,8 +109,8 @@ const MAX_ACTIVITY_DETAIL_ENTRIES = 10_000;
 const MAX_ACTIVITY_DETAIL_BYTES = 512 * 1024;
 const MAX_ACTIVITY_DETAIL_RESPONSE_BYTES = 256 * 1024;
 const MAX_ACTIVITY_DETAIL_PAGE_SIZE = 100;
-const MAX_ACTIVITY_METRICS_PER_REQUEST = 25;
-const MAX_ACTIVITY_METRIC_READ_BYTES = 64 * 1024;
+export const MAX_ACTIVITY_METRICS_PER_REQUEST = 25;
+const MAX_ACTIVITY_METRIC_DOCUMENT_BYTES = 64 * 1024;
 const MAX_ACTIVITY_METRIC_RESPONSE_BYTES = 32 * 1024;
 const MAX_ROUTE_LIST_BYTES = 512 * 1024;
 const MAX_ROUTE_PAGE_SIZE = 100;
@@ -2417,7 +2417,7 @@ async function getActivityMetrics(
   }
   requireJsonBudget(
     document.data,
-    MAX_ACTIVITY_METRIC_READ_BYTES,
+    MAX_ACTIVITY_METRIC_DOCUMENT_BYTES,
     'The selected activity metrics exceed the MCP processing limit.',
   );
   const stats = document.data.stats;
@@ -2447,7 +2447,7 @@ async function getActivityMetrics(
     };
   });
   const result = {
-    requestedMetricCount: projectedMetrics.length,
+    selectedMetricCount: projectedMetrics.length,
     availableMetricCount: projectedMetrics.filter(metric => metric.available).length,
     metrics: projectedMetrics,
   };

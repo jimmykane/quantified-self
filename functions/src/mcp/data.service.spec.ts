@@ -373,7 +373,7 @@ describe('MCP data service', () => {
       [DataDistance.type, DataAscent.type],
     );
     expect(result).toEqual({
-      requestedMetricCount: 2,
+      selectedMetricCount: 2,
       availableMetricCount: 1,
       metrics: [{
         type: DataDistance.type,
@@ -430,6 +430,22 @@ describe('MCP data service', () => {
       metrics: [DataDistance.type],
     })).rejects.toMatchObject<McpDataError>({
       code: 'detail_not_available',
+    });
+
+    vi.mocked(dependencies.fetchActivityMetricDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        stats: { [DataDistance.type]: 'x'.repeat(65 * 1024) },
+      },
+    });
+    await expect(service.getActivityMetrics({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      metrics: [DataDistance.type],
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
     });
   });
 
