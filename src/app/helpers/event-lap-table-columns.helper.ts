@@ -7,10 +7,26 @@ import {
   DataDistance,
   DataDuration,
   DataEnergy,
+  DataEHPE,
+  DataEHPEAvg,
+  DataEHPEMax,
+  DataEHPEMin,
+  DataEVPE,
+  DataEVPEAvg,
+  DataEVPEMax,
+  DataEVPEMin,
   DataHeartRateAvg,
   DataHeartRateMax,
   DataInterface,
+  DataNumberOfSatellites,
+  DataNumberOfSatellitesAvg,
+  DataNumberOfSatellitesMax,
+  DataNumberOfSatellitesMin,
   DataPowerAvg,
+  DataSatellite5BestSNR,
+  DataSatellite5BestSNRAvg,
+  DataSatellite5BestSNRMax,
+  DataSatellite5BestSNRMin,
   DataSpeedAvg,
   DataSwimPaceAvg,
   DynamicDataLoader,
@@ -61,28 +77,120 @@ const EVENT_LAP_SPORT_FAMILIES: readonly AppEventLapSportFamily[] = [
   'other',
 ];
 
-const EVENT_LAP_METRIC_OPTION_GROUPS: EventLapMetricOptionGroup[] = [];
+const EXCLUDED_EVENT_LAP_METRIC_TYPES = new Set([
+  DataEHPE.type,
+  DataEHPEAvg.type,
+  DataEHPEMin.type,
+  DataEHPEMax.type,
+  DataEVPE.type,
+  DataEVPEAvg.type,
+  DataEVPEMin.type,
+  DataEVPEMax.type,
+  DataNumberOfSatellites.type,
+  DataNumberOfSatellitesAvg.type,
+  DataNumberOfSatellitesMin.type,
+  DataNumberOfSatellitesMax.type,
+  DataSatellite5BestSNR.type,
+  DataSatellite5BestSNRAvg.type,
+  DataSatellite5BestSNRMin.type,
+  DataSatellite5BestSNRMax.type,
+]);
+
+interface EventLapCatalogMetric {
+  type: string;
+  parentGroupID: string;
+  parentGroupLabel: string;
+  order: number;
+}
+
+interface EventLapMetricVariant {
+  family: string;
+  label: string;
+}
+
+interface OrderedEventLapMetricOptionGroup extends EventLapMetricOptionGroup {
+  order: number;
+}
+
 const EVENT_LAP_METRIC_TYPES = new Set<string>();
+const EVENT_LAP_CATALOG_METRICS: EventLapCatalogMetric[] = [];
+
+const resolveEventLapMetricVariant = (type: string): EventLapMetricVariant | null => {
+  const prefixMatch = /^(Average|Avg|Maximum|Max|Minimum|Min)\s+(.+)$/i.exec(type);
+  const suffixMatch = /^(.+)\s+(Average|Avg|Maximum|Max|Minimum|Min)$/i.exec(type);
+  const variantMatch = prefixMatch || suffixMatch;
+  if (!variantMatch) {
+    return null;
+  }
+
+  const token = (prefixMatch ? prefixMatch[1] : suffixMatch?.[2] || '').toLowerCase();
+  const family = (prefixMatch ? prefixMatch[2] : suffixMatch?.[1] || '').trim();
+  if (!family) {
+    return null;
+  }
+
+  return {
+    family,
+    label: token === 'avg' || token === 'average'
+      ? 'Average'
+      : token === 'max' || token === 'maximum'
+        ? 'Maximum'
+        : 'Minimum',
+  };
+};
 
 EVENT_SUMMARY_METRIC_GROUPS.forEach((summaryGroup) => {
-  const metrics = summaryGroup.metricTypes
-    .filter((type) => {
-      if (EVENT_LAP_METRIC_TYPES.has(type)) {
-        return false;
-      }
-      EVENT_LAP_METRIC_TYPES.add(type);
-      return true;
-    })
-    .map((type) => ({ type, label: type }));
-
-  if (metrics.length > 0) {
-    EVENT_LAP_METRIC_OPTION_GROUPS.push({
-      id: summaryGroup.id,
-      label: summaryGroup.label,
-      metrics,
+  summaryGroup.metricTypes.forEach((type) => {
+    if (EXCLUDED_EVENT_LAP_METRIC_TYPES.has(type) || EVENT_LAP_METRIC_TYPES.has(type)) {
+      return;
+    }
+    EVENT_LAP_METRIC_TYPES.add(type);
+    EVENT_LAP_CATALOG_METRICS.push({
+      type,
+      parentGroupID: summaryGroup.id,
+      parentGroupLabel: summaryGroup.label,
+      order: EVENT_LAP_CATALOG_METRICS.length,
     });
+  });
+});
+
+const metricVariantCounts = new Map<string, number>();
+EVENT_LAP_CATALOG_METRICS.forEach(({ type }) => {
+  const variant = resolveEventLapMetricVariant(type);
+  if (variant) {
+    metricVariantCounts.set(variant.family, (metricVariantCounts.get(variant.family) || 0) + 1);
   }
 });
+
+const EVENT_LAP_METRIC_OPTION_GROUPS: EventLapMetricOptionGroup[] = Array
+  .from(EVENT_LAP_CATALOG_METRICS.reduce((groups, metric) => {
+    const variant = resolveEventLapMetricVariant(metric.type);
+    const isVariantFamily = variant && (metricVariantCounts.get(variant.family) || 0) > 1;
+    const id = isVariantFamily
+      ? `metric-${variant.family.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+      : metric.parentGroupID;
+    const label = isVariantFamily ? variant.family : metric.parentGroupLabel;
+    const existing = groups.get(id);
+    const option = {
+      type: metric.type,
+      label: isVariantFamily ? variant.label : metric.type,
+    };
+
+    if (existing) {
+      existing.metrics.push(option);
+      return groups;
+    }
+
+    groups.set(id, {
+      id,
+      label,
+      metrics: [option],
+      order: metric.order,
+    });
+    return groups;
+  }, new Map<string, OrderedEventLapMetricOptionGroup>()).values())
+  .sort((left, right) => left.order - right.order)
+  .map(({ order: _order, ...group }) => group);
 
 const CORE_LAP_METRIC_TYPES = [
   DataDuration.type,

@@ -1,5 +1,12 @@
 import {
   DataPaceAvg,
+  DataEHPE,
+  DataEVPE,
+  DataHeartRateAvg,
+  DataHeartRateMax,
+  DataHeartRateMin,
+  DataNumberOfSatellites,
+  DataSatellite5BestSNR,
   DataSpeedAvg,
   DataSwimPaceAvg,
   LapInterface,
@@ -20,6 +27,7 @@ import {
   getSelectedEventLapMetricTypes,
   isEventLapSportFamily,
   normalizeEventDetailsSettings,
+  normalizeEventLapMetricTypes,
   resolveEventLapSportFamily,
 } from './event-lap-table-columns.helper';
 
@@ -77,6 +85,26 @@ describe('event lap table columns helper', () => {
     expect(optionGroups.map((group) => group.id)).toContain('performance');
     expect(optionGroups[0]?.metrics.map((metric) => metric.type)).toContain(DataPaceAvg.type);
     expect(optionGroups.flatMap((group) => group.metrics).filter((metric) => metric.type === DataSpeedAvg.type)).toHaveLength(1);
+  });
+
+  it('excludes position diagnostics and groups average/minimum/maximum metric families', () => {
+    const optionGroups = getEventLapMetricOptionGroups();
+    const options = optionGroups.flatMap((group) => group.metrics);
+    const heartRateGroup = optionGroups.find((group) => group.label === 'Heart Rate');
+
+    expect(options.map((metric) => metric.type)).not.toEqual(expect.arrayContaining([
+      DataEHPE.type,
+      DataEVPE.type,
+      DataNumberOfSatellites.type,
+      DataSatellite5BestSNR.type,
+    ]));
+    expect(heartRateGroup?.metrics).toEqual(expect.arrayContaining([
+      { type: DataHeartRateAvg.type, label: 'Average' },
+      { type: DataHeartRateMax.type, label: 'Maximum' },
+      { type: DataHeartRateMin.type, label: 'Minimum' },
+    ]));
+    expect(normalizeEventLapMetricTypes([DataPaceAvg.type, DataEVPE.type, DataNumberOfSatellites.type]))
+      .toEqual([DataPaceAvg.type]);
   });
 
   it('formats pace, speed, and swim pace with the saved unit preferences', () => {
