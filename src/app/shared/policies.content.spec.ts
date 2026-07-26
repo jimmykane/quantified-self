@@ -38,12 +38,17 @@ describe('MCP client access policy', () => {
     expect(content).toContain('imported device/provider source keys');
     expect(content).toContain('MTB jump measurements');
     expect(content).toContain('exact start and end latitude/longitude coordinates when available');
+    expect(content).toContain('start or end is near a location');
     expect(content).toContain('exact latitude and longitude');
     expect(content).toContain('home, workplace, frequent trailhead');
     expect(content).toContain('stable account/event paths');
     expect(content).toContain('stable account/route paths');
     expect(content).toContain('simplified polyline preview geometry');
+    expect(content).toContain('segment start/end coordinates');
+    expect(content).toContain('persisted preview passes near a location');
     expect(content).toContain('parsed waypoint coordinates');
+    expect(content).toContain('only the location text to Mapbox for forward geocoding');
+    expect(content).toContain('activity data, route data, account identifiers');
     expect(content).toContain('Original route files');
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('stored server-side only as hashes');

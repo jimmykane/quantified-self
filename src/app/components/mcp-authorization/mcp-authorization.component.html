@@ -52,9 +52,11 @@
           <p class="mcp-authorization__privacy">
             This connection is read-only. Activity-detail access may include exact activity start, end, and jump
             coordinates, which can reveal your home, workplace, frequent trailhead, or other sensitive locations.
-            Saved-route access may include exact bounds, preview geometry, and waypoint coordinates. Raw streams,
-            original files, provider payloads, and credentials are not returned. Direct app links contain stable
-            account/event or route paths and still require your normal sign-in.
+            Saved-route access may include exact bounds, preview geometry with segment endpoints, and waypoint
+            coordinates. If the client searches by place name, Quantified Self sends that location text to Mapbox to
+            resolve coordinates; direct-coordinate searches stay within Quantified Self. Raw streams, original files,
+            provider payloads, and credentials are not returned. Direct app links contain stable account/event or route
+            paths and still require your normal sign-in.
           </p>
         </section>
       } @else {

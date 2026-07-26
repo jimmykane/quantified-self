@@ -85,6 +85,14 @@ describe('MCP HTTP scope enforcement', () => {
       method: 'tools/call',
       params: { name: 'get_route_geometry' },
     })).toBe(MCP_OAUTH_SCOPES.RoutesRead);
+    expect(requiredScopeForRequest({
+      method: 'tools/call',
+      params: { name: 'find_activities_near_location' },
+    })).toBe(MCP_OAUTH_SCOPES.ActivityDetailsRead);
+    expect(requiredScopeForRequest({
+      method: 'tools/call',
+      params: { name: 'find_routes_near_location' },
+    })).toBe(MCP_OAUTH_SCOPES.RoutesRead);
   });
 
   it('registers only the tools granted by the bearer scopes', async () => {
@@ -121,16 +129,55 @@ describe('MCP HTTP scope enforcement', () => {
       'query_sleep_summary',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
+      'find_activities_near_location',
       'list_activities',
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
+      'find_routes_near_location',
       'get_route_geometry',
       'list_route_waypoints',
       'list_routes',
     ]);
+  });
+
+  it('marks place-search tools as read-only operations that may call Mapbox', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.RoutesRead,
+      ],
+      baseUrl: 'https://quantified-self.io',
+    });
+    const client = new Client({
+      name: 'metadata-test-client',
+      version: '1.0.0',
+    });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tools = (await client.listTools()).tools;
+      for (const toolName of [
+        'find_activities_near_location',
+        'find_routes_near_location',
+      ]) {
+        expect(tools.find(tool => tool.name === toolName)?.annotations).toMatchObject({
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        });
+      }
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('discloses exact start and end coordinates in the activity tool metadata', async () => {

@@ -26,6 +26,22 @@ const MAX_MCP_REQUEST_BYTES = 64 * 1024;
 const MCP_ISO_DATE_TIME_SCHEMA = z.iso.datetime({ offset: true }).max(64);
 const MCP_OPAQUE_REFERENCE_SCHEMA = z.string().min(1).max(512);
 const MCP_CURSOR_SCHEMA = z.string().min(1).max(512);
+const MCP_NEARBY_LOCATION_SCHEMA = z.union([
+  z.object({
+    query: z.string().min(1).max(200),
+  }),
+  z.object({
+    latitudeDegrees: z.number().min(-90).max(90),
+    longitudeDegrees: z.number().min(-180).max(180),
+  }),
+]);
+const MCP_NEARBY_RADIUS_SCHEMA = z.number()
+  .min(100)
+  .max(500_000)
+  .default(25_000);
+const MCP_ACTIVITY_TYPES_SCHEMA = z.array(
+  z.string().min(1).max(120),
+).max(20).optional();
 const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
   SLEEP_PROVIDERS.GarminAPI,
   SLEEP_PROVIDERS.SuuntoApp,
@@ -207,6 +223,11 @@ const READ_ONLY_TOOL_ANNOTATIONS = {
   openWorldHint: false,
 } as const;
 
+const READ_ONLY_LOCATION_TOOL_ANNOTATIONS = {
+  ...READ_ONLY_TOOL_ANNOTATIONS,
+  openWorldHint: true,
+} as const;
+
 async function runReadOnlyTool(
   name: string,
   operation: () => Promise<unknown>,
@@ -364,6 +385,39 @@ export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
       limit: input.limit,
     })));
 
+    server.registerTool('find_activities_near_location', {
+      title: 'Find activities near a location',
+      description: 'Find activities whose exact start or end coordinate is within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Dates are optional, and results are returned newest first in bounded scan pages.',
+      inputSchema: {
+        location: MCP_NEARBY_LOCATION_SCHEMA,
+        radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+        start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+        end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+        limit: z.number().int().min(1).max(25).default(10),
+      },
+      annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'find_activities_near_location',
+      () => dataService.findActivitiesNearLocation({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        appBaseUrl: auth.baseUrl,
+        location: input.location,
+        radiusMeters: input.radiusMeters,
+        startTimeMs: input.start
+          ? parseMcpDateTime(input.start, 'start')
+          : undefined,
+        endTimeMs: input.end
+          ? parseMcpDateTime(input.end, 'end')
+          : undefined,
+        activityTypes: input.activityTypes,
+        cursor: input.cursor,
+        limit: input.limit,
+      }),
+    ));
+
     server.registerTool('list_activity_laps', {
       title: 'List activity laps',
       description: 'List allowlisted lap timing and performance fields for one activity.',
@@ -436,9 +490,34 @@ export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
       limit: input.limit,
     })));
 
+    server.registerTool('find_routes_near_location', {
+      title: 'Find saved routes near a location',
+      description: 'Find saved routes whose persisted preview passes within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
+      inputSchema: {
+        location: MCP_NEARBY_LOCATION_SCHEMA,
+        radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+        limit: z.number().int().min(1).max(10).default(10),
+      },
+      annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'find_routes_near_location',
+      () => dataService.findRoutesNearLocation({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        appBaseUrl: auth.baseUrl,
+        location: input.location,
+        radiusMeters: input.radiusMeters,
+        activityTypes: input.activityTypes,
+        cursor: input.cursor,
+        limit: input.limit,
+      }),
+    ));
+
     server.registerTool('get_route_geometry', {
       title: 'Get saved-route geometry',
-      description: 'Get the bounded polyline5 preview geometry and exact bounds for one saved route.',
+      description: 'Get the bounded polyline5 preview geometry, exact bounds, and explicit start and end coordinates for each segment of one saved route.',
       inputSchema: {
         routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
       },
@@ -483,6 +562,7 @@ export function requiredScopeForRequest(body: unknown): McpOAuthScope | null {
   }
   if ([
     'list_activities',
+    'find_activities_near_location',
     'list_activity_laps',
     'list_activity_jumps',
     'list_activity_swim_lengths',
@@ -491,6 +571,7 @@ export function requiredScopeForRequest(body: unknown): McpOAuthScope | null {
   }
   if ([
     'list_routes',
+    'find_routes_near_location',
     'get_route_geometry',
     'list_route_waypoints',
   ].includes(toolName)) {

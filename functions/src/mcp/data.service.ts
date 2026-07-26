@@ -70,6 +70,21 @@ import {
   resolveRouteSourceExtension,
   RouteProcessingHttpStatusError,
 } from '../routes/route-processing';
+import {
+  forwardGeocodeMapbox,
+  MapboxForwardGeocodingResult,
+  MapboxGeocodingError,
+} from '../shared/mapbox-geocoder';
+import {
+  consumeMcpGeocodingRateLimit,
+  McpGeocodingRateLimitError,
+} from './geocoding-rate-limit';
+import {
+  boundsMayBeWithinRadius,
+  findNearestPointOnPolyline,
+  haversineDistanceMeters,
+  SpatialPosition,
+} from './spatial';
 
 const MAX_EVENT_QUERY_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
 const MAX_EVENT_QUERY_DOCUMENTS = 2000;
@@ -100,6 +115,13 @@ const MAX_ROUTE_SOURCE_BYTES = 2 * 1024 * 1024;
 const MAX_ROUTE_DECOMPRESSED_BYTES = 8 * 1024 * 1024;
 const MAX_ROUTE_WAYPOINTS = 500;
 const MAX_ROUTE_WAYPOINT_BYTES = 256 * 1024;
+const MAX_NEARBY_ACTIVITY_SCAN_DOCUMENTS = 100;
+const MAX_NEARBY_ACTIVITY_RESPONSE_BYTES = 256 * 1024;
+const MAX_NEARBY_ROUTE_SCAN_DOCUMENTS = 50;
+const MAX_NEARBY_ROUTE_DETAIL_LOADS = 12;
+const MAX_NEARBY_ROUTE_DETAIL_BYTES = 1024 * 1024;
+const MAX_NEARBY_ROUTE_DECODED_POINTS = 20_000;
+const MAX_NEARBY_ROUTE_RESPONSE_BYTES = 256 * 1024;
 const SAFE_SUMMARY_STAT_FIELDS = [
   new FieldPath('stats', DataDuration.type),
   new FieldPath('stats', DataDistance.type),
@@ -140,7 +162,8 @@ export type McpDataErrorCode =
   | 'invalid_timezone'
   | 'metric_not_ready'
   | 'detail_not_available'
-  | 'query_too_large';
+  | 'query_too_large'
+  | 'temporarily_unavailable';
 
 export class McpDataError extends Error {
   constructor(
@@ -180,7 +203,9 @@ type OpaqueValueKind =
   | 'route_ref'
   | 'activity_cursor'
   | 'route_cursor'
-  | 'activity_detail_cursor';
+  | 'activity_detail_cursor'
+  | 'activity_nearby_cursor'
+  | 'route_nearby_cursor';
 
 interface ActivityReference {
   activityId: string;
@@ -195,6 +220,10 @@ interface ActivityDetailCursor {
   activityId: string;
   detailKind: ActivityDetailKind;
   offset: number;
+}
+
+interface NearbyCursor extends OrderedDocumentCursor {
+  queryHash: string;
 }
 
 export function resolveMcpRouteSourcePath(
@@ -248,6 +277,13 @@ export interface McpDataServiceDependencies {
     limit: number,
     cursor?: OrderedDocumentCursor,
   ) => Promise<RawDocument[]>;
+  fetchNearbyActivityDocuments: (
+    uid: string,
+    startTimeMs: number | undefined,
+    endTimeMs: number | undefined,
+    limit: number,
+    cursor?: OrderedDocumentCursor,
+  ) => Promise<RawDocument[]>;
   fetchActivityDetailDocument: (
     uid: string,
     activityId: string,
@@ -273,6 +309,13 @@ export interface McpDataServiceDependencies {
     payload: Buffer,
     resolvedExtension: string,
   ) => Promise<RouteWaypointJSONInterface[]>;
+  forwardGeocodeLocation: (
+    query: string,
+  ) => Promise<MapboxForwardGeocodingResult>;
+  consumeGeocodingRateLimit: (
+    uid: string,
+    connectionId: string,
+  ) => Promise<void>;
   importEvent: (data: EventJSONInterface, id: string) => EventInterface;
 }
 
@@ -360,6 +403,45 @@ const defaultDependencies: McpDataServiceDependencies = {
       .collection('activities')
       .where('eventStartDate', '>=', new Date(startTimeMs))
       .where('eventStartDate', '<=', new Date(endTimeMs))
+      .orderBy('eventStartDate', 'desc')
+      .orderBy(FieldPath.documentId(), 'desc')
+      .limit(limit)
+      .select(
+        'eventID',
+        'eventStartDate',
+        'startDate',
+        'endDate',
+        'type',
+        'powerMeter',
+        'trainer',
+        ...SAFE_ACTIVITY_SUMMARY_FIELDS,
+      );
+    if (cursor) {
+      query = query.startAfter(new Date(cursor.timeMs), cursor.id);
+    }
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    }));
+  },
+  fetchNearbyActivityDocuments: async (
+    uid,
+    startTimeMs,
+    endTimeMs,
+    limit,
+    cursor,
+  ) => {
+    let query = admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection('activities') as admin.firestore.Query;
+    if (startTimeMs !== undefined && endTimeMs !== undefined) {
+      query = query
+        .where('eventStartDate', '>=', new Date(startTimeMs))
+        .where('eventStartDate', '<=', new Date(endTimeMs));
+    }
+    query = query
       .orderBy('eventStartDate', 'desc')
       .orderBy(FieldPath.documentId(), 'desc')
       .limit(limit)
@@ -492,6 +574,10 @@ const defaultDependencies: McpDataServiceDependencies = {
     const routeFile = await parseRoutePayload(decompressed, resolvedExtension);
     return routeFile.getWaypoints();
   },
+  forwardGeocodeLocation: query => forwardGeocodeMapbox(query),
+  consumeGeocodingRateLimit: (uid, connectionId) => (
+    consumeMcpGeocodingRateLimit(uid, connectionId)
+  ),
   importEvent: (data, id) => EventImporterJSON.getEventFromJSON(data).setID(id),
 };
 
@@ -732,6 +818,49 @@ function encodeOrderedCursor(
   connectionId: string,
 ): string {
   return encodeOpaqueValue(kind, cursor as unknown as Record<string, unknown>, uid, connectionId);
+}
+
+function decodeNearbyCursor(
+  kind: 'activity_nearby_cursor' | 'route_nearby_cursor',
+  cursor: string | undefined,
+  uid: string,
+  connectionId: string,
+  queryHash: string,
+): OrderedDocumentCursor | undefined {
+  if (!cursor) {
+    return undefined;
+  }
+  const parsed = decodeOpaqueValue(
+    kind,
+    cursor,
+    uid,
+    connectionId,
+    'pagination cursor',
+  ) as unknown as Partial<NearbyCursor>;
+  if (
+    !Number.isSafeInteger(parsed.timeMs)
+    || !isValidFirestoreDocumentId(parsed.id)
+    || parsed.queryHash !== queryHash
+  ) {
+    throw new McpDataError('invalid_request', 'The pagination cursor is invalid.');
+  }
+  return {
+    timeMs: Number(parsed.timeMs),
+    id: parsed.id,
+  };
+}
+
+function encodeNearbyCursor(
+  kind: 'activity_nearby_cursor' | 'route_nearby_cursor',
+  cursor: OrderedDocumentCursor,
+  uid: string,
+  connectionId: string,
+  queryHash: string,
+): string {
+  return encodeOpaqueValue(kind, {
+    ...cursor,
+    queryHash,
+  }, uid, connectionId);
 }
 
 function decodeActivityListCursor(
@@ -1135,7 +1264,7 @@ function projectSwimLength(value: unknown, index: number) {
   };
 }
 
-function projectRoutePreview(value: unknown) {
+function projectRoutePreviewDetails(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new McpDataError(
       'detail_not_available',
@@ -1202,9 +1331,20 @@ function projectRoutePreview(value: unknown) {
       'Route preview geometry is not available.',
     );
   }
-  const projectedSegments = segments.map((candidate, segmentIndex) => {
+  const projectedSegments: Array<{
+    segmentIndex: number;
+    activityType: string | null;
+    sourcePointCount: number;
+    pointCount: number;
+    bounds: RouteBounds | null;
+    startPosition: SpatialPosition;
+    endPosition: SpatialPosition;
+    encodedPolyline: string;
+  }> = [];
+  const decodedSegments: SpatialPosition[][] = [];
+  segments.forEach((candidate, segmentIndex) => {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-      return null;
+      return;
     }
     const segment = candidate as Record<string, unknown>;
     const segmentSourcePointCount = asSafeInteger(segment.sourcePointCount);
@@ -1216,25 +1356,29 @@ function projectRoutePreview(value: unknown) {
           Math.min(MAX_ROUTE_PREVIEW_BYTES, segmentPointCount * 12),
           /^[\x3f-\x7e]+$/,
         );
+    const decoded = encodedPolyline ? decodeRoutePolyline5(encodedPolyline) : [];
     if (
       !encodedPolyline
       || segmentSourcePointCount === null
       || segmentPointCount === null
       || segmentPointCount <= 0
-      || decodeRoutePolyline5(encodedPolyline).length !== segmentPointCount
+      || decoded.length !== segmentPointCount
     ) {
-      return null;
+      return;
     }
-    return {
+    projectedSegments.push({
       segmentIndex,
       activityType: normalizeActivityType(segment.activityType),
       sourcePointCount: segmentSourcePointCount,
       pointCount: segmentPointCount,
       bounds: projectBounds(segment.bounds),
+      startPosition: decoded[0],
+      endPosition: decoded[decoded.length - 1],
       encodedPolyline,
-    };
+    });
+    decodedSegments.push(decoded);
   });
-  if (projectedSegments.some(segment => segment === null)) {
+  if (projectedSegments.length !== segments.length) {
     throw new McpDataError(
       'detail_not_available',
       'Route preview geometry is not available.',
@@ -1254,7 +1398,14 @@ function projectRoutePreview(value: unknown) {
     MAX_ROUTE_PREVIEW_BYTES,
     'Route preview geometry exceeds the MCP response limit.',
   );
-  return projected;
+  return {
+    geometry: projected,
+    decodedSegments,
+  };
+}
+
+function projectRoutePreview(value: unknown) {
+  return projectRoutePreviewDetails(value).geometry;
 }
 
 function projectRouteWaypoint(value: unknown, index: number) {
@@ -1694,6 +1845,30 @@ export interface ListActivitiesInput {
   limit?: number;
 }
 
+export type McpNearbyLocation =
+  | {
+    query: string;
+  }
+  | SpatialPosition;
+
+interface FindNearbyInputBase {
+  uid: string;
+  connectionId: string;
+  appBaseUrl: string;
+  location: McpNearbyLocation;
+  radiusMeters?: number;
+  activityTypes?: readonly string[];
+  cursor?: string;
+  limit?: number;
+}
+
+export interface FindNearbyActivitiesInput extends FindNearbyInputBase {
+  startTimeMs?: number;
+  endTimeMs?: number;
+}
+
+export type FindNearbyRoutesInput = FindNearbyInputBase;
+
 export interface ListActivityDetailsInput {
   uid: string;
   connectionId: string;
@@ -1765,6 +1940,125 @@ interface SafeRouteListEntry {
     bounds: RouteBounds | null;
     stats: SafeActivityStats;
   };
+}
+
+interface ResolvedNearbyLocation {
+  source: 'coordinates' | 'mapbox';
+  resolvedLabel: string | null;
+  position: SpatialPosition;
+}
+
+function validateNearbyRadius(value: number | undefined): number {
+  const radiusMeters = value ?? 25_000;
+  if (
+    !Number.isFinite(radiusMeters)
+    || radiusMeters < 100
+    || radiusMeters > 500_000
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      'radiusMeters must be between 100 and 500000.',
+    );
+  }
+  return radiusMeters;
+}
+
+async function resolveNearbyLocation(
+  dependencies: McpDataServiceDependencies,
+  input: Pick<FindNearbyInputBase, 'uid' | 'connectionId' | 'location'>,
+): Promise<ResolvedNearbyLocation> {
+  if (
+    'latitudeDegrees' in input.location
+    && 'longitudeDegrees' in input.location
+  ) {
+    if (
+      !Number.isFinite(input.location.latitudeDegrees)
+      || input.location.latitudeDegrees < -90
+      || input.location.latitudeDegrees > 90
+      || !Number.isFinite(input.location.longitudeDegrees)
+      || input.location.longitudeDegrees < -180
+      || input.location.longitudeDegrees > 180
+    ) {
+      throw new McpDataError(
+        'invalid_request',
+        'A valid latitude and longitude are required.',
+      );
+    }
+    return {
+      source: 'coordinates',
+      resolvedLabel: null,
+      position: {
+        latitudeDegrees: input.location.latitudeDegrees,
+        longitudeDegrees: input.location.longitudeDegrees,
+      },
+    };
+  }
+
+  try {
+    await dependencies.consumeGeocodingRateLimit(
+      input.uid,
+      input.connectionId,
+    );
+    const resolved = await dependencies.forwardGeocodeLocation(
+      input.location.query,
+    );
+    return {
+      source: 'mapbox',
+      resolvedLabel: resolved.resolvedLabel,
+      position: resolved.center,
+    };
+  } catch (error) {
+    if (error instanceof McpGeocodingRateLimitError) {
+      throw new McpDataError('temporarily_unavailable', error.message);
+    }
+    if (error instanceof MapboxGeocodingError) {
+      if (error.code === 'invalid_query' || error.code === 'not_found') {
+        throw new McpDataError('invalid_request', error.message);
+      }
+      throw new McpDataError(
+        'temporarily_unavailable',
+        'Location lookup is temporarily unavailable.',
+      );
+    }
+    if (error instanceof McpDataError) {
+      throw error;
+    }
+    throw new McpDataError(
+      'temporarily_unavailable',
+      'Location lookup is temporarily unavailable.',
+    );
+  }
+}
+
+function buildNearbyQueryHash(input: {
+  location: ResolvedNearbyLocation;
+  radiusMeters: number;
+  activityTypes: readonly string[];
+  startTimeMs?: number;
+  endTimeMs?: number;
+}): string {
+  return createHash('sha256').update(JSON.stringify({
+    latitudeDegrees: Number(input.location.position.latitudeDegrees.toFixed(6)),
+    longitudeDegrees: Number(input.location.position.longitudeDegrees.toFixed(6)),
+    radiusMeters: input.radiusMeters,
+    activityTypes: [...input.activityTypes].sort(),
+    startTimeMs: input.startTimeMs ?? null,
+    endTimeMs: input.endTimeMs ?? null,
+  }), 'utf8').digest('base64url');
+}
+
+function activityTypeMatches(
+  candidate: string | null,
+  filters: readonly string[],
+): boolean {
+  return filters.length === 0 || (candidate !== null && filters.includes(candidate));
+}
+
+function routeActivityTypesMatch(
+  candidates: readonly string[],
+  filters: readonly string[],
+): boolean {
+  return filters.length === 0 || filters.some(filter => candidates.includes(filter));
 }
 
 function projectActivityListEntry(
@@ -2111,6 +2405,164 @@ export function createMcpDataService(
       };
     },
 
+    async findActivitiesNearLocation(input: FindNearbyActivitiesInput) {
+      const hasStartTime = input.startTimeMs !== undefined;
+      const hasEndTime = input.endTimeMs !== undefined;
+      if (hasStartTime !== hasEndTime) {
+        throw new McpDataError(
+          'invalid_request',
+          'start and end must either both be provided or both be omitted.',
+        );
+      }
+      if (hasStartTime && hasEndTime) {
+        validateBoundedRange(input.startTimeMs!, input.endTimeMs!);
+      }
+      const radiusMeters = validateNearbyRadius(input.radiusMeters);
+      const activityTypes = [
+        ...new Set(resolveActivityTypes(input.activityTypes).map(String)),
+      ];
+      const location = await resolveNearbyLocation(dependencies, input);
+      const queryHash = buildNearbyQueryHash({
+        location,
+        radiusMeters,
+        activityTypes,
+        startTimeMs: input.startTimeMs,
+        endTimeMs: input.endTimeMs,
+      });
+      const cursor = decodeNearbyCursor(
+        'activity_nearby_cursor',
+        input.cursor,
+        input.uid,
+        input.connectionId,
+        queryHash,
+      );
+      const limit = Math.min(25, Math.max(1, Math.floor(input.limit || 10)));
+      const documents = await dependencies.fetchNearbyActivityDocuments(
+        input.uid,
+        input.startTimeMs,
+        input.endTimeMs,
+        MAX_NEARBY_ACTIVITY_SCAN_DOCUMENTS + 1,
+        cursor,
+      );
+      if (documents.length > MAX_NEARBY_ACTIVITY_SCAN_DOCUMENTS + 1) {
+        throw new McpDataError(
+          'query_too_large',
+          'The nearby activity query returned more data than requested.',
+        );
+      }
+
+      const matches: Array<Record<string, unknown>> = [];
+      let processedDocumentCount = 0;
+      let skippedActivityCount = 0;
+      let cumulativeBytes = 0;
+      let lastProcessedDocument: RawDocument | undefined;
+      for (const document of documents.slice(0, MAX_NEARBY_ACTIVITY_SCAN_DOCUMENTS)) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The nearby activity query contains data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_LIST_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The nearby activity query exceeds the MCP processing limit.',
+          );
+        }
+        processedDocumentCount += 1;
+        lastProcessedDocument = document;
+        const entry = projectActivityListEntry(document, input);
+        if (
+          !entry
+          || !activityTypeMatches(entry.summary.activityType, activityTypes)
+        ) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        const positioned = [
+          entry.summary.startPosition
+            ? {
+              kind: 'start' as const,
+              position: entry.summary.startPosition,
+              distanceMeters: haversineDistanceMeters(
+                location.position,
+                entry.summary.startPosition,
+              ),
+            }
+            : null,
+          entry.summary.endPosition
+            ? {
+              kind: 'end' as const,
+              position: entry.summary.endPosition,
+              distanceMeters: haversineDistanceMeters(
+                location.position,
+                entry.summary.endPosition,
+              ),
+            }
+            : null,
+        ].filter((candidate): candidate is NonNullable<typeof candidate> => (
+          candidate !== null
+        ));
+        const nearbyPositions = positioned.filter(candidate => (
+          candidate.distanceMeters <= radiusMeters
+        ));
+        if (nearbyPositions.length === 0) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        const nearest = nearbyPositions.reduce((current, candidate) => (
+          candidate.distanceMeters < current.distanceMeters ? candidate : current
+        ));
+        matches.push({
+          ...entry.summary,
+          nearestDistanceMeters: nearest.distanceMeters,
+          nearestPosition: nearest.position,
+          nearestPositionKind: nearest.kind,
+          matchedPositionKinds: nearbyPositions.map(candidate => candidate.kind),
+        });
+        if (matches.length >= limit) {
+          break;
+        }
+      }
+
+      const hasMore = processedDocumentCount < documents.length;
+      const lastProcessedTimeMs = asTimestampMs(
+        lastProcessedDocument?.data.eventStartDate,
+      );
+      const nextCursor = hasMore
+        && lastProcessedDocument
+        && lastProcessedTimeMs !== null
+        && isValidFirestoreDocumentId(lastProcessedDocument.id)
+        ? encodeNearbyCursor(
+            'activity_nearby_cursor',
+            {
+              timeMs: lastProcessedTimeMs,
+              id: lastProcessedDocument.id,
+            },
+            input.uid,
+            input.connectionId,
+            queryHash,
+          )
+        : null;
+      const result = {
+        location: {
+          source: location.source,
+          resolvedLabel: location.resolvedLabel,
+          ...location.position,
+          radiusMeters,
+        },
+        scannedActivityCount: processedDocumentCount,
+        skippedActivityCount,
+        activities: matches,
+        nextCursor,
+        scanComplete: nextCursor === null,
+      };
+      requireJsonBudget(
+        result,
+        MAX_NEARBY_ACTIVITY_RESPONSE_BYTES,
+        'The nearby activity results exceed the MCP response limit.',
+      );
+      return result;
+    },
+
     async listActivityLaps(input: ListActivityDetailsInput) {
       return listActivityDetail(dependencies, input, 'laps');
     },
@@ -2180,6 +2632,213 @@ export function createMcpDataService(
         routes: page.map(entry => entry.summary),
         nextCursor,
       };
+    },
+
+    async findRoutesNearLocation(input: FindNearbyRoutesInput) {
+      const radiusMeters = validateNearbyRadius(input.radiusMeters);
+      const activityTypes = [
+        ...new Set(resolveActivityTypes(input.activityTypes).map(String)),
+      ];
+      const location = await resolveNearbyLocation(dependencies, input);
+      const queryHash = buildNearbyQueryHash({
+        location,
+        radiusMeters,
+        activityTypes,
+      });
+      const cursor = decodeNearbyCursor(
+        'route_nearby_cursor',
+        input.cursor,
+        input.uid,
+        input.connectionId,
+        queryHash,
+      );
+      const limit = Math.min(10, Math.max(1, Math.floor(input.limit || 10)));
+      const documents = await dependencies.fetchRouteDocuments(
+        input.uid,
+        MAX_NEARBY_ROUTE_SCAN_DOCUMENTS + 1,
+        cursor,
+      );
+      if (documents.length > MAX_NEARBY_ROUTE_SCAN_DOCUMENTS + 1) {
+        throw new McpDataError(
+          'query_too_large',
+          'The nearby route query returned more data than requested.',
+        );
+      }
+
+      const matches: Array<Record<string, unknown>> = [];
+      let processedDocumentCount = 0;
+      let skippedRouteCount = 0;
+      let routeDetailLoadCount = 0;
+      let routeDetailBytes = 0;
+      let decodedPointCount = 0;
+      let summaryBytes = 0;
+      let stoppedForDetailBudget = false;
+      let lastProcessedDocument: RawDocument | undefined;
+      for (const document of documents.slice(0, MAX_NEARBY_ROUTE_SCAN_DOCUMENTS)) {
+        summaryBytes += measureJsonBytes(
+          document.data,
+          'The nearby route query contains data that cannot be processed safely.',
+        );
+        if (summaryBytes > MAX_ROUTE_LIST_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The nearby route query exceeds the MCP summary processing limit.',
+          );
+        }
+        const entry = projectRouteListEntry(document, input);
+        if (
+          !entry
+          || !routeActivityTypesMatch(entry.summary.activityTypes, activityTypes)
+          || (
+            entry.summary.bounds
+            && !boundsMayBeWithinRadius(
+              location.position,
+              entry.summary.bounds,
+              radiusMeters,
+            )
+          )
+        ) {
+          processedDocumentCount += 1;
+          lastProcessedDocument = document;
+          skippedRouteCount += 1;
+          continue;
+        }
+        if (routeDetailLoadCount >= MAX_NEARBY_ROUTE_DETAIL_LOADS) {
+          stoppedForDetailBudget = true;
+          break;
+        }
+
+        const detail = await dependencies.fetchRouteDocument(
+          input.uid,
+          document.id,
+          'geometry',
+        );
+        routeDetailLoadCount += 1;
+        processedDocumentCount += 1;
+        lastProcessedDocument = document;
+        if (!detail || detail.id !== document.id) {
+          skippedRouteCount += 1;
+          continue;
+        }
+        routeDetailBytes += measureJsonBytes(
+          detail.data.preview,
+          'The nearby route previews cannot be processed safely.',
+        );
+        if (routeDetailBytes > MAX_NEARBY_ROUTE_DETAIL_BYTES) {
+          skippedRouteCount += 1;
+          stoppedForDetailBudget = true;
+          break;
+        }
+        const rawPreview = detail.data.preview
+          && typeof detail.data.preview === 'object'
+          && !Array.isArray(detail.data.preview)
+          ? detail.data.preview as Record<string, unknown>
+          : null;
+        const declaredPreviewPointCount = asSafeInteger(rawPreview?.pointCount);
+        if (
+          declaredPreviewPointCount !== null
+          && decodedPointCount + declaredPreviewPointCount
+            > MAX_NEARBY_ROUTE_DECODED_POINTS
+        ) {
+          skippedRouteCount += 1;
+          stoppedForDetailBudget = true;
+          break;
+        }
+
+        let preview: ReturnType<typeof projectRoutePreviewDetails>;
+        try {
+          preview = projectRoutePreviewDetails(detail.data.preview);
+        } catch {
+          skippedRouteCount += 1;
+          continue;
+        }
+        const previewPointCount = preview.decodedSegments.reduce(
+          (sum, segment) => sum + segment.length,
+          0,
+        );
+        decodedPointCount += previewPointCount;
+        if (decodedPointCount > MAX_NEARBY_ROUTE_DECODED_POINTS) {
+          skippedRouteCount += 1;
+          stoppedForDetailBudget = true;
+          break;
+        }
+
+        const nearestBySegment = preview.decodedSegments.flatMap(
+          (points, segmentIndex) => {
+            const nearest = findNearestPointOnPolyline(location.position, points);
+            return nearest ? [{
+              ...nearest,
+              segmentIndex,
+              startPosition: points[0],
+              endPosition: points[points.length - 1],
+            }] : [];
+          },
+        );
+        if (nearestBySegment.length === 0) {
+          skippedRouteCount += 1;
+          continue;
+        }
+        const nearest = nearestBySegment.reduce((current, candidate) => (
+          candidate.distanceMeters < current.distanceMeters ? candidate : current
+        ));
+        if (nearest.distanceMeters > radiusMeters) {
+          skippedRouteCount += 1;
+          continue;
+        }
+        matches.push({
+          ...entry.summary,
+          nearestDistanceMeters: nearest.distanceMeters,
+          nearestPosition: nearest.position,
+          matchingSegmentIndex: nearest.segmentIndex,
+          matchingSegmentStartPosition: nearest.startPosition,
+          matchingSegmentEndPosition: nearest.endPosition,
+        });
+        if (matches.length >= limit) {
+          break;
+        }
+      }
+
+      const hasMore = stoppedForDetailBudget
+        || processedDocumentCount < documents.length;
+      const lastProcessedTimeMs = asTimestampMs(
+        lastProcessedDocument?.data.importedAt,
+      );
+      const nextCursor = hasMore
+        && lastProcessedDocument
+        && lastProcessedTimeMs !== null
+        && isValidFirestoreDocumentId(lastProcessedDocument.id)
+        ? encodeNearbyCursor(
+            'route_nearby_cursor',
+            {
+              timeMs: lastProcessedTimeMs,
+              id: lastProcessedDocument.id,
+            },
+            input.uid,
+            input.connectionId,
+            queryHash,
+          )
+        : null;
+      const result = {
+        location: {
+          source: location.source,
+          resolvedLabel: location.resolvedLabel,
+          ...location.position,
+          radiusMeters,
+        },
+        scannedRouteCount: processedDocumentCount,
+        loadedRoutePreviewCount: routeDetailLoadCount,
+        decodedRoutePointCount: decodedPointCount,
+        skippedRouteCount,
+        routes: matches,
+        nextCursor,
+        scanComplete: nextCursor === null,
+      };
+      requireJsonBudget(
+        result,
+        MAX_NEARBY_ROUTE_RESPONSE_BYTES,
+        'The nearby route results exceed the MCP response limit.',
+      );
+      return result;
     },
 
     async getRouteGeometry(input: RouteDetailInput) {

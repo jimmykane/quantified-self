@@ -749,12 +749,17 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
     expect(dataAndPrivacySection?.content).toContain('exact start/end latitude/longitude coordinates when available');
+    expect(dataAndPrivacySection?.content).toContain("match an activity's start or end");
     expect(dataAndPrivacySection?.content).toContain('Jump records can also include exact latitude/longitude coordinates');
     expect(dataAndPrivacySection?.content).toContain('home, workplace, frequent trailhead');
     expect(dataAndPrivacySection?.content).toContain('stable account/event paths');
     expect(dataAndPrivacySection?.content).toContain('stable account/route paths');
     expect(dataAndPrivacySection?.content).toContain('simplified polyline previews');
+    expect(dataAndPrivacySection?.content).toContain('segment start/end coordinates');
+    expect(dataAndPrivacySection?.content).toContain('measure against the persisted preview');
     expect(dataAndPrivacySection?.content).toContain('waypoint coordinates');
+    expect(dataAndPrivacySection?.content).toContain('location text to Mapbox for forward geocoding');
+    expect(dataAndPrivacySection?.content).toContain('does not send activity, route, account, or prompt data');
     expect(dataAndPrivacySection?.content).toContain('original route files');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> MCP connections**');

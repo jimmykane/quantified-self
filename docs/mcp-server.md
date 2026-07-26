@@ -40,15 +40,16 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 
 - `metrics:read` for event metrics and ready Training-derived snapshots;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
-- `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, laps, swim lengths,
-  and MTB jumps; and
-- `routes:read` for saved-route summaries, preview geometry, and waypoints.
+- `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, start/end proximity
+  searches, laps, swim lengths, and MTB jumps; and
+- `routes:read` for saved-route summaries, preview geometry, preview proximity searches, and waypoints.
 
 The last two scopes are independent grants. Existing metric or sleep connections do not acquire them automatically; the
 client must start a new authorization request and the user must approve the requested scope. Activity-detail consent
 states that activity starts, ends, and individual jumps can include exact coordinates that may reveal a home, workplace,
 frequent trailhead, or other sensitive location. Saved-route consent states that route bounds, simplified geometry, and
-waypoint coordinates can expose exact locations.
+waypoint coordinates can expose exact locations. Consent also states that place-name proximity searches send only the
+supplied location text to Mapbox for forward geocoding, while direct-coordinate searches do not call Mapbox.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -159,14 +160,17 @@ The analytics and map entries follow the
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
 | `list_activities` | `activity-details:read` | Paginated safe activity summaries with optional exact start/end coordinates, opaque references, and signed-in app links |
+| `find_activities_near_location` | `activity-details:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements, including exact coordinates when present |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_routes` | `routes:read` | Paginated saved-route summaries, exact bounds, opaque references, and signed-in app links |
-| `get_route_geometry` | `routes:read` | Bounded persisted `polyline5` preview geometry |
+| `find_routes_near_location` | `routes:read` | Bounded newest-first scan measuring a location against persisted route previews |
+| `get_route_geometry` | `routes:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
-Every tool is annotated read-only, non-destructive, idempotent, and closed-world. The HTTP layer checks the required scope
+Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
+tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks the required scope
 before the tool call, and only registers tools covered by the bearer token.
 
 ## Sports Lib metric discovery
@@ -227,6 +231,14 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
+`find_activities_near_location` reuses the same field mask and safe summary projection. It matches only the persisted
+start and end positions, not the raw activity track: the response reports the nearest matching coordinate, whether it
+was the start or end, and the great-circle distance. An optional paired start/end date filter retains the 366-day bound.
+If dates are omitted, the scan starts with the newest activity and continues through encrypted, query-bound cursors.
+Each call examines at most 100 activity documents, processes at most 512 KiB of selected summary data, returns at most
+25 matches and 256 KiB, and reports whether the history scan is complete. Results preserve newest-first scan order; they
+are not globally sorted by distance.
+
 ## Saved-route projection
 
 `routes:read` lists `users/{uid}/routes` through a field mask containing the route name, timestamps, activity types,
@@ -236,7 +248,17 @@ cursors use the same UID-and-connection-bound authenticated-encryption design as
 
 `get_route_geometry` reads only the persisted Sports Lib route preview. The response fixes the contract to preview
 version 1, `polyline5`, precision 5, exact bounds, at most 20 segments and 5,000 decoded preview points. Segment IDs and
-names are excluded. This is the deliberately simplified preview, not the source route's raw point stream.
+names are excluded. Each segment includes explicit `startPosition` and `endPosition` values derived from the first and
+last decoded preview point. This is the deliberately simplified preview, not the source route's raw point stream.
+
+`find_routes_near_location` first uses each route's persisted exact bounds as a cheap exclusion check, then reads only
+the `preview` field for plausible candidates. It decodes the persisted `polyline5` once and measures the nearest point
+on every preview segment using spherical geometry, so a route can match anywhere along its preview rather than only at
+its endpoints. The result includes the nearest point and distance, matching segment index, and that segment's explicit
+start/end coordinates. One call scans at most 50 summaries, loads at most 12 previews, processes at most 1 MiB of preview
+JSON and 20,000 decoded points, returns at most 10 matches and 256 KiB, and continues with an encrypted query-bound
+cursor when any scan or geometry budget is reached. Invalid or missing previews are skipped and counted rather than
+expanding the read to original route sources.
 
 `list_route_waypoints` reads only the server-owned source metadata needed to find the saved FIT/GPX object. The Storage
 read is restricted to the owning user's route path and default project bucket, streamed to a 2 MiB compressed/raw limit,
@@ -247,7 +269,24 @@ existing `/user/{uid}/route/{routeId}` page and still requires normal sign-in.
 
 The activity list orders and ranges on `eventStartDate`; the route list orders on `importedAt`. In both cases the
 document name is only a deterministic pagination tie-breaker. These query shapes use Firestore's automatic single-field
-indexes, so the MCP surface adds no composite index or index configuration.
+indexes, so the MCP surface adds no composite index or index configuration. All-history nearby activity scans use the
+same `eventStartDate` order without a range predicate; optional bounded dates use the existing range-and-order shape.
+
+## Nearby-location resolution
+
+Both nearby tools accept either `{ latitudeDegrees, longitudeDegrees }` or `{ query }`, plus a radius from 100 to
+500,000 metres. Direct coordinates are validated and used entirely inside Quantified Self. Place text is normalized,
+limited to 20 words and 200 characters, and sent to the Mapbox Geocoding v6 forward endpoint with autocomplete disabled,
+one result, and temporary (uncached) use. MCP never invokes an AI model to repair or reinterpret a failed place lookup.
+The shared deterministic Mapbox adapter is also used by AI Insights, where the existing explicitly metered AI fallback
+remains an AI-specific behavior.
+
+Mapbox responses have a 5-second timeout and 64 KiB body limit. Only the resolved label, feature type, center, and valid
+bounding box enter the application. Authentication, rate-limit, timeout, malformed-response, and provider failures map
+to safe MCP errors without logging the query or resolved coordinates. In addition to the normal MCP connection request
+limit, place-name lookups have a distributed limit of 30 per connection per minute. Their counter documents use the
+existing `mcpOAuthRateLimits` collection and `expireAt` TTL lifecycle. Direct-coordinate calls do not consume that
+geocoding budget.
 
 ## Training-derived metrics
 
@@ -287,6 +326,10 @@ deliberately.
   document ID used to resume pagination.
 - Activity date ranges are at most 366 days. Activity and route list pages are at most 100 entries, read only one page
   plus a continuation sentinel per call, and reject more than 512 KiB of cumulative selected data.
+- Nearby activity calls scan at most 100 summaries, return at most 25 matches and 256 KiB, and can traverse all history
+  only through encrypted query-bound pages.
+- Nearby route calls scan at most 50 summaries, load at most 12 persisted previews, process at most 1 MiB and 20,000
+  decoded preview points, and return at most 10 matches and 256 KiB.
 - Lap, jump, and swim-length arrays are limited to 10,000 raw entries and 512 KiB before projection; responses are at
   most 100 entries and 256 KiB per page.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
@@ -294,6 +337,8 @@ deliberately.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was
   truncated.
 - Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
+- Place-name geocoding is additionally limited to 30 requests per MCP connection per minute; coordinate input bypasses
+  Mapbox and this provider-specific counter.
 - Public authorization starts are limited before client-metadata retrieval to 10 per client ID and 30 per requester
   address per minute.
 - Requests require valid IANA timezones where local date bucketing is relevant.

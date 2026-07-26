@@ -6,12 +6,14 @@ import type {
   NormalizedInsightLocationFilter,
 } from '../../../../shared/ai-insights.types';
 import { aiInsightsGenkit } from './genkit';
-import { resolveMapboxAccessToken } from './mapbox-config';
+import {
+  forwardGeocodeMapbox,
+  MapboxGeocodingError,
+} from '../../shared/mapbox-geocoder';
 
 const DEFAULT_LOCATION_RADIUS_KM = 50;
 const LOCATION_RADIUS_MIN_KM = 1;
 const LOCATION_RADIUS_MAX_KM = 500;
-const MAPBOX_FORWARD_GEOCODING_TYPES = 'country,region,place,locality,district,postcode,address';
 const MAPBOX_BBOX_FEATURE_TYPES = new Set(['country', 'region']);
 const LOCATION_TEXT_MAX_LENGTH = 200;
 const DIRECT_COORDINATE_DECIMAL_PLACES = 5;
@@ -350,120 +352,65 @@ function resolvePromptLocationCandidate(
   return null;
 }
 
-function getMapboxAccessToken(): string {
-  const token = resolveMapboxAccessToken();
-  if (!token) {
-    throw new HttpsError(
-      'internal',
-      'Location filtering is unavailable because MAPBOX_ACCESS_TOKEN is not configured on the backend.',
-    );
-  }
-  return token;
-}
-
-function parseMapboxBoundingBox(rawValue: unknown): GeocodedLocationResult['bbox'] | undefined {
-  if (!Array.isArray(rawValue) || rawValue.length !== 4) {
-    return undefined;
-  }
-
-  const [west, south, east, north] = rawValue.map(value => Number(value));
-  if (
-    !Number.isFinite(west)
-    || !Number.isFinite(south)
-    || !Number.isFinite(east)
-    || !Number.isFinite(north)
-  ) {
-    return undefined;
-  }
-
-  if (west < -180 || west > 180 || east < -180 || east > 180 || south < -90 || south > 90 || north < -90 || north > 90) {
-    return undefined;
-  }
-
-  return { west, south, east, north };
-}
-
-function normalizeMapboxFeatureTypes(rawValue: unknown): string[] {
-  if (!Array.isArray(rawValue)) {
-    return [];
-  }
-
-  return rawValue
-    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-    .map(value => value.trim().toLowerCase());
-}
-
 function resolveMapboxPreferredMode(
-  featureTypes: readonly string[],
+  featureType: string | null,
   bbox: GeocodedLocationResult['bbox'] | undefined,
 ): 'bbox' | 'radius' {
   if (!bbox) {
     return 'radius';
   }
 
-  return featureTypes.some(featureType => MAPBOX_BBOX_FEATURE_TYPES.has(featureType))
+  return featureType && MAPBOX_BBOX_FEATURE_TYPES.has(featureType)
     ? 'bbox'
     : 'radius';
 }
 
 const defaultResolveLocationFilterDependencies: ResolveLocationFilterDependencies = {
   geocodeLocation: async (locationText) => {
-    const accessToken = getMapboxAccessToken();
-    const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(locationText)}.json?limit=1&autocomplete=false&types=${MAPBOX_FORWARD_GEOCODING_TYPES}&access_token=${accessToken}`;
-    const response = await fetch(endpoint);
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
+    try {
+      const resolved = await forwardGeocodeMapbox(locationText);
+      return {
+        resolvedLabel: resolved.resolvedLabel,
+        center: resolved.center,
+        preferredMode: resolveMapboxPreferredMode(
+          resolved.featureType,
+          resolved.bbox,
+        ),
+        bbox: resolved.bbox,
+      };
+    } catch (error) {
+      if (!(error instanceof MapboxGeocodingError)) {
+        throw new HttpsError(
+          'unavailable',
+          'Location filtering is temporarily unavailable.',
+        );
+      }
+      if (error.code === 'not_found' || error.code === 'invalid_query') {
+        return null;
+      }
+      if (error.code === 'not_configured') {
+        throw new HttpsError(
+          'internal',
+          'Location filtering is unavailable because MAPBOX_ACCESS_TOKEN is not configured on the backend.',
+        );
+      }
+      if (error.code === 'unauthorized') {
         throw new HttpsError(
           'internal',
           'Location filtering is unavailable because the configured Mapbox token was rejected.',
         );
       }
-
-      if (response.status === 429) {
+      if (error.code === 'rate_limited') {
         throw new HttpsError(
           'unavailable',
           'Location filtering is temporarily unavailable because Mapbox rate limiting was reached.',
         );
       }
-
       throw new HttpsError(
         'unavailable',
-        `Location filtering is temporarily unavailable because Mapbox geocoding returned ${response.status}.`,
+        'Location filtering is temporarily unavailable because Mapbox geocoding failed.',
       );
     }
-
-    const payload = await response.json() as {
-      features?: Array<{
-        center?: [number, number];
-        place_name?: string;
-        text?: string;
-        bbox?: unknown;
-        place_type?: unknown;
-      }>;
-    };
-    const feature = Array.isArray(payload.features) ? payload.features[0] : null;
-    if (!feature) {
-      return null;
-    }
-
-    const longitudeDegrees = Number(feature.center?.[0]);
-    const latitudeDegrees = Number(feature.center?.[1]);
-    if (!isValidCoordinate(latitudeDegrees, longitudeDegrees)) {
-      return null;
-    }
-
-    const bbox = parseMapboxBoundingBox(feature.bbox);
-    const featureTypes = normalizeMapboxFeatureTypes(feature.place_type);
-
-    return {
-      resolvedLabel: normalizeLocationText(feature.place_name || feature.text || locationText) || locationText,
-      center: {
-        latitudeDegrees,
-        longitudeDegrees,
-      },
-      preferredMode: resolveMapboxPreferredMode(featureTypes, bbox),
-      bbox,
-    };
   },
   inferLocationText: async (input) => {
     const { output } = await aiInsightsGenkit.generate({

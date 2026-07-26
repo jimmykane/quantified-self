@@ -30,11 +30,11 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'activity-details:read': {
     title: 'Individual activity details',
-    description: 'Read activity summaries with exact start and end coordinates when available, laps, swim lengths, MTB jumps with exact coordinates, and signed-in links containing stable account/event paths.',
+    description: 'Read activity summaries with exact start and end coordinates when available, search starts or ends near a location, read laps, swim lengths, MTB jumps with exact coordinates, and open signed-in links containing stable account/event paths. Place-name searches send the location text to Mapbox.',
   },
   'routes:read': {
     title: 'Saved routes and waypoints',
-    description: 'Read saved-route names, metrics, exact bounds, preview geometry, waypoint coordinates, and signed-in links containing stable account/route paths.',
+    description: 'Read saved-route names, metrics, exact bounds, preview geometry with segment endpoints, search previews near a location, read waypoint coordinates, and open signed-in links containing stable account/route paths. Place-name searches send the location text to Mapbox.',
   },
 };
 

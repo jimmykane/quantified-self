@@ -71,10 +71,14 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('exact start and end coordinates when available');
+    expect(content).toContain('search starts or ends near a location');
     expect(content).toContain('MTB jumps with exact coordinates');
     expect(content).toContain('home, workplace, frequent trailhead');
     expect(content).toContain('Saved routes and waypoints');
+    expect(content).toContain('preview geometry with segment endpoints');
     expect(content).toContain('waypoint coordinates');
+    expect(content).toContain('location text to Mapbox');
+    expect(content).toContain('direct-coordinate searches stay within Quantified Self');
     expect(content).toContain('Raw streams');
     expect(content).toContain('stable account/event or route paths');
   });
