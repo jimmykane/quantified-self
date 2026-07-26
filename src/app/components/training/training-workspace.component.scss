@@ -254,6 +254,10 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-power-systems-cards dd { font-size: 24px; }
 .training-power-systems-cards small { margin-top: 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
 .training-power-systems-card-description { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); line-height: 1.35; }
+.training-power-systems-interpretation { margin-top: 16px; padding: 12px 0; border-block: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.training-power-systems-interpretation h4 { margin: 0; font-size: var(--training-inter-caption-font-size); }
+.training-power-systems-interpretation p { margin: 5px 0 0; font-size: var(--training-inter-body-font-size); font-weight: 650; line-height: 1.4; }
+.training-power-systems-interpretation ul { display: grid; gap: 5px; margin: 9px 0 0; padding-left: 18px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.4; }
 .training-power-systems-evidence { margin-top: 16px; }
 .training-power-systems-evidence p { margin: 0; font-size: var(--training-inter-body-font-size); line-height: 1.45; }
 .training-power-systems-evidence ul { display: flex; flex-wrap: wrap; gap: 5px 16px; margin: 7px 0 0; padding: 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); line-height: 1.4; list-style: none; }

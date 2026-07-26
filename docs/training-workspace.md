@@ -6,7 +6,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `14`
+- Quantified Self derived-metric schema: `15`
 - `@sports-alliance/sports-lib`: `17.8.0`
 - Training disciplines: Running, Cycling, and Swimming
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
@@ -892,7 +892,8 @@ The bounded payload persists:
 - Sports-lib source fingerprint;
 - usable-curve count, history span, malformed and isolated-spike rejected-point counts, sustained/short anchor coverage,
   the distinct activities that actually supplied each component's retained envelope anchors, fit error,
-  candidate-method spread, leave-one-anchor-out stability, and whole-workout source-removal diagnostics;
+  candidate-method spread, and—only when W′ is withheld for method disagreement—the count and minimum/maximum range
+  of the three candidate W′ values; plus leave-one-anchor-out stability and whole-workout source-removal diagnostics;
 - compact dated component statuses and values for the 12-week sparse history; and
 - current-window candidate, usable-curve, and excluded-evidence counts.
 
@@ -916,9 +917,11 @@ gate.
 
 CP and W′ stability are independent after the shared fit-error gate passes. Stable CP remains visible in a `partial`
 result when W′ method or anchor sensitivity exceeds its limit; W′ is `unstable`, Pmax is unavailable because it depends
-on W′, and the complete model remains absent. A top-level `unstable` result now identifies unstable CP. The UI reports
-method spread, anchor-removal sensitivity, and whole-workout removal sensitivity separately so the reason is not
-misidentified.
+on W′, and the complete model remains absent. A top-level `unstable` result now identifies unstable CP. For an unstable
+W′ result, the UI adds a plain-language explanation: whether all retained sustained anchors came from one workout,
+whether removing it leaves no CP/W′ refit, the competing W′ candidate range, and why Pmax remains withheld. Candidate
+values are competing estimates, not a replacement W′ result. The UI also reports method spread, anchor-removal
+sensitivity, and whole-workout removal sensitivity separately so the reason is not misidentified.
 
 The UI shows an exact activity-type selector only when multiple types are available, current CP/W′/Pmax cards with
 plain-language modeled-parameter descriptions, status/reason copy, evidence coverage, contributor-aware diagnostics grouped as
@@ -931,7 +934,7 @@ capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout presc
 #### Parser and continuous-stream boundary
 
 Sports-lib 17.8.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
-Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 14 rebuilds existing
+Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 15 rebuilds existing
 snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
 
@@ -1502,7 +1505,7 @@ When a Training change depends on a new sports-lib version:
 6. Deploy the frontend.
 7. Verify a real account with ready, partial, sparse, and missing-data states.
 
-Existing snapshots rebuild lazily after a schema bump. Schema 14 is sufficient for rolling power-system capacity when
+Existing snapshots rebuild lazily after a schema bump. Schema 15 is sufficient for rolling power-system capacity when
 persisted curves already exist. A new parser-owned activity stat may additionally require a reparse; changing only the
 derived schema cannot create a missing activity stat or reconstruct a missing continuous stream.
 

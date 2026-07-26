@@ -659,6 +659,20 @@
             }
           </dl>
 
+          @if (powerSystems.interpretation; as interpretation) {
+            <section
+              class="training-power-systems-interpretation"
+              aria-labelledby="training-power-systems-interpretation-title">
+              <h4 id="training-power-systems-interpretation-title">What this means</h4>
+              <p>{{ interpretation.summary }}</p>
+              <ul>
+                @for (detail of interpretation.details; track $index) {
+                  <li>{{ detail }}</li>
+                }
+              </ul>
+            </section>
+          }
+
           <div class="training-power-systems-evidence">
             <p>{{ powerSystems.evidenceText }}</p>
             <ul aria-label="Capacity model diagnostics">

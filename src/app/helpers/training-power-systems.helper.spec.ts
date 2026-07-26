@@ -5,6 +5,7 @@ import type {
   DerivedTrainingPowerSystemsStatus,
 } from '@shared/derived-metrics';
 import {
+  buildTrainingPowerSystemsInterpretation,
   buildTrainingPowerSystemsActivityTypeViewModels,
   resolveTrainingPowerSystemsMetricPayload,
 } from './training-power-systems.helper';
@@ -29,29 +30,44 @@ function entry(
   status: DerivedTrainingPowerSystemsStatus = 'ready',
   reason: DerivedTrainingPowerSystemsReason | null = null,
 ) {
-  const resolvedReason = status === 'ready'
-    ? null
-    : reason ?? (status === 'partial' ? 'insufficient-maximum-power-range' : 'insufficient-history');
-  const componentStatus: DerivedTrainingPowerSystemsComponentStatus = status === 'partial' || status === 'ready'
-    ? 'ready'
-    : status;
+  const resolvedReason =
+    status === 'ready'
+      ? null
+      : (reason ??
+        (status === 'partial'
+          ? 'insufficient-maximum-power-range'
+          : 'insufficient-history'));
+  const componentStatus: DerivedTrainingPowerSystemsComponentStatus =
+    status === 'partial' || status === 'ready' ? 'ready' : status;
   const wPrimeStatus: DerivedTrainingPowerSystemsComponentStatus =
     resolvedReason === 'unstable-w-prime-fit' ? 'unstable' : componentStatus;
-  const maximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus = status === 'partial'
-    ? 'insufficient-evidence'
-    : componentStatus;
+  const maximumPowerStatus: DerivedTrainingPowerSystemsComponentStatus =
+    status === 'partial' ? 'insufficient-evidence' : componentStatus;
+  const hasUnstableWPrimeCandidates = resolvedReason === 'unstable-w-prime-fit';
   const current = {
     effectiveDayMs: asOfDayMs,
     status,
     reason: resolvedReason,
     activityType,
     sourceFingerprint: 'three-dimensional-capacity:0123456789abcdef',
-    criticalPower: component(componentStatus, 260, resolvedReason ?? 'insufficient-history'),
-    wPrime: component(wPrimeStatus, 18_500, resolvedReason ?? 'insufficient-history'),
-    maximumPower: component(maximumPowerStatus, 1_200, resolvedReason ?? 'insufficient-history'),
+    criticalPower: component(
+      componentStatus,
+      260,
+      resolvedReason ?? 'insufficient-history',
+    ),
+    wPrime: component(
+      wPrimeStatus,
+      18_500,
+      resolvedReason ?? 'insufficient-history',
+    ),
+    maximumPower: component(
+      maximumPowerStatus,
+      1_200,
+      resolvedReason ?? 'insufficient-history',
+    ),
     diagnostics: {
       sourceCount: 3,
-      historyStartDayMs: asOfDayMs - (30 * DAY_MS),
+      historyStartDayMs: asOfDayMs - 30 * DAY_MS,
       historyEndDayMs: asOfDayMs - DAY_MS,
       historySpanDays: 29,
       rejectedPointCount: 0,
@@ -62,11 +78,18 @@ function entry(
       criticalPowerContributingSourceCount: 2,
       maximumPowerAnchorCount: status === 'partial' ? 2 : 8,
       maximumPowerContributingSourceCount: status === 'partial' ? 1 : 2,
-      criticalPowerNormalizedRmse: status === 'insufficient-evidence' ? null : 0.02,
-      criticalPowerSpreadRatio: status === 'insufficient-evidence' ? null : 0.01,
+      criticalPowerNormalizedRmse:
+        status === 'insufficient-evidence' ? null : 0.02,
+      criticalPowerSpreadRatio:
+        status === 'insufficient-evidence' ? null : 0.01,
       wPrimeSpreadRatio: status === 'insufficient-evidence' ? null : 0.04,
-      criticalPowerLeaveOneOutSpreadRatio: status === 'insufficient-evidence' ? null : 0.02,
-      wPrimeLeaveOneOutSpreadRatio: status === 'insufficient-evidence' ? null : 0.08,
+      wPrimeCandidateCount: hasUnstableWPrimeCandidates ? 3 : 0,
+      wPrimeCandidateMinimumJoules: hasUnstableWPrimeCandidates ? 10_000 : null,
+      wPrimeCandidateMaximumJoules: hasUnstableWPrimeCandidates ? 14_400 : null,
+      criticalPowerLeaveOneOutSpreadRatio:
+        status === 'insufficient-evidence' ? null : 0.02,
+      wPrimeLeaveOneOutSpreadRatio:
+        status === 'insufficient-evidence' ? null : 0.08,
       criticalPowerSourceRemovalFitCount: 2,
       criticalPowerSourceRemovalFailureCount: 0,
       criticalPowerSourceRemovalMaximumChangeRatio: 0.03,
@@ -378,6 +401,44 @@ describe('training-power-systems.helper', () => {
     expect(view.reasonText).toContain('Critical power is usable');
   });
 
+  it('turns unstable W′ diagnostics into a plain-language evidence explanation', () => {
+    const unstableWPrime = entry('Cycling', 'partial', 'unstable-w-prime-fit');
+    unstableWPrime.current.diagnostics = {
+      ...unstableWPrime.current.diagnostics,
+      sourceCount: 9,
+      historyStartDayMs: asOfDayMs - 29 * DAY_MS,
+      historySpanDays: 28,
+      criticalPowerAnchorCount: 8,
+      earlyCriticalPowerAnchorCount: 4,
+      longCriticalPowerAnchorCount: 3,
+      criticalPowerContributingSourceCount: 1,
+      maximumPowerAnchorCount: 8,
+      maximumPowerContributingSourceCount: 2,
+      criticalPowerSourceRemovalFitCount: 0,
+      criticalPowerSourceRemovalFailureCount: 1,
+      criticalPowerSourceRemovalMaximumChangeRatio: null,
+      wPrimeSourceRemovalMaximumChangeRatio: null,
+      wPrimeCandidateCount: 3,
+      wPrimeCandidateMinimumJoules: 10_017,
+      wPrimeCandidateMaximumJoules: 14_410,
+    };
+
+    const interpretation = buildTrainingPowerSystemsInterpretation(
+      unstableWPrime.current,
+    );
+
+    expect(interpretation).toEqual({
+      summary:
+        'Critical power is usable, but this window cannot support one trustworthy W′ or Pmax value.',
+      details: [
+        'All retained 2–20 minute bests came from one workout.',
+        'Removing that workout leaves no CP/W′ refit.',
+        '3 fitting methods produced W′ estimates from 10.0 to 14.4 kJ, so QS withholds one value.',
+        'Pmax is intentionally unavailable because the three-parameter model depends on a stable W′ value, not because it is zero.',
+      ],
+    });
+  });
+
   it('explains method disagreement and distinguishes usable curves from envelope contributors', () => {
     const unstable = entry('Cycling', 'unstable', 'unstable-critical-power-fit');
     unstable.current.diagnostics = {
@@ -405,46 +466,93 @@ describe('training-power-systems.helper', () => {
       usableCurveActivityCount: 9,
       excludedActivityCount: 2,
     };
-    const normalized = resolveTrainingPowerSystemsMetricPayload(payload([unstable]));
+    const normalized = resolveTrainingPowerSystemsMetricPayload(
+      payload([unstable]),
+    );
     const view = buildTrainingPowerSystemsActivityTypeViewModels(normalized)[0];
 
     expect(view.reasonText).toContain('fitting methods disagree');
     expect(view.diagnostics).toContain('9 usable power curves over 28 days');
-    expect(view.diagnostics).toContain('1 workout supplied 7/8 sustained anchors');
+    expect(view.diagnostics).toContain(
+      '1 workout supplied 7/8 sustained anchors',
+    );
     expect(view.diagnostics).toContain('2 workouts supplied 8/8 short anchors');
     expect(view.diagnostics).toContain('4.1% CP method spread');
     expect(view.diagnostics).toContain('32.7% W′ method spread');
     expect(view.diagnostics).toContain('9.5% worst anchor-removal change');
-    expect(view.diagnostics).toContain('1 whole-workout removal refit unavailable');
+    expect(view.diagnostics).toContain(
+      '1 whole-workout removal refit unavailable',
+    );
     expect(view.diagnostics.join(' ')).not.toContain('fitted sources');
-    expect(view.evidenceText)
-      .toBe('9 of 11 workouts in the preceding 42 days supplied usable power curves; 2 could not supply one.');
+    expect(view.evidenceText).toBe(
+      '9 of 11 workouts in the preceding 42 days supplied usable power curves; 2 could not supply one.',
+    );
   });
 
   it('builds three aligned sparse trends and keeps today as the current endpoint', () => {
-    const normalized = resolveTrainingPowerSystemsMetricPayload(payload([entry('Rowing')]));
+    const normalized = resolveTrainingPowerSystemsMetricPayload(
+      payload([entry('Rowing')]),
+    );
     const view = buildTrainingPowerSystemsActivityTypeViewModels(normalized)[0];
 
-    expect(view.trends.map(trend => [trend.label, trend.unit])).toEqual([
+    expect(view.trends.map((trend) => [trend.label, trend.unit])).toEqual([
       ['Critical power', 'W'],
       ['W′', 'kJ'],
       ['Maximum power', 'W'],
     ]);
     view.trends.forEach((trend) => {
       expect(trend.points).toHaveLength(3);
-      expect(trend.points[1]).toMatchObject({ value: null, statusText: 'Not enough evidence' });
-      expect(trend.points.at(-1)).toMatchObject({ dayMs: asOfDayMs, isCurrent: true });
-      expect(trend.rangeStartDayMs).toBe(asOfDayMs - (84 * DAY_MS));
+      expect(trend.points[1]).toMatchObject({
+        value: null,
+        statusText: 'Not enough evidence',
+      });
+      expect(trend.points.at(-1)).toMatchObject({
+        dayMs: asOfDayMs,
+        isCurrent: true,
+      });
+      expect(trend.rangeStartDayMs).toBe(asOfDayMs - 84 * DAY_MS);
       expect(trend.rangeEndDayMs).toBe(asOfDayMs);
     });
-    expect(view.trends[1].points.map(point => point.value)).toEqual([18, null, 18.5]);
+    expect(view.trends[1].points.map((point) => point.value)).toEqual([
+      18,
+      null,
+      18.5,
+    ]);
   });
 
   it('never creates an all-sports aggregate option', () => {
     const normalized = resolveTrainingPowerSystemsMetricPayload(payload());
     const views = buildTrainingPowerSystemsActivityTypeViewModels(normalized);
 
-    expect(views.map(view => view.activityType)).not.toContain('All sports');
+    expect(views.map((view) => view.activityType)).not.toContain('All sports');
     expect(views).toHaveLength(2);
+  });
+
+  it.each([
+    (value: ReturnType<typeof payload>) => {
+      const current = value.activityTypes[0].current;
+      current.status = 'partial';
+      current.reason = 'unstable-w-prime-fit';
+      current.wPrime = component('unstable', 0, 'unstable-w-prime-fit');
+      current.maximumPower = component(
+        'insufficient-evidence',
+        0,
+        'unstable-w-prime-fit',
+      );
+      current.diagnostics.wPrimeCandidateCount = 0;
+      return value;
+    },
+    (value: ReturnType<typeof payload>) => {
+      value.activityTypes[0].current.diagnostics.wPrimeCandidateCount = 3;
+      value.activityTypes[0].current.diagnostics.wPrimeCandidateMinimumJoules = 14_000;
+      value.activityTypes[0].current.diagnostics.wPrimeCandidateMaximumJoules = 10_000;
+      return value;
+    },
+  ])('rejects inconsistent W′ candidate diagnostics', (mutate) => {
+    expect(
+      resolveTrainingPowerSystemsMetricPayload(
+        mutate(structuredClone(payload())),
+      ),
+    ).toBeNull();
   });
 });

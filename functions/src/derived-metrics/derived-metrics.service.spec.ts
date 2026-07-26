@@ -1995,33 +1995,49 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             maximumPower: expected.maximumPower,
             diagnostics: {
                 sourceCount: expected.diagnostics.sourceCount,
-                historyStartDayMs: Date.parse(`${expected.envelope.historyStartDate}T00:00:00.000Z`),
-                historyEndDayMs: Date.parse(`${expected.envelope.historyEndDate}T00:00:00.000Z`),
+                historyStartDayMs: Date.parse(
+                    `${expected.envelope.historyStartDate}T00:00:00.000Z`,
+                ),
+                historyEndDayMs: Date.parse(
+                    `${expected.envelope.historyEndDate}T00:00:00.000Z`,
+                ),
                 historySpanDays: expected.diagnostics.historySpanDays,
                 rejectedPointCount: expected.envelope.rejectedPointCount,
                 rejectedShortPowerSpikePointCount:
                     expected.envelope.rejectedShortPowerSpikePointCount,
-                criticalPowerAnchorCount: expected.diagnostics.criticalPowerAnchorCount,
-                earlyCriticalPowerAnchorCount: expected.diagnostics.earlyCriticalPowerAnchorCount,
-                longCriticalPowerAnchorCount: expected.diagnostics.longCriticalPowerAnchorCount,
+                criticalPowerAnchorCount:
+                    expected.diagnostics.criticalPowerAnchorCount,
+                earlyCriticalPowerAnchorCount:
+                    expected.diagnostics.earlyCriticalPowerAnchorCount,
+                longCriticalPowerAnchorCount:
+                    expected.diagnostics.longCriticalPowerAnchorCount,
                 criticalPowerContributingSourceCount: 1,
-                maximumPowerAnchorCount: expected.diagnostics.maximumPowerAnchorCount,
+                maximumPowerAnchorCount:
+                    expected.diagnostics.maximumPowerAnchorCount,
                 maximumPowerContributingSourceCount: 1,
-                criticalPowerNormalizedRmse: expected.diagnostics.criticalPowerNormalizedRmse,
-                criticalPowerSpreadRatio: expected.diagnostics.criticalPowerSpreadRatio,
+                criticalPowerNormalizedRmse:
+                    expected.diagnostics.criticalPowerNormalizedRmse,
+                criticalPowerSpreadRatio:
+                    expected.diagnostics.criticalPowerSpreadRatio,
                 wPrimeSpreadRatio: expected.diagnostics.wPrimeSpreadRatio,
+                wPrimeCandidateCount: 0,
+                wPrimeCandidateMinimumJoules: null,
+                wPrimeCandidateMaximumJoules: null,
                 criticalPowerLeaveOneOutSpreadRatio:
                     expected.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
-                wPrimeLeaveOneOutSpreadRatio: expected.diagnostics.wPrimeLeaveOneOutSpreadRatio,
+                wPrimeLeaveOneOutSpreadRatio:
+                    expected.diagnostics.wPrimeLeaveOneOutSpreadRatio,
                 criticalPowerSourceRemovalFitCount:
                     expected.diagnostics.criticalPowerSourceRemovalFitCount,
                 criticalPowerSourceRemovalFailureCount:
                     expected.diagnostics.criticalPowerSourceRemovalFailureCount,
                 criticalPowerSourceRemovalMaximumChangeRatio:
-                    expected.diagnostics.criticalPowerSourceRemovalMaximumChangeRatio,
+                    expected.diagnostics
+                        .criticalPowerSourceRemovalMaximumChangeRatio,
                 wPrimeSourceRemovalMaximumChangeRatio:
                     expected.diagnostics.wPrimeSourceRemovalMaximumChangeRatio,
-                maximumPowerNormalizedRmse: expected.diagnostics.maximumPowerNormalizedRmse,
+                maximumPowerNormalizedRmse:
+                    expected.diagnostics.maximumPowerNormalizedRmse,
                 maximumPowerLeaveOneOutSpreadRatio:
                     expected.diagnostics.maximumPowerLeaveOneOutSpreadRatio,
             },
@@ -2302,6 +2318,29 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 reason: 'unstable-w-prime-fit',
                 value: null,
             },
+            diagnostics: {
+                ...baseFit.diagnostics,
+                criticalPowerCandidates: [
+                    {
+                        method: 'power-reciprocal-time',
+                        criticalPowerWatts: 230.8,
+                        wPrimeJoules: 10_017,
+                        normalizedRmse: 0.022,
+                    },
+                    {
+                        method: 'work-time',
+                        criticalPowerWatts: 224.13,
+                        wPrimeJoules: 12_433,
+                        normalizedRmse: 0.032,
+                    },
+                    {
+                        method: 'duration-domain',
+                        criticalPowerWatts: 221.9,
+                        wPrimeJoules: 14_410,
+                        normalizedRmse: 0.051,
+                    },
+                ],
+            },
         };
 
         const result = buildTrainingPowerSystemsMetricPayload(
@@ -2319,6 +2358,11 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
                 status: 'insufficient-evidence',
                 reason: 'unstable-w-prime-fit',
                 value: null,
+            },
+            diagnostics: {
+                wPrimeCandidateCount: 3,
+                wPrimeCandidateMinimumJoules: 10_017,
+                wPrimeCandidateMaximumJoules: 14_410,
             },
         });
     });

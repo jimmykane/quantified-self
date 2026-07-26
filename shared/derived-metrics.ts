@@ -90,7 +90,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 14;
+export const DERIVED_METRIC_SCHEMA_VERSION = 15;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -603,6 +603,13 @@ export interface DerivedTrainingPowerSystemsDiagnostics {
   criticalPowerNormalizedRmse: number | null;
   criticalPowerSpreadRatio: number | null;
   wPrimeSpreadRatio: number | null;
+  /**
+   * Preserved only when Sports-lib withholds W′ because its current fitting
+   * methods disagree. These are competing estimates, not a reported W′.
+   */
+  wPrimeCandidateCount: number;
+  wPrimeCandidateMinimumJoules: number | null;
+  wPrimeCandidateMaximumJoules: number | null;
   criticalPowerLeaveOneOutSpreadRatio: number | null;
   wPrimeLeaveOneOutSpreadRatio: number | null;
   criticalPowerSourceRemovalFitCount: number;

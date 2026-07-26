@@ -598,6 +598,9 @@ describe('TrainingWorkspaceComponent', () => {
           criticalPowerNormalizedRmse: 0.02,
           criticalPowerSpreadRatio: 0.01,
           wPrimeSpreadRatio: 0.04,
+          wPrimeCandidateCount: wPrimeUnstable ? 3 : 0,
+          wPrimeCandidateMinimumJoules: wPrimeUnstable ? 10_017 : null,
+          wPrimeCandidateMaximumJoules: wPrimeUnstable ? 14_410 : null,
           criticalPowerLeaveOneOutSpreadRatio: 0.02,
           wPrimeLeaveOneOutSpreadRatio: 0.08,
           criticalPowerSourceRemovalFitCount: 2,
@@ -695,6 +698,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('260 W');
     expect(fixture.nativeElement.textContent).toContain('Critical power is usable');
     expect(fixture.nativeElement.textContent).toContain('W′ changes too much');
+    expect(fixture.nativeElement.textContent).toContain('What this means');
+    expect(fixture.nativeElement.textContent).toContain('from 10.0 to 14.4 kJ');
+    expect(fixture.nativeElement.textContent).toContain('Pmax is intentionally unavailable');
     expect(fixture.nativeElement.textContent).toContain('Unavailable');
     expect(fixture.nativeElement.textContent).not.toContain('All sports');
 

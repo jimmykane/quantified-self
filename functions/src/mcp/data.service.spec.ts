@@ -2171,6 +2171,9 @@ describe('MCP data service', () => {
             },
             diagnostics: {
               rejectedShortPowerSpikePointCount: 3,
+              wPrimeCandidateCount: 3,
+              wPrimeCandidateMinimumJoules: 10_017,
+              wPrimeCandidateMaximumJoules: 14_410,
               criticalPowerSourceRemovalFitCount: 2,
               criticalPowerSourceRemovalFailureCount: 1,
               criticalPowerSourceRemovalMaximumChangeRatio: 0.04,
@@ -2204,6 +2207,9 @@ describe('MCP data service', () => {
             },
             diagnostics: {
               rejectedShortPowerSpikePointCount: 3,
+              wPrimeCandidateCount: 3,
+              wPrimeCandidateMinimumJoules: 10_017,
+              wPrimeCandidateMaximumJoules: 14_410,
               criticalPowerSourceRemovalFitCount: 2,
               criticalPowerSourceRemovalFailureCount: 1,
               criticalPowerSourceRemovalMaximumChangeRatio: 0.04,

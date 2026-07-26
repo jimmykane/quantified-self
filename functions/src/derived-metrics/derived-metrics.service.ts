@@ -1626,6 +1626,37 @@ function summarizeTrainingPowerSystemsEnvelope(fit: ThreeDimensionalCapacityFit)
     };
 }
 
+function summarizeUnstableWPrimeCandidates(fit: ThreeDimensionalCapacityFit): {
+    count: number;
+    minimumJoules: number | null;
+    maximumJoules: number | null;
+} | null {
+    if (fit.status !== 'partial' || fit.reason !== 'unstable-w-prime-fit') {
+        return {
+            count: 0,
+            minimumJoules: null,
+            maximumJoules: null,
+        };
+    }
+    const candidates = Array.isArray(fit.diagnostics?.criticalPowerCandidates)
+        ? fit.diagnostics.criticalPowerCandidates
+        : [];
+    const wPrimeValues = candidates.map((candidate) => candidate?.wPrimeJoules);
+    if (
+        wPrimeValues.length !== 3 ||
+        wPrimeValues.some(
+            (value) => !Number.isFinite(value) || (value as number) <= 0,
+        )
+    ) {
+        return null;
+    }
+    return {
+        count: wPrimeValues.length,
+        minimumJoules: Math.min(...(wPrimeValues as number[])),
+        maximumJoules: Math.max(...(wPrimeValues as number[])),
+    };
+}
+
 function resolveUtcDateKey(dayMs: number): string {
     return new Date(dayMs).toISOString().slice(0, 10);
 }
@@ -1757,18 +1788,25 @@ function serializeTrainingPowerSystemsFit(
     activityType: ActivityTypes,
     effectiveDayMs: number,
 ): DerivedTrainingPowerSystemsSnapshot {
-    const criticalPower = serializeTrainingPowerSystemsComponent(fit.criticalPower);
-    const wPrime = serializeTrainingPowerSystemsComponent(fit.wPrime);
-    const maximumPower = serializeTrainingPowerSystemsComponent(fit.maximumPower);
-    const envelopeSummary = summarizeTrainingPowerSystemsEnvelope(fit);
-    const hasInvalidFitContract = !isTrainingPowerSystemsFitContractConsistent(
-        fit,
-        activityType,
-        effectiveDayMs,
-        criticalPower,
-        wPrime,
-        maximumPower,
+    const criticalPower = serializeTrainingPowerSystemsComponent(
+        fit.criticalPower,
     );
+    const wPrime = serializeTrainingPowerSystemsComponent(fit.wPrime);
+    const maximumPower = serializeTrainingPowerSystemsComponent(
+        fit.maximumPower,
+    );
+    const envelopeSummary = summarizeTrainingPowerSystemsEnvelope(fit);
+    const wPrimeCandidates = summarizeUnstableWPrimeCandidates(fit);
+    const hasInvalidFitContract =
+        wPrimeCandidates === null ||
+        !isTrainingPowerSystemsFitContractConsistent(
+            fit,
+            activityType,
+            effectiveDayMs,
+            criticalPower,
+            wPrime,
+            maximumPower,
+        );
     const invalidComponent: DerivedTrainingPowerSystemsComponent = {
         status: 'invalid-input',
         reason: 'invalid-source',
@@ -1782,20 +1820,39 @@ function serializeTrainingPowerSystemsFit(
         sourceFingerprint: fit.sourceFingerprint,
         criticalPower: hasInvalidFitContract ? invalidComponent : criticalPower,
         wPrime: hasInvalidFitContract ? { ...invalidComponent } : wPrime,
-        maximumPower: hasInvalidFitContract ? { ...invalidComponent } : maximumPower,
+        maximumPower: hasInvalidFitContract
+            ? { ...invalidComponent }
+            : maximumPower,
         diagnostics: {
             sourceCount: fit.diagnostics.sourceCount,
-            historyStartDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyStartDate),
-            historyEndDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyEndDate),
+            historyStartDayMs: resolveUtcDateKeyDayMs(
+                fit.envelope.historyStartDate,
+            ),
+            historyEndDayMs: resolveUtcDateKeyDayMs(
+                fit.envelope.historyEndDate,
+            ),
             historySpanDays: fit.diagnostics.historySpanDays,
             rejectedPointCount: fit.envelope.rejectedPointCount,
-            rejectedShortPowerSpikePointCount: fit.envelope.rejectedShortPowerSpikePointCount,
+            rejectedShortPowerSpikePointCount:
+                fit.envelope.rejectedShortPowerSpikePointCount,
             ...envelopeSummary,
-            criticalPowerNormalizedRmse: fit.diagnostics.criticalPowerNormalizedRmse,
+            criticalPowerNormalizedRmse:
+                fit.diagnostics.criticalPowerNormalizedRmse,
             criticalPowerSpreadRatio: fit.diagnostics.criticalPowerSpreadRatio,
             wPrimeSpreadRatio: fit.diagnostics.wPrimeSpreadRatio,
-            criticalPowerLeaveOneOutSpreadRatio: fit.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
-            wPrimeLeaveOneOutSpreadRatio: fit.diagnostics.wPrimeLeaveOneOutSpreadRatio,
+            wPrimeCandidateCount: hasInvalidFitContract
+                ? 0
+                : wPrimeCandidates.count,
+            wPrimeCandidateMinimumJoules: hasInvalidFitContract
+                ? null
+                : wPrimeCandidates.minimumJoules,
+            wPrimeCandidateMaximumJoules: hasInvalidFitContract
+                ? null
+                : wPrimeCandidates.maximumJoules,
+            criticalPowerLeaveOneOutSpreadRatio:
+                fit.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
+            wPrimeLeaveOneOutSpreadRatio:
+                fit.diagnostics.wPrimeLeaveOneOutSpreadRatio,
             criticalPowerSourceRemovalFitCount:
                 fit.diagnostics.criticalPowerSourceRemovalFitCount,
             criticalPowerSourceRemovalFailureCount:

@@ -80,12 +80,18 @@ export interface TrainingPowerSystemsTrendViewModel {
   points: TrainingPowerSystemsTrendPointViewModel[];
 }
 
+export interface TrainingPowerSystemsInterpretationViewModel {
+  summary: string;
+  details: string[];
+}
+
 export interface TrainingPowerSystemsActivityTypeViewModel {
   activityType: string;
   status: DerivedTrainingPowerSystemsStatus;
   statusText: string;
   reasonText: string;
   evidenceText: string;
+  interpretation: TrainingPowerSystemsInterpretationViewModel | null;
   diagnostics: string[];
   cards: TrainingPowerSystemsCardViewModel[];
   trends: TrainingPowerSystemsTrendViewModel[];
@@ -112,6 +118,13 @@ function nullableNonNegativeNumber(value: unknown): number | null | undefined {
   }
   const numeric = finiteNumber(value);
   return numeric !== null && numeric >= 0 ? numeric : undefined;
+}
+
+function nullablePositiveNumber(value: unknown): number | null | undefined {
+  const numeric = nullableNonNegativeNumber(value);
+  return numeric === null || numeric === undefined || numeric > 0
+    ? numeric
+    : undefined;
 }
 
 function isUtcDayMs(value: number): boolean {
@@ -293,6 +306,13 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
   const criticalPowerSourceRemovalFailureCount = nonNegativeInteger(
     raw.criticalPowerSourceRemovalFailureCount,
   );
+  const wPrimeCandidateCount = nonNegativeInteger(raw.wPrimeCandidateCount);
+  const wPrimeCandidateMinimumJoules = nullablePositiveNumber(
+    raw.wPrimeCandidateMinimumJoules,
+  );
+  const wPrimeCandidateMaximumJoules = nullablePositiveNumber(
+    raw.wPrimeCandidateMaximumJoules,
+  );
   const optionalDiagnostics = [
     nullableNonNegativeNumber(raw.criticalPowerNormalizedRmse),
     nullableNonNegativeNumber(raw.criticalPowerSpreadRatio),
@@ -305,63 +325,77 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     nullableNonNegativeNumber(raw.maximumPowerLeaveOneOutSpreadRatio),
   ] as const;
   if (
-    sourceCount === null
-    || historySpanDays === null
-    || rejectedPointCount === null
-    || rejectedShortPowerSpikePointCount === null
-    || criticalPowerAnchorCount === null
-    || criticalPowerAnchorCount > THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length
-    || earlyCriticalPowerAnchorCount === null
-    || earlyCriticalPowerAnchorCount > criticalPowerAnchorCount
-    || longCriticalPowerAnchorCount === null
-    || longCriticalPowerAnchorCount > criticalPowerAnchorCount
-    || earlyCriticalPowerAnchorCount + longCriticalPowerAnchorCount > criticalPowerAnchorCount
-    || criticalPowerContributingSourceCount === null
-    || criticalPowerContributingSourceCount > sourceCount
-    || criticalPowerContributingSourceCount > criticalPowerAnchorCount
-    || ((criticalPowerAnchorCount === 0) !== (criticalPowerContributingSourceCount === 0))
-    || maximumPowerAnchorCount === null
-    || maximumPowerAnchorCount > THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS.length
-    || maximumPowerContributingSourceCount === null
-    || maximumPowerContributingSourceCount > sourceCount
-    || maximumPowerContributingSourceCount > maximumPowerAnchorCount
-    || ((maximumPowerAnchorCount === 0) !== (maximumPowerContributingSourceCount === 0))
-    || criticalPowerSourceRemovalFitCount === null
-    || criticalPowerSourceRemovalFailureCount === null
-    || criticalPowerSourceRemovalFitCount + criticalPowerSourceRemovalFailureCount
-      > criticalPowerContributingSourceCount
-    || (
-      criticalPowerSourceRemovalFitCount === 0
-      && (optionalDiagnostics[5] !== null || optionalDiagnostics[6] !== null)
-    )
-    || (
-      criticalPowerSourceRemovalFitCount > 0
-      && (optionalDiagnostics[5] === null || optionalDiagnostics[6] === null)
-    )
-    || optionalDiagnostics.some(item => item === undefined)
-    || (
-      sourceCount === 0
-      && (
-        criticalPowerAnchorCount !== 0
-        || earlyCriticalPowerAnchorCount !== 0
-        || longCriticalPowerAnchorCount !== 0
-        || criticalPowerContributingSourceCount !== 0
-        || maximumPowerAnchorCount !== 0
-        || maximumPowerContributingSourceCount !== 0
-        || criticalPowerSourceRemovalFitCount !== 0
-        || criticalPowerSourceRemovalFailureCount !== 0
-        || optionalDiagnostics.some(item => item !== null)
-      )
-    )
-    || ((historyStartDayMs === null) !== (historyEndDayMs === null))
-    || (historyStartDayMs !== null && (!isUtcDayMs(historyStartDayMs) || !isUtcDayMs(historyEndDayMs as number)))
-    || (historyStartDayMs !== null && historyStartDayMs > (historyEndDayMs as number))
-    || ((historyStartDayMs === null) !== (sourceCount === 0))
-    || (historyStartDayMs === null && historySpanDays !== 0)
-    || (
-      historyStartDayMs !== null
-      && historySpanDays !== Math.round(((historyEndDayMs as number) - historyStartDayMs) / DAY_MS)
-    )
+    sourceCount === null ||
+    historySpanDays === null ||
+    rejectedPointCount === null ||
+    rejectedShortPowerSpikePointCount === null ||
+    criticalPowerAnchorCount === null ||
+    criticalPowerAnchorCount >
+      THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length ||
+    earlyCriticalPowerAnchorCount === null ||
+    earlyCriticalPowerAnchorCount > criticalPowerAnchorCount ||
+    longCriticalPowerAnchorCount === null ||
+    longCriticalPowerAnchorCount > criticalPowerAnchorCount ||
+    earlyCriticalPowerAnchorCount + longCriticalPowerAnchorCount >
+      criticalPowerAnchorCount ||
+    criticalPowerContributingSourceCount === null ||
+    criticalPowerContributingSourceCount > sourceCount ||
+    criticalPowerContributingSourceCount > criticalPowerAnchorCount ||
+    (criticalPowerAnchorCount === 0) !==
+      (criticalPowerContributingSourceCount === 0) ||
+    maximumPowerAnchorCount === null ||
+    maximumPowerAnchorCount >
+      THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS.length ||
+    maximumPowerContributingSourceCount === null ||
+    maximumPowerContributingSourceCount > sourceCount ||
+    maximumPowerContributingSourceCount > maximumPowerAnchorCount ||
+    (maximumPowerAnchorCount === 0) !==
+      (maximumPowerContributingSourceCount === 0) ||
+    criticalPowerSourceRemovalFitCount === null ||
+    criticalPowerSourceRemovalFailureCount === null ||
+    wPrimeCandidateCount === null ||
+    (wPrimeCandidateCount !== 0 && wPrimeCandidateCount !== 3) ||
+    (wPrimeCandidateMinimumJoules === null) !==
+      (wPrimeCandidateMaximumJoules === null) ||
+    (wPrimeCandidateCount === 0 &&
+      (wPrimeCandidateMinimumJoules !== null ||
+        wPrimeCandidateMaximumJoules !== null)) ||
+    (wPrimeCandidateCount > 0 &&
+      (wPrimeCandidateMinimumJoules === null ||
+        wPrimeCandidateMaximumJoules === null ||
+        wPrimeCandidateMinimumJoules > wPrimeCandidateMaximumJoules)) ||
+    criticalPowerSourceRemovalFitCount +
+      criticalPowerSourceRemovalFailureCount >
+      criticalPowerContributingSourceCount ||
+    (criticalPowerSourceRemovalFitCount === 0 &&
+      (optionalDiagnostics[5] !== null || optionalDiagnostics[6] !== null)) ||
+    (criticalPowerSourceRemovalFitCount > 0 &&
+      (optionalDiagnostics[5] === null || optionalDiagnostics[6] === null)) ||
+    optionalDiagnostics.some((item) => item === undefined) ||
+    (sourceCount === 0 &&
+      (criticalPowerAnchorCount !== 0 ||
+        earlyCriticalPowerAnchorCount !== 0 ||
+        longCriticalPowerAnchorCount !== 0 ||
+        criticalPowerContributingSourceCount !== 0 ||
+        maximumPowerAnchorCount !== 0 ||
+        maximumPowerContributingSourceCount !== 0 ||
+        criticalPowerSourceRemovalFitCount !== 0 ||
+        criticalPowerSourceRemovalFailureCount !== 0 ||
+        wPrimeCandidateCount !== 0 ||
+        wPrimeCandidateMinimumJoules !== null ||
+        wPrimeCandidateMaximumJoules !== null ||
+        optionalDiagnostics.some((item) => item !== null))) ||
+    (historyStartDayMs === null) !== (historyEndDayMs === null) ||
+    (historyStartDayMs !== null &&
+      (!isUtcDayMs(historyStartDayMs) ||
+        !isUtcDayMs(historyEndDayMs as number))) ||
+    (historyStartDayMs !== null &&
+      historyStartDayMs > (historyEndDayMs as number)) ||
+    (historyStartDayMs === null) !== (sourceCount === 0) ||
+    (historyStartDayMs === null && historySpanDays !== 0) ||
+    (historyStartDayMs !== null &&
+      historySpanDays !==
+        Math.round(((historyEndDayMs as number) - historyStartDayMs) / DAY_MS))
   ) {
     return null;
   }
@@ -381,12 +415,18 @@ function resolveDiagnostics(value: unknown): DerivedTrainingPowerSystemsDiagnost
     criticalPowerNormalizedRmse: optionalDiagnostics[0] as number | null,
     criticalPowerSpreadRatio: optionalDiagnostics[1] as number | null,
     wPrimeSpreadRatio: optionalDiagnostics[2] as number | null,
-    criticalPowerLeaveOneOutSpreadRatio: optionalDiagnostics[3] as number | null,
+    wPrimeCandidateCount,
+    wPrimeCandidateMinimumJoules,
+    wPrimeCandidateMaximumJoules,
+    criticalPowerLeaveOneOutSpreadRatio: optionalDiagnostics[3] as
+      number | null,
     wPrimeLeaveOneOutSpreadRatio: optionalDiagnostics[4] as number | null,
     criticalPowerSourceRemovalFitCount,
     criticalPowerSourceRemovalFailureCount,
-    criticalPowerSourceRemovalMaximumChangeRatio: optionalDiagnostics[5] as number | null,
-    wPrimeSourceRemovalMaximumChangeRatio: optionalDiagnostics[6] as number | null,
+    criticalPowerSourceRemovalMaximumChangeRatio: optionalDiagnostics[5] as
+      number | null,
+    wPrimeSourceRemovalMaximumChangeRatio: optionalDiagnostics[6] as
+      number | null,
     maximumPowerNormalizedRmse: optionalDiagnostics[7] as number | null,
     maximumPowerLeaveOneOutSpreadRatio: optionalDiagnostics[8] as number | null,
   };
@@ -398,37 +438,50 @@ function resolveSnapshot(
   asOfDayMs: number,
 ): DerivedTrainingPowerSystemsSnapshot | null {
   const raw = asRecord(value);
-  const statusAndReason = raw ? resolveStatusAndReason(raw.status, raw.reason) : null;
+  const statusAndReason = raw
+    ? resolveStatusAndReason(raw.status, raw.reason)
+    : null;
   const effectiveDayMs = raw ? finiteNumber(raw.effectiveDayMs) : null;
   const criticalPower = raw ? resolveComponent(raw.criticalPower) : null;
   const wPrime = raw ? resolveComponent(raw.wPrime) : null;
   const maximumPower = raw ? resolveComponent(raw.maximumPower) : null;
   const diagnostics = raw ? resolveDiagnostics(raw.diagnostics) : null;
-  const sourceFingerprint = raw?.sourceFingerprint === null
-    ? null
-    : typeof raw?.sourceFingerprint === 'string'
-      && /^three-dimensional-capacity:[0-9a-f]{16}$/.test(raw.sourceFingerprint)
-      ? raw.sourceFingerprint
-      : undefined;
+  const sourceFingerprint =
+    raw?.sourceFingerprint === null
+      ? null
+      : typeof raw?.sourceFingerprint === 'string' &&
+          /^three-dimensional-capacity:[0-9a-f]{16}$/.test(
+            raw.sourceFingerprint,
+          )
+        ? raw.sourceFingerprint
+        : undefined;
   if (
-    !raw
-    || !statusAndReason
-    || effectiveDayMs !== asOfDayMs
-    || !isUtcDayMs(effectiveDayMs)
-    || raw.activityType !== activityType
-    || !criticalPower
-    || !wPrime
-    || !maximumPower
-    || !componentStatusesMatchOverall(
+    !raw ||
+    !statusAndReason ||
+    effectiveDayMs !== asOfDayMs ||
+    !isUtcDayMs(effectiveDayMs) ||
+    raw.activityType !== activityType ||
+    !criticalPower ||
+    !wPrime ||
+    !maximumPower ||
+    !componentStatusesMatchOverall(
       statusAndReason.status,
       statusAndReason.reason,
       criticalPower,
       wPrime,
       maximumPower,
-    )
-    || !diagnostics
-    || sourceFingerprint === undefined
-    || ((diagnostics.sourceCount === 0) !== (sourceFingerprint === null))
+    ) ||
+    !diagnostics ||
+    sourceFingerprint === undefined ||
+    (diagnostics.sourceCount === 0) !== (sourceFingerprint === null) ||
+    (statusAndReason.reason === 'unstable-w-prime-fit' &&
+      (diagnostics.wPrimeCandidateCount !== 3 ||
+        diagnostics.wPrimeCandidateMinimumJoules === null ||
+        diagnostics.wPrimeCandidateMaximumJoules === null)) ||
+    (statusAndReason.reason !== 'unstable-w-prime-fit' &&
+      (diagnostics.wPrimeCandidateCount !== 0 ||
+        diagnostics.wPrimeCandidateMinimumJoules !== null ||
+        diagnostics.wPrimeCandidateMaximumJoules !== null))
   ) {
     return null;
   }
@@ -730,6 +783,45 @@ function formatEvidenceText(evidenceCounts: DerivedTrainingPowerSystemsEvidenceC
   ].join(' ');
 }
 
+export function buildTrainingPowerSystemsInterpretation(
+  snapshot: DerivedTrainingPowerSystemsSnapshot,
+): TrainingPowerSystemsInterpretationViewModel | null {
+  if (snapshot.reason !== 'unstable-w-prime-fit') {
+    return null;
+  }
+  const { diagnostics } = snapshot;
+  const allSustainedAnchorsComeFromOneWorkout =
+    diagnostics.criticalPowerContributingSourceCount === 1;
+  const hasFullSustainedRange =
+    diagnostics.criticalPowerAnchorCount ===
+    THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length;
+  const sustainedEvidence = allSustainedAnchorsComeFromOneWorkout
+    ? hasFullSustainedRange
+      ? 'All retained 2–20 minute bests came from one workout.'
+      : `All ${diagnostics.criticalPowerAnchorCount} retained sustained-power anchors came from one workout.`
+    : null;
+  const sourceRemoval =
+    allSustainedAnchorsComeFromOneWorkout &&
+    diagnostics.criticalPowerSourceRemovalFailureCount > 0
+      ? 'Removing that workout leaves no CP/W′ refit.'
+      : null;
+  const candidateRange =
+    diagnostics.wPrimeCandidateMinimumJoules !== null &&
+    diagnostics.wPrimeCandidateMaximumJoules !== null
+      ? `${diagnostics.wPrimeCandidateCount} fitting methods produced W′ estimates from ${formatNumber(diagnostics.wPrimeCandidateMinimumJoules / 1000, 1)} to ${formatNumber(diagnostics.wPrimeCandidateMaximumJoules / 1000, 1)} kJ, so QS withholds one value.`
+      : null;
+  return {
+    summary:
+      'Critical power is usable, but this window cannot support one trustworthy W′ or Pmax value.',
+    details: [
+      sustainedEvidence,
+      sourceRemoval,
+      candidateRange,
+      'Pmax is intentionally unavailable because the three-parameter model depends on a stable W′ value, not because it is zero.',
+    ].filter((item): item is string => Boolean(item)),
+  };
+}
+
 export function buildTrainingPowerSystemsActivityTypeViewModels(
   payload: DerivedTrainingPowerSystemsMetricPayload | null,
 ): TrainingPowerSystemsActivityTypeViewModel[] {
@@ -775,6 +867,7 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
       statusText: formatOverallStatus(current.status),
       reasonText: formatReason(current.reason),
       evidenceText: formatEvidenceText(evidenceCounts),
+      interpretation: buildTrainingPowerSystemsInterpretation(current),
       diagnostics: [
         `${current.diagnostics.sourceCount} usable power curves over ${current.diagnostics.historySpanDays} days`,
         `${sourceLabel(current.diagnostics.criticalPowerContributingSourceCount)} supplied ${current.diagnostics.criticalPowerAnchorCount}/${THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS.length} sustained anchors`,

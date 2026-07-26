@@ -141,6 +141,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('A type selector appears only when more than one exact activity type is available');
     expect(trainingSection?.content).toContain('fitting-method disagreement');
     expect(trainingSection?.content).toContain('stable CP can remain visible when W′ is unstable');
+    expect(trainingSection?.content).toContain('**What this means**');
+    expect(trainingSection?.content).toContain('competing W′ estimate range');
     expect(trainingSection?.content).toContain('whole-workout removal');
     expect(trainingSection?.content).toContain('New power curves remove isolated one-sample recording artifacts');
     expect(trainingSection?.content).toContain('short-curve signature in older stored curves');
