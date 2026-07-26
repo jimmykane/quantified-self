@@ -79,6 +79,8 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Connect ChatGPT');
     expect(content).toContain('https://quantified-self.io/mcp');
     expect(content).toContain('Copy endpoint');
+    expect(content).toContain('exact start, end, and jump coordinates');
+    expect(content).toContain('reveal sensitive locations');
 
     fixture.componentInstance.copyEndpoint();
 

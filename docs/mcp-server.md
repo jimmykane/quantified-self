@@ -204,8 +204,9 @@ events, privacy filtering, query bounds, and the MCP transport.
 
 `activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. List queries select
 only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a signed-in app link,
-the persisted `Start Position` and `End Position` stats, and a fixed set of numeric summary stats. Detail calls select
-exactly one persisted array: `laps`, `events` for jumps, or `swimLengths`. They never hydrate a whole activity document.
+the latitude/longitude leaves of the persisted `Start Position` and `End Position` stats, and a fixed set of numeric
+summary stats. Detail calls select exactly one persisted array: `laps`, `events` for jumps, or `swimLengths`. They never
+hydrate a whole activity document or position map.
 
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
 average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
@@ -218,7 +219,7 @@ excluded.
 
 Sports Lib already derives these positions from the first and last available activity position when an importer does not
 provide them, and the normal activity writer persists both stats. Historical activities that do not contain a complete
-stored pair return `null`; no reparse or backfill is required. Selecting the two nested fields does not change the
+stored pair return `null`; no reparse or backfill is required. Selecting the four coordinate leaves does not change the
 activity query filters or ordering, so it adds no composite index.
 
 `list_activities` returns an encrypted `activityRef`, not the activity or event document ID. References and detail

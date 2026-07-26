@@ -355,10 +355,21 @@ describe('MCP data service', () => {
       },
     });
     nonFiniteAndMissing.id = 'activity-non-finite';
+    const missingAndValidEnd = activityDocument({
+      eventID: 'event-valid-end',
+      stats: {
+        [DataEndPosition.type]: {
+          latitudeDegrees: -90,
+          longitudeDegrees: 180,
+        },
+      },
+    });
+    missingAndValidEnd.id = 'activity-valid-end';
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       zeroAndPartial,
       outOfRange,
       nonFiniteAndMissing,
+      missingAndValidEnd,
     ]);
     const service = createMcpDataService(dependencies);
 
@@ -385,6 +396,12 @@ describe('MCP data service', () => {
     }, {
       startPosition: null,
       endPosition: null,
+    }, {
+      startPosition: null,
+      endPosition: {
+        latitudeDegrees: -90,
+        longitudeDegrees: 180,
+      },
     }]);
   });
 

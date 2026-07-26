@@ -118,8 +118,10 @@ const SAFE_SUMMARY_STAT_FIELDS = [
 const SAFE_ACTIVITY_SUMMARY_FIELDS = [
   ...SAFE_SUMMARY_STAT_FIELDS,
   new FieldPath('stats', 'Jump Count'),
-  new FieldPath('stats', DataStartPosition.type),
-  new FieldPath('stats', DataEndPosition.type),
+  new FieldPath('stats', DataStartPosition.type, 'latitudeDegrees'),
+  new FieldPath('stats', DataStartPosition.type, 'longitudeDegrees'),
+  new FieldPath('stats', DataEndPosition.type, 'latitudeDegrees'),
+  new FieldPath('stats', DataEndPosition.type, 'longitudeDegrees'),
 ] as const;
 const SAFE_SLEEP_VITAL_KEYS = [
   'averageHeartRateBpm',
