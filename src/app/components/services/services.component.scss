@@ -352,6 +352,11 @@
     contain: paint;
 }
 
+.services-workspace-main--mcp {
+    overflow: visible;
+    contain: none;
+}
+
 .service-tools-dialog__header {
     display: flex;
     align-items: center;

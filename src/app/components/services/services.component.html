@@ -223,7 +223,9 @@
           }
         </mat-button-toggle-group>
 
-        <section class="services-workspace-main">
+        <section
+          class="services-workspace-main"
+          [class.services-workspace-main--mcp]="activeSection === 'mcp'">
           @if (activeSection !== 'mcp') {
           <section
             class="service-detail"

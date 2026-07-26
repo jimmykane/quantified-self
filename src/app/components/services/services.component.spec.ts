@@ -465,6 +465,7 @@ describe('ServicesComponent', () => {
 
         const mcpPanel = fixture.nativeElement.querySelector('.service-detail[aria-label="MCP"]');
         const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+        const workspace = fixture.nativeElement.querySelector('.services-workspace-main');
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
             'utf8',
@@ -481,6 +482,7 @@ describe('ServicesComponent', () => {
         expect(
             fixture.nativeElement.querySelector('.service-detail[aria-label="Wahoo"]'),
         ).toBeNull();
+        expect(workspace.classList.contains('services-workspace-main--mcp')).toBe(true);
     });
 
     it('opens each overview card at its matching tool', () => {
@@ -822,10 +824,13 @@ describe('ServicesComponent', () => {
             'utf8'
         );
         const workspaceRule = styles.match(/\.services-workspace-main\s*\{[^}]*\}/)?.[0] ?? '';
+        const mcpWorkspaceRule = styles.match(/\.services-workspace-main--mcp\s*\{[^}]*\}/)?.[0] ?? '';
         const hiddenPanelRule = styles.match(/\.service-detail\[hidden\]\s*\{[^}]*\}/)?.[0] ?? '';
 
         expect(workspaceRule).toContain('overflow: clip');
         expect(workspaceRule).toContain('contain: paint');
+        expect(mcpWorkspaceRule).toContain('overflow: visible');
+        expect(mcpWorkspaceRule).toContain('contain: none');
         expect(hiddenPanelRule).toContain('display: none');
     });
 
