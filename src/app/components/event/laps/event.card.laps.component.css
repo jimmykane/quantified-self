@@ -48,3 +48,31 @@
   display: inline-flex;
   gap: 8px;
 }
+
+.lap-header-averages {
+  align-items: center;
+  color: var(--mat-sys-on-surface-variant);
+  display: inline-flex;
+  gap: 8px;
+  max-width: min(68vw, 760px);
+  min-width: 0;
+  overflow: auto;
+  white-space: nowrap;
+}
+
+.lap-header-average-label,
+.lap-header-average-family {
+  font: var(--mat-sys-label-medium);
+}
+
+.lap-header-average-family {
+  border-inline-start: 1px solid var(--mat-sys-outline-variant);
+  padding-inline-start: 8px;
+}
+
+.lap-header-average {
+  align-items: center;
+  display: inline-flex;
+  font: var(--mat-sys-label-large);
+  gap: 4px;
+}

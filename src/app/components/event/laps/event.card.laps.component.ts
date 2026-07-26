@@ -12,9 +12,6 @@ import { MatSelectionListChange } from '@angular/material/list';
 import { MatTableDataSource } from '@angular/material/table';
 import {
   ActivityInterface,
-  DataDistance,
-  DataDuration,
-  DataInterface,
   EventInterface,
   LapInterface,
   LapTypes,
@@ -26,9 +23,12 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
 import {
   EventLapMetricOptionGroup,
+  EventLapAverageMetric,
   formatEventLapMetric,
+  getAverageEventLapMetrics,
   getEventLapMetricOptionGroups,
   getEventLapSportFamilyPresentation,
+  getEventLapMetricStat,
   getSelectedEventLapMetricTypes,
   normalizeEventDetailsSettings,
   resolveEventLapSportFamily,
@@ -62,6 +62,12 @@ interface LapTableGroup {
   tables: LapTableView[];
 }
 
+interface LapHeaderAverageGroup {
+  family: AppEventLapSportFamily;
+  label: string;
+  metrics: EventLapAverageMetric[];
+}
+
 @Component({
   selector: 'app-event-card-laps',
   templateUrl: './event.card.laps.component.html',
@@ -83,6 +89,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public columnsMap = new Map<string, string[]>();
   public lapTableGroups: LapTableGroup[] = [];
   public lapColumnMenuGroups: LapColumnMenuGroup[] = [];
+  public lapHeaderAverageGroups: LapHeaderAverageGroup[] = [];
   public hasMultipleEventActivities = false;
   public savingLapColumnSportFamilies = signal(new Set<AppEventLapSportFamily>());
   private eventDetailsSettings: AppEventDetailsSettingsInterface = normalizeEventDetailsSettings(null);
@@ -124,6 +131,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.dataSourcesMap.clear();
     this.columnsMap.clear();
     this.lapTableGroups = [];
+    this.lapHeaderAverageGroups = [];
 
     if (!this.selectedActivities) {
       this.lapColumnMenuGroups = [];
@@ -162,6 +170,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         })
         .filter((table): table is LapTableView => !!table),
     })).filter((group) => group.tables.length > 0);
+    this.updateLapHeaderAverageGroups();
     this.updateLapColumnMenuGroups();
     this.changeDetectorRef.markForCheck();
   }
@@ -181,7 +190,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         .filter((column) => column !== '#')
         .forEach((metricType) => {
           row[metricType] = formatEventLapMetric(
-            this.getLapMetricStat(lap, metricType),
+            getEventLapMetricStat(lap, metricType),
             metricType,
             this.unitSettings,
             activity.type,
@@ -191,20 +200,6 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       lapDataArray.push(row);
       return lapDataArray;
     }, []);
-  }
-
-  private getLapMetricStat(lap: LapInterface, metricType: string): DataInterface | null {
-    try {
-      if (metricType === DataDuration.type) {
-        return lap.getDuration?.() || null;
-      }
-      if (metricType === DataDistance.type) {
-        return lap.getDistance?.() || null;
-      }
-      return lap.getStat?.(metricType) || null;
-    } catch {
-      return null;
-    }
   }
 
   private calculateColumns(dataSource: MatTableDataSource<LapTableRow>, activityType: unknown): string[] {
@@ -301,6 +296,45 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         metricGroups,
       };
     });
+  }
+
+  private updateLapHeaderAverageGroups(): void {
+    const lapDataByFamily = new Map<AppEventLapSportFamily, {
+      activityType: unknown;
+      laps: LapInterface[];
+    }>();
+
+    this.selectedActivities.forEach((activity) => {
+      const visibleLaps = (activity.getLaps?.() || [])
+        .filter((lap) => this.shouldShowLapType(lap.type));
+      if (visibleLaps.length === 0) {
+        return;
+      }
+
+      const family = resolveEventLapSportFamily(activity.type);
+      const existing = lapDataByFamily.get(family);
+      if (existing) {
+        existing.laps.push(...visibleLaps);
+        return;
+      }
+      lapDataByFamily.set(family, {
+        activityType: activity.type,
+        laps: [...visibleLaps],
+      });
+    });
+
+    this.lapHeaderAverageGroups = Array.from(lapDataByFamily.entries())
+      .map(([family, lapData]) => ({
+        family,
+        label: getEventLapSportFamilyPresentation(family).label,
+        metrics: getAverageEventLapMetrics(
+          lapData.laps,
+          this.getColumnsToDisplay(lapData.activityType).filter((column) => column !== '#'),
+          this.unitSettings,
+          lapData.activityType,
+        ),
+      }))
+      .filter((group) => group.metrics.length > 0);
   }
 
   private setSportFamilySaving(sportFamily: AppEventLapSportFamily, saving: boolean): void {

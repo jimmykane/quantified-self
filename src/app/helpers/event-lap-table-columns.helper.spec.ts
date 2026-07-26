@@ -2,6 +2,7 @@ import {
   DataPaceAvg,
   DataSpeedAvg,
   DataSwimPaceAvg,
+  LapInterface,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
@@ -13,6 +14,7 @@ import {
 import {
   EVENT_LAP_TABLE_FIXED_COLUMN,
   formatEventLapMetric,
+  getAverageEventLapMetrics,
   getDefaultEventLapMetricTypes,
   getEventLapMetricOptionGroups,
   getSelectedEventLapMetricTypes,
@@ -84,6 +86,16 @@ describe('event lap table columns helper', () => {
       .toBe('11.19 mph');
     expect(formatEventLapMetric(new DataSwimPaceAvg(90), DataSwimPaceAvg.type, unitSettings, 'Swimming'))
       .toBe('01:22 min/100yd');
+  });
+
+  it('formats header averages with the saved metric units', () => {
+    const laps = [300, 330].map((pace) => ({
+      getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
+    } as unknown as LapInterface));
+
+    expect(getAverageEventLapMetrics(laps, [DataPaceAvg.type], unitSettings, 'Running')).toEqual([
+      { type: DataPaceAvg.type, display: '08:26 min/m' },
+    ]);
   });
 
   it('retains stopwatch duration formatting and hides invalid values', () => {

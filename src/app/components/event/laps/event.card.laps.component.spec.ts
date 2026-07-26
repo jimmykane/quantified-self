@@ -115,6 +115,55 @@ describe('EventCardLapsComponent', () => {
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataPaceAvg.type]).toBe('05:00 min/km');
     });
 
+    it('shows unit-aware metric averages beside the Laps title', () => {
+        const activity = createActivity([300, 330].map((pace) => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
+        } as unknown as LapInterface)));
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        expect(component.lapHeaderAverageGroups).toEqual([
+            {
+                family: 'running',
+                label: 'Running',
+                metrics: [{ type: DataPaceAvg.type, display: '05:15 min/km' }],
+            },
+        ]);
+    });
+
+    it('keeps running and cycling header averages separate', () => {
+        const running = createActivity([{
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(300) : undefined,
+        } as unknown as LapInterface]);
+        const cycling = {
+            ...createActivity([{
+                ...createRenderableLap(LapTypes.Manual),
+                getStat: (type: string) => type === DataSpeedAvg.type ? new DataSpeedAvg(5) : undefined,
+            } as unknown as LapInterface]),
+            getID: () => 'activity-2',
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.selectedActivities = [running, cycling];
+
+        component.ngOnChanges();
+
+        expect(component.lapHeaderAverageGroups).toEqual([
+            {
+                family: 'running',
+                label: 'Running',
+                metrics: [{ type: DataPaceAvg.type, display: '05:00 min/km' }],
+            },
+            {
+                family: 'cycling',
+                label: 'Cycling',
+                metrics: [{ type: DataSpeedAvg.type, display: '18.00 km/h' }],
+            },
+        ]);
+    });
+
     it('uses speed for cycling laps', () => {
         const speed = new DataSpeedAvg(5);
         const activity = {
@@ -252,6 +301,8 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
         expect(template).toContain('lapColumnFamiliesMenu');
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
+        expect(template).toContain('event-section-header-title');
+        expect(template).toContain('lap-header-averages');
         expect(template).toContain('lapTableGroup.tables');
         expect(template).not.toContain('getDataSource(');
         expect(template).not.toContain('getColumns(');

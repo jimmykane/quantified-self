@@ -306,6 +306,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - To change it, open **Laps -> Columns**, choose Running, Cycling, Swimming, or Other activities, then tick the metrics you want to see.
 - Quantified Self remembers a separate column list for each of those sport families. A triathlon can therefore keep different running, cycling, and swimming lap layouts.
 - Running and trail-running laps use pace, cycling laps use speed, and swimming laps use swim pace. These values, along with other convertible metrics, follow your unit preferences in **Settings -> Units**.
+- The Laps heading also shows the average of each visible lap metric, using those same units. Multisport events keep the sport families separate.
 - The menu includes the Event Summary metric families, but a column appears only when a current lap has a valid value. Missing values stay unavailable rather than becoming zero.
 
 ### Event swim length tables

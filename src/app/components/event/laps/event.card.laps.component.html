@@ -1,6 +1,23 @@
 @if (availableLapTypes.length > 0) {
 <mat-divider></mat-divider>
 <app-event-section-header icon="linear_scale" title="Laps">
+  @if (lapHeaderAverageGroups.length > 0) {
+  <span event-section-header-title class="lap-header-averages" aria-label="Average lap metrics">
+    <span class="lap-header-average-label">Avg</span>
+    @for (group of lapHeaderAverageGroups; track group.family) {
+    @if (lapHeaderAverageGroups.length > 1) {
+    <span class="lap-header-average-family">{{ group.label }}</span>
+    }
+    @for (metric of group.metrics; track metric.type) {
+    <span class="lap-header-average" [matTooltip]="'Average ' + metric.type + ': ' + metric.display"
+      [attr.aria-label]="'Average ' + metric.type + ': ' + metric.display">
+      <app-data-type-icon [dataType]="metric.type" size="16px"></app-data-type-icon>
+      <span>{{ metric.display }}</span>
+    </span>
+    }
+    }
+  </span>
+  }
   @if (canCustomize && lapColumnMenuGroups.length > 0) {
   <button mat-icon-button [matMenuTriggerFor]="lapColumnFamiliesMenu" matTooltip="Choose lap columns"
     aria-label="Choose lap columns">

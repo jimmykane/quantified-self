@@ -13,6 +13,8 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataSwimPaceAvg,
+  DynamicDataLoader,
+  LapInterface,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { resolvePrimaryUnitAwareDisplayStat } from './summary-display.helper';
@@ -38,6 +40,11 @@ export interface EventLapSportFamilyPresentation {
   family: AppEventLapSportFamily;
   label: string;
   icon: string;
+}
+
+export interface EventLapAverageMetric {
+  type: string;
+  display: string;
 }
 
 const SPORT_FAMILY_PRESENTATIONS: EventLapSportFamilyPresentation[] = [
@@ -240,3 +247,49 @@ export const formatEventLapMetric = (
   const display = resolvePrimaryUnitAwareDisplayStat(stat, unitSettings, metricType, [activityType]);
   return display?.text || '';
 };
+
+export const getEventLapMetricStat = (
+  lap: LapInterface,
+  metricType: string,
+): DataInterface | null => {
+  try {
+    if (metricType === DataDuration.type) {
+      return lap.getDuration?.() || null;
+    }
+    if (metricType === DataDistance.type) {
+      return lap.getDistance?.() || null;
+    }
+    return lap.getStat?.(metricType) || null;
+  } catch {
+    return null;
+  }
+};
+
+export const getAverageEventLapMetrics = (
+  laps: readonly LapInterface[],
+  metricTypes: readonly string[],
+  unitSettings: UserUnitSettingsInterface | null | undefined,
+  activityType: unknown,
+): EventLapAverageMetric[] => (
+  metricTypes.reduce<EventLapAverageMetric[]>((averages, metricType) => {
+    const values = laps
+      .map((lap) => getEventLapMetricStat(lap, metricType)?.getValue?.())
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    if (values.length === 0) {
+      return averages;
+    }
+
+    try {
+      const averageValue = values.reduce((total, value) => total + value, 0) / values.length;
+      const averageStat = DynamicDataLoader.getDataInstanceFromDataType(metricType, averageValue);
+      const display = formatEventLapMetric(averageStat, metricType, unitSettings, activityType);
+      if (display) {
+        averages.push({ type: metricType, display });
+      }
+    } catch {
+      // A malformed or non-numeric sports-lib metric should not block the Laps table.
+    }
+
+    return averages;
+  }, [])
+);

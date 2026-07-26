@@ -5,7 +5,8 @@
     </div>
     @if (title) {
     <div class="event-section-header-title">
-      {{ title }}
+      <span class="event-section-header-title-text">{{ title }}</span>
+      <ng-content select="[event-section-header-title]"></ng-content>
     </div>
     }
   </div>
