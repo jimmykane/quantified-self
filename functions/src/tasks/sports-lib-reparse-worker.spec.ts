@@ -175,7 +175,7 @@ describe('processSportsLibReparseTask', () => {
     it('should register heavy worker with capped heavy runtime limits and retry config', () => {
         expect(hoisted.capturedTaskOptions[1]).toMatchObject({
             memory: '8GiB',
-            cpu: 2,
+            cpu: 4,
             concurrency: 1,
             maxInstances: 1,
             timeoutSeconds: 1800,
