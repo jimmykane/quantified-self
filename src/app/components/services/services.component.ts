@@ -19,14 +19,16 @@ import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-s
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { AppUserInterface } from '../../models/app-user.interface';
 
-type ServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
+type ProviderServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
+type ServiceSectionId = ProviderServiceSectionId | 'mcp';
 type ServiceToolId = 'history' | 'routes' | 'uploads' | 'auto-sync' | 'activity-sync';
 type ServiceDataFlowActivityDestination = 'suunto' | 'wahoo';
 
 interface ServiceSectionOption {
   id: ServiceSectionId;
   label: string;
-  serviceName: ServiceNames;
+  providerId: ProviderServiceSectionId | null;
+  serviceName: ServiceNames | null;
 }
 
 interface ServiceToolLaunch {
@@ -60,7 +62,7 @@ interface ServiceDataFlowMatrixRoute extends ServiceToolLaunch {
   id: string;
   kind: ServiceDataFlowMatrixRouteKind;
   state: ServiceDataFlowMatrixRouteState;
-  sourceSection: ServiceSectionId;
+  sourceSection: ProviderServiceSectionId;
 }
 
 interface ServiceDataFlowMatrixCell {
@@ -83,7 +85,7 @@ interface ServiceDataFlowSummary {
   matrixRows: readonly ServiceDataFlowMatrixRow[];
 }
 
-const SERVICE_SECTION_BY_NAME: Record<ServiceNames, ServiceSectionId> = {
+const SERVICE_SECTION_BY_NAME: Record<ServiceNames, ProviderServiceSectionId> = {
   [ServiceNames.GarminAPI]: 'garmin',
   [ServiceNames.SuuntoApp]: 'suunto',
   [ServiceNames.COROSAPI]: 'coros',
@@ -97,7 +99,7 @@ const SERVICE_MATRIX_PROVIDERS: readonly ServiceNames[] = [
   ServiceNames.WahooAPI,
 ];
 
-function createEmptyAutomaticSyncSummaryBySection(): Record<ServiceSectionId, ServiceAutomaticSyncSummary> {
+function createEmptyAutomaticSyncSummaryBySection(): Record<ProviderServiceSectionId, ServiceAutomaticSyncSummary> {
   return {
     garmin: { activities: [], routes: [] },
     suunto: { activities: [], routes: [] },
@@ -122,7 +124,7 @@ function buildAutomaticSyncRouteLabel(
 
 function buildAutomaticSyncSummaryBySection(
   user: AppUserInterface | null | undefined,
-): Record<ServiceSectionId, ServiceAutomaticSyncSummary> {
+): Record<ProviderServiceSectionId, ServiceAutomaticSyncSummary> {
   const summaries = createEmptyAutomaticSyncSummaryBySection();
   const serviceSyncSettings = user?.settings?.serviceSyncSettings;
   const activitySettings = serviceSyncSettings?.activitySyncRoutes || {};
@@ -171,7 +173,7 @@ function buildAutomaticSyncSummaryBySection(
 
 function buildServiceDataFlowSummary(
   user: AppUserInterface | null | undefined,
-  serviceConnectionState: Record<ServiceSectionId, boolean>,
+  serviceConnectionState: Record<ProviderServiceSectionId, boolean>,
 ): ServiceDataFlowSummary {
   const matrixRows = SERVICE_MATRIX_PROVIDERS.map((sourceServiceName) => ({
     sourceServiceName,
@@ -286,30 +288,41 @@ export class ServicesComponent implements OnInit, OnDestroy {
     suunto: getProviderDisplayName(ServiceNames.SuuntoApp, 'source'),
     coros: getProviderDisplayName(ServiceNames.COROSAPI, 'source'),
     wahoo: getProviderDisplayName(ServiceNames.WahooAPI, 'source'),
+    mcp: 'MCP',
   };
   public readonly serviceSectionOptions: readonly ServiceSectionOption[] = [
     {
       id: 'garmin',
       label: this.serviceLabelBySection.garmin,
+      providerId: 'garmin',
       serviceName: ServiceNames.GarminAPI,
     },
     {
       id: 'suunto',
       label: this.serviceLabelBySection.suunto,
+      providerId: 'suunto',
       serviceName: ServiceNames.SuuntoApp,
     },
     {
       id: 'coros',
       label: this.serviceLabelBySection.coros,
+      providerId: 'coros',
       serviceName: ServiceNames.COROSAPI,
     },
     {
       id: 'wahoo',
       label: this.serviceLabelBySection.wahoo,
+      providerId: 'wahoo',
       serviceName: ServiceNames.WahooAPI,
     },
+    {
+      id: 'mcp',
+      label: this.serviceLabelBySection.mcp,
+      providerId: null,
+      serviceName: null,
+    },
   ];
-  public readonly serviceOverviewCardsBySection: Record<ServiceSectionId, readonly ServiceOverviewCard[]> = {
+  public readonly serviceOverviewCardsBySection: Record<ProviderServiceSectionId, readonly ServiceOverviewCard[]> = {
     garmin: [
       {
         title: 'Activity sync',
@@ -434,11 +447,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public serviceNames = ServiceNames;
   public hasProAccess = false;
   public isAdmin = false;
-  public managedService: ServiceSectionId | null = null;
+  public managedService: ProviderServiceSectionId | null = null;
   public managedTool: ServiceToolId = 'history';
   public managedToolTitle: string | null = null;
   public managedActivitySyncDestination: ServiceDataFlowActivityDestination | null = null;
-  public readonly serviceConnectionState: Record<ServiceSectionId, boolean> = {
+  public readonly serviceConnectionState: Record<ProviderServiceSectionId, boolean> = {
     garmin: false,
     suunto: false,
     coros: false,
@@ -453,7 +466,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private routeSubscription!: Subscription;
   private serviceToolsDialogRef: MatDialogRef<unknown> | null = null;
   private readonly dialog = inject(MatDialog);
-  private readonly serviceNameBySection: Record<ServiceSectionId, ServiceNames> = {
+  private readonly serviceNameBySection: Record<ProviderServiceSectionId, ServiceNames> = {
     suunto: ServiceNames.SuuntoApp,
     garmin: ServiceNames.GarminAPI,
     coros: ServiceNames.COROSAPI,
@@ -516,7 +529,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   async selectService(section: ServiceSectionId) {
     this.activeSection = section;
 
-    const serviceName = this.serviceNameBySection[section];
+    const serviceName = section === 'mcp'
+      ? 'mcp'
+      : this.serviceNameBySection[section];
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { serviceName: serviceName },
@@ -524,7 +539,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  public openServiceTools(section: ServiceSectionId, toolLaunch: ServiceToolLaunch): void {
+  public openServiceTools(section: ProviderServiceSectionId, toolLaunch: ServiceToolLaunch): void {
     if (!this.serviceToolsDialog || this.serviceToolsDialogRef) {
       return;
     }
@@ -554,7 +569,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  public setServiceConnectionState(section: ServiceSectionId, connected: boolean): void {
+  public setServiceConnectionState(section: ProviderServiceSectionId, connected: boolean): void {
     this.serviceConnectionState[section] = connected;
     this.refreshDataFlowSummary();
   }
@@ -591,6 +606,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   private getSectionFromServiceName(serviceName: string | null): ServiceSectionId {
+    if (serviceName === 'mcp') {
+      return 'mcp';
+    }
     if (serviceName === ServiceNames.GarminAPI) {
       return 'garmin';
     }

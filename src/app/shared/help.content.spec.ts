@@ -55,13 +55,23 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('96 x 96 PNG (3.3 KB)');
     expect(dataAndPrivacySection?.content).toContain('/assets/favicons/android-chrome-192x192.png');
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
-    expect(dataAndPrivacySection?.content).toContain('Settings -> Account -> MCP connections');
+    expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
+    expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
+    expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
+    expect(dataAndPrivacySection?.content).toContain('cannot force Android or the ChatGPT app');
     expect(dataAndPrivacySection?.content).toContain('[Read-only MCP Server feature page](/features/mcp-server)');
     expect(dataAndPrivacySection?.links).toContainEqual({
       label: 'MCP Server',
       icon: 'devices',
       kind: 'route',
       target: '/features/mcp-server',
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'MCP Connections',
+      icon: 'devices',
+      kind: 'route',
+      target: '/services',
+      queryParams: { serviceName: 'mcp' },
     });
   });
 
@@ -780,7 +790,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('does not send activity, route, account, or prompt data');
     expect(dataAndPrivacySection?.content).toContain('original route files');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
-    expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> MCP connections**');
+    expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');
     expect(dataAndPrivacySection?.content).toContain('Failed or abandoned authorization attempts');
   });

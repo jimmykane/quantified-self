@@ -318,6 +318,33 @@ describe('SideNavComponent', () => {
         expect(myTracksItem?.nativeElement.textContent).not.toContain('BASIC');
     });
 
+    it('links free users to Connectivity so they can manage MCP clients', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-1',
+            displayName: 'Free User',
+            email: 'free@example.com',
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(false);
+
+        fixture.detectChanges();
+
+        const connectivityItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Connectivity'));
+
+        expect(connectivityItem).toBeTruthy();
+        expect(connectivityItem?.nativeElement.getAttribute('routerlink')).toBe('/services');
+        expect(connectivityItem?.nativeElement.textContent).not.toContain('PRO');
+        expect(connectivityItem?.nativeElement.querySelector('.lock-icon')).toBeNull();
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'),
+            'utf8',
+        );
+        expect(template).toContain(
+            "[queryParams]=\"hasPaidAccess ? null : { serviceName: 'mcp' }\"",
+        );
+    });
+
     it('should show file comparison in navigation for guests and signed-in users without a new badge', () => {
         fixture.detectChanges();
 

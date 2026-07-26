@@ -12,9 +12,14 @@ describe('McpAuthorizationComponent', () => {
   const functions = {
     call: vi.fn(),
   };
+  const windowRef = {
+    location: { assign },
+    navigator: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' },
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    windowRef.navigator.userAgent = 'Mozilla/5.0 (X11; Linux x86_64)';
     functions.call.mockImplementation((name: string) => {
       if (name === 'getMcpAuthorizationRequest') {
         return Promise.resolve({
@@ -52,7 +57,7 @@ describe('McpAuthorizationComponent', () => {
           },
         },
         { provide: AppFunctionsService, useValue: functions },
-        { provide: AppWindowService, useValue: { windowRef: { location: { assign } } } },
+        { provide: AppWindowService, useValue: { windowRef } },
         { provide: LoggerService, useValue: { error: vi.fn() } },
       ],
     }).compileComponents();
@@ -84,6 +89,21 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('precise-position metrics');
     expect(content).toContain('unrequested activity stats');
     expect(content).toContain('stable account/event or route paths');
+    expect(content).not.toContain('Android app handoff');
+  });
+
+  it('warns Android users before the client app-link handoff', async () => {
+    windowRef.navigator.userAgent = 'Mozilla/5.0 (Linux; Android 15; Pixel 9)';
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const content = fixture.nativeElement.textContent as string;
+    expect(content).toContain('Android app handoff');
+    expect(content).toContain('ChatGPT opens but does not resume setup');
+    expect(content).toContain('Open supported links');
+    expect(content).toContain('finish setup in ChatGPT on the web from a desktop');
   });
 
   it('submits the selected scopes and returns to the client', async () => {

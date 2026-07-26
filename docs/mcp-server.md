@@ -31,8 +31,8 @@ Hosting routes these paths to `mcpApi`:
 | `/oauth/token` | Exchanges or refreshes an OAuth token |
 | `/mcp` | Read-only MCP Streamable HTTP endpoint |
 
-`/mcp/authorize` is the authenticated Angular consent page. Account Settings lists connections only after the client
-successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
+`/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
+the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
 
 ## Public discovery and indexing
 
@@ -59,11 +59,23 @@ The MCP initialize response identifies the server as **Quantified Self** and adv
 
 All three files must remain public, square transparent PNGs. The 96px and 192px assets stay below ChatGPT's current 10 KB
 icon-upload limit; the 512px asset is intentionally advertised only in MCP metadata. MCP clients may render the metadata
-automatically, but rendering is optional; the Account MCP setup card and Help page therefore also offer direct downloads
+automatically, but rendering is optional; the Connections MCP tab and Help page therefore also offer direct downloads
 for ChatGPT's manual icon upload. Keep the metadata, both download links, and the focused MCP/frontend tests aligned
 whenever any asset changes.
 
 ## OAuth and authorization
+
+### Android client handoff
+
+The authenticated consent page detects Android browsers and warns before approval that the exact client-supplied return
+address may open in the installed client app. If ChatGPT opens but does not resume its custom-app flow, it does not
+exchange the authorization code and the pending connection never becomes active. Connections > MCP and Help recommend
+desktop web setup first. They also document the optional Android workaround of temporarily disabling ChatGPT's
+**Open supported links** handling, retrying the complete browser flow, and restoring the setting afterward.
+
+Quantified Self must continue redirecting to the exact validated OAuth return address. Do not rewrite the callback,
+introduce a Quantified Self redirect trampoline, or claim that the server can control Android App Links or client-app
+behavior.
 
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
@@ -110,7 +122,7 @@ Firestore holds short-lived OAuth records in:
 Connection metadata lives at `users/{uid}/mcpConnections/{connectionId}` and follows `pending -> active -> revoked`.
 Approval creates a pending record whose `expireAt` matches the five-minute authorization-code expiry. The successful
 code-exchange transaction creates the credentials, changes the connection to active, stamps `lastUsedAtMs`, and removes
-`expireAt` atomically. Settings lists active records only. For compatibility, pre-lifecycle records with a non-null
+`expireAt` atomically. Connections lists active records only. For compatibility, pre-lifecycle records with a non-null
 `lastUsedAtMs` remain active, while old unexchanged records with no usage are hidden. Firestore TTL removes new abandoned
 pending records. A mixed-version rollout is also recoverable: a pending record with completed-exchange usage evidence is
 treated as active, and the next authorized request or refresh removes its stale TTL. Connection documents have no

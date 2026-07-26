@@ -88,6 +88,14 @@ describe('AppRoutingModule routes', () => {
     expect(routesRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
+  it('allows authenticated onboarded users to manage MCP from Connections', () => {
+    const servicesRoute = routes.find(route => route.path === 'services');
+
+    expect(servicesRoute).toBeTruthy();
+    expect(servicesRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(servicesRoute?.loadChildren).toBeTypeOf('function');
+  });
+
   it('should keep MCP consent authenticated and out of search indexes', () => {
     const mcpAuthorizationRoute = routes.find(route => route.path === 'mcp/authorize');
 

@@ -2,7 +2,6 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
-import { proGuard } from './authentication/pro.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
@@ -386,7 +385,7 @@ const topLevelRoutes: Routes = [
     path: 'services',
     loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule),
     data: { title: 'Services', animation: 'Services', preload: true },
-    canMatch: [authGuard, onboardingGuard, proGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'dashboard',

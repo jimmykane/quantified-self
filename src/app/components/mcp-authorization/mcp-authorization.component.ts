@@ -74,6 +74,9 @@ export class McpAuthorizationComponent implements OnInit {
   readonly deciding = signal<'approve' | 'deny' | null>(null);
   readonly error = signal<string | null>(null);
   readonly selectedScopes = signal<McpScope[]>([]);
+  readonly isAndroid = /android/i.test(
+    this.windowService.windowRef.navigator?.userAgent || '',
+  );
   readonly scopeOptions = computed(() => {
     const selected = new Set(this.selectedScopes());
     return (this.request()?.scopes || []).map(scope => ({

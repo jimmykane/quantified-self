@@ -73,6 +73,35 @@ mat-card-content {
   margin-top: 12px;
 }
 
+.mcp-connections__android-guidance {
+  align-items: flex-start;
+  background: var(--mat-sys-secondary-container);
+  border-radius: 12px;
+  color: var(--mat-sys-on-secondary-container);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-top: 16px;
+  padding: 16px;
+
+  > mat-icon {
+    flex: 0 0 auto;
+  }
+
+  h4 {
+    color: inherit;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  p {
+    color: inherit;
+    line-height: 1.45;
+    margin: 4px 0 0;
+  }
+}
+
 .mcp-connections__setup-note {
   font-size: 0.8rem;
 }

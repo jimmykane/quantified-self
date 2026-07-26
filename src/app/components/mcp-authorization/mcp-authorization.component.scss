@@ -112,6 +112,29 @@ mat-card-content {
   padding: 16px;
 }
 
+.mcp-authorization__warning--android {
+  align-items: flex-start;
+}
+
+.mcp-authorization__warning > mat-icon {
+  flex: 0 0 auto;
+}
+
+.mcp-authorization__warning-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+
+  strong {
+    line-height: 1.4;
+  }
+
+  p {
+    margin: 0;
+    line-height: 1.45;
+  }
+}
+
 .mcp-authorization__error,
 .mcp-authorization__state--error {
   color: var(--mat-sys-error);

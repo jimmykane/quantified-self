@@ -36,6 +36,21 @@
           </div>
         }
 
+        @if (isAndroid) {
+          <div class="mcp-authorization__warning mcp-authorization__warning--android" role="note">
+            <mat-icon>phone_android</mat-icon>
+            <div class="mcp-authorization__warning-copy">
+              <strong>Android app handoff</strong>
+              <p>
+                After you allow access, Android may open the return address in the installed client app. If ChatGPT
+                opens but does not resume setup, this connection will not become active. Deny this request and finish
+                setup in ChatGPT on the web from a desktop, or temporarily turn off ChatGPT's
+                <strong>Open supported links</strong> setting and retry the browser flow.
+              </p>
+            </div>
+          </div>
+        }
+
         <section class="mcp-authorization__permissions" aria-labelledby="mcp-permissions-title">
           <h2 id="mcp-permissions-title">Requested permissions</h2>
           @for (option of scopeOptions(); track option.scope) {

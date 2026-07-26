@@ -41,6 +41,10 @@
     box-shadow: none;
 }
 
+.service-data-flow[hidden] {
+    display: none;
+}
+
 .service-data-flow__panel-title {
     align-items: center;
     gap: 12px;
@@ -279,6 +283,26 @@
     flex-direction: column;
     gap: 8px;
     font-weight: 600;
+}
+
+.provider-selector__mcp-brand {
+    display: inline-flex;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--mat-sys-on-surface);
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.provider-selector__mcp-brand mat-icon {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    font-size: 22px;
+    line-height: 22px;
 }
 
 .provider-selector__name {
@@ -595,9 +619,20 @@
         min-width: 0;
     }
 
+    :host ::ng-deep .provider-selector--mobile .mat-button-toggle-button,
+    :host ::ng-deep .provider-selector--mobile .mat-button-toggle-label-content {
+        width: 100%;
+        min-width: 0;
+    }
+
+    :host ::ng-deep .provider-selector--mobile .mat-button-toggle-label-content {
+        box-sizing: border-box;
+        padding-inline: 4px;
+    }
+
     .provider-selector__mobile-option {
         gap: 4px;
-        font-size: 0.82rem;
+        font-size: clamp(0.7rem, 2.6vw, 0.82rem);
     }
 
     .service-tools-dialog__content {

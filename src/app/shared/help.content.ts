@@ -34,6 +34,7 @@ export interface HelpSectionLink {
   kind: 'route' | 'external';
   target: string;
   fragment?: string;
+  queryParams?: Record<string, string>;
 }
 
 export interface HelpSection {
@@ -790,8 +791,9 @@ In Settings you can:
 
 - turn anonymous usage statistics on or off,
 - turn marketing emails on or off,
-- review and revoke authorized MCP clients under **Account**,
 - and customize charts, maps, and units.
+
+Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
 
 ## MCP client access
 
@@ -801,7 +803,7 @@ In Settings you can:
 - Sleep access covers normalized session summaries and day/week/month aggregates. It excludes provider user/session IDs, provider payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, or respiration samples.
 - Saved-route access covers route names, bounded metrics and counts, exact bounds, simplified polyline previews with segment start/end coordinates, nearby searches that measure against the persisted preview, waypoint coordinates, and signed-in app links containing stable account/route paths. It excludes original route files, raw track points and streams, waypoint names/comments, Storage paths, provider provenance, and delivery metadata.
 - Nearby MCP searches accept either direct latitude/longitude or a place name such as a city. Direct coordinates are processed inside Quantified Self. For place names, Quantified Self sends only the location text to Mapbox for forward geocoding; it does not send activity, route, account, or prompt data to Mapbox for this lookup.
-- Only clients that finish authorization appear in **Settings -> Account -> MCP connections**. Failed or abandoned authorization attempts are not active connections and expire automatically. Disconnecting a listed client blocks future access, but the external client may retain data it already received under its own policy.
+- Only clients that finish authorization appear in [**Connections -> MCP**](/services?serviceName=mcp). Failed or abandoned authorization attempts are not active connections and expire automatically. Disconnecting a listed client blocks future access, but the external client may retain data it already received under its own policy.
 - See the [Read-only MCP Server feature page](/features/mcp-server) for a public overview of the available data categories and access boundaries.
 - See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
 
@@ -813,7 +815,13 @@ In Settings you can:
 4. Start a new chat, select the Quantified Self app, and ask about your metrics, activity details, sleep summaries, saved routes, activities that started or ended near a place, or routes that pass near a place.
 5. If ChatGPT asks for an app icon, download either [96 x 96 PNG (3.3 KB)](/assets/favicons/android-chrome-96x96.png) or [192 x 192 PNG (9.9 KB)](/assets/favicons/android-chrome-192x192.png). Both stay under its current 10 KB upload limit. MCP clients that render server metadata can discover these icons automatically.
 
-You can copy the endpoint and manage connected clients in **Settings -> Account -> MCP connections**. ChatGPT is an external client, so authorize only the data you are comfortable sharing and review its own data-retention policy.
+### Android authorization handoff
+
+Desktop setup is the most reliable option. After approval in an Android browser, Android may open the client return address in the installed ChatGPT app. If ChatGPT opens but does not continue the custom-app setup, the authorization code is not exchanged and no active MCP connection appears.
+
+Retry from ChatGPT on the web using a desktop. As an Android workaround, temporarily turn off **Open supported links** for ChatGPT under the app's **Open by default** or **Set as default** settings, retry the entire browser authorization flow, and restore the setting afterward. Quantified Self must return to the exact address supplied by ChatGPT and cannot force Android or the ChatGPT app to handle that address differently.
+
+You can copy the endpoint and manage connected clients in [**Connections -> MCP**](/services?serviceName=mcp). ChatGPT is an external client, so authorize only the data you are comfortable sharing and review its own data-retention policy.
 
 ## Account deletion
 
@@ -838,6 +846,13 @@ This action cannot be undone.
 - Legal details live on the Policies page.`,
     links: [
       { label: 'Settings', icon: 'settings', kind: 'route', target: '/settings' },
+      {
+        label: 'MCP Connections',
+        icon: 'devices',
+        kind: 'route',
+        target: '/services',
+        queryParams: { serviceName: 'mcp' },
+      },
       { label: 'Policies', icon: 'policy', kind: 'route', target: '/policies' },
       { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
       { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },

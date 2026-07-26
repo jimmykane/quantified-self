@@ -86,6 +86,10 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Download 192 px · 9.9 KB');
     expect(content).toContain('only after it finishes authorization');
     expect(content).toContain('abandoned attempts expire automatically');
+    expect(content).toContain('Authorizing on Android');
+    expect(content).toContain('Desktop setup is the most reliable option');
+    expect(content).toContain('Open supported links');
+    expect(content).toContain('no active connection is created');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',

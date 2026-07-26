@@ -143,6 +143,7 @@ describe('ServicesComponent', () => {
             'suunto',
             'coros',
             'wahoo',
+            'mcp',
         ]);
     });
 
@@ -154,6 +155,7 @@ describe('ServicesComponent', () => {
             'suunto',
             'coros',
             'wahoo',
+            'mcp',
         ]);
 
         fixture.detectChanges();
@@ -171,6 +173,7 @@ describe('ServicesComponent', () => {
             'suunto',
             'coros',
             'wahoo',
+            'mcp',
         ]);
     });
 
@@ -191,7 +194,19 @@ describe('ServicesComponent', () => {
         expect((component as any).getSectionFromServiceName(ServiceNames.SuuntoApp)).toBe('suunto');
     });
 
-    it('renders the mobile provider selector as a compact Material toggle group', () => {
+    it('selects MCP through a stable query parameter', async () => {
+        await component.selectService('mcp');
+
+        expect(component.activeSection).toBe('mcp');
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: { serviceName: 'mcp' },
+            queryParamsHandling: 'merge',
+        });
+        expect((component as any).getSectionFromServiceName('mcp')).toBe('mcp');
+    });
+
+    it('renders the mobile connection selector as a compact Material toggle group', () => {
         fixture.detectChanges();
 
         const providerSelector = fixture.nativeElement.querySelector('.provider-selector--mobile');
@@ -199,22 +214,23 @@ describe('ServicesComponent', () => {
             .map((toggle: Element) => toggle.textContent?.trim());
 
         expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
-        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo', 'MCP']);
         expect(providerSelector.querySelectorAll('app-service-source-icon')).toHaveLength(0);
         expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
     });
 
-    it('renders the desktop provider selector as a Material button toggle group', () => {
+    it('renders the desktop connection selector with MCP after Wahoo', () => {
         fixture.detectChanges();
 
         const providerSelector = fixture.nativeElement.querySelector('.provider-selector--desktop');
-        const providerLabels = Array.from(providerSelector.querySelectorAll('.provider-selector__option > span'))
+        const providerLabels = Array.from(providerSelector.querySelectorAll('.provider-selector__name'))
             .map((label: Element) => label.textContent?.trim());
 
         expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
-        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+        expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo', 'MCP']);
         const desktopProviderIcons = providerSelector.querySelectorAll('app-service-source-icon');
         expect(desktopProviderIcons).toHaveLength(4);
+        expect(providerSelector.querySelectorAll('.provider-selector__mcp-brand')).toHaveLength(1);
         expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
     });
 
@@ -422,13 +438,15 @@ describe('ServicesComponent', () => {
         const garminOverview = servicePanels[0].querySelector('.service-overview');
         const corosOverview = servicePanels[2].querySelector('.service-overview');
 
-        expect(servicePanels.length).toBe(4);
+        expect(servicePanels.length).toBe(5);
         expect(garminOverview).toBeTruthy();
         expect(corosOverview).toBeTruthy();
         expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(false);
         expect(fixture.nativeElement.querySelector('[aria-label="suunto app" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('[aria-label="wahoo" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('[aria-label="mcp" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-mcp-connections')).toBeNull();
 
         component.activeSection = 'coros';
         fixture.detectChanges();
@@ -437,6 +455,32 @@ describe('ServicesComponent', () => {
         expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(false);
         expect(servicePanels[0].querySelector('.service-overview')).toBe(garminOverview);
         expect(servicePanels[2].querySelector('.service-overview')).toBe(corosOverview);
+    });
+
+    it('mounts MCP status only in the MCP tab and hides provider-only data flow', () => {
+        fixture.detectChanges();
+
+        component.activeSection = 'mcp';
+        fixture.detectChanges();
+
+        const mcpPanel = fixture.nativeElement.querySelector('.service-detail[aria-label="MCP"]');
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8',
+        );
+
+        expect(mcpPanel.hidden).toBe(false);
+        expect(mcpPanel.querySelector('app-mcp-connections')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('app-services-garmin')).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-services-suunto')).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-services-coros')).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-services-wahoo')).toBeNull();
+        expect(dataFlow.hidden).toBe(true);
+        expect(styles).toMatch(/\.service-data-flow\[hidden\]\s*\{[^}]*display:\s*none;/);
+        expect(
+            fixture.nativeElement.querySelector('.service-detail[aria-label="Wahoo"]'),
+        ).toBeNull();
     });
 
     it('opens each overview card at its matching tool', () => {

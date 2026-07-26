@@ -372,7 +372,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Access Boundaries',
         title: 'Read-only by design, with separate permissions',
-        copy: 'MCP access uses an authorization flow designed for external clients. The client receives only the scopes you approve and can be disconnected from Quantified Self Settings.',
+        copy: 'MCP access uses an authorization flow designed for external clients. The client receives only the scopes you approve and can be disconnected from Connections.',
         items: [
           {
             icon: 'fact_check',
