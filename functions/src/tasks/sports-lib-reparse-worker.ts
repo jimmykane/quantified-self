@@ -393,6 +393,17 @@ async function processSportsLibReparseTaskRequest(
         terminalFailureAt: admin.firestore.FieldValue.delete(),
     }, { merge: true });
 
+    logger.info('[sports-lib-reparse-worker] Job started.', {
+        jobId,
+        uid: job.uid,
+        eventId: job.eventId,
+        processingTier: workerTier,
+        attemptCount: nextAttemptCount,
+        targetSportsLibVersion,
+        runtimeSportsLibVersion,
+        heavyReason: job.heavyReason || null,
+    });
+
     try {
         const reparseResult = await reparseEventFromOriginalFiles(job.uid, job.eventId, {
             mode: 'reimport',
