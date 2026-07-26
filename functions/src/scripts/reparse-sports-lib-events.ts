@@ -5,6 +5,7 @@ import {
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     ReparseStatusWrite,
     extractSourceFiles,
+    getSportsLibReparseFailureReason,
     isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseTerminalFailureMessage,
     parseUIDAllowlist,
@@ -375,9 +376,12 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
                 ...(firestoreIndexUrl ? { firestoreIndexUrl } : {}),
             });
             const terminalFailure = isSportsLibReparseTerminalFailureMessage(errorMessage);
+            const failureReason = terminalFailure
+                ? getSportsLibReparseFailureReason(errorMessage)
+                : 'REPARSE_FAILED';
             await writeReparseStatusUnlessUserDeleted(uid, eventId, {
                 status: 'failed',
-                reason: 'REPARSE_FAILED',
+                reason: failureReason,
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastError: errorMessage,

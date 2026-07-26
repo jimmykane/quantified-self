@@ -42,7 +42,7 @@ export const REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS = {
   cpu: 4,
   concurrency: 1,
   maxInstances: 1,
-  timeoutSeconds: 1800,
+  timeoutSeconds: 960,
 } as const;
 
 export const REPARSE_PROCESSING_HEAVY_TASK_RATE_LIMITS = {

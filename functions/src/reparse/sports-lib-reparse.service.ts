@@ -19,14 +19,17 @@ import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
+    SPORTS_LIB_REPARSE_FAILURE_REASONS,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
+    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
+    SportsLibReparseFailureReason,
     SportsLibReparseHeavyReason,
     SportsLibReparseProcessingTier,
 } from './sports-lib-reparse.config';
 import {
-    MAX_ACTIVITY_UPLOAD_BYTES,
-    MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
     MAX_ACTIVITY_DECOMPRESSED_BYTES,
     MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
 } from '../shared/activity-processing-config';
@@ -46,6 +49,12 @@ const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
 export {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
+    SPORTS_LIB_REPARSE_FAILURE_REASONS,
+    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
+    SPORTS_LIB_REPARSE_HEAVY_SAFE_RUNTIME_BUDGET_MS,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL,
+    SPORTS_LIB_REPARSE_NORMAL_SAFE_RUNTIME_BUDGET_MS,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
@@ -62,10 +71,25 @@ const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^Strict original-file reparse failed\. .*: Original file exceeds reparse size limit\./,
     /^Strict original-file reparse failed\. .*: \[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
     /^\[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
+    /^\[sports-lib-reparse\] Event duration .* is too heavy for automatic reparse/,
+    /^\[sports-lib-reparse\] Previous heavy reparse attempt did not complete before retry/,
 ] as const;
 
 export function isSportsLibReparseTerminalFailureMessage(errorMessage: string): boolean {
     return SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
+}
+
+function isSportsLibReparseTooHeavyFailureMessage(errorMessage: string): boolean {
+    return /^\[sports-lib-reparse\] Reparse exceeded safe runtime budget /.test(errorMessage)
+        || /^Strict original-file reparse failed\. .*: \[sports-lib-reparse\] Reparse exceeded safe runtime budget /.test(errorMessage)
+        || /^\[sports-lib-reparse\] Event duration .* is too heavy for automatic reparse/.test(errorMessage)
+        || /^\[sports-lib-reparse\] Previous heavy reparse attempt did not complete before retry/.test(errorMessage);
+}
+
+export function getSportsLibReparseFailureReason(errorMessage: string): SportsLibReparseFailureReason {
+    return isSportsLibReparseTooHeavyFailureMessage(errorMessage)
+        ? SPORTS_LIB_REPARSE_FAILURE_REASONS.TooHeavyForAutoReparse
+        : SPORTS_LIB_REPARSE_FAILURE_REASONS.ReparseFailed;
 }
 
 class ReparsePersistenceSkippedForDeletedUserError extends Error {
@@ -210,6 +234,7 @@ export interface SportsLibReparseJob {
     eventDurationMs?: number;
     attemptCount: number;
     lastError?: string;
+    failureReason?: SportsLibReparseFailureReason;
     terminalFailure?: boolean;
     terminalFailureAt?: unknown;
     supersededAt?: unknown;
@@ -396,9 +421,9 @@ function isGzip(path: string): boolean {
 }
 
 function maybeDecompressOriginalFile(path: string, rawBytes: Buffer): Buffer {
-    if (rawBytes.byteLength > MAX_ACTIVITY_UPLOAD_BYTES) {
+    if (rawBytes.byteLength > SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES) {
         throw new Error(
-            `Original file exceeds reparse size limit. Maximum raw source size is ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL}; `
+            `Original file exceeds reparse size limit. Maximum raw source size is ${SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL}; `
             + `${path} is ${rawBytes.byteLength} bytes.`,
         );
     }
@@ -436,6 +461,12 @@ export function isSportsLibReparseDurationHeavy(eventDurationMs: number | null |
     return typeof eventDurationMs === 'number'
         && Number.isFinite(eventDurationMs)
         && eventDurationMs >= SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS;
+}
+
+export function isSportsLibReparseTooHeavyForAutomaticReparse(eventDurationMs: number | null | undefined): boolean {
+    return typeof eventDurationMs === 'number'
+        && Number.isFinite(eventDurationMs)
+        && eventDurationMs >= SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS;
 }
 
 export function resolveSportsLibReparseRoutingDecision(

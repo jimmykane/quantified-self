@@ -367,10 +367,13 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     }
 
     private getReparseReasonLabel(row: ReparseFailurePreview): string {
+        if (row.failureReason === 'TOO_HEAVY_FOR_AUTO_REPARSE') {
+            return 'Too heavy for auto reparse';
+        }
         if (row.heavyReason === 'duration_gt_32h') {
             return 'Duration > 32h';
         }
-        if (row.heavyReason === 'duration_gt_24h') {
+        if (row.heavyReason === 'duration_gt_24h' || row.heavyReason === 'duration_gte_24h') {
             return 'Duration > 24h';
         }
         if (row.heavyReason === 'manual_admin') {
