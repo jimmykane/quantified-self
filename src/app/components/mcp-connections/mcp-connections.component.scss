@@ -1,31 +1,50 @@
+:host {
+  display: block;
+}
+
 .mcp-connections {
+  display: grid;
+  gap: 16px;
   width: 100%;
 }
 
-mat-card-content {
-  padding-top: 20px;
+.mcp-connections__card {
+  width: 100%;
 }
 
-.mcp-connections__setup {
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-  margin-bottom: 20px;
-  padding-bottom: 20px;
+.mcp-connections__card mat-card-title {
+  color: var(--mat-sys-on-surface);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
 
-  h3 {
-    color: var(--mat-sys-on-surface);
-    font-size: 1rem;
-    margin: 0;
-  }
+.mcp-connections__card mat-card-subtitle {
+  line-height: 1.4;
+}
 
-  p,
-  ol {
-    color: var(--mat-sys-on-surface-variant);
-    margin: 8px 0 0;
-  }
+.mcp-connections__card mat-card-content {
+  padding-top: 16px;
+}
 
-  ol {
-    padding-left: 20px;
-  }
+.mcp-connections__card mat-card-content > p {
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.mcp-connections__card-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.mcp-connections__app-icon {
+  object-fit: contain;
 }
 
 .mcp-connections__endpoint {
@@ -43,67 +62,16 @@ mat-card-content {
   }
 }
 
-.mcp-connections__icon-downloads {
-  align-items: flex-start;
-  display: flex;
-  gap: 12px;
-  margin-top: 16px;
-
-  img {
-    flex: 0 0 48px;
-    height: 48px;
-    width: 48px;
-  }
-
-  h4 {
-    color: var(--mat-sys-on-surface);
-    font-size: 0.9rem;
-    margin: 0;
-  }
-
-  p {
-    margin-top: 4px;
-  }
+.mcp-connections__setup-steps {
+  color: var(--mat-sys-on-surface-variant);
+  margin: 16px 0 0;
+  padding-left: 20px;
 }
 
 .mcp-connections__icon-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
-}
-
-.mcp-connections__android-guidance {
-  align-items: flex-start;
-  background: var(--mat-sys-secondary-container);
-  border-radius: 12px;
-  color: var(--mat-sys-on-secondary-container);
-  display: grid;
-  gap: 12px;
-  grid-template-columns: auto minmax(0, 1fr);
-  margin-top: 16px;
-  padding: 16px;
-
-  > mat-icon {
-    flex: 0 0 auto;
-  }
-
-  h4 {
-    color: inherit;
-    font-size: 0.9rem;
-    line-height: 1.4;
-    margin: 0;
-  }
-
-  p {
-    color: inherit;
-    line-height: 1.45;
-    margin: 4px 0 0;
-  }
-}
-
-.mcp-connections__setup-note {
-  font-size: 0.8rem;
 }
 
 .mcp-connections__state {
@@ -175,12 +143,16 @@ mat-card-content {
 }
 
 @media (max-width: 599px) {
+  .mcp-connections {
+    gap: 12px;
+  }
+
   .mcp-connections__endpoint {
     align-items: stretch;
     flex-direction: column;
 
     button {
-      align-self: flex-start;
+      width: 100%;
     }
   }
 
@@ -190,11 +162,15 @@ mat-card-content {
   }
 
   .mcp-connections__item button {
-    justify-self: start;
+    width: 100%;
   }
 
-  .mcp-connections__icon-downloads {
-    align-items: center;
-    flex-direction: column;
+  .mcp-connections__icon-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mcp-connections__icon-actions a {
+    width: 100%;
   }
 }

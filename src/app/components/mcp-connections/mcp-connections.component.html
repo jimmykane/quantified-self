@@ -1,12 +1,86 @@
-<mat-card appearance="outlined" class="mcp-connections">
-  <mat-card-header>
-    <mat-card-title>MCP connections</mat-card-title>
-    <mat-card-subtitle>Read-only clients that completed authorization to access metrics, activity details, sleep, or saved routes.</mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
-    <section class="mcp-connections__setup" aria-labelledby="mcp-chatgpt-title">
-      <h3 id="mcp-chatgpt-title">Connect ChatGPT</h3>
-      <p>In ChatGPT on the web, turn on Developer mode and create a custom app with this endpoint.</p>
+<section class="mcp-connections" aria-label="MCP connection management">
+  <mat-card
+    appearance="outlined"
+    class="mcp-connections__card mcp-connections__card--status"
+    aria-labelledby="mcp-connections-title">
+    <mat-card-header>
+      <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">devices</mat-icon>
+      <mat-card-title id="mcp-connections-title">MCP connections</mat-card-title>
+      <mat-card-subtitle>
+        Read-only clients that completed authorization to access metrics, activity details, sleep, or saved routes.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      @if (loading()) {
+        <div class="mcp-connections__state" role="status">
+          <mat-spinner diameter="28"></mat-spinner>
+          <span>Loading connections…</span>
+        </div>
+      } @else if (error()) {
+        <div class="mcp-connections__state mcp-connections__state--error" role="alert">
+          <mat-icon>error</mat-icon>
+          <span>{{ error() }}</span>
+          <button mat-button type="button" (click)="loadConnections()">Retry</button>
+        </div>
+      } @else if (connections().length === 0) {
+        <div class="mcp-connections__state">
+          <mat-icon>link_off</mat-icon>
+          <span>No MCP clients are connected.</span>
+        </div>
+      } @else {
+        <div class="mcp-connections__list">
+          @for (connection of connections(); track connection.connectionId) {
+            <article class="mcp-connections__item">
+              <div class="mcp-connections__details">
+                <h3>{{ connection.clientName }}</h3>
+                <p>{{ connection.redirectHost }}</p>
+                <ul aria-label="Granted permissions">
+                  @for (scope of connection.scopes; track scope) {
+                    <li>{{ scopeLabels[scope] }}</li>
+                  }
+                </ul>
+                <p class="mcp-connections__dates">
+                  Connected {{ connection.createdAtMs | date:'mediumDate' }}
+                  @if (connection.lastUsedAtMs) {
+                    · Last used {{ connection.lastUsedAtMs | date:'medium' }}
+                  }
+                </p>
+              </div>
+              <button
+                mat-stroked-button
+                type="button"
+                class="qs-mat-warn"
+                [disabled]="revokingConnectionId() !== null"
+                (click)="revoke(connection)">
+                <span class="mcp-connections__button-content">
+                  @if (revokingConnectionId() === connection.connectionId) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                    <span>Disconnecting…</span>
+                  } @else {
+                    <mat-icon>link_off</mat-icon>
+                    <span>Disconnect</span>
+                  }
+                </span>
+              </button>
+            </article>
+          }
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card
+    appearance="outlined"
+    class="mcp-connections__card"
+    aria-labelledby="mcp-chatgpt-title">
+    <mat-card-header>
+      <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">add_link</mat-icon>
+      <mat-card-title id="mcp-chatgpt-title">Connect ChatGPT</mat-card-title>
+      <mat-card-subtitle>
+        In ChatGPT on the web, turn on Developer mode and create a custom app with this endpoint.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
       <div class="mcp-connections__endpoint">
         <code>{{ mcpEndpoint }}</code>
         <button mat-stroked-button type="button" (click)="copyEndpoint()">
@@ -16,107 +90,84 @@
           </span>
         </button>
       </div>
-      <section class="mcp-connections__icon-downloads" aria-labelledby="mcp-chatgpt-icon-title">
-        <img src="/assets/favicons/android-chrome-96x96.png" alt="" aria-hidden="true">
-        <div>
-          <h4 id="mcp-chatgpt-icon-title">ChatGPT app icon</h4>
-          <p>ChatGPT may discover the app icon automatically. If it asks you to upload one, use either compact PNG below; both are under its 10 KB upload limit.</p>
-          <div class="mcp-connections__icon-actions">
-            <a
-              mat-stroked-button
-              href="/assets/favicons/android-chrome-96x96.png"
-              download="quantified-self-chatgpt-icon-96.png">
-              Download 96 px · 3.3 KB
-            </a>
-            <a
-              mat-stroked-button
-              href="/assets/favicons/android-chrome-192x192.png"
-              download="quantified-self-chatgpt-icon-192.png">
-              Download 192 px · 9.9 KB
-            </a>
-          </div>
-        </div>
-      </section>
-      <ol>
+      <ol class="mcp-connections__setup-steps">
         <li>Let ChatGPT scan the available tools.</li>
         <li>Sign in to Quantified Self when prompted.</li>
         <li>Choose the read-only metrics, activity details, sleep, or saved-route permissions you want to grant.</li>
       </ol>
-      <aside class="mcp-connections__android-guidance" aria-labelledby="mcp-android-guidance-title">
-        <mat-icon aria-hidden="true">phone_android</mat-icon>
-        <div>
-          <h4 id="mcp-android-guidance-title">Authorizing on Android</h4>
-          <p>
-            Desktop setup is the most reliable option. Android may send the final return address to the installed
-            ChatGPT app. If the app opens but does not continue setup, no active connection is created. Complete the
-            flow in ChatGPT on the web from a desktop, or temporarily turn off <strong>Open supported links</strong>
-            for ChatGPT under Android's app settings, retry in the browser, and restore the setting afterward.
-          </p>
-        </div>
-      </aside>
-      <p class="mcp-connections__setup-note">
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card
+    appearance="outlined"
+    class="mcp-connections__card"
+    aria-labelledby="mcp-chatgpt-icon-title">
+    <mat-card-header>
+      <img
+        mat-card-avatar
+        class="mcp-connections__app-icon"
+        src="/assets/favicons/android-chrome-96x96.png"
+        alt=""
+        aria-hidden="true">
+      <mat-card-title id="mcp-chatgpt-icon-title">ChatGPT app icon</mat-card-title>
+      <mat-card-subtitle>
+        ChatGPT may discover the app icon automatically. If it asks for an upload, use either compact PNG below.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="mcp-connections__icon-actions">
+        <a
+          mat-stroked-button
+          href="/assets/favicons/android-chrome-96x96.png"
+          download="quantified-self-chatgpt-icon-96.png">
+          Download 96 px · 3.3 KB
+        </a>
+        <a
+          mat-stroked-button
+          href="/assets/favicons/android-chrome-192x192.png"
+          download="quantified-self-chatgpt-icon-192.png">
+          Download 192 px · 9.9 KB
+        </a>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card
+    appearance="outlined"
+    class="mcp-connections__card"
+    aria-labelledby="mcp-android-guidance-title">
+    <mat-card-header>
+      <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">phone_android</mat-icon>
+      <mat-card-title id="mcp-android-guidance-title">Authorizing on Android</mat-card-title>
+      <mat-card-subtitle>Use desktop setup when Android cannot complete the client-app handoff.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p>
+        Desktop setup is the most reliable option. Android may send the final return address to the installed
+        ChatGPT app. If the app opens but does not continue setup, no active connection is created. Complete the
+        flow in ChatGPT on the web from a desktop, or temporarily turn off <strong>Open supported links</strong>
+        for ChatGPT under Android's app settings, retry in the browser, and restore the setting afterward.
+      </p>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card
+    appearance="outlined"
+    class="mcp-connections__card"
+    aria-labelledby="mcp-data-access-title">
+    <mat-card-header>
+      <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">shield</mat-icon>
+      <mat-card-title id="mcp-data-access-title">Data access and privacy</mat-card-title>
+      <mat-card-subtitle>Review sensitive location and connection-lifecycle boundaries.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p>
         Individual activity details may include exact start, end, and jump coordinates that can reveal sensitive
         locations. Nearby activity and route searches can use these coordinates and saved preview geometry. Place-name
-        searches send the location text to Mapbox; direct-coordinate searches do not. You can review or disconnect the
-        client below at any time. A client appears here only after it finishes authorization; abandoned attempts expire
-        automatically.
+        searches send the location text to Mapbox; direct-coordinate searches do not. You can review or disconnect a
+        client from the MCP connections card at any time. A client appears there only after it finishes authorization;
+        abandoned attempts expire automatically.
       </p>
-    </section>
-
-    @if (loading()) {
-      <div class="mcp-connections__state" role="status">
-        <mat-spinner diameter="28"></mat-spinner>
-        <span>Loading connections…</span>
-      </div>
-    } @else if (error()) {
-      <div class="mcp-connections__state mcp-connections__state--error" role="alert">
-        <mat-icon>error</mat-icon>
-        <span>{{ error() }}</span>
-        <button mat-button type="button" (click)="loadConnections()">Retry</button>
-      </div>
-    } @else if (connections().length === 0) {
-      <div class="mcp-connections__state">
-        <mat-icon>link_off</mat-icon>
-        <span>No MCP clients are connected.</span>
-      </div>
-    } @else {
-      <div class="mcp-connections__list">
-        @for (connection of connections(); track connection.connectionId) {
-          <article class="mcp-connections__item">
-            <div class="mcp-connections__details">
-              <h3>{{ connection.clientName }}</h3>
-              <p>{{ connection.redirectHost }}</p>
-              <ul aria-label="Granted permissions">
-                @for (scope of connection.scopes; track scope) {
-                  <li>{{ scopeLabels[scope] }}</li>
-                }
-              </ul>
-              <p class="mcp-connections__dates">
-                Connected {{ connection.createdAtMs | date:'mediumDate' }}
-                @if (connection.lastUsedAtMs) {
-                  · Last used {{ connection.lastUsedAtMs | date:'medium' }}
-                }
-              </p>
-            </div>
-            <button
-              mat-stroked-button
-              type="button"
-              class="qs-mat-warn"
-              [disabled]="revokingConnectionId() !== null"
-              (click)="revoke(connection)">
-              <span class="mcp-connections__button-content">
-                @if (revokingConnectionId() === connection.connectionId) {
-                  <mat-spinner diameter="18"></mat-spinner>
-                  <span>Disconnecting…</span>
-                } @else {
-                  <mat-icon>link_off</mat-icon>
-                  <span>Disconnect</span>
-                }
-              </span>
-            </button>
-          </article>
-        }
-      </div>
-    }
-  </mat-card-content>
-</mat-card>
+    </mat-card-content>
+  </mat-card>
+</section>

@@ -69,6 +69,31 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Saved routes and waypoints');
   });
 
+  it('uses a standard glass-card stack matching the connection workspace', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const cards = Array.from(
+      fixture.nativeElement.querySelectorAll<HTMLElement>('mat-card.mcp-connections__card'),
+    );
+    const titles = cards.map(card =>
+      card.querySelector('mat-card-title')?.textContent?.trim());
+
+    expect(cards).toHaveLength(5);
+    expect(titles).toEqual([
+      'MCP connections',
+      'Connect ChatGPT',
+      'ChatGPT app icon',
+      'Authorizing on Android',
+      'Data access and privacy',
+    ]);
+    expect(cards.every(card => !card.classList.contains('qs-card-plain'))).toBe(true);
+    expect(fixture.nativeElement.querySelector('.mcp-connections').tagName.toLowerCase())
+      .toBe('section');
+  });
+
   it('shows the ChatGPT setup steps and copies the public endpoint', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();
@@ -84,6 +109,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('ChatGPT app icon');
     expect(content).toContain('Download 96 px · 3.3 KB');
     expect(content).toContain('Download 192 px · 9.9 KB');
+    expect(content).toContain('client from the MCP connections card at any time');
     expect(content).toContain('only after it finishes authorization');
     expect(content).toContain('abandoned attempts expire automatically');
     expect(content).toContain('Authorizing on Android');
