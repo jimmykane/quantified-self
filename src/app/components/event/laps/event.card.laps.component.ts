@@ -47,6 +47,8 @@ interface LapColumnMenuGroup {
   icon: string;
   selectedMetricTypes: string[];
   metricGroups: EventLapMetricOptionGroup[];
+  filteredMetricGroups: EventLapMetricOptionGroup[];
+  searchTerm: string;
 }
 
 interface LapTableView {
@@ -59,6 +61,32 @@ interface LapTableView {
 interface LapTableGroup {
   lapType: LapTypes;
   tables: LapTableView[];
+}
+
+function filterLapMetricGroups(
+  metricGroups: EventLapMetricOptionGroup[],
+  searchTerm: string,
+): EventLapMetricOptionGroup[] {
+  const queryTokens = searchTerm.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (queryTokens.length === 0) {
+    return metricGroups;
+  }
+
+  const matchesQuery = (value: string): boolean => {
+    const normalizedValue = value.toLocaleLowerCase();
+    return queryTokens.every((token) => normalizedValue.includes(token));
+  };
+
+  return metricGroups.reduce<EventLapMetricOptionGroup[]>((filteredGroups, metricGroup) => {
+    const groupMatches = matchesQuery(metricGroup.label);
+    const metrics = metricGroup.metrics.filter((metric) => groupMatches || matchesQuery(
+      `${metric.label} ${metric.type}`,
+    ));
+    if (metrics.length > 0) {
+      filteredGroups.push({ ...metricGroup, metrics });
+    }
+    return filteredGroups;
+  }, []);
 }
 
 @Component({
@@ -278,6 +306,15 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     }
   }
 
+  public onLapColumnMetricSearchInput(group: LapColumnMenuGroup, event: Event): void {
+    const searchTerm = (event.target as HTMLInputElement | null)?.value || '';
+    this.setLapColumnMetricSearchTerm(group, searchTerm);
+  }
+
+  public clearLapColumnMetricSearch(group: LapColumnMenuGroup): void {
+    this.setLapColumnMetricSearchTerm(group, '');
+  }
+
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.selectedActivities.forEach((activity) => {
@@ -297,8 +334,16 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         icon: presentation.icon,
         selectedMetricTypes: getSelectedEventLapMetricTypes(this.eventDetailsSettings, family),
         metricGroups,
+        filteredMetricGroups: metricGroups,
+        searchTerm: '',
       };
     });
+  }
+
+  private setLapColumnMetricSearchTerm(group: LapColumnMenuGroup, searchTerm: string): void {
+    group.searchTerm = searchTerm;
+    group.filteredMetricGroups = filterLapMetricGroups(group.metricGroups, searchTerm);
+    this.changeDetectorRef.markForCheck();
   }
 
   private setSportFamilySaving(sportFamily: AppEventLapSportFamily, saving: boolean): void {

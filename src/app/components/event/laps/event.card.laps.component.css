@@ -34,6 +34,18 @@
   padding: 12px 16px 4px;
 }
 
+.lap-column-search-field {
+  display: block;
+  margin: 8px 16px 0;
+}
+
+.lap-column-menu-empty {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+  padding: 12px 16px;
+}
+
 .lap-column-menu-saving {
   align-items: center;
   color: var(--mat-sys-on-surface-variant);

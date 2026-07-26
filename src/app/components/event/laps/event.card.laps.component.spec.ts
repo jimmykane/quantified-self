@@ -310,6 +310,42 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapColumnMenuGroups[1]?.selectedMetricTypes).toContain(DataSpeedAvg.type);
     });
 
+    it('filters lap metric groups by typed metric and group names', () => {
+        const activity = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]),
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+
+        const cyclingGroup = component.lapColumnMenuGroups.find((group) => group.family === 'cycling');
+        if (!cyclingGroup) {
+            throw new Error('Expected cycling lap column group');
+        }
+
+        component.onLapColumnMetricSearchInput(cyclingGroup, {
+            target: { value: 'min speed' },
+        } as unknown as Event);
+
+        expect(cyclingGroup.searchTerm).toBe('min speed');
+        expect(cyclingGroup.filteredMetricGroups).toEqual(expect.arrayContaining([expect.objectContaining({
+            label: 'Speed',
+            metrics: [{ type: DataSpeedMin.type, label: 'Minimum' }],
+        })]));
+
+        component.onLapColumnMetricSearchInput(cyclingGroup, {
+            target: { value: 'not a metric' },
+        } as unknown as Event);
+
+        expect(cyclingGroup.filteredMetricGroups).toEqual([]);
+
+        component.clearLapColumnMetricSearch(cyclingGroup);
+
+        expect(cyclingGroup.searchTerm).toBe('');
+        expect(cyclingGroup.filteredMetricGroups).toBe(cyclingGroup.metricGroups);
+    });
+
     it('restores the prior column layout when its profile save fails', async () => {
         const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
         updateLapTableColumns.mockRejectedValueOnce(new Error('save failed'));
@@ -398,6 +434,9 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
         expect(template).toContain('lapColumnFamiliesMenu');
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
+        expect(template).toContain('Search metrics');
+        expect(template).toContain('group.filteredMetricGroups');
+        expect(template).toContain('No matching metrics.');
         expect(template).toContain('row.isLapAverage');
         expect(template).toContain('lap-average-row');
         expect(template).not.toContain('lap-header-averages');

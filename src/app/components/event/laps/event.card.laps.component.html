@@ -20,6 +20,20 @@
   <ng-template matMenuContent let-group="group">
     <div class="lap-column-menu-content">
       <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units.</p>
+      <mat-form-field appearance="outline" class="lap-column-search-field" subscriptSizing="dynamic">
+        <mat-label>Search metrics</mat-label>
+        <input matInput [value]="group.searchTerm" (input)="onLapColumnMetricSearchInput(group, $event)"
+          placeholder="Speed, heart rate, power..." [attr.aria-label]="'Search ' + group.label.toLowerCase() + ' lap metrics'"
+          autocomplete="off">
+        @if (group.searchTerm) {
+        <button mat-icon-button matSuffix type="button" (click)="clearLapColumnMetricSearch(group)"
+          aria-label="Clear metric search">
+          <mat-icon>close</mat-icon>
+        </button>
+        } @else {
+        <mat-icon matSuffix>search</mat-icon>
+        }
+      </mat-form-field>
       @if (savingLapColumnSportFamilies().has(group.family)) {
       <div class="lap-column-menu-saving" aria-live="polite">
         <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
@@ -29,7 +43,7 @@
       <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
         (click)="$event.stopPropagation()"
         [aria-label]="group.label + ' lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
-        @for (metricGroup of group.metricGroups; track metricGroup.id) {
+        @for (metricGroup of group.filteredMetricGroups; track metricGroup.id) {
         <div mat-subheader>{{ metricGroup.label }}</div>
         @for (metric of metricGroup.metrics; track metric.type) {
         <mat-list-option [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type">
@@ -39,6 +53,9 @@
           </span>
         </mat-list-option>
         }
+        }
+        @empty {
+        <p class="lap-column-menu-empty" role="status">No matching metrics.</p>
         }
       </mat-selection-list>
     </div>
