@@ -6,7 +6,6 @@ import { EventSectionHeaderComponent } from './event.section-header.component';
 @Component({
     template: `
     <app-event-section-header icon="map" title="Laps">
-      <span event-section-header-title class="projected-title-content">Avg pace</span>
       <button class="projected-action">Options</button>
     </app-event-section-header>
   `,
@@ -34,7 +33,7 @@ describe('EventSectionHeaderComponent', () => {
     });
 
     it('should render title when provided', () => {
-        const titleEl: HTMLElement | null = fixture.nativeElement.querySelector('.event-section-header-title-text');
+        const titleEl: HTMLElement | null = fixture.nativeElement.querySelector('.event-section-header-title');
         expect(titleEl?.textContent?.trim()).toBe('Laps');
     });
 
@@ -42,11 +41,5 @@ describe('EventSectionHeaderComponent', () => {
         const projectedAction: HTMLButtonElement | null = fixture.nativeElement.querySelector('.projected-action');
         expect(projectedAction).toBeTruthy();
         expect(projectedAction?.textContent?.trim()).toBe('Options');
-    });
-
-    it('should project title-adjacent content separately from actions', () => {
-        const titleContent: HTMLSpanElement | null = fixture.nativeElement.querySelector('.projected-title-content');
-        expect(titleContent?.textContent?.trim()).toBe('Avg pace');
-        expect(titleContent?.parentElement?.classList).toContain('event-section-header-title');
     });
 });

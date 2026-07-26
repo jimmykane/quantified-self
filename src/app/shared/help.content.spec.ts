@@ -289,7 +289,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
     expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
     expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
-    expect(gettingStartedSection?.content).toContain('Laps heading also shows the average');
+    expect(gettingStartedSection?.content).toContain('Each lap table includes an **Avg** row directly below its headers');
     expect(gettingStartedSection?.content).toContain('Satellite diagnostics and EHPE/EVPE position-error metrics');
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable rather than becoming zero');
   });

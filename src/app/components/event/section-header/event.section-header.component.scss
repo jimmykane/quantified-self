@@ -27,12 +27,8 @@ section.event-section-header {
 }
 
 .event-section-header-title {
-  align-items: center;
   font: var(--mat-sys-title-medium);
   color: var(--mat-sys-on-surface);
-  display: flex;
-  gap: 8px;
-  min-width: 0;
 }
 
 .event-section-header-actions {

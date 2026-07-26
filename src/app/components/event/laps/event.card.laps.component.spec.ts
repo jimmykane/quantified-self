@@ -115,7 +115,7 @@ describe('EventCardLapsComponent', () => {
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataPaceAvg.type]).toBe('05:00 min/km');
     });
 
-    it('shows unit-aware metric averages beside the Laps title', () => {
+    it('shows unit-aware metric averages directly below the table header', () => {
         const activity = createActivity([300, 330].map((pace) => ({
             ...createRenderableLap(LapTypes.Manual),
             getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
@@ -124,16 +124,16 @@ describe('EventCardLapsComponent', () => {
 
         component.ngOnChanges();
 
-        expect(component.lapHeaderAverageGroups).toEqual([
-            {
-                family: 'running',
-                label: 'Running',
-                metrics: [{ type: DataPaceAvg.type, display: '05:15 min/km' }],
-            },
-        ]);
+        const rows = component.getDataSource(activity, LapTypes.Manual)?.data;
+        expect(rows?.[0]).toMatchObject({
+            '#': 'Avg',
+            isLapAverage: true,
+            [DataPaceAvg.type]: '05:15 min/km',
+        });
+        expect(rows?.[1]?.['#']).toBe(1);
     });
 
-    it('keeps running and cycling header averages separate', () => {
+    it('keeps table average rows sport-aware', () => {
         const running = createActivity([{
             ...createRenderableLap(LapTypes.Manual),
             getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(300) : undefined,
@@ -150,18 +150,16 @@ describe('EventCardLapsComponent', () => {
 
         component.ngOnChanges();
 
-        expect(component.lapHeaderAverageGroups).toEqual([
-            {
-                family: 'running',
-                label: 'Running',
-                metrics: [{ type: DataPaceAvg.type, display: '05:00 min/km' }],
-            },
-            {
-                family: 'cycling',
-                label: 'Cycling',
-                metrics: [{ type: DataSpeedAvg.type, display: '18.00 km/h' }],
-            },
-        ]);
+        expect(component.getDataSource(running, LapTypes.Manual)?.data[0]).toMatchObject({
+            '#': 'Avg',
+            isLapAverage: true,
+            [DataPaceAvg.type]: '05:00 min/km',
+        });
+        expect(component.getDataSource(cycling, LapTypes.Manual)?.data[0]).toMatchObject({
+            '#': 'Avg',
+            isLapAverage: true,
+            [DataSpeedAvg.type]: '18.00 km/h',
+        });
     });
 
     it('uses speed for cycling laps', () => {
@@ -301,8 +299,9 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
         expect(template).toContain('lapColumnFamiliesMenu');
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
-        expect(template).toContain('event-section-header-title');
-        expect(template).toContain('lap-header-averages');
+        expect(template).toContain('row.isLapAverage');
+        expect(template).toContain('lap-average-row');
+        expect(template).not.toContain('lap-header-averages');
         expect(template).toContain('lapTableGroup.tables');
         expect(template).not.toContain('getDataSource(');
         expect(template).not.toContain('getColumns(');
