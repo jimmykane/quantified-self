@@ -69,98 +69,117 @@
     </mat-card-content>
   </mat-card>
 
+  <header class="mcp-connections__section-header">
+    <h2>Let’s help you set up your MCP plugin</h2>
+    <p>Use the connection details below, then finish authorization in ChatGPT.</p>
+  </header>
+
   <mat-card
     appearance="outlined"
     class="mcp-connections__card"
-    aria-labelledby="mcp-chatgpt-title">
+    aria-labelledby="mcp-chatgpt-setup-title">
     <mat-card-header>
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">add_link</mat-icon>
-      <mat-card-title id="mcp-chatgpt-title">Connect ChatGPT</mat-card-title>
+      <mat-card-title id="mcp-chatgpt-setup-title">ChatGPT setup</mat-card-title>
       <mat-card-subtitle>
-        In ChatGPT on the web, turn on Developer mode and create a custom app with this endpoint.
+        Add the Quantified Self endpoint and icon before starting the read-only authorization flow.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      <div class="mcp-connections__endpoint">
-        <code>{{ mcpEndpoint }}</code>
-        <button mat-stroked-button type="button" (click)="copyEndpoint()">
-          <span class="mcp-connections__button-content">
-            <mat-icon>content_copy</mat-icon>
-            <span>Copy endpoint</span>
-          </span>
-        </button>
+      <div class="mcp-connections__setup-grid">
+        <section class="mcp-connections__setup-block" aria-labelledby="mcp-endpoint-title">
+          <h3 id="mcp-endpoint-title">Connection URL</h3>
+          <p>Paste this endpoint when ChatGPT asks for your MCP server URL.</p>
+          <div class="mcp-connections__endpoint">
+            <code>{{ mcpEndpoint }}</code>
+            <button mat-stroked-button type="button" (click)="copyEndpoint()">
+              <span class="mcp-connections__button-content">
+                <mat-icon>content_copy</mat-icon>
+                <span>Copy endpoint</span>
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <section class="mcp-connections__setup-block" aria-labelledby="mcp-chatgpt-icon-title">
+          <div class="mcp-connections__app-identity">
+            <img
+              class="mcp-connections__app-icon"
+              src="/assets/favicons/android-chrome-96x96.png"
+              alt=""
+              aria-hidden="true">
+            <div>
+              <h3 id="mcp-chatgpt-icon-title">ChatGPT app icon</h3>
+              <p>Use either compact PNG if ChatGPT asks you to upload an icon.</p>
+            </div>
+          </div>
+          <div class="mcp-connections__icon-actions">
+            <a
+              mat-stroked-button
+              href="/assets/favicons/android-chrome-96x96.png"
+              download="quantified-self-chatgpt-icon-96.png">
+              Download 96 px · 3.3 KB
+            </a>
+            <a
+              mat-stroked-button
+              href="/assets/favicons/android-chrome-192x192.png"
+              download="quantified-self-chatgpt-icon-192.png">
+              Download 192 px · 9.9 KB
+            </a>
+          </div>
+        </section>
       </div>
-      <ol class="mcp-connections__setup-steps">
-        <li>Let ChatGPT scan the available tools.</li>
-        <li>Sign in to Quantified Self when prompted.</li>
-        <li>Choose the read-only metrics, activity details, sleep, or saved-route permissions you want to grant.</li>
-      </ol>
+
+      <mat-divider></mat-divider>
+
+      <section class="mcp-connections__setup-block" aria-labelledby="mcp-finish-setup-title">
+        <h3 id="mcp-finish-setup-title">Finish setup in ChatGPT</h3>
+        <ol class="mcp-connections__setup-steps">
+          <li>Let ChatGPT scan the available tools.</li>
+          <li>Sign in to Quantified Self when prompted.</li>
+          <li>Choose the read-only metrics, activity details, sleep, or saved-route permissions you want to grant.</li>
+        </ol>
+      </section>
+
+      <mat-divider></mat-divider>
+
+      <section class="mcp-connections__android-guidance" aria-labelledby="mcp-android-guidance-title">
+        <mat-icon class="mcp-connections__inline-icon" aria-hidden="true">phone_android</mat-icon>
+        <div>
+          <h3 id="mcp-android-guidance-title">Authorizing on Android</h3>
+          <p>
+            Desktop setup is the most reliable option. Android may send the final return address to the installed
+            ChatGPT app. If the app opens but does not continue setup, no active connection is created. Complete the
+            flow in ChatGPT on the web from a desktop, or temporarily turn off <strong>Open supported links</strong>
+            for ChatGPT under Android's app settings, retry in the browser, and restore the setting afterward.
+          </p>
+        </div>
+      </section>
     </mat-card-content>
   </mat-card>
 
   <mat-card
     appearance="outlined"
     class="mcp-connections__card"
-    aria-labelledby="mcp-chatgpt-icon-title">
+    aria-labelledby="mcp-authorization-title">
     <mat-card-header>
-      <img
-        mat-card-avatar
-        class="mcp-connections__app-icon"
-        src="/assets/favicons/android-chrome-96x96.png"
-        alt=""
-        aria-hidden="true">
-      <mat-card-title id="mcp-chatgpt-icon-title">ChatGPT app icon</mat-card-title>
-      <mat-card-subtitle>
-        ChatGPT may discover the app icon automatically. If it asks for an upload, use either compact PNG below.
-      </mat-card-subtitle>
+      <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">verified_user</mat-icon>
+      <mat-card-title id="mcp-authorization-title">Authorization and data access</mat-card-title>
+      <mat-card-subtitle>Choose the separate read-only permissions you are comfortable granting.</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      <div class="mcp-connections__icon-actions">
-        <a
-          mat-stroked-button
-          href="/assets/favicons/android-chrome-96x96.png"
-          download="quantified-self-chatgpt-icon-96.png">
-          Download 96 px · 3.3 KB
-        </a>
-        <a
-          mat-stroked-button
-          href="/assets/favicons/android-chrome-192x192.png"
-          download="quantified-self-chatgpt-icon-192.png">
-          Download 192 px · 9.9 KB
-        </a>
-      </div>
-    </mat-card-content>
-  </mat-card>
-
-  <mat-card
-    appearance="outlined"
-    class="mcp-connections__card"
-    aria-labelledby="mcp-android-guidance-title">
-    <mat-card-header>
-      <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">phone_android</mat-icon>
-      <mat-card-title id="mcp-android-guidance-title">Authorizing on Android</mat-card-title>
-      <mat-card-subtitle>Use desktop setup when Android cannot complete the client-app handoff.</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <p>
-        Desktop setup is the most reliable option. Android may send the final return address to the installed
-        ChatGPT app. If the app opens but does not continue setup, no active connection is created. Complete the
-        flow in ChatGPT on the web from a desktop, or temporarily turn off <strong>Open supported links</strong>
-        for ChatGPT under Android's app settings, retry in the browser, and restore the setting afterward.
+      <p class="mcp-connections__authorization-intro">
+        During authorization, you can approve any combination of these access categories:
       </p>
-    </mat-card-content>
-  </mat-card>
+      <ul class="mcp-connections__authorization-list" aria-label="Available MCP permissions">
+        <li><mat-icon aria-hidden="true">query_stats</mat-icon>{{ scopeLabels['metrics:read'] }}</li>
+        <li><mat-icon aria-hidden="true">directions_run</mat-icon>{{ scopeLabels['activity-details:read'] }}</li>
+        <li><mat-icon aria-hidden="true">bedtime</mat-icon>{{ scopeLabels['sleep:read'] }}</li>
+        <li><mat-icon aria-hidden="true">route</mat-icon>{{ scopeLabels['routes:read'] }}</li>
+      </ul>
 
-  <mat-card
-    appearance="outlined"
-    class="mcp-connections__card"
-    aria-labelledby="mcp-data-access-title">
-    <mat-card-header>
-      <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">shield</mat-icon>
-      <mat-card-title id="mcp-data-access-title">Data access and privacy</mat-card-title>
-      <mat-card-subtitle>Review sensitive location and connection-lifecycle boundaries.</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
+      <mat-divider></mat-divider>
+
       <p>
         Individual activity details may include exact start, end, and jump coordinates that can reveal sensitive
         locations. Nearby activity and route searches can use these coordinates and saved preview geometry. Place-name

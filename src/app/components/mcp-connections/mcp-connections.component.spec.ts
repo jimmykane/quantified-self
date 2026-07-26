@@ -81,17 +81,22 @@ describe('McpConnectionsComponent', () => {
     const titles = cards.map(card =>
       card.querySelector('mat-card-title')?.textContent?.trim());
 
-    expect(cards).toHaveLength(5);
+    expect(cards).toHaveLength(3);
     expect(titles).toEqual([
       'MCP connections',
-      'Connect ChatGPT',
-      'ChatGPT app icon',
-      'Authorizing on Android',
-      'Data access and privacy',
+      'ChatGPT setup',
+      'Authorization and data access',
     ]);
     expect(cards.every(card => !card.classList.contains('qs-card-plain'))).toBe(true);
     expect(fixture.nativeElement.querySelector('.mcp-connections').tagName.toLowerCase())
       .toBe('section');
+    expect(
+      fixture.nativeElement.querySelector('.mcp-connections__section-header h2').textContent.trim(),
+    ).toBe('Let’s help you set up your MCP plugin');
+    const setupCard = cards[1];
+    expect(setupCard.querySelector('code')?.textContent?.trim()).toBe('https://quantified-self.io/mcp');
+    expect(setupCard.querySelector('.mcp-connections__app-icon')).toBeTruthy();
+    expect(setupCard.querySelector('#mcp-android-guidance-title')).toBeTruthy();
   });
 
   it('shows the ChatGPT setup steps and copies the public endpoint', async () => {
@@ -101,7 +106,7 @@ describe('McpConnectionsComponent', () => {
     fixture.detectChanges();
 
     const content = fixture.nativeElement.textContent as string;
-    expect(content).toContain('Connect ChatGPT');
+    expect(content).toContain('ChatGPT setup');
     expect(content).toContain('https://quantified-self.io/mcp');
     expect(content).toContain('Copy endpoint');
     expect(content).toContain('exact start, end, and jump coordinates');
@@ -116,6 +121,8 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Desktop setup is the most reliable option');
     expect(content).toContain('Open supported links');
     expect(content).toContain('no active connection is created');
+    expect(content).toContain('Authorization and data access');
+    expect(content).toContain('any combination of these access categories');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',
