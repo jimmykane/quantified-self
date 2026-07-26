@@ -16,6 +16,7 @@ import {
   getDefaultEventLapMetricTypes,
   getEventLapMetricOptionGroups,
   getSelectedEventLapMetricTypes,
+  isEventLapSportFamily,
   normalizeEventDetailsSettings,
   resolveEventLapSportFamily,
 } from './event-lap-table-columns.helper';
@@ -40,7 +41,14 @@ describe('event lap table columns helper', () => {
     expect(getDefaultEventLapMetricTypes('running')).not.toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('cycling')).toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataSwimPaceAvg.type);
+    expect(getDefaultEventLapMetricTypes('other')).toContain(DataSpeedAvg.type);
     expect(EVENT_LAP_TABLE_FIXED_COLUMN).toBe('#');
+  });
+
+  it('only accepts supported sport families for persisted layouts', () => {
+    expect(isEventLapSportFamily('running')).toBe(true);
+    expect(isEventLapSportFamily('rowing')).toBe(false);
+    expect(isEventLapSportFamily(null)).toBe(false);
   });
 
   it('normalizes saved choices while preserving an intentional empty layout', () => {

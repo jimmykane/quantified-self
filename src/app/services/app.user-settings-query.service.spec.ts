@@ -191,6 +191,13 @@ describe('AppUserSettingsQueryService', () => {
                 },
             });
         });
+
+        it('rejects unsupported sport families before writing settings', async () => {
+            await expect(service.updateLapTableColumns('rowing', [DataPaceAvg.type]))
+                .rejects.toThrow('supported sport family');
+
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
     });
 
 });

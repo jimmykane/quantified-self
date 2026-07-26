@@ -11,6 +11,7 @@ import {
   DataHeartRateMax,
   DataInterface,
   DataPowerAvg,
+  DataSpeedAvg,
   DataSwimPaceAvg,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -44,6 +45,13 @@ const SPORT_FAMILY_PRESENTATIONS: EventLapSportFamilyPresentation[] = [
   { family: 'cycling', label: 'Cycling', icon: 'directions_bike' },
   { family: 'swimming', label: 'Swimming', icon: 'pool' },
   { family: 'other', label: 'Other activities', icon: 'sports' },
+];
+
+const EVENT_LAP_SPORT_FAMILIES: readonly AppEventLapSportFamily[] = [
+  'running',
+  'cycling',
+  'swimming',
+  'other',
 ];
 
 const EVENT_LAP_METRIC_OPTION_GROUPS: EventLapMetricOptionGroup[] = [];
@@ -97,6 +105,11 @@ export const getEventLapSportFamilyPresentation = (
     || SPORT_FAMILY_PRESENTATIONS[SPORT_FAMILY_PRESENTATIONS.length - 1]
 );
 
+export const isEventLapSportFamily = (value: unknown): value is AppEventLapSportFamily => (
+  typeof value === 'string'
+  && EVENT_LAP_SPORT_FAMILIES.includes(value as AppEventLapSportFamily)
+);
+
 export const resolveEventLapSportFamily = (activityType: unknown): AppEventLapSportFamily => {
   const resolvedActivityType = ActivityTypesHelper.resolveActivityType(activityType);
   if (!resolvedActivityType) {
@@ -123,7 +136,7 @@ export const getDefaultEventLapMetricTypes = (
     ? DataSwimPaceAvg.type
     : resolvePreferredSpeedDerivedAverageTypeForActivity(
       family === 'running' ? 'Running' : family === 'cycling' ? 'Cycling' : 'Other',
-    );
+    ) || DataSpeedAvg.type;
 
   return [
     DataDuration.type,
@@ -167,7 +180,7 @@ export const normalizeEventDetailsSettings = (value: unknown): AppEventDetailsSe
     : {};
   const normalizedColumnsBySportFamily: Partial<Record<AppEventLapSportFamily, string[]>> = {};
 
-  SPORT_FAMILY_PRESENTATIONS.forEach(({ family }) => {
+  EVENT_LAP_SPORT_FAMILIES.forEach((family) => {
     const normalizedMetricTypes = normalizeEventLapMetricTypes(columnsBySportFamily[family]);
     if (normalizedMetricTypes !== null) {
       normalizedColumnsBySportFamily[family] = normalizedMetricTypes;

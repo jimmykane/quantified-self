@@ -50,6 +50,18 @@ interface LapColumnMenuGroup {
   metricGroups: EventLapMetricOptionGroup[];
 }
 
+interface LapTableView {
+  key: string;
+  activity: ActivityInterface;
+  dataSource: MatTableDataSource<LapTableRow>;
+  columns: string[];
+}
+
+interface LapTableGroup {
+  lapType: LapTypes;
+  tables: LapTableView[];
+}
+
 @Component({
   selector: 'app-event-card-laps',
   templateUrl: './event.card.laps.component.html',
@@ -69,7 +81,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   public dataSourcesMap = new Map<string, MatTableDataSource<LapTableRow>>();
   public columnsMap = new Map<string, string[]>();
+  public lapTableGroups: LapTableGroup[] = [];
   public lapColumnMenuGroups: LapColumnMenuGroup[] = [];
+  public hasMultipleEventActivities = false;
   public savingLapColumnSportFamilies = signal(new Set<AppEventLapSportFamily>());
   private eventDetailsSettings: AppEventDetailsSettingsInterface = normalizeEventDetailsSettings(null);
   private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
@@ -84,6 +98,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   ngOnChanges() {
+    this.hasMultipleEventActivities = (this.event?.getActivities?.() || []).length > 1;
     this.updateAvailableLapTypes();
     this.updateData();
   }
@@ -108,6 +123,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private updateData() {
     this.dataSourcesMap.clear();
     this.columnsMap.clear();
+    this.lapTableGroups = [];
 
     if (!this.selectedActivities) {
       this.lapColumnMenuGroups = [];
@@ -132,6 +148,20 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     });
 
     this.availableLapTypes = this.availableLapTypes.filter(lapType => lapTypesWithData.has(lapType));
+    this.lapTableGroups = this.availableLapTypes.map((lapType) => ({
+      lapType,
+      tables: this.selectedActivities
+        .map((activity): LapTableView | null => {
+          const key = this.getKey(activity, lapType);
+          const dataSource = this.dataSourcesMap.get(key);
+          const columns = this.columnsMap.get(key);
+          if (!dataSource || !columns) {
+            return null;
+          }
+          return { key, activity, dataSource, columns };
+        })
+        .filter((table): table is LapTableView => !!table),
+    })).filter((group) => group.tables.length > 0);
     this.updateLapColumnMenuGroups();
     this.changeDetectorRef.markForCheck();
   }

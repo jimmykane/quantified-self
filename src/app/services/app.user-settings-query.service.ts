@@ -19,6 +19,7 @@ import {
     AppUserInterface
 } from '../models/app-user.interface';
 import {
+    isEventLapSportFamily,
     normalizeEventDetailsSettings,
     normalizeEventLapMetricTypes,
 } from '../helpers/event-lap-table-columns.helper';
@@ -239,9 +240,13 @@ export class AppUserSettingsQueryService {
      * Stores the visible metric columns for one Event Details Laps sport family.
      */
     public async updateLapTableColumns(
-        sportFamily: AppEventLapSportFamily,
+        sportFamily: AppEventLapSportFamily | string,
         selectedMetricTypes: string[],
     ): Promise<void> {
+        if (!isEventLapSportFamily(sportFamily)) {
+            throw new Error('Lap table columns must use a supported sport family.');
+        }
+
         const normalizedMetricTypes = normalizeEventLapMetricTypes(selectedMetricTypes);
         if (normalizedMetricTypes === null) {
             throw new Error('Lap table columns must be selected from the supported event metrics.');

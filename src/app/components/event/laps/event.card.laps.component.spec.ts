@@ -1,5 +1,6 @@
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatSelectionListChange } from '@angular/material/list';
 import {
     ActivityInterface,
     DataDuration,
@@ -37,6 +38,16 @@ function createRenderableLap(type: LapTypes): LapInterface {
             getStopwatchDisplayValue: () => '0:12.85',
         }),
     } as unknown as LapInterface;
+}
+
+function createLapColumnSelectionChange(metricTypes: string[]): MatSelectionListChange {
+    return {
+        source: {
+            selectedOptions: {
+                selected: metricTypes.map((value) => ({ value })),
+            },
+        },
+    } as unknown as MatSelectionListChange;
 }
 
 describe('EventCardLapsComponent', () => {
@@ -84,6 +95,8 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
 
         expect(component.availableLapTypes).toEqual([LapTypes.Manual]);
+        expect(component.lapTableGroups).toHaveLength(1);
+        expect(component.lapTableGroups[0]?.tables[0]?.dataSource.data[0].Duration).toBe('0:12.85');
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0].Duration).toBe('0:12.85');
     });
 
@@ -125,13 +138,10 @@ describe('EventCardLapsComponent', () => {
         component.selectedActivities = [activity];
         component.ngOnChanges();
 
-        await component.onLapColumnSelectionChange('running', {
-            source: {
-                selectedOptions: {
-                    selected: [{ value: DataPaceAvg.type }],
-                },
-            },
-        } as any);
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange([DataPaceAvg.type]),
+        );
 
         expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataPaceAvg.type]);
         expect(updateLapTableColumns).toHaveBeenCalledWith('running', [DataPaceAvg.type]);
@@ -161,13 +171,10 @@ describe('EventCardLapsComponent', () => {
         component.selectedActivities = [activity];
         component.ngOnChanges();
 
-        await component.onLapColumnSelectionChange('running', {
-            source: {
-                selectedOptions: {
-                    selected: [{ value: DataPaceAvg.type }],
-                },
-            },
-        } as any);
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange([DataPaceAvg.type]),
+        );
 
         expect(component.getColumnsToDisplay('Running')).toContain(DataDuration.type);
         expect(snackBar.open).toHaveBeenCalledWith('Could not save lap columns. Please try again.', 'Close');
@@ -245,5 +252,8 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
         expect(template).toContain('lapColumnFamiliesMenu');
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
+        expect(template).toContain('lapTableGroup.tables');
+        expect(template).not.toContain('getDataSource(');
+        expect(template).not.toContain('getColumns(');
     });
 });
