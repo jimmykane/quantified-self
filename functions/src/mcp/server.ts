@@ -29,11 +29,11 @@ const MCP_CURSOR_SCHEMA = z.string().min(1).max(512);
 const MCP_NEARBY_LOCATION_SCHEMA = z.union([
   z.object({
     query: z.string().min(1).max(200),
-  }),
+  }).strict(),
   z.object({
     latitudeDegrees: z.number().min(-90).max(90),
     longitudeDegrees: z.number().min(-180).max(180),
-  }),
+  }).strict(),
 ]);
 const MCP_NEARBY_RADIUS_SCHEMA = z.number()
   .min(100)

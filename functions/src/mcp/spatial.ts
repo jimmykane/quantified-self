@@ -109,10 +109,13 @@ export function findNearestPointOnPolyline(
   position: SpatialPosition,
   rawPoints: readonly SpatialPosition[],
 ): NearestPolylinePoint | null {
-  if (!isValidSpatialPosition(position)) {
+  if (
+    !isValidSpatialPosition(position)
+    || rawPoints.some(point => !isValidSpatialPosition(point))
+  ) {
     return null;
   }
-  const points = rawPoints.filter(isValidSpatialPosition);
+  const points = [...rawPoints];
   if (points.length === 0) {
     return null;
   }

@@ -338,7 +338,8 @@ deliberately.
   truncated.
 - Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
 - Place-name geocoding is additionally limited to 30 requests per MCP connection per minute; coordinate input bypasses
-  Mapbox and this provider-specific counter.
+  Mapbox and this provider-specific counter. The geocoding counter transaction rechecks account-deletion state before
+  writing, preventing an in-flight lookup from recreating MCP state after user cleanup.
 - Public authorization starts are limited before client-metadata retrieval to 10 per client ID and 30 per requester
   address per minute.
 - Requests require valid IANA timezones where local date bucketing is relevant.

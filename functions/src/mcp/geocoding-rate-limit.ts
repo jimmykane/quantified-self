@@ -1,5 +1,8 @@
 import * as admin from 'firebase-admin';
 import { createHash } from 'node:crypto';
+import {
+  getUserDeletionGuardStateInTransaction,
+} from '../shared/user-deletion-guard';
 import { MCP_OAUTH_COLLECTIONS } from './oauth.service';
 
 const MCP_GEOCODING_REQUESTS_PER_MINUTE = 30;
@@ -12,6 +15,13 @@ export class McpGeocodingRateLimitError extends Error {
   }
 }
 
+export class McpGeocodingUnavailableError extends Error {
+  constructor() {
+    super('The MCP account is no longer available.');
+    this.name = 'McpGeocodingUnavailableError';
+  }
+}
+
 interface RateLimitSnapshot {
   exists: boolean;
   data: () => { count?: unknown } | undefined;
@@ -20,6 +30,7 @@ interface RateLimitSnapshot {
 interface RateLimitTransaction {
   get: (reference: unknown) => Promise<RateLimitSnapshot>;
   set: (reference: unknown, value: Record<string, unknown>) => void;
+  assertUserAvailable: (uid: string, nowMs: number) => Promise<void>;
 }
 
 export interface McpGeocodingRateLimitDependencies {
@@ -36,11 +47,37 @@ const defaultDependencies: McpGeocodingRateLimitDependencies = {
   document: documentId => admin.firestore()
     .collection(MCP_OAUTH_COLLECTIONS.rateLimits)
     .doc(documentId),
-  runTransaction: operation => admin.firestore().runTransaction(
-    operation as unknown as (
-      transaction: admin.firestore.Transaction,
-    ) => Promise<void>,
-  ),
+  runTransaction: (operation) => {
+    const db = admin.firestore();
+    return db.runTransaction(async transaction => operation({
+      get: async reference => {
+        const snapshot = await transaction.get(
+          reference as admin.firestore.DocumentReference,
+        );
+        return {
+          exists: snapshot.exists,
+          data: () => snapshot.data(),
+        };
+      },
+      set: (reference, value) => {
+        transaction.set(
+          reference as admin.firestore.DocumentReference,
+          value,
+        );
+      },
+      assertUserAvailable: async (uid, nowMs) => {
+        const guard = await getUserDeletionGuardStateInTransaction(
+          db,
+          transaction,
+          uid,
+          nowMs,
+        );
+        if (guard.shouldSkip) {
+          throw new McpGeocodingUnavailableError();
+        }
+      },
+    }));
+  },
   timestampFromMillis: value => admin.firestore.Timestamp.fromMillis(value),
 };
 
@@ -70,6 +107,7 @@ export async function consumeMcpGeocodingRateLimit(
   );
 
   await resolvedDependencies.runTransaction(async (transaction) => {
+    await transaction.assertUserAvailable(uid, nowMs);
     const snapshot = await transaction.get(document);
     const previousCount = snapshot.exists ? Number(snapshot.data()?.count || 0) : 0;
     const nextCount = Number.isSafeInteger(previousCount) && previousCount >= 0

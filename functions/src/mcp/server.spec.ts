@@ -180,6 +180,41 @@ describe('MCP HTTP scope enforcement', () => {
     }
   });
 
+  it('rejects ambiguous location objects before a nearby tool can execute', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+      baseUrl: 'https://quantified-self.io',
+    });
+    const client = new Client({
+      name: 'schema-test-client',
+      version: '1.0.0',
+    });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const result = await client.callTool({
+        name: 'find_activities_near_location',
+        arguments: {
+          location: {
+            query: 'Ioannina, Greece',
+            latitudeDegrees: 39.665,
+            longitudeDegrees: 20.8537,
+          },
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('Invalid input');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('discloses exact start and end coordinates in the activity tool metadata', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({

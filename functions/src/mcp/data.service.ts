@@ -74,6 +74,7 @@ import {
   forwardGeocodeMapbox,
   MapboxForwardGeocodingResult,
   MapboxGeocodingError,
+  normalizeMapboxQuery,
 } from '../shared/mapbox-geocoder';
 import {
   consumeMcpGeocodingRateLimit,
@@ -83,6 +84,7 @@ import {
   boundsMayBeWithinRadius,
   findNearestPointOnPolyline,
   haversineDistanceMeters,
+  isValidSpatialPosition,
   SpatialPosition,
 } from './spatial';
 
@@ -1363,6 +1365,7 @@ function projectRoutePreviewDetails(value: unknown) {
       || segmentPointCount === null
       || segmentPointCount <= 0
       || decoded.length !== segmentPointCount
+      || decoded.some(point => !isValidSpatialPosition(point))
     ) {
       return;
     }
@@ -1968,17 +1971,40 @@ async function resolveNearbyLocation(
   input: Pick<FindNearbyInputBase, 'uid' | 'connectionId' | 'location'>,
 ): Promise<ResolvedNearbyLocation> {
   if (
-    'latitudeDegrees' in input.location
-    && 'longitudeDegrees' in input.location
+    !input.location
+    || typeof input.location !== 'object'
+    || Array.isArray(input.location)
   ) {
-    if (
-      !Number.isFinite(input.location.latitudeDegrees)
-      || input.location.latitudeDegrees < -90
-      || input.location.latitudeDegrees > 90
-      || !Number.isFinite(input.location.longitudeDegrees)
-      || input.location.longitudeDegrees < -180
-      || input.location.longitudeDegrees > 180
-    ) {
+    throw new McpDataError(
+      'invalid_request',
+      'Provide either a place query or a latitude/longitude pair.',
+    );
+  }
+  const rawLocation = input.location as unknown as Record<string, unknown>;
+  const hasQuery = Object.prototype.hasOwnProperty.call(rawLocation, 'query');
+  const hasLatitude = Object.prototype.hasOwnProperty.call(
+    rawLocation,
+    'latitudeDegrees',
+  );
+  const hasLongitude = Object.prototype.hasOwnProperty.call(
+    rawLocation,
+    'longitudeDegrees',
+  );
+  if (
+    (hasQuery && (hasLatitude || hasLongitude))
+    || (!hasQuery && (!hasLatitude || !hasLongitude))
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      'Provide either a place query or a latitude/longitude pair.',
+    );
+  }
+  if (hasLatitude && hasLongitude) {
+    const position = {
+      latitudeDegrees: rawLocation.latitudeDegrees,
+      longitudeDegrees: rawLocation.longitudeDegrees,
+    };
+    if (!isValidSpatialPosition(position)) {
       throw new McpDataError(
         'invalid_request',
         'A valid latitude and longitude are required.',
@@ -1987,25 +2013,39 @@ async function resolveNearbyLocation(
     return {
       source: 'coordinates',
       resolvedLabel: null,
-      position: {
-        latitudeDegrees: input.location.latitudeDegrees,
-        longitudeDegrees: input.location.longitudeDegrees,
-      },
+      position,
     };
+  }
+  if (typeof rawLocation.query !== 'string') {
+    throw new McpDataError(
+      'invalid_request',
+      'A valid place query is required.',
+    );
   }
 
   try {
+    const normalizedQuery = normalizeMapboxQuery(rawLocation.query);
     await dependencies.consumeGeocodingRateLimit(
       input.uid,
       input.connectionId,
     );
     const resolved = await dependencies.forwardGeocodeLocation(
-      input.location.query,
+      normalizedQuery,
     );
+    const resolvedLabel = asBoundedString(resolved.resolvedLabel, 240);
+    if (!resolvedLabel || !isValidSpatialPosition(resolved.center)) {
+      throw new McpDataError(
+        'temporarily_unavailable',
+        'Location lookup is temporarily unavailable.',
+      );
+    }
     return {
       source: 'mapbox',
-      resolvedLabel: resolved.resolvedLabel,
-      position: resolved.center,
+      resolvedLabel,
+      position: {
+        latitudeDegrees: resolved.center.latitudeDegrees,
+        longitudeDegrees: resolved.center.longitudeDegrees,
+      },
     };
   } catch (error) {
     if (error instanceof McpGeocodingRateLimitError) {
@@ -2714,18 +2754,26 @@ export function createMcpDataService(
           'geometry',
         );
         routeDetailLoadCount += 1;
-        processedDocumentCount += 1;
-        lastProcessedDocument = document;
         if (!detail || detail.id !== document.id) {
+          processedDocumentCount += 1;
+          lastProcessedDocument = document;
           skippedRouteCount += 1;
           continue;
         }
-        routeDetailBytes += measureJsonBytes(
+        const currentDetailBytes = measureJsonBytes(
           detail.data.preview,
           'The nearby route previews cannot be processed safely.',
         );
-        if (routeDetailBytes > MAX_NEARBY_ROUTE_DETAIL_BYTES) {
+        if (currentDetailBytes > MAX_NEARBY_ROUTE_DETAIL_BYTES) {
+          processedDocumentCount += 1;
+          lastProcessedDocument = document;
           skippedRouteCount += 1;
+          continue;
+        }
+        if (
+          routeDetailBytes + currentDetailBytes
+          > MAX_NEARBY_ROUTE_DETAIL_BYTES
+        ) {
           stoppedForDetailBudget = true;
           break;
         }
@@ -2737,18 +2785,21 @@ export function createMcpDataService(
         const declaredPreviewPointCount = asSafeInteger(rawPreview?.pointCount);
         if (
           declaredPreviewPointCount !== null
+          && declaredPreviewPointCount <= MAX_ROUTE_PREVIEW_POINTS
           && decodedPointCount + declaredPreviewPointCount
             > MAX_NEARBY_ROUTE_DECODED_POINTS
         ) {
-          skippedRouteCount += 1;
           stoppedForDetailBudget = true;
           break;
         }
+        routeDetailBytes += currentDetailBytes;
 
         let preview: ReturnType<typeof projectRoutePreviewDetails>;
         try {
           preview = projectRoutePreviewDetails(detail.data.preview);
         } catch {
+          processedDocumentCount += 1;
+          lastProcessedDocument = document;
           skippedRouteCount += 1;
           continue;
         }
@@ -2757,11 +2808,8 @@ export function createMcpDataService(
           0,
         );
         decodedPointCount += previewPointCount;
-        if (decodedPointCount > MAX_NEARBY_ROUTE_DECODED_POINTS) {
-          skippedRouteCount += 1;
-          stoppedForDetailBudget = true;
-          break;
-        }
+        processedDocumentCount += 1;
+        lastProcessedDocument = document;
 
         const nearestBySegment = preview.decodedSegments.flatMap(
           (points, segmentIndex) => {

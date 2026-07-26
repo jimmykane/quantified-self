@@ -63,6 +63,17 @@ describe('MCP spatial helpers', () => {
     });
   });
 
+  it('fails closed instead of joining points across malformed coordinates', () => {
+    expect(findNearestPointOnPolyline(
+      { latitudeDegrees: 0, longitudeDegrees: 1 },
+      [
+        { latitudeDegrees: 0, longitudeDegrees: 0 },
+        { latitudeDegrees: 91, longitudeDegrees: 1 },
+        { latitudeDegrees: 0, longitudeDegrees: 2 },
+      ],
+    )).toBeNull();
+  });
+
   it('finds points on route segments that cross the antimeridian', () => {
     const nearest = findNearestPointOnPolyline(
       { latitudeDegrees: 0.1, longitudeDegrees: 180 },

@@ -138,7 +138,7 @@ export async function forwardGeocodeMapbox(
 }
 
 export function normalizeMapboxQuery(rawQuery: string): string {
-  const query = `${rawQuery || ''}`.replace(/\s+/g, ' ').trim();
+  const query = normalizeSingleLineText(rawQuery);
   const wordCount = query.split(/\s+/).filter(Boolean).length;
   if (
     !query
@@ -184,9 +184,13 @@ function parseMapboxForwardGeocodingResponse(
   const coordinates = Array.isArray(geometry?.coordinates)
     ? geometry.coordinates
     : [];
-  const longitudeDegrees = Number(coordinates[0]);
-  const latitudeDegrees = Number(coordinates[1]);
-  if (!isValidCoordinate(latitudeDegrees, longitudeDegrees)) {
+  const longitudeDegrees = asFiniteNumber(coordinates[0]);
+  const latitudeDegrees = asFiniteNumber(coordinates[1]);
+  if (
+    latitudeDegrees === null
+    || longitudeDegrees === null
+    || !isValidCoordinate(latitudeDegrees, longitudeDegrees)
+  ) {
     throw new MapboxGeocodingError(
       'unavailable',
       'Mapbox geocoding returned invalid coordinates.',
@@ -246,11 +250,22 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function firstNonEmptyString(values: unknown[]): string | null {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim().slice(0, 240);
+    if (typeof value === 'string') {
+      const normalized = normalizeSingleLineText(value);
+      if (normalized) {
+        return normalized.slice(0, 240);
+      }
     }
   }
   return null;
+}
+
+function normalizeSingleLineText(value: unknown): string {
+  return `${value || ''}`
+    .replace(/\p{Cc}+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,;])/g, '$1')
+    .trim();
 }
 
 function joinMapboxLabel(name: unknown, place: unknown): string | null {
@@ -263,15 +278,23 @@ function parseBoundingBox(value: unknown): MapboxForwardGeocodingResult['bbox'] 
   if (!Array.isArray(value) || value.length !== 4) {
     return undefined;
   }
-  const [west, south, east, north] = value.map(Number);
+  const [west, south, east, north] = value.map(asFiniteNumber);
   if (
-    !isValidCoordinate(south, west)
+    west === null
+    || south === null
+    || east === null
+    || north === null
+    || !isValidCoordinate(south, west)
     || !isValidCoordinate(north, east)
     || south > north
   ) {
     return undefined;
   }
   return { west, south, east, north };
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function isValidCoordinate(latitudeDegrees: number, longitudeDegrees: number): boolean {

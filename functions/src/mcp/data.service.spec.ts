@@ -13,6 +13,7 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataStartPosition,
+  encodeRoutePolyline5,
   EventImporterJSON,
   EventInterface,
   TimeIntervals,
@@ -420,6 +421,111 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_request',
     });
+  });
+
+  it('rejects invalid provider coordinates before starting a nearby scan', async () => {
+    vi.mocked(dependencies.forwardGeocodeLocation).mockResolvedValue({
+      resolvedLabel: 'Invalid place',
+      center: {
+        latitudeDegrees: 91,
+        longitudeDegrees: 20,
+      },
+      featureType: 'place',
+    });
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.findActivitiesNearLocation({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      location: { query: 'Invalid place' },
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'temporarily_unavailable',
+    });
+    expect(dependencies.fetchNearbyActivityDocuments).not.toHaveBeenCalled();
+  });
+
+  it('rejects ambiguous locations in the data boundary without calling Mapbox', async () => {
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.findActivitiesNearLocation({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      location: {
+        query: 'Ioannina, Greece',
+        latitudeDegrees: 39.665,
+        longitudeDegrees: 20.8537,
+      } as unknown as {
+        query: string;
+      },
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.consumeGeocodingRateLimit).not.toHaveBeenCalled();
+    expect(dependencies.forwardGeocodeLocation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    [],
+    { query: '   ' },
+    { query: 'word '.repeat(21) },
+  ])('rejects malformed locations before consuming geocoding quota', async (location) => {
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.findActivitiesNearLocation({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      location: location as unknown as { query: string },
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.consumeGeocodingRateLimit).not.toHaveBeenCalled();
+    expect(dependencies.forwardGeocodeLocation).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a valid place before charging quota and geocoding', async () => {
+    await createMcpDataService(dependencies).findActivitiesNearLocation({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      location: { query: '  Ioannina,\n Greece  ' },
+    });
+
+    expect(dependencies.consumeGeocodingRateLimit).toHaveBeenCalledOnce();
+    expect(dependencies.forwardGeocodeLocation).toHaveBeenCalledWith(
+      'Ioannina, Greece',
+    );
+  });
+
+  it('projects only allowlisted fields from a resolved provider center', async () => {
+    vi.mocked(dependencies.forwardGeocodeLocation).mockResolvedValue({
+      resolvedLabel: 'Ioannina, Greece',
+      center: {
+        latitudeDegrees: 39.665,
+        longitudeDegrees: 20.8537,
+        providerPayload: 'private-provider-data',
+      } as unknown as {
+        latitudeDegrees: number;
+        longitudeDegrees: number;
+      },
+      featureType: 'place',
+    });
+    const result = await createMcpDataService(dependencies)
+      .findActivitiesNearLocation({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        location: { query: 'Ioannina, Greece' },
+      });
+
+    expect(result.location).toMatchObject({
+      latitudeDegrees: 39.665,
+      longitudeDegrees: 20.8537,
+    });
+    expect(JSON.stringify(result)).not.toContain('private-provider-data');
   });
 
   it('returns null for incomplete or invalid activity positions while preserving zero coordinates', async () => {
@@ -984,6 +1090,125 @@ describe('MCP data service', () => {
     expect(dependencies.fetchRouteDocument).toHaveBeenCalledTimes(12);
   });
 
+  it('defers rather than skips the first route beyond the cumulative preview-byte budget', async () => {
+    const routeDocuments = Array.from({ length: 6 }, (_, index) => ({
+      ...routeDocument({
+        name: `Route ${index}`,
+        importedAt: new Date(Date.parse('2026-07-01T10:00:00.000Z') - index),
+        bounds: {
+          minLatitudeDegrees: -1,
+          maxLatitudeDegrees: 1,
+          minLongitudeDegrees: -1,
+          maxLongitudeDegrees: 1,
+        },
+      }),
+      id: `route-${index}`,
+    }));
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue(routeDocuments);
+    vi.mocked(dependencies.fetchRouteDocument).mockImplementation(
+      async (_uid, routeId) => ({
+        id: routeId,
+        data: {
+          preview: {
+            version: 1,
+            encoding: 'polyline5',
+            precision: 5,
+            sourcePointCount: 2,
+            pointCount: 2,
+            padding: 'x'.repeat(250_000),
+            segments: [{
+              sourcePointCount: 2,
+              pointCount: 2,
+              encodedPolyline: '_p~iF~ps|U_ulLnnqC',
+            }],
+          },
+        },
+      }),
+    );
+    const result = await createMcpDataService(dependencies)
+      .findRoutesNearLocation({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        location: {
+          latitudeDegrees: 0,
+          longitudeDegrees: 0,
+        },
+        radiusMeters: 1_000,
+      });
+
+    expect(result).toMatchObject({
+      scannedRouteCount: 4,
+      loadedRoutePreviewCount: 5,
+      skippedRouteCount: 4,
+      routes: [],
+      scanComplete: false,
+      nextCursor: expect.any(String),
+    });
+  });
+
+  it('defers rather than skips the first route beyond the decoded-point budget', async () => {
+    const routeDocuments = Array.from({ length: 5 }, (_, index) => ({
+      ...routeDocument({
+        name: `Route ${index}`,
+        importedAt: new Date(Date.parse('2026-07-01T10:00:00.000Z') - index),
+        bounds: {
+          minLatitudeDegrees: -1,
+          maxLatitudeDegrees: 1,
+          minLongitudeDegrees: -1,
+          maxLongitudeDegrees: 1,
+        },
+      }),
+      id: `route-${index}`,
+    }));
+    const points = Array.from({ length: 5_000 }, (_, index) => ({
+      latitudeDegrees: 38.5 + (index * 0.000001),
+      longitudeDegrees: -120.2,
+    }));
+    const encodedPolyline = encodeRoutePolyline5(points);
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue(routeDocuments);
+    vi.mocked(dependencies.fetchRouteDocument).mockImplementation(
+      async (_uid, routeId) => ({
+        id: routeId,
+        data: {
+          preview: {
+            version: 1,
+            encoding: 'polyline5',
+            precision: 5,
+            sourcePointCount: points.length,
+            pointCount: points.length,
+            segments: [{
+              sourcePointCount: points.length,
+              pointCount: points.length,
+              encodedPolyline,
+            }],
+          },
+        },
+      }),
+    );
+    const result = await createMcpDataService(dependencies)
+      .findRoutesNearLocation({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        location: {
+          latitudeDegrees: 0,
+          longitudeDegrees: 0,
+        },
+        radiusMeters: 1_000,
+      });
+
+    expect(result).toMatchObject({
+      scannedRouteCount: 4,
+      loadedRoutePreviewCount: 5,
+      decodedRoutePointCount: 20_000,
+      skippedRouteCount: 4,
+      routes: [],
+      scanComplete: false,
+      nextCursor: expect.any(String),
+    });
+  });
+
   it('returns only safe route waypoint coordinates from a bounded source parse', async () => {
     vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
       routeDocument(),
@@ -1119,6 +1344,33 @@ describe('MCP data service', () => {
             sourcePointCount: 1,
             pointCount: 1,
             encodedPolyline: '?'.repeat(13),
+          }],
+        },
+      },
+    });
+    await expect(service.getRouteGeometry({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      routeRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'detail_not_available',
+    });
+
+    vi.mocked(dependencies.fetchRouteDocument).mockResolvedValue({
+      id: 'route-1',
+      data: {
+        preview: {
+          version: 1,
+          encoding: 'polyline5',
+          precision: 5,
+          sourcePointCount: 1,
+          pointCount: 1,
+          segments: [{
+            sourcePointCount: 1,
+            pointCount: 1,
+            // Polyline5 for latitude 91, longitude 0. Sports Lib currently
+            // drops it, and MCP independently rejects invalid decoded points.
+            encodedPolyline: '_mljP?',
           }],
         },
       },

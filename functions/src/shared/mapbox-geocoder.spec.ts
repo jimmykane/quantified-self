@@ -25,8 +25,8 @@ function dependencies(
           bbox: [20.7, 39.5, 21, 39.8],
           properties: {
             feature_type: 'place',
-            name_preferred: 'Ioannina',
-            place_formatted: 'Epirus, Greece',
+            name_preferred: 'Ioannina\n',
+            place_formatted: 'Epirus,\u0000 Greece',
           },
         }],
       })),
@@ -40,6 +40,8 @@ function dependencies(
 describe('Mapbox forward geocoder', () => {
   it('normalizes and bounds location text', () => {
     expect(normalizeMapboxQuery('  Ioannina,   Greece ')).toBe('Ioannina, Greece');
+    expect(normalizeMapboxQuery('Ioannina\u0000,\nGreece'))
+      .toBe('Ioannina, Greece');
     expect(() => normalizeMapboxQuery('word '.repeat(21))).toThrow(
       expect.objectContaining({ code: 'invalid_query' }),
     );
@@ -111,6 +113,38 @@ describe('Mapbox forward geocoder', () => {
     })).rejects.toMatchObject<MapboxGeocodingError>({
       code: 'unavailable',
       message: 'Mapbox geocoding timed out.',
+    });
+  });
+
+  it('does not coerce malformed provider coordinates to zero', async () => {
+    const malformedCenter = JSON.stringify({
+      features: [{
+        geometry: { coordinates: [null, null] },
+        properties: { name: 'Malformed place' },
+      }],
+    });
+    await expect(forwardGeocodeMapbox(
+      'Malformed place',
+      dependencies({ body: malformedCenter }),
+    )).rejects.toMatchObject<MapboxGeocodingError>({ code: 'unavailable' });
+
+    const malformedBounds = JSON.stringify({
+      features: [{
+        geometry: { coordinates: [20.8537, 39.665] },
+        bbox: [null, null, null, null],
+        properties: { name: 'Ioannina' },
+      }],
+    });
+    await expect(forwardGeocodeMapbox(
+      'Ioannina',
+      dependencies({ body: malformedBounds }),
+    )).resolves.toEqual({
+      resolvedLabel: 'Ioannina',
+      center: {
+        latitudeDegrees: 39.665,
+        longitudeDegrees: 20.8537,
+      },
+      featureType: null,
     });
   });
 });
