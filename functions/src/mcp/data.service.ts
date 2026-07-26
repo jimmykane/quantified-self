@@ -1358,9 +1358,18 @@ function projectRoutePreviewDetails(value: unknown) {
           Math.min(MAX_ROUTE_PREVIEW_BYTES, segmentPointCount * 12),
           /^[\x3f-\x7e]+$/,
         );
-    const decoded = encodedPolyline ? decodeRoutePolyline5(encodedPolyline) : [];
+    const encodedPointCountMatches = encodedPolyline !== null
+      && segmentPointCount !== null
+      && hasExactEncodedPolylinePointCount(
+        encodedPolyline,
+        segmentPointCount,
+      );
+    const decoded = encodedPointCountMatches
+      ? decodeRoutePolyline5(encodedPolyline)
+      : [];
     if (
       !encodedPolyline
+      || !encodedPointCountMatches
       || segmentSourcePointCount === null
       || segmentPointCount === null
       || segmentPointCount <= 0
@@ -1405,6 +1414,40 @@ function projectRoutePreviewDetails(value: unknown) {
     geometry: projected,
     decodedSegments,
   };
+}
+
+function hasExactEncodedPolylinePointCount(
+  encodedPolyline: string,
+  expectedPointCount: number,
+): boolean {
+  const expectedComponentCount = expectedPointCount * 2;
+  let componentCount = 0;
+  let index = 0;
+  while (index < encodedPolyline.length) {
+    let componentComplete = false;
+    for (let chunkCount = 0; chunkCount < 6; chunkCount += 1) {
+      if (index >= encodedPolyline.length) {
+        return false;
+      }
+      const chunk = encodedPolyline.charCodeAt(index) - 63;
+      index += 1;
+      if (chunk < 0 || chunk > 63) {
+        return false;
+      }
+      if (chunk < 0x20) {
+        componentComplete = true;
+        break;
+      }
+    }
+    if (!componentComplete) {
+      return false;
+    }
+    componentCount += 1;
+    if (componentCount > expectedComponentCount) {
+      return false;
+    }
+  }
+  return componentCount === expectedComponentCount;
 }
 
 function projectRoutePreview(value: unknown) {
@@ -2710,6 +2753,7 @@ export function createMcpDataService(
       let skippedRouteCount = 0;
       let routeDetailLoadCount = 0;
       let routeDetailBytes = 0;
+      let routePointWorkCount = 0;
       let decodedPointCount = 0;
       let summaryBytes = 0;
       let stoppedForDetailBudget = false;
@@ -2785,14 +2829,22 @@ export function createMcpDataService(
         const declaredPreviewPointCount = asSafeInteger(rawPreview?.pointCount);
         if (
           declaredPreviewPointCount !== null
+          && declaredPreviewPointCount > 0
           && declaredPreviewPointCount <= MAX_ROUTE_PREVIEW_POINTS
-          && decodedPointCount + declaredPreviewPointCount
+          && routePointWorkCount + declaredPreviewPointCount
             > MAX_NEARBY_ROUTE_DECODED_POINTS
         ) {
           stoppedForDetailBudget = true;
           break;
         }
         routeDetailBytes += currentDetailBytes;
+        if (
+          declaredPreviewPointCount !== null
+          && declaredPreviewPointCount > 0
+          && declaredPreviewPointCount <= MAX_ROUTE_PREVIEW_POINTS
+        ) {
+          routePointWorkCount += declaredPreviewPointCount;
+        }
 
         let preview: ReturnType<typeof projectRoutePreviewDetails>;
         try {

@@ -1209,6 +1209,66 @@ describe('MCP data service', () => {
     });
   });
 
+  it('charges invalid preview decoding against the cumulative point-work budget', async () => {
+    const routeDocuments = Array.from({ length: 5 }, (_, index) => ({
+      ...routeDocument({
+        name: `Invalid route ${index}`,
+        importedAt: new Date(Date.parse('2026-07-01T10:00:00.000Z') - index),
+        bounds: {
+          minLatitudeDegrees: -1,
+          maxLatitudeDegrees: 1,
+          minLongitudeDegrees: -1,
+          maxLongitudeDegrees: 1,
+        },
+      }),
+      id: `route-${index}`,
+    }));
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue(routeDocuments);
+    vi.mocked(dependencies.fetchRouteDocument).mockImplementation(
+      async (_uid, routeId) => ({
+        id: routeId,
+        data: {
+          preview: {
+            version: 1,
+            encoding: 'polyline5',
+            precision: 5,
+            sourcePointCount: 5_000,
+            pointCount: 5_000,
+            segments: [{
+              sourcePointCount: 5_000,
+              pointCount: 5_000,
+              // Exactly 5,000 encoded 0,0 points. Sports Lib filters these
+              // coordinates after decoding, so every preview is invalid.
+              encodedPolyline: '??'.repeat(5_000),
+            }],
+          },
+        },
+      }),
+    );
+
+    const result = await createMcpDataService(dependencies)
+      .findRoutesNearLocation({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        location: {
+          latitudeDegrees: 0,
+          longitudeDegrees: 0,
+        },
+        radiusMeters: 1_000,
+      });
+
+    expect(result).toMatchObject({
+      scannedRouteCount: 4,
+      loadedRoutePreviewCount: 5,
+      decodedRoutePointCount: 0,
+      skippedRouteCount: 4,
+      routes: [],
+      scanComplete: false,
+      nextCursor: expect.any(String),
+    });
+  });
+
   it('returns only safe route waypoint coordinates from a bounded source parse', async () => {
     vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
       routeDocument(),

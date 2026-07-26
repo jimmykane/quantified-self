@@ -254,11 +254,12 @@ last decoded preview point. This is the deliberately simplified preview, not the
 `find_routes_near_location` first uses each route's persisted exact bounds as a cheap exclusion check, then reads only
 the `preview` field for plausible candidates. It decodes the persisted `polyline5` once and measures the nearest point
 on every preview segment using spherical geometry, so a route can match anywhere along its preview rather than only at
-its endpoints. The result includes the nearest point and distance, matching segment index, and that segment's explicit
-start/end coordinates. One call scans at most 50 summaries, loads at most 12 previews, processes at most 1 MiB of preview
-JSON and 20,000 decoded points, returns at most 10 matches and 256 KiB, and continues with an encrypted query-bound
-cursor when any scan or geometry budget is reached. Invalid or missing previews are skipped and counted rather than
-expanding the read to original route sources.
+its endpoints. Encoded segments are preflighted against their declared point counts before decoding, and invalid preview
+attempts consume the same cumulative point-work budget as valid previews. The result includes the nearest point and
+distance, matching segment index, and that segment's explicit start/end coordinates. One call scans at most 50
+summaries, loads at most 12 previews, processes at most 1 MiB of preview JSON and 20,000 decoded points, returns at most
+10 matches and 256 KiB, and continues with an encrypted query-bound cursor when any scan or geometry budget is reached.
+Invalid or missing previews are skipped and counted rather than expanding the read to original route sources.
 
 `list_route_waypoints` reads only the server-owned source metadata needed to find the saved FIT/GPX object. The Storage
 read is restricted to the owning user's route path and default project bucket, streamed to a 2 MiB compressed/raw limit,
