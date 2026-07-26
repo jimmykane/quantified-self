@@ -61,6 +61,7 @@ import {
 } from '../../../shared/sleep';
 import {
   McpMetricDescriptor,
+  projectSportsLibNumericMetricValue,
   resolveAvailableSportsLibMetrics,
   resolveSportsLibNumericMetric,
 } from './metric-catalog';
@@ -108,6 +109,9 @@ const MAX_ACTIVITY_DETAIL_ENTRIES = 10_000;
 const MAX_ACTIVITY_DETAIL_BYTES = 512 * 1024;
 const MAX_ACTIVITY_DETAIL_RESPONSE_BYTES = 256 * 1024;
 const MAX_ACTIVITY_DETAIL_PAGE_SIZE = 100;
+const MAX_ACTIVITY_METRICS_PER_REQUEST = 25;
+const MAX_ACTIVITY_METRIC_READ_BYTES = 64 * 1024;
+const MAX_ACTIVITY_METRIC_RESPONSE_BYTES = 32 * 1024;
 const MAX_ROUTE_LIST_BYTES = 512 * 1024;
 const MAX_ROUTE_PAGE_SIZE = 100;
 const MAX_ROUTE_PREVIEW_SEGMENTS = 20;
@@ -290,6 +294,11 @@ export interface McpDataServiceDependencies {
     uid: string,
     activityId: string,
     detailKind: ActivityDetailKind,
+  ) => Promise<RawDocument | null>;
+  fetchActivityMetricDocument: (
+    uid: string,
+    activityId: string,
+    metricTypes: readonly string[],
   ) => Promise<RawDocument | null>;
   fetchRouteDocuments: (
     uid: string,
@@ -479,6 +488,24 @@ const defaultDependencies: McpDataServiceDependencies = {
       .where(FieldPath.documentId(), '==', activityId)
       .limit(1)
       .select('eventID', detailField)
+      .get();
+    const doc = snapshot.docs[0];
+    return doc ? {
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    } : null;
+  },
+  fetchActivityMetricDocument: async (uid, activityId, metricTypes) => {
+    const snapshot = await admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection('activities')
+      .where(FieldPath.documentId(), '==', activityId)
+      .limit(1)
+      .select(
+        'eventID',
+        ...metricTypes.map(metricType => new FieldPath('stats', metricType)),
+      )
       .get();
     const doc = snapshot.docs[0];
     return doc ? {
@@ -1923,6 +1950,13 @@ export interface ListActivityDetailsInput {
   limit?: number;
 }
 
+export interface GetActivityMetricsInput {
+  uid: string;
+  connectionId: string;
+  activityRef: string;
+  metrics: readonly string[];
+}
+
 export interface ListRoutesInput {
   uid: string;
   connectionId: string;
@@ -2327,6 +2361,104 @@ async function listActivityDetail(
   return result;
 }
 
+async function getActivityMetrics(
+  dependencies: McpDataServiceDependencies,
+  input: GetActivityMetricsInput,
+) {
+  if (
+    !Array.isArray(input.metrics)
+    || input.metrics.length === 0
+    || input.metrics.length > MAX_ACTIVITY_METRICS_PER_REQUEST
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      `Choose between 1 and ${MAX_ACTIVITY_METRICS_PER_REQUEST} activity metrics.`,
+    );
+  }
+  const metrics = [...new Map(input.metrics.map((requestedType) => {
+    if (
+      typeof requestedType !== 'string'
+      || requestedType.length === 0
+      || requestedType.length > 120
+    ) {
+      throw new McpDataError(
+        'invalid_metric',
+        'Each activity metric must be a supported numeric Sports Lib type.',
+      );
+    }
+    const metric = resolveSportsLibNumericMetric(requestedType);
+    if (!metric) {
+      throw new McpDataError(
+        'invalid_metric',
+        'Each activity metric must be a supported numeric Sports Lib type.',
+      );
+    }
+    return [metric.type, metric] as const;
+  })).values()];
+  const reference = decodeActivityReference(
+    input.activityRef,
+    input.uid,
+    input.connectionId,
+  );
+  const document = await dependencies.fetchActivityMetricDocument(
+    input.uid,
+    reference.activityId,
+    metrics.map(metric => metric.type),
+  );
+  if (
+    !document
+    || document.id !== reference.activityId
+    || document.data.eventID !== reference.eventId
+  ) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The requested activity metrics are not available.',
+    );
+  }
+  requireJsonBudget(
+    document.data,
+    MAX_ACTIVITY_METRIC_READ_BYTES,
+    'The selected activity metrics exceed the MCP processing limit.',
+  );
+  const stats = document.data.stats;
+  if (
+    stats !== undefined
+    && (
+      !stats
+      || typeof stats !== 'object'
+      || Array.isArray(stats)
+    )
+  ) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The requested activity metrics are not available.',
+    );
+  }
+  const persistedStats = stats as Record<string, unknown> | undefined;
+  const projectedMetrics = metrics.map(metric => {
+    const value = projectSportsLibNumericMetricValue(
+      metric.type,
+      persistedStats?.[metric.type],
+    );
+    return {
+      ...metric,
+      value,
+      available: value !== null,
+    };
+  });
+  const result = {
+    requestedMetricCount: projectedMetrics.length,
+    availableMetricCount: projectedMetrics.filter(metric => metric.available).length,
+    metrics: projectedMetrics,
+  };
+  requireJsonBudget(
+    result,
+    MAX_ACTIVITY_METRIC_RESPONSE_BYTES,
+    'The selected activity metrics exceed the MCP response limit.',
+  );
+  return result;
+}
+
 export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
@@ -2656,6 +2788,10 @@ export function createMcpDataService(
 
     async listActivitySwimLengths(input: ListActivityDetailsInput) {
       return listActivityDetail(dependencies, input, 'swim_lengths');
+    },
+
+    async getActivityMetrics(input: GetActivityMetricsInput) {
+      return getActivityMetrics(dependencies, input);
     },
 
     async listRoutes(input: ListRoutesInput) {

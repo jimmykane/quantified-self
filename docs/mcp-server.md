@@ -38,14 +38,16 @@ user revoke one immediately.
 
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
-- `metrics:read` for event metrics and ready Training-derived snapshots;
+- `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
+  `activity-details:read` is also granted;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, start/end proximity
   searches, laps, swim lengths, and MTB jumps; and
 - `routes:read` for saved-route summaries, preview geometry, preview proximity searches, and waypoints.
 
-The last two scopes are independent grants. Existing metric or sleep connections do not acquire them automatically; the
-client must start a new authorization request and the user must approve the requested scope. Activity-detail consent
+The scopes remain independent grants. Existing metric or sleep connections do not acquire activity-detail or route
+access automatically; the client must start a new authorization request and the user must approve the requested scope.
+Activity-detail consent
 states that activity starts, ends, and individual jumps can include exact coordinates that may reveal a home, workplace,
 frequent trailhead, or other sensitive location. Saved-route consent states that route bounds, simplified geometry, and
 waypoint coordinates can expose exact locations. Consent also states that place-name proximity searches send only the
@@ -157,6 +159,7 @@ The analytics and map entries follow the
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
+| `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
 | `list_activities` | `activity-details:read` | Paginated safe activity summaries with optional exact start/end coordinates, opaque references, and signed-in app links |
@@ -170,8 +173,9 @@ The analytics and map entries follow the
 | `list_route_waypoints` | `routes:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
 Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
-tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks the required scope
-before the tool call, and only registers tools covered by the bearer token.
+tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
+before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` is registered only
+when both of its scopes are present.
 
 ## Sports Lib metric discovery
 
@@ -191,6 +195,11 @@ expose precise position.
 It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing non-MCP callers keep
 their prior local-time behavior when they omit the timezone.
 
+`get_activity_metrics` reuses the same catalog and alias resolution. The request is canonicalized and deduplicated before
+Firestore access, and each stored value is reconstructed through its Sports Lib data class. Only finite values accepted
+by that class are returned; missing or invalid selected values are reported as unavailable. This keeps new eligible
+Sports Lib numeric metrics on the same automatic surface instead of introducing a per-activity registry.
+
 When a Sports Lib metric is added or changed:
 
 1. follow `.agent/skills/mcp-metric-surface/SKILL.md` and
@@ -209,17 +218,19 @@ events, privacy filtering, query bounds, and the MCP transport.
 `activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. List queries select
 only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a signed-in app link,
 the latitude/longitude leaves of the persisted `Start Position` and `End Position` stats, and a fixed set of numeric
-summary stats. Detail calls select exactly one persisted array: `laps`, `events` for jumps, or `swimLengths`. They never
-hydrate a whole activity document or position map.
+summary stats. Detail calls select exactly one persisted array: `laps`, `events` for jumps, or `swimLengths`.
+Per-activity metric calls select only `eventID` plus the requested canonical `stats.<type>` leaves. They never hydrate a
+whole activity document or position map.
 
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
 average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
 distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
 height, hang time, speed, rotations, score, and latitude/longitude. Activity summaries expose optional `startPosition`
 and `endPosition` objects containing only validated `latitudeDegrees` and `longitudeDegrees`; missing, partial,
-non-finite, or out-of-range pairs become `null`. Activity names and notes, raw streams, arbitrary stats, internal ID
-fields, device/provider creator data, source keys, original files, nested position metadata, and parser extensions are
-excluded.
+non-finite, or out-of-range pairs become `null`. Per-activity metric requests expose only selected finite numeric values
+from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and
+unrequested stats, internal ID fields, device/provider creator data, source keys, original files, nested position
+metadata, and parser extensions are excluded.
 
 Sports Lib already derives these positions from the first and last available activity position when an importer does not
 provide them, and the normal activity writer persists both stats. Historical activities that do not contain a complete
@@ -333,6 +344,8 @@ deliberately.
   decoded preview points, and return at most 10 matches and 256 KiB.
 - Lap, jump, and swim-length arrays are limited to 10,000 raw entries and 512 KiB before projection; responses are at
   most 100 entries and 256 KiB per page.
+- Per-activity metric calls accept at most 25 requested types, read at most 64 KiB of selected fields, and return at most
+  32 KiB.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
   decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was

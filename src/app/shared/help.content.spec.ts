@@ -747,6 +747,9 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('**Sleep summaries**');
     expect(dataAndPrivacySection?.content).toContain('**Saved routes and waypoints**');
     expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
+    expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
+    expect(dataAndPrivacySection?.content).toContain('Together with Activity and Training metric access');
+    expect(dataAndPrivacySection?.content).toContain('unrequested stored stats are excluded');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
     expect(dataAndPrivacySection?.content).toContain('exact start/end latitude/longitude coordinates when available');
     expect(dataAndPrivacySection?.content).toContain("match an activity's start or end");

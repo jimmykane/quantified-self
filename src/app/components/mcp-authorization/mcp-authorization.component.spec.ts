@@ -68,6 +68,7 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('Training Copilot');
     expect(content).toContain('https://client.example/oauth/callback');
     expect(content).toContain('Activity and Training metrics');
+    expect(content).toContain('selected canonical numeric metrics for one activity');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('exact start and end coordinates when available');
@@ -80,6 +81,8 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('location text to Mapbox');
     expect(content).toContain('direct-coordinate searches stay within Quantified Self');
     expect(content).toContain('Raw streams');
+    expect(content).toContain('precise-position metrics');
+    expect(content).toContain('unrequested activity stats');
     expect(content).toContain('stable account/event or route paths');
   });
 

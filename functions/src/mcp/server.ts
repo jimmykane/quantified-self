@@ -473,6 +473,29 @@ export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
     ));
   }
 
+  if (
+    auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
+    && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+  ) {
+    server.registerTool('get_activity_metrics', {
+      title: 'Get activity metrics',
+      description: 'Read up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Requires both metric and activity-detail access.',
+      inputSchema: {
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        metrics: z.array(z.string().min(1).max(120)).min(1).max(25),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_activity_metrics',
+      () => dataService.getActivityMetrics({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        activityRef: input.activityRef,
+        metrics: input.metrics,
+      }),
+    ));
+  }
+
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
     server.registerTool('list_routes', {
       title: 'List saved routes',
@@ -545,20 +568,26 @@ export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
   return server;
 }
 
-export function requiredScopeForRequest(body: unknown): McpOAuthScope | null {
+export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   if (
     !body
     || typeof body !== 'object'
     || (body as Record<string, unknown>).method !== 'tools/call'
   ) {
-    return null;
+    return [];
   }
   const params = (body as Record<string, unknown>).params;
   const toolName = params && typeof params === 'object'
     ? `${(params as Record<string, unknown>).name || ''}`
     : '';
+  if (toolName === 'get_activity_metrics') {
+    return [
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ];
+  }
   if (['list_sleep_sessions', 'query_sleep_summary'].includes(toolName)) {
-    return MCP_OAUTH_SCOPES.SleepRead;
+    return [MCP_OAUTH_SCOPES.SleepRead];
   }
   if ([
     'list_activities',
@@ -567,7 +596,7 @@ export function requiredScopeForRequest(body: unknown): McpOAuthScope | null {
     'list_activity_jumps',
     'list_activity_swim_lengths',
   ].includes(toolName)) {
-    return MCP_OAUTH_SCOPES.ActivityDetailsRead;
+    return [MCP_OAUTH_SCOPES.ActivityDetailsRead];
   }
   if ([
     'list_routes',
@@ -575,12 +604,12 @@ export function requiredScopeForRequest(body: unknown): McpOAuthScope | null {
     'get_route_geometry',
     'list_route_waypoints',
   ].includes(toolName)) {
-    return MCP_OAUTH_SCOPES.RoutesRead;
+    return [MCP_OAUTH_SCOPES.RoutesRead];
   }
   if (['list_metrics', 'query_metric', 'get_training_metric'].includes(toolName)) {
-    return MCP_OAUTH_SCOPES.MetricsRead;
+    return [MCP_OAUTH_SCOPES.MetricsRead];
   }
-  return null;
+  return [];
 }
 
 export function supportsMcpTransportMethod(method: string): boolean {
@@ -810,11 +839,11 @@ export const mcpApi = onRequest({
     return;
   }
 
-  const requiredScope = requiredScopeForRequest(request.body);
-  if (requiredScope && !auth.scopes.includes(requiredScope)) {
+  const requiredScopes = requiredScopesForRequest(request.body);
+  if (requiredScopes.some(scope => !auth.scopes.includes(scope))) {
     response.set(
       'WWW-Authenticate',
-      `Bearer error="insufficient_scope", scope="${requiredScope}", resource_metadata="${metadataUrl}"`,
+      `Bearer error="insufficient_scope", scope="${requiredScopes.join(' ')}", resource_metadata="${metadataUrl}"`,
     );
     response.status(403).json({ error: 'insufficient_scope' });
     return;

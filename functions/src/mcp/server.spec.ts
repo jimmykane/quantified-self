@@ -19,7 +19,7 @@ import {
   parseMcpBearerToken,
   parseMcpDateTime,
   parseMcpFormEncodedBody,
-  requiredScopeForRequest,
+  requiredScopesForRequest,
   resolveMcpAuthorizationRequesterKey,
   resolvePublicBaseUrl,
   requireMcpTokenGrantType,
@@ -63,36 +63,43 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
   it('requires metrics scope for metrics tools', () => {
-    expect(requiredScopeForRequest({
+    expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'query_metric' },
-    })).toBe(MCP_OAUTH_SCOPES.MetricsRead);
+    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
   });
 
   it('requires sleep scope for sleep tools', () => {
-    expect(requiredScopeForRequest({
+    expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'list_sleep_sessions' },
-    })).toBe(MCP_OAUTH_SCOPES.SleepRead);
+    })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
 
   it('requires separate activity-detail and route scopes for granular tools', () => {
-    expect(requiredScopeForRequest({
+    expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'list_activity_jumps' },
-    })).toBe(MCP_OAUTH_SCOPES.ActivityDetailsRead);
-    expect(requiredScopeForRequest({
+    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'get_route_geometry' },
-    })).toBe(MCP_OAUTH_SCOPES.RoutesRead);
-    expect(requiredScopeForRequest({
+    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'find_activities_near_location' },
-    })).toBe(MCP_OAUTH_SCOPES.ActivityDetailsRead);
-    expect(requiredScopeForRequest({
+    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'find_routes_near_location' },
-    })).toBe(MCP_OAUTH_SCOPES.RoutesRead);
+    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_activity_metrics' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
   });
 
   it('registers only the tools granted by the bearer scopes', async () => {
@@ -134,6 +141,20 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ])).resolves.toEqual([
+      'find_activities_near_location',
+      'get_activity_metrics',
+      'get_training_metric',
+      'list_activities',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
+      'list_metrics',
+      'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
       'find_routes_near_location',
@@ -242,11 +263,11 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
   it('does not assign a scope to protocol messages or unknown tools', () => {
-    expect(requiredScopeForRequest({ method: 'initialize' })).toBeNull();
-    expect(requiredScopeForRequest({
+    expect(requiredScopesForRequest({ method: 'initialize' })).toEqual([]);
+    expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'unknown' },
-    })).toBeNull();
+    })).toEqual([]);
   });
 
   it('keeps the stateless JSON transport on bounded POST requests', () => {

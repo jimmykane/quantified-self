@@ -22,7 +22,7 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
 }> = {
   'metrics:read': {
     title: 'Activity and Training metrics',
-    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots.',
+    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
   },
   'sleep:read': {
     title: 'Sleep summaries',
@@ -30,7 +30,7 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'activity-details:read': {
     title: 'Individual activity details',
-    description: 'Read activity summaries with exact start and end coordinates when available, search starts or ends near a location, read laps, swim lengths, MTB jumps with exact coordinates, and open signed-in links containing stable account/event paths. Place-name searches send the location text to Mapbox.',
+    description: 'Read activity summaries with exact start and end coordinates when available, search starts or ends near a location, read laps, swim lengths, MTB jumps with exact coordinates, and open signed-in links containing stable account/event paths. When metric access is also granted, the client can request selected canonical numeric metrics for one activity. Place-name searches send the location text to Mapbox.',
   },
   'routes:read': {
     title: 'Saved routes and waypoints',

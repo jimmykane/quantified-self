@@ -122,6 +122,34 @@ export function resolveSportsLibNumericMetric(
   }
 }
 
+export function projectSportsLibNumericMetricValue(
+  canonicalType: string,
+  persistedValue: unknown,
+): number | null {
+  const descriptor = resolveSportsLibNumericMetric(canonicalType);
+  if (!descriptor || descriptor.type !== canonicalType) {
+    return null;
+  }
+
+  try {
+    const DataClass = DynamicDataLoader.getDataClassFromDataType(
+      canonicalType,
+    ) as unknown as SportsLibDataClass;
+    const instance = new DataClass(persistedValue);
+    const value = instance.getValue?.();
+    if (
+      typeof value !== 'number'
+      || !Number.isFinite(value)
+      || instance.isValueTypeValid?.(value) === false
+    ) {
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveAvailableSportsLibMetrics(
   persistedStatMaps: readonly (Record<string, unknown> | null | undefined)[],
   catalog: readonly McpMetricDescriptor[] = defaultMetricCatalog,

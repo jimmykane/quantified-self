@@ -35,6 +35,9 @@ describe('MCP client access policy', () => {
     expect(topic?.title).toBe('MCP Client Access');
     expect(content).toContain('one or more requested read-only permissions');
     expect(content).toContain('excludes precise latitude/longitude metrics');
+    expect(content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
+    expect(content).toContain('Together with Activity and Training metric access');
+    expect(content).toContain('unrequested stored stats are excluded');
     expect(content).toContain('imported device/provider source keys');
     expect(content).toContain('MTB jump measurements');
     expect(content).toContain('exact start and end latitude/longitude coordinates when available');

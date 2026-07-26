@@ -10,6 +10,7 @@ import {
   DataEnergy,
   DataHeartRateAvg,
   DataJumpEvent,
+  DataLatitudeDegrees,
   DataPowerAvg,
   DataSpeedAvg,
   DataStartPosition,
@@ -172,6 +173,7 @@ describe('MCP data service', () => {
       fetchActivityDocuments: vi.fn().mockResolvedValue([]),
       fetchNearbyActivityDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDetailDocument: vi.fn().mockResolvedValue(null),
+      fetchActivityMetricDocument: vi.fn().mockResolvedValue(null),
       fetchRouteDocuments: vi.fn().mockResolvedValue([]),
       fetchRouteDocument: vi.fn().mockResolvedValue(null),
       downloadRouteSource: vi.fn().mockResolvedValue(Buffer.from('route')),
@@ -326,6 +328,109 @@ describe('MCP data service', () => {
       'activity-1',
       'jumps',
     );
+  });
+
+  it('returns only explicitly selected canonical numeric metrics for a referenced activity', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    const activityRef = activities.activities[0].activityRef;
+    vi.mocked(dependencies.fetchActivityMetricDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        stats: {
+          [DataDistance.type]: 20_000,
+          [DataAscent.type]: 'private-non-numeric-value',
+          'Owner controlled private stat': 'do-not-return',
+        },
+        sourceActivityKey: 'private-source-key',
+      },
+    });
+
+    const result = await service.getActivityMetrics({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      metrics: [
+        DataDistance.type,
+        DataAscent.type,
+        DataDistance.type,
+      ],
+    });
+
+    expect(dependencies.fetchActivityMetricDocument).toHaveBeenCalledWith(
+      'user-1',
+      'activity-1',
+      [DataDistance.type, DataAscent.type],
+    );
+    expect(result).toEqual({
+      requestedMetricCount: 2,
+      availableMetricCount: 1,
+      metrics: [{
+        type: DataDistance.type,
+        displayType: expect.any(String),
+        unit: 'm',
+        unitSystem: 'metric',
+        value: 20_000,
+        available: true,
+      }, {
+        type: DataAscent.type,
+        displayType: expect.any(String),
+        unit: 'm',
+        unitSystem: 'metric',
+        value: null,
+        available: false,
+      }],
+    });
+    expect(JSON.stringify(result)).not.toContain('Owner controlled');
+    expect(JSON.stringify(result)).not.toContain('private-source-key');
+    expect(JSON.stringify(result)).not.toContain('private-non-numeric-value');
+
+    vi.mocked(dependencies.fetchActivityMetricDocument).mockClear();
+    await expect(service.getActivityMetrics({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      metrics: [DataLatitudeDegrees.type],
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.fetchActivityMetricDocument).not.toHaveBeenCalled();
+
+    await expect(service.getActivityMetrics({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      metrics: Array.from({ length: 26 }, () => DataDistance.type),
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityMetricDocument).not.toHaveBeenCalled();
+
+    vi.mocked(dependencies.fetchActivityMetricDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'different-event',
+        stats: { [DataDistance.type]: 20_000 },
+      },
+    });
+    await expect(service.getActivityMetrics({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      metrics: [DataDistance.type],
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'detail_not_available',
+    });
   });
 
   it('finds activities by exact start or end position without geocoding coordinates', async () => {

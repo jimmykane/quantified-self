@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSportsLibNumericMetricCatalog,
   getSportsLibNumericMetricCatalog,
+  projectSportsLibNumericMetricValue,
   resolveAvailableSportsLibMetrics,
   resolveSportsLibNumericMetric,
 } from './metric-catalog';
@@ -41,6 +42,14 @@ describe('MCP Sports Lib metric catalog', () => {
     expect(resolveSportsLibNumericMetric(DataActivityTypes.type)).toBeNull();
     expect(resolveSportsLibNumericMetric(DataLatitudeDegrees.type)).toBeNull();
     expect(resolveSportsLibNumericMetric('unknown metric')).toBeNull();
+  });
+
+  it('projects only finite values accepted by the canonical Sports Lib class', () => {
+    expect(projectSportsLibNumericMetricValue(DataDistance.type, 12_345)).toBe(12_345);
+    expect(projectSportsLibNumericMetricValue(DataDistance.type, '12,345')).toBeNull();
+    expect(projectSportsLibNumericMetricValue(DataDistance.type, Number.NaN)).toBeNull();
+    expect(projectSportsLibNumericMetricValue(DataLatitudeDegrees.type, 39.665)).toBeNull();
+    expect(projectSportsLibNumericMetricValue('unknown metric', 42)).toBeNull();
   });
 
   it('discovers a newly persisted numeric class without a manual MCP registry entry', () => {
