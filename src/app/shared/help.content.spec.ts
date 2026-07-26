@@ -281,6 +281,17 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
   });
 
+  it('should document sport-specific event lap table columns', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Event lap tables');
+    expect(gettingStartedSection?.content).toContain('**Laps -> Columns**');
+    expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
+    expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
+    expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
+    expect(gettingStartedSection?.content).toContain('Missing values stay unavailable rather than becoming zero');
+  });
+
   it('should document event stamina metrics', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 

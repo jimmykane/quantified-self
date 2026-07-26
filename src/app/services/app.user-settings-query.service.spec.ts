@@ -5,13 +5,14 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 import { BehaviorSubject } from 'rxjs';
-import { User, AppThemes, MapTypes } from '@sports-alliance/sports-lib';
+import { User, AppThemes, DataPaceAvg, MapTypes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('AppUserSettingsQueryService', () => {
     let service: AppUserSettingsQueryService;
     let mockUserSubject: BehaviorSubject<User | null>;
     let mockAuthService: { user$: any };
+    let mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> };
 
     const createMockUser = (overrides: any = {}): User => ({
         id: 'test-uid',
@@ -38,12 +39,13 @@ describe('AppUserSettingsQueryService', () => {
         mockAuthService = {
             user$: mockUserSubject.asObservable()
         };
+        mockUserService = { updateUserProperties: vi.fn().mockResolvedValue(true) };
 
         TestBed.configureTestingModule({
             providers: [
                 AppUserSettingsQueryService,
                 { provide: AppAuthService, useValue: mockAuthService },
-                { provide: AppUserService, useValue: { updateUserProperties: vi.fn().mockResolvedValue(true) } },
+                { provide: AppUserService, useValue: mockUserService },
                 { provide: LoggerService, useValue: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }
             ]
         });
@@ -157,6 +159,37 @@ describe('AppUserSettingsQueryService', () => {
             TestBed.flushEffects();
 
             expect(service.appThemeSetting()).toBe(AppThemes.Dark);
+        });
+    });
+
+    describe('eventDetailsSettings', () => {
+        it('normalizes saved lap columns and persists an independent sport family choice', async () => {
+            const user = createMockUser({
+                settings: {
+                    eventDetailsSettings: {
+                        lapTableColumnsBySportFamily: {
+                            running: [DataPaceAvg.type, 'invalid metric'],
+                        },
+                    },
+                },
+            });
+            mockUserSubject.next(user);
+            TestBed.flushEffects();
+
+            expect(service.eventDetailsSettings().lapTableColumnsBySportFamily?.running)
+                .toEqual([DataPaceAvg.type]);
+
+            await service.updateLapTableColumns('cycling', []);
+
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: {
+                    eventDetailsSettings: {
+                        lapTableColumnsBySportFamily: {
+                            cycling: [],
+                        },
+                    },
+                },
+            });
         });
     });
 

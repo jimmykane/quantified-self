@@ -14,8 +14,14 @@ import {
     AppMapSettingsInterface,
     AppChartSettingsInterface,
     AppMyTracksSettings,
+    AppEventDetailsSettingsInterface,
+    AppEventLapSportFamily,
     AppUserInterface
 } from '../models/app-user.interface';
+import {
+    normalizeEventDetailsSettings,
+    normalizeEventLapMetricTypes,
+} from '../helpers/event-lap-table-columns.helper';
 
 import { LoggerService } from './logger.service';
 
@@ -88,6 +94,17 @@ export class AppUserSettingsQueryService {
             distinctUntilChanged((prev, curr) => equal(prev, curr))
         ),
         { initialValue: {} as UserSummariesSettingsInterface }
+    );
+
+    /**
+     * Event-detail display preferences, such as the sport-specific Laps table columns.
+     */
+    public readonly eventDetailsSettings = toSignal(
+        this.user$.pipe(
+            map(user => normalizeEventDetailsSettings(user?.settings?.eventDetailsSettings)),
+            distinctUntilChanged((prev, curr) => equal(prev, curr))
+        ),
+        { initialValue: normalizeEventDetailsSettings(null) }
     );
 
     /**
@@ -216,6 +233,48 @@ export class AppUserSettingsQueryService {
         return this.userService.updateUserProperties(user, { settings: updatedSettings })
             .then(() => this.logger.info(`[AppUserSettingsQueryService] Summaries Settings updated successfully.`))
             .catch(err => this.logger.error(`[AppUserSettingsQueryService] Failed to update Summaries Settings:`, err));
+    }
+
+    /**
+     * Stores the visible metric columns for one Event Details Laps sport family.
+     */
+    public async updateLapTableColumns(
+        sportFamily: AppEventLapSportFamily,
+        selectedMetricTypes: string[],
+    ): Promise<void> {
+        const normalizedMetricTypes = normalizeEventLapMetricTypes(selectedMetricTypes);
+        if (normalizedMetricTypes === null) {
+            throw new Error('Lap table columns must be selected from the supported event metrics.');
+        }
+
+        const currentMetricTypes = this.eventDetailsSettings()
+            .lapTableColumnsBySportFamily?.[sportFamily];
+        if (equal(currentMetricTypes, normalizedMetricTypes)) {
+            return;
+        }
+
+        const user = await this.getCurrentUser();
+        if (!user) {
+            throw new Error('Sign in to save lap table columns.');
+        }
+
+        const updatedSettings: AppEventDetailsSettingsInterface = {
+            lapTableColumnsBySportFamily: {
+                [sportFamily]: normalizedMetricTypes,
+            },
+        };
+
+        this.logger.info(`[AppUserSettingsQueryService] Updating ${sportFamily} lap table columns.`, {
+            selectedMetricCount: normalizedMetricTypes.length,
+        });
+        return this.userService.updateUserProperties(user, {
+            settings: { eventDetailsSettings: updatedSettings },
+        })
+            .then(() => this.logger.info(`[AppUserSettingsQueryService] Lap table columns updated successfully.`))
+            .catch(err => {
+                this.logger.error(`[AppUserSettingsQueryService] Failed to update lap table columns:`, err);
+                throw err;
+            });
     }
 
     /**

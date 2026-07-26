@@ -300,6 +300,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The jump table appears in activity tabs and only shows columns with available data.
 - Jump metrics use your preferred units from **Settings** when unit conversion is supported.
 
+### Event lap tables
+
+- Event details include a **Laps** table when selected activities contain lap data.
+- To change it, open **Laps -> Columns**, choose Running, Cycling, Swimming, or Other activities, then tick the metrics you want to see.
+- Quantified Self remembers a separate column list for each of those sport families. A triathlon can therefore keep different running, cycling, and swimming lap layouts.
+- Running and trail-running laps use pace, cycling laps use speed, and swimming laps use swim pace. These values, along with other convertible metrics, follow your unit preferences in **Settings -> Units**.
+- The menu includes the Event Summary metric families, but a column appears only when a current lap has a valid value. Missing values stay unavailable rather than becoming zero.
+
 ### Event swim length tables
 
 - Event details include a **Swim Lengths** table when selected swim activities contain per-length pool data.

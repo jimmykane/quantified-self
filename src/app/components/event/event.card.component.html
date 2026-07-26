@@ -75,7 +75,7 @@
         <!-- Laps Section -->
         @if (hasLapsFlag()) {
         <app-event-card-laps [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
-          [event]="activeEvent">
+          [event]="activeEvent" [canCustomize]="isOwner()">
         </app-event-card-laps>
         }
 

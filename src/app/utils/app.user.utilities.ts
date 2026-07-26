@@ -62,6 +62,7 @@ import {
     AppDashboardAutoTileState,
     AppMapStyleName,
     AppDashboardSettingsInterface,
+    AppEventDetailsSettingsInterface,
     AppDashboardTileEventFiltersInterface,
     AppMapSettingsInterface,
     AppMyTracksSettings,
@@ -103,6 +104,7 @@ import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync
 import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { normalizeDistanceUnits } from '@shared/unit-aware-display';
 import { normalizeDeviceDisplaySettings } from '../helpers/device-color-preferences.helper';
+import { normalizeEventDetailsSettings } from '../helpers/event-lap-table-columns.helper';
 
 /**
  * Utility class for AppUser related static methods and default settings.
@@ -448,6 +450,9 @@ export class AppUserUtilities {
             (settings.appSettings as AppUserSettingsInterface['appSettings']).dashboardActionPrompts,
         );
         settings.deviceDisplaySettings = normalizeDeviceDisplaySettings(settings.deviceDisplaySettings);
+        settings.eventDetailsSettings = normalizeEventDetailsSettings(
+            settings.eventDetailsSettings,
+        ) as AppEventDetailsSettingsInterface;
 
         // Chart
         settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};

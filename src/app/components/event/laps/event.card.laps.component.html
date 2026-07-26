@@ -1,6 +1,48 @@
 @if (availableLapTypes.length > 0) {
 <mat-divider></mat-divider>
-<app-event-section-header icon="linear_scale" title="Laps"></app-event-section-header>
+<app-event-section-header icon="linear_scale" title="Laps">
+  @if (canCustomize && lapColumnMenuGroups.length > 0) {
+  <button mat-icon-button [matMenuTriggerFor]="lapColumnFamiliesMenu" matTooltip="Choose lap columns"
+    aria-label="Choose lap columns">
+    <mat-icon>view_column</mat-icon>
+  </button>
+  }
+</app-event-section-header>
+<mat-menu #lapColumnFamiliesMenu="matMenu" class="qs-menu-panel">
+  @for (group of lapColumnMenuGroups; track group.family) {
+  <button mat-menu-item [matMenuTriggerFor]="lapColumnMetricsMenu" [matMenuTriggerData]="{ group: group }">
+    <mat-icon>{{ group.icon }}</mat-icon>
+    <span>{{ group.label }} columns</span>
+  </button>
+  }
+</mat-menu>
+<mat-menu #lapColumnMetricsMenu="matMenu" class="qs-menu-panel">
+  <ng-template matMenuContent let-group="group">
+    <div class="lap-column-menu-content" (click)="$event.stopPropagation()">
+      <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units.</p>
+      @if (savingLapColumnSportFamilies().has(group.family)) {
+      <div class="lap-column-menu-saving" aria-live="polite">
+        <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+        <span>Saving columns</span>
+      </div>
+      }
+      <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+        [aria-label]="group.label + ' lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
+        @for (metricGroup of group.metricGroups; track metricGroup.id) {
+        <div mat-subheader>{{ metricGroup.label }}</div>
+        @for (metric of metricGroup.metrics; track metric.type) {
+        <mat-list-option [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type">
+          <span class="lap-column-option">
+            <app-data-type-icon [dataType]="metric.type" size="18px"></app-data-type-icon>
+            <span>{{ metric.label }}</span>
+          </span>
+        </mat-list-option>
+        }
+        }
+      </mat-selection-list>
+    </div>
+  </ng-template>
+</mat-menu>
 <mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
   @for (availableLapType of availableLapTypes; track availableLapType) {
   <mat-tab [label]="availableLapType">
