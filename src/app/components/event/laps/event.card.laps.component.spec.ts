@@ -1,5 +1,7 @@
+import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
     ActivityInterface,
@@ -62,6 +64,7 @@ describe('EventCardLapsComponent', () => {
         updateLapTableColumns = vi.fn().mockResolvedValue(undefined);
         snackBar = { open: vi.fn() };
         await TestBed.configureTestingModule({
+            imports: [CommonModule, MatMenuModule],
             declarations: [EventCardLapsComponent],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -98,6 +101,29 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapTableGroups).toHaveLength(1);
         expect(component.lapTableGroups[0]?.tables[0]?.dataSource.data[0].Duration).toBe('0:12.85');
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0].Duration).toBe('0:12.85');
+    });
+
+    it('renders a single lap type without tab chrome', () => {
+        const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+        expect(fixture.nativeElement.querySelector('table[mat-table]')).toBeTruthy();
+    });
+
+    it('renders tabs when multiple lap types are available', () => {
+        const activity = createActivity([
+            createRenderableLap(LapTypes.Manual),
+            createRenderableLap(LapTypes.AutoLap),
+        ]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.lapTableGroups).toHaveLength(2);
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeTruthy();
     });
 
     it('shows running pace instead of a mislabeled average speed column', () => {
@@ -323,6 +349,10 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('lap-average-row');
         expect(template).not.toContain('lap-header-averages');
         expect(template).toContain('lapTableGroup.tables');
+        expect(template).toContain('lapTableGroups.length === 1');
+        expect(template).toContain('*ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"');
+        expect(template).toContain('lap-tab-text');
+        expect(template).toContain('lap-tab-icon');
         expect(template).not.toContain('getDataSource(');
         expect(template).not.toContain('getColumns(');
     });

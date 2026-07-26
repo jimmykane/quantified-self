@@ -49,6 +49,16 @@
   gap: 8px;
 }
 
+.lap-tab-label {
+  align-items: center;
+  display: inline-flex;
+  height: 100%;
+}
+
+.lap-tab-icon {
+  display: none;
+}
+
 .lap-average-row {
   background: var(--mat-sys-surface-container-low);
 }
@@ -56,4 +66,18 @@
 .lap-average-cell {
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-large);
+}
+
+@media (max-width: 599.98px) {
+  .lap-tab-label {
+    justify-content: center;
+  }
+
+  .lap-tab-icon {
+    display: inline;
+  }
+
+  .lap-tab-text {
+    display: none;
+  }
 }

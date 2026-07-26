@@ -44,44 +44,57 @@
     </div>
   </ng-template>
 </mat-menu>
-<mat-tab-group [dynamicHeight]="true" [preserveContent]="true">
+@if (lapTableGroups.length === 1) {
+@if (lapTableGroups[0]; as lapTableGroup) {
+<ng-container *ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"></ng-container>
+}
+} @else {
+<mat-tab-group class="lap-type-tabs" [dynamicHeight]="true" [preserveContent]="true">
   @for (lapTableGroup of lapTableGroups; track lapTableGroup.lapType) {
-  <mat-tab [label]="lapTableGroup.lapType">
+  <mat-tab [aria-label]="lapTableGroup.lapType">
     <ng-template matTabLabel>
-      <app-lap-type-icon [lapType]="lapTableGroup.lapType" size="20px"></app-lap-type-icon>
+      <span class="lap-tab-label">
+        <app-lap-type-icon aria-hidden="true" class="lap-tab-icon" [lapType]="lapTableGroup.lapType" size="20px"></app-lap-type-icon>
+        <span class="lap-tab-text">{{ lapTableGroup.lapType }}</span>
+      </span>
     </ng-template>
-    @for (lapTable of lapTableGroup.tables; track lapTable.key) {
-    <section>
-      @if (selectedActivities.length > 1 || hasMultipleEventActivities) {
-      <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
-        [activity]="lapTable.activity" [selectedActivities]="selectedActivities">
-      </app-activity-toggle>
-      }
-      @if (selectedActivities.length > 1) {
-      <mat-divider [inset]="true"></mat-divider>
-      }
-      <section class="table-container">
-        <table mat-table [dataSource]="lapTable.dataSource">
-          @for (column of lapTable.columns; track column) {
-          <ng-container [matColumnDef]="column" [sticky]="column === '#'">
-            <mat-header-cell *matHeaderCellDef [class.lap-index-cell]="column === '#'"
-              [class.lap-duration-cell]="column === 'Duration'">
-              @if (column !== '#') {
-              <app-data-type-icon [dataType]="column"></app-data-type-icon>
-              }
-            </mat-header-cell>
-            <mat-cell *matCellDef="let row" [class.lap-index-cell]="column === '#'"
-              [class.lap-duration-cell]="column === 'Duration'"
-              [class.lap-average-cell]="row.isLapAverage">{{ row[column] }}</mat-cell>
-          </ng-container>
-          }
-          <mat-header-row *matHeaderRowDef="lapTable.columns"></mat-header-row>
-          <mat-row *matRowDef="let row; columns: lapTable.columns;" [class.lap-average-row]="row.isLapAverage"></mat-row>
-        </table>
-      </section>
-    </section>
-    }
+    <ng-container *ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"></ng-container>
   </mat-tab>
   }
 </mat-tab-group>
 }
+}
+
+<ng-template #lapTableGroupTables let-lapTableGroup>
+  @for (lapTable of lapTableGroup.tables; track lapTable.key) {
+  <section>
+    @if (selectedActivities.length > 1 || hasMultipleEventActivities) {
+    <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
+      [activity]="lapTable.activity" [selectedActivities]="selectedActivities">
+    </app-activity-toggle>
+    }
+    @if (selectedActivities.length > 1) {
+    <mat-divider [inset]="true"></mat-divider>
+    }
+    <section class="table-container">
+      <table mat-table [dataSource]="lapTable.dataSource">
+        @for (column of lapTable.columns; track column) {
+        <ng-container [matColumnDef]="column" [sticky]="column === '#'">
+          <mat-header-cell *matHeaderCellDef [class.lap-index-cell]="column === '#'"
+            [class.lap-duration-cell]="column === 'Duration'">
+            @if (column !== '#') {
+            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+            }
+          </mat-header-cell>
+          <mat-cell *matCellDef="let row" [class.lap-index-cell]="column === '#'"
+            [class.lap-duration-cell]="column === 'Duration'"
+            [class.lap-average-cell]="row.isLapAverage">{{ row[column] }}</mat-cell>
+        </ng-container>
+        }
+        <mat-header-row *matHeaderRowDef="lapTable.columns"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: lapTable.columns;" [class.lap-average-row]="row.isLapAverage"></mat-row>
+      </table>
+    </section>
+  </section>
+  }
+</ng-template>
