@@ -15,7 +15,7 @@ import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from 
 import { routeResolver } from './resolvers/route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
-const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync between supported connected services.';
+const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.';
 
 const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   '',
@@ -68,12 +68,12 @@ const topLevelRoutes: Routes = [
     data: {
       title: 'Membership',
       preload: true,
-      description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.',
+      description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Membership",
-        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.",
+        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.",
         "url": "https://quantified-self.io/pricing",
         "inLanguage": "en",
         "isPartOf": {
@@ -129,12 +129,12 @@ const topLevelRoutes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.",
+        "description": "Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -155,6 +155,7 @@ const topLevelRoutes: Routes = [
           "Send Suunto routes to Wahoo",
           "Send GPX/FIT routes to Wahoo",
           "Sync past activities",
+          "Read-only MCP client access",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
@@ -284,6 +285,11 @@ const topLevelRoutes: Routes = [
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.trainingAnalysis
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.mcpServer,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.mcpServer
   },
   {
     path: PUBLIC_FEATURE_PATHS.aiInsights,
@@ -487,6 +493,9 @@ const topLevelRoutes: Routes = [
           "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
           "Automatic Garmin to Suunto activity sync",
           "Automatic COROS to Suunto activity sync",
+          "Automatic Wahoo to Suunto activity sync",
+          "Activity and route delivery to Wahoo",
+          "Read-only MCP access for compatible clients",
           "Sync past activities to Suunto by date"
         ],
         "offers": {

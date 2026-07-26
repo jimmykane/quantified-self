@@ -11,6 +11,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
       trainingAnalysis: 'features/training-analysis',
+      mcpServer: 'features/mcp-server',
       aiInsights: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
       fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
@@ -58,6 +59,13 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('readiness, load trends, intensity, durability, sleep context, and historical build comparisons');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.faqItems.some(item => item.question === 'How is Training different from the Dashboard?')).toBe(true);
+
+    expect(PUBLIC_SEO_PAGES.mcpServer.h1).toBe('Connect ChatGPT to your training data with a read-only MCP server');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('compatible MCP clients');
+    expect(PUBLIC_SEO_PAGES.mcpServer.intro).toContain('approve only the read-only data categories');
+    expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.title === 'Ask about metrics, individual activities, sleep, and routes')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('exact start, end, jump, route, or waypoint coordinates'))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.aiInsights.h1).toBe('AI insights for endurance training data');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('chart-backed AI insights');
@@ -123,6 +131,7 @@ describe('public-seo-pages.content', () => {
 
     expect(featureHubLinks).toContain('/features/ai-insights');
     expect(featureHubLinks).toContain('/features/training-analysis');
+    expect(featureHubLinks).toContain('/features/mcp-server');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');
     expect(featureHubLinks).toContain('/features/workout-file-comparison');
     expect(featureHubLinks).toContain('/features/fit-gpx-tcx-file-analyzer');

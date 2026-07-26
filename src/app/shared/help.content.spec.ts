@@ -56,6 +56,13 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('/assets/favicons/android-chrome-192x192.png');
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
     expect(dataAndPrivacySection?.content).toContain('Settings -> Account -> MCP connections');
+    expect(dataAndPrivacySection?.content).toContain('[Read-only MCP Server feature page](/features/mcp-server)');
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'MCP Server',
+      icon: 'devices',
+      kind: 'route',
+      target: '/features/mcp-server',
+    });
   });
 
   it('should expose four unique global support actions', () => {

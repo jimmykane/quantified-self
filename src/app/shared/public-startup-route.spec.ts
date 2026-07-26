@@ -42,6 +42,8 @@ describe('public-startup-route', () => {
   it('identifies public content routes that can start before browser auth resolves', () => {
     expect(isPublicContentPath('/policies')).toBe(true);
     expect(isPublicContentPath('/releases?view=latest')).toBe(true);
+    expect(isPublicContentPath('/features/mcp-server')).toBe(true);
+    expect(isPublicContentPath('/mcp/authorize')).toBe(false);
     expect(isPublicContentPath('/training')).toBe(false);
     expect(isPublicContentPath('/dashboard')).toBe(false);
     expect(isPublicContentPath('/login')).toBe(false);

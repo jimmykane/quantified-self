@@ -20,6 +20,7 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/features',
   '/features/workout-data-comparison',
   '/features/training-analysis',
+  '/features/mcp-server',
   '/features/ai-insights',
   '/features/workout-file-comparison',
   '/features/fit-gpx-tcx-file-analyzer',

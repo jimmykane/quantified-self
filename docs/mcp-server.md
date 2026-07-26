@@ -34,6 +34,19 @@ Hosting routes these paths to `mcpApi`:
 `/mcp/authorize` is the authenticated Angular consent page. Account Settings lists connections only after the client
 successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
 
+## Public discovery and indexing
+
+The crawlable product overview lives at `/features/mcp-server`. It is a prerendered public page with route metadata,
+canonical metadata, visible capability and boundary copy, FAQ structured data, and links to the setup and policy
+details. `/help#data-and-privacy` owns the user setup instructions, while `/policies#mcp-clients` owns the complete
+disclosure.
+
+The protocol endpoint, OAuth endpoints, well-known metadata endpoints, and authenticated `/mcp/authorize` consent page
+must never be added to the sitemap. Keep them disallowed in `src/robots.txt`, and keep consent route metadata set to
+`noindex, nofollow`. When MCP scopes, tools, location behavior, projections, or supported data categories change, update
+the feature page, Help, Policies, sitemap `lastmod`, prerender/startup registries, and focused content/hosting tests in
+the same change.
+
 ## Server presentation metadata
 
 The MCP initialize response identifies the server as **Quantified Self** and advertises two public PNG icon variants:

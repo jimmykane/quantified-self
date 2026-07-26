@@ -719,13 +719,13 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     ),
   },
   wahoo: {
-    title: 'Wahoo Integration',
+    title: 'Wahoo Activity Sync and Route Delivery',
     preload: true,
     animation: 'Integrations',
-    description: 'Connect Wahoo to Quantified Self for automatic FIT activity imports, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, Garmin/COROS/Suunto activity sync to Wahoo, date-range history imports, and private multi-provider training analysis.',
+    description: 'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and private training analysis.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.wahoo,
-      'Connect Wahoo to Quantified Self for automatic FIT activity imports, Wahoo-to-Suunto activity sync, direct FIT activity and GPX/FIT course/route delivery, saved Suunto route delivery, date-range history imports, original-file retention, and private multi-provider training analysis.',
+      'Automatic FIT activity imports, Wahoo-to-Suunto activity sync, activity sync to Wahoo, GPX/FIT and saved Suunto route delivery, and private training analysis.',
     ),
   },
 };

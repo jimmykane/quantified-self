@@ -5,7 +5,9 @@ Allow: /help
 Allow: /tools
 Allow: /tools/compare
 Allow: /integrations
+Allow: /integrations/wahoo
 Allow: /features
+Allow: /features/mcp-server
 Allow: /features/workout-data-comparison
 Allow: /features/training-analysis
 Allow: /features/ai-insights
@@ -21,7 +23,11 @@ Allow: /guides/centralize-garmin-suunto-coros-workout-data
 Allow: /releases
 Disallow: /user
 Disallow: /user/
+Disallow: /mcp
 Disallow: /mcp/authorize
+Disallow: /oauth/
+Disallow: /.well-known/oauth-protected-resource
+Disallow: /.well-known/oauth-authorization-server
 Disallow: /settings
 Disallow: /dashboard
 Disallow: /training

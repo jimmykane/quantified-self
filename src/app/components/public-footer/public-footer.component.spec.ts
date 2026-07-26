@@ -23,6 +23,10 @@ describe('PublicFooterComponent', () => {
 
     expect(footer).toBeTruthy();
     expect(text).toContain('Training analysis');
+    expect(text).toContain('MCP server');
+    expect(text).toContain('Wahoo integration');
+    expect(footer?.querySelector('a[href="/features/mcp-server"]')).toBeTruthy();
+    expect(footer?.querySelector('a[href="/integrations/wahoo"]')).toBeTruthy();
     expect(text).toContain('Help & support');
     expect(text).toContain('Dimitrios Kanellopoulos');
     expect(text).toContain('Kaloudi 15');

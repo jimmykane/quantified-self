@@ -802,6 +802,7 @@ In Settings you can:
 - Saved-route access covers route names, bounded metrics and counts, exact bounds, simplified polyline previews with segment start/end coordinates, nearby searches that measure against the persisted preview, waypoint coordinates, and signed-in app links containing stable account/route paths. It excludes original route files, raw track points and streams, waypoint names/comments, Storage paths, provider provenance, and delivery metadata.
 - Nearby MCP searches accept either direct latitude/longitude or a place name such as a city. Direct coordinates are processed inside Quantified Self. For place names, Quantified Self sends only the location text to Mapbox for forward geocoding; it does not send activity, route, account, or prompt data to Mapbox for this lookup.
 - Only clients that finish authorization appear in **Settings -> Account -> MCP connections**. Failed or abandoned authorization attempts are not active connections and expire automatically. Disconnecting a listed client blocks future access, but the external client may retain data it already received under its own policy.
+- See the [Read-only MCP Server feature page](/features/mcp-server) for a public overview of the available data categories and access boundaries.
 - See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
 
 ## Use with ChatGPT
@@ -841,6 +842,7 @@ This action cannot be undone.
       { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
       { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },
       { label: 'COROS Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_COROS_DATA_FRAGMENT },
+      { label: 'MCP Server', icon: 'devices', kind: 'route', target: '/features/mcp-server' },
       { label: 'MCP Client Access', icon: 'devices', kind: 'route', target: '/policies', fragment: POLICIES_MCP_CLIENTS_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Privacy Email', icon: 'shield', kind: 'external', target: PRIVACY_MAILTO },
