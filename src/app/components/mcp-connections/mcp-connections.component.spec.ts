@@ -81,6 +81,22 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Copy endpoint');
     expect(content).toContain('exact start, end, and jump coordinates');
     expect(content).toContain('reveal sensitive locations');
+    expect(content).toContain('ChatGPT app icon');
+    expect(content).toContain('Download 96 px · 3.3 KB');
+    expect(content).toContain('Download 192 px · 9.9 KB');
+
+    const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
+      '.mcp-connections__icon-actions a',
+    );
+    expect(iconDownloads).toHaveLength(2);
+    expect(iconDownloads[0].getAttribute('href'))
+      .toBe('/assets/favicons/android-chrome-96x96.png');
+    expect(iconDownloads[0].getAttribute('download'))
+      .toBe('quantified-self-chatgpt-icon-96.png');
+    expect(iconDownloads[1].getAttribute('href'))
+      .toBe('/assets/favicons/android-chrome-192x192.png');
+    expect(iconDownloads[1].getAttribute('download'))
+      .toBe('quantified-self-chatgpt-icon-192.png');
 
     fixture.componentInstance.copyEndpoint();
 

@@ -52,6 +52,9 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Use with ChatGPT');
     expect(dataAndPrivacySection?.content).toContain('Developer mode');
     expect(dataAndPrivacySection?.content).toContain('https://quantified-self.io/mcp');
+    expect(dataAndPrivacySection?.content).toContain('96 x 96 PNG (3.3 KB)');
+    expect(dataAndPrivacySection?.content).toContain('/assets/favicons/android-chrome-192x192.png');
+    expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
     expect(dataAndPrivacySection?.content).toContain('Settings -> Account -> MCP connections');
   });
 

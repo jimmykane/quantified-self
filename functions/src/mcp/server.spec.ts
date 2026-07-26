@@ -110,8 +110,7 @@ describe('MCP HTTP scope enforcement', () => {
         clientId: 'https://client.example/mcp.json',
         connectionId: 'connection-1',
         scopes,
-        baseUrl: 'https://quantified-self.io',
-      });
+      }, 'https://quantified-self.io');
       const client = new Client({
         name: 'scope-test-client',
         version: '1.0.0',
@@ -174,8 +173,7 @@ describe('MCP HTTP scope enforcement', () => {
         MCP_OAUTH_SCOPES.ActivityDetailsRead,
         MCP_OAUTH_SCOPES.RoutesRead,
       ],
-      baseUrl: 'https://quantified-self.io',
-    });
+    }, 'https://quantified-self.io');
     const client = new Client({
       name: 'metadata-test-client',
       version: '1.0.0',
@@ -208,8 +206,7 @@ describe('MCP HTTP scope enforcement', () => {
       clientId: 'https://client.example/mcp.json',
       connectionId: 'connection-1',
       scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
-      baseUrl: 'https://quantified-self.io',
-    });
+    }, 'https://quantified-self.io');
     const client = new Client({
       name: 'schema-test-client',
       version: '1.0.0',
@@ -243,8 +240,7 @@ describe('MCP HTTP scope enforcement', () => {
       clientId: 'https://client.example/mcp.json',
       connectionId: 'connection-1',
       scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
-      baseUrl: 'https://quantified-self.io',
-    });
+    }, 'https://quantified-self.io');
     const client = new Client({
       name: 'metadata-test-client',
       version: '1.0.0',
@@ -256,6 +252,53 @@ describe('MCP HTTP scope enforcement', () => {
         .find(tool => tool.name === 'list_activities');
 
       expect(listActivities?.description).toContain('exact start and end coordinates when present');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('advertises compact hosted app icons for MCP clients', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://beta.quantified-self.io');
+    const client = new Client({
+      name: 'icon-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getServerVersion()).toEqual({
+        name: 'quantified-self',
+        title: 'Quantified Self',
+        version: '1.0.0',
+        description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+        websiteUrl: 'https://beta.quantified-self.io',
+        icons: [
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-96x96.png',
+            mimeType: 'image/png',
+            sizes: ['96x96'],
+          },
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-192x192.png',
+            mimeType: 'image/png',
+            sizes: ['192x192'],
+          },
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-512x512.png',
+            mimeType: 'image/png',
+            sizes: ['512x512'],
+          },
+        ],
+      });
     } finally {
       await client.close();
       await server.close();

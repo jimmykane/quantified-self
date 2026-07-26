@@ -46,6 +46,20 @@ const MCP_NEARBY_RADIUS_SCHEMA = z.number()
 const MCP_ACTIVITY_TYPES_SCHEMA = z.array(
   z.string().min(1).max(120),
 ).max(20).optional();
+const MCP_SERVER_ICON_VARIANTS = [
+  {
+    path: '/assets/favicons/android-chrome-96x96.png',
+    sizes: ['96x96'],
+  },
+  {
+    path: '/assets/favicons/android-chrome-192x192.png',
+    sizes: ['192x192'],
+  },
+  {
+    path: '/assets/favicons/android-chrome-512x512.png',
+    sizes: ['512x512'],
+  },
+] as const;
 const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
   SLEEP_PROVIDERS.GarminAPI,
   SLEEP_PROVIDERS.SuuntoApp,
@@ -57,7 +71,6 @@ interface AuthenticatedMcpRequest {
   clientId: string;
   connectionId: string;
   scopes: McpOAuthScope[];
-  baseUrl: string;
 }
 
 function getOAuthService(): ReturnType<typeof createMcpOAuthService> {
@@ -249,10 +262,21 @@ async function runReadOnlyTool(
   }
 }
 
-export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
+export function createMcpServer(
+  auth: AuthenticatedMcpRequest,
+  publicBaseUrl: string,
+): McpServer {
   const server = new McpServer({
     name: 'quantified-self',
+    title: 'Quantified Self',
     version: '1.0.0',
+    description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+    websiteUrl: publicBaseUrl,
+    icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
+      src: `${publicBaseUrl}${icon.path}`,
+      mimeType: 'image/png',
+      sizes: [...icon.sizes],
+    })),
   });
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
@@ -822,7 +846,7 @@ export const mcpApi = onRequest({
     return;
   }
 
-  let auth: Omit<AuthenticatedMcpRequest, 'baseUrl'>;
+  let auth: AuthenticatedMcpRequest;
   try {
     auth = await getOAuthService().authenticateBearer(bearerToken, resource);
   } catch (error) {
@@ -867,10 +891,7 @@ export const mcpApi = onRequest({
     return;
   }
 
-  const server = createMcpServer({
-    ...auth,
-    baseUrl,
-  });
+  const server = createMcpServer(auth, baseUrl);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
