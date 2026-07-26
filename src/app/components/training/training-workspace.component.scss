@@ -82,15 +82,6 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-readiness-history > header strong { font-size: 14px; }
 .training-readiness-history > header div > span { margin-top: 3px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-micro-font-size); }
 .training-readiness-history-updating { color: var(--mat-sys-primary); font-size: var(--training-inter-micro-font-size); }
-.training-readiness-trend { display: block; width: 100%; height: auto; margin-top: 8px; overflow: visible; }
-.training-readiness-trend-grid { stroke: var(--mat-sys-outline-variant); stroke-opacity: .72; stroke-width: 1; vector-effect: non-scaling-stroke; }
-.training-readiness-trend-threshold { stroke: var(--mat-sys-primary); stroke-dasharray: 3 4; stroke-opacity: .6; }
-.training-readiness-trend-axis { stroke: var(--mat-sys-outline); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.training-readiness-trend-axis-label { fill: var(--mat-sys-on-surface-variant); font-family: var(--training-numeric-font-family); font-size: 8px; font-weight: 600; }
-.training-readiness-trend-line { fill: none; stroke: var(--mat-sys-primary); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.25; vector-effect: non-scaling-stroke; }
-.training-readiness-trend-point-visible { fill: var(--mat-sys-primary); stroke: var(--qs-glass-panel-bg, var(--mat-sys-surface)); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
-.training-readiness-trend-tooltip-trigger { display: block; box-sizing: border-box; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: help; }
-.training-readiness-trend-tooltip-trigger:focus-visible { outline: 2px solid var(--mat-sys-on-surface); outline-offset: -2px; }
 .training-readiness-trend-dates, .training-readiness-trend-legend { display: flex; justify-content: space-between; gap: 10px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); }
 .training-readiness-trend-legend { justify-content: flex-start; flex-wrap: wrap; margin-top: 6px; }
 .training-readiness-trend-legend span { padding-right: 9px; border-right: 1px solid var(--mat-sys-outline-variant); }
@@ -329,11 +320,6 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-body-weight-summary span, .training-body-weight-summary strong, .training-body-weight-summary small { display: block; min-width: 0; }
 .training-body-weight-summary span, .training-body-weight-summary small { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); line-height: 1.35; }
 .training-body-weight-summary strong { margin: 5px 0 4px; font-size: var(--training-card-stat-font-size); line-height: 1.1; overflow-wrap: anywhere; }
-.training-body-weight-trend { display: block; width: 100%; height: auto; margin-top: 12px; overflow: visible; }
-.training-body-weight-trend-line { fill: none; stroke: var(--mat-sys-primary); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.25; vector-effect: non-scaling-stroke; }
-.training-body-weight-trend-point { fill: var(--mat-sys-primary); stroke: var(--qs-glass-panel-bg, var(--mat-sys-surface)); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
-.training-body-weight-tooltip-trigger { display: block; box-sizing: border-box; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: help; }
-.training-body-weight-tooltip-trigger:focus-visible { outline: 2px solid var(--mat-sys-on-surface); outline-offset: -2px; }
 .training-body-weight-trend-dates { display: flex; justify-content: space-between; gap: 10px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-fine-font-size); }
 .training-body-weight-coverage, .training-body-weight-source { margin: 10px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.4; }
 .training-body-weight-source { font-size: var(--training-inter-micro-font-size); }
@@ -346,7 +332,6 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 @media (max-width: 1200px) { .training-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-insights-grid > .training-insight-panel:nth-of-type(3):last-of-type { grid-column: 1 / -1; } }
 @media (max-width: 1050px) { .training-build-grid:has(> :nth-child(3)) { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-build-grid:has(> :nth-child(3)) > :last-child { grid-column: 1 / -1; } }
 @media (max-width: 960px) { .training-current-context-grid, .training-load-grid, .training-performance-grid, .training-readiness-overview { grid-template-columns: 1fr; } .training-readiness-history { padding: 16px 0 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); border-left: 0; } .training-readiness-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .training-readiness-metrics > div:nth-child(odd) { padding-left: 0; border-left: 0; } .training-readiness-metrics > div:nth-child(even) { padding-left: 10px; border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); } .training-chart-panel-wide { grid-row: auto; min-height: 360px; } .training-power-systems-trends { grid-template-columns: 1fr; } .training-intensity-chart, .training-swim-performance-panel, .training-durability-panel { grid-column: auto; } }
-@media (min-width: 961px) { .training-readiness-trend-line { stroke-width: 1.5; } .training-readiness-trend-point-visible { r: 1.25; stroke-width: 1.25; } }
 @media (max-width: 640px) {
   :host {
     --training-inter-base-font-size: 14px;

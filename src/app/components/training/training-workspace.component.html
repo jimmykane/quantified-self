@@ -170,36 +170,11 @@
                 }
               </header>
               @if (trainingReadiness.historyPoints.length) {
-                <svg class="training-readiness-trend" viewBox="0 0 360 90" role="img" [attr.aria-label]="trainingReadiness.historyAriaLabel">
-                  <g aria-hidden="true">
-                    @for (tick of trainingReadiness.historyAxisTicks; track tick.score) {
-                      <line class="training-readiness-trend-grid" [class.training-readiness-trend-threshold]="tick.isReadinessThreshold" x1="30" x2="350" [attr.y1]="tick.y" [attr.y2]="tick.y"></line>
-                      <text class="training-readiness-trend-axis-label" x="24" [attr.y]="tick.y" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
-                    }
-                    <line class="training-readiness-trend-axis" x1="30" x2="30" y1="8" y2="76"></line>
-                  </g>
-                  @for (segment of trainingReadiness.historySegments; track segment) {
-                    <polyline class="training-readiness-trend-line" [attr.points]="segment"></polyline>
-                  }
-                  @for (point of trainingReadiness.historyPoints; track point.dayMs) {
-                    @if (point.y !== null) {
-                      <circle
-                        class="training-readiness-trend-point training-readiness-trend-point-visible"
-                        [attr.cx]="point.x"
-                        [attr.cy]="point.y"
-                        r="3"
-                        aria-hidden="true"></circle>
-                      <foreignObject [attr.x]="point.x - 9" [attr.y]="point.y - 9" width="18" height="18">
-                        <button
-                          class="training-readiness-trend-tooltip-trigger"
-                          type="button"
-                          [attr.aria-label]="point.label"
-                          [matTooltip]="point.label"
-                          matTooltipPosition="above"></button>
-                      </foreignObject>
-                    }
-                  }
-                </svg>
+                <app-training-readiness-trend-chart
+                  [points]="trainingReadiness.historyPoints"
+                  [ariaLabel]="trainingReadiness.historyAriaLabel"
+                  [darkTheme]="isDarkTheme()"
+                ></app-training-readiness-trend-chart>
                 <div class="training-readiness-trend-dates">
                   <span>{{ trainingReadiness.historyStartLabel }}</span>
                   <span>{{ trainingReadiness.historyEndLabel }}</span>
@@ -799,25 +774,13 @@
                 <small>{{ bodyWeightTrend.change28dText }}</small>
               </div>
             </div>
-            @if (bodyWeightTrend.chartSegments.length) {
-              <svg class="training-body-weight-trend" viewBox="0 0 360 90" role="img" [attr.aria-label]="bodyWeightTrend.chartAriaLabel">
-                @for (segment of bodyWeightTrend.chartSegments; track segment) {
-                  <polyline class="training-body-weight-trend-line" [attr.points]="segment"></polyline>
-                }
-                @for (point of bodyWeightTrend.chartPoints; track point.dayMs) {
-                  @if (point.y !== null) {
-                    <circle class="training-body-weight-trend-point" [attr.cx]="point.x" [attr.cy]="point.y" r="3" aria-hidden="true"></circle>
-                    <foreignObject [attr.x]="point.x - 9" [attr.y]="point.y - 9" width="18" height="18">
-                      <button
-                        class="training-body-weight-tooltip-trigger"
-                        type="button"
-                        [attr.aria-label]="point.label"
-                        [matTooltip]="point.label"
-                        matTooltipPosition="above"></button>
-                    </foreignObject>
-                  }
-                }
-              </svg>
+            @if (bodyWeightTrend.chartPoints.length) {
+              <app-training-body-weight-trend-chart
+                [points]="bodyWeightTrend.chartPoints"
+                [ariaLabel]="bodyWeightTrend.chartAriaLabel"
+                [darkTheme]="isDarkTheme()"
+                [unitSettings]="unitSettings"
+              ></app-training-body-weight-trend-chart>
               <div class="training-body-weight-trend-dates">
                 <span>{{ bodyWeightTrend.chartStartLabel }}</span>
                 <span>{{ bodyWeightTrend.chartEndLabel }}</span>

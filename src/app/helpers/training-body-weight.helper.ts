@@ -8,9 +8,7 @@ export type TrainingBodyWeightViewState = 'preparing' | 'empty' | 'ready' | 'una
 
 export interface TrainingBodyWeightTrendPointViewModel {
   dayMs: number;
-  x: number;
-  y: number | null;
-  label: string;
+  weightKg: number | null;
 }
 
 export interface TrainingBodyWeightViewModel {
@@ -29,14 +27,7 @@ export interface TrainingBodyWeightViewModel {
   chartStartLabel: string;
   chartEndLabel: string;
   chartPoints: TrainingBodyWeightTrendPointViewModel[];
-  chartSegments: string[];
 }
-
-const CHART_WIDTH = 360;
-const CHART_MIN_X = 10;
-const CHART_MAX_X = CHART_WIDTH - 10;
-const CHART_MIN_Y = 8;
-const CHART_MAX_Y = 76;
 
 export function resolveTrainingBodyWeightMetricPayload(
   value: unknown,
@@ -134,13 +125,12 @@ export function buildTrainingBodyWeightViewModel(
       chartStartLabel: '',
       chartEndLabel: '',
       chartPoints: [],
-      chartSegments: [],
     };
   }
 
   const availablePoints = payload.points.filter(point => point.weightKg !== null);
   const isUpdating = metricStatus !== 'ready';
-  const chart = buildChartViewModel(payload, unitSettings, locale);
+  const chart = buildChartViewModel(payload, locale);
   if (!availablePoints.length || payload.latestWeightKg === null || payload.latestWeightDayMs === null) {
     return {
       state: 'empty',
@@ -180,55 +170,17 @@ export function buildTrainingBodyWeightViewModel(
 
 function buildChartViewModel(
   payload: DerivedBodyWeightTrendMetricPayload,
-  unitSettings: UserUnitSettingsInterface | null | undefined,
   locale?: string,
-): Pick<TrainingBodyWeightViewModel, 'chartAriaLabel' | 'chartStartLabel' | 'chartEndLabel' | 'chartPoints' | 'chartSegments'> {
+): Pick<TrainingBodyWeightViewModel, 'chartAriaLabel' | 'chartStartLabel' | 'chartEndLabel' | 'chartPoints'> {
   const values = payload.points.flatMap(point => point.weightKg === null ? [] : [point.weightKg]);
-  const minimum = values.length ? Math.min(...values) : 0;
-  const maximum = values.length ? Math.max(...values) : 0;
-  const valueRange = Math.max(1, maximum - minimum);
-  const chartPoints = payload.points.map((point, index) => {
-    const x = CHART_MIN_X + (index * (CHART_MAX_X - CHART_MIN_X) / Math.max(1, payload.points.length - 1));
-    const y = point.weightKg === null
-      ? null
-      : CHART_MAX_Y - (((point.weightKg - minimum) / valueRange) * (CHART_MAX_Y - CHART_MIN_Y));
-    return {
-      dayMs: point.dayMs,
-      x: roundChartCoordinate(x),
-      y: y === null ? null : roundChartCoordinate(y),
-      label: point.weightKg === null
-        ? `${formatUtcDate(point.dayMs, locale)}: no recorded body-weight measurement.`
-        : `${formatUtcDate(point.dayMs, locale)}: ${formatWeight(point.weightKg, unitSettings)}.`,
-    };
-  });
   return {
     chartAriaLabel: values.length
       ? `Body-weight measurements over 28 UTC days. ${values.length} days have recorded measurements; missing days are gaps.`
       : 'No body-weight measurement was recorded in this 28-day window.',
     chartStartLabel: formatUtcDate(payload.points[0]?.dayMs, locale),
     chartEndLabel: formatUtcDate(payload.points.at(-1)?.dayMs, locale),
-    chartPoints,
-    chartSegments: buildChartSegments(chartPoints),
+    chartPoints: payload.points.map(point => ({ dayMs: point.dayMs, weightKg: point.weightKg })),
   };
-}
-
-function buildChartSegments(points: readonly TrainingBodyWeightTrendPointViewModel[]): string[] {
-  const segments: string[] = [];
-  let currentSegment: string[] = [];
-  points.forEach((point) => {
-    if (point.y === null) {
-      if (currentSegment.length) {
-        segments.push(currentSegment.join(' '));
-        currentSegment = [];
-      }
-      return;
-    }
-    currentSegment.push(`${point.x},${point.y}`);
-  });
-  if (currentSegment.length) {
-    segments.push(currentSegment.join(' '));
-  }
-  return segments;
 }
 
 function normalizePoint(value: unknown): DerivedBodyWeightTrendMetricPayload['points'][number] | null {
@@ -269,10 +221,6 @@ function formatUtcDate(value: number | null | undefined, locale?: string): strin
 
 function formatNumber(value: number, fractionDigits: number, locale?: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: fractionDigits, minimumFractionDigits: 0 }).format(value);
-}
-
-function roundChartCoordinate(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 function asRecord(value: unknown): UnknownRecord | null {

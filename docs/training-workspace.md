@@ -152,6 +152,8 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Sport visibility dialog: `src/app/components/training/training-sport-visibility-dialog.component.*`
 - Swimming chart: `src/app/components/training/training-swim-performance-chart.component.*`
 - Durability trajectory: `src/app/components/training/training-durability-trajectory-chart.component.*`
+- Readiness history chart: `src/app/components/training/training-readiness-trend-chart.component.*`
+- Body-weight trend chart: `src/app/components/training/training-body-weight-trend-chart.component.*`
 - Snapshot service: `src/app/services/dashboard-derived-metrics.service.ts`
 - Shared payload contracts: `shared/derived-metrics.ts`
 - Shared discipline registry: `shared/training-disciplines.ts`
@@ -195,7 +197,7 @@ Frontend transformation responsibilities are intentionally split into focused he
 | `training-power-profile.helper.ts` | 90-day versus one-year power retention |
 | `training-card-guidance.helper.ts` | Plain-language outcomes, evidence quality, and evidence-gated next steps for build, load, and intensity cards |
 | `dashboard-training-insights.helper.ts` | Live readiness adapter and bounded sleep window |
-| `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend geometry |
+| `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend data |
 | `training-recovery-estimate.helper.ts` | Imported recovery countdown wording |
 | `training-sport-visibility.helper.ts` | Automatic/fixed sport resolution and compact labels |
 | `training-swim-performance.helper.ts` | Swim pace units plus pool/open-water conclusions and evidence-gated chart model |
@@ -408,7 +410,8 @@ Training state and Readiness are fixed inside the optional Today summary:
   on the same UTC day reduce to a daily median; the snapshot retains the latest 28 UTC days with missing days as null
   points, the latest recorded value, and current 7- and 28-day medians. Its change values compare each current window
   to the immediately preceding equal-length window and are withheld unless each side has at least three recorded days.
-  The frontend formats values with the user's weight-unit setting and never bridges chart gaps. This is neutral context,
+  The frontend formats values with the user's weight-unit setting and displays the trend with ECharts without bridging
+  chart gaps. This is neutral context,
   not a health assessment, training prescription, or input to Readiness, Form, or the TSS-only Training state.
 
 Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
@@ -628,11 +631,10 @@ mislabel a new score as yesterday's. An open Training route schedules a narrow U
 projection-sensitive kinds can reuse a compatible Form seed and do not require an event or activity scan;
 `body_weight_trend` reads its narrow persisted Weight source so its UTC windows stay current.
 
-The compact chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes remain
-interpretable across days. Each scored chart mark has a generous, keyboard-focusable HTML hit target and an Angular
-Material hover/focus tooltip with its UTC date, score, status, confidence, available-signal count, and
-recovery-baseline-night count. Missing scores have no point and therefore remain visible as gaps rather than being
-interpolated.
+The compact ECharts chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes
+remain interpretable across days. Its shared app-standard hover or tap tooltip reports the UTC date, score,
+status, confidence, available-signal count, and recovery-baseline-night count. Missing scores remain null series
+values, so ECharts leaves visible gaps rather than interpolating them.
 
 #### Recovery remaining
 
@@ -1243,9 +1245,9 @@ UI principles:
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
 - Responsive icon-only Training actions hide only their projected text label and reset Material's icon-and-text margins,
   keeping the visible icon centered without suppressing Material focus, ripple, or touch-target elements.
-- Readiness history uses its parent `qs-glass-card-panel` surface and the app's divider token rather than a nested neutral
-  container. On desktop, its 14 daily marks and connecting line remain deliberately compact so the recent trend supports
-  the current signal instead of overpowering it.
+- Readiness history and body-weight trend use compact ECharts canvases inside their parent card surfaces rather than
+  nested neutral containers. Their null observations remain visible gaps, and their shared safe tooltip surface keeps
+  the detail readable without being cropped by the card.
 - Durability evidence and its trajectory inherit their parent Training card surface. Borders and dividers preserve the
   hierarchy without stacking gray inset surfaces inside the card.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
@@ -1414,6 +1416,8 @@ training-readiness.helper.spec.ts
 training-recovery-estimate.helper.spec.ts
 training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
+training-readiness-trend-chart.component.spec.ts
+training-body-weight-trend-chart.component.spec.ts
 event-json-sanitizer.spec.ts
 ```
 

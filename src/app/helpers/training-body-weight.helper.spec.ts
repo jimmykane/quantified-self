@@ -60,8 +60,8 @@ describe('training body-weight helper', () => {
       coverageText: '8/28 days recorded',
     });
     expect(model.chartPoints).toHaveLength(28);
-    expect(model.chartPoints[0].y).toBeNull();
-    expect(model.chartSegments).toHaveLength(2);
+    expect(model.chartPoints[0]).toEqual({ dayMs: payload.points[0].dayMs, weightKg: null });
+    expect(model.chartPoints.filter(point => point.weightKg !== null)).toHaveLength(3);
     expect(model.sourceText).toContain('does not change Readiness');
   });
 
