@@ -93,17 +93,7 @@
     </mat-card-content>
 
     @if (request()) {
-      <mat-card-actions align="end">
-        <button mat-button type="button" [disabled]="deciding() !== null" (click)="deny()">
-          <span class="mcp-authorization__button-content">
-            @if (deciding() === 'deny') {
-              <mat-spinner diameter="18"></mat-spinner>
-              <span>Denying…</span>
-            } @else {
-              <span>Deny</span>
-            }
-          </span>
-        </button>
+      <mat-card-actions class="mcp-authorization__actions">
         <button
           mat-flat-button
           type="button"
@@ -116,6 +106,16 @@
             } @else {
               <mat-icon>link</mat-icon>
               <span>Allow selected access</span>
+            }
+          </span>
+        </button>
+        <button mat-button type="button" [disabled]="deciding() !== null" (click)="deny()">
+          <span class="mcp-authorization__button-content">
+            @if (deciding() === 'deny') {
+              <mat-spinner diameter="18"></mat-spinner>
+              <span>Denying…</span>
+            } @else {
+              <span>Deny</span>
             }
           </span>
         </button>

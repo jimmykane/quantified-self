@@ -106,6 +106,23 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('finish setup in ChatGPT on the web from a desktop');
   });
 
+  it('stacks the full-width authorization actions with the primary action first', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const actions = fixture.nativeElement.querySelector(
+      '.mcp-authorization__actions',
+    ) as HTMLElement;
+    const buttons = Array.from(actions.querySelectorAll('button'));
+
+    expect(actions).toBeTruthy();
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0].textContent).toContain('Allow selected access');
+    expect(buttons[1].textContent).toContain('Deny');
+  });
+
   it('submits the selected scopes and returns to the client', async () => {
     const fixture = TestBed.createComponent(McpAuthorizationComponent);
     fixture.detectChanges();
