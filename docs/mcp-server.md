@@ -31,8 +31,8 @@ Hosting routes these paths to `mcpApi`:
 | `/oauth/token` | Exchanges or refreshes an OAuth token |
 | `/mcp` | Read-only MCP Streamable HTTP endpoint |
 
-`/mcp/authorize` is the authenticated Angular consent page. Account Settings lists active MCP connections and lets the
-user revoke one immediately.
+`/mcp/authorize` is the authenticated Angular consent page. Account Settings lists connections only after the client
+successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
 
 ## Server presentation metadata
 
@@ -94,14 +94,21 @@ Firestore holds short-lived OAuth records in:
 - `mcpOAuthRefreshTokens`; and
 - `mcpOAuthRateLimits`.
 
-Active connection metadata lives at `users/{uid}/mcpConnections/{connectionId}`. Browser Firestore access to every MCP
-collection is denied; authenticated, App Check-protected callables mediate consent, listing, and revocation. Revocation
-transactionally rechecks account-deletion state before changing the connection, then deletes active tokens and codes.
-Bearer authentication performs the same account-deletion check before recording usage or running a tool, while account
-deletion recursively removes connection and OAuth state. OAuth cleanup reads at most 51 documents per page, deletes at
-most 10 document roots concurrently, and caps one trigger attempt at 250 deletions. The Auth deletion trigger continues
-mail, provider-identifier, and queue cleanup if that bounded pass fails or has more work, then fails retryably so Firebase
-durably invokes the idempotent cleanup again. All short-lived MCP collections use `expireAt` TTL configuration in
+Connection metadata lives at `users/{uid}/mcpConnections/{connectionId}` and follows `pending -> active -> revoked`.
+Approval creates a pending record whose `expireAt` matches the five-minute authorization-code expiry. The successful
+code-exchange transaction creates the credentials, changes the connection to active, stamps `lastUsedAtMs`, and removes
+`expireAt` atomically. Settings lists active records only. For compatibility, pre-lifecycle records with a non-null
+`lastUsedAtMs` remain active, while old unexchanged records with no usage are hidden. Firestore TTL removes new abandoned
+pending records; connection documents have no descendant collections by design.
+
+Browser Firestore access to every MCP collection is denied; authenticated, App Check-protected callables mediate
+consent, listing, and revocation. Revocation transactionally rechecks account-deletion state before changing the
+connection to revoked, then deletes active tokens and codes. Bearer authentication requires an active connection and
+performs the same account-deletion check before recording usage or running a tool, while account deletion recursively
+removes connection and OAuth state. OAuth cleanup reads at most 51 documents per page, deletes at most 10 document roots
+concurrently, and caps one trigger attempt at 250 deletions. The Auth deletion trigger continues mail,
+provider-identifier, and queue cleanup if that bounded pass fails or has more work, then fails retryably so Firebase
+durably invokes the idempotent cleanup again. All short-lived MCP records use `expireAt` TTL configuration in
 `firestore.indexes.json`.
 
 ## Consent-page browser policy

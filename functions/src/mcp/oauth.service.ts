@@ -181,6 +181,7 @@ export interface McpConnection {
   createdAtMs: number;
   lastUsedAtMs: number | null;
   revokedAtMs: number | null;
+  status?: 'pending' | 'active' | 'revoked';
 }
 
 interface AuthorizationApprovalInput {
@@ -245,6 +246,22 @@ function timestamp(ms: number): admin.firestore.Timestamp {
 
 function documentData<T>(snapshot: admin.firestore.DocumentSnapshot): T | null {
   return snapshot.exists ? snapshot.data() as T : null;
+}
+
+function isActiveMcpConnection(connection: McpConnection | null): connection is McpConnection {
+  if (!connection || connection.revokedAtMs !== null || connection.status === 'revoked') {
+    return false;
+  }
+  return connection.status === 'active'
+    || (connection.status === undefined && connection.lastUsedAtMs !== null);
+}
+
+function isPendingMcpConnection(connection: McpConnection | null): connection is McpConnection {
+  if (!connection || connection.revokedAtMs !== null) {
+    return false;
+  }
+  return connection.status === 'pending'
+    || (connection.status === undefined && connection.lastUsedAtMs === null);
 }
 
 export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
@@ -361,7 +378,11 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           ...input.codeRecord,
           expireAt: timestamp(input.codeRecord.expiresAtMs),
         });
-        transaction.set(connectionRef(input.uid, input.connection.connectionId), input.connection);
+        transaction.set(connectionRef(input.uid, input.connection.connectionId), {
+          ...input.connection,
+          status: 'pending',
+          expireAt: timestamp(input.codeRecord.expiresAtMs),
+        });
         return request;
       });
     },
@@ -403,8 +424,8 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
         );
-        if (!connection || connection.revokedAtMs !== null) {
-          throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.');
+        if (!isPendingMcpConnection(connection)) {
+          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer available.');
         }
         transaction.delete(codeRef);
         transaction.create(
@@ -429,7 +450,9 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           },
         );
         transaction.update(activeConnectionRef, {
+          status: 'active',
           lastUsedAtMs: input.nowMs,
+          expireAt: admin.firestore.FieldValue.delete(),
         });
         return code;
       });
@@ -456,13 +479,15 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
         );
-        if (!connection || connection.revokedAtMs !== null) {
-          throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.');
+        if (!isActiveMcpConnection(connection)) {
+          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.');
         }
         if (refresh.active !== true) {
           transaction.update(activeConnectionRef, {
+            status: 'revoked',
             revokedAtMs: input.nowMs,
             lastUsedAtMs: input.nowMs,
+            expireAt: admin.firestore.FieldValue.delete(),
           });
           return { refresh, replayed: true as const };
         }
@@ -502,6 +527,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           },
         );
         transaction.update(activeConnectionRef, {
+          status: 'active',
           scopes: input.requestedScopes || refresh.scopes,
           lastUsedAtMs: input.nowMs,
         });
@@ -559,11 +585,8 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
         );
-        if (
-          !connection
-          || connection.revokedAtMs !== null
-        ) {
-          throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
+        if (!isActiveMcpConnection(connection)) {
+          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.', 401);
         }
         if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
           throw new McpOAuthError(
@@ -584,6 +607,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           expireAt: timestamp(windowStartMs + MCP_RATE_LIMIT_DOCUMENT_LIFETIME_MS),
         });
         transaction.update(activeConnectionRef, {
+          status: 'active',
           lastUsedAtMs: nowMs,
         });
       });
@@ -617,7 +641,11 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         if (!connection.exists) {
           return false;
         }
-        transaction.set(ref, { revokedAtMs: nowMs }, { merge: true });
+        transaction.set(ref, {
+          status: 'revoked',
+          revokedAtMs: nowMs,
+          expireAt: admin.firestore.FieldValue.delete(),
+        }, { merge: true });
         return true;
       });
       if (!shouldDeleteCredentials) {
@@ -1096,6 +1124,7 @@ export function createMcpOAuthService(
           createdAtMs: nowMs,
           lastUsedAtMs: null,
           revokedAtMs: null,
+          status: 'pending',
         },
         nowMs,
       });
@@ -1226,11 +1255,8 @@ export function createMcpOAuthService(
         throw new McpOAuthError('invalid_grant', 'The access token is invalid or expired.', 401);
       }
       const connection = await store.getConnection(token.uid, token.connectionId);
-      if (
-        !connection
-        || connection.revokedAtMs !== null
-      ) {
-        throw new McpOAuthError('invalid_grant', 'The MCP connection has been revoked.', 401);
+      if (!isActiveMcpConnection(connection)) {
+        throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.', 401);
       }
       if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
         throw new McpOAuthError(
@@ -1249,7 +1275,7 @@ export function createMcpOAuthService(
     },
 
     async listConnections(uid: string) {
-      return (await store.listConnections(uid)).filter(connection => connection.revokedAtMs === null);
+      return (await store.listConnections(uid)).filter(isActiveMcpConnection);
     },
 
     revokeConnection(uid: string, connectionId: string) {

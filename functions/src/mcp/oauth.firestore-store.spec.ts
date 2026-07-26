@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const {
+  fieldValueDeleteMock,
   firestoreMock,
   timestampFromMillisMock,
 } = vi.hoisted(() => ({
+  fieldValueDeleteMock: vi.fn(() => ({ deleteField: true })),
   firestoreMock: vi.fn(),
   timestampFromMillisMock: vi.fn((milliseconds: number) => ({ milliseconds })),
 }));
@@ -12,6 +14,9 @@ vi.mock('firebase-admin', () => ({
   firestore: Object.assign(firestoreMock, {
     Timestamp: {
       fromMillis: timestampFromMillisMock,
+    },
+    FieldValue: {
+      delete: fieldValueDeleteMock,
     },
   }),
 }));
@@ -55,6 +60,160 @@ function fakeSnapshot(
 }
 
 describe('Firestore MCP OAuth store', () => {
+  it('stores an approved connection as pending with the authorization-code expiry', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'users/user-1') {
+          return fakeSnapshot(true);
+        }
+        if (ref.path === 'userDeletionTombstones/user-1') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'mcpOAuthAuthorizationRequests/request-1') {
+          return fakeSnapshot(true, {
+            status: 'pending',
+            expiresAtMs: 10_000,
+          });
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      create: vi.fn(),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+
+    await buildFirestoreMcpOAuthStore().approveAuthorization({
+      uid: 'user-1',
+      requestId: 'request-1',
+      grantedScopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      codeHash: 'code-hash',
+      codeRecord: {
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        clientId: 'https://client.example/mcp.json',
+        redirectUri: 'https://client.example/oauth/callback',
+        codeChallenge: 'challenge',
+        scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+        audience: 'https://quantified-self.io/mcp',
+        createdAtMs: 5_000,
+        expiresAtMs: 8_000,
+      },
+      connection: {
+        connectionId: 'connection-1',
+        clientId: 'https://client.example/mcp.json',
+        clientName: 'Example MCP Client',
+        redirectHost: 'client.example',
+        scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+        createdAtMs: 5_000,
+        lastUsedAtMs: null,
+        revokedAtMs: null,
+        status: 'pending',
+      },
+      nowMs: 5_000,
+    });
+
+    expect(transaction.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'users/user-1/mcpConnections/connection-1',
+      }),
+      expect.objectContaining({
+        status: 'pending',
+        expireAt: { milliseconds: 8_000 },
+      }),
+    );
+  });
+
+  it('atomically activates a pending connection and removes its TTL on code exchange', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'mcpOAuthAuthorizationCodes/code-hash') {
+          return fakeSnapshot(true, {
+            uid: 'user-1',
+            connectionId: 'connection-1',
+            clientId: 'https://client.example/mcp.json',
+            redirectUri: 'https://client.example/oauth/callback',
+            codeChallenge: 'challenge',
+            scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+            audience: 'https://quantified-self.io/mcp',
+            expiresAtMs: 8_000,
+          });
+        }
+        if (ref.path === 'users/user-1') {
+          return fakeSnapshot(true);
+        }
+        if (ref.path === 'userDeletionTombstones/user-1') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1/mcpConnections/connection-1') {
+          return fakeSnapshot(true, {
+            status: 'pending',
+            lastUsedAtMs: null,
+            revokedAtMs: null,
+          });
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      create: vi.fn(),
+      delete: vi.fn(),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+
+    await buildFirestoreMcpOAuthStore().exchangeAuthorizationCode({
+      codeHash: 'code-hash',
+      clientId: 'https://client.example/mcp.json',
+      redirectUri: 'https://client.example/oauth/callback',
+      audience: 'https://quantified-self.io/mcp',
+      codeChallenge: 'challenge',
+      accessTokenHash: 'access-hash',
+      accessTokenRecord: {
+        uid: '',
+        connectionId: '',
+        clientId: 'https://client.example/mcp.json',
+        scopes: [],
+        audience: 'https://quantified-self.io/mcp',
+        createdAtMs: 5_000,
+        expiresAtMs: 10_000,
+      },
+      refreshTokenHash: 'refresh-hash',
+      refreshTokenRecord: {
+        uid: '',
+        connectionId: '',
+        clientId: 'https://client.example/mcp.json',
+        scopes: [],
+        audience: 'https://quantified-self.io/mcp',
+        familyId: 'family-1',
+        createdAtMs: 5_000,
+        expiresAtMs: 20_000,
+      },
+      nowMs: 5_000,
+    });
+
+    expect(transaction.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'users/user-1/mcpConnections/connection-1',
+      }),
+      {
+        status: 'active',
+        lastUsedAtMs: 5_000,
+        expireAt: { deleteField: true },
+      },
+    );
+  });
+
   function buildAuthorizationStartRateLimitFirestore() {
     const documents = new Map<string, Record<string, unknown>>();
     const transaction = {
@@ -365,6 +524,7 @@ describe('Firestore MCP OAuth store', () => {
         }
         if (ref.path === 'users/user-1/mcpConnections/connection-1') {
           return fakeSnapshot(true, {
+            status: 'active',
             scopes: [MCP_OAUTH_SCOPES.MetricsRead],
             revokedAtMs: null,
           });

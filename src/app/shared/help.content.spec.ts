@@ -774,6 +774,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('original route files');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('**Settings -> Account -> MCP connections**');
+    expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');
+    expect(dataAndPrivacySection?.content).toContain('Failed or abandoned authorization attempts');
   });
 
   it('directs account deletion to the Account settings section', () => {

@@ -84,6 +84,8 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('ChatGPT app icon');
     expect(content).toContain('Download 96 px · 3.3 KB');
     expect(content).toContain('Download 192 px · 9.9 KB');
+    expect(content).toContain('only after it finishes authorization');
+    expect(content).toContain('abandoned attempts expire automatically');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',

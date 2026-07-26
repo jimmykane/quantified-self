@@ -801,7 +801,7 @@ In Settings you can:
 - Sleep access covers normalized session summaries and day/week/month aggregates. It excludes provider user/session IDs, provider payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, or respiration samples.
 - Saved-route access covers route names, bounded metrics and counts, exact bounds, simplified polyline previews with segment start/end coordinates, nearby searches that measure against the persisted preview, waypoint coordinates, and signed-in app links containing stable account/route paths. It excludes original route files, raw track points and streams, waypoint names/comments, Storage paths, provider provenance, and delivery metadata.
 - Nearby MCP searches accept either direct latitude/longitude or a place name such as a city. Direct coordinates are processed inside Quantified Self. For place names, Quantified Self sends only the location text to Mapbox for forward geocoding; it does not send activity, route, account, or prompt data to Mapbox for this lookup.
-- Review or disconnect clients in **Settings -> Account -> MCP connections**. Disconnecting blocks future access, but the external client may retain data it already received under its own policy.
+- Only clients that finish authorization appear in **Settings -> Account -> MCP connections**. Failed or abandoned authorization attempts are not active connections and expire automatically. Disconnecting a listed client blocks future access, but the external client may retain data it already received under its own policy.
 - See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
 
 ## Use with ChatGPT

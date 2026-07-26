@@ -55,6 +55,8 @@ describe('MCP client access policy', () => {
     expect(content).toContain('Original route files');
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('stored server-side only as hashes');
+    expect(content).toContain('becomes active and appears in Settings only after');
+    expect(content).toContain('Abandoned pending approvals expire automatically');
     expect(content).toContain('Settings -> Account');
     expect(content).toContain('retain data it already received');
   });

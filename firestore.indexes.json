@@ -1415,6 +1415,18 @@
       "indexes": []
     },
     {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "status",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "aiInsightsPromptRepairs",
       "fieldPath": "expireAt",
       "ttl": true,

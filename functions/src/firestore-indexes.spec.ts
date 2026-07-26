@@ -148,6 +148,7 @@ describe('firestore indexes', () => {
             'mcpOAuthAccessTokens',
             'mcpOAuthRefreshTokens',
             'mcpOAuthRateLimits',
+            'mcpConnections',
         ]) {
             expect(config.fieldOverrides).toContainEqual({
                 collectionGroup,
@@ -165,6 +166,17 @@ describe('firestore indexes', () => {
             expect(fieldOverride.fieldPath).toBe('expireAt');
             expect(fieldOverride.indexes).toEqual([]);
         }
+    });
+
+    it('does not index MCP connection status because listing filters it in memory', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'mcpConnections',
+            fieldPath: 'status',
+            ttl: false,
+            indexes: [],
+        });
     });
 
     it('keeps dashboard route preview recency query deployable', () => {
