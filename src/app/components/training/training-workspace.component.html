@@ -749,6 +749,70 @@
             </div>
           }
         }
+        <article class="training-body-weight-panel qs-glass-card-panel" aria-labelledby="training-body-weight-title">
+          <header>
+            <div>
+              <h3 id="training-body-weight-title" class="qs-dashboard-chart-title">Body-weight trend</h3>
+              <p>Recorded measurements only</p>
+            </div>
+            <span>28-day view</span>
+          </header>
+          @if (bodyWeightTrend.state === 'unavailable') {
+            <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
+          } @else if (bodyWeightTrend.state === 'preparing') {
+            <div class="training-capacity-loading" role="status">
+              <mat-spinner diameter="24"></mat-spinner>
+              <div><strong>Preparing body-weight trend</strong><p>{{ bodyWeightTrend.statusText }}</p></div>
+            </div>
+          } @else {
+            @if (bodyWeightTrend.isUpdating) {
+              <p class="training-recovery-update" role="status">Updating recorded measurements…</p>
+            }
+            <div class="training-body-weight-summary">
+              <div>
+                <span>Latest</span>
+                <strong><app-training-metric-text [text]="bodyWeightTrend.latestWeightText"></app-training-metric-text></strong>
+                <small>{{ bodyWeightTrend.latestRecordedText }}</small>
+              </div>
+              <div>
+                <span>7-day median</span>
+                <strong><app-training-metric-text [text]="bodyWeightTrend.median7dText"></app-training-metric-text></strong>
+                <small>{{ bodyWeightTrend.change7dText }}</small>
+              </div>
+              <div>
+                <span>28-day median</span>
+                <strong><app-training-metric-text [text]="bodyWeightTrend.median28dText"></app-training-metric-text></strong>
+                <small>{{ bodyWeightTrend.change28dText }}</small>
+              </div>
+            </div>
+            @if (bodyWeightTrend.chartSegments.length) {
+              <svg class="training-body-weight-trend" viewBox="0 0 360 90" role="img" [attr.aria-label]="bodyWeightTrend.chartAriaLabel">
+                @for (segment of bodyWeightTrend.chartSegments; track segment) {
+                  <polyline class="training-body-weight-trend-line" [attr.points]="segment"></polyline>
+                }
+                @for (point of bodyWeightTrend.chartPoints; track point.dayMs) {
+                  @if (point.y !== null) {
+                    <circle class="training-body-weight-trend-point" [attr.cx]="point.x" [attr.cy]="point.y" r="3" aria-hidden="true"></circle>
+                    <foreignObject [attr.x]="point.x - 9" [attr.y]="point.y - 9" width="18" height="18">
+                      <button
+                        class="training-body-weight-tooltip-trigger"
+                        type="button"
+                        [attr.aria-label]="point.label"
+                        [matTooltip]="point.label"
+                        matTooltipPosition="above"></button>
+                    </foreignObject>
+                  }
+                }
+              </svg>
+              <div class="training-body-weight-trend-dates">
+                <span>{{ bodyWeightTrend.chartStartLabel }}</span>
+                <span>{{ bodyWeightTrend.chartEndLabel }}</span>
+              </div>
+            }
+            <p class="training-body-weight-coverage">{{ bodyWeightTrend.coverageText }} · {{ bodyWeightTrend.statusText }}</p>
+            <p class="training-body-weight-source">{{ bodyWeightTrend.sourceText }}</p>
+          }
+        </article>
         @if (isSwimmingVisible) {
           @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
             <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">

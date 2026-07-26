@@ -45,6 +45,7 @@ import {
   resolveTrainingExplanationMetricPayload,
   resolveTrainingReadinessMetricPayload,
 } from '../helpers/training-derived-metrics.helper';
+import { resolveTrainingBodyWeightMetricPayload } from '../helpers/training-body-weight.helper';
 import { resolveTrainingPowerSystemsMetricPayload } from '../helpers/training-power-systems.helper';
 import type { DashboardDerivedMetricStatus } from '../helpers/derived-metric-status.helper';
 import { AppFunctionsService } from './app.functions.service';
@@ -56,6 +57,7 @@ import {
   CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
   type DerivedMetricKind,
+  type DerivedBodyWeightTrendMetricPayload,
   type DerivedPowerCurveMetricPayload,
   type DerivedTrainingDurabilityMetricPayload,
   type DerivedTrainingExplanationMetricPayload,
@@ -86,6 +88,7 @@ export interface DashboardDerivedMetricsState {
   trainingExplanation: DerivedTrainingExplanationMetricPayload | null;
   trainingDurability: DerivedTrainingDurabilityMetricPayload | null;
   trainingReadiness: DerivedTrainingReadinessMetricPayload | null;
+  bodyWeightTrend: DerivedBodyWeightTrendMetricPayload | null;
   powerCurve: DerivedPowerCurveMetricPayload | null;
   trainingSwimPerformance: DashboardTrainingSwimPerformanceContext | null;
   formStatus: DashboardDerivedMetricStatus;
@@ -108,6 +111,7 @@ export interface DashboardDerivedMetricsState {
   trainingExplanationStatus: DashboardDerivedMetricStatus;
   trainingDurabilityStatus: DashboardDerivedMetricStatus;
   trainingReadinessStatus: DashboardDerivedMetricStatus;
+  bodyWeightTrendStatus: DashboardDerivedMetricStatus;
   powerCurveStatus: DashboardDerivedMetricStatus;
   trainingSwimPerformanceStatus: DashboardDerivedMetricStatus;
 }
@@ -134,6 +138,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     trainingExplanation: null,
     trainingDurability: null,
     trainingReadiness: null,
+    bodyWeightTrend: null,
     powerCurve: null,
     trainingSwimPerformance: null,
     formStatus: 'missing',
@@ -156,6 +161,7 @@ export function createDashboardDerivedMetricsMissingState(): DashboardDerivedMet
     trainingExplanationStatus: 'missing',
     trainingDurabilityStatus: 'missing',
     trainingReadinessStatus: 'missing',
+    bodyWeightTrendStatus: 'missing',
     powerCurveStatus: 'missing',
     trainingSwimPerformanceStatus: 'missing',
   };
@@ -185,6 +191,7 @@ type DerivedMetricStateContextKey =
   | 'trainingExplanation'
   | 'trainingDurability'
   | 'trainingReadiness'
+  | 'bodyWeightTrend'
   | 'powerCurve'
   | 'trainingSwimPerformance';
 
@@ -209,6 +216,7 @@ type DerivedMetricStateStatusKey =
   | 'trainingExplanationStatus'
   | 'trainingDurabilityStatus'
   | 'trainingReadinessStatus'
+  | 'bodyWeightTrendStatus'
   | 'powerCurveStatus'
   | 'trainingSwimPerformanceStatus';
 
@@ -231,6 +239,7 @@ const DASHBOARD_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
     && kind !== DERIVED_METRIC_KINDS.TrainingExplanation
     && kind !== DERIVED_METRIC_KINDS.TrainingDurability
     && kind !== DERIVED_METRIC_KINDS.TrainingReadiness
+    && kind !== DERIVED_METRIC_KINDS.BodyWeightTrend
     && kind !== DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 );
 
@@ -367,6 +376,11 @@ export class DashboardDerivedMetricsService {
         contextKey: 'trainingReadiness',
         statusKey: 'trainingReadinessStatus',
         resolveContext: (snapshot) => resolveTrainingReadinessMetricPayload(this.resolveSnapshotPayload(snapshot)),
+      },
+      [DERIVED_METRIC_KINDS.BodyWeightTrend]: {
+        contextKey: 'bodyWeightTrend',
+        statusKey: 'bodyWeightTrendStatus',
+        resolveContext: (snapshot) => resolveTrainingBodyWeightMetricPayload(this.resolveSnapshotPayload(snapshot)),
       },
       [DERIVED_METRIC_KINDS.PowerCurve]: {
         contextKey: 'powerCurve',
@@ -596,6 +610,14 @@ export class DashboardDerivedMetricsService {
       status === 'ready'
       && metricKind === DERIVED_METRIC_KINDS.TrainingReadiness
       && !resolveTrainingReadinessMetricPayload(this.resolveSnapshotPayload(snapshot))
+    ) {
+      return 'stale';
+    }
+
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.BodyWeightTrend
+      && !resolveTrainingBodyWeightMetricPayload(this.resolveSnapshotPayload(snapshot))
     ) {
       return 'stale';
     }

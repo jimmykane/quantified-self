@@ -1674,6 +1674,7 @@ describe('MCP data service', () => {
       expect.objectContaining({ type: DataDistance.type }),
     ]);
     expect(result.derivedMetricKinds).toContain(DERIVED_METRIC_KINDS.TrainingReadiness);
+    expect(result.derivedMetricKinds).toContain(DERIVED_METRIC_KINDS.BodyWeightTrend);
     expect(result.sleepCapabilities.providers).toContain(SLEEP_PROVIDERS.GarminAPI);
   });
 
@@ -2011,6 +2012,73 @@ describe('MCP data service', () => {
     });
     expect(JSON.stringify(result.payload)).not.toContain('event-3');
     expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
+  });
+
+  it('exposes the ready body-weight trend with only its safe daily values', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 4,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+        trendDays: 28,
+        comparisonWindowDays: 7,
+        minimumComparableDayCount: 3,
+        latestWeightKg: 71.2,
+        latestWeightDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+        median7dKg: 71.4,
+        median28dKg: 71.8,
+        change7dKg: -0.3,
+        change7dPercent: -0.42,
+        change28dKg: -0.6,
+        change28dPercent: -0.84,
+        recordedDayCount7d: 4,
+        recordedDayCount28d: 11,
+        points: [{
+          dayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+          weightKg: 71.2,
+          eventId: 'private-weight-entry',
+          label: 'Morning measurement',
+        }],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.BodyWeightTrend,
+    );
+
+    expect(result).toEqual({
+      metricKind: DERIVED_METRIC_KINDS.BodyWeightTrend,
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 4,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+        trendDays: 28,
+        comparisonWindowDays: 7,
+        minimumComparableDayCount: 3,
+        latestWeightKg: 71.2,
+        latestWeightDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+        median7dKg: 71.4,
+        median28dKg: 71.8,
+        change7dKg: -0.3,
+        change7dPercent: -0.42,
+        change28dKg: -0.6,
+        change28dPercent: -0.84,
+        recordedDayCount7d: 4,
+        recordedDayCount28d: 11,
+        points: [{
+          dayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+          weightKg: 71.2,
+        }],
+      },
+    });
+    expect(JSON.stringify(result.payload)).not.toContain('private-weight-entry');
+    expect(JSON.stringify(result.payload)).not.toContain('Morning measurement');
   });
 
   it('removes imported device provenance from Training capacity while preserving metrics', async () => {

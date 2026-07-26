@@ -421,7 +421,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('requests only projection-sensitive readiness inputs at the next UTC day', async () => {
+  it('requests readiness projections and the body-weight trend at the next UTC day', async () => {
     const nowMs = Date.UTC(2026, 6, 16, 23, 59, 59, 500);
     vi.useFakeTimers();
     vi.setSystemTime(nowMs);
@@ -463,6 +463,7 @@ describe('TrainingWorkspaceComponent', () => {
             'form_plus_7d',
             'freshness_forecast',
             'training_readiness',
+            'body_weight_trend',
           ],
         },
       );

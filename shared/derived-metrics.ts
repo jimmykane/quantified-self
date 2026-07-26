@@ -30,6 +30,7 @@ export const DERIVED_METRIC_KINDS = {
   TrainingDurability: 'training_durability',
   TrainingBuildComparison: 'training_build_comparison',
   TrainingReadiness: 'training_readiness',
+  BodyWeightTrend: 'body_weight_trend',
   TrainingSwimPerformance: 'training_swim_performance',
 } as const;
 
@@ -57,6 +58,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingDurability,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
   DERIVED_METRIC_KINDS.TrainingReadiness,
+  DERIVED_METRIC_KINDS.BodyWeightTrend,
   DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
@@ -82,6 +84,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingDurability,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  DERIVED_METRIC_KINDS.BodyWeightTrend,
   DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
@@ -965,6 +968,30 @@ export interface DerivedTrainingReadinessMetricPayload {
   points: DerivedTrainingReadinessHistoryPoint[];
 }
 
+export interface DerivedBodyWeightTrendPoint {
+  dayMs: number;
+  weightKg: number | null;
+}
+
+export interface DerivedBodyWeightTrendMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  trendDays: 28;
+  comparisonWindowDays: 7;
+  minimumComparableDayCount: 3;
+  latestWeightKg: number | null;
+  latestWeightDayMs: number | null;
+  median7dKg: number | null;
+  median28dKg: number | null;
+  change7dKg: number | null;
+  change7dPercent: number | null;
+  change28dKg: number | null;
+  change28dPercent: number | null;
+  recordedDayCount7d: number;
+  recordedDayCount28d: number;
+  points: DerivedBodyWeightTrendPoint[];
+}
+
 export type DerivedPowerCurveScope = DerivedPowerCapacityDiscipline;
 
 export type DerivedTrainingSwimEnvironment = 'pool' | 'open-water';
@@ -1060,6 +1087,7 @@ export type DerivedTrainingExplanationMetricSnapshot = DerivedMetricSnapshotBase
 export type DerivedTrainingDurabilityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingDurabilityMetricPayload>;
 export type DerivedTrainingBuildComparisonMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingBuildComparisonMetricPayload>;
 export type DerivedTrainingReadinessMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingReadinessMetricPayload>;
+export type DerivedBodyWeightTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedBodyWeightTrendMetricPayload>;
 export type DerivedTrainingSwimPerformanceMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSwimPerformanceMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
@@ -1083,6 +1111,7 @@ export type DerivedMetricSnapshot =
   | DerivedTrainingDurabilityMetricSnapshot
   | DerivedTrainingBuildComparisonMetricSnapshot
   | DerivedTrainingReadinessMetricSnapshot
+  | DerivedBodyWeightTrendMetricSnapshot
   | DerivedTrainingSwimPerformanceMetricSnapshot;
 
 export { POWER_CAPACITY_DISCIPLINES };

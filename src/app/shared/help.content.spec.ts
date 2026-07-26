@@ -130,6 +130,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('What drove this');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
+    expect(trainingSection?.content).toContain('**Body-weight trend**');
+    expect(trainingSection?.content).toContain('multiple measurements on one UTC day to a median');
+    expect(trainingSection?.content).toContain('does not change the Training state, Form, Readiness');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
     expect(trainingSection?.content).toContain('**Power systems** is shown only where it is available to your account');
     expect(trainingSection?.content).toContain('It estimates current CP, W′, and Pmax');

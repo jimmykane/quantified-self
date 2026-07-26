@@ -322,7 +322,9 @@ MCP reads only `status: "ready"` documents with the exact current schema from
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
 exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels,
 identity-derived source fingerprints, and imported device/provider provenance (`sourceKey` and `previousSourceKey`) from
-the payload.
+the payload. For example, `body_weight_trend` is discoverable through `list_metrics` and readable through
+`get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
+change values—never source document or measurement identities.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline and schema work plus

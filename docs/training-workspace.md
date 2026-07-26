@@ -346,6 +346,7 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
 | `training_build_comparison` | Best Build and sleep context | Activities, settings, parent events, sleep |
 | `training_readiness` | Readiness 14-day trend | Form snapshot seed plus bounded sleep sessions |
+| `body_weight_trend` | Neutral body-weight context: latest value, 7/28-day medians, and sparse 28-day trend | Persisted positive Sports-lib `Weight` values from form documents |
 | `training_swim_performance` | Pool/open-water pace and contextual SWOLF | Activities plus active swim lengths |
 
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
@@ -356,6 +357,10 @@ kinds are excluded from the default Dashboard subscription and freshness scope. 
 `training_durability` to that scope only while a matching explicitly configured tile exists.
 `training_power_systems` has no Dashboard tile and is never added to normal Dashboard subscriptions. Opening a normal
 Dashboard therefore does not create a hidden Training dependency or freshness probe for those kinds.
+
+`body_weight_trend` is also Training-only. It is calendar-sensitive because its current 7- and 28-day UTC windows
+advance at midnight, but it is not projection-sensitive: it reads only persisted Weight values and does not reuse the
+Form projection seed.
 
 ### Shared Dashboard and Training insight reuse
 
@@ -399,6 +404,12 @@ Training state and Readiness are fixed inside the optional Today summary:
   is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
   sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
   cannot select different latest evidence because query order changed.
+- **Body-weight trend** reads only positive persisted Sports-lib `Weight` values, in canonical kilograms. Multiple values
+  on the same UTC day reduce to a daily median; the snapshot retains the latest 28 UTC days with missing days as null
+  points, the latest recorded value, and current 7- and 28-day medians. Its change values compare each current window
+  to the immediately preceding equal-length window and are withheld unless each side has at least three recorded days.
+  The frontend formats values with the user's weight-unit setting and never bridges chart gaps. This is neutral context,
+  not a health assessment, training prescription, or input to Readiness, Form, or the TSS-only Training state.
 
 Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
 useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
@@ -613,8 +624,9 @@ baseline evidence counts. The latest complete series may remain visible while it
 refresh. The live current calculation replaces today's plotted score only when the snapshot's `asOfDayMs` is the current
 UTC day, so newly imported sleep can update the card without waiting for a historical snapshot and a stale series cannot
 mislabel a new score as yesterday's. An open Training route schedules a narrow UTC-day rollover refresh for `form_now`,
-`ramp_rate`, `form_plus_7d`, `freshness_forecast`, and `training_readiness`. Those projection-sensitive kinds can reuse a compatible Form seed and do not
-require an event or activity scan.
+`ramp_rate`, `form_plus_7d`, `freshness_forecast`, `training_readiness`, and `body_weight_trend`. The first five
+projection-sensitive kinds can reuse a compatible Form seed and do not require an event or activity scan;
+`body_weight_trend` reads its narrow persisted Weight source so its UTC windows stay current.
 
 The compact chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes remain
 interpretable across days. Each scored chart mark has a generous, keyboard-focusable HTML hit target and an Angular

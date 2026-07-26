@@ -31,6 +31,7 @@ import {
     DataSwimDistance,
     DataSwimPaceAvg,
     DataVO2Max,
+    DataWeight,
     DURABILITY_PROTOCOL_VERSION,
     fitThreeDimensionalCapacityModel,
     type ThreeDimensionalCapacityFit,
@@ -584,6 +585,107 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: true,
+        });
+    });
+
+    it('uses persisted event stats for the body-weight trend', async () => {
+        const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
+
+        expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.BodyWeightTrend])).toEqual({
+            needsFormDocs: true,
+            needsRecoveryNowDocs: false,
+            needsTrainingActivityDocs: false,
+            needsTrainingSwimLengths: false,
+            needsTrainingBuildBenchmarkSettings: false,
+            needsTrainingBuildSleepDocs: false,
+            needsTrainingReadinessSleepDocs: false,
+        });
+    });
+});
+
+describe('buildBodyWeightTrendMetricPayload', () => {
+    it('builds daily medians, leaves gaps explicit, and withholds sparse comparison claims', async () => {
+        const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const weightDoc = (id: string, dayOffset: number, weightKg: unknown) => ({
+            id,
+            data: () => ({
+                startDate: nowMs + (dayOffset * 24 * 60 * 60 * 1000),
+                stats: { [DataWeight.type]: weightKg },
+            }),
+        });
+
+        const result = buildBodyWeightTrendMetricPayload([
+            weightDoc('today-a', 0, 70.4),
+            weightDoc('today-b', 0, 70.8),
+            weightDoc('one-day', -1, 70.7),
+            weightDoc('two-days', -2, 70.6),
+            weightDoc('previous-one', -8, 71.2),
+            weightDoc('previous-two', -9, 71.1),
+            weightDoc('invalid-weight', -3, -20),
+            weightDoc('future-weight', 1, 65),
+        ] as any, nowMs);
+
+        expect(result.sourceEventCount).toBe(6);
+        expect(result.payload).toMatchObject({
+            dayBoundary: 'UTC',
+            asOfDayMs: Date.UTC(2026, 6, 16),
+            trendDays: 28,
+            comparisonWindowDays: 7,
+            minimumComparableDayCount: 3,
+            latestWeightKg: 70.6,
+            latestWeightDayMs: Date.UTC(2026, 6, 16),
+            median7dKg: 70.6,
+            recordedDayCount7d: 3,
+            recordedDayCount28d: 5,
+            change7dKg: null,
+            change28dKg: null,
+        });
+        expect(result.payload.points).toHaveLength(28);
+        expect(result.payload.points.at(-1)).toEqual({ dayMs: Date.UTC(2026, 6, 16), weightKg: 70.6 });
+        expect(result.payload.points.find(point => point.dayMs === Date.UTC(2026, 6, 13))).toEqual({
+            dayMs: Date.UTC(2026, 6, 13),
+            weightKg: null,
+        });
+    });
+
+    it('compares like-for-like rolling medians when both windows have enough recorded days', async () => {
+        const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const docs = [0, -1, -2].flatMap((offset) => [
+            {
+                id: `current-${offset}`,
+                data: () => ({
+                    startDate: nowMs + (offset * dayMs),
+                    stats: { [DataWeight.type]: 70 },
+                }),
+            },
+            {
+                id: `previous-${offset}`,
+                data: () => ({
+                    startDate: nowMs + ((offset - 7) * dayMs),
+                    stats: { [DataWeight.type]: 71 },
+                }),
+            },
+            {
+                id: `previous-month-${offset}`,
+                data: () => ({
+                    startDate: nowMs + ((offset - 28) * dayMs),
+                    stats: { [DataWeight.type]: 72 },
+                }),
+            },
+        ]);
+
+        const result = buildBodyWeightTrendMetricPayload(docs as any, nowMs);
+
+        expect(result.payload).toMatchObject({
+            median7dKg: 70,
+            median28dKg: 70.5,
+            change7dKg: -1,
+            change7dPercent: -1.41,
+            change28dKg: -1.5,
+            change28dPercent: -2.08,
         });
     });
 });
