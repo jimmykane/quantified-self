@@ -59,6 +59,10 @@ import {
   buildTrainingReadinessViewModel,
   type TrainingReadinessViewModel,
 } from '../../helpers/training-readiness.helper';
+import {
+  buildTrainingBodyWeightViewModel,
+  type TrainingBodyWeightViewModel,
+} from '../../helpers/training-body-weight.helper';
 import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import {
   buildTrainingAnalysis,
@@ -272,6 +276,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
   public trainingRecovery = createEmptyTrainingRecoveryViewModel();
   public trainingReadiness: TrainingReadinessViewModel = buildTrainingReadinessViewModel(null, { isPreparing: true });
+  public bodyWeightTrend: TrainingBodyWeightViewModel = buildTrainingBodyWeightViewModel(null, 'building', null);
   public trainingRecoveryEstimate: TrainingRecoveryEstimateViewModel | null = null;
   public trainingExplanationView: TrainingExplanationViewModel | null = null;
   public trainingDurabilityScopes: TrainingDurabilityScopeViewModel[] = [];
@@ -365,6 +370,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.reconcilePendingTrainingSportVisibility();
         this.unitSettings = user?.settings?.unitSettings || null;
         this.refreshSportSpecificViewModels();
+        this.refreshDerivedViewModels();
         this.changeDetector.markForCheck();
         return;
       }
@@ -496,6 +502,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
     this.trainingReadiness = buildTrainingReadinessViewModel(null, { isPreparing: true });
+    this.bodyWeightTrend = buildTrainingBodyWeightViewModel(null, 'building', null);
     this.trainingRecoveryEstimate = null;
     this.trainingExplanationView = null;
     this.trainingDurabilityScopes = [];
@@ -985,6 +992,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       currentTrainingState.info,
     );
     this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
+    this.bodyWeightTrend = buildTrainingBodyWeightViewModel(
+      this.derivedState.bodyWeightTrend,
+      this.derivedState.bodyWeightTrendStatus,
+      this.unitSettings,
+    );
     this.refreshTrainingRecoveryEstimate();
     this.trainingRecovery = this.buildTrainingRecoveryViewModel(
       this.derivedState.trainingBuildComparison?.recovery || null,
@@ -1118,6 +1130,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
               DERIVED_METRIC_KINDS.FormPlus7d,
               DERIVED_METRIC_KINDS.FreshnessForecast,
               DERIVED_METRIC_KINDS.TrainingReadiness,
+              DERIVED_METRIC_KINDS.BodyWeightTrend,
             ],
           });
         }

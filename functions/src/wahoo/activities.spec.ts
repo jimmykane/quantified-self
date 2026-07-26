@@ -210,6 +210,15 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
+  it('rejects files larger than 20MB before sending to Wahoo', async () => {
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.alloc((20 * 1024 * 1024) + 1)))
+      .rejects.toMatchObject({
+        code: 'invalid-argument',
+        message: 'Cannot upload activity because the size is greater than 20MB.',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
   it('returns a retryable error when Wahoo cannot be reached', async () => {
     mocks.requestWahooAPI.mockRejectedValue(new WahooAPITransportError('Wahoo API request timed out.'));
 

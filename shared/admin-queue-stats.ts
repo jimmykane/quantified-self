@@ -94,6 +94,7 @@ export interface EventReparseFailurePreview {
     supersededBySportsLibVersion?: string;
     processingTier?: string;
     heavyReason?: string;
+    failureReason?: string;
     eventDurationMs?: number | null;
 }
 

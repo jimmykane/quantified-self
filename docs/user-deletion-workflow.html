@@ -241,6 +241,12 @@
                         <td>Attempts partner deauthorization first; if the provider is unavailable, archives token material for follow-up, then guarantees local token-root cleanup</td>
                     </tr>
                     <tr>
+                        <td><strong>MCP OAuth State</strong></td>
+                        <td><code>mcpOAuthAuthorizationRequests/*</code><br><code>mcpOAuthAuthorizationCodes/*</code><br><code>mcpOAuthAccessTokens/*</code><br><code>mcpOAuthRefreshTokens/*</code><br><code>mcpOAuthRateLimits/*</code><br><code>users/{uid}/mcpConnections/*</code></td>
+                        <td><code>cleanupUserAccounts</code></td>
+                        <td>Recursively deletes bounded pages with limited concurrency. An incomplete or failed pass does not skip mail or queue cleanup; the trigger fails afterward so Firebase retries the idempotent cleanup.</td>
+                    </tr>
+                    <tr>
                         <td><strong>Operational Queues</strong></td>
                         <td><code>activitySyncQueue/*</code><br><code>routeSyncQueue/*</code><br><code>sleepSyncQueue/*</code><br><code>suuntoAppWorkoutQueue/*</code><br><code>COROSAPIWorkoutQueue/*</code><br><code>garminAPIActivityQueue/*</code><br><code>wahooAPIWorkoutQueue/*</code><br><code>wahooAPIUserMappings/*</code><br><code>failed_jobs/*</code><br><code>sportsLibReparseJobs/*</code><br><code>sportsLibRouteReparseJobs/*</code></td>
                         <td><code>cleanupUserAccounts</code></td>

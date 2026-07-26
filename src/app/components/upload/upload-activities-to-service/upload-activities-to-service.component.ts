@@ -11,6 +11,7 @@ import type { FunctionName } from '@shared/functions-manifest';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 
 const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES = 20 * 1024 * 1024;
+const MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL = '20MB';
 const BASE64_CHUNK_SIZE = 0x8000;
 const SERVICE_ACTIVITY_UPLOAD_DELAY_MS = 2000;
 const WAHOO_STATUS_POLL_DELAY_MS = 2000;
@@ -274,12 +275,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     }
 
     if (file.file.size > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
-      throw new Error('Cannot upload activity because the size is greater than 20MB');
+      throw new Error(`Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL}`);
     }
 
     const payload = await this.readFileAsArrayBuffer(file.file);
     if (payload.byteLength > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
-      throw new Error('Cannot upload activity because the size is greater than 20MB');
+      throw new Error(`Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES_LABEL}`);
     }
 
     const base64String = this.arrayBufferToBase64(payload);

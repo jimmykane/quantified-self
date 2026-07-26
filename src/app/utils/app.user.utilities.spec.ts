@@ -1180,5 +1180,25 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings.tableSettings.active).toBe(DataHeartRateAvg.type);
             expect(settings.dashboardSettings.tableSettings.selectedColumns).toEqual([DataHeartRateAvg.type, 'Distance']);
         });
+
+        it('should normalize sport-specific event lap table columns without discarding an empty layout', () => {
+            const user = {
+                settings: {
+                    eventDetailsSettings: {
+                        lapTableColumnsBySportFamily: {
+                            running: ['Average Pace', 'invalid metric', 'Average Pace'],
+                            cycling: [],
+                            swimming: ['invalid metric'],
+                        },
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.eventDetailsSettings?.lapTableColumnsBySportFamily?.running).toEqual(['Average Pace']);
+            expect(settings.eventDetailsSettings?.lapTableColumnsBySportFamily?.cycling).toEqual([]);
+            expect(settings.eventDetailsSettings?.lapTableColumnsBySportFamily?.swimming).toBeUndefined();
+        });
     });
 });

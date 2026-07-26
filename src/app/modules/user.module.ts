@@ -14,7 +14,7 @@ import { UserSettingsComponent } from '../components/user-settings/user-settings
         CommonModule,
         SharedModule,
         MaterialModule,
-        UserRoutingModule
+        UserRoutingModule,
     ],
     exports: [],
     declarations: [

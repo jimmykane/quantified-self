@@ -162,6 +162,12 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
     eventTableFilters?: AppDashboardEventTableFiltersInterface;
 }
 
+export type AppEventLapSportFamily = 'running' | 'cycling' | 'swimming' | 'other';
+
+export interface AppEventDetailsSettingsInterface {
+    lapTableColumnsBySportFamily?: Partial<Record<AppEventLapSportFamily, string[]>>;
+}
+
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {
     theme?: ChartThemes;
     fillOpacityVersion?: number;
@@ -226,6 +232,7 @@ export interface AppUserSettingsInterface extends UserSettingsInterface {
     myTracksSettings?: AppMyTracksSettings;
     mapSettings?: AppMapSettingsInterface;
     dashboardSettings?: AppDashboardSettingsInterface;
+    eventDetailsSettings?: AppEventDetailsSettingsInterface;
     appSettings?: AppAppSettingsInterface;
     serviceSyncSettings?: ServiceSyncSettingsInterface;
     deviceDisplaySettings?: AppDeviceDisplaySettingsInterface;

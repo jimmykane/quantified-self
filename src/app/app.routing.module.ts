@@ -2,7 +2,6 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
-import { proGuard } from './authentication/pro.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
@@ -15,7 +14,7 @@ import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from 
 import { routeResolver } from './resolvers/route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
-const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync between supported connected services.';
+const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.';
 
 const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   '',
@@ -68,12 +67,12 @@ const topLevelRoutes: Routes = [
     data: {
       title: 'Membership',
       preload: true,
-      description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.',
+      description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Membership",
-        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.",
+        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.",
         "url": "https://quantified-self.io/pricing",
         "inLanguage": "en",
         "isPartOf": {
@@ -129,12 +128,12 @@ const topLevelRoutes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.",
+        "description": "Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -155,6 +154,7 @@ const topLevelRoutes: Routes = [
           "Send Suunto routes to Wahoo",
           "Send GPX/FIT routes to Wahoo",
           "Sync past activities",
+          "Read-only MCP client access",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
@@ -286,6 +286,11 @@ const topLevelRoutes: Routes = [
     data: PUBLIC_SEO_ROUTE_DATA.trainingAnalysis
   },
   {
+    path: PUBLIC_FEATURE_PATHS.mcpServer,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.mcpServer
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.aiInsights,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.aiInsights
@@ -380,7 +385,7 @@ const topLevelRoutes: Routes = [
     path: 'services',
     loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule),
     data: { title: 'Services', animation: 'Services', preload: true },
-    canMatch: [authGuard, onboardingGuard, proGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'dashboard',
@@ -418,6 +423,16 @@ const topLevelRoutes: Routes = [
     loadChildren: () => import('./modules/user.module').then(module => module.UserModule),
     data: { title: 'Settings', animation: 'User', preload: true },
     canMatch: [authGuard, onboardingGuard],
+  },
+  {
+    path: 'mcp/authorize',
+    loadComponent: () => import('./components/mcp-authorization/mcp-authorization.component')
+      .then(module => module.McpAuthorizationComponent),
+    data: {
+      title: 'Authorize MCP connection',
+      robots: 'noindex, nofollow',
+    },
+    canMatch: [authGuard],
   },
   {
     path: 'share/event/:userID/:eventID',
@@ -477,6 +492,9 @@ const topLevelRoutes: Routes = [
           "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
           "Automatic Garmin to Suunto activity sync",
           "Automatic COROS to Suunto activity sync",
+          "Automatic Wahoo to Suunto activity sync",
+          "Activity and route delivery to Wahoo",
+          "Read-only MCP access for compatible clients",
           "Sync past activities to Suunto by date"
         ],
         "offers": {

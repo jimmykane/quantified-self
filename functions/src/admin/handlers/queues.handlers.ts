@@ -114,6 +114,7 @@ function mapEventReparseOutcome(
         supersededBySportsLibVersion: `${data.supersededBySportsLibVersion || ''}` || undefined,
         processingTier: `${data.processingTier || ''}`,
         heavyReason: `${data.heavyReason || ''}`,
+        failureReason: `${data.failureReason || ''}`,
         eventDurationMs: toFiniteNumberOrNull(data.eventDurationMs),
     };
 }
@@ -1278,12 +1279,14 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
             enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
             processedAt: admin.firestore.FieldValue.delete(),
             lastError: admin.firestore.FieldValue.delete(),
+            failureReason: admin.firestore.FieldValue.delete(),
             terminalFailure: admin.firestore.FieldValue.delete(),
             terminalFailureAt: admin.firestore.FieldValue.delete(),
         }, { merge: true });
 
         return {
             uid,
+            failureReason: `${jobData.failureReason || ''}` || undefined,
             terminalFailure: jobData.terminalFailure === true,
             terminalFailureAt: jobData.terminalFailureAt,
             recoveredStalePending: isStalePendingHeavy,
@@ -1296,6 +1299,7 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             lastError: errorMessage,
             enqueuedAt: admin.firestore.FieldValue.delete(),
+            failureReason: claimedRetry.failureReason || admin.firestore.FieldValue.delete(),
             terminalFailure: claimedRetry.terminalFailure ? true : admin.firestore.FieldValue.delete(),
             terminalFailureAt: claimedRetry.terminalFailure
                 ? (claimedRetry.terminalFailureAt || admin.firestore.FieldValue.serverTimestamp())

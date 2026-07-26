@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { gzipSync } from 'node:zlib';
-import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
+import {
+    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL,
+    SPORTS_LIB_REPARSE_TARGET_VERSION,
+} from './sports-lib-reparse.config';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 
 const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
@@ -212,8 +217,10 @@ import {
     shouldEventBeReparsed,
     writeReparseStatus,
     buildSportsLibReparseJobId,
+    getSportsLibReparseFailureReason,
     isSportsLibReparseDurationHeavy,
     isSportsLibReparseTerminalFailureMessage,
+    isSportsLibReparseTooHeavyForAutomaticReparse,
     resolveSportsLibReparseRoutingDecision,
     getEventAndActivitiesForReparse,
     reparseEventFromOriginalFiles,
@@ -305,8 +312,8 @@ describe('sports-lib-reparse.service', () => {
         );
     });
 
-    it('enables only the event reparse scanner by default', () => {
-        expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(true);
+    it('disables the event reparse scanner by default', () => {
+        expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled).toBe(false);
         expect(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist).toEqual([]);
     });
 
@@ -358,7 +365,7 @@ describe('sports-lib-reparse.service', () => {
 
     it('isSportsLibReparseTerminalFailureMessage should treat size and runtime budget failures as terminal', () => {
         expect(isSportsLibReparseTerminalFailureMessage(
-            'Strict original-file reparse failed. users/u1/events/e1/original.fit: Original file exceeds reparse size limit. Maximum raw source size is 20MB; users/u1/events/e1/original.fit is 20971521 bytes.',
+            `Strict original-file reparse failed. users/u1/events/e1/original.fit: Original file exceeds reparse size limit. Maximum raw source size is ${SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL}; users/u1/events/e1/original.fit is 31457281 bytes.`,
         )).toBe(true);
         expect(isSportsLibReparseTerminalFailureMessage(
             '[sports-lib-reparse] Reparse exceeded safe runtime budget before before_persist for user u1 event e1.',
@@ -366,6 +373,27 @@ describe('sports-lib-reparse.service', () => {
         expect(isSportsLibReparseTerminalFailureMessage(
             'Strict original-file reparse failed. users/u1/events/e1/original.fit: [sports-lib-reparse] Reparse exceeded safe runtime budget before download_source_file:users/u1/events/e1/original.fit for user u1 event e1.',
         )).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage(
+            '[sports-lib-reparse] Event duration 334800000ms is too heavy for automatic reparse; limit is 259200000ms.',
+        )).toBe(true);
+        expect(isSportsLibReparseTerminalFailureMessage(
+            '[sports-lib-reparse] Previous heavy reparse attempt did not complete before retry for event duration 118800000ms; marking as too heavy for automatic reparse.',
+        )).toBe(true);
+        expect(getSportsLibReparseFailureReason(
+            '[sports-lib-reparse] Reparse exceeded safe runtime budget before before_persist for user u1 event e1.',
+        )).toBe('TOO_HEAVY_FOR_AUTO_REPARSE');
+        expect(getSportsLibReparseFailureReason(
+            '[sports-lib-reparse] Event duration 334800000ms is too heavy for automatic reparse; limit is 259200000ms.',
+        )).toBe('TOO_HEAVY_FOR_AUTO_REPARSE');
+        expect(getSportsLibReparseFailureReason(
+            '[sports-lib-reparse] Previous heavy reparse attempt did not complete before retry for event duration 118800000ms; marking as too heavy for automatic reparse.',
+        )).toBe('TOO_HEAVY_FOR_AUTO_REPARSE');
+        expect(getSportsLibReparseFailureReason('Event e1 was not found for user u1')).toBe('REPARSE_FAILED');
+    });
+
+    it('isSportsLibReparseTooHeavyForAutomaticReparse should only mark extreme multi-day events', () => {
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS - 1)).toBe(false);
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS)).toBe(true);
     });
 
     it('classifySportsLibReparseVersionDisposition should distinguish rollout directions', () => {
@@ -468,11 +496,11 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('parseFromOriginalFilesStrict should fail before parsing raw source files above the upload limit', async () => {
-        hoisted.mockDownload.mockResolvedValue([Buffer.alloc((20 * 1024 * 1024) + 1)]);
+        hoisted.mockDownload.mockResolvedValue([Buffer.alloc(SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES + 1)]);
 
         await expect(parseFromOriginalFilesStrict([
             { path: 'users/u1/events/e1/original.fit' },
-        ])).rejects.toThrow('Original file exceeds reparse size limit. Maximum raw source size is 20MB');
+        ])).rejects.toThrow(`Original file exceeds reparse size limit. Maximum raw source size is ${SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL}`);
 
         expect(hoisted.fitImporter.getFromArrayBuffer).not.toHaveBeenCalled();
     });

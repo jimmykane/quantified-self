@@ -188,6 +188,28 @@ describe('UploadActivitiesComponent', () => {
     expect(button.classList.contains('full-width-action')).toBe(true);
   });
 
+  it('should manage drag state without inline event handlers', () => {
+    const dropzone = document.createElement('div');
+    const dragOverEvent = new Event('dragover', { cancelable: true }) as DragEvent;
+    const dragLeaveEvent = new Event('dragleave', { cancelable: true }) as DragEvent;
+    Object.defineProperty(dragOverEvent, 'currentTarget', { value: dropzone });
+    Object.defineProperty(dragLeaveEvent, 'currentTarget', { value: dropzone });
+    const dragOverStopPropagation = vi.spyOn(dragOverEvent, 'stopPropagation');
+    const dragLeaveStopPropagation = vi.spyOn(dragLeaveEvent, 'stopPropagation');
+
+    component.handleDragOver(dragOverEvent);
+
+    expect(dragOverEvent.defaultPrevented).toBe(true);
+    expect(dragOverStopPropagation).toHaveBeenCalledTimes(1);
+    expect(dropzone.classList.contains('drag')).toBe(true);
+
+    component.handleDragLeave(dragLeaveEvent);
+
+    expect(dragLeaveEvent.defaultPrevented).toBe(true);
+    expect(dragLeaveStopPropagation).toHaveBeenCalledTimes(1);
+    expect(dropzone.classList.contains('drag')).toBe(false);
+  });
+
   it('should skip upload count checks for pro users', async () => {
     component.user = { uid: 'u1' } as any;
     userServiceMock.hasProAccessSignal.mockReturnValueOnce(true);

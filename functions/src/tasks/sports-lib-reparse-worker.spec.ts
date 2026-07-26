@@ -8,7 +8,16 @@ const hoisted = vi.hoisted(() => {
         error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
     const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
         errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
-        || /^Event .* was not found for user .*$/.test(errorMessage));
+        || /^Event .* was not found for user .*$/.test(errorMessage)
+        || errorMessage.includes('Reparse exceeded safe runtime budget')
+        || errorMessage.includes('is too heavy for automatic reparse')
+        || errorMessage.includes('Previous heavy reparse attempt did not complete before retry'));
+    const getSportsLibReparseFailureReason = vi.fn((errorMessage: string) =>
+        errorMessage.includes('Reparse exceeded safe runtime budget')
+        || errorMessage.includes('is too heavy for automatic reparse')
+        || errorMessage.includes('Previous heavy reparse attempt did not complete before retry')
+            ? 'TOO_HEAVY_FOR_AUTO_REPARSE'
+            : 'REPARSE_FAILED');
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
     const resolveRuntimeSportsLibVersion = vi.fn(() => '9.0.99');
     const classifySportsLibReparseVersionDisposition = vi.fn((targetVersion: string, runtimeVersion: string) => {
@@ -18,6 +27,8 @@ const hoisted = vi.hoisted(() => {
     const getSportsLibReparseEventDurationMs = vi.fn(() => null);
     const isSportsLibReparseDurationHeavy = vi.fn((durationMs: number | null | undefined) =>
         typeof durationMs === 'number' && durationMs >= 24 * 60 * 60 * 1000);
+    const isSportsLibReparseTooHeavyForAutomaticReparse = vi.fn((durationMs: number | null | undefined) =>
+        typeof durationMs === 'number' && durationMs >= 72 * 60 * 60 * 1000);
     const enqueueSportsLibReparseHeavyTask = vi.fn().mockResolvedValue(true);
     const getUserDeletionGuardState = vi.fn().mockResolvedValue({
         userExists: true,
@@ -53,11 +64,13 @@ const hoisted = vi.hoisted(() => {
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
         isSportsLibReparseTerminalFailureMessage,
+        getSportsLibReparseFailureReason,
         resolveTargetSportsLibVersion,
         resolveRuntimeSportsLibVersion,
         classifySportsLibReparseVersionDisposition,
         getSportsLibReparseEventDurationMs,
         isSportsLibReparseDurationHeavy,
+        isSportsLibReparseTooHeavyForAutomaticReparse,
         enqueueSportsLibReparseHeavyTask,
         getUserDeletionGuardState,
         runtimeDefaults,
@@ -80,13 +93,22 @@ vi.mock('firebase-functions/v2/tasks', () => ({
 }));
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
+    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS: 72 * 60 * 60 * 1000,
+    SPORTS_LIB_REPARSE_FAILURE_REASONS: {
+        ReparseFailed: 'REPARSE_FAILED',
+        TooHeavyForAutoReparse: 'TOO_HEAVY_FOR_AUTO_REPARSE',
+    },
     SPORTS_LIB_REPARSE_HEAVY_REASONS: { Duration: 'duration_gte_24h', ManualAdmin: 'manual_admin' },
+    SPORTS_LIB_REPARSE_HEAVY_SAFE_RUNTIME_BUDGET_MS: 15 * 60 * 1000,
     SPORTS_LIB_REPARSE_JOBS_COLLECTION: 'sportsLibReparseJobs',
+    SPORTS_LIB_REPARSE_NORMAL_SAFE_RUNTIME_BUDGET_MS: 25 * 60 * 1000,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS: { Normal: 'normal', Heavy: 'heavy' },
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
     getSportsLibReparseEventDurationMs: hoisted.getSportsLibReparseEventDurationMs,
+    getSportsLibReparseFailureReason: hoisted.getSportsLibReparseFailureReason,
     isSportsLibReparseDurationHeavy: hoisted.isSportsLibReparseDurationHeavy,
+    isSportsLibReparseTooHeavyForAutomaticReparse: hoisted.isSportsLibReparseTooHeavyForAutomaticReparse,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
@@ -139,9 +161,20 @@ describe('processSportsLibReparseTask', () => {
         hoisted.getSportsLibReparseEventDurationMs.mockReturnValue(null);
         hoisted.isSportsLibReparseDurationHeavy.mockImplementation((durationMs: number | null | undefined) =>
             typeof durationMs === 'number' && durationMs >= 24 * 60 * 60 * 1000);
+        hoisted.isSportsLibReparseTooHeavyForAutomaticReparse.mockImplementation((durationMs: number | null | undefined) =>
+            typeof durationMs === 'number' && durationMs >= 72 * 60 * 60 * 1000);
         hoisted.isSportsLibReparseTerminalFailureMessage.mockImplementation((errorMessage: string) =>
             errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
-            || /^Event .* was not found for user .*$/.test(errorMessage));
+            || /^Event .* was not found for user .*$/.test(errorMessage)
+            || errorMessage.includes('Reparse exceeded safe runtime budget')
+            || errorMessage.includes('is too heavy for automatic reparse')
+            || errorMessage.includes('Previous heavy reparse attempt did not complete before retry'));
+        hoisted.getSportsLibReparseFailureReason.mockImplementation((errorMessage: string) =>
+            errorMessage.includes('Reparse exceeded safe runtime budget')
+            || errorMessage.includes('is too heavy for automatic reparse')
+            || errorMessage.includes('Previous heavy reparse attempt did not complete before retry')
+                ? 'TOO_HEAVY_FOR_AUTO_REPARSE'
+                : 'REPARSE_FAILED');
         hoisted.enqueueSportsLibReparseHeavyTask.mockResolvedValue(true);
         hoisted.getUserDeletionGuardState.mockResolvedValue({
             userExists: true,
@@ -175,10 +208,10 @@ describe('processSportsLibReparseTask', () => {
     it('should register heavy worker with capped heavy runtime limits and retry config', () => {
         expect(hoisted.capturedTaskOptions[1]).toMatchObject({
             memory: '8GiB',
-            cpu: 2,
+            cpu: 4,
             concurrency: 1,
             maxInstances: 1,
-            timeoutSeconds: 1800,
+            timeoutSeconds: 960,
             retryConfig: expect.objectContaining({
                 maxAttempts: 10,
             }),
@@ -707,6 +740,80 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
             status: 'processing',
             processingTier: 'heavy',
+        }), { merge: true });
+    });
+
+    it('should mark extreme-duration heavy jobs too heavy without parsing', async () => {
+        const eventDurationMs = 93 * 60 * 60 * 1000;
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                eventPath: 'users/u1/events/e1',
+                status: 'pending',
+                processingTier: 'heavy',
+                heavyReason: 'duration_gte_24h',
+                attemptCount: 3,
+                targetSportsLibVersion: '9.0.99',
+                eventDurationMs,
+            }),
+        });
+
+        await (processSportsLibReparseHeavyTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            reason: 'TOO_HEAVY_FOR_AUTO_REPARSE',
+            targetSportsLibVersion: '9.0.99',
+            lastError: expect.stringContaining('is too heavy for automatic reparse'),
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
+        }));
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'failed',
+            lastError: expect.stringContaining('is too heavy for automatic reparse'),
+            failureReason: 'TOO_HEAVY_FOR_AUTO_REPARSE',
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
+        }), { merge: true });
+    });
+
+    it('should mark retried heavy processing jobs too heavy without parsing again', async () => {
+        const eventDurationMs = 33 * 60 * 60 * 1000;
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                eventPath: 'users/u1/events/e1',
+                status: 'processing',
+                processingTier: 'heavy',
+                heavyReason: 'duration_gte_24h',
+                attemptCount: 1,
+                targetSportsLibVersion: '9.0.99',
+                eventDurationMs,
+            }),
+        });
+
+        await (processSportsLibReparseHeavyTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            reason: 'TOO_HEAVY_FOR_AUTO_REPARSE',
+            targetSportsLibVersion: '9.0.99',
+            lastError: expect.stringContaining('Previous heavy reparse attempt did not complete before retry'),
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
+        }));
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'failed',
+            lastError: expect.stringContaining('Previous heavy reparse attempt did not complete before retry'),
+            failureReason: 'TOO_HEAVY_FOR_AUTO_REPARSE',
+            terminalFailure: true,
+            terminalFailureAt: 'SERVER_TIMESTAMP',
         }), { merge: true });
     });
 

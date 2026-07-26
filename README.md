@@ -174,6 +174,10 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `*Queue` | 7 days | `expireAt` | Temporary queue items |
 | `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |
 | `userDeletionTombstones` | Account-deletion retention window | `expireAt` | Deletion guards with TTL fallback cleanup |
+| `mcpOAuthAuthorizationRequests` / `mcpOAuthAuthorizationCodes` | 10 / 5 minutes | `expireAt` | MCP OAuth consent and single-use codes |
+| `mcpOAuthAccessTokens` / `mcpOAuthRefreshTokens` | 1 hour / 30 days | `expireAt` | Hashed MCP bearer and refresh credentials |
+| `mcpOAuthRateLimits` | About 5 minutes | `expireAt` | Distributed MCP request counters |
+| `users/*/mcpConnections` | 5 minutes while pending | `expireAt` | Abandoned MCP approvals; successful exchanges remove the TTL field |
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
@@ -182,6 +186,7 @@ These policies are infrastructure configuration; starting local emulators does n
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
+- [Read-only MCP server](docs/mcp-server.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)
 - [Email lifecycle](docs/email-lifecycle.md)

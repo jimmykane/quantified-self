@@ -75,4 +75,29 @@ describe('PublicSeoPageComponent', () => {
 
     guideFixture.destroy();
   });
+
+  it('renders the public MCP capabilities, boundaries, and setup links', () => {
+    routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.mcpServer;
+
+    const mcpFixture = TestBed.createComponent(PublicSeoPageComponent);
+    mcpFixture.detectChanges();
+
+    const text = mcpFixture.nativeElement.textContent as string;
+    const links = Array.from(mcpFixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
+    const hrefs = links.map(link => link.getAttribute('href') ?? '');
+
+    expect(text).toContain('Connect ChatGPT to your training data with a read-only MCP server');
+    expect(text).toContain('Activity and Training metrics');
+    expect(text).toContain('Sleep sessions and summaries');
+    expect(text).toContain('Saved routes and nearby search');
+    expect(text).toContain('No settings or data writes');
+    expect(text).toContain('ChatGPT is an external client with its own privacy and retention practices');
+    expect(mcpFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(8);
+    expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(5);
+    expect(hrefs).toContain('/login');
+    expect(hrefs).toContain('/help#data-and-privacy');
+    expect(hrefs).toContain('/policies#mcp-clients');
+
+    mcpFixture.destroy();
+  });
 });

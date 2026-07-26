@@ -52,8 +52,8 @@ describe('downloadWahooFITFile', () => {
   });
 
   it('rejects oversized and malformed payloads', async () => {
-    fetchMock.mockResolvedValueOnce(response(200, fitPayload(), { 'content-length': `${20 * 1024 * 1024 + 1}` }));
-    await expect(downloadWahooFITFile('https://cdn.wahooligan.com/large.fit')).rejects.toThrow('20 MB');
+    fetchMock.mockResolvedValueOnce(response(200, fitPayload(), { 'content-length': `${30 * 1024 * 1024 + 1}` }));
+    await expect(downloadWahooFITFile('https://cdn.wahooligan.com/large.fit')).rejects.toThrow('30MB');
     fetchMock.mockResolvedValueOnce(response(200, Buffer.from('not-fit')));
     await expect(downloadWahooFITFile('https://cdn.wahooligan.com/bad.fit')).rejects.toThrow('valid FIT');
   });

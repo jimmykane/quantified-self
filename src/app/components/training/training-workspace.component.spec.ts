@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -288,16 +288,8 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('14-day trend');
       expect(panel.textContent).toContain('14/14 days scored');
       expect(panel.textContent).toContain('browser does not load workout history');
-      expect(panel.querySelectorAll('.training-readiness-trend-point')).toHaveLength(14);
-      expect(panel.querySelectorAll('.training-readiness-trend-tooltip-trigger')).toHaveLength(14);
-      expect(panel.querySelectorAll('.training-readiness-trend-axis-label')).toHaveLength(4);
-      const readinessPoint = panel.querySelector('.training-readiness-trend-point');
-      const readinessTooltipTrigger = panel.querySelector('.training-readiness-trend-tooltip-trigger');
-      expect(readinessPoint?.getAttribute('r')).toBe('3');
-      expect(readinessPoint?.getAttribute('aria-hidden')).toBe('true');
-      expect(readinessTooltipTrigger?.getAttribute('aria-label')).toContain('/100');
-      const readinessTooltip = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip);
-      expect(readinessTooltip.message).toContain('/100');
+      expect(panel.querySelector('app-training-readiness-trend-chart')).not.toBeNull();
+      expect(panel.querySelector('svg.training-readiness-trend')).toBeNull();
       expect(fixture.nativeElement.querySelector('.training-recovery-panel')).toBeNull();
       expect(fixture.nativeElement.querySelectorAll('.training-current-context-grid > article')).toHaveLength(1);
       fixture.destroy();
@@ -421,7 +413,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('requests only projection-sensitive readiness inputs at the next UTC day', async () => {
+  it('requests readiness projections and the body-weight trend at the next UTC day', async () => {
     const nowMs = Date.UTC(2026, 6, 16, 23, 59, 59, 500);
     vi.useFakeTimers();
     vi.setSystemTime(nowMs);
@@ -463,6 +455,7 @@ describe('TrainingWorkspaceComponent', () => {
             'form_plus_7d',
             'freshness_forecast',
             'training_readiness',
+            'body_weight_trend',
           ],
         },
       );
@@ -597,6 +590,9 @@ describe('TrainingWorkspaceComponent', () => {
           criticalPowerNormalizedRmse: 0.02,
           criticalPowerSpreadRatio: 0.01,
           wPrimeSpreadRatio: 0.04,
+          wPrimeCandidateCount: wPrimeUnstable ? 3 : 0,
+          wPrimeCandidateMinimumJoules: wPrimeUnstable ? 10_017 : null,
+          wPrimeCandidateMaximumJoules: wPrimeUnstable ? 14_410 : null,
           criticalPowerLeaveOneOutSpreadRatio: 0.02,
           wPrimeLeaveOneOutSpreadRatio: 0.08,
           criticalPowerSourceRemovalFitCount: 2,
@@ -694,6 +690,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('260 W');
     expect(fixture.nativeElement.textContent).toContain('Critical power is usable');
     expect(fixture.nativeElement.textContent).toContain('W′ changes too much');
+    expect(fixture.nativeElement.textContent).toContain('What this means');
+    expect(fixture.nativeElement.textContent).toContain('from 10.0 to 14.4 kJ');
+    expect(fixture.nativeElement.textContent).toContain('Pmax is intentionally unavailable');
     expect(fixture.nativeElement.textContent).toContain('Unavailable');
     expect(fixture.nativeElement.textContent).not.toContain('All sports');
 

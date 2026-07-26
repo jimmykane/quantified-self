@@ -30,9 +30,9 @@ describe('sports-lib reparse task dispatch', () => {
     });
 
     it.each([
-        [enqueueSportsLibReparseTask, 'processSportsLibReparseTask', 'reparse-job-abc-123'],
-        [enqueueSportsLibRouteReparseTask, 'processSportsLibRouteReparseTask', 'route-reparse-job-abc-123'],
-    ])('uses direct worker payloads and dispatch deadlines', async (enqueue, functionName, taskId) => {
+        [enqueueSportsLibReparseTask, 'processSportsLibReparseTask', 'reparse-job-abc-123', 1800],
+        [enqueueSportsLibRouteReparseTask, 'processSportsLibRouteReparseTask', 'route-reparse-job-abc-123', 1800],
+    ])('uses direct worker payloads and matching dispatch deadlines', async (enqueue, functionName, taskId, dispatchDeadlineSeconds) => {
         await expect(enqueue('job-abc-123')).resolves.toBe(true);
 
         expect(hoisted.mockFunctions.taskQueue).toHaveBeenCalledWith(
@@ -40,7 +40,7 @@ describe('sports-lib reparse task dispatch', () => {
         );
         expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
             { jobId: 'job-abc-123' },
-            { id: taskId, dispatchDeadlineSeconds: 1800, scheduleDelaySeconds: 1 },
+            { id: taskId, dispatchDeadlineSeconds, scheduleDelaySeconds: 1 },
         );
     });
 
@@ -56,7 +56,7 @@ describe('sports-lib reparse task dispatch', () => {
             { jobId: 'job-abc-123' },
             {
                 id: 'reparse-heavy-job-abc-123-manual-1700000000000-abc',
-                dispatchDeadlineSeconds: 1800,
+                dispatchDeadlineSeconds: 960,
                 scheduleDelaySeconds: 1,
             },
         );

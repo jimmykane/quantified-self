@@ -27,6 +27,7 @@ import {
   MAX_ACTIVITY_DECOMPRESSED_BYTES,
   MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
   MAX_ACTIVITY_UPLOAD_BYTES,
+  MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
@@ -399,7 +400,7 @@ export const uploadActivity = onRequest({
     }
 
     if (rawBody.length > MAX_ACTIVITY_UPLOAD_BYTES) {
-      throw new HttpStatusError(400, `File is too large (${(rawBody.length / 1024 / 1024).toFixed(1)}MB). Maximum size is 20MB.`);
+      throw new HttpStatusError(400, `File is too large (${(rawBody.length / 1024 / 1024).toFixed(1)}MB). Maximum size is ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL}.`);
     }
 
     const payloadForParsing = maybeDecompressPayloadForParsing(rawBody, resolvedExtension);

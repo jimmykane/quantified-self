@@ -61,6 +61,7 @@ describe('serverRoutes', () => {
       'features',
       'features/workout-data-comparison',
       'features/training-analysis',
+      'features/mcp-server',
       'features/ai-insights',
       'features/workout-file-comparison',
       'features/fit-gpx-tcx-file-analyzer',
@@ -84,6 +85,7 @@ describe('serverRoutes', () => {
         .map(route => route.path)
     );
     expect(prerenderedPaths.has('')).toBe(true);
+    expect(prerenderedPaths.has('mcp/authorize')).toBe(false);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);
@@ -100,6 +102,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('features')).toBe(true);
     expect(prerenderedPaths.has('features/workout-data-comparison')).toBe(true);
     expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
+    expect(prerenderedPaths.has('features/mcp-server')).toBe(true);
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
     expect(prerenderedPaths.has('features/workout-file-comparison')).toBe(true);
     expect(prerenderedPaths.has('features/fit-gpx-tcx-file-analyzer')).toBe(true);
@@ -125,6 +128,7 @@ describe('serverRoutes', () => {
       status: 404,
     });
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'pricing')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'tools/compare/saved')?.status).toBeUndefined();

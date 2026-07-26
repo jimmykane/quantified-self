@@ -22,6 +22,7 @@ const hoisted = vi.hoisted(() => {
     const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
         errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
         || /^Event .* was not found for user .*$/.test(errorMessage));
+    const getSportsLibReparseFailureReason = vi.fn(() => 'REPARSE_FAILED');
     const getUserDeletionGuardState = vi.fn().mockResolvedValue({
         userExists: true,
         deletionInProgress: false,
@@ -198,6 +199,7 @@ const hoisted = vi.hoisted(() => {
         writeReparseStatus,
         isReparsePersistenceSkippedForUserDeletionError,
         isSportsLibReparseTerminalFailureMessage,
+        getSportsLibReparseFailureReason,
         getUserDeletionGuardState,
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
@@ -233,6 +235,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     writeReparseStatus: hoisted.writeReparseStatus,
     isReparsePersistenceSkippedForUserDeletionError: hoisted.isReparsePersistenceSkippedForUserDeletionError,
     isSportsLibReparseTerminalFailureMessage: hoisted.isSportsLibReparseTerminalFailureMessage,
+    getSportsLibReparseFailureReason: hoisted.getSportsLibReparseFailureReason,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
 }));
 
@@ -1008,6 +1011,7 @@ describe('reparse-sports-lib-events script', () => {
             terminalFailure: true,
             terminalFailureAt: 'SERVER_TIMESTAMP',
         }));
+        expect(hoisted.getSportsLibReparseFailureReason).toHaveBeenCalledWith('Event e1 was not found for user u1');
     });
 
     it('should process candidates without entitlement filtering', async () => {

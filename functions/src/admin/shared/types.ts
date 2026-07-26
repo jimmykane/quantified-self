@@ -151,6 +151,7 @@ export interface SportsLibReparseJobDocDataBase {
     status?: string;
     attemptCount?: number;
     lastError?: string;
+    failureReason?: string;
     terminalFailure?: boolean;
     terminalFailureAt?: unknown;
     updatedAt?: unknown;

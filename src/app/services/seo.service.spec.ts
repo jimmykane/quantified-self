@@ -135,6 +135,8 @@ describe('SeoService', () => {
         expect(mockScript.textContent).toContain('Garmin to Suunto activity sync');
         expect(mockScript.textContent).toContain('COROS to Suunto activity sync');
         expect(mockScript.textContent).toContain('Wahoo to Suunto activity sync');
+        expect(mockScript.textContent).toContain('Activity and route delivery to Wahoo');
+        expect(mockScript.textContent).toContain('Read-only MCP access for compatible clients');
         expect(mockScript.textContent).toContain('Sync past activities to Suunto by date');
     });
 

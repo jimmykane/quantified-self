@@ -16,6 +16,7 @@ export interface EventStatAggregationRequest {
   valueType: ChartDataValueTypes;
   categoryType: ChartDataCategoryTypes;
   requestedTimeInterval?: TimeIntervals;
+  timeZone?: string;
   preferences?: EventStatAggregationPreferences;
 }
 

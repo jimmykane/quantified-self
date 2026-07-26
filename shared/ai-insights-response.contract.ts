@@ -23,6 +23,11 @@ import {
   AI_INSIGHTS_ANOMALY_MAX_CALLOUTS,
 } from './ai-insights-anomaly.constants';
 
+// Browser object-schema initialization otherwise probes JavaScript string evaluation.
+if (typeof window !== 'undefined') {
+  z.config({ jitless: true });
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 export type AiInsightsResponseValidationFailure = {

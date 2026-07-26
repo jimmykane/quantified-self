@@ -2284,6 +2284,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingExplanation: null,
       trainingDurability: this.derivedTrainingDurabilityPayload,
       trainingReadiness: null,
+      bodyWeightTrend: null,
       trainingSwimPerformance: null,
       powerCurve: this.derivedPowerCurvePayload,
       formStatus: this.derivedFormStatus,
@@ -2306,6 +2307,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       trainingExplanationStatus: 'missing',
       trainingDurabilityStatus: this.derivedTrainingDurabilityStatus,
       trainingReadinessStatus: 'missing',
+      bodyWeightTrendStatus: 'missing',
       trainingSwimPerformanceStatus: 'missing',
       powerCurveStatus: this.derivedPowerCurveStatus,
     }, { force: true, metricKinds: this.resolveDashboardDerivedMetricKinds() });

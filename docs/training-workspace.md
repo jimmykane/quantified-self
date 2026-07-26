@@ -6,8 +6,8 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `14`
-- `@sports-alliance/sports-lib`: `17.8.0`
+- Quantified Self derived-metric schema: `15`
+- `@sports-alliance/sports-lib`: `18.0.0`
 - Training disciplines: Running, Cycling, and Swimming
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -152,6 +152,8 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Sport visibility dialog: `src/app/components/training/training-sport-visibility-dialog.component.*`
 - Swimming chart: `src/app/components/training/training-swim-performance-chart.component.*`
 - Durability trajectory: `src/app/components/training/training-durability-trajectory-chart.component.*`
+- Readiness history chart: `src/app/components/training/training-readiness-trend-chart.component.*`
+- Body-weight trend chart: `src/app/components/training/training-body-weight-trend-chart.component.*`
 - Snapshot service: `src/app/services/dashboard-derived-metrics.service.ts`
 - Shared payload contracts: `shared/derived-metrics.ts`
 - Shared discipline registry: `shared/training-disciplines.ts`
@@ -195,7 +197,7 @@ Frontend transformation responsibilities are intentionally split into focused he
 | `training-power-profile.helper.ts` | 90-day versus one-year power retention |
 | `training-card-guidance.helper.ts` | Plain-language outcomes, evidence quality, and evidence-gated next steps for build, load, and intensity cards |
 | `dashboard-training-insights.helper.ts` | Live readiness adapter and bounded sleep window |
-| `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend geometry |
+| `training-readiness.helper.ts` | Training-specific readiness wording, driver freshness, implication, and trend data |
 | `training-recovery-estimate.helper.ts` | Imported recovery countdown wording |
 | `training-sport-visibility.helper.ts` | Automatic/fixed sport resolution and compact labels |
 | `training-swim-performance.helper.ts` | Swim pace units plus pool/open-water conclusions and evidence-gated chart model |
@@ -346,6 +348,7 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
 | `training_build_comparison` | Best Build and sleep context | Activities, settings, parent events, sleep |
 | `training_readiness` | Readiness 14-day trend | Form snapshot seed plus bounded sleep sessions |
+| `body_weight_trend` | Neutral body-weight context: latest value, 7/28-day medians, and sparse 28-day trend | Persisted positive Sports-lib `Weight` values from form documents |
 | `training_swim_performance` | Pool/open-water pace and contextual SWOLF | Activities plus active swim lengths |
 
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
@@ -356,6 +359,10 @@ kinds are excluded from the default Dashboard subscription and freshness scope. 
 `training_durability` to that scope only while a matching explicitly configured tile exists.
 `training_power_systems` has no Dashboard tile and is never added to normal Dashboard subscriptions. Opening a normal
 Dashboard therefore does not create a hidden Training dependency or freshness probe for those kinds.
+
+`body_weight_trend` is also Training-only. It is calendar-sensitive because its current 7- and 28-day UTC windows
+advance at midnight, but it is not projection-sensitive: it reads only persisted Weight values and does not reuse the
+Form projection seed.
 
 ### Shared Dashboard and Training insight reuse
 
@@ -399,6 +406,13 @@ Training state and Readiness are fixed inside the optional Today summary:
   is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
   sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
   cannot select different latest evidence because query order changed.
+- **Body-weight trend** reads only positive persisted Sports-lib `Weight` values, in canonical kilograms. Multiple values
+  on the same UTC day reduce to a daily median; the snapshot retains the latest 28 UTC days with missing days as null
+  points, the latest recorded value, and current 7- and 28-day medians. Its change values compare each current window
+  to the immediately preceding equal-length window and are withheld unless each side has at least three recorded days.
+  The frontend formats values with the user's weight-unit setting and displays the trend with ECharts without bridging
+  chart gaps. This is neutral context,
+  not a health assessment, training prescription, or input to Readiness, Form, or the TSS-only Training state.
 
 Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
 useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
@@ -613,14 +627,14 @@ baseline evidence counts. The latest complete series may remain visible while it
 refresh. The live current calculation replaces today's plotted score only when the snapshot's `asOfDayMs` is the current
 UTC day, so newly imported sleep can update the card without waiting for a historical snapshot and a stale series cannot
 mislabel a new score as yesterday's. An open Training route schedules a narrow UTC-day rollover refresh for `form_now`,
-`ramp_rate`, `form_plus_7d`, `freshness_forecast`, and `training_readiness`. Those projection-sensitive kinds can reuse a compatible Form seed and do not
-require an event or activity scan.
+`ramp_rate`, `form_plus_7d`, `freshness_forecast`, `training_readiness`, and `body_weight_trend`. The first five
+projection-sensitive kinds can reuse a compatible Form seed and do not require an event or activity scan;
+`body_weight_trend` reads its narrow persisted Weight source so its UTC windows stay current.
 
-The compact chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes remain
-interpretable across days. Each scored chart mark has a generous, keyboard-focusable HTML hit target and an Angular
-Material hover/focus tooltip with its UTC date, score, status, confidence, available-signal count, and
-recovery-baseline-night count. Missing scores have no point and therefore remain visible as gaps rather than being
-interpolated.
+The compact ECharts chart uses a fixed 0–100 score axis, with the 75 and 55 Readiness thresholds marked so changes
+remain interpretable across days. Its shared app-standard hover or tap tooltip reports the UTC date, score,
+status, confidence, available-signal count, and recovery-baseline-night count. Missing scores remain null series
+values, so ECharts leaves visible gaps rather than interpolating them.
 
 #### Recovery remaining
 
@@ -880,7 +894,8 @@ The bounded payload persists:
 - Sports-lib source fingerprint;
 - usable-curve count, history span, malformed and isolated-spike rejected-point counts, sustained/short anchor coverage,
   the distinct activities that actually supplied each component's retained envelope anchors, fit error,
-  candidate-method spread, leave-one-anchor-out stability, and whole-workout source-removal diagnostics;
+  candidate-method spread, and—only when W′ is withheld for method disagreement—the count and minimum/maximum range
+  of the three candidate W′ values; plus leave-one-anchor-out stability and whole-workout source-removal diagnostics;
 - compact dated component statuses and values for the 12-week sparse history; and
 - current-window candidate, usable-curve, and excluded-evidence counts.
 
@@ -904,9 +919,11 @@ gate.
 
 CP and W′ stability are independent after the shared fit-error gate passes. Stable CP remains visible in a `partial`
 result when W′ method or anchor sensitivity exceeds its limit; W′ is `unstable`, Pmax is unavailable because it depends
-on W′, and the complete model remains absent. A top-level `unstable` result now identifies unstable CP. The UI reports
-method spread, anchor-removal sensitivity, and whole-workout removal sensitivity separately so the reason is not
-misidentified.
+on W′, and the complete model remains absent. A top-level `unstable` result now identifies unstable CP. For an unstable
+W′ result, the UI adds a plain-language explanation: whether all retained sustained anchors came from one workout,
+whether removing it leaves no CP/W′ refit, the competing W′ candidate range, and why Pmax remains withheld. Candidate
+values are competing estimates, not a replacement W′ result. The UI also reports method spread, anchor-removal
+sensitivity, and whole-workout removal sensitivity separately so the reason is not misidentified.
 
 The UI shows an exact activity-type selector only when multiple types are available, current CP/W′/Pmax cards with
 plain-language modeled-parameter descriptions, status/reason copy, evidence coverage, contributor-aware diagnostics grouped as
@@ -918,8 +935,8 @@ capacity evidence, not TSS, FTP, fitness, fatigue, Readiness, or a workout presc
 
 #### Parser and continuous-stream boundary
 
-Sports-lib 17.7.0 does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
-Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 14 rebuilds existing
+The pinned Sports-lib parser does not generate CP, W′, Pmax, or three-dimensional strain while parsing one activity. Quantified
+Self uses the already persisted mean-max Power Curve summary for rolling capacity, so schema 15 rebuilds existing
 snapshots without source-file reprocessing or a data migration. Historical `Three Dimensional Strain Evidence` stats
 remain deserializable for compatibility, but event Performance does not expose the retired strain tab.
 
@@ -1228,9 +1245,9 @@ UI principles:
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
 - Responsive icon-only Training actions hide only their projected text label and reset Material's icon-and-text margins,
   keeping the visible icon centered without suppressing Material focus, ripple, or touch-target elements.
-- Readiness history uses its parent `qs-glass-card-panel` surface and the app's divider token rather than a nested neutral
-  container. On desktop, its 14 daily marks and connecting line remain deliberately compact so the recent trend supports
-  the current signal instead of overpowering it.
+- Readiness history and body-weight trend use compact ECharts canvases inside their parent card surfaces rather than
+  nested neutral containers. Their null observations remain visible gaps, and their shared safe tooltip surface keeps
+  the detail readable without being cropped by the card.
 - Durability evidence and its trajectory inherit their parent Training card surface. Borders and dividers preserve the
   hierarchy without stacking gray inset surfaces inside the card.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
@@ -1327,6 +1344,25 @@ skiing, and multisport aggregates need different fatigue models rather than this
 
 Do not read settings or sleep unconditionally in the worker. Source requirements are part of the performance contract.
 
+### Exposing Training snapshots through MCP
+
+The read-only MCP server does not recalculate Training metrics and does not scan activity history for a derived tool call.
+`get_training_metric` accepts only a kind registered in `DERIVED_METRIC_KINDS` and reads the normal
+`users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready`, current-schema payload plus schema, update,
+and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being
+interpreted as zero.
+
+There is deliberately no separate MCP-derived-kind registry. A newly registered kind is discoverable, but its payload must
+still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts`. The server recursively removes event/activity
+IDs, names, and labels, including identities nested under event- or activity-named parents. It also removes source
+fingerprints and imported device/provider provenance (`sourceKey` and `previousSourceKey`). If a new payload introduces
+another identity- or provenance-bearing field, extend the redaction contract before release rather than relying on client
+behavior.
+
+Use `.agent/skills/mcp-metric-surface/SKILL.md` for every derived-kind change. Add a focused MCP test that covers ready-state
+handling, schema metadata, and the payload's positive and negative disclosure contract. The transport, scopes, query
+bounds, sleep projection, and Sports Lib event-stat discovery are documented in `docs/mcp-server.md`.
+
 ## Testing and Verification
 
 ### Sports-lib
@@ -1380,6 +1416,8 @@ training-readiness.helper.spec.ts
 training-recovery-estimate.helper.spec.ts
 training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
+training-readiness-trend-chart.component.spec.ts
+training-body-weight-trend-chart.component.spec.ts
 event-json-sanitizer.spec.ts
 ```
 
@@ -1471,7 +1509,7 @@ When a Training change depends on a new sports-lib version:
 6. Deploy the frontend.
 7. Verify a real account with ready, partial, sparse, and missing-data states.
 
-Existing snapshots rebuild lazily after a schema bump. Schema 14 is sufficient for rolling power-system capacity when
+Existing snapshots rebuild lazily after a schema bump. Schema 15 is sufficient for rolling power-system capacity when
 persisted curves already exist. A new parser-owned activity stat may additionally require a reparse; changing only the
 derived schema cannot create a missing activity stat or reconstruct a missing continuous stream.
 
@@ -1491,6 +1529,7 @@ Before merging a Training change, confirm:
 - [ ] Settings writes are authenticated, App-Check protected, deletion guarded, normalized, and branch-scoped.
 - [ ] Source dependencies are fetched only for metric kinds that need them.
 - [ ] Snapshot schema and frontend normalizers agree.
+- [ ] New or changed derived kinds have an MCP ready-state, identity-redaction, and device/provider-provenance contract test.
 - [ ] Loading, failed, empty, updating, invalid, and ready states are readable.
 - [ ] Metric delta colors follow metric semantics.
 - [ ] Help content and this document are current.

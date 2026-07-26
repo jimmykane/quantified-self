@@ -371,7 +371,7 @@ describe('getQueueStats Cloud Function', () => {
             },
         });
         expect(result.reparse).toEqual(expect.objectContaining({
-            automaticScanEnabled: true,
+            automaticScanEnabled: false,
             queuePending: 10,
             targetSportsLibVersion: SPORTS_LIB_REPARSE_TARGET_VERSION,
             jobs: {

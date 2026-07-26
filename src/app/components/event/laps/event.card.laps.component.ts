@@ -1,18 +1,64 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  Input,
+  OnChanges,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { MatSelectionListChange } from '@angular/material/list';
 import { MatTableDataSource } from '@angular/material/table';
-import { ActivityInterface, EventInterface, LapInterface } from '@sports-alliance/sports-lib';
-import { DataTableAbstractDirective, StatRowElement } from '../../data-table/data-table-abstract.directive';
-import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { LapTypes } from '@sports-alliance/sports-lib';
-import { DataHeartRateMax } from '@sports-alliance/sports-lib';
-import { isNumber } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  EventInterface,
+  LapTypes,
+  UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
+import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { isEventLapTypeAllowed } from '../../../helpers/event-lap-type.helper';
+import {
+  EventLapMetricOptionGroup,
+  formatEventLapMetric,
+  getAverageEventLapMetrics,
+  getEventLapMetricOptionGroups,
+  getEventLapSportFamilyPresentation,
+  getEventLapMetricStat,
+  getSelectedEventLapMetricTypes,
+  normalizeEventDetailsSettings,
+  resolveEventLapSportFamily,
+} from '../../../helpers/event-lap-table-columns.helper';
+import {
+  AppEventDetailsSettingsInterface,
+  AppEventLapSportFamily,
+} from '../../../models/app-user.interface';
 
-interface LapTableRow extends StatRowElement {
-  '#': number;
-  Type: LapTypes;
-  'Maximum Heart Rate': string;
+interface LapTableRow extends Record<string, string | number | boolean> {
+  '#': string | number;
+  isLapAverage?: boolean;
+}
+
+interface LapColumnMenuGroup {
+  family: AppEventLapSportFamily;
+  label: string;
+  icon: string;
+  selectedMetricTypes: string[];
+  metricGroups: EventLapMetricOptionGroup[];
+}
+
+interface LapTableView {
+  key: string;
+  activity: ActivityInterface;
+  dataSource: MatTableDataSource<LapTableRow>;
+  columns: string[];
+}
+
+interface LapTableGroup {
+  lapType: LapTypes;
+  tables: LapTableView[];
 }
 
 @Component({
@@ -28,17 +74,30 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings: UserUnitSettingsInterface;
+  @Input() canCustomize = false;
 
-  public availableLapTypes: LapTypes[] = []
+  public availableLapTypes: LapTypes[] = [];
 
   public dataSourcesMap = new Map<string, MatTableDataSource<LapTableRow>>();
   public columnsMap = new Map<string, string[]>();
+  public lapTableGroups: LapTableGroup[] = [];
+  public lapColumnMenuGroups: LapColumnMenuGroup[] = [];
+  public hasMultipleEventActivities = false;
+  public savingLapColumnSportFamilies = signal(new Set<AppEventLapSportFamily>());
+  private eventDetailsSettings: AppEventDetailsSettingsInterface = normalizeEventDetailsSettings(null);
+  private readonly userSettingsQuery = inject(AppUserSettingsQueryService);
+  private readonly snackBar = inject(MatSnackBar);
 
-  constructor(public eventColorService: AppEventColorService, protected changeDetectorRef: ChangeDetectorRef) {
+  constructor(protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
+    effect(() => {
+      this.eventDetailsSettings = this.userSettingsQuery.eventDetailsSettings();
+      this.updateData();
+    });
   }
 
   ngOnChanges() {
+    this.hasMultipleEventActivities = (this.event?.getActivities?.() || []).length > 1;
     this.updateAvailableLapTypes();
     this.updateData();
   }
@@ -47,8 +106,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.availableLapTypes = [];
     if (this.selectedActivities) {
       this.selectedActivities.forEach(activity => {
+        const laps = activity.getLaps?.() || [];
         this.availableLapTypes = [...new Set(this.availableLapTypes.concat(
-          activity.getLaps().map(lap => lap.type)
+          laps.map(lap => lap.type)
             .filter(lapType => this.shouldShowLapType(lapType))
         ))];
       });
@@ -62,8 +122,11 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   private updateData() {
     this.dataSourcesMap.clear();
     this.columnsMap.clear();
+    this.lapTableGroups = [];
 
     if (!this.selectedActivities) {
+      this.lapColumnMenuGroups = [];
+      this.changeDetectorRef.markForCheck();
       return;
     }
 
@@ -78,12 +141,28 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           lapTypesWithData.add(lapType);
           const dataSource = new MatTableDataSource(data);
           this.dataSourcesMap.set(key, dataSource);
-          this.columnsMap.set(key, this.calculateColumns(dataSource));
+          this.columnsMap.set(key, this.calculateColumns(dataSource, activity.type));
         }
       });
     });
 
     this.availableLapTypes = this.availableLapTypes.filter(lapType => lapTypesWithData.has(lapType));
+    this.lapTableGroups = this.availableLapTypes.map((lapType) => ({
+      lapType,
+      tables: this.selectedActivities
+        .map((activity): LapTableView | null => {
+          const key = this.getKey(activity, lapType);
+          const dataSource = this.dataSourcesMap.get(key);
+          const columns = this.columnsMap.get(key);
+          if (!dataSource || !columns) {
+            return null;
+          }
+          return { key, activity, dataSource, columns };
+        })
+        .filter((table): table is LapTableView => !!table),
+    })).filter((group) => group.tables.length > 0);
+    this.updateLapColumnMenuGroups();
+    this.changeDetectorRef.markForCheck();
   }
 
   private getKey(activity: ActivityInterface, lapType: LapTypes): string {
@@ -91,47 +170,50 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   private generateLapData(activity: ActivityInterface, lapType: LapTypes): LapTableRow[] {
-    return activity.getLaps().filter(lap => lap.type === lapType).reduce<LapTableRow[]>((lapDataArray, lap, index) => {
-      const statRowElement = this.getStatsRowElement(lap.getStatsAsArray(), [activity.type], this.unitSettings);
-      const maxHR = lap.getStat(DataHeartRateMax.type);
+    const laps = (activity.getLaps?.() || []).filter(lap => lap.type === lapType);
+    const metricTypes = this.getColumnsToDisplay(activity.type).filter((column) => column !== '#');
+    const lapRows = laps.reduce<LapTableRow[]>((lapDataArray, lap, index) => {
       const row: LapTableRow = {
-        ...statRowElement,
         '#': index + 1,
-        Type: lap.type,
-        Duration: this.getLapDurationDisplayValue(lap),
-        'Maximum Heart Rate': maxHR ? `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '',
       };
+
+      metricTypes.forEach((metricType) => {
+        row[metricType] = formatEventLapMetric(
+          getEventLapMetricStat(lap, metricType),
+          metricType,
+          this.unitSettings,
+          activity.type,
+        );
+      });
 
       lapDataArray.push(row);
       return lapDataArray;
     }, []);
-  }
 
-  private getLapDurationDisplayValue(lap: LapInterface): string {
-    const duration = lap.getDuration();
-    const stopwatchDuration = duration as typeof duration & {
-      getStopwatchDisplayValue?: () => string;
-    };
-
-    if (typeof stopwatchDuration.getStopwatchDisplayValue === 'function') {
-      return stopwatchDuration.getStopwatchDisplayValue();
+    const averageMetrics = getAverageEventLapMetrics(laps, metricTypes, this.unitSettings, activity.type);
+    if (averageMetrics.length === 0) {
+      return lapRows;
     }
 
-    const centiseconds = Math.round(duration.getValue() * 100);
-    const sign = centiseconds < 0 ? '-' : '';
-    const absoluteCentiseconds = Math.abs(centiseconds);
-    const minutes = Math.floor(absoluteCentiseconds / 6000);
-    const seconds = Math.floor((absoluteCentiseconds % 6000) / 100);
-    const fraction = (absoluteCentiseconds % 100).toString().padStart(2, '0');
-
-    return `${sign}${minutes}:${seconds.toString().padStart(2, '0')}.${fraction}`;
+    const averageRow: LapTableRow = {
+      '#': 'Avg',
+      isLapAverage: true,
+    };
+    averageMetrics.forEach(({ type, display }) => {
+      averageRow[type] = display;
+    });
+    return [averageRow, ...lapRows];
   }
 
-  private calculateColumns(dataSource: MatTableDataSource<LapTableRow>): string[] {
-    return this.getColumnsToDisplay().filter(column => {
-      return dataSource.data.find(row => {
+  private calculateColumns(dataSource: MatTableDataSource<LapTableRow>, activityType: unknown): string[] {
+    return this.getColumnsToDisplay(activityType).filter(column => {
+      if (column === '#') {
+        return true;
+      }
+      return dataSource.data.some(row => {
         const cellValue = row[column as keyof LapTableRow];
-        return isNumber(cellValue) || Boolean(cellValue); // isNumber allow 0's to be accepted
+        return (typeof cellValue === 'number' && Number.isFinite(cellValue))
+          || (typeof cellValue === 'string' && cellValue.trim().length > 0);
       });
     });
   }
@@ -144,26 +226,88 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     return this.columnsMap.get(this.getKey(activity, lapType)) || [];
   }
 
-  getColumnsToDisplay() {
+  getColumnsToDisplay(activityType: unknown = 'Other'): string[] {
+    const family = resolveEventLapSportFamily(activityType);
     return [
       '#',
-      'Duration',
-      'Distance',
-      'Ascent',
-      'Descent',
-      'Energy',
-      'Average Heart Rate',
-      'Maximum Heart Rate',
-      'Average Speed',
-      'Average Power',
-    ]
+      ...getSelectedEventLapMetricTypes(
+        this.canCustomize ? this.eventDetailsSettings : undefined,
+        family,
+      ),
+    ];
   }
 
   isSticky(column: string) {
     return column === '#'
   }
 
-  isStickyEnd(column: string) {
+  isStickyEnd(_column: string) {
     return false;
+  }
+
+  public async onLapColumnSelectionChange(
+    sportFamily: AppEventLapSportFamily,
+    event: MatSelectionListChange,
+  ): Promise<void> {
+    if (!this.canCustomize || this.savingLapColumnSportFamilies().has(sportFamily)) {
+      return;
+    }
+
+    const selectedMetricTypes = event.source.selectedOptions.selected
+      .map((option) => option.value)
+      .filter((value): value is string => typeof value === 'string');
+    const previousSettings = this.eventDetailsSettings;
+    const nextSettings = normalizeEventDetailsSettings({
+      lapTableColumnsBySportFamily: {
+        ...previousSettings.lapTableColumnsBySportFamily,
+        [sportFamily]: selectedMetricTypes,
+      },
+    });
+    this.eventDetailsSettings = nextSettings;
+    this.updateData();
+    this.setSportFamilySaving(sportFamily, true);
+
+    try {
+      await this.userSettingsQuery.updateLapTableColumns(sportFamily, selectedMetricTypes);
+    } catch {
+      this.eventDetailsSettings = previousSettings;
+      this.updateData();
+      this.snackBar.open('Could not save lap columns. Please try again.', 'Close');
+    } finally {
+      this.setSportFamilySaving(sportFamily, false);
+    }
+  }
+
+  private updateLapColumnMenuGroups(): void {
+    const sportFamilies = new Set<AppEventLapSportFamily>();
+    this.selectedActivities.forEach((activity) => {
+      const laps = activity.getLaps?.() || [];
+      const hasVisibleLaps = laps.some((lap) => this.shouldShowLapType(lap.type));
+      if (hasVisibleLaps) {
+        sportFamilies.add(resolveEventLapSportFamily(activity.type));
+      }
+    });
+
+    const metricGroups = getEventLapMetricOptionGroups();
+    this.lapColumnMenuGroups = Array.from(sportFamilies).map((family) => {
+      const presentation = getEventLapSportFamilyPresentation(family);
+      return {
+        family,
+        label: presentation.label,
+        icon: presentation.icon,
+        selectedMetricTypes: getSelectedEventLapMetricTypes(this.eventDetailsSettings, family),
+        metricGroups,
+      };
+    });
+  }
+
+  private setSportFamilySaving(sportFamily: AppEventLapSportFamily, saving: boolean): void {
+    const nextSavingSportFamilies = new Set(this.savingLapColumnSportFamilies());
+    if (saving) {
+      nextSavingSportFamilies.add(sportFamily);
+    } else {
+      nextSavingSportFamilies.delete(sportFamily);
+    }
+    this.savingLapColumnSportFamilies.set(nextSavingSportFamilies);
   }
 }

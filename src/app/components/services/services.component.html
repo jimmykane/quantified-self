@@ -3,11 +3,12 @@
     <main class="settings-content services-content">
         <header class="services-page-header">
           <h1>Connections</h1>
-          <p>Bring your activity data together.</p>
+          <p>Connect activity providers and manage authorized MCP clients.</p>
         </header>
 
         <mat-expansion-panel
           class="service-data-flow"
+          [hidden]="activeSection === 'mcp'"
           [expanded]="isDataFlowExpanded"
           (opened)="isDataFlowExpanded = true"
           (closed)="isDataFlowExpanded = false">
@@ -175,23 +176,32 @@
           class="provider-selector provider-selector--desktop"
           [value]="activeSection"
           hideSingleSelectionIndicator
-          aria-label="Service providers"
+          aria-label="Connection categories"
           (change)="selectService($event.value)">
           @for (section of serviceSectionOptions; track section.id) {
           <mat-button-toggle [value]="section.id" [attr.aria-label]="section.label">
             <span class="provider-selector__option">
-              <app-service-source-icon
-                [sourceServiceName]="section.serviceName"
-                [iconWidth]="72"
-                [iconHeight]="24"
-                [showTooltip]="false">
-              </app-service-source-icon>
+              @if (section.serviceName; as serviceName) {
+                <app-service-source-icon
+                  [sourceServiceName]="serviceName"
+                  [iconWidth]="72"
+                  [iconHeight]="24"
+                  [showTooltip]="false">
+                </app-service-source-icon>
+              } @else {
+                <span class="provider-selector__mcp-brand" aria-hidden="true">
+                  <mat-icon>devices</mat-icon>
+                  <span>MCP</span>
+                </span>
+              }
               <span class="provider-selector__name">{{ section.label }}</span>
-              @if (serviceConnectionState[section.id]) {
-              <span class="provider-selector__connection-state">
-                <span class="provider-selector__connection-dot"></span>
-                Connected
-              </span>
+              @if (section.providerId; as providerId) {
+                @if (serviceConnectionState[providerId]) {
+                  <span class="provider-selector__connection-state">
+                    <span class="provider-selector__connection-dot"></span>
+                    Connected
+                  </span>
+                }
               }
             </span>
           </mat-button-toggle>
@@ -202,7 +212,7 @@
           class="provider-selector provider-selector--mobile"
           [value]="activeSection"
           hideSingleSelectionIndicator
-          aria-label="Service providers"
+          aria-label="Connection categories"
           (change)="selectService($event.value)">
           @for (section of serviceSectionOptions; track section.id) {
           <mat-button-toggle
@@ -213,7 +223,10 @@
           }
         </mat-button-toggle-group>
 
-        <section class="services-workspace-main">
+        <section
+          class="services-workspace-main"
+          [class.services-workspace-main--mcp]="activeSection === 'mcp'">
+          @if (activeSection !== 'mcp') {
           <section
             class="service-detail"
             [hidden]="activeSection !== 'garmin'"
@@ -284,6 +297,15 @@
             <ng-container
               *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
             </ng-container>
+          </section>
+          }
+          <section
+            class="service-detail service-detail--mcp"
+            [hidden]="activeSection !== 'mcp'"
+            aria-label="MCP">
+            @if (activeSection === 'mcp') {
+              <app-mcp-connections></app-mcp-connections>
+            }
           </section>
         </section>
 

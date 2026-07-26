@@ -21,7 +21,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Training analysis, Garmin, COROS, and Wahoo to Suunto activity sync, sending Suunto routes to Garmin or Wahoo and GPX/FIT routes to Wahoo, account setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -41,6 +41,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Send Suunto routes to Garmin');
     expect(helpAbout).toContain('Send GPX/FIT routes to Wahoo');
     expect(helpAbout).toContain('Sync past activities');
+    expect(helpAbout).toContain('Read-only MCP client access');
   });
 
   it('should define a public pricing route with membership JSON-LD', () => {
@@ -85,6 +86,23 @@ describe('AppRoutingModule routes', () => {
     expect(routesRoute).toBeTruthy();
     expect(routesRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(routesRoute?.data?.['robots']).toBe('noindex, follow');
+  });
+
+  it('allows authenticated onboarded users to manage MCP from Connections', () => {
+    const servicesRoute = routes.find(route => route.path === 'services');
+
+    expect(servicesRoute).toBeTruthy();
+    expect(servicesRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(servicesRoute?.loadChildren).toBeTypeOf('function');
+  });
+
+  it('should keep MCP consent authenticated and out of search indexes', () => {
+    const mcpAuthorizationRoute = routes.find(route => route.path === 'mcp/authorize');
+
+    expect(mcpAuthorizationRoute).toBeTruthy();
+    expect(mcpAuthorizationRoute?.canMatch).toEqual([authGuard]);
+    expect(mcpAuthorizationRoute?.loadComponent).toBeTypeOf('function');
+    expect(mcpAuthorizationRoute?.data?.['robots']).toBe('noindex, nofollow');
   });
 
   it('should define unguarded noindexed public share routes', () => {
@@ -148,7 +166,7 @@ describe('AppRoutingModule routes', () => {
       { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'private Garmin training dashboard' },
       { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
       { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS to Suunto activity sync' },
-      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'automatic FIT activity imports' },
+      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'Automatic FIT activity imports' },
     ];
 
     for (const expectedRoute of expectedRoutes) {
@@ -355,7 +373,7 @@ describe('AppRoutingModule routes', () => {
     }
   });
 
-  it('should include sync-focused metadata on the public home route', () => {
+  it('should include integration and MCP metadata on the public home route', () => {
     const homeRoute = routes.find(route => route.path === '');
 
     expect(homeRoute).toBeTruthy();
@@ -364,7 +382,7 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.data).toMatchObject({
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep context, and optional activity sync between supported connected services.');
+    expect(homeRoute?.data?.['description']).toBe('Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',
@@ -372,6 +390,9 @@ describe('AppRoutingModule routes', () => {
       name: 'Quantified Self',
     });
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Automatic Wahoo to Suunto activity sync');
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Activity and route delivery to Wahoo');
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Read-only MCP access for compatible clients');
   });
 
   it('should keep the dashboard as the authenticated app entry route', () => {

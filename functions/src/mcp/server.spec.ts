@@ -1,0 +1,495 @@
+import { AddressInfo } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { McpDataError } from './data.service';
+import {
+  McpOAuthError,
+  MCP_OAUTH_SCOPES,
+  rejectRepeatedOAuthParameters,
+} from './oauth.service';
+import {
+  classifyMcpBearerFailure,
+  createMcpServer,
+  formatMcpToolError,
+  isMcpFormUrlEncodedContentType,
+  isMcpRequestBodyWithinLimit,
+  parseMcpBearerToken,
+  parseMcpDateTime,
+  parseMcpFormEncodedBody,
+  requiredScopesForRequest,
+  resolveMcpAuthorizationRequesterKey,
+  resolvePublicBaseUrl,
+  requireMcpTokenGrantType,
+  supportsMcpTransportMethod,
+} from './server';
+
+describe('MCP HTTP scope enforcement', () => {
+  it('uses only canonical allowlisted origins for OAuth issuer and audience URLs', () => {
+    const requestWithHost = (host: string) => ({
+      get: (name: string) => name.toLowerCase() === 'x-forwarded-host' ? host : undefined,
+    }) as unknown as Parameters<typeof resolvePublicBaseUrl>[0];
+
+    expect(resolvePublicBaseUrl(requestWithHost('beta.quantified-self.io')))
+      .toBe('https://beta.quantified-self.io');
+    expect(resolvePublicBaseUrl(requestWithHost('quantified-self.io:444')))
+      .toBe('https://quantified-self.io');
+    expect(resolvePublicBaseUrl(requestWithHost('attacker.example')))
+      .toBe('https://quantified-self.io');
+  });
+
+  it('uses the Cloud Functions client address for public authorization rate limits', () => {
+    const request = (
+      forwardedFor: string | undefined,
+      ip?: string,
+    ) => ({
+      get: (name: string) => name.toLowerCase() === 'x-forwarded-for'
+        ? forwardedFor
+        : undefined,
+      ip,
+    });
+
+    expect(resolveMcpAuthorizationRequesterKey(
+      request('203.0.113.10, 10.0.0.1', '10.0.0.2'),
+    )).toBe('203.0.113.10');
+    expect(resolveMcpAuthorizationRequesterKey(
+      request('not-an-ip', '2001:db8::10'),
+    )).toBe('2001:db8::10');
+    expect(resolveMcpAuthorizationRequesterKey(
+      request(undefined, undefined),
+    )).toBe('unknown');
+  });
+
+  it('requires metrics scope for metrics tools', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'query_metric' },
+    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+  });
+
+  it('requires sleep scope for sleep tools', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'list_sleep_sessions' },
+    })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
+  });
+
+  it('requires separate activity-detail and route scopes for granular tools', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'list_activity_jumps' },
+    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_route_geometry' },
+    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'find_activities_near_location' },
+    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'find_routes_near_location' },
+    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_activity_metrics' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+  });
+
+  it('registers only the tools granted by the bearer scopes', async () => {
+    const listToolNames = async (scopes: Array<typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES]>) => {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = createMcpServer({
+        uid: 'user-1',
+        clientId: 'https://client.example/mcp.json',
+        connectionId: 'connection-1',
+        scopes,
+      }, 'https://quantified-self.io');
+      const client = new Client({
+        name: 'scope-test-client',
+        version: '1.0.0',
+      });
+      try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        return (await client.listTools()).tools.map(tool => tool.name).sort();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    };
+
+    await expect(listToolNames([MCP_OAUTH_SCOPES.MetricsRead])).resolves.toEqual([
+      'get_training_metric',
+      'list_metrics',
+      'query_metric',
+    ]);
+    await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
+      'list_sleep_sessions',
+      'query_sleep_summary',
+    ]);
+    await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
+      'find_activities_near_location',
+      'list_activities',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ])).resolves.toEqual([
+      'find_activities_near_location',
+      'get_activity_metrics',
+      'get_training_metric',
+      'list_activities',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
+      'list_metrics',
+      'query_metric',
+    ]);
+    await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
+      'find_routes_near_location',
+      'get_route_geometry',
+      'list_route_waypoints',
+      'list_routes',
+    ]);
+  });
+
+  it('marks place-search tools as read-only operations that may call Mapbox', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.RoutesRead,
+      ],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'metadata-test-client',
+      version: '1.0.0',
+    });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tools = (await client.listTools()).tools;
+      for (const toolName of [
+        'find_activities_near_location',
+        'find_routes_near_location',
+      ]) {
+        expect(tools.find(tool => tool.name === toolName)?.annotations).toMatchObject({
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        });
+      }
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('rejects ambiguous location objects before a nearby tool can execute', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'schema-test-client',
+      version: '1.0.0',
+    });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const result = await client.callTool({
+        name: 'find_activities_near_location',
+        arguments: {
+          location: {
+            query: 'Ioannina, Greece',
+            latitudeDegrees: 39.665,
+            longitudeDegrees: 20.8537,
+          },
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('Invalid input');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('discloses exact start and end coordinates in the activity tool metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'metadata-test-client',
+      version: '1.0.0',
+    });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const listActivities = (await client.listTools()).tools
+        .find(tool => tool.name === 'list_activities');
+
+      expect(listActivities?.description).toContain('exact start and end coordinates when present');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('advertises compact hosted app icons for MCP clients', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://beta.quantified-self.io');
+    const client = new Client({
+      name: 'icon-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getServerVersion()).toEqual({
+        name: 'quantified-self',
+        title: 'Quantified Self',
+        version: '1.0.0',
+        description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+        websiteUrl: 'https://beta.quantified-self.io',
+        icons: [
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-96x96.png',
+            mimeType: 'image/png',
+            sizes: ['96x96'],
+          },
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-192x192.png',
+            mimeType: 'image/png',
+            sizes: ['192x192'],
+          },
+          {
+            src: 'https://beta.quantified-self.io/assets/favicons/android-chrome-512x512.png',
+            mimeType: 'image/png',
+            sizes: ['512x512'],
+          },
+        ],
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('does not assign a scope to protocol messages or unknown tools', () => {
+    expect(requiredScopesForRequest({ method: 'initialize' })).toEqual([]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'unknown' },
+    })).toEqual([]);
+  });
+
+  it('keeps the stateless JSON transport on bounded POST requests', () => {
+    expect(supportsMcpTransportMethod('POST')).toBe(true);
+    expect(supportsMcpTransportMethod('GET')).toBe(false);
+    expect(supportsMcpTransportMethod('DELETE')).toBe(false);
+    expect(isMcpRequestBodyWithinLimit({ method: 'initialize' }, '24')).toBe(true);
+    expect(isMcpRequestBodyWithinLimit({ payload: 'x'.repeat(70_000) }, undefined)).toBe(false);
+    expect(isMcpRequestBodyWithinLimit({}, 'not-a-number')).toBe(false);
+  });
+
+  it('preserves repeated form parameters for strict OAuth validation', () => {
+    const parsed = parseMcpFormEncodedBody(
+      'grant_type=refresh_token&scope=metrics%3Aread&scope=sleep%3Aread',
+    );
+    expect(parsed).toEqual({
+      grant_type: 'refresh_token',
+      scope: ['metrics:read', 'sleep:read'],
+    });
+    expect(() => rejectRepeatedOAuthParameters(parsed)).toThrow(
+      expect.objectContaining({ code: 'invalid_request' }),
+    );
+  });
+
+  it('accepts only form-encoded OAuth token requests', () => {
+    expect(isMcpFormUrlEncodedContentType('application/x-www-form-urlencoded')).toBe(true);
+    expect(isMcpFormUrlEncodedContentType(
+      'Application/X-Www-Form-Urlencoded; charset=UTF-8',
+    )).toBe(true);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset="utf8"',
+    )).toBe(true);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset=ISO-8859-1',
+    )).toBe(false);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset=UTF-8; charset=UTF-8',
+    )).toBe(false);
+    expect(isMcpFormUrlEncodedContentType(
+      'application/x-www-form-urlencoded; charset=""',
+    )).toBe(false);
+    expect(isMcpFormUrlEncodedContentType('application/json')).toBe(false);
+    expect(isMcpFormUrlEncodedContentType(undefined)).toBe(false);
+  });
+
+  it('requires unambiguous ISO date-times with a UTC offset', () => {
+    expect(parseMcpDateTime('2024-01-01T00:00:00Z', 'start'))
+      .toBe(Date.parse('2024-01-01T00:00:00Z'));
+    expect(parseMcpDateTime('2024-01-01T02:00:00+02:00', 'start'))
+      .toBe(Date.parse('2024-01-01T00:00:00Z'));
+    expect(() => parseMcpDateTime('01/02/2024', 'start')).toThrow(McpDataError);
+    expect(() => parseMcpDateTime('2024-01-01', 'start')).toThrow(McpDataError);
+  });
+
+  it('does not disclose unexpected backend error messages through tool results', () => {
+    expect(formatMcpToolError(new Error('users/private-user/secret-path'))).toEqual({
+      isError: true,
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          error: 'internal_error',
+          message: 'The MCP tool could not complete the request.',
+        }),
+      }],
+    });
+    expect(formatMcpToolError(new McpDataError('invalid_metric', 'Unknown metric.')))
+      .toEqual(expect.objectContaining({
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: 'invalid_metric',
+            message: 'Unknown metric.',
+          }),
+        }],
+      }));
+  });
+
+  it('distinguishes invalid tokens, rate limits, and backend authentication failures', () => {
+    expect(classifyMcpBearerFailure(
+      new McpOAuthError('invalid_grant', 'expired', 401),
+    )).toEqual({
+      statusCode: 401,
+      error: 'invalid_token',
+      challengeError: 'invalid_token',
+    });
+    expect(classifyMcpBearerFailure(
+      new McpOAuthError('temporarily_unavailable', 'limited', 429),
+    )).toEqual({
+      statusCode: 429,
+      error: 'temporarily_unavailable',
+      retryAfterSeconds: 60,
+    });
+    expect(classifyMcpBearerFailure(new Error('firestore unavailable'))).toEqual({
+      statusCode: 503,
+      error: 'temporarily_unavailable',
+    });
+  });
+
+  it('reports unsupported OAuth token grants with the standard error code', () => {
+    expect(requireMcpTokenGrantType('authorization_code')).toBe('authorization_code');
+    expect(requireMcpTokenGrantType('refresh_token')).toBe('refresh_token');
+    expect(() => requireMcpTokenGrantType('')).toThrow(
+      expect.objectContaining({ code: 'invalid_request' }),
+    );
+    expect(() => requireMcpTokenGrantType(['refresh_token', 'refresh_token'])).toThrow(
+      expect.objectContaining({ code: 'invalid_request' }),
+    );
+    expect(() => requireMcpTokenGrantType('client_credentials')).toThrow(
+      expect.objectContaining({ code: 'unsupported_grant_type' }),
+    );
+  });
+
+  it('parses the case-insensitive Bearer authorization scheme strictly', () => {
+    expect(parseMcpBearerToken('Bearer token-value')).toBe('token-value');
+    expect(parseMcpBearerToken('bearer token-value')).toBe('token-value');
+    expect(parseMcpBearerToken('BEARER   token-value')).toBe('token-value');
+    expect(parseMcpBearerToken('Basic token-value')).toBeNull();
+    expect(parseMcpBearerToken('Bearer token value')).toBeNull();
+  });
+
+  it('handles an initialize request through the pinned stateless HTTP adapter', async () => {
+    const httpServer = createHttpServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      request.on('end', async () => {
+        const server = new McpServer({ name: 'adapter-test', version: '1.0.0' });
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+          enableJsonResponse: true,
+        });
+        try {
+          await server.connect(transport);
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          await transport.handleRequest(request, response, body);
+        } finally {
+          await transport.close();
+          await server.close();
+        }
+      });
+    });
+    await new Promise<void>(resolve => httpServer.listen(0, '127.0.0.1', resolve));
+
+    try {
+      const address = httpServer.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${address.port}`, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json, text/event-stream',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-11-25',
+            capabilities: {},
+            clientInfo: {
+              name: 'adapter-test-client',
+              version: '1.0.0',
+            },
+          },
+        }),
+      });
+      const body = await response.json() as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual(expect.objectContaining({
+        jsonrpc: '2.0',
+        id: 1,
+        result: expect.objectContaining({
+          serverInfo: {
+            name: 'adapter-test',
+            version: '1.0.0',
+          },
+        }),
+      }));
+    } finally {
+      await new Promise<void>((resolve, reject) => httpServer.close(error => error ? reject(error) : resolve()));
+    }
+  });
+});

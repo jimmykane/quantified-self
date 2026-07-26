@@ -24,9 +24,9 @@ import {
   isWahooDuplicateError,
   isWahooDuplicateMessage,
 } from './error-details';
+import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES, MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
 
-const MAX_ACTIVITY_UPLOAD_BYTES = 20 * 1024 * 1024;
-const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_UPLOAD_BYTES / 3) * 4 + 4;
+const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const WAHOO_UPLOAD_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
 
 interface WahooWorkoutFileUploadPayload {
@@ -259,8 +259,8 @@ export async function uploadActivityFileToWahoo(
   if (fileBuffer.length === 0) {
     throw new HttpsError('invalid-argument', 'File content is empty.');
   }
-  if (fileBuffer.length > MAX_ACTIVITY_UPLOAD_BYTES) {
-    throw new HttpsError('invalid-argument', 'Cannot upload activity because the size is greater than 20MB.');
+  if (fileBuffer.length > MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES) {
+    throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL}.`);
   }
 
   try {

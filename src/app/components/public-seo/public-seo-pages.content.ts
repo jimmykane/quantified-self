@@ -3,6 +3,7 @@ import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@s
 export type PublicSeoPageKey =
   | 'featuresHub'
   | 'trainingAnalysis'
+  | 'mcpServer'
   | 'aiInsights'
   | 'workoutFileComparison'
   | 'fitGpxTcxFileAnalyzer'
@@ -71,6 +72,7 @@ export interface PublicSeoRouteData {
 export const PUBLIC_FEATURE_PATHS = {
   hub: 'features',
   trainingAnalysis: 'features/training-analysis',
+  mcpServer: 'features/mcp-server',
   aiInsights: 'features/ai-insights',
   workoutFileComparison: 'features/workout-file-comparison',
   fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
@@ -112,12 +114,13 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore Quantified Self features for endurance training data: Training analysis, AI Insights, workout file comparison, FIT/GPX/TCX file analysis, sports watch benchmark reports, and a private dashboard for Garmin, Suunto, COROS, Wahoo, and uploaded activity files.',
+    description: 'Explore training analysis, read-only MCP access, AI Insights, workout file comparison, FIT/GPX/TCX tools, sports watch benchmark reports, and a private dashboard.',
     h1: 'Features for endurance training data',
-    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved route files, analyze training context, compare recordings, benchmark devices, and ask chart-backed questions about your training history.',
-    chips: ['Training analysis', 'AI Insights', 'Workout comparison', 'FIT/TCX/GPX', 'Route files', 'Benchmarks'],
+    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, analyze training context, compare recordings, benchmark devices, and ask questions through AI Insights or an MCP client you explicitly authorize.',
+    chips: ['Training analysis', 'MCP server', 'AI Insights', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('MCP Server', '/features/mcp-server'),
       routeAction('AI Insights', '/features/ai-insights'),
       routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
       routeAction('Compare Files', '/features/workout-file-comparison'),
@@ -140,6 +143,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             icon: 'query_stats',
             title: 'AI Insights',
             copy: `Ask focused questions about stored Garmin, Suunto, COROS, Wahoo, and uploaded activity data. Free accounts include ${FREE_AI_REQUEST_LIMIT} AI requests per calendar month.`,
+          },
+          {
+            icon: 'devices',
+            title: 'Read-only MCP access',
+            copy: 'Authorize ChatGPT or another compatible MCP client to read only the activity metrics, Training analysis, activity details, sleep summaries, or saved routes you approve.',
           },
           {
             icon: 'compare_arrows',
@@ -193,7 +201,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'What Quantified Self features should I start with?',
-        answer: 'Start with integrations when you need provider sync, workout file comparison when you have exported files, sports watch benchmarks when you need device evidence, and AI Insights when you want chart-backed answers from stored training data.',
+        answer: 'Start with integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, AI Insights for built-in chart-backed answers, or the MCP server when you want to use a compatible external client with explicitly approved read-only data.',
       },
       {
         question: 'Can I compare custom files and provider data?',
@@ -205,7 +213,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Choose the feature that matches the data problem',
-    closingCopy: 'Use the hub when you are deciding between curated training analysis, AI analysis, file comparison, device benchmarks, provider sync, and centralized workout history.',
+    closingCopy: 'Use the hub when you are deciding between curated training analysis, built-in AI analysis, read-only MCP access, file comparison, device benchmarks, provider sync, and centralized workout history.',
     closingActions: [
       routeAction('Explore Integrations', '/integrations', 'flat', 'arrow_forward'),
       routeAction('Training Guides', '/guides'),
@@ -317,6 +325,106 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Explore Integrations', '/integrations'),
       routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+    ],
+  },
+  mcpServer: {
+    key: 'mcpServer',
+    path: PUBLIC_FEATURE_PATHS.mcpServer,
+    eyebrow: 'MCP Server',
+    title: 'Read-only MCP Server for Training Data',
+    description: 'Connect ChatGPT and compatible MCP clients to your training data through a read-only MCP server for metrics, activity details, sleep summaries, and saved routes.',
+    h1: 'Connect ChatGPT to your training data with a read-only MCP server',
+    intro: 'Connect ChatGPT or another compatible Model Context Protocol client to Quantified Self, approve only the read-only data categories you want it to use, and ask questions about your training history without exposing your entire account by default.',
+    chips: ['MCP server', 'ChatGPT', 'Read-only', 'Activity metrics', 'Sleep summaries', 'Saved routes'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Set Up MCP', '/help', 'stroked', undefined, 'data-and-privacy'),
+      routeAction('Read Access Policy', '/policies', 'stroked', undefined, 'mcp-clients'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Training Questions',
+        title: 'Ask about metrics, individual activities, sleep, and routes',
+        copy: 'The server exposes bounded tools for discovery and analysis. Every result is projected through the permissions you approve instead of returning raw account documents.',
+        items: [
+          {
+            icon: 'monitoring',
+            title: 'Activity and Training metrics',
+            copy: 'Discover available metrics, inspect day, week, or month trends, and query ready Training analysis such as load, readiness, intensity, durability, and sport-specific evidence.',
+          },
+          {
+            icon: 'directions_run',
+            title: 'Individual activity details',
+            copy: 'Find activities by time or nearby start and end positions, then inspect bounded summaries, laps, swim lengths, MTB jumps, app links, and selected numeric Sports Lib metrics.',
+          },
+          {
+            icon: 'bedtime',
+            title: 'Sleep sessions and summaries',
+            copy: 'Review normalized sleep sessions plus daily, weekly, or monthly aggregates without exposing provider payloads, raw stage intervals, or raw physiological samples.',
+          },
+          {
+            icon: 'route',
+            title: 'Saved routes and nearby search',
+            copy: 'Search saved routes near coordinates or a place, and inspect bounded route metrics, simplified geometry, segment start and end positions, and waypoint coordinates.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Access Boundaries',
+        title: 'Read-only by design, with separate permissions',
+        copy: 'MCP access uses an authorization flow designed for external clients. The client receives only the scopes you approve and can be disconnected from Connections.',
+        items: [
+          {
+            icon: 'fact_check',
+            title: 'Separate optional scopes',
+            copy: 'Activity metrics, individual activity details, sleep summaries, and saved routes are independent grants. Adding a new category requires another explicit approval.',
+          },
+          {
+            icon: 'lock',
+            title: 'No settings or data writes',
+            copy: 'MCP clients cannot create, edit, or delete activities, routes, sleep records, dashboard settings, or Training state. Revocation blocks future access.',
+          },
+          {
+            icon: 'shield',
+            title: 'Safe projections and location warnings',
+            copy: 'Raw files, raw streams, provider credentials, and device provenance are excluded. Activity details and route scopes can include exact coordinates, so authorize location access only for clients you trust.',
+          },
+          {
+            icon: 'location_searching',
+            title: 'Coordinate or place-name search',
+            copy: 'Direct-coordinate searches stay within Quantified Self. For a place-name search, only the supplied location text is sent to Mapbox for geocoding—not your activity, route, account, or unrelated prompt data.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'What does the Quantified Self MCP server do?',
+        answer: 'It gives a compatible external client a bounded, read-only way to discover and query approved Quantified Self activity metrics, Training analysis, individual activity details, sleep summaries, and saved routes.',
+      },
+      {
+        question: 'Can I use the MCP server with ChatGPT?',
+        answer: 'Yes. Add https://quantified-self.io/mcp as a custom app endpoint in ChatGPT, sign in to Quantified Self, and approve the read-only permissions you want to grant. ChatGPT is an external client with its own privacy and retention practices.',
+      },
+      {
+        question: 'Can an MCP client rearrange my dashboard or change my data?',
+        answer: 'No. The MCP server is read-only. It cannot write dashboard settings, activities, routes, Training state, or sleep records.',
+      },
+      {
+        question: 'Does MCP access expose my original activity or route files?',
+        answer: 'No. Original files, raw streams, provider payloads, credentials, and storage paths are excluded. Results use bounded summaries and safe projections for the specific tool and permission.',
+      },
+      {
+        question: 'Can an MCP client see exact locations?',
+        answer: 'Only if you approve individual activity details or saved-route access. Those scopes can return exact start, end, jump, route, or waypoint coordinates and may reveal sensitive places such as a home, workplace, or frequent trailhead.',
+      },
+    ],
+    closingTitle: 'Choose the data scopes, then keep control',
+    closingCopy: 'Create an account, connect the training sources you use, and authorize only the MCP permissions needed for the questions you want to ask. Review or revoke completed client connections at any time.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('MCP Setup Guide', '/help', 'stroked', undefined, 'data-and-privacy'),
+      routeAction('MCP Client Policy', '/policies', 'stroked', undefined, 'mcp-clients'),
     ],
   },
   aiInsights: {
@@ -1414,6 +1522,7 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
 export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData> = {
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
+  mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),
   aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
   fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),

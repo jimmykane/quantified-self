@@ -59,6 +59,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingExplanation: null,
     trainingDurability: null,
     trainingReadiness: null,
+    bodyWeightTrend: null,
     powerCurve: null,
     trainingSwimPerformance: null,
     formStatus: 'missing',
@@ -81,6 +82,7 @@ describe('DashboardDerivedMetricsService', () => {
     trainingExplanationStatus: 'missing',
     trainingDurabilityStatus: 'missing',
     trainingReadinessStatus: 'missing',
+    bodyWeightTrendStatus: 'missing',
     powerCurveStatus: 'missing',
     trainingSwimPerformanceStatus: 'missing',
   });
@@ -729,6 +731,7 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(true);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.BodyWeightTrend))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingExplanation))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingDurability))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingPowerSystems))).toBe(true);
@@ -799,6 +802,53 @@ describe('DashboardDerivedMetricsService', () => {
     expect(invalidState.trainingReadinessStatus).toBe('stale');
   });
 
+  it('maps a valid body-weight trend and self-heals a malformed ready snapshot', async () => {
+    const uid = 'user-1';
+    const now = new Date();
+    const asOfDayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const payload = {
+      dayBoundary: 'UTC',
+      asOfDayMs,
+      trendDays: 28,
+      comparisonWindowDays: 7,
+      minimumComparableDayCount: 3,
+      latestWeightKg: 70.2,
+      latestWeightDayMs: asOfDayMs,
+      median7dKg: 70.3,
+      median28dKg: 70.7,
+      change7dKg: -0.4,
+      change7dPercent: -0.57,
+      change28dKg: -1.2,
+      change28dPercent: -1.68,
+      recordedDayCount7d: 4,
+      recordedDayCount28d: 8,
+      points: Array.from({ length: 28 }, (_, index) => ({
+        dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
+        weightKg: index === 27 ? 70.2 : null,
+      })),
+    };
+    hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
+    hoisted.docDataMock
+      .mockReturnValueOnce(of({
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload,
+      }))
+      .mockReturnValueOnce(of({
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload: { ...payload, recordedDayCount7d: 9 },
+      }));
+
+    const validState = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.BodyWeightTrend],
+    }));
+    const invalidState = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.BodyWeightTrend],
+    }));
+
+    expect(validState.bodyWeightTrend).toEqual(payload);
+    expect(validState.bodyWeightTrendStatus).toBe('ready');
+    expect(invalidState.bodyWeightTrend).toBeNull();
+    expect(invalidState.bodyWeightTrendStatus).toBe('stale');
+  });
+
   it('does not let an in-flight dashboard probe suppress a Training workspace request', () => {
     let resolveDashboardProbe: ((value: unknown) => void) | null = null;
     mockFunctionsService.call.mockImplementationOnce(() => new Promise((resolve) => {
@@ -831,6 +881,7 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.TrainingDurability,
         DERIVED_METRIC_KINDS.TrainingBuildComparison,
         DERIVED_METRIC_KINDS.TrainingReadiness,
+        DERIVED_METRIC_KINDS.BodyWeightTrend,
         DERIVED_METRIC_KINDS.TrainingSwimPerformance,
       ],
     });

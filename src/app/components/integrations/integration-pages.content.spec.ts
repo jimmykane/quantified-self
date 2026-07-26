@@ -23,7 +23,8 @@ describe('integration-pages.content', () => {
   });
 
   it('documents Wahoo FIT imports, activity and route delivery, Wahoo-to-Suunto sync, and retained imported activities after disconnect', () => {
-    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('automatic FIT activity imports');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('Automatic FIT activity imports');
+    expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.title).toBe('Wahoo Activity Sync and Route Delivery');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('activity sync to Wahoo');
     expect(PROVIDER_INTEGRATION_ROUTE_DATA.wahoo.description).toContain('Wahoo-to-Suunto activity sync');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.toolsCopy).toContain('accepts direct FIT activity and GPX/FIT course/route delivery');

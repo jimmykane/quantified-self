@@ -19,14 +19,17 @@ import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
+    SPORTS_LIB_REPARSE_FAILURE_REASONS,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
+    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
+    SportsLibReparseFailureReason,
     SportsLibReparseHeavyReason,
     SportsLibReparseProcessingTier,
 } from './sports-lib-reparse.config';
 import {
-    MAX_ACTIVITY_UPLOAD_BYTES,
-    MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
     MAX_ACTIVITY_DECOMPRESSED_BYTES,
     MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
 } from '../shared/activity-processing-config';
@@ -46,6 +49,12 @@ const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
 export {
     SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS,
     SPORTS_LIB_REPARSE_HEAVY_REASONS,
+    SPORTS_LIB_REPARSE_FAILURE_REASONS,
+    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
+    SPORTS_LIB_REPARSE_HEAVY_SAFE_RUNTIME_BUDGET_MS,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES,
+    SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL,
+    SPORTS_LIB_REPARSE_NORMAL_SAFE_RUNTIME_BUDGET_MS,
     SPORTS_LIB_REPARSE_PROCESSING_TIERS,
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
@@ -62,10 +71,25 @@ const SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS = [
     /^Strict original-file reparse failed\. .*: Original file exceeds reparse size limit\./,
     /^Strict original-file reparse failed\. .*: \[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
     /^\[sports-lib-reparse\] Reparse exceeded safe runtime budget /,
+    /^\[sports-lib-reparse\] Event duration .* is too heavy for automatic reparse/,
+    /^\[sports-lib-reparse\] Previous heavy reparse attempt did not complete before retry/,
 ] as const;
 
 export function isSportsLibReparseTerminalFailureMessage(errorMessage: string): boolean {
     return SPORTS_LIB_REPARSE_TERMINAL_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
+}
+
+function isSportsLibReparseTooHeavyFailureMessage(errorMessage: string): boolean {
+    return /^\[sports-lib-reparse\] Reparse exceeded safe runtime budget /.test(errorMessage)
+        || /^Strict original-file reparse failed\. .*: \[sports-lib-reparse\] Reparse exceeded safe runtime budget /.test(errorMessage)
+        || /^\[sports-lib-reparse\] Event duration .* is too heavy for automatic reparse/.test(errorMessage)
+        || /^\[sports-lib-reparse\] Previous heavy reparse attempt did not complete before retry/.test(errorMessage);
+}
+
+export function getSportsLibReparseFailureReason(errorMessage: string): SportsLibReparseFailureReason {
+    return isSportsLibReparseTooHeavyFailureMessage(errorMessage)
+        ? SPORTS_LIB_REPARSE_FAILURE_REASONS.TooHeavyForAutoReparse
+        : SPORTS_LIB_REPARSE_FAILURE_REASONS.ReparseFailed;
 }
 
 class ReparsePersistenceSkippedForDeletedUserError extends Error {
@@ -210,6 +234,7 @@ export interface SportsLibReparseJob {
     eventDurationMs?: number;
     attemptCount: number;
     lastError?: string;
+    failureReason?: SportsLibReparseFailureReason;
     terminalFailure?: boolean;
     terminalFailureAt?: unknown;
     supersededAt?: unknown;
@@ -290,6 +315,82 @@ function toErrorMessage(error: unknown): string {
     return `${error}`;
 }
 
+function getReparseRuntimeBudgetRemainingMs(runtimeBudget?: ReparseRuntimeBudget): number | null {
+    if (!runtimeBudget?.deadlineMs) {
+        return null;
+    }
+
+    return Math.max(0, runtimeBudget.deadlineMs - Date.now());
+}
+
+function buildReparseTimingLogContext(
+    uid: string,
+    eventId: string,
+    stage: string,
+    startedAtMs: number,
+    additionalContext?: Record<string, unknown>,
+): Record<string, unknown> {
+    return {
+        uid,
+        eventId,
+        stage,
+        elapsedMs: Date.now() - startedAtMs,
+        ...additionalContext,
+    };
+}
+
+function logReparseStageStarted(
+    uid: string,
+    eventId: string,
+    stage: string,
+    startedAtMs: number,
+    additionalContext?: Record<string, unknown>,
+): void {
+    logger.info('[sports-lib-reparse] Stage started.', buildReparseTimingLogContext(
+        uid,
+        eventId,
+        stage,
+        startedAtMs,
+        additionalContext,
+    ));
+}
+
+function logReparseStageCompleted(
+    uid: string,
+    eventId: string,
+    stage: string,
+    startedAtMs: number,
+    additionalContext?: Record<string, unknown>,
+): void {
+    logger.info('[sports-lib-reparse] Stage completed.', buildReparseTimingLogContext(
+        uid,
+        eventId,
+        stage,
+        startedAtMs,
+        additionalContext,
+    ));
+}
+
+function logReparseStageFailed(
+    uid: string,
+    eventId: string,
+    stage: string,
+    startedAtMs: number,
+    error: unknown,
+    additionalContext?: Record<string, unknown>,
+): void {
+    logger.error('[sports-lib-reparse] Stage failed.', buildReparseTimingLogContext(
+        uid,
+        eventId,
+        stage,
+        startedAtMs,
+        {
+            error: toErrorMessage(error),
+            ...additionalContext,
+        },
+    ));
+}
+
 function toDateOrUndefined(value: unknown): Date | undefined {
     if (!value) {
         return undefined;
@@ -320,9 +421,9 @@ function isGzip(path: string): boolean {
 }
 
 function maybeDecompressOriginalFile(path: string, rawBytes: Buffer): Buffer {
-    if (rawBytes.byteLength > MAX_ACTIVITY_UPLOAD_BYTES) {
+    if (rawBytes.byteLength > SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES) {
         throw new Error(
-            `Original file exceeds reparse size limit. Maximum raw source size is ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL}; `
+            `Original file exceeds reparse size limit. Maximum raw source size is ${SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL}; `
             + `${path} is ${rawBytes.byteLength} bytes.`,
         );
     }
@@ -360,6 +461,12 @@ export function isSportsLibReparseDurationHeavy(eventDurationMs: number | null |
     return typeof eventDurationMs === 'number'
         && Number.isFinite(eventDurationMs)
         && eventDurationMs >= SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS;
+}
+
+export function isSportsLibReparseTooHeavyForAutomaticReparse(eventDurationMs: number | null | undefined): boolean {
+    return typeof eventDurationMs === 'number'
+        && Number.isFinite(eventDurationMs)
+        && eventDurationMs >= SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS;
 }
 
 export function resolveSportsLibReparseRoutingDecision(
@@ -648,11 +755,32 @@ export async function parseFromOriginalFilesStrict(
     const failedFiles: { path: string; reason: string }[] = [];
     const resolvedSourceBuckets: ResolvedSourceBucketInfo[] = [];
     const sourceContentHashes: string[] = [];
+    const uid = runtimeBudget?.uid || 'unknown';
+    const eventId = runtimeBudget?.eventId || 'unknown';
 
-    for (const sourceFile of sourceFiles) {
+    for (let sourceFileIndex = 0; sourceFileIndex < sourceFiles.length; sourceFileIndex += 1) {
+        const sourceFile = sourceFiles[sourceFileIndex];
+        const sourceFileStartedAtMs = Date.now();
+        const sourceFileLogContext = {
+            path: sourceFile.path,
+            originalFilename: sourceFile.originalFilename || null,
+            sourceFileIndex,
+            sourceFilesCount: sourceFiles.length,
+            runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs(runtimeBudget),
+        };
+        logReparseStageStarted(uid, eventId, 'source_file', sourceFileStartedAtMs, sourceFileLogContext);
         try {
             assertReparseRuntimeBudget(runtimeBudget, `download_source_file:${sourceFile.path}`);
+            const downloadStartedAtMs = Date.now();
+            logReparseStageStarted(uid, eventId, 'download_source_file', downloadStartedAtMs, sourceFileLogContext);
             const downloadResult = await downloadSourceBytesWithBucketFallback(sourceFile);
+            logReparseStageCompleted(uid, eventId, 'download_source_file', downloadStartedAtMs, {
+                ...sourceFileLogContext,
+                rawBytes: downloadResult.rawBytes.byteLength,
+                resolvedBucket: downloadResult.resolvedBucket,
+                usedFallbackBucket: downloadResult.usedFallbackBucket,
+                runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs(runtimeBudget),
+            });
             if (downloadResult.resolvedBucket) {
                 resolvedSourceBuckets.push({
                     path: sourceFile.path,
@@ -662,15 +790,48 @@ export async function parseFromOriginalFilesStrict(
                 });
             }
             const rawBytes = downloadResult.rawBytes;
+            const decompressStartedAtMs = Date.now();
+            logReparseStageStarted(uid, eventId, 'prepare_source_file', decompressStartedAtMs, {
+                ...sourceFileLogContext,
+                rawBytes: rawBytes.byteLength,
+                isGzip: isGzip(sourceFile.path),
+            });
             const fileBytes = maybeDecompressOriginalFile(sourceFile.path, rawBytes);
+            logReparseStageCompleted(uid, eventId, 'prepare_source_file', decompressStartedAtMs, {
+                ...sourceFileLogContext,
+                rawBytes: rawBytes.byteLength,
+                preparedBytes: fileBytes.byteLength,
+                isGzip: isGzip(sourceFile.path),
+                runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs(runtimeBudget),
+            });
             const sourceContentHash = createHash('sha256').update(fileBytes).digest('hex');
             sourceContentHashes.push(sourceContentHash);
             assertReparseRuntimeBudget(runtimeBudget, `parse_source_file:${sourceFile.path}`);
+            const parseStartedAtMs = Date.now();
+            logReparseStageStarted(uid, eventId, 'parse_source_file', parseStartedAtMs, {
+                ...sourceFileLogContext,
+                preparedBytes: fileBytes.byteLength,
+                runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs(runtimeBudget),
+            });
             const parsedEvent = await parseActivityFilePayload(fileBytes, sourceFile.path);
+            logReparseStageCompleted(uid, eventId, 'parse_source_file', parseStartedAtMs, {
+                ...sourceFileLogContext,
+                preparedBytes: fileBytes.byteLength,
+                parsedActivitiesCount: parsedEvent.getActivities().length,
+                runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs(runtimeBudget),
+            });
             assertReparseRuntimeBudget(runtimeBudget, `finish_parse_source_file:${sourceFile.path}`);
 
             parsedEvents.push(parsedEvent);
+            logReparseStageCompleted(uid, eventId, 'source_file', sourceFileStartedAtMs, {
+                ...sourceFileLogContext,
+                rawBytes: rawBytes.byteLength,
+                preparedBytes: fileBytes.byteLength,
+                parsedActivitiesCount: parsedEvent.getActivities().length,
+                runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs(runtimeBudget),
+            });
         } catch (error) {
+            logReparseStageFailed(uid, eventId, 'source_file', sourceFileStartedAtMs, error, sourceFileLogContext);
             failedFiles.push({
                 path: sourceFile.path,
                 reason: (error as Error)?.message || 'Could not parse source file',
@@ -1791,10 +1952,20 @@ export async function reparseEventFromOriginalFiles(
     const mode = options?.mode || 'reimport';
     const targetSportsLibVersion = options?.targetSportsLibVersion || resolveTargetSportsLibVersion();
     try {
+        logReparseStageStarted(uid, eventId, 'reparse_event', startedAtMs, {
+            mode,
+            targetSportsLibVersion,
+        });
         assertSportsLibRuntimeVersionMatchesTarget(targetSportsLibVersion);
 
         stage = 'load_event_and_activities';
         const loadEventAndActivitiesStartedAtMs = Date.now();
+        logReparseStageStarted(uid, eventId, stage, loadEventAndActivitiesStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            providedEventData: !!options?.eventData,
+            providedActivityDocs: !!options?.activityDocs,
+        });
         const eventAndActivities = options?.eventData && options?.activityDocs
             ? {
                 eventData: options.eventData,
@@ -1802,10 +1973,26 @@ export async function reparseEventFromOriginalFiles(
             }
             : await getEventAndActivitiesForReparse(uid, eventId);
         const loadEventAndActivitiesDurationMs = Date.now() - loadEventAndActivitiesStartedAtMs;
+        logReparseStageCompleted(uid, eventId, stage, loadEventAndActivitiesStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            activityDocsCount: eventAndActivities.activityDocs.length,
+        });
         assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'extract_source_files');
 
         stage = 'extract_source_files';
+        const extractSourceFilesStartedAtMs = Date.now();
+        logReparseStageStarted(uid, eventId, stage, extractSourceFilesStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+        });
         const sourceFiles = extractSourceFiles(eventAndActivities.eventData);
+        logReparseStageCompleted(uid, eventId, stage, extractSourceFilesStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            sourceFilesCount: sourceFiles.length,
+            sourceFilePaths: sourceFiles.map(sourceFile => sourceFile.path),
+        });
         if (sourceFiles.length === 0) {
             const totalDurationMs = Date.now() - startedAtMs;
             logger.info('[sports-lib-reparse] Reparse timing', {
@@ -1835,12 +2022,25 @@ export async function reparseEventFromOriginalFiles(
 
         stage = 'parse_source_files';
         const parseFromSourcesStartedAtMs = Date.now();
+        logReparseStageStarted(uid, eventId, stage, parseFromSourcesStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            sourceFilesCount: sourceFiles.length,
+            runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs({ deadlineMs: options?.deadlineMs }),
+        });
         const parseResult = await parseFromOriginalFilesStrict(sourceFiles, {
             deadlineMs: options?.deadlineMs,
             uid,
             eventId,
         });
         const parseFromSourcesDurationMs = Date.now() - parseFromSourcesStartedAtMs;
+        logReparseStageCompleted(uid, eventId, stage, parseFromSourcesStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            sourceFilesCount: parseResult.sourceFilesCount,
+            parsedEventsCount: parseResult.parsedEvents.length,
+            runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs({ deadlineMs: options?.deadlineMs }),
+        });
         assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'transform_event');
 
         const autoHealResult = applyAutoHealedSourceBucketMetadata(
@@ -1857,6 +2057,11 @@ export async function reparseEventFromOriginalFiles(
 
         stage = 'transform_event';
         const transformStartedAtMs = Date.now();
+        logReparseStageStarted(uid, eventId, stage, transformStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            existingActivityDocsCount: eventAndActivities.activityDocs.length,
+        });
         const reparsedEvent = parseResult.finalEvent;
         reparsedEvent.setID(eventId);
         applyPreservedFields(reparsedEvent, autoHealResult.eventData);
@@ -1906,15 +2111,35 @@ export async function reparseEventFromOriginalFiles(
         }
         EventUtilities.reGenerateStatsForEvent(reparsedEvent);
         const transformDurationMs = Date.now() - transformStartedAtMs;
+        logReparseStageCompleted(uid, eventId, stage, transformStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            parsedActivitiesCount: reparsedEvent.getActivities().length,
+            runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs({ deadlineMs: options?.deadlineMs }),
+        });
         assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'before_persist');
 
         if (options?.beforePersist) {
             stage = 'before_persist_guard';
+            const beforePersistStartedAtMs = Date.now();
+            logReparseStageStarted(uid, eventId, stage, beforePersistStartedAtMs, {
+                mode,
+                targetSportsLibVersion,
+            });
             await options.beforePersist();
+            logReparseStageCompleted(uid, eventId, stage, beforePersistStartedAtMs, {
+                mode,
+                targetSportsLibVersion,
+            });
         }
         assertReparseRuntimeBudget({ deadlineMs: options?.deadlineMs, uid, eventId }, 'persist_reparsed_event');
         stage = 'persist_reparsed_event';
         const persistStartedAtMs = Date.now();
+        logReparseStageStarted(uid, eventId, stage, persistStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            parsedActivitiesCount: reparsedEvent.getActivities().length,
+        });
         const persistResult = await persistReparsedEvent(
             uid,
             eventId,
@@ -1925,6 +2150,13 @@ export async function reparseEventFromOriginalFiles(
         );
         const persistDurationMs = Date.now() - persistStartedAtMs;
         const totalDurationMs = Date.now() - startedAtMs;
+        logReparseStageCompleted(uid, eventId, stage, persistStartedAtMs, {
+            mode,
+            targetSportsLibVersion,
+            parsedActivitiesCount: reparsedEvent.getActivities().length,
+            staleActivitiesDeleted: persistResult.staleActivitiesDeleted,
+            runtimeBudgetRemainingMs: getReparseRuntimeBudgetRemainingMs({ deadlineMs: options?.deadlineMs }),
+        });
 
         logger.info('[sports-lib-reparse] Reparse timing', {
             uid,
@@ -1949,6 +2181,10 @@ export async function reparseEventFromOriginalFiles(
             staleActivitiesDeleted: persistResult.staleActivitiesDeleted,
         };
     } catch (error) {
+        logReparseStageFailed(uid, eventId, stage, startedAtMs, error, {
+            mode,
+            targetSportsLibVersion,
+        });
         logger.error('[sports-lib-reparse] Reparse failed', {
             uid,
             eventId,

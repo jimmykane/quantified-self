@@ -145,6 +145,8 @@ describe('HomeComponent', () => {
         expect(text).toContain('Manual Activity Uploads to Suunto');
         expect(text).toContain('choose a date range to sync activities');
         expect(text).toContain('Explore Integrations');
+        expect(text).toContain('Explore Wahoo');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/integrations/wahoo"], a[ng-reflect-router-link="/integrations/wahoo"]')).toBeTruthy();
         expect(integrationLinks.length).toBeGreaterThanOrEqual(1);
         expect(text).not.toContain('Set up sync');
         expect(text).not.toContain('How it works');
@@ -159,7 +161,7 @@ describe('HomeComponent', () => {
         const metricChips = fixture.nativeElement.querySelectorAll('.metric-chip');
         const metricChipInfoIcons = fixture.nativeElement.querySelectorAll('.metric-chip .metric-chip-info');
 
-        expect(performanceCards.length).toBe(5);
+        expect(performanceCards.length).toBe(6);
         expect(metricChips.length).toBe(27);
         expect(metricChipInfoIcons.length).toBe(27);
         expect(text).toContain('Engineered for Performance');
@@ -197,6 +199,9 @@ describe('HomeComponent', () => {
         expect(text).toContain('Custom');
         expect(text).toContain('Map');
         expect(text).toContain('clustered heatmaps');
+        expect(text).toContain('Read-only MCP Server');
+        expect(text).toContain('activity metrics, sleep summaries, activity details, and saved routes you approve');
+        expect(fixture.nativeElement.querySelector('a[routerlink="/features/mcp-server"], a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {

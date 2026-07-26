@@ -50,6 +50,7 @@
                     mat-stroked-button
                     class="section-link"
                     [routerLink]="link.target"
+                    [queryParams]="link.queryParams ?? null"
                     [fragment]="link.fragment ?? null">
                     <mat-icon>{{ link.icon }}</mat-icon>
                     <span>{{ link.label }}</span>

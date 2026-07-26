@@ -27,6 +27,7 @@ import {
     DataSwimDistance,
     DataSwimPaceAvg,
     DataVO2Max,
+    DataWeight,
     fitThreeDimensionalCapacityModel,
     normalizeDurabilityEvidenceValue,
     THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
@@ -63,6 +64,7 @@ import {
     isDerivedTrainingPowerSystemsStatusReasonPair,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
+    type DerivedBodyWeightTrendMetricPayload,
     type DerivedFormDailyLoadEntry,
     type DerivedEasyPercentMetricPayload,
     type DerivedEfficiencyDelta4wMetricPayload,
@@ -208,6 +210,9 @@ const TRAINING_DURABILITY_WEEKLY_POINT_COUNT = 12 as const;
 const TRAINING_RECOVERY_CURRENT_WINDOW_DAYS = 28;
 const TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS = 84;
 const TRAINING_READINESS_HISTORY_DAYS = 14 as const;
+const BODY_WEIGHT_TREND_DAYS = 28 as const;
+const BODY_WEIGHT_COMPARISON_WINDOW_DAYS = 7 as const;
+const BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT = 3 as const;
 const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
 const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
 const POWER_CURVE_MAX_STORED_POINTS = 128;
@@ -333,6 +338,7 @@ interface DerivedMetricBuildExecutionContext {
     getTrainingDurabilityBuildResult: () => DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload>;
     getTrainingBuildComparisonBuildResult: () => DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload>;
     getTrainingReadinessBuildResult: () => DerivedMetricBuildResult<DerivedTrainingReadinessMetricPayload>;
+    getBodyWeightTrendBuildResult: () => DerivedMetricBuildResult<DerivedBodyWeightTrendMetricPayload>;
     getTrainingSwimPerformanceBuildResult: () => DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload>;
 }
 
@@ -1620,6 +1626,37 @@ function summarizeTrainingPowerSystemsEnvelope(fit: ThreeDimensionalCapacityFit)
     };
 }
 
+function summarizeUnstableWPrimeCandidates(fit: ThreeDimensionalCapacityFit): {
+    count: number;
+    minimumJoules: number | null;
+    maximumJoules: number | null;
+} | null {
+    if (fit.status !== 'partial' || fit.reason !== 'unstable-w-prime-fit') {
+        return {
+            count: 0,
+            minimumJoules: null,
+            maximumJoules: null,
+        };
+    }
+    const candidates = Array.isArray(fit.diagnostics?.criticalPowerCandidates)
+        ? fit.diagnostics.criticalPowerCandidates
+        : [];
+    const wPrimeValues = candidates.map((candidate) => candidate?.wPrimeJoules);
+    if (
+        wPrimeValues.length !== 3 ||
+        wPrimeValues.some(
+            (value) => !Number.isFinite(value) || (value as number) <= 0,
+        )
+    ) {
+        return null;
+    }
+    return {
+        count: wPrimeValues.length,
+        minimumJoules: Math.min(...(wPrimeValues as number[])),
+        maximumJoules: Math.max(...(wPrimeValues as number[])),
+    };
+}
+
 function resolveUtcDateKey(dayMs: number): string {
     return new Date(dayMs).toISOString().slice(0, 10);
 }
@@ -1751,18 +1788,25 @@ function serializeTrainingPowerSystemsFit(
     activityType: ActivityTypes,
     effectiveDayMs: number,
 ): DerivedTrainingPowerSystemsSnapshot {
-    const criticalPower = serializeTrainingPowerSystemsComponent(fit.criticalPower);
-    const wPrime = serializeTrainingPowerSystemsComponent(fit.wPrime);
-    const maximumPower = serializeTrainingPowerSystemsComponent(fit.maximumPower);
-    const envelopeSummary = summarizeTrainingPowerSystemsEnvelope(fit);
-    const hasInvalidFitContract = !isTrainingPowerSystemsFitContractConsistent(
-        fit,
-        activityType,
-        effectiveDayMs,
-        criticalPower,
-        wPrime,
-        maximumPower,
+    const criticalPower = serializeTrainingPowerSystemsComponent(
+        fit.criticalPower,
     );
+    const wPrime = serializeTrainingPowerSystemsComponent(fit.wPrime);
+    const maximumPower = serializeTrainingPowerSystemsComponent(
+        fit.maximumPower,
+    );
+    const envelopeSummary = summarizeTrainingPowerSystemsEnvelope(fit);
+    const wPrimeCandidates = summarizeUnstableWPrimeCandidates(fit);
+    const hasInvalidFitContract =
+        wPrimeCandidates === null ||
+        !isTrainingPowerSystemsFitContractConsistent(
+            fit,
+            activityType,
+            effectiveDayMs,
+            criticalPower,
+            wPrime,
+            maximumPower,
+        );
     const invalidComponent: DerivedTrainingPowerSystemsComponent = {
         status: 'invalid-input',
         reason: 'invalid-source',
@@ -1776,20 +1820,39 @@ function serializeTrainingPowerSystemsFit(
         sourceFingerprint: fit.sourceFingerprint,
         criticalPower: hasInvalidFitContract ? invalidComponent : criticalPower,
         wPrime: hasInvalidFitContract ? { ...invalidComponent } : wPrime,
-        maximumPower: hasInvalidFitContract ? { ...invalidComponent } : maximumPower,
+        maximumPower: hasInvalidFitContract
+            ? { ...invalidComponent }
+            : maximumPower,
         diagnostics: {
             sourceCount: fit.diagnostics.sourceCount,
-            historyStartDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyStartDate),
-            historyEndDayMs: resolveUtcDateKeyDayMs(fit.envelope.historyEndDate),
+            historyStartDayMs: resolveUtcDateKeyDayMs(
+                fit.envelope.historyStartDate,
+            ),
+            historyEndDayMs: resolveUtcDateKeyDayMs(
+                fit.envelope.historyEndDate,
+            ),
             historySpanDays: fit.diagnostics.historySpanDays,
             rejectedPointCount: fit.envelope.rejectedPointCount,
-            rejectedShortPowerSpikePointCount: fit.envelope.rejectedShortPowerSpikePointCount,
+            rejectedShortPowerSpikePointCount:
+                fit.envelope.rejectedShortPowerSpikePointCount,
             ...envelopeSummary,
-            criticalPowerNormalizedRmse: fit.diagnostics.criticalPowerNormalizedRmse,
+            criticalPowerNormalizedRmse:
+                fit.diagnostics.criticalPowerNormalizedRmse,
             criticalPowerSpreadRatio: fit.diagnostics.criticalPowerSpreadRatio,
             wPrimeSpreadRatio: fit.diagnostics.wPrimeSpreadRatio,
-            criticalPowerLeaveOneOutSpreadRatio: fit.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
-            wPrimeLeaveOneOutSpreadRatio: fit.diagnostics.wPrimeLeaveOneOutSpreadRatio,
+            wPrimeCandidateCount: hasInvalidFitContract
+                ? 0
+                : wPrimeCandidates.count,
+            wPrimeCandidateMinimumJoules: hasInvalidFitContract
+                ? null
+                : wPrimeCandidates.minimumJoules,
+            wPrimeCandidateMaximumJoules: hasInvalidFitContract
+                ? null
+                : wPrimeCandidates.maximumJoules,
+            criticalPowerLeaveOneOutSpreadRatio:
+                fit.diagnostics.criticalPowerLeaveOneOutSpreadRatio,
+            wPrimeLeaveOneOutSpreadRatio:
+                fit.diagnostics.wPrimeLeaveOneOutSpreadRatio,
             criticalPowerSourceRemovalFitCount:
                 fit.diagnostics.criticalPowerSourceRemovalFitCount,
             criticalPowerSourceRemovalFailureCount:
@@ -3500,6 +3563,142 @@ function resolveMedian(values: readonly number[]): number | null {
         : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+interface BodyWeightWindowSummary {
+    medianKg: number | null;
+    recordedDayCount: number;
+}
+
+function buildBodyWeightWindowSummary(
+    dailyWeights: ReadonlyMap<number, number>,
+    endDayMs: number,
+    dayCount: number,
+): BodyWeightWindowSummary {
+    const weights: number[] = [];
+    for (let offset = 0; offset < dayCount; offset += 1) {
+        const weight = dailyWeights.get(endDayMs - (offset * DAY_MS));
+        if (weight !== undefined) {
+            weights.push(weight);
+        }
+    }
+    return {
+        medianKg: resolveMedian(weights),
+        recordedDayCount: weights.length,
+    };
+}
+
+function resolveBodyWeightChange(
+    current: BodyWeightWindowSummary,
+    previous: BodyWeightWindowSummary,
+): { changeKg: number | null; changePercent: number | null } {
+    if (
+        current.recordedDayCount < BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT
+        || previous.recordedDayCount < BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT
+        || current.medianKg === null
+        || previous.medianKg === null
+        || previous.medianKg <= 0
+    ) {
+        return { changeKg: null, changePercent: null };
+    }
+    const changeKg = current.medianKg - previous.medianKg;
+    return {
+        changeKg: toRoundedNumber(changeKg, 3),
+        changePercent: toRoundedNumber((changeKg / previous.medianKg) * 100, 2),
+    };
+}
+
+export function buildBodyWeightTrendMetricPayload(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+    nowMs = Date.now(),
+): DerivedMetricBuildResult<DerivedBodyWeightTrendMetricPayload> {
+    const asOfDayMs = resolveUtcDayStartMs(nowMs);
+    const rawWeightsByDay = new Map<number, number[]>();
+    let sourceEventCount = 0;
+
+    docs.forEach((doc) => {
+        const eventData = (doc.data() || {}) as Record<string, unknown>;
+        const weightKg = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataWeight.type));
+        const recordedAtMs = toMillis(eventData.startDate) ?? toMillis(eventData.endDate);
+        if (weightKg === null || recordedAtMs === null) {
+            return;
+        }
+        const dayMs = resolveUtcDayStartMs(recordedAtMs);
+        if (dayMs > asOfDayMs) {
+            return;
+        }
+        const existing = rawWeightsByDay.get(dayMs) || [];
+        existing.push(weightKg);
+        rawWeightsByDay.set(dayMs, existing);
+        sourceEventCount += 1;
+    });
+
+    const dailyWeights = new Map<number, number>();
+    rawWeightsByDay.forEach((weights, dayMs) => {
+        const medianKg = resolveMedian(weights);
+        if (medianKg !== null) {
+            dailyWeights.set(dayMs, toRoundedNumber(medianKg, 3));
+        }
+    });
+
+    const current7d = buildBodyWeightWindowSummary(
+        dailyWeights,
+        asOfDayMs,
+        BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
+    );
+    const previous7d = buildBodyWeightWindowSummary(
+        dailyWeights,
+        asOfDayMs - (BODY_WEIGHT_COMPARISON_WINDOW_DAYS * DAY_MS),
+        BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
+    );
+    const current28d = buildBodyWeightWindowSummary(dailyWeights, asOfDayMs, BODY_WEIGHT_TREND_DAYS);
+    const previous28d = buildBodyWeightWindowSummary(
+        dailyWeights,
+        asOfDayMs - (BODY_WEIGHT_TREND_DAYS * DAY_MS),
+        BODY_WEIGHT_TREND_DAYS,
+    );
+    const change7d = resolveBodyWeightChange(current7d, previous7d);
+    const change28d = resolveBodyWeightChange(current28d, previous28d);
+    let latestWeightDayMs: number | null = null;
+    let latestWeightKg: number | null = null;
+    for (let dayMs = asOfDayMs; dayMs >= 0; dayMs -= DAY_MS) {
+        const weightKg = dailyWeights.get(dayMs);
+        if (weightKg !== undefined) {
+            latestWeightDayMs = dayMs;
+            latestWeightKg = weightKg;
+            break;
+        }
+    }
+    const firstTrendDayMs = asOfDayMs - ((BODY_WEIGHT_TREND_DAYS - 1) * DAY_MS);
+    const points: DerivedBodyWeightTrendMetricPayload['points'] = [];
+    for (let dayMs = firstTrendDayMs; dayMs <= asOfDayMs; dayMs += DAY_MS) {
+        points.push({
+            dayMs,
+            weightKg: dailyWeights.get(dayMs) ?? null,
+        });
+    }
+
+    return {
+        sourceEventCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            trendDays: BODY_WEIGHT_TREND_DAYS,
+            comparisonWindowDays: BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
+            minimumComparableDayCount: BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT,
+            latestWeightKg,
+            latestWeightDayMs,
+            median7dKg: current7d.medianKg === null ? null : toRoundedNumber(current7d.medianKg, 3),
+            median28dKg: current28d.medianKg === null ? null : toRoundedNumber(current28d.medianKg, 3),
+            change7dKg: change7d.changeKg,
+            change7dPercent: change7d.changePercent,
+            change28dKg: change28d.changeKg,
+            change28dPercent: change28d.changePercent,
+            recordedDayCount7d: current7d.recordedDayCount,
+            recordedDayCount28d: current28d.recordedDayCount,
+            points,
+        },
+    };
+}
+
 function resolveCircularMinuteDistance(left: number, right: number): number {
     const absoluteDistance = Math.abs(left - right) % (24 * 60);
     return Math.min(absoluteDistance, (24 * 60) - absoluteDistance);
@@ -4425,6 +4624,10 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         sourceDependencies: ['formDocs', 'trainingReadinessSleepDocs'],
         build: (context) => context.getTrainingReadinessBuildResult(),
     },
+    [DERIVED_METRIC_KINDS.BodyWeightTrend]: {
+        sourceDependencies: ['formDocs'],
+        build: (context) => context.getBodyWeightTrendBuildResult(),
+    },
     [DERIVED_METRIC_KINDS.TrainingSwimPerformance]: {
         sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         includeTrainingSwimLengths: true,
@@ -4460,6 +4663,7 @@ function createDerivedMetricBuildExecutionContext(
     let trainingDurabilityBuildResultCache: DerivedMetricBuildResult<DerivedTrainingDurabilityMetricPayload> | null = null;
     let trainingBuildComparisonBuildResultCache: DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> | null = null;
     let trainingReadinessBuildResultCache: DerivedMetricBuildResult<DerivedTrainingReadinessMetricPayload> | null = null;
+    let bodyWeightTrendBuildResultCache: DerivedMetricBuildResult<DerivedBodyWeightTrendMetricPayload> | null = null;
     let trainingSwimPerformanceBuildResultCache: DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload> | null = null;
 
     const getDailyLoadContext = (): ReturnType<typeof buildDailyLoadContext> => {
@@ -4591,6 +4795,14 @@ function createDerivedMetricBuildExecutionContext(
         return trainingReadinessBuildResultCache;
     };
 
+    const getBodyWeightTrendBuildResult = (): DerivedMetricBuildResult<DerivedBodyWeightTrendMetricPayload> => {
+        if (bodyWeightTrendBuildResultCache) {
+            return bodyWeightTrendBuildResultCache;
+        }
+        bodyWeightTrendBuildResultCache = buildBodyWeightTrendMetricPayload(formDocs, nowMs);
+        return bodyWeightTrendBuildResultCache;
+    };
+
     const getTrainingSwimPerformanceBuildResult = (): DerivedMetricBuildResult<DerivedTrainingSwimPerformanceMetricPayload> => {
         if (trainingSwimPerformanceBuildResultCache) {
             return trainingSwimPerformanceBuildResultCache;
@@ -4619,6 +4831,7 @@ function createDerivedMetricBuildExecutionContext(
         getTrainingDurabilityBuildResult,
         getTrainingBuildComparisonBuildResult,
         getTrainingReadinessBuildResult,
+        getBodyWeightTrendBuildResult,
         getTrainingSwimPerformanceBuildResult,
     };
 }

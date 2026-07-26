@@ -13,16 +13,10 @@ export interface TrainingReadinessMetricRowViewModel {
 export interface TrainingReadinessTrendPointViewModel {
   dayMs: number;
   score: number | null;
-  x: number;
-  y: number | null;
-  label: string;
-}
-
-export interface TrainingReadinessTrendAxisTickViewModel {
-  score: number;
-  label: string;
-  y: number;
-  isReadinessThreshold: boolean;
+  statusLabel: string | null;
+  confidence: string | null;
+  availableSignalCount: number;
+  baselineEvidenceCount: number;
 }
 
 export interface TrainingReadinessViewModel {
@@ -45,16 +39,7 @@ export interface TrainingReadinessViewModel {
   historyStartLabel: string;
   historyEndLabel: string;
   historyPoints: TrainingReadinessTrendPointViewModel[];
-  historySegments: string[];
-  historyAxisTicks: TrainingReadinessTrendAxisTickViewModel[];
 }
-
-const HISTORY_CHART_WIDTH = 360;
-const HISTORY_CHART_MIN_X = 30;
-const HISTORY_CHART_MAX_X = HISTORY_CHART_WIDTH - 10;
-const HISTORY_CHART_MIN_Y = 8;
-const HISTORY_CHART_MAX_Y = 76;
-const HISTORY_AXIS_TICK_SCORES = [100, 75, 55, 0] as const;
 
 export function buildTrainingReadinessViewModel(
   context: DashboardReadinessSignalsContext | null | undefined,
@@ -199,8 +184,6 @@ function buildTrainingReadinessHistoryViewModel(
   | 'historyStartLabel'
   | 'historyEndLabel'
   | 'historyPoints'
-  | 'historySegments'
-  | 'historyAxisTicks'
 > {
   const history = options.history || null;
   const historyStatus = `${options.historyStatus || ''}`;
@@ -216,8 +199,6 @@ function buildTrainingReadinessHistoryViewModel(
       historyStartLabel: '',
       historyEndLabel: '',
       historyPoints: [],
-      historySegments: [],
-      historyAxisTicks: buildHistoryAxisTicks(),
     };
   }
 
@@ -231,10 +212,10 @@ function buildTrainingReadinessHistoryViewModel(
     referenceDate.getUTCDate(),
   );
   const canReplaceCurrentDay = history.asOfDayMs === currentUtcDayMs && !!context;
-  const points = history.points.map((point, index): TrainingReadinessTrendPointViewModel => {
+  const points = history.points.map((point): TrainingReadinessTrendPointViewModel => {
     const useLiveCurrentContext = point.dayMs === history.asOfDayMs && canReplaceCurrentDay && !!context;
     const score = useLiveCurrentContext ? context.score : point.score;
-    const label = useLiveCurrentContext ? context.label : point.label;
+    const statusLabel = useLiveCurrentContext ? context.label : point.label;
     const confidence = useLiveCurrentContext ? context.confidence : point.confidence;
     const availableSignalCount = useLiveCurrentContext
       ? context.availableSignalCount
@@ -242,23 +223,13 @@ function buildTrainingReadinessHistoryViewModel(
     const baselineEvidenceCount = useLiveCurrentContext
       ? context.baselineEvidenceCount
       : point.baselineEvidenceCount;
-    const x = HISTORY_CHART_MIN_X + (
-      index * (HISTORY_CHART_MAX_X - HISTORY_CHART_MIN_X) / Math.max(1, history.points.length - 1)
-    );
     return {
       dayMs: point.dayMs,
       score,
-      x: roundChartCoordinate(x),
-      y: score === null ? null : scoreToHistoryChartY(score),
-      label: buildHistoryPointLabel({
-        dayMs: point.dayMs,
-        score,
-        label,
-        confidence,
-        availableSignalCount,
-        baselineEvidenceCount,
-        locale: options.locale,
-      }),
+      statusLabel,
+      confidence,
+      availableSignalCount,
+      baselineEvidenceCount,
     };
   });
   const scoredDayCount = points.filter(point => point.score !== null).length;
@@ -287,70 +258,7 @@ function buildTrainingReadinessHistoryViewModel(
     historyStartLabel: formatUtcDate(points[0]?.dayMs, options.locale),
     historyEndLabel: formatUtcDate(points[points.length - 1]?.dayMs, options.locale),
     historyPoints: points,
-    historySegments: buildHistorySegments(points),
-    historyAxisTicks: buildHistoryAxisTicks(),
   };
-}
-
-function buildHistoryAxisTicks(): TrainingReadinessTrendAxisTickViewModel[] {
-  return HISTORY_AXIS_TICK_SCORES.map(score => ({
-    score,
-    label: `${score}`,
-    y: scoreToHistoryChartY(score),
-    isReadinessThreshold: score === 75 || score === 55,
-  }));
-}
-
-function scoreToHistoryChartY(score: number): number {
-  return roundChartCoordinate(HISTORY_CHART_MAX_Y - (
-    (Math.max(0, Math.min(100, score)) / 100) * (HISTORY_CHART_MAX_Y - HISTORY_CHART_MIN_Y)
-  ));
-}
-
-function buildHistoryPointLabel({
-  dayMs,
-  score,
-  label,
-  confidence,
-  availableSignalCount,
-  baselineEvidenceCount,
-  locale,
-}: {
-  dayMs: number;
-  score: number | null;
-  label: string | null;
-  confidence: string | null;
-  availableSignalCount: number;
-  baselineEvidenceCount: number;
-  locale?: string;
-}): string {
-  const dateText = formatUtcHistoryDate(dayMs, locale);
-  if (score === null || label === null || confidence === null) {
-    return `${dateText}: no readiness score; not enough evidence was available.`;
-  }
-  const baselineText = baselineEvidenceCount > 0
-    ? `${baselineEvidenceCount} recovery-baseline ${baselineEvidenceCount === 1 ? 'night' : 'nights'}`
-    : 'no recovery-baseline nights';
-  return `${dateText}: ${formatNumber(score, locale, 0)}/100, ${label}. ${capitalize(confidence)} confidence; ${availableSignalCount}/4 signals; ${baselineText}.`;
-}
-
-function buildHistorySegments(points: readonly TrainingReadinessTrendPointViewModel[]): string[] {
-  const segments: string[] = [];
-  let currentSegment: string[] = [];
-  points.forEach((point) => {
-    if (point.y === null) {
-      if (currentSegment.length) {
-        segments.push(currentSegment.join(' '));
-        currentSegment = [];
-      }
-      return;
-    }
-    currentSegment.push(`${point.x},${point.y}`);
-  });
-  if (currentSegment.length) {
-    segments.push(currentSegment.join(' '));
-  }
-  return segments;
 }
 
 function buildTrainingImplication(label: DashboardReadinessSignalsContext['label']): {
@@ -411,19 +319,6 @@ function formatUtcDate(value: number | null | undefined, locale?: string): strin
     day: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(value as number));
-}
-
-function formatUtcHistoryDate(value: number, locale?: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(value));
-}
-
-function roundChartCoordinate(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 function capitalize(value: string): string {

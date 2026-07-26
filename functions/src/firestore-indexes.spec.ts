@@ -135,20 +135,47 @@ describe('firestore indexes', () => {
             collectionGroup: 'sportsLibRouteReparseJobs',
             fieldPath: 'expireAt',
             ttl: true,
-            indexes: [
-                {
-                    order: 'ASCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    order: 'DESCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    arrayConfig: 'CONTAINS',
-                    queryScope: 'COLLECTION',
-                },
-            ],
+            indexes: [],
+        });
+    });
+
+    it('keeps MCP OAuth TTL fields deployable without unnecessary automatic indexes', () => {
+        const config = loadFirestoreIndexes();
+
+        for (const collectionGroup of [
+            'mcpOAuthAuthorizationRequests',
+            'mcpOAuthAuthorizationCodes',
+            'mcpOAuthAccessTokens',
+            'mcpOAuthRefreshTokens',
+            'mcpOAuthRateLimits',
+            'mcpConnections',
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup,
+                fieldPath: 'expireAt',
+                ttl: true,
+                indexes: [],
+            });
+        }
+    });
+
+    it('exempts every TTL-only expiration field from automatic indexing', () => {
+        const config = loadFirestoreIndexes();
+
+        for (const fieldOverride of config.fieldOverrides.filter(field => field.ttl === true)) {
+            expect(fieldOverride.fieldPath).toBe('expireAt');
+            expect(fieldOverride.indexes).toEqual([]);
+        }
+    });
+
+    it('does not index MCP connection status because listing filters it in memory', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'mcpConnections',
+            fieldPath: 'status',
+            ttl: false,
+            indexes: [],
         });
     });
 
@@ -240,20 +267,7 @@ describe('firestore indexes', () => {
             collectionGroup: 'routeDeliverySyncQueue',
             fieldPath: 'expireAt',
             ttl: true,
-            indexes: [
-                {
-                    order: 'ASCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    order: 'DESCENDING',
-                    queryScope: 'COLLECTION',
-                },
-                {
-                    arrayConfig: 'CONTAINS',
-                    queryScope: 'COLLECTION',
-                },
-            ],
+            indexes: [],
         });
     });
 });

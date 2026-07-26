@@ -29,5 +29,19 @@ if ! grep -q 'Processing collection: queueCleanupTombstones' "$OutputFile"; then
     exit 1
 fi
 
+for collection in \
+    mcpOAuthAuthorizationRequests \
+    mcpOAuthAuthorizationCodes \
+    mcpOAuthAccessTokens \
+    mcpOAuthRefreshTokens \
+    mcpOAuthRateLimits \
+    mcpConnections
+do
+    if ! grep -q "Processing collection: $collection" "$OutputFile"; then
+        echo "Expected $collection to be included in TTL setup output."
+        exit 1
+    fi
+done
+
 # Cleanup
 rm -rf "$TEST_DIR"

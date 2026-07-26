@@ -1219,6 +1219,48 @@ describe('Firestore Security Rules', () => {
                 }));
             });
         });
+
+        describe('MCP server-owned credential state', () => {
+            it('should deny owners reading or writing MCP connection summaries directly', async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore()
+                        .doc(`users/${userId}/mcpConnections/connection-1`)
+                        .set({ clientName: 'Example client' });
+                });
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const ref = db.doc(`users/${userId}/mcpConnections/connection-1`);
+
+                await assertFails(ref.get());
+                await assertFails(ref.set({ clientName: 'Forged client' }));
+                await assertFails(ref.delete());
+            });
+
+            it('should deny browser access to every top-level MCP OAuth collection', async () => {
+                const collectionNames = [
+                    'mcpOAuthAuthorizationRequests',
+                    'mcpOAuthAuthorizationCodes',
+                    'mcpOAuthAccessTokens',
+                    'mcpOAuthRefreshTokens',
+                    'mcpOAuthRateLimits',
+                ];
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await Promise.all(collectionNames.map(collectionName =>
+                        context.firestore().doc(`${collectionName}/credential-1`).set({
+                            uid: userId,
+                            secret: 'server-owned',
+                        })
+                    ));
+                });
+                const db = testEnv.authenticatedContext(userId).firestore();
+
+                for (const collectionName of collectionNames) {
+                    const ref = db.doc(`${collectionName}/credential-1`);
+                    await assertFails(ref.get());
+                    await assertFails(ref.set({ uid: userId }));
+                    await assertFails(ref.delete());
+                }
+            });
+        });
     });
     // End of main describe block removed here to include appended tests
 

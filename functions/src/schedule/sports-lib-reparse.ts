@@ -404,6 +404,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 ...(routingDecision.heavyReason ? {} : { heavyReason: admin.firestore.FieldValue.delete() }),
                 ...(routingDecision.eventDurationMs !== null ? {} : { eventDurationMs: admin.firestore.FieldValue.delete() }),
                 lastError: admin.firestore.FieldValue.delete(),
+                failureReason: admin.firestore.FieldValue.delete(),
                 terminalFailure: admin.firestore.FieldValue.delete(),
                 terminalFailureAt: admin.firestore.FieldValue.delete(),
                 processedAt: admin.firestore.FieldValue.delete(),

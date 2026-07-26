@@ -5,6 +5,7 @@ import {
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
   POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
@@ -33,6 +34,7 @@ export interface HelpSectionLink {
   kind: 'route' | 'external';
   target: string;
   fragment?: string;
+  queryParams?: Record<string, string>;
 }
 
 export interface HelpSection {
@@ -86,8 +88,9 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
 - When a derived comparison is missing or rebuilding, Training says it is preparing rather than showing a zero-session result. A confirmed empty state means no eligible activity leg was found in the latest 28 days.
 - **Durability** replaces the old aggregate efficiency trend on Training. Its Running, Cycling, Pool, and Open water tabs compare the current 28 days with the median of the prior three 28-day blocks, expose candidate and eligible activity coverage, preserve output and pool-length/stroke contexts, and show primary exclusion reasons. A context needs eligible evidence in at least two prior blocks before Training calls it usual. Each context also plots a readable 12-week durability trend: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. A Cycling Power Curve proves that power was recorded, but it does not by itself make the ride comparable durability evidence; cycling also needs paired heart rate, sufficient duration and coverage, steady output, and no more than 20% in zones 4–7. Cycling trajectory bars show power-recorded activities while their labels show eligible / power-recorded counts. Weeks without a comparable session explain their primary exclusions instead of being called simply empty, and lines never bridge those gaps. A lower output-to-heart-rate ratio later in one session can suggest a fade only when you intended a similarly steady effort; intentional easing, terrain changes, coasting, or a pace change can produce it too. Use repeated comparable sessions as a trend, and treat missing durability as no suitable comparison rather than zero. Evidence is generated when supported activities are processed; older activities that have not yet been reprocessed stay explicitly missing. Activity-level timelines remain on event detail pages and are not persisted in Training snapshots.
+- **Body-weight trend** is neutral context from recorded persisted Weight values only. It reduces multiple measurements on one UTC day to a median, shows the latest value plus 7- and 28-day medians in your chosen units, and plots the latest 28 days without joining gaps. A 7- or 28-day change appears only when both equal-length windows have at least three recorded days. It is not a health assessment and does not change the Training state, Form, Readiness, or a workout recommendation.
 - **Power systems** is shown only where it is available to your account. It estimates current CP, W′, and Pmax for each exact canonical activity type from its stored power curves. For a calculation date, it uses only that type's preceding 42 completed UTC days: the same day and all future workouts are excluded. The selector has no all-sports value, and Cycling is not pooled with Indoor Cycling, mountain biking, Rowing, or any other type.
-- Power systems shows today plus sparse workout-date points from the latest 12 weeks. A value appears only when Sports-lib marks that component ready; partial, insufficient, poor-fit, unstable, and invalid evidence remains explicit instead of becoming zero. CP is the modeled sustained-power boundary, W′ is the modeled work capacity above CP, and Pmax is the modeled short-duration power ceiling. CP and W′ have separate stability decisions: stable CP can remain visible when W′ is unstable, while dependent Pmax stays unavailable. Diagnostics distinguish every usable power curve from the smaller set of workouts that actually supplied the retained sustained and short-duration envelope anchors, and show fitting-method disagreement, single-anchor removal, and whole-workout removal separately. A type selector appears only when more than one exact activity type is available. New power curves remove isolated one-sample recording artifacts before persistence; the fitter also rejects and counts their short-curve signature in older stored curves. This is capacity evidence—not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
+- Power systems shows today plus sparse workout-date points from the latest 12 weeks. A value appears only when Sports-lib marks that component ready; partial, insufficient, poor-fit, unstable, and invalid evidence remains explicit instead of becoming zero. CP is the modeled sustained-power boundary, W′ is the modeled work capacity above CP, and Pmax is the modeled short-duration power ceiling. CP and W′ have separate stability decisions: stable CP can remain visible when W′ is unstable, while dependent Pmax stays unavailable. When W′ is withheld, **What this means** explains whether one workout supplied all retained sustained bests, whether removing it leaves no CP/W′ refit, the competing W′ estimate range, and why Pmax remains unavailable; that range is evidence of disagreement, not a reported W′ value. Diagnostics distinguish every usable power curve from the smaller set of workouts that actually supplied the retained sustained and short-duration envelope anchors, and show fitting-method disagreement, single-anchor removal, and whole-workout removal separately. A type selector appears only when more than one exact activity type is available. New power curves remove isolated one-sample recording artifacts before persistence; the fitter also rejects and counts their short-curve signature in older stored curves. This is capacity evidence—not TSS, FTP, fitness, fatigue, Readiness, or a workout prescription.
 - Parsing a workout no longer generates CP, W′, Pmax, or power-system strain. Existing Training snapshots rebuild from stored power curves without reparsing source files. A future workout-strain phase would need the original continuous power stream because a power curve does not preserve the order of work and recovery; this release does not calculate or aggregate strain.
 - Imported capacity markers remain separate from rolling power systems. **FTP setting** is the latest positive FTP imported with an eligible Running or Cycling activity; repeated carried values are deduplicated and shown with when that setting was first and last seen. A value that exactly matches the session-derived estimate of 95% of that activity's 20-minute best is not presented as an imported setting.
 - **Imported VO₂ max** is a separate aerobic marker, never a readiness score. Training does not call it a lab result or compare it numerically with power thresholds unless the source provides that methodological provenance.
@@ -296,6 +299,16 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Event details now include a **Jumps** table when selected activities contain jump events.
 - The jump table appears in activity tabs and only shows columns with available data.
 - Jump metrics use your preferred units from **Settings** when unit conversion is supported.
+
+### Event lap tables
+
+- Event details include a **Laps** table when selected activities contain lap data.
+- To change it, open **Laps -> Columns**, choose Running, Cycling, Swimming, or Other activities, then tick the metrics you want to see.
+- Quantified Self remembers a separate column list for each of those sport families. A triathlon can therefore keep different running, cycling, and swimming lap layouts.
+- Running and trail-running laps use pace, cycling laps use speed, and swimming laps use swim pace. These values, along with other convertible metrics, follow your unit preferences in **Settings -> Units**.
+- Each lap table includes an **Avg** row directly below its headers, with averageable lap metrics in their matching columns and using those same units. Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged.
+- Satellite diagnostics and EHPE/EVPE position-error metrics are intentionally left out of the column picker. Related Average, Minimum, and Maximum values are grouped under their shared metric name.
+- The menu includes the Event Summary metric families, but a column appears only when a current lap has a valid value. Missing values stay unavailable rather than becoming zero.
 
 ### Event swim length tables
 
@@ -790,6 +803,36 @@ In Settings you can:
 - turn marketing emails on or off,
 - and customize charts, maps, and units.
 
+Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
+
+## MCP client access
+
+- An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics**, **Individual activity details**, **Sleep summaries**, and **Saved routes and waypoints** are separate, optional read-only permissions.
+- Activity access covers persisted numeric activity metrics and ready Training-derived snapshots. When individual activity detail access is also granted, a client can request up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Precise latitude/longitude metrics are excluded, and Training event/activity IDs, names, labels, source fingerprints, and imported device/provider source keys are removed.
+- Individual activity detail access covers bounded activity summaries with exact start/end latitude/longitude coordinates when available, nearby searches that match an activity's start or end, laps, swim lengths, MTB jumps, and signed-in app links containing stable account/event paths. Together with Activity and Training metric access, it also permits explicitly selected canonical numeric metrics for one activity. Jump records can also include exact latitude/longitude coordinates. Exact activity and jump coordinates can reveal your home, workplace, frequent trailhead, or other sensitive locations. Raw streams, activity names and notes, original files, device/provider provenance, precise-position metrics, nonnumeric stats, and unrequested stored stats are excluded.
+- Sleep access covers normalized session summaries and day/week/month aggregates. It excludes provider user/session IDs, provider payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, or respiration samples.
+- Saved-route access covers route names, bounded metrics and counts, exact bounds, simplified polyline previews with segment start/end coordinates, nearby searches that measure against the persisted preview, waypoint coordinates, and signed-in app links containing stable account/route paths. It excludes original route files, raw track points and streams, waypoint names/comments, Storage paths, provider provenance, and delivery metadata.
+- Nearby MCP searches accept either direct latitude/longitude or a place name such as a city. Direct coordinates are processed inside Quantified Self. For place names, Quantified Self sends only the location text to Mapbox for forward geocoding; it does not send activity, route, account, or prompt data to Mapbox for this lookup.
+- Only clients that finish authorization appear in [**Connections -> MCP**](/services?serviceName=mcp). Failed or abandoned authorization attempts are not active connections and expire automatically. Disconnecting a listed client blocks future access, but the external client may retain data it already received under its own policy.
+- See the [Read-only MCP Server feature page](/features/mcp-server) for a public overview of the available data categories and access boundaries.
+- See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
+
+## Use with ChatGPT
+
+1. In ChatGPT on the web, turn on Developer mode and create a custom app.
+2. Use the Quantified Self MCP endpoint: **https://quantified-self.io/mcp**.
+3. Let ChatGPT scan the available tools, then sign in to Quantified Self and approve the read-only permissions you want to grant.
+4. Start a new chat, select the Quantified Self app, and ask about your metrics, activity details, sleep summaries, saved routes, activities that started or ended near a place, or routes that pass near a place.
+5. If ChatGPT asks for an app icon, download either [96 x 96 PNG (3.3 KB)](/assets/favicons/android-chrome-96x96.png) or [192 x 192 PNG (9.9 KB)](/assets/favicons/android-chrome-192x192.png). Both stay under its current 10 KB upload limit. MCP clients that render server metadata can discover these icons automatically.
+
+### Android authorization handoff
+
+Desktop setup is the most reliable option. After approval in an Android browser, Android may open the client return address in the installed ChatGPT app. If ChatGPT opens but does not continue the custom-app setup, the authorization code is not exchanged and no active MCP connection appears.
+
+Retry from ChatGPT on the web using a desktop. As an Android workaround, temporarily turn off **Open supported links** for ChatGPT under the app's **Open by default** or **Set as default** settings, retry the entire browser authorization flow, and restore the setting afterward. Quantified Self must return to the exact address supplied by ChatGPT and cannot force Android or the ChatGPT app to handle that address differently.
+
+You can copy the endpoint and manage connected clients in [**Connections -> MCP**](/services?serviceName=mcp). ChatGPT is an external client, so authorize only the data you are comfortable sharing and review its own data-retention policy.
+
 ## Account deletion
 
 You can delete your account from **Settings -> Account -> Danger Zone**.
@@ -813,10 +856,19 @@ This action cannot be undone.
 - Legal details live on the Policies page.`,
     links: [
       { label: 'Settings', icon: 'settings', kind: 'route', target: '/settings' },
+      {
+        label: 'MCP Connections',
+        icon: 'devices',
+        kind: 'route',
+        target: '/services',
+        queryParams: { serviceName: 'mcp' },
+      },
       { label: 'Policies', icon: 'policy', kind: 'route', target: '/policies' },
       { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
       { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },
       { label: 'COROS Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_COROS_DATA_FRAGMENT },
+      { label: 'MCP Server', icon: 'devices', kind: 'route', target: '/features/mcp-server' },
+      { label: 'MCP Client Access', icon: 'devices', kind: 'route', target: '/policies', fragment: POLICIES_MCP_CLIENTS_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Privacy Email', icon: 'shield', kind: 'external', target: PRIVACY_MAILTO },
     ],

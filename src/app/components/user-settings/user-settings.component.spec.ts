@@ -369,6 +369,8 @@ describe('UserSettingsComponent', () => {
 
         const accountPanel = fixture.nativeElement.querySelector('[aria-labelledby="settings-account-title"]');
         expect(accountPanel.querySelector('.danger-card')).toBeTruthy();
+        expect(accountPanel.querySelector('app-mcp-connections')).toBeNull();
+        expect(accountPanel.textContent).not.toContain('MCP connections');
         expect(accountPanel.querySelector('.settings-panel-body')).toBeNull();
         expect(accountPanel.textContent).toContain('Delete My Account');
         expect(accountPanel.hidden).toBe(true);

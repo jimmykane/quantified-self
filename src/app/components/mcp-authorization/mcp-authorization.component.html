@@ -1,0 +1,125 @@
+<main class="mcp-authorization">
+  <mat-card appearance="outlined" class="mcp-authorization__card">
+    <mat-card-header>
+      <mat-card-title>Connect an MCP client</mat-card-title>
+      <mat-card-subtitle>Choose exactly what this client may read from your account.</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (loading()) {
+        <div class="mcp-authorization__state" role="status">
+          <mat-spinner diameter="32"></mat-spinner>
+          <span>Loading authorization request…</span>
+        </div>
+      } @else if (request(); as authorizationRequest) {
+        <section class="mcp-authorization__client" aria-labelledby="mcp-client-name">
+          <mat-icon>devices</mat-icon>
+          <div>
+            <h1 id="mcp-client-name">{{ authorizationRequest.clientName }}</h1>
+            <dl>
+              <div>
+                <dt>Client metadata</dt>
+                <dd>{{ authorizationRequest.clientIdHost }}</dd>
+              </div>
+              <div>
+                <dt>Return address</dt>
+                <dd>{{ authorizationRequest.redirectUri }}</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        @if (authorizationRequest.loopbackRedirect) {
+          <div class="mcp-authorization__warning" role="note">
+            <mat-icon>warning</mat-icon>
+            <span>This client will return to a program running on your device. Only continue if you started it.</span>
+          </div>
+        }
+
+        @if (isAndroid) {
+          <div class="mcp-authorization__warning mcp-authorization__warning--android" role="note">
+            <mat-icon>phone_android</mat-icon>
+            <div class="mcp-authorization__warning-copy">
+              <strong>Android app handoff</strong>
+              <p>
+                After you allow access, Android may open the return address in the installed client app. If ChatGPT
+                opens but does not resume setup, this connection will not become active. Deny this request and finish
+                setup in ChatGPT on the web from a desktop, or temporarily turn off ChatGPT's
+                <strong>Open supported links</strong> setting and retry the browser flow.
+              </p>
+            </div>
+          </div>
+        }
+
+        <section class="mcp-authorization__permissions" aria-labelledby="mcp-permissions-title">
+          <h2 id="mcp-permissions-title">Requested permissions</h2>
+          @for (option of scopeOptions(); track option.scope) {
+            <mat-checkbox
+              [checked]="option.selected"
+              [disabled]="deciding() !== null"
+              (change)="toggleScope(option.scope, $event)">
+              <span class="mcp-authorization__permission-copy">
+                <strong>{{ option.title }}</strong>
+                <span>{{ option.description }}</span>
+              </span>
+            </mat-checkbox>
+          }
+          <p class="mcp-authorization__privacy">
+            This connection is read-only. Activity-detail access may include exact activity start, end, and jump
+            coordinates, which can reveal your home, workplace, frequent trailhead, or other sensitive locations.
+            When both activity-detail and metric access are granted, a client may also request selected canonical
+            numeric metrics for an individual activity.
+            Saved-route access may include exact bounds, preview geometry with segment endpoints, and waypoint
+            coordinates. If the client searches by place name, Quantified Self sends that location text to Mapbox to
+            resolve coordinates; direct-coordinate searches stay within Quantified Self. Raw streams, original files,
+            provider payloads, credentials, precise-position metrics, nonnumeric stats, and unrequested activity stats
+            are not returned. Direct app links contain stable account/event or route paths and still require your
+            normal sign-in.
+          </p>
+        </section>
+      } @else {
+        <div class="mcp-authorization__state mcp-authorization__state--error" role="alert">
+          <mat-icon>error</mat-icon>
+          <span>{{ error() }}</span>
+        </div>
+      }
+
+      @if (error() && request()) {
+        <div class="mcp-authorization__error" role="alert">
+          <mat-icon>error</mat-icon>
+          <span>{{ error() }}</span>
+        </div>
+      }
+    </mat-card-content>
+
+    @if (request()) {
+      <mat-card-actions align="end">
+        <button mat-button type="button" [disabled]="deciding() !== null" (click)="deny()">
+          <span class="mcp-authorization__button-content">
+            @if (deciding() === 'deny') {
+              <mat-spinner diameter="18"></mat-spinner>
+              <span>Denying…</span>
+            } @else {
+              <span>Deny</span>
+            }
+          </span>
+        </button>
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="deciding() !== null || selectedScopes().length === 0"
+          (click)="approve()">
+          <span class="mcp-authorization__button-content">
+            @if (deciding() === 'approve') {
+              <mat-spinner diameter="18"></mat-spinner>
+              <span>Connecting…</span>
+            } @else {
+              <mat-icon>link</mat-icon>
+              <span>Allow selected access</span>
+            }
+          </span>
+        </button>
+      </mat-card-actions>
+    }
+  </mat-card>
+</main>

@@ -1,5 +1,9 @@
-export const MAX_ACTIVITY_UPLOAD_BYTES = 20 * 1024 * 1024;
-export const MAX_ACTIVITY_UPLOAD_BYTES_LABEL = '20MB';
+export const MAX_ACTIVITY_UPLOAD_BYTES = 30 * 1024 * 1024;
+export const MAX_ACTIVITY_UPLOAD_BYTES_LABEL = '30MB';
+// Callable upload-to-service paths send base64 inside JSON, so a 30MB FIT can
+// exceed the 32MB v2 HTTP request cap before the function handler runs.
+export const MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES = 20 * 1024 * 1024;
+export const MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL = '20MB';
 export const MAX_ACTIVITY_DECOMPRESSED_BYTES = 512 * 1024 * 1024;
 export const MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL = '512MB';
 
@@ -39,10 +43,10 @@ export const REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS = {
 
 export const REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS = {
   memory: '8GiB',
-  cpu: 2,
+  cpu: 4,
   concurrency: 1,
   maxInstances: 1,
-  timeoutSeconds: 1800,
+  timeoutSeconds: 960,
 } as const;
 
 export const REPARSE_PROCESSING_HEAVY_TASK_RATE_LIMITS = {

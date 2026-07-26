@@ -30,6 +30,7 @@ export const DERIVED_METRIC_KINDS = {
   TrainingDurability: 'training_durability',
   TrainingBuildComparison: 'training_build_comparison',
   TrainingReadiness: 'training_readiness',
+  BodyWeightTrend: 'body_weight_trend',
   TrainingSwimPerformance: 'training_swim_performance',
 } as const;
 
@@ -57,6 +58,7 @@ export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingDurability,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
   DERIVED_METRIC_KINDS.TrainingReadiness,
+  DERIVED_METRIC_KINDS.BodyWeightTrend,
   DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
@@ -82,12 +84,13 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingDurability,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  DERIVED_METRIC_KINDS.BodyWeightTrend,
   DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 14;
+export const DERIVED_METRIC_SCHEMA_VERSION = 15;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -600,6 +603,13 @@ export interface DerivedTrainingPowerSystemsDiagnostics {
   criticalPowerNormalizedRmse: number | null;
   criticalPowerSpreadRatio: number | null;
   wPrimeSpreadRatio: number | null;
+  /**
+   * Preserved only when Sports-lib withholds W′ because its current fitting
+   * methods disagree. These are competing estimates, not a reported W′.
+   */
+  wPrimeCandidateCount: number;
+  wPrimeCandidateMinimumJoules: number | null;
+  wPrimeCandidateMaximumJoules: number | null;
   criticalPowerLeaveOneOutSpreadRatio: number | null;
   wPrimeLeaveOneOutSpreadRatio: number | null;
   criticalPowerSourceRemovalFitCount: number;
@@ -965,6 +975,30 @@ export interface DerivedTrainingReadinessMetricPayload {
   points: DerivedTrainingReadinessHistoryPoint[];
 }
 
+export interface DerivedBodyWeightTrendPoint {
+  dayMs: number;
+  weightKg: number | null;
+}
+
+export interface DerivedBodyWeightTrendMetricPayload {
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  trendDays: 28;
+  comparisonWindowDays: 7;
+  minimumComparableDayCount: 3;
+  latestWeightKg: number | null;
+  latestWeightDayMs: number | null;
+  median7dKg: number | null;
+  median28dKg: number | null;
+  change7dKg: number | null;
+  change7dPercent: number | null;
+  change28dKg: number | null;
+  change28dPercent: number | null;
+  recordedDayCount7d: number;
+  recordedDayCount28d: number;
+  points: DerivedBodyWeightTrendPoint[];
+}
+
 export type DerivedPowerCurveScope = DerivedPowerCapacityDiscipline;
 
 export type DerivedTrainingSwimEnvironment = 'pool' | 'open-water';
@@ -1060,6 +1094,7 @@ export type DerivedTrainingExplanationMetricSnapshot = DerivedMetricSnapshotBase
 export type DerivedTrainingDurabilityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingDurabilityMetricPayload>;
 export type DerivedTrainingBuildComparisonMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingBuildComparisonMetricPayload>;
 export type DerivedTrainingReadinessMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingReadinessMetricPayload>;
+export type DerivedBodyWeightTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedBodyWeightTrendMetricPayload>;
 export type DerivedTrainingSwimPerformanceMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSwimPerformanceMetricPayload>;
 export type DerivedMetricSnapshot =
   | DerivedFormMetricSnapshot
@@ -1083,6 +1118,7 @@ export type DerivedMetricSnapshot =
   | DerivedTrainingDurabilityMetricSnapshot
   | DerivedTrainingBuildComparisonMetricSnapshot
   | DerivedTrainingReadinessMetricSnapshot
+  | DerivedBodyWeightTrendMetricSnapshot
   | DerivedTrainingSwimPerformanceMetricSnapshot;
 
 export { POWER_CAPACITY_DISCIPLINES };

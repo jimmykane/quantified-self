@@ -1,7 +1,15 @@
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatSelectionListChange } from '@angular/material/list';
 import {
     ActivityInterface,
+    DataDuration,
+    DataPaceAvg,
+    DataSpeedAvg,
+    DataSpeedMax,
+    DataSpeedMin,
     EventInterface,
     LapInterface,
     LapTypes,
@@ -12,6 +20,9 @@ import { resolve } from 'node:path';
 import { vi } from 'vitest';
 import { EventCardLapsComponent } from './event.card.laps.component';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { normalizeEventDetailsSettings } from '../../../helpers/event-lap-table-columns.helper';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
     return {
@@ -33,16 +44,38 @@ function createRenderableLap(type: LapTypes): LapInterface {
     } as unknown as LapInterface;
 }
 
+function createLapColumnSelectionChange(metricTypes: string[]): MatSelectionListChange {
+    return {
+        source: {
+            selectedOptions: {
+                selected: metricTypes.map((value) => ({ value })),
+            },
+        },
+    } as unknown as MatSelectionListChange;
+}
+
 describe('EventCardLapsComponent', () => {
     let component: EventCardLapsComponent;
     let fixture: ComponentFixture<EventCardLapsComponent>;
+    let eventDetailsSettings: ReturnType<typeof signal>;
+    let updateLapTableColumns: ReturnType<typeof vi.fn>;
+    let snackBar: { open: ReturnType<typeof vi.fn> };
 
     beforeEach(async () => {
+        eventDetailsSettings = signal(normalizeEventDetailsSettings(null));
+        updateLapTableColumns = vi.fn().mockResolvedValue(undefined);
+        snackBar = { open: vi.fn() };
         await TestBed.configureTestingModule({
+            imports: [CommonModule, MatMenuModule],
             declarations: [EventCardLapsComponent],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn(), detectChanges: vi.fn() } },
+                {
+                    provide: AppUserSettingsQueryService,
+                    useValue: { eventDetailsSettings, updateLapTableColumns },
+                },
+                { provide: MatSnackBar, useValue: snackBar },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -67,7 +100,230 @@ describe('EventCardLapsComponent', () => {
         component.ngOnChanges();
 
         expect(component.availableLapTypes).toEqual([LapTypes.Manual]);
+        expect(component.lapTableGroups).toHaveLength(1);
+        expect(component.lapTableGroups[0]?.tables[0]?.dataSource.data[0].Duration).toBe('0:12.85');
         expect(component.getDataSource(activity, LapTypes.Manual)?.data[0].Duration).toBe('0:12.85');
+    });
+
+    it('renders a single lap type without tab chrome', () => {
+        const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+        expect(fixture.nativeElement.querySelector('table[mat-table]')).toBeTruthy();
+    });
+
+    it('renders tabs when multiple lap types are available', () => {
+        const activity = createActivity([
+            createRenderableLap(LapTypes.Manual),
+            createRenderableLap(LapTypes.AutoLap),
+        ]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        expect(component.lapTableGroups).toHaveLength(2);
+        expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeTruthy();
+    });
+
+    it('shows running pace instead of a mislabeled average speed column', () => {
+        const pace = new DataPaceAvg(300);
+        const activity = createActivity([{
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? pace : undefined,
+        } as unknown as LapInterface]);
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        expect(component.getColumns(activity, LapTypes.Manual)).toContain(DataPaceAvg.type);
+        expect(component.getColumns(activity, LapTypes.Manual)).not.toContain(DataSpeedAvg.type);
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataPaceAvg.type]).toBe('05:00 min/km');
+    });
+
+    it('shows unit-aware metric averages directly below the table header', () => {
+        const activity = createActivity([300, 330].map((pace) => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(pace) : undefined,
+        } as unknown as LapInterface)));
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        const rows = component.getDataSource(activity, LapTypes.Manual)?.data;
+        expect(rows?.[0]).toMatchObject({
+            '#': 'Avg',
+            isLapAverage: true,
+            [DataPaceAvg.type]: '05:15 min/km',
+        });
+        expect(rows?.[1]?.['#']).toBe(1);
+    });
+
+    it('does not average accumulated lap totals', () => {
+        const activity = createActivity([120, 180].map((duration, index) => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getDuration: () => new DataDuration(duration),
+            getStat: (type: string) => type === DataPaceAvg.type
+                ? new DataPaceAvg(index === 0 ? 300 : 330)
+                : undefined,
+        } as unknown as LapInterface)));
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        const averageRow = component.getDataSource(activity, LapTypes.Manual)?.data[0];
+        expect(averageRow).toMatchObject({
+            '#': 'Avg',
+            [DataPaceAvg.type]: '05:15 min/km',
+        });
+        expect(averageRow).not.toHaveProperty(DataDuration.type);
+    });
+
+    it('keeps table average rows sport-aware', () => {
+        const running = createActivity([{
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataPaceAvg.type ? new DataPaceAvg(300) : undefined,
+        } as unknown as LapInterface]);
+        const cycling = {
+            ...createActivity([{
+                ...createRenderableLap(LapTypes.Manual),
+                getStat: (type: string) => type === DataSpeedAvg.type ? new DataSpeedAvg(5) : undefined,
+            } as unknown as LapInterface]),
+            getID: () => 'activity-2',
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.selectedActivities = [running, cycling];
+
+        component.ngOnChanges();
+
+        expect(component.getDataSource(running, LapTypes.Manual)?.data[0]).toMatchObject({
+            '#': 'Avg',
+            isLapAverage: true,
+            [DataPaceAvg.type]: '05:00 min/km',
+        });
+        expect(component.getDataSource(cycling, LapTypes.Manual)?.data[0]).toMatchObject({
+            '#': 'Avg',
+            isLapAverage: true,
+            [DataSpeedAvg.type]: '18.00 km/h',
+        });
+    });
+
+    it('uses speed for cycling laps', () => {
+        const speed = new DataSpeedAvg(5);
+        const activity = {
+            ...createActivity([{
+                ...createRenderableLap(LapTypes.Manual),
+                getStat: (type: string) => type === DataSpeedAvg.type ? speed : undefined,
+            } as unknown as LapInterface]),
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+
+        expect(component.getColumns(activity, LapTypes.Manual)).toContain(DataSpeedAvg.type);
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data[0][DataSpeedAvg.type]).toBe('18.00 km/h');
+    });
+
+    it('renders selected cycling speed minimum and maximum lap metrics', async () => {
+        const activity = {
+            ...createActivity([{
+                ...createRenderableLap(LapTypes.Manual),
+                getStat: (type: string) => {
+                    if (type === DataSpeedAvg.type) {
+                        return new DataSpeedAvg(5);
+                    }
+                    if (type === DataSpeedMin.type) {
+                        return new DataSpeedMin(1);
+                    }
+                    if (type === DataSpeedMax.type) {
+                        return new DataSpeedMax(10);
+                    }
+                    return undefined;
+                },
+            } as unknown as LapInterface]),
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+
+        component.ngOnChanges();
+        await component.onLapColumnSelectionChange(
+            'cycling',
+            createLapColumnSelectionChange([DataSpeedAvg.type, DataSpeedMin.type, DataSpeedMax.type]),
+        );
+
+        expect(component.getColumns(activity, LapTypes.Manual)).toEqual([
+            '#',
+            DataSpeedAvg.type,
+            DataSpeedMin.type,
+            DataSpeedMax.type,
+        ]);
+        expect(component.getDataSource(activity, LapTypes.Manual)?.data).toEqual([
+            {
+                '#': 'Avg',
+                isLapAverage: true,
+                [DataSpeedAvg.type]: '18.00 km/h',
+                [DataSpeedMin.type]: '3.60 km/h',
+                [DataSpeedMax.type]: '36.00 km/h',
+            },
+            {
+                '#': 1,
+                [DataSpeedAvg.type]: '18.00 km/h',
+                [DataSpeedMin.type]: '3.60 km/h',
+                [DataSpeedMax.type]: '36.00 km/h',
+            },
+        ]);
+    });
+
+    it('updates an owner-selected sport family column layout immediately and persists it', async () => {
+        const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange([DataPaceAvg.type]),
+        );
+
+        expect(component.getColumnsToDisplay('Running')).toEqual(['#', DataPaceAvg.type]);
+        expect(updateLapTableColumns).toHaveBeenCalledWith('running', [DataPaceAvg.type]);
+    });
+
+    it('keeps independent column menu groups for multisport event details', () => {
+        const running = createActivity([createRenderableLap(LapTypes.Manual)]);
+        const cycling = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]),
+            getID: () => 'activity-2',
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [running, cycling];
+
+        component.ngOnChanges();
+
+        expect(component.lapColumnMenuGroups.map((group) => group.family)).toEqual(['running', 'cycling']);
+        expect(component.lapColumnMenuGroups[0]?.selectedMetricTypes).toContain(DataPaceAvg.type);
+        expect(component.lapColumnMenuGroups[1]?.selectedMetricTypes).toContain(DataSpeedAvg.type);
+    });
+
+    it('restores the prior column layout when its profile save fails', async () => {
+        const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
+        updateLapTableColumns.mockRejectedValueOnce(new Error('save failed'));
+        component.canCustomize = true;
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange([DataPaceAvg.type]),
+        );
+
+        expect(component.getColumnsToDisplay('Running')).toContain(DataDuration.type);
+        expect(snackBar.open).toHaveBeenCalledWith('Could not save lap columns. Please try again.', 'Close');
     });
 
     it('should format durations from cached lap data without the stopwatch formatter', () => {
@@ -140,5 +396,17 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
         expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
+        expect(template).toContain('lapColumnFamiliesMenu');
+        expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
+        expect(template).toContain('row.isLapAverage');
+        expect(template).toContain('lap-average-row');
+        expect(template).not.toContain('lap-header-averages');
+        expect(template).toContain('lapTableGroup.tables');
+        expect(template).toContain('lapTableGroups.length === 1');
+        expect(template).toContain('*ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"');
+        expect(template).toContain('lap-tab-text');
+        expect(template).toContain('lap-tab-icon');
+        expect(template).not.toContain('getDataSource(');
+        expect(template).not.toContain('getColumns(');
     });
 });

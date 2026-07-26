@@ -32,6 +32,7 @@ describe('authGuard', () => {
             createUrlTree: vi.fn().mockImplementation((commands) => ({
                 toString: () => commands.join('/')
             })),
+            getCurrentNavigation: vi.fn().mockReturnValue(null),
             navigate: vi.fn()
         };
 
@@ -77,6 +78,29 @@ describe('authGuard', () => {
 
         expect(snackBarSpy.open).toHaveBeenCalledWith('You must login first', undefined, { duration: 2000 });
         expect(authServiceStub.redirectUrl).toBe('/test');
+        expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
+            queryParams: { returnUrl: '/test' },
+        });
+    });
+
+    it('preserves the MCP authorization request query when login is required', async () => {
+        vi.mocked(router.getCurrentNavigation).mockReturnValue({
+            extractedUrl: {
+                toString: () => '/mcp/authorize?request_id=request-1',
+            },
+        } as any);
+
+        const guardResult = TestBed.runInInjectionContext(() => authGuard(
+            {} as any,
+            [{ path: 'mcp' }, { path: 'authorize' }] as any
+        )) as Observable<unknown>;
+        const result = await firstValueFrom(guardResult);
+
+        expect(result).not.toBe(true);
+        expect(authServiceStub.redirectUrl).toBe('/mcp/authorize?request_id=request-1');
+        expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
+            queryParams: { returnUrl: '/mcp/authorize?request_id=request-1' },
+        });
     });
 
     it('should treat Firebase sign-out as authoritative over a replayed app user', async () => {

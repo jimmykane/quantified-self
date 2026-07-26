@@ -101,15 +101,11 @@
   @if (user) {
   <div class="sidenav-section-header">Account</div>
 
-  <mat-list-item [routerLinkActive]="hasPaidAccess ? 'active' : ''" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" [routerLink]="hasPaidAccess ? '/services' : '/subscriptions'"
+  <mat-list-item routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" routerLink="/services"
+    [queryParams]="hasPaidAccess ? null : { serviceName: 'mcp' }"
     (click)="closeSideNav()">
     <mat-icon>sync</mat-icon>
     <span>Connectivity</span>
-    <span class="fill-space"></span>
-    @if (!hasPaidAccess) {
-    <mat-icon class="lock-icon">lock</mat-icon>
-    <span class="pro-badge">PRO</span>
-    }
   </mat-list-item>
 
   <mat-list-item routerLinkActive="active" [routerLink]="'/settings'" (click)="closeSideNav()">
@@ -183,11 +179,10 @@
       <button mat-icon-button matTooltip="Star on GitHub" (click)="gitHubStar()">
         <mat-icon>star</mat-icon>
       </button>
-      <button mat-icon-button matTooltip="Contact Support" onclick="window.open('mailto:support@quantified-self.io')">
+      <button mat-icon-button matTooltip="Contact Support" (click)="contactSupport()">
         <mat-icon>email</mat-icon>
       </button>
-      <button mat-icon-button matTooltip="Report a Bug"
-        onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
+      <button mat-icon-button matTooltip="Report a Bug" (click)="reportBug()">
         <mat-icon>bug_report</mat-icon>
       </button>
       <button mat-icon-button matTooltip="Policies" routerLink="/policies" (click)="closeSideNav()">

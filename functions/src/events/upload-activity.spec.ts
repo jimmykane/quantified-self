@@ -604,11 +604,11 @@ describe('uploadActivity', () => {
     expect(response.status).toHaveBeenCalledWith(400);
   });
 
-  it('should reject payloads larger than 20MB', async () => {
+  it('should reject payloads larger than 30MB', async () => {
     const response = makeResponse();
     await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-      rawBody: Buffer.alloc((20 * 1024 * 1024) + 1),
+      rawBody: Buffer.alloc((30 * 1024 * 1024) + 1),
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);

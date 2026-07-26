@@ -16,6 +16,10 @@ export const FUNCTIONS_MANIFEST = {
 
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },
+    getMcpAuthorizationRequest: { name: 'getMcpAuthorizationRequest', region: 'europe-west2' },
+    decideMcpAuthorization: { name: 'decideMcpAuthorization', region: 'europe-west2' },
+    listMcpConnections: { name: 'listMcpConnections', region: 'europe-west2' },
+    revokeMcpConnection: { name: 'revokeMcpConnection', region: 'europe-west2' },
 
     // COROS Functions
     getCOROSAPIAuthRequestTokenRedirectURI: { name: 'getCOROSAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },

@@ -44,6 +44,7 @@ import {
   MAX_ACTIVITY_DECOMPRESSED_BYTES,
   MAX_ACTIVITY_DECOMPRESSED_BYTES_LABEL,
   MAX_ACTIVITY_UPLOAD_BYTES,
+  MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
@@ -322,7 +323,7 @@ function normalizeManifestFiles(
     if (byteLength > MAX_ACTIVITY_UPLOAD_BYTES) {
       throw new HttpStatusError(
         400,
-        `File ${index + 1} is too large (${(byteLength / 1024 / 1024).toFixed(1)}MB). Maximum file size is 20MB.`,
+        `File ${index + 1} is too large (${(byteLength / 1024 / 1024).toFixed(1)}MB). Maximum file size is ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL}.`,
       );
     }
 

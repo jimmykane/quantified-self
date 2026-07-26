@@ -6,6 +6,7 @@ import {
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
   POLICIES_COROS_DATA_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
+  POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
@@ -42,6 +43,35 @@ describe('help.content', () => {
         expect(link.icon.trim().length).toBeGreaterThan(0);
         expect(link.target.trim().length).toBeGreaterThan(0);
       });
+    });
+  });
+
+  it('should document the ChatGPT MCP setup path and production endpoint', () => {
+    const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
+
+    expect(dataAndPrivacySection?.content).toContain('Use with ChatGPT');
+    expect(dataAndPrivacySection?.content).toContain('Developer mode');
+    expect(dataAndPrivacySection?.content).toContain('https://quantified-self.io/mcp');
+    expect(dataAndPrivacySection?.content).toContain('96 x 96 PNG (3.3 KB)');
+    expect(dataAndPrivacySection?.content).toContain('/assets/favicons/android-chrome-192x192.png');
+    expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
+    expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
+    expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
+    expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
+    expect(dataAndPrivacySection?.content).toContain('cannot force Android or the ChatGPT app');
+    expect(dataAndPrivacySection?.content).toContain('[Read-only MCP Server feature page](/features/mcp-server)');
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'MCP Server',
+      icon: 'devices',
+      kind: 'route',
+      target: '/features/mcp-server',
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'MCP Connections',
+      icon: 'devices',
+      kind: 'route',
+      target: '/services',
+      queryParams: { serviceName: 'mcp' },
     });
   });
 
@@ -117,6 +147,9 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('What drove this');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
+    expect(trainingSection?.content).toContain('**Body-weight trend**');
+    expect(trainingSection?.content).toContain('multiple measurements on one UTC day to a median');
+    expect(trainingSection?.content).toContain('does not change the Training state, Form, Readiness');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
     expect(trainingSection?.content).toContain('**Power systems** is shown only where it is available to your account');
     expect(trainingSection?.content).toContain('It estimates current CP, W′, and Pmax');
@@ -125,6 +158,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('A type selector appears only when more than one exact activity type is available');
     expect(trainingSection?.content).toContain('fitting-method disagreement');
     expect(trainingSection?.content).toContain('stable CP can remain visible when W′ is unstable');
+    expect(trainingSection?.content).toContain('**What this means**');
+    expect(trainingSection?.content).toContain('competing W′ estimate range');
     expect(trainingSection?.content).toContain('whole-workout removal');
     expect(trainingSection?.content).toContain('New power curves remove isolated one-sample recording artifacts');
     expect(trainingSection?.content).toContain('short-curve signature in older stored curves');
@@ -244,6 +279,20 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('grouped into collapsed sets through the next idle/rest length');
     expect(gettingStartedSection?.content).toContain('lap index, split progress, duration, distance, length type, stroke, strokes, swim pace, cadence, heart rate, SWOLF, and energy');
     expect(gettingStartedSection?.content).toContain('25 m, 50 m, 75 m, and 100 m splits before the rest row');
+  });
+
+  it('should document sport-specific event lap table columns', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Event lap tables');
+    expect(gettingStartedSection?.content).toContain('**Laps -> Columns**');
+    expect(gettingStartedSection?.content).toContain('Running, Cycling, Swimming, or Other activities');
+    expect(gettingStartedSection?.content).toContain('separate column list for each of those sport families');
+    expect(gettingStartedSection?.content).toContain('Running and trail-running laps use pace');
+    expect(gettingStartedSection?.content).toContain('Each lap table includes an **Avg** row directly below its headers');
+    expect(gettingStartedSection?.content).toContain('Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged');
+    expect(gettingStartedSection?.content).toContain('Satellite diagnostics and EHPE/EVPE position-error metrics');
+    expect(gettingStartedSection?.content).toContain('Missing values stay unavailable rather than becoming zero');
   });
 
   it('should document event stamina metrics', () => {
@@ -690,6 +739,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('[Garmin Data](/policies#garmin-data)');
     expect(dataAndPrivacySection?.content).toContain('[Suunto Data](/policies#suunto-data)');
     expect(dataAndPrivacySection?.content).toContain('[COROS Data](/policies#coros-data)');
+    expect(dataAndPrivacySection?.content).toContain('[Policies -> MCP Client Access](/policies#mcp-clients)');
     expect(dataAndPrivacySection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(dataAndPrivacySection?.links).toContainEqual({
       label: 'Garmin Data Privacy',
@@ -713,12 +763,50 @@ describe('help.content', () => {
       fragment: POLICIES_COROS_DATA_FRAGMENT,
     });
     expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'MCP Client Access',
+      icon: 'devices',
+      kind: 'route',
+      target: '/policies',
+      fragment: POLICIES_MCP_CLIENTS_FRAGMENT,
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
       label: 'AI & Processors',
       icon: 'shield',
       kind: 'route',
       target: '/policies',
       fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT,
     });
+  });
+
+  it('documents MCP scopes, redaction, and revocation', () => {
+    const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
+
+    expect(dataAndPrivacySection?.content).toContain('**Activity and Training metrics**');
+    expect(dataAndPrivacySection?.content).toContain('**Individual activity details**');
+    expect(dataAndPrivacySection?.content).toContain('**Sleep summaries**');
+    expect(dataAndPrivacySection?.content).toContain('**Saved routes and waypoints**');
+    expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
+    expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
+    expect(dataAndPrivacySection?.content).toContain('Together with Activity and Training metric access');
+    expect(dataAndPrivacySection?.content).toContain('unrequested stored stats are excluded');
+    expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
+    expect(dataAndPrivacySection?.content).toContain('exact start/end latitude/longitude coordinates when available');
+    expect(dataAndPrivacySection?.content).toContain("match an activity's start or end");
+    expect(dataAndPrivacySection?.content).toContain('Jump records can also include exact latitude/longitude coordinates');
+    expect(dataAndPrivacySection?.content).toContain('home, workplace, frequent trailhead');
+    expect(dataAndPrivacySection?.content).toContain('stable account/event paths');
+    expect(dataAndPrivacySection?.content).toContain('stable account/route paths');
+    expect(dataAndPrivacySection?.content).toContain('simplified polyline previews');
+    expect(dataAndPrivacySection?.content).toContain('segment start/end coordinates');
+    expect(dataAndPrivacySection?.content).toContain('measure against the persisted preview');
+    expect(dataAndPrivacySection?.content).toContain('waypoint coordinates');
+    expect(dataAndPrivacySection?.content).toContain('location text to Mapbox for forward geocoding');
+    expect(dataAndPrivacySection?.content).toContain('does not send activity, route, account, or prompt data');
+    expect(dataAndPrivacySection?.content).toContain('original route files');
+    expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
+    expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
+    expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');
+    expect(dataAndPrivacySection?.content).toContain('Failed or abandoned authorization attempts');
   });
 
   it('directs account deletion to the Account settings section', () => {

@@ -12,6 +12,7 @@ import {
 import {
   buildEventStatAggregation,
   filterEventStatsForAggregation,
+  isValidIanaTimeZone,
   resolveAggregationCategoryKey,
   resolveAutoAggregationTimeInterval,
 } from '@shared/event-stat-aggregation';
@@ -108,6 +109,24 @@ describe('event-stat-aggregation shared core', () => {
         activityTypes: [ActivityTypes.Running],
       }),
     ])).toBe(TimeIntervals.Monthly);
+  });
+
+  it('should ignore malformed dates when resolving the auto interval', () => {
+    expect(resolveAutoAggregationTimeInterval([
+      makeEvent({
+        startDate: new Date('2024-03-10T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+      makeEvent({
+        id: 'invalid-date',
+        startDate: new Date(Number.NaN),
+        activityTypes: [ActivityTypes.Running],
+      }),
+      makeEvent({
+        startDate: new Date('2024-01-01T10:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+    ], 'Europe/Helsinki')).toBe(TimeIntervals.Monthly);
   });
 
   it('should resolve known, unknown and multisport activity category keys', () => {
@@ -516,6 +535,106 @@ describe('event-stat-aggregation shared core', () => {
     expect(aggregation.buckets[1].bucketKey).toBe(expectedSecondBucket.getTime());
   });
 
+  it('should bucket dates at the requested IANA timezone boundary across DST', () => {
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        id: 'before-local-midnight',
+        startDate: new Date('2024-03-31T20:30:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+      makeEvent({
+        id: 'after-local-midnight',
+        startDate: new Date('2024-03-31T21:30:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(aggregation.buckets.map(bucket => bucket.bucketKey)).toEqual([
+      new Date('2024-03-30T22:00:00.000Z').getTime(),
+      new Date('2024-03-31T21:00:00.000Z').getTime(),
+    ]);
+    expect(aggregation.buckets.map(bucket => bucket.aggregateValue)).toEqual([5, 10]);
+  });
+
+  it('should move a nonexistent midnight boundary forward within the same local day', () => {
+    const bucketStart = resolveAggregationCategoryKey(
+      makeEvent({
+        startDate: new Date('2023-10-01T12:00:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+      }),
+      ChartDataCategoryTypes.DateType,
+      TimeIntervals.Daily,
+      undefined,
+      'America/Asuncion',
+    );
+
+    expect(bucketStart).toBe(new Date('2023-10-01T04:00:00.000Z').getTime());
+  });
+
+  it('should preserve existing local bucketing when no timezone is provided', () => {
+    const eventDate = new Date('2024-01-01T23:30:00.000Z');
+
+    expect(resolveAggregationCategoryKey(
+      makeEvent({
+        startDate: eventDate,
+        activityTypes: [ActivityTypes.Running],
+      }),
+      ChartDataCategoryTypes.DateType,
+      TimeIntervals.Daily,
+    )).toBe(new Date(
+      eventDate.getFullYear(),
+      eventDate.getMonth(),
+      eventDate.getDate(),
+    ).getTime());
+  });
+
+  it('should validate IANA timezone names', () => {
+    expect(isValidIanaTimeZone('Europe/Helsinki')).toBe(true);
+    expect(isValidIanaTimeZone('  Europe/Helsinki  ')).toBe(true);
+    expect(isValidIanaTimeZone('')).toBe(false);
+    expect(isValidIanaTimeZone('Not/A_Timezone')).toBe(false);
+  });
+
+  it.each(['', '   ', 'Not/A_Timezone'])(
+    'should reject an explicitly invalid timezone %j',
+    (timeZone) => {
+      expect(() => buildEventStatAggregation([], {
+        dataType: DataDistance.type,
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        requestedTimeInterval: TimeIntervals.Daily,
+        timeZone,
+      })).toThrow(`Invalid IANA timezone: ${timeZone}`);
+    },
+  );
+
+  it('should use the same normalized timezone value that validation accepts', () => {
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        startDate: new Date('2024-03-31T21:30:00.000Z'),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 10 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Daily,
+      timeZone: '  Europe/Helsinki  ',
+    });
+
+    expect(aggregation.buckets[0]?.bucketKey)
+      .toBe(new Date('2024-03-31T21:00:00.000Z').getTime());
+  });
+
   it('should warn and skip invalid date buckets when aggregating by date', () => {
     const logger = { warn: vi.fn() };
     const invalidDateEvent = {
@@ -546,6 +665,30 @@ describe('event-stat-aggregation shared core', () => {
 
     expect(aggregation.buckets).toEqual([]);
     expect(logger.warn).toHaveBeenCalledOnce();
+  });
+
+  it('should skip invalid date buckets when an explicit timezone is provided', () => {
+    const logger = { warn: vi.fn() };
+    const aggregation = buildEventStatAggregation([
+      makeEvent({
+        id: 'invalid-zoned-date',
+        startDate: new Date(Number.NaN),
+        activityTypes: [ActivityTypes.Running],
+        stats: { [DataDistance.type]: 5 },
+      }),
+    ], {
+      dataType: DataDistance.type,
+      valueType: ChartDataValueTypes.Total,
+      categoryType: ChartDataCategoryTypes.DateType,
+      requestedTimeInterval: TimeIntervals.Auto,
+      timeZone: 'Europe/Helsinki',
+    }, logger);
+
+    expect(aggregation.buckets).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[event-stat-aggregation] Event is missing a valid startDate',
+      { eventID: 'invalid-zoned-date' },
+    );
   });
 
   it('should log and bucket missing activity display values as unknown', () => {
