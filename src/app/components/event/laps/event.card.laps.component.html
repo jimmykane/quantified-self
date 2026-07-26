@@ -18,7 +18,7 @@
 </mat-menu>
 <mat-menu #lapColumnMetricsMenu="matMenu" class="qs-menu-panel">
   <ng-template matMenuContent let-group="group">
-    <div class="lap-column-menu-content" (click)="$event.stopPropagation()">
+    <div class="lap-column-menu-content">
       <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units.</p>
       @if (savingLapColumnSportFamilies().has(group.family)) {
       <div class="lap-column-menu-saving" aria-live="polite">
@@ -27,6 +27,7 @@
       </div>
       }
       <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+        (click)="$event.stopPropagation()"
         [aria-label]="group.label + ' lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
         @for (metricGroup of group.metricGroups; track metricGroup.id) {
         <div mat-subheader>{{ metricGroup.label }}</div>

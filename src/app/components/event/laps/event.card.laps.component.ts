@@ -213,7 +213,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     return column === '#'
   }
 
-  isStickyEnd(column: string) {
+  isStickyEnd(_column: string) {
     return false;
   }
 
