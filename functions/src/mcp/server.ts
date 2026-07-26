@@ -406,7 +406,7 @@ export function createMcpServer(
     }, input => runReadOnlyTool('list_activities', () => dataService.listActivities({
       uid: auth.uid,
       connectionId: auth.connectionId,
-      appBaseUrl: auth.baseUrl,
+      appBaseUrl: publicBaseUrl,
       startTimeMs: parseMcpDateTime(input.start, 'start'),
       endTimeMs: parseMcpDateTime(input.end, 'end'),
       cursor: input.cursor,
@@ -431,7 +431,7 @@ export function createMcpServer(
       () => dataService.findActivitiesNearLocation({
         uid: auth.uid,
         connectionId: auth.connectionId,
-        appBaseUrl: auth.baseUrl,
+        appBaseUrl: publicBaseUrl,
         location: input.location,
         radiusMeters: input.radiusMeters,
         startTimeMs: input.start
@@ -538,7 +538,7 @@ export function createMcpServer(
     }, input => runReadOnlyTool('list_routes', () => dataService.listRoutes({
       uid: auth.uid,
       connectionId: auth.connectionId,
-      appBaseUrl: auth.baseUrl,
+      appBaseUrl: publicBaseUrl,
       cursor: input.cursor,
       limit: input.limit,
     })));
@@ -559,7 +559,7 @@ export function createMcpServer(
       () => dataService.findRoutesNearLocation({
         uid: auth.uid,
         connectionId: auth.connectionId,
-        appBaseUrl: auth.baseUrl,
+        appBaseUrl: publicBaseUrl,
         location: input.location,
         radiusMeters: input.radiusMeters,
         activityTypes: input.activityTypes,
