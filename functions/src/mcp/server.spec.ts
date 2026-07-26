@@ -133,6 +133,32 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
   });
 
+  it('discloses exact start and end coordinates in the activity tool metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+      baseUrl: 'https://quantified-self.io',
+    });
+    const client = new Client({
+      name: 'metadata-test-client',
+      version: '1.0.0',
+    });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const listActivities = (await client.listTools()).tools
+        .find(tool => tool.name === 'list_activities');
+
+      expect(listActivities?.description).toContain('exact start and end coordinates when present');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('does not assign a scope to protocol messages or unknown tools', () => {
     expect(requiredScopeForRequest({ method: 'initialize' })).toBeNull();
     expect(requiredScopeForRequest({

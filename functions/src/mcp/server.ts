@@ -346,7 +346,7 @@ export function createMcpServer(auth: AuthenticatedMcpRequest): McpServer {
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
     server.registerTool('list_activities', {
       title: 'List activities',
-      description: 'List bounded activity summaries with opaque references and direct authenticated app links.',
+      description: 'List bounded activity summaries, including exact start and end coordinates when present, with opaque references and direct authenticated app links.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,

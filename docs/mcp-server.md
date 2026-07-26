@@ -40,13 +40,15 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 
 - `metrics:read` for event metrics and ready Training-derived snapshots;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
-- `activity-details:read` for bounded activity summaries, laps, swim lengths, and MTB jumps; and
+- `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, laps, swim lengths,
+  and MTB jumps; and
 - `routes:read` for saved-route summaries, preview geometry, and waypoints.
 
 The last two scopes are independent grants. Existing metric or sleep connections do not acquire them automatically; the
 client must start a new authorization request and the user must approve the requested scope. Activity-detail consent
-states that individual jumps can include exact coordinates. Saved-route consent states that route bounds, simplified
-geometry, and waypoint coordinates can expose exact locations.
+states that activity starts, ends, and individual jumps can include exact coordinates that may reveal a home, workplace,
+frequent trailhead, or other sensitive location. Saved-route consent states that route bounds, simplified geometry, and
+waypoint coordinates can expose exact locations.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -156,7 +158,7 @@ The analytics and map entries follow the
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `list_activities` | `activity-details:read` | Paginated safe activity summaries, opaque references, and signed-in app links |
+| `list_activities` | `activity-details:read` | Paginated safe activity summaries with optional exact start/end coordinates, opaque references, and signed-in app links |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements, including exact coordinates when present |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
@@ -202,14 +204,22 @@ events, privacy filtering, query bounds, and the MCP transport.
 
 `activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. List queries select
 only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a signed-in app link,
-and a fixed set of numeric summary stats. Detail calls select exactly one persisted array: `laps`, `events` for jumps, or
-`swimLengths`. They never hydrate a whole activity document.
+the persisted `Start Position` and `End Position` stats, and a fixed set of numeric summary stats. Detail calls select
+exactly one persisted array: `laps`, `events` for jumps, or `swimLengths`. They never hydrate a whole activity document.
 
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
 average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
 distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
-height, hang time, speed, rotations, score, and latitude/longitude. Activity names and notes, raw streams, arbitrary
-stats, internal ID fields, device/provider creator data, source keys, original files, and parser extensions are excluded.
+height, hang time, speed, rotations, score, and latitude/longitude. Activity summaries expose optional `startPosition`
+and `endPosition` objects containing only validated `latitudeDegrees` and `longitudeDegrees`; missing, partial,
+non-finite, or out-of-range pairs become `null`. Activity names and notes, raw streams, arbitrary stats, internal ID
+fields, device/provider creator data, source keys, original files, nested position metadata, and parser extensions are
+excluded.
+
+Sports Lib already derives these positions from the first and last available activity position when an importer does not
+provide them, and the normal activity writer persists both stats. Historical activities that do not contain a complete
+stored pair return `null`; no reparse or backfill is required. Selecting the two nested fields does not change the
+activity query filters or ordering, so it adds no composite index.
 
 `list_activities` returns an encrypted `activityRef`, not the activity or event document ID. References and detail
 cursors use authenticated encryption and are bound to the UID and MCP connection, so another connection cannot replay

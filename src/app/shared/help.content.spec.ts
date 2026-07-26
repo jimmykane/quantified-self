@@ -748,7 +748,9 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('**Saved routes and waypoints**');
     expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
-    expect(dataAndPrivacySection?.content).toContain('Jump records can include exact latitude/longitude coordinates');
+    expect(dataAndPrivacySection?.content).toContain('exact start/end latitude/longitude coordinates when available');
+    expect(dataAndPrivacySection?.content).toContain('Jump records can also include exact latitude/longitude coordinates');
+    expect(dataAndPrivacySection?.content).toContain('home, workplace, frequent trailhead');
     expect(dataAndPrivacySection?.content).toContain('stable account/event paths');
     expect(dataAndPrivacySection?.content).toContain('stable account/route paths');
     expect(dataAndPrivacySection?.content).toContain('simplified polyline previews');

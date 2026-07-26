@@ -24,8 +24,9 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   intervals, or raw HRV, SpO2, or respiration samples.
 - **Activity-detail field:** decide whether it belongs in the explicit activity summary, lap, jump, or swim-length
   projection. Never forward whole activity documents, raw streams, creator/device metadata, source keys, names/notes,
-  internal identifier fields, arbitrary stats, or parser extensions. Exact jump coordinates require the
-  `activity-details:read` scope and matching consent/policy wording.
+  internal identifier fields, arbitrary stats, or parser extensions. Exact activity start/end and jump coordinates
+  require the `activity-details:read` scope and matching consent/policy wording that explains the sensitive-location
+  risk.
 - **Saved-route field or parser output:** decide whether it belongs in the explicit route summary, preview, or waypoint
   projection. Never forward original files, raw points/streams, Storage paths, source/delivery provenance, waypoint text,
   links, or extensions. Exact route bounds, preview geometry, and waypoint coordinates require `routes:read`.

@@ -6,11 +6,13 @@ import {
   DataCadenceAvg,
   DataDistance,
   DataDuration,
+  DataEndPosition,
   DataEnergy,
   DataHeartRateAvg,
   DataJumpEvent,
   DataPowerAvg,
   DataSpeedAvg,
+  DataStartPosition,
   EventImporterJSON,
   EventInterface,
   TimeIntervals,
@@ -110,6 +112,17 @@ function activityDocument(overrides: Record<string, unknown> = {}) {
         [DataCadenceAvg.type]: 82,
         [DataEnergy.type]: 700,
         'Jump Count': 2,
+        [DataStartPosition.type]: {
+          latitudeDegrees: 39.6671,
+          longitudeDegrees: 20.8374,
+          accuracyMeters: 3,
+          sourceKey: 'private-position-source',
+        },
+        [DataEndPosition.type]: {
+          latitudeDegrees: 39.6722,
+          longitudeDegrees: 20.8428,
+          providerPayload: 'private-position-payload',
+        },
         'Owner controlled private stat': 'do-not-return',
       },
       ...overrides,
@@ -195,7 +208,7 @@ describe('MCP data service', () => {
     )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
   });
 
-  it('projects activity summaries and exact MTB jump coordinates without leaking raw activity data', async () => {
+  it('projects exact activity and MTB jump coordinates without leaking raw activity data', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
     ]);
@@ -217,6 +230,14 @@ describe('MCP data service', () => {
       powerMeter: true,
       trainer: false,
       jumpCount: 2,
+      startPosition: {
+        latitudeDegrees: 39.6671,
+        longitudeDegrees: 20.8374,
+      },
+      endPosition: {
+        latitudeDegrees: 39.6722,
+        longitudeDegrees: 20.8428,
+      },
       supportedDetailKinds: ['laps', 'jumps', 'swim_lengths'],
       stats: expect.objectContaining({
         durationSeconds: 3600,
@@ -233,6 +254,9 @@ describe('MCP data service', () => {
     expect(Buffer.from(activityRef, 'base64url').toString('utf8')).not.toContain('activity-1');
     expect(JSON.stringify(activities.activities[0])).not.toContain('Private device');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-key');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-source');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-payload');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('accuracyMeters');
     expect(JSON.stringify(activities.activities[0])).not.toContain('Owner controlled');
 
     vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
@@ -291,6 +315,77 @@ describe('MCP data service', () => {
       'activity-1',
       'jumps',
     );
+  });
+
+  it('returns null for incomplete or invalid activity positions while preserving zero coordinates', async () => {
+    const zeroAndPartial = activityDocument({
+      eventID: 'event-zero',
+      stats: {
+        [DataStartPosition.type]: {
+          latitudeDegrees: 0,
+          longitudeDegrees: 0,
+        },
+        [DataEndPosition.type]: {
+          latitudeDegrees: 39.6722,
+        },
+      },
+    });
+    zeroAndPartial.id = 'activity-zero';
+    const outOfRange = activityDocument({
+      eventID: 'event-range',
+      stats: {
+        [DataStartPosition.type]: {
+          latitudeDegrees: 91,
+          longitudeDegrees: 20,
+        },
+        [DataEndPosition.type]: {
+          latitudeDegrees: 40,
+          longitudeDegrees: -181,
+        },
+      },
+    });
+    outOfRange.id = 'activity-range';
+    const nonFiniteAndMissing = activityDocument({
+      eventID: 'event-non-finite',
+      stats: {
+        [DataStartPosition.type]: {
+          latitudeDegrees: Number.POSITIVE_INFINITY,
+          longitudeDegrees: 20,
+        },
+      },
+    });
+    nonFiniteAndMissing.id = 'activity-non-finite';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      zeroAndPartial,
+      outOfRange,
+      nonFiniteAndMissing,
+    ]);
+    const service = createMcpDataService(dependencies);
+
+    const result = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+
+    expect(result.activities.map(activity => ({
+      startPosition: activity.startPosition,
+      endPosition: activity.endPosition,
+    }))).toEqual([{
+      startPosition: {
+        latitudeDegrees: 0,
+        longitudeDegrees: 0,
+      },
+      endPosition: null,
+    }, {
+      startPosition: null,
+      endPosition: null,
+    }, {
+      startPosition: null,
+      endPosition: null,
+    }]);
   });
 
   it('binds activity references and detail cursors to the MCP connection', async () => {

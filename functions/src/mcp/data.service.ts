@@ -18,6 +18,7 @@ import {
   DataDescent,
   DataDistance,
   DataDuration,
+  DataEndPosition,
   DynamicDataLoader,
   DataEnergy,
   DataHeartRateAvg,
@@ -27,6 +28,7 @@ import {
   DataPowerMax,
   DataSpeedAvg,
   DataSpeedMax,
+  DataStartPosition,
   decodeRoutePolyline5,
   EventImporterJSON,
   EventInterface,
@@ -113,9 +115,11 @@ const SAFE_SUMMARY_STAT_FIELDS = [
   new FieldPath('stats', DataCadenceMax.type),
   new FieldPath('stats', DataEnergy.type),
 ] as const;
-const SAFE_ACTIVITY_STAT_FIELDS = [
+const SAFE_ACTIVITY_SUMMARY_FIELDS = [
   ...SAFE_SUMMARY_STAT_FIELDS,
   new FieldPath('stats', 'Jump Count'),
+  new FieldPath('stats', DataStartPosition.type),
+  new FieldPath('stats', DataEndPosition.type),
 ] as const;
 const SAFE_SLEEP_VITAL_KEYS = [
   'averageHeartRateBpm',
@@ -365,7 +369,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'type',
         'powerMeter',
         'trainer',
-        ...SAFE_ACTIVITY_STAT_FIELDS,
+        ...SAFE_ACTIVITY_SUMMARY_FIELDS,
       );
     if (cursor) {
       query = query.startAfter(new Date(cursor.timeMs), cursor.id);
@@ -938,6 +942,11 @@ interface SafeActivityStats {
   energyKilocalories: number | null;
 }
 
+interface SafePosition {
+  latitudeDegrees: number;
+  longitudeDegrees: number;
+}
+
 function projectActivityStats(value: unknown): SafeActivityStats {
   const stats = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -957,6 +966,18 @@ function projectActivityStats(value: unknown): SafeActivityStats {
     maximumCadenceRpm: asNonNegativeNumber(stats[DataCadenceMax.type]),
     energyKilocalories: asNonNegativeNumber(stats[DataEnergy.type]),
   };
+}
+
+function projectPosition(value: unknown): SafePosition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const position = value as Record<string, unknown>;
+  const latitudeDegrees = asLatitude(position.latitudeDegrees);
+  const longitudeDegrees = asLongitude(position.longitudeDegrees);
+  return latitudeDegrees !== null && longitudeDegrees !== null
+    ? { latitudeDegrees, longitudeDegrees }
+    : null;
 }
 
 function normalizeActivityType(value: unknown): string | null {
@@ -1719,6 +1740,8 @@ interface SafeActivityListEntry {
     powerMeter: boolean;
     trainer: boolean;
     jumpCount: number | null;
+    startPosition: SafePosition | null;
+    endPosition: SafePosition | null;
     supportedDetailKinds: readonly ActivityDetailKind[];
     stats: SafeActivityStats;
   };
@@ -1784,6 +1807,8 @@ function projectActivityListEntry(
       powerMeter: document.data.powerMeter === true,
       trainer: document.data.trainer === true,
       jumpCount: asSafeInteger(rawStats['Jump Count']),
+      startPosition: projectPosition(rawStats[DataStartPosition.type]),
+      endPosition: projectPosition(rawStats[DataEndPosition.type]),
       supportedDetailKinds: ['laps', 'jumps', 'swim_lengths'],
       stats: {
         ...stats,

@@ -70,7 +70,9 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
+    expect(content).toContain('exact start and end coordinates when available');
     expect(content).toContain('MTB jumps with exact coordinates');
+    expect(content).toContain('home, workplace, frequent trailhead');
     expect(content).toContain('Saved routes and waypoints');
     expect(content).toContain('waypoint coordinates');
     expect(content).toContain('Raw streams');

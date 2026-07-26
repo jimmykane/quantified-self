@@ -37,7 +37,9 @@ describe('MCP client access policy', () => {
     expect(content).toContain('excludes precise latitude/longitude metrics');
     expect(content).toContain('imported device/provider source keys');
     expect(content).toContain('MTB jump measurements');
+    expect(content).toContain('exact start and end latitude/longitude coordinates when available');
     expect(content).toContain('exact latitude and longitude');
+    expect(content).toContain('home, workplace, frequent trailhead');
     expect(content).toContain('stable account/event paths');
     expect(content).toContain('stable account/route paths');
     expect(content).toContain('simplified polyline preview geometry');
