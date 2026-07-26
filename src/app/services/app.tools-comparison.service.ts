@@ -53,7 +53,8 @@ interface PreparedComparisonFile {
 const SUPPORTED_COMPARISON_EXTENSIONS = new Set(['fit', 'gpx', 'tcx']);
 const MIN_COMPARISON_FILES = 2;
 const MAX_COMPARISON_FILES = 10;
-const MAX_COMPARISON_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_COMPARISON_FILE_BYTES = 30 * 1024 * 1024;
+const MAX_COMPARISON_FILE_BYTES_LABEL = '30MB';
 const MAX_COMPARISON_TOTAL_BYTES = 30 * 1024 * 1024;
 // Keep this aligned with MAX_ACTIVITY_DECOMPRESSED_BYTES in the comparison function.
 const MAX_COMPARISON_DECOMPRESSED_HASH_BYTES = 512 * 1024 * 1024;
@@ -193,7 +194,7 @@ export class AppToolsComparisonService {
         return `${file.name || 'Selected file'} is empty.`;
       }
       if (file.size > MAX_COMPARISON_FILE_BYTES) {
-        return `${file.name || 'Selected file'} is larger than 20MB.`;
+        return `${file.name || 'Selected file'} is larger than ${MAX_COMPARISON_FILE_BYTES_LABEL}.`;
       }
     }
 

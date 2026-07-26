@@ -379,10 +379,10 @@ describe('AppToolsComparisonService', () => {
     ])).rejects.toThrow('Only FIT, GPX, and TCX files');
 
     const oversizedFile = makeFile('huge.fit', [1, 2]);
-    Object.defineProperty(oversizedFile, 'size', { value: (20 * 1024 * 1024) + 1 });
+    Object.defineProperty(oversizedFile, 'size', { value: (30 * 1024 * 1024) + 1 });
     await expect(service.createComparison([makeFile('one.fit', [1]), oversizedFile]))
       .rejects
-      .toThrow('larger than 20MB');
+      .toThrow('combined upload under 30MB');
 
     expect(fetchMock).not.toHaveBeenCalled();
   });

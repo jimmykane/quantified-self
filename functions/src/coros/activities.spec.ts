@@ -292,14 +292,14 @@ describe('importActivityToCOROSAPI', () => {
     });
   });
 
-  it('rejects files larger than 20MB before uploading to COROS', async () => {
+  it('rejects files larger than 30MB before uploading to COROS', async () => {
     const request = createMockRequest({
-      data: { file: Buffer.alloc((20 * 1024 * 1024) + 1).toString('base64') },
+      data: { file: Buffer.alloc((30 * 1024 * 1024) + 1).toString('base64') },
     });
 
     await expect(importActivityToCOROSAPI(request as any)).rejects.toMatchObject({
       code: 'invalid-argument',
-      message: 'Cannot upload activity because the size is greater than 20MB',
+      message: 'Cannot upload activity because the size is greater than 30MB',
     });
     expect(requestMocks.post).not.toHaveBeenCalled();
   });

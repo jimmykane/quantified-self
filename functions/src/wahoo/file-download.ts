@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 import * as net from 'net';
 import { config } from '../config';
-import { MAX_ACTIVITY_UPLOAD_BYTES } from '../shared/activity-processing-config';
+import { MAX_ACTIVITY_UPLOAD_BYTES, MAX_ACTIVITY_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
 import { WAHOO_FIT_DOWNLOAD_TIMEOUT_MS } from './constants';
 import { WahooRequestTimeoutError, withWahooRequestTimeout } from './request-timeout';
 
@@ -46,7 +46,7 @@ function assertFitPayload(payload: Buffer): void {
 async function readBoundedBody(body: NodeJS.ReadableStream | null, contentLength: string | null): Promise<Buffer> {
   const declaredLength = contentLength ? Number(contentLength) : null;
   if (declaredLength !== null && Number.isFinite(declaredLength) && declaredLength > MAX_ACTIVITY_UPLOAD_BYTES) {
-    throw new Error('Wahoo FIT file exceeds the 20 MB limit.');
+    throw new Error(`Wahoo FIT file exceeds the ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL} limit.`);
   }
   if (!body) throw new Error('Wahoo FIT response did not contain a body.');
   const chunks: Buffer[] = [];
@@ -55,7 +55,7 @@ async function readBoundedBody(body: NodeJS.ReadableStream | null, contentLength
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     totalBytes += buffer.length;
     if (totalBytes > MAX_ACTIVITY_UPLOAD_BYTES) {
-      throw new Error('Wahoo FIT file exceeds the 20 MB limit.');
+      throw new Error(`Wahoo FIT file exceeds the ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL} limit.`);
     }
     chunks.push(buffer);
   }
@@ -102,7 +102,7 @@ export async function downloadWahooFITFile(rawUrl: string): Promise<Buffer> {
       if (error instanceof WahooRequestTimeoutError) throw new Error('Wahoo FIT download timed out.');
       if ((error as { statusCode?: unknown })?.statusCode) throw error;
       const errorMessage = error instanceof Error ? error.message : '';
-      if (errorMessage.includes('20 MB') || errorMessage.includes('valid FIT')) throw error;
+      if (errorMessage.includes(MAX_ACTIVITY_UPLOAD_BYTES_LABEL) || errorMessage.includes('valid FIT')) throw error;
       throw new Error('Wahoo FIT download request failed.');
     }
   }

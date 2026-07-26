@@ -23,11 +23,11 @@ import { toSuuntoAuthorizationHeader } from './authorization-header';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+import { MAX_ACTIVITY_UPLOAD_BYTES, MAX_ACTIVITY_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
 
 const SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES = new Set([502, 503, 504]);
 const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
 const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
-const MAX_ACTIVITY_UPLOAD_BYTES = 20 * 1024 * 1024;
 const SUUNTO_PERMANENT_500_MESSAGE_PATTERNS = [
   'unsupported',
   'invalid',
@@ -446,7 +446,7 @@ export const importActivityToSuuntoApp = onCall({
   }
 
   if (size > MAX_ACTIVITY_UPLOAD_BYTES) {
-    throw new HttpsError('invalid-argument', 'Cannot upload activity because the size is greater than 20MB');
+    throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_UPLOAD_BYTES_LABEL}`);
   }
 
   return uploadActivityFileToSuunto(userID, fileBuffer);
