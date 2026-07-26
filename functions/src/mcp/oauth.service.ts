@@ -253,15 +253,18 @@ function isActiveMcpConnection(connection: McpConnection | null): connection is 
     return false;
   }
   return connection.status === 'active'
-    || (connection.status === undefined && connection.lastUsedAtMs !== null);
+    || (
+      (connection.status === undefined || connection.status === 'pending')
+      && connection.lastUsedAtMs !== null
+    );
 }
 
 function isPendingMcpConnection(connection: McpConnection | null): connection is McpConnection {
   if (!connection || connection.revokedAtMs !== null) {
     return false;
   }
-  return connection.status === 'pending'
-    || (connection.status === undefined && connection.lastUsedAtMs === null);
+  return connection.lastUsedAtMs === null
+    && (connection.status === 'pending' || connection.status === undefined);
 }
 
 export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
@@ -272,6 +275,8 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
     .doc(uid)
     .collection(MCP_OAUTH_COLLECTIONS.userConnections)
     .doc(connectionId);
+  // Connection documents are leaf records by design. Pending records use
+  // Firestore TTL, whose document deletion does not recursively delete descendants.
   const deleteCredentialStateForConnection = async (
     uid: string,
     connectionId: string,
@@ -378,7 +383,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           ...input.codeRecord,
           expireAt: timestamp(input.codeRecord.expiresAtMs),
         });
-        transaction.set(connectionRef(input.uid, input.connection.connectionId), {
+        transaction.create(connectionRef(input.uid, input.connection.connectionId), {
           ...input.connection,
           status: 'pending',
           expireAt: timestamp(input.codeRecord.expiresAtMs),
@@ -530,6 +535,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           status: 'active',
           scopes: input.requestedScopes || refresh.scopes,
           lastUsedAtMs: input.nowMs,
+          expireAt: admin.firestore.FieldValue.delete(),
         });
         return { refresh, replayed: false as const };
       });
@@ -609,6 +615,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         transaction.update(activeConnectionRef, {
           status: 'active',
           lastUsedAtMs: nowMs,
+          expireAt: admin.firestore.FieldValue.delete(),
         });
       });
     },

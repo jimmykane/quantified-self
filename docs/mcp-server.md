@@ -99,7 +99,9 @@ Approval creates a pending record whose `expireAt` matches the five-minute autho
 code-exchange transaction creates the credentials, changes the connection to active, stamps `lastUsedAtMs`, and removes
 `expireAt` atomically. Settings lists active records only. For compatibility, pre-lifecycle records with a non-null
 `lastUsedAtMs` remain active, while old unexchanged records with no usage are hidden. Firestore TTL removes new abandoned
-pending records; connection documents have no descendant collections by design.
+pending records. A mixed-version rollout is also recoverable: a pending record with completed-exchange usage evidence is
+treated as active, and the next authorized request or refresh removes its stale TTL. Connection documents have no
+descendant collections by design.
 
 Browser Firestore access to every MCP collection is denied; authenticated, App Check-protected callables mediate
 consent, listing, and revocation. Revocation transactionally rechecks account-deletion state before changing the

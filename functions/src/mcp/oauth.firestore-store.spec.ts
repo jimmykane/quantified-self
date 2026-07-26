@@ -119,7 +119,7 @@ describe('Firestore MCP OAuth store', () => {
       nowMs: 5_000,
     });
 
-    expect(transaction.set).toHaveBeenCalledWith(
+    expect(transaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
         path: 'users/user-1/mcpConnections/connection-1',
       }),
@@ -128,6 +128,70 @@ describe('Firestore MCP OAuth store', () => {
         expireAt: { milliseconds: 8_000 },
       }),
     );
+  });
+
+  it('marks an existing connection revoked and removes any pending TTL', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'users/user-1') {
+          return fakeSnapshot(true);
+        }
+        if (ref.path === 'userDeletionTombstones/user-1') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1/mcpConnections/connection-1') {
+          return fakeSnapshot(true, {
+            status: 'active',
+            revokedAtMs: null,
+          });
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    const emptyCredentialQuery = {
+      where: vi.fn(),
+      get: vi.fn(async () => ({ docs: [] })),
+    };
+    emptyCredentialQuery.where.mockReturnValue(emptyCredentialQuery);
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (
+          name === MCP_OAUTH_COLLECTIONS.accessTokens
+          || name === MCP_OAUTH_COLLECTIONS.refreshTokens
+          || name === MCP_OAUTH_COLLECTIONS.authorizationCodes
+        ) {
+          return emptyCredentialQuery;
+        }
+        return fakeDocumentReference(name);
+      }),
+      recursiveDelete: vi.fn(),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+
+    await buildFirestoreMcpOAuthStore().revokeConnection(
+      'user-1',
+      'connection-1',
+      5_000,
+    );
+
+    expect(transaction.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'users/user-1/mcpConnections/connection-1',
+      }),
+      {
+        status: 'revoked',
+        revokedAtMs: 5_000,
+        expireAt: { deleteField: true },
+      },
+      { merge: true },
+    );
+    expect(emptyCredentialQuery.get).toHaveBeenCalledTimes(3);
+    expect(db.recursiveDelete).not.toHaveBeenCalled();
   });
 
   it('atomically activates a pending connection and removes its TTL on code exchange', async () => {
@@ -560,6 +624,62 @@ describe('Firestore MCP OAuth store', () => {
     expect(transaction.get).toHaveBeenCalledTimes(4);
     expect(transaction.set).not.toHaveBeenCalled();
     expect(transaction.update).not.toHaveBeenCalled();
+  });
+
+  it('repairs a stale pending TTL when recording authorized activity', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'users/user-1') {
+          return fakeSnapshot(true);
+        }
+        if (ref.path === 'userDeletionTombstones/user-1') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path.startsWith('mcpOAuthRateLimits/')) {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1/mcpConnections/connection-1') {
+          return fakeSnapshot(true, {
+            status: 'pending',
+            scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+            lastUsedAtMs: 4_000,
+            revokedAtMs: null,
+          });
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+    const token: AccessTokenRecord = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId: 'https://client.example/mcp.json',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 4_000,
+      expiresAtMs: 10_000,
+    };
+
+    await buildFirestoreMcpOAuthStore().recordAuthorizedRequest(token, 5_000);
+
+    expect(transaction.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'users/user-1/mcpConnections/connection-1',
+      }),
+      {
+        status: 'active',
+        lastUsedAtMs: 5_000,
+        expireAt: { deleteField: true },
+      },
+    );
   });
 
   it.each([

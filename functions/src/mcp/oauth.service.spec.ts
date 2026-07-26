@@ -86,8 +86,8 @@ function createMemoryStore(): McpOAuthStore & {
         !connection
         || connection.revokedAtMs !== null
         || !(
-          connection.status === 'pending'
-          || (connection.status === undefined && connection.lastUsedAtMs === null)
+          connection.lastUsedAtMs === null
+          && (connection.status === 'pending' || connection.status === undefined)
         )
       ) {
         throw new McpOAuthError('invalid_grant', 'connection unavailable');
@@ -130,7 +130,10 @@ function createMemoryStore(): McpOAuthStore & {
         || connection.revokedAtMs !== null
         || !(
           connection.status === 'active'
-          || (connection.status === undefined && connection.lastUsedAtMs !== null)
+          || (
+            (connection.status === undefined || connection.status === 'pending')
+            && connection.lastUsedAtMs !== null
+          )
         )
       ) {
         throw new McpOAuthError('invalid_grant', 'inactive connection');
@@ -194,7 +197,10 @@ function createMemoryStore(): McpOAuthStore & {
         || connection.revokedAtMs !== null
         || !(
           connection.status === 'active'
-          || (connection.status === undefined && connection.lastUsedAtMs !== null)
+          || (
+            (connection.status === undefined || connection.status === 'pending')
+            && connection.lastUsedAtMs !== null
+          )
         )
       ) {
         throw new McpOAuthError('invalid_grant', 'inactive connection', 401);
@@ -202,7 +208,11 @@ function createMemoryStore(): McpOAuthStore & {
       if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
         throw new McpOAuthError('invalid_grant', 'scope no longer authorized', 401);
       }
-      connections.set(key, { ...connection, lastUsedAtMs: nowMs });
+      connections.set(key, {
+        ...connection,
+        status: 'active',
+        lastUsedAtMs: nowMs,
+      });
     },
     async listConnections(uid) {
       return [...connections.entries()]
@@ -841,6 +851,60 @@ describe('MCP OAuth service', () => {
     expect(store.refreshTokens.size).toBe(0);
   });
 
+  it('activates an in-flight legacy authorization created before lifecycle statuses', async () => {
+    const store = createMemoryStore();
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 5000,
+      randomToken: vi.fn()
+        .mockReturnValueOnce('access-token')
+        .mockReturnValueOnce('refresh-token')
+        .mockReturnValueOnce('family-id'),
+    });
+    const verifier = 'correct-verifier-value-with-at-least-43-characters';
+    const code = 'legacy-authorization-code';
+    store.codes.set(hashOpaqueValue(code), {
+      uid: 'user-1',
+      connectionId: 'legacy-connection',
+      clientId: metadata().client_id,
+      redirectUri: metadata().redirect_uris[0],
+      codeChallenge: createPkceChallenge(verifier),
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 4000,
+      expiresAtMs: 6000,
+    });
+    store.connections.set('user-1:legacy-connection', {
+      connectionId: 'legacy-connection',
+      clientId: metadata().client_id,
+      clientName: metadata().client_name,
+      redirectHost: 'client.example',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      createdAtMs: 4000,
+      lastUsedAtMs: null,
+      revokedAtMs: null,
+    });
+
+    await expect(service.exchangeAuthorizationCode({
+      grant_type: 'authorization_code',
+      code,
+      client_id: metadata().client_id,
+      redirect_uri: metadata().redirect_uris[0],
+      code_verifier: verifier,
+      resource: 'https://quantified-self.io/mcp',
+    }, 'https://quantified-self.io')).resolves.toEqual(expect.objectContaining({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+    }));
+    expect(store.connections.get('user-1:legacy-connection')).toEqual(
+      expect.objectContaining({
+        status: 'active',
+        lastUsedAtMs: 5000,
+      }),
+    );
+  });
+
   it('does not authenticate a bearer token against a pending connection', async () => {
     const store = createMemoryStore();
     const service = createMcpOAuthService({
@@ -877,6 +941,51 @@ describe('MCP OAuth service', () => {
       code: 'invalid_grant',
       statusCode: 401,
     });
+  });
+
+  it('repairs a mixed-revision connection completed by the previous server version', async () => {
+    const store = createMemoryStore();
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 5000,
+      randomToken: () => 'unused',
+    });
+    store.connections.set('user-1:connection-1', {
+      connectionId: 'connection-1',
+      clientId: metadata().client_id,
+      clientName: metadata().client_name,
+      redirectHost: 'client.example',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      createdAtMs: 1,
+      lastUsedAtMs: 4000,
+      revokedAtMs: null,
+      status: 'pending',
+    });
+    store.accessTokens.set(hashOpaqueValue('access-token'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId: metadata().client_id,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 4000,
+      expiresAtMs: 10_000,
+    });
+
+    await expect(service.listConnections('user-1')).resolves.toHaveLength(1);
+    await expect(service.authenticateBearer(
+      'access-token',
+      'https://quantified-self.io/mcp',
+    )).resolves.toMatchObject({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+    });
+    expect(store.connections.get('user-1:connection-1')).toEqual(
+      expect.objectContaining({
+        status: 'active',
+        lastUsedAtMs: 5000,
+      }),
+    );
   });
 
   it('fails closed when a connection is revoked during bearer authentication', async () => {
