@@ -127,7 +127,7 @@ describe('PublicPricingComponent', () => {
         expect(loadingState.attributes['aria-live']).toBe('polite');
     });
 
-    it('routes every plan choice through login to the membership area', () => {
+    it('routes every plan choice through login without bypassing onboarding', () => {
         fixture.detectChanges();
         const buttons = fixture.debugElement.queryAll(By.css('button[data-plan-role]'));
 
@@ -144,7 +144,7 @@ describe('PublicPricingComponent', () => {
 
         expect(router.navigate).toHaveBeenCalledTimes(4);
         expect(router.navigate).toHaveBeenCalledWith(['/login'], {
-            queryParams: { returnUrl: '/subscriptions' },
+            queryParams: { returnUrl: '/dashboard' },
         });
     });
 

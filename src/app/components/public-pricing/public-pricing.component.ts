@@ -97,7 +97,7 @@ export class PublicPricingComponent {
 
     continueToMembership(): void {
         void this.router.navigate(['/login'], {
-            queryParams: { returnUrl: '/subscriptions' },
+            queryParams: { returnUrl: '/dashboard' },
         });
     }
 }
