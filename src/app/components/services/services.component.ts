@@ -18,6 +18,7 @@ import { ROUTE_DELIVERY_SYNC_ROUTES } from '@shared/route-delivery-sync-routes';
 import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-sync-rollout';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { AppUserInterface } from '../../models/app-user.interface';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 type ProviderServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
 type ServiceSectionId = ProviderServiceSectionId | 'mcp';
@@ -29,6 +30,7 @@ interface ServiceSectionOption {
   label: string;
   providerId: ProviderServiceSectionId | null;
   serviceName: ServiceNames | null;
+  requiresPro: boolean;
 }
 
 interface ServiceToolLaunch {
@@ -296,30 +298,35 @@ export class ServicesComponent implements OnInit, OnDestroy {
       label: this.serviceLabelBySection.garmin,
       providerId: 'garmin',
       serviceName: ServiceNames.GarminAPI,
+      requiresPro: true,
     },
     {
       id: 'suunto',
       label: this.serviceLabelBySection.suunto,
       providerId: 'suunto',
       serviceName: ServiceNames.SuuntoApp,
+      requiresPro: true,
     },
     {
       id: 'coros',
       label: this.serviceLabelBySection.coros,
       providerId: 'coros',
       serviceName: ServiceNames.COROSAPI,
+      requiresPro: true,
     },
     {
       id: 'wahoo',
       label: this.serviceLabelBySection.wahoo,
       providerId: 'wahoo',
       serviceName: ServiceNames.WahooAPI,
+      requiresPro: true,
     },
     {
       id: 'mcp',
       label: this.serviceLabelBySection.mcp,
       providerId: null,
       serviceName: null,
+      requiresPro: false,
     },
   ];
   public readonly serviceOverviewCardsBySection: Record<ProviderServiceSectionId, readonly ServiceOverviewCard[]> = {
@@ -466,6 +473,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private routeSubscription!: Subscription;
   private serviceToolsDialogRef: MatDialogRef<unknown> | null = null;
   private readonly dialog = inject(MatDialog);
+  private readonly analyticsService = inject(AppAnalyticsService);
   private readonly serviceNameBySection: Record<ProviderServiceSectionId, ServiceNames> = {
     suunto: ServiceNames.SuuntoApp,
     garmin: ServiceNames.GarminAPI,
@@ -532,6 +540,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
     const serviceName = section === 'mcp'
       ? 'mcp'
       : this.serviceNameBySection[section];
+    this.analyticsService.logEvent('service_section_selected', {
+      section,
+      service_name: serviceName,
+      access: this.hasProAccess ? 'pro' : 'non_pro',
+    });
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { serviceName: serviceName },
@@ -540,6 +553,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   public openServiceTools(section: ProviderServiceSectionId, toolLaunch: ServiceToolLaunch): void {
+    if (!this.hasProAccess) {
+      this.openProPlans(section, 'capability_card', toolLaunch.tool);
+      return;
+    }
     if (!this.serviceToolsDialog || this.serviceToolsDialogRef) {
       return;
     }
@@ -567,6 +584,26 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.managedToolTitle = null;
       this.managedActivitySyncDestination = null;
     });
+  }
+
+  public openProPlans(
+    section: ProviderServiceSectionId,
+    source: 'capability_card' | 'data_flow',
+    feature: string,
+  ): void {
+    this.analyticsService.logEvent('upsell_triggered', {
+      service_name: this.serviceNameBySection[section],
+      source,
+      feature,
+    });
+    void this.router.navigate(['/subscriptions']);
+  }
+
+  public openActiveProviderDataFlowPlans(): void {
+    if (this.activeSection === 'mcp') {
+      return;
+    }
+    this.openProPlans(this.activeSection, 'data_flow', 'provider_data_flow');
   }
 
   public setServiceConnectionState(section: ProviderServiceSectionId, connected: boolean): void {
@@ -621,7 +658,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     if (serviceName === ServiceNames.WahooAPI) {
       return 'wahoo';
     }
-    return 'garmin';
+    return this.hasProAccess ? 'garmin' : 'mcp';
   }
 
   private refreshDataFlowSummary(): void {

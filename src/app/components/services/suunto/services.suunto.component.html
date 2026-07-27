@@ -15,8 +15,7 @@
     [showDetails]="connectionView.showDetails"
     [statusLabelOverride]="connectionView.statusLabelOverride"
     [statusIconOverride]="connectionView.statusIconOverride"
-    [statusTone]="connectionView.statusTone"
-    (click)="!canConnectServiceWithCurrentAccess && !isServiceConnected && triggerUpsell()">
+    [statusTone]="connectionView.statusTone">
     <div connection-body class="connection-details">
     @if (isReconnectRequired) {
     <div class="reconnect-required-banner" role="alert">
@@ -90,7 +89,7 @@
       }
       @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
-        [disabled]="!user || isLoading || isConnecting || !canConnectServiceWithCurrentAccess" (click)="connectWithService($event)">
+        [disabled]="!user || isLoading || isConnecting" (click)="connectWithService($event)">
         @if (isConnecting) {
         <ng-container>
           <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
@@ -98,7 +97,8 @@
         </ng-container>
         } @else {
         <ng-container>
-          <mat-icon>{{ isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link' }}</mat-icon> {{ connectButtonLabel }}
+          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
+          {{ canConnectServiceWithCurrentAccess ? connectButtonLabel : 'View Pro plans' }}
         </ng-container>
         }
       </button>

@@ -102,7 +102,7 @@
   <div class="sidenav-section-header">Account</div>
 
   <mat-list-item routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" routerLink="/services"
-    [queryParams]="hasPaidAccess ? null : { serviceName: 'mcp' }"
+    [queryParams]="isProUser ? null : { serviceName: 'mcp' }"
     (click)="closeSideNav()">
     <mat-icon>sync</mat-icon>
     <span>Connectivity</span>

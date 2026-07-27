@@ -389,6 +389,21 @@ describe('ServicesGarminComponent', () => {
             expect(connectButton?.disabled).toBe(false);
         });
 
+        it('shows an enabled Pro plans action while keeping disconnect available without Pro', () => {
+            component.hasProAccess = false;
+            component.user = { uid: 'user-1' } as any;
+            component.serviceTokens = [] as any;
+            component.serviceMeta = null as any;
+            fixture.detectChanges();
+
+            const connectButton = fixture.nativeElement.querySelector('.qs-mat-primary');
+
+            expect(component.canConnectServiceWithCurrentAccess).toBe(false);
+            expect((component as any).canDisconnectWithoutProAccess).toBe(true);
+            expect(connectButton?.textContent).toContain('View Pro plans');
+            expect(connectButton?.disabled).toBe(false);
+        });
+
         it('keeps history import loading while Garmin token permissions are not loaded', () => {
             component.isLoading = false;
             component.serviceTokens = [{

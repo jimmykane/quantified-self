@@ -441,6 +441,10 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('available to every signed-in account');
+    expect(serviceConnectionsSection?.content).toContain('marked **PRO**');
+    expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
+    expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
     expect(serviceConnectionsSection?.content).toContain('Choose an action');
     expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');

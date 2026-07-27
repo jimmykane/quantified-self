@@ -122,6 +122,10 @@
     line-height: 1.4;
 }
 
+.service-data-flow__upgrade {
+    margin-top: 12px;
+}
+
 .service-data-flow__matrix-scroll {
     width: 100%;
     margin-top: 16px;
@@ -324,6 +328,16 @@
     font-size: 0.72rem;
     font-weight: 650;
     line-height: 1;
+}
+
+.provider-selector__entitlement {
+    display: inline-block;
+    width: 1px;
+    height: 1px;
+}
+
+.provider-selector__entitlement--mobile {
+    margin-left: 2px;
 }
 
 .provider-selector__connection-dot {
@@ -636,8 +650,10 @@
     }
 
     .provider-selector__mobile-option {
+        flex-direction: column;
         gap: 4px;
         font-size: clamp(0.7rem, 2.6vw, 0.82rem);
+        line-height: 1.1;
     }
 
     .service-tools-dialog__content {
