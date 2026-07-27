@@ -515,8 +515,8 @@ If you downgrade from a paid plan, the app keeps your access through the current
 
 After the grace period:
 
-- Existing provider connections and configured sync are paused.
-- Provider connections can always be disconnected without upgrading.
+- Provider imports and automatic delivery stop, and an automated subscription check disconnects expired Pro connections.
+- Any provider connection that is still shown can always be disconnected manually without upgrading.
 - Existing activities and routes are retained. New uploads follow your current plan limits.
 
 ## When to contact support
@@ -607,7 +607,7 @@ Garmin, Suunto, COROS, and Wahoo connections are part of **Pro**.
 
 The **Connections** page is available to every signed-in account. Starter and Basic accounts open on the free **MCP** tab by default and can select every provider tab to review its capabilities. Provider tabs are marked **PRO**, while MCP is marked **FREE**. Connecting a provider, importing history, uploading to a provider, and automatic sync still require Pro.
 
-Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card. For non-Pro accounts, the action opens the Pro subscription page. For Pro accounts, it opens the provider tool in a dialog; close the dialog to return to the unchanged overview. A connected provider can always be disconnected after Pro access ends.
+Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card. For non-Pro accounts, the action opens the Pro subscription page. For Pro accounts, it opens the provider tool in a dialog; close the dialog to return to the unchanged overview. A connected provider can always be disconnected after Pro access ends. Once any grace period expires, an automated subscription check disconnects remaining expired Pro provider connections.
 
 At the top of Connections, **Your data flow** explains that connected providers import new activities into Quantified Self. Non-Pro accounts see a Pro upgrade explanation instead of an unusable connection prompt. Once two or more services are connected with Pro access, it shows a provider-to-provider matrix of compatible automatic activity and saved-route delivery paths through Quantified Self. On phones, the same routes are grouped by source and destination instead of using a wide table. Enabled routes show **On**, available routes remain opt-in, and a configured route that cannot run because a provider is disconnected or needs reconnection is marked **Needs connection**. With no services connected, it prompts a Pro account to connect its first provider.
 

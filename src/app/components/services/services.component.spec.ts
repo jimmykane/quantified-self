@@ -249,12 +249,12 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const selector = fixture.nativeElement.querySelector('.provider-selector--mobile');
-        const badges = Array.from(selector.querySelectorAll('.mat-badge-content'))
-            .map((badge: Element) => badge.textContent?.trim());
+        const entitlementLabels = Array.from(selector.querySelectorAll('.provider-selector__entitlement mat-chip'))
+            .map((chip: Element) => chip.textContent?.trim());
         const ariaLabels = Array.from(selector.querySelectorAll('mat-button-toggle button'))
             .map((button: Element) => button.getAttribute('aria-label'));
 
-        expect(badges).toEqual(['PRO', 'PRO', 'PRO', 'PRO', 'FREE']);
+        expect(entitlementLabels).toEqual(['PRO', 'PRO', 'PRO', 'PRO', 'FREE']);
         expect(ariaLabels).toEqual([
             'Garmin, Pro feature',
             'Suunto, Pro feature',
@@ -264,15 +264,36 @@ describe('ServicesComponent', () => {
         ]);
     });
 
-    it('hides entitlement badges for Pro users', () => {
+    it('hides entitlement labels for Pro users', () => {
         component.hasProAccess = true;
         fixture.detectChanges();
 
         const selector = fixture.nativeElement.querySelector('.provider-selector--mobile');
-        const visibleBadges = Array.from(selector.querySelectorAll('.provider-selector__entitlement'))
-            .filter((badge: Element) => !badge.classList.contains('mat-badge-hidden'));
 
-        expect(visibleBadges).toHaveLength(0);
+        expect(selector.querySelectorAll('.provider-selector__entitlement')).toHaveLength(0);
+    });
+
+    it('refreshes Pro access when the current user entitlement changes', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        component.processUser({
+            uid: 'user-1',
+            stripeRole: 'basic',
+        } as User, false);
+
+        await component.ngOnInit();
+
+        userUpdates$.next({
+            uid: 'user-1',
+            stripeRole: 'pro',
+        } as User);
+        expect(component.hasProAccess).toBe(true);
+
+        userUpdates$.next({
+            uid: 'user-1',
+            stripeRole: 'basic',
+        } as User);
+        expect(component.hasProAccess).toBe(false);
     });
 
     it('renders the desktop connection selector with MCP after Wahoo', () => {

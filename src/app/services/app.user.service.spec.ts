@@ -2319,7 +2319,6 @@ describe('AppUserService', () => {
 
                 await service.getCurrentUserServiceTokenAndRedirectURI(serviceName);
 
-                // Check for substrings since full URL depends on encoded spaces
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
                 });

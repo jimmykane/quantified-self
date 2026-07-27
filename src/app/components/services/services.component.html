@@ -213,15 +213,13 @@
                 </span>
               }
               <span class="provider-selector__name">{{ section.label }}</span>
-              <span
-                class="provider-selector__entitlement"
-                [matBadge]="section.requiresPro ? 'PRO' : 'FREE'"
-                [matBadgeHidden]="hasProAccess"
-                matBadgeSize="small"
-                matBadgePosition="above after"
-                [matBadgeOverlap]="false"
-                aria-hidden="true">
-              </span>
+              @if (!hasProAccess) {
+              <mat-chip-set class="provider-selector__entitlement" aria-hidden="true">
+                <mat-chip disableRipple [highlighted]="section.requiresPro">
+                  {{ section.requiresPro ? 'PRO' : 'FREE' }}
+                </mat-chip>
+              </mat-chip-set>
+              }
               @if (section.providerId; as providerId) {
                 @if (serviceConnectionState[providerId]) {
                   <span class="provider-selector__connection-state">
@@ -247,15 +245,13 @@
             [aria-label]="section.label + (!hasProAccess ? (section.requiresPro ? ', Pro feature' : ', Free') : '')">
             <span class="provider-selector__mobile-option">
               <span>{{ section.label }}</span>
-              <span
-                class="provider-selector__entitlement provider-selector__entitlement--mobile"
-                [matBadge]="section.requiresPro ? 'PRO' : 'FREE'"
-                [matBadgeHidden]="hasProAccess"
-                matBadgeSize="small"
-                matBadgePosition="above after"
-                [matBadgeOverlap]="false"
-                aria-hidden="true">
-              </span>
+              @if (!hasProAccess) {
+              <mat-chip-set class="provider-selector__entitlement" aria-hidden="true">
+                <mat-chip disableRipple [highlighted]="section.requiresPro">
+                  {{ section.requiresPro ? 'PRO' : 'FREE' }}
+                </mat-chip>
+              </mat-chip-set>
+              }
             </span>
           </mat-button-toggle>
           }

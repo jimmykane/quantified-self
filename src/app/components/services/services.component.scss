@@ -331,13 +331,9 @@
 }
 
 .provider-selector__entitlement {
-    display: inline-block;
-    width: 1px;
-    height: 1px;
-}
-
-.provider-selector__entitlement--mobile {
-    margin-left: 2px;
+    --mat-chip-container-height: 20px;
+    --mat-chip-label-text-size: 0.66rem;
+    --mat-chip-label-text-weight: 700;
 }
 
 .provider-selector__connection-dot {

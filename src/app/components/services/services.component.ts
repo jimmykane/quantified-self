@@ -19,6 +19,7 @@ import { isRouteDeliverySyncRouteUIDAllowlisted } from '@shared/route-delivery-s
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 
 type ProviderServiceSectionId = 'suunto' | 'garmin' | 'coros' | 'wahoo';
 type ServiceSectionId = ProviderServiceSectionId | 'mcp';
@@ -524,6 +525,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.processUser(user, isPro);
       } else if (user) {
         this.user = user;
+        this.isAdmin = user.admin === true;
+        this.hasProAccess = AppUserUtilities.hasProAccess(user, this.isAdmin);
         this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
         this.refreshDataFlowSummary();
       }
