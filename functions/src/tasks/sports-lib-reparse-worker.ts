@@ -166,9 +166,12 @@ function getReparseTaskSafeRuntimeBudgetMs(workerTier: SportsLibReparseWorkerTie
 }
 
 function getDurationTooHeavyForAutomaticReparseErrorMessage(eventDurationMs: number): string {
+    const limitText = SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS === null
+        ? 'disabled'
+        : `${SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS}ms`;
     return '[sports-lib-reparse] Event duration '
         + `${eventDurationMs}ms is too heavy for automatic reparse; `
-        + `limit is ${SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS}ms.`;
+        + `limit is ${limitText}.`;
 }
 
 function getPreviousHeavyAttemptTooHeavyErrorMessage(eventDurationMs: number | null): string {
@@ -327,7 +330,7 @@ async function markJobTooHeavyForAutomaticReparse(
         uid: job.uid,
         eventId: job.eventId,
         eventDurationMs: eventDurationMs ?? null,
-        maxAutomaticEventDurationMs: SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
+        maxAutomaticEventDurationMs: SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS ?? null,
         failureReason,
     });
 }

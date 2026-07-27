@@ -27,8 +27,7 @@ const hoisted = vi.hoisted(() => {
     const getSportsLibReparseEventDurationMs = vi.fn(() => null);
     const isSportsLibReparseDurationHeavy = vi.fn((durationMs: number | null | undefined) =>
         typeof durationMs === 'number' && durationMs >= 24 * 60 * 60 * 1000);
-    const isSportsLibReparseTooHeavyForAutomaticReparse = vi.fn((durationMs: number | null | undefined) =>
-        typeof durationMs === 'number' && durationMs >= 72 * 60 * 60 * 1000);
+    const isSportsLibReparseTooHeavyForAutomaticReparse = vi.fn(() => false);
     const enqueueSportsLibReparseHeavyTask = vi.fn().mockResolvedValue(true);
     const getUserDeletionGuardState = vi.fn().mockResolvedValue({
         userExists: true,
@@ -93,7 +92,7 @@ vi.mock('firebase-functions/v2/tasks', () => ({
 }));
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
-    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS: 72 * 60 * 60 * 1000,
+    SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS: null,
     SPORTS_LIB_REPARSE_FAILURE_REASONS: {
         ReparseFailed: 'REPARSE_FAILED',
         TooHeavyForAutoReparse: 'TOO_HEAVY_FOR_AUTO_REPARSE',
@@ -161,8 +160,7 @@ describe('processSportsLibReparseTask', () => {
         hoisted.getSportsLibReparseEventDurationMs.mockReturnValue(null);
         hoisted.isSportsLibReparseDurationHeavy.mockImplementation((durationMs: number | null | undefined) =>
             typeof durationMs === 'number' && durationMs >= 24 * 60 * 60 * 1000);
-        hoisted.isSportsLibReparseTooHeavyForAutomaticReparse.mockImplementation((durationMs: number | null | undefined) =>
-            typeof durationMs === 'number' && durationMs >= 72 * 60 * 60 * 1000);
+        hoisted.isSportsLibReparseTooHeavyForAutomaticReparse.mockImplementation(() => false);
         hoisted.isSportsLibReparseTerminalFailureMessage.mockImplementation((errorMessage: string) =>
             errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
             || /^Event .* was not found for user .*$/.test(errorMessage)
@@ -743,7 +741,7 @@ describe('processSportsLibReparseTask', () => {
         }), { merge: true });
     });
 
-    it('should mark extreme-duration heavy jobs too heavy without parsing', async () => {
+    it('should process extreme-duration heavy jobs when the automatic duration cap is disabled', async () => {
         const eventDurationMs = 93 * 60 * 60 * 1000;
         hoisted.jobGet.mockResolvedValue({
             exists: true,
@@ -762,21 +760,16 @@ describe('processSportsLibReparseTask', () => {
 
         await (processSportsLibReparseHeavyTask as any)({ data: { jobId: 'job-1' } });
 
-        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
-        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
-            status: 'failed',
-            reason: 'TOO_HEAVY_FOR_AUTO_REPARSE',
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
-            lastError: expect.stringContaining('is too heavy for automatic reparse'),
-            terminalFailure: true,
-            terminalFailureAt: 'SERVER_TIMESTAMP',
+            deadlineMs: expect.any(Number),
+            beforePersist: expect.any(Function),
         }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
-            status: 'failed',
-            lastError: expect.stringContaining('is too heavy for automatic reparse'),
-            failureReason: 'TOO_HEAVY_FOR_AUTO_REPARSE',
-            terminalFailure: true,
-            terminalFailureAt: 'SERVER_TIMESTAMP',
+            status: 'processing',
+            processingTier: 'heavy',
+            attemptCount: 4,
         }), { merge: true });
     });
 

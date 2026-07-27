@@ -464,6 +464,10 @@ export function isSportsLibReparseDurationHeavy(eventDurationMs: number | null |
 }
 
 export function isSportsLibReparseTooHeavyForAutomaticReparse(eventDurationMs: number | null | undefined): boolean {
+    if (SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS === null) {
+        return false;
+    }
+
     return typeof eventDurationMs === 'number'
         && Number.isFinite(eventDurationMs)
         && eventDurationMs >= SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS;

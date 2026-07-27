@@ -391,9 +391,14 @@ describe('sports-lib-reparse.service', () => {
         expect(getSportsLibReparseFailureReason('Event e1 was not found for user u1')).toBe('REPARSE_FAILED');
     });
 
-    it('isSportsLibReparseTooHeavyForAutomaticReparse should only mark extreme multi-day events', () => {
-        expect(isSportsLibReparseTooHeavyForAutomaticReparse(SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS - 1)).toBe(false);
-        expect(isSportsLibReparseTooHeavyForAutomaticReparse(SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS)).toBe(true);
+    it('isSportsLibReparseTooHeavyForAutomaticReparse should not reject by event duration when the cap is disabled', () => {
+        expect(SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS).toBeNull();
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(72 * 60 * 60 * 1000)).toBe(false);
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(7 * 24 * 60 * 60 * 1000)).toBe(false);
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(Number.MAX_SAFE_INTEGER)).toBe(false);
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(null)).toBe(false);
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(undefined)).toBe(false);
+        expect(isSportsLibReparseTooHeavyForAutomaticReparse(Number.NaN)).toBe(false);
     });
 
     it('classifySportsLibReparseVersionDisposition should distinguish rollout directions', () => {
