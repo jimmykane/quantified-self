@@ -308,6 +308,15 @@ describe('EventCardLapsComponent', () => {
         expect(component.lapColumnMenuGroups.map((group) => group.family)).toEqual(['running', 'cycling']);
         expect(component.lapColumnMenuGroups[0]?.selectedMetricTypes).toContain(DataPaceAvg.type);
         expect(component.lapColumnMenuGroups[1]?.selectedMetricTypes).toContain(DataSpeedAvg.type);
+        expect(component.activeLapColumnMenuGroup?.family).toBe('running');
+
+        component.onLapColumnMenuSportFamilyChange('cycling');
+
+        expect(component.activeLapColumnMenuGroup?.family).toBe('cycling');
+
+        component.ngOnChanges();
+
+        expect(component.activeLapColumnMenuGroup?.family).toBe('cycling');
     });
 
     it('filters lap metric groups by typed metric and group names', () => {
@@ -432,7 +441,11 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
         expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
-        expect(template).toContain('lapColumnFamiliesMenu');
+        expect(template).toContain('lapColumnsMenu');
+        expect(template).toContain('xPosition="before"');
+        expect(template).toContain('qs-menu-panel-form qs-config-menu lap-column-menu-panel');
+        expect(template).toContain('mat-button-toggle-group');
+        expect(template).toContain('activeLapColumnMenuGroup');
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
         expect(template).toContain('Search metrics');
         expect(template).toContain('group.filteredMetricGroups');
@@ -447,5 +460,6 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('lap-tab-icon');
         expect(template).not.toContain('getDataSource(');
         expect(template).not.toContain('getColumns(');
+        expect(template).not.toContain('lapColumnMetricsMenu');
     });
 });

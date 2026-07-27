@@ -22,9 +22,24 @@
 }
 
 .lap-column-menu-content {
-  max-height: min(70vh, 640px);
-  min-width: 288px;
-  overflow: auto;
+  box-sizing: border-box;
+  inline-size: min(380px, calc(100vw - 24px));
+  max-block-size: min(70dvh, 640px);
+  min-inline-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lap-column-family-toggle {
+  display: flex;
+  margin: 12px 16px 0;
+}
+
+.lap-column-family-toggle mat-button-toggle {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .lap-column-menu-copy {
@@ -36,7 +51,7 @@
 
 .lap-column-search-field {
   display: block;
-  margin: 8px 16px 0;
+  margin: 12px 16px 0;
 }
 
 .lap-column-menu-empty {

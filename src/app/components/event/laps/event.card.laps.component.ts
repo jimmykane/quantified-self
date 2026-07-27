@@ -110,6 +110,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   public columnsMap = new Map<string, string[]>();
   public lapTableGroups: LapTableGroup[] = [];
   public lapColumnMenuGroups: LapColumnMenuGroup[] = [];
+  public activeLapColumnMenuGroup: LapColumnMenuGroup | null = null;
   public hasMultipleEventActivities = false;
   public savingLapColumnSportFamilies = signal(new Set<AppEventLapSportFamily>());
   private eventDetailsSettings: AppEventDetailsSettingsInterface = normalizeEventDetailsSettings(null);
@@ -315,6 +316,15 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.setLapColumnMetricSearchTerm(group, '');
   }
 
+  public onLapColumnMenuSportFamilyChange(family: string): void {
+    const nextGroup = this.lapColumnMenuGroups.find((group) => group.family === family);
+    if (!nextGroup || nextGroup === this.activeLapColumnMenuGroup) {
+      return;
+    }
+    this.activeLapColumnMenuGroup = nextGroup;
+    this.changeDetectorRef.markForCheck();
+  }
+
   private updateLapColumnMenuGroups(): void {
     const sportFamilies = new Set<AppEventLapSportFamily>();
     this.selectedActivities.forEach((activity) => {
@@ -325,6 +335,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       }
     });
 
+    const activeFamily = this.activeLapColumnMenuGroup?.family;
     const metricGroups = getEventLapMetricOptionGroups();
     this.lapColumnMenuGroups = Array.from(sportFamilies).map((family) => {
       const presentation = getEventLapSportFamilyPresentation(family);
@@ -338,6 +349,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         searchTerm: '',
       };
     });
+    this.activeLapColumnMenuGroup = this.lapColumnMenuGroups.find(
+      (group) => group.family === activeFamily,
+    ) || this.lapColumnMenuGroups[0] || null;
   }
 
   private setLapColumnMetricSearchTerm(group: LapColumnMenuGroup, searchTerm: string): void {
