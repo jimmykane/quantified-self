@@ -26,6 +26,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate local Quantified Self plugin
+        env:
+          QS_CHATGPT_APP_ID: plugin_asdk_app_ci_fixture
+          QS_PLUGIN_CACHEBUSTER: ci-${{ github.sha }}
+        run: |
+          npm run plugin:tools
+          npm --prefix tools/quantified-self-plugin test
+          npm run plugin:validate
+          git diff --exit-code
+
       - name: Install and test functions
         run: |
           cd functions

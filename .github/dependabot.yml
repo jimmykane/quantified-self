@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /tools/quantified-self-plugin
+    schedule:
+      interval: monthly
+    allow:
+      - dependency-name: "@openai/codex"
+    labels:
+      - dependencies

@@ -1,0 +1,12 @@
+{
+  "name": "@quantified-self/local-plugin-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test plugin-tool.test.mjs"
+  },
+  "dependencies": {
+    "@openai/codex": "0.145.0"
+  }
+}

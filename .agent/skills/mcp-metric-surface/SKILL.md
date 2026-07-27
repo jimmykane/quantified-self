@@ -44,6 +44,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   projection. Never forward original files, raw points/streams, Storage paths, source/delivery provenance, waypoint text,
   links, or extensions. Exact route bounds, preview geometry, nearby search, and waypoint coordinates require dependent
   `route-location:read` in addition to `routes:read`.
+- **Local plugin or bundled analysis skill:** keep `plugins/quantified-self/plugin.template.json`, the repo-local
+  marketplace, starter prompts, branding, and `analyze-quantified-self` guidance aligned with the public MCP surface.
+  Do not duplicate the complete tool or metric catalog in the skill; make it discover the authoritative runtime
+  catalogs. Keep the ChatGPT technical app ID and generated cache-busted bundle files out of Git.
 
 ## Implementation Contract
 
@@ -76,6 +80,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    text for compatibility. Expected errors remain text-only `isError` results. Update the in-memory contract fixture for
    every affected tool, every derived kind, optional/nullable and pagination states, and add a negative leakage canary
    for each sensitive neighboring field.
+9. Classify local-plugin follow-up explicitly. Tool names, descriptions, schemas, scopes, or server instructions require
+   a deployed-server update and a rescan of the registered ChatGPT app. Plugin manifest, starter-prompt, icon, or bundled
+   skill changes require `npm run plugin:sync` after validation. Server implementation changes that preserve the public
+   contract do not require a plugin rebuild.
 
 ## Verify
 
@@ -96,6 +104,7 @@ Add or update focused tests for:
 - scope denial and query limits.
 
 Then run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts` plus the focused Functions tests,
-`npm --prefix functions run build`, the affected frontend tests, the Firestore rules suite when access changes, and
-`git diff --check`. Do not deploy, publish Sports Lib, start a production reparse, or mutate cloud configuration as part
-of this workflow.
+`npm --prefix functions run build`, the affected frontend tests, the Firestore rules suite when access changes,
+`npm --prefix tools/quantified-self-plugin test`, a fixture-ID `npm run plugin:validate` when the local package or public
+tool contract is affected, and `git diff --check`. Do not deploy, publish Sports Lib, start a production reparse, install
+the plugin into a real profile, or mutate cloud configuration as part of this workflow.
