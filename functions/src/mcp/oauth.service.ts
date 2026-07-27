@@ -5,6 +5,7 @@ import { BlockList, isIP, LookupFunction } from 'node:net';
 import { Agent } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import fetch from 'node-fetch';
+import { FieldValue } from 'firebase-admin/firestore';
 import {
   getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
@@ -322,7 +323,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
     transaction.set(ref, {
       status: 'revoked',
       revokedAtMs: nowMs,
-      expireAt: admin.firestore.FieldValue.delete(),
+      expireAt: FieldValue.delete(),
     }, { merge: true });
   };
 
@@ -542,7 +543,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         transaction.update(activeConnectionRef, {
           status: 'active',
           lastUsedAtMs: input.nowMs,
-          expireAt: admin.firestore.FieldValue.delete(),
+          expireAt: FieldValue.delete(),
         });
         return code;
       });
@@ -625,7 +626,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           status: 'active',
           scopes: nextScopes,
           lastUsedAtMs: input.nowMs,
-          expireAt: admin.firestore.FieldValue.delete(),
+          expireAt: FieldValue.delete(),
         });
         return { refresh, replayed: false as const };
       });
@@ -695,7 +696,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         transaction.update(activeConnectionRef, {
           status: 'active',
           lastUsedAtMs: nowMs,
-          expireAt: admin.firestore.FieldValue.delete(),
+          expireAt: FieldValue.delete(),
         });
       });
     },

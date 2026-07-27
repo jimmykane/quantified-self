@@ -15,10 +15,13 @@ vi.mock('firebase-admin', () => ({
     Timestamp: {
       fromMillis: timestampFromMillisMock,
     },
-    FieldValue: {
-      delete: fieldValueDeleteMock,
-    },
   }),
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    delete: fieldValueDeleteMock,
+  },
 }));
 
 import {
