@@ -3,9 +3,9 @@
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
-authenticated user's persisted numeric activity metrics, ready Training-derived snapshots, normalized sleep summaries,
-explicitly authorized individual activity details, and saved-route previews without granting browser or Firestore
-access.
+authenticated user's persisted numeric activity metrics, first-class body-measurement history, ready Training-derived
+snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
+without granting browser or Firestore access.
 
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
 stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
@@ -79,8 +79,8 @@ behavior.
 
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
-- `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
-  `activity-details:read` is also granted;
+- `metrics:read` for event metrics, bounded identity-free body-measurement history, ready Training-derived snapshots,
+  and selected per-activity metrics when `activity-details:read` is also granted;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, start/end proximity
   searches, laps, swim lengths, and MTB jumps; and
@@ -206,6 +206,8 @@ The analytics and map entries follow the
 
 | Tool | Scope | Result |
 | --- | --- | --- |
+| `list_measurement_types` | `metrics:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
+| `query_measurements` | `metrics:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
@@ -249,6 +251,38 @@ their prior local-time behavior when they omit the timezone.
 Firestore access, and each stored value is reconstructed through its Sports Lib data class. Only finite values accepted
 by that class are returned; missing or invalid selected values are reported as unavailable. This keeps new eligible
 Sports Lib numeric metrics on the same automatic surface instead of introducing a per-activity registry.
+
+## First-class body measurements
+
+`measurement-catalog.ts` is a deliberately narrow semantic projection layered on the automatic numeric Sports Lib
+catalog. It does not decide whether a Sports Lib metric exists or is numerically valid: each entry must resolve through
+`metric-catalog.ts`. It decides only which canonical metrics are safe and meaningful as personal body measurements.
+Adding a numeric Sports Lib class still does not silently expose it as a body measurement.
+
+The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` values in persisted event stats.
+`list_measurement_types` describes its kilogram storage unit, median default, supported median/average/minimum/maximum/
+latest aggregations, day/week/month intervals, 366-day range limit, and the optional ready
+`body_weight_trend` Training snapshot.
+
+`query_measurements` reads the same bounded event pages as `query_metric`, excludes benchmark merges, resolves the
+requested persisted value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
+records in an explicit IANA timezone. It returns only the semantic type, canonical metric metadata, query parameters,
+bucket start, aggregate value, bucket count, and first/latest change summary. It never returns the Firestore document
+ID, exact source measurement timestamp, activity type, event/activity identity, name, label, provider/device metadata,
+or source provenance. Multiple same-bucket values default to a median; `latest` means the chronologically latest value
+inside that bucket. The capability describes these as recorded values, not a medical or health assessment.
+
+The generic `query_metric` path continues to accept `Weight` for backward compatibility, but MCP instructions and tool
+descriptions direct body-weight, body-mass, weigh-in, history, and trend requests to the first-class measurement tools.
+The existing `body_weight_trend` snapshot remains the fast 28-day Training view, not the historical measurement API.
+No new Firestore collection, composite index, persistence format, reparse, or backfill is required.
+
+To add another first-class measurement, add one explicit semantic definition backed by an already eligible canonical
+Sports Lib numeric type, define its value-validity rule, supported aggregations and intervals, and user-facing meaning,
+then update the tool-schema enum from the same exported ID tuple. Add positive catalog/query coverage, a negative
+sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day event-read
+and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
+payload, or arbitrary persisted stat key.
 
 When a Sports Lib metric is added or changed:
 
@@ -381,6 +415,8 @@ deliberately.
 ## Bounds and operational controls
 
 - Event and sleep date ranges are at most 366 days.
+- Body-measurement ranges are at most 366 days and return only day/week/month buckets. They share the event query's
+  2,000-document, 4 MiB stats, and 20,000 stat-entry limits, then apply a separate 128 KiB response limit.
 - An event metric query reads at most 25 events per Firestore page and rejects matches above 2,000 events, more than
   4 MiB of cumulative serialized event stats, or more than 20,000 cumulative top-level stat entries.
 - Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the

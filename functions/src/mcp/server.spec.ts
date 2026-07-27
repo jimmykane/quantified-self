@@ -67,6 +67,14 @@ describe('MCP HTTP scope enforcement', () => {
       method: 'tools/call',
       params: { name: 'query_metric' },
     })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'query_measurements' },
+    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'list_measurement_types' },
+    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -127,7 +135,9 @@ describe('MCP HTTP scope enforcement', () => {
 
     await expect(listToolNames([MCP_OAUTH_SCOPES.MetricsRead])).resolves.toEqual([
       'get_training_metric',
+      'list_measurement_types',
       'list_metrics',
+      'query_measurements',
       'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
@@ -152,7 +162,9 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_measurement_types',
       'list_metrics',
+      'query_measurements',
       'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
@@ -161,6 +173,60 @@ describe('MCP HTTP scope enforcement', () => {
       'list_route_waypoints',
       'list_routes',
     ]);
+  });
+
+  it('advertises first-class body-measurement routing and safe tool metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'measurement-metadata-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tools = (await client.listTools()).tools;
+      const listMeasurements = tools.find(tool => tool.name === 'list_measurement_types');
+      const queryMeasurements = tools.find(tool => tool.name === 'query_measurements');
+      const queryMetric = tools.find(tool => tool.name === 'query_metric');
+
+      expect(client.getInstructions()).toContain('body weight, body mass, weigh-ins');
+      expect(client.getInstructions()).toContain('not a medical or health assessment');
+      expect(client.getInstructions()).toContain('Use list_metrics and query_metric for activity');
+      expect(listMeasurements?.description).toContain('body weight');
+      expect(queryMeasurements?.description).toContain('identity-free');
+      expect(queryMeasurements?.description).toContain('provider, device, source, event, and activity identity are excluded');
+      expect(queryMeasurements?.description).toContain('not a medical or health assessment');
+      expect(queryMetric?.description).toContain('use query_measurements');
+      expect(queryMeasurements?.inputSchema).toMatchObject({
+        properties: {
+          measurementType: {
+            enum: ['body_weight'],
+          },
+          aggregation: {
+            default: 'median',
+          },
+          interval: {
+            default: 'day',
+          },
+        },
+      });
+      expect(queryMeasurements?.annotations).toMatchObject({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('marks place-search tools as read-only operations that may call Mapbox', async () => {
@@ -278,8 +344,8 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getServerVersion()).toEqual({
         name: 'quantified-self',
         title: 'Quantified Self',
-        version: '1.0.0',
-        description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+        version: '1.1.0',
+        description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [
           {

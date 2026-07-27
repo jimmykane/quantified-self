@@ -53,7 +53,7 @@ export class McpConnectionsComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly revokingConnectionId = signal<string | null>(null);
   readonly scopeLabels: Record<McpConnection['scopes'][number], string> = {
-    'metrics:read': 'Activity and Training metrics',
+    'metrics:read': 'Activity, body measurements, and Training metrics',
     'sleep:read': 'Sleep summaries',
     'activity-details:read': 'Individual activity details',
     'routes:read': 'Saved routes and waypoints',

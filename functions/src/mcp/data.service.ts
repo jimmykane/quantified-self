@@ -66,6 +66,14 @@ import {
   resolveSportsLibNumericMetric,
 } from './metric-catalog';
 import {
+  getMcpMeasurementCatalog,
+  isMcpMeasurementValueAllowed,
+  McpMeasurementAggregation,
+  McpMeasurementDescriptor,
+  McpMeasurementInterval,
+  resolveMcpMeasurementDefinition,
+} from './measurement-catalog';
+import {
   maybeDecompressPayloadForParsing,
   parseRoutePayload,
   resolveRouteSourceExtension,
@@ -95,6 +103,7 @@ const EVENT_QUERY_PAGE_SIZE = 25;
 const MAX_EVENT_QUERY_STATS_BYTES = 4 * 1024 * 1024;
 const MAX_EVENT_QUERY_STAT_ENTRIES = 20_000;
 const METRIC_DISCOVERY_EVENT_LIMIT = 500;
+const MAX_MEASUREMENT_RESPONSE_BYTES = 128 * 1024;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
 const SLEEP_CURSOR_VERSION = 1;
@@ -1575,6 +1584,79 @@ function resolveTimeInterval(interval: string): TimeIntervals {
   return resolved;
 }
 
+function resolveMeasurementTimeInterval(
+  interval: McpMeasurementInterval,
+): TimeIntervals {
+  switch (interval) {
+    case 'day':
+      return TimeIntervals.Daily;
+    case 'week':
+      return TimeIntervals.Weekly;
+    case 'month':
+      return TimeIntervals.Monthly;
+    default:
+      throw new McpDataError('invalid_request', 'Unsupported measurement interval.');
+  }
+}
+
+function aggregateMeasurementBucket(
+  measurements: readonly { recordedAtMs: number; value: number }[],
+  aggregation: McpMeasurementAggregation,
+): number {
+  const values = measurements.map(measurement => measurement.value);
+  switch (aggregation) {
+    case 'median': {
+      const sorted = [...values].sort((left, right) => left - right);
+      const middle = Math.floor(sorted.length / 2);
+      return sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle];
+    }
+    case 'average':
+      return values.reduce((average, value, index) => (
+        average + ((value - average) / (index + 1))
+      ), 0);
+    case 'minimum':
+      return Math.min(...values);
+    case 'maximum':
+      return Math.max(...values);
+    case 'latest':
+      return measurements.reduce((latest, measurement) => (
+        measurement.recordedAtMs >= latest.recordedAtMs ? measurement : latest
+      )).value;
+    default:
+      throw new McpDataError('invalid_request', 'Unsupported measurement aggregation.');
+  }
+}
+
+function buildMeasurementPoints(
+  measurements: readonly { recordedAtMs: number; value: number }[],
+  interval: McpMeasurementInterval,
+  aggregation: McpMeasurementAggregation,
+  timeZone: string,
+): McpMeasurementPoint[] {
+  const timeInterval = resolveMeasurementTimeInterval(interval);
+  const buckets = new Map<number, Array<{ recordedAtMs: number; value: number }>>();
+  measurements.forEach((measurement) => {
+    const bucketStartTimeMs = resolveDateAggregationBucketStart(
+      new Date(measurement.recordedAtMs),
+      timeInterval,
+      timeZone,
+    );
+    const bucket = buckets.get(bucketStartTimeMs) || [];
+    bucket.push(measurement);
+    buckets.set(bucketStartTimeMs, bucket);
+  });
+
+  return [...buckets.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([bucketStartTimeMs, bucketMeasurements]) => ({
+      bucketStartTimeMs,
+      value: aggregateMeasurementBucket(bucketMeasurements, aggregation),
+      measurementCount: bucketMeasurements.length,
+    }));
+}
+
 function resolveActivityTypes(activityTypes: readonly string[] | undefined): ActivityTypes[] {
   return (activityTypes || []).map((activityType) => {
     const resolved = ActivityTypesHelper.resolveActivityType(activityType);
@@ -1743,6 +1825,42 @@ export interface QueryMetricInput {
   interval: 'auto' | 'hourly' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semesterly' | 'yearly';
   timeZone: string;
   activityTypes?: readonly string[];
+}
+
+export interface ListMeasurementTypesResult {
+  measurementTypes: McpMeasurementDescriptor[];
+}
+
+export interface QueryMeasurementsInput {
+  uid: string;
+  measurementType: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  aggregation: McpMeasurementAggregation;
+  interval: McpMeasurementInterval;
+  timeZone: string;
+}
+
+export interface McpMeasurementPoint {
+  bucketStartTimeMs: number;
+  value: number;
+  measurementCount: number;
+}
+
+export interface QueryMeasurementsResult {
+  measurementType: McpMeasurementDescriptor;
+  startTimeMs: number;
+  endTimeMs: number;
+  timeZone: string;
+  aggregation: McpMeasurementAggregation;
+  interval: McpMeasurementInterval;
+  measurementCount: number;
+  points: McpMeasurementPoint[];
+  summary: {
+    firstPoint: McpMeasurementPoint;
+    latestPoint: McpMeasurementPoint;
+    absoluteChange: number;
+  } | null;
 }
 
 function redactDerivedPayload(
@@ -2536,6 +2654,109 @@ export function createMcpDataService(
         matchedEventCount: events.length,
         aggregation,
       };
+    },
+
+    async listMeasurementTypes(): Promise<ListMeasurementTypesResult> {
+      return {
+        measurementTypes: getMcpMeasurementCatalog(),
+      };
+    },
+
+    async queryMeasurements(
+      input: QueryMeasurementsInput,
+    ): Promise<QueryMeasurementsResult> {
+      validateBoundedRange(input.startTimeMs, input.endTimeMs);
+      const timeZone = requireTimeZone(input.timeZone);
+      const definition = resolveMcpMeasurementDefinition(input.measurementType);
+      if (!definition) {
+        throw new McpDataError(
+          'invalid_metric',
+          'The measurement type is not supported.',
+        );
+      }
+      if (!definition.supportedAggregations.includes(input.aggregation)) {
+        throw new McpDataError(
+          'invalid_request',
+          'The aggregation is not supported for this measurement type.',
+        );
+      }
+      if (!definition.supportedIntervals.includes(input.interval)) {
+        throw new McpDataError(
+          'invalid_request',
+          'The interval is not supported for this measurement type.',
+        );
+      }
+
+      const measurementType = getMcpMeasurementCatalog()
+        .find(candidate => candidate.id === definition.id);
+      if (!measurementType) {
+        throw new McpDataError(
+          'invalid_metric',
+          'The measurement type is not available in the current Sports Lib version.',
+        );
+      }
+
+      const documents = await fetchBoundedEventDocuments(dependencies, input);
+      const measurements = documents.flatMap((document) => {
+        if (isBenchmarkEventForTrainingMetrics(document.data)) {
+          return [];
+        }
+        const recordedAtMs = asTimestampMs(document.data.startDate);
+        const stats = document.data.stats;
+        if (
+          recordedAtMs === null
+          || !stats
+          || typeof stats !== 'object'
+          || Array.isArray(stats)
+        ) {
+          return [];
+        }
+        const value = projectSportsLibNumericMetricValue(
+          definition.canonicalMetricType,
+          (stats as Record<string, unknown>)[definition.canonicalMetricType],
+        );
+        if (
+          value === null
+          || !isMcpMeasurementValueAllowed(definition, value)
+        ) {
+          return [];
+        }
+        return [{
+          recordedAtMs,
+          value,
+        }];
+      });
+      const points = buildMeasurementPoints(
+        measurements,
+        input.interval,
+        input.aggregation,
+        timeZone,
+      );
+      const firstPoint = points[0];
+      const latestPoint = points[points.length - 1];
+      const result: QueryMeasurementsResult = {
+        measurementType,
+        startTimeMs: input.startTimeMs,
+        endTimeMs: input.endTimeMs,
+        timeZone,
+        aggregation: input.aggregation,
+        interval: input.interval,
+        measurementCount: measurements.length,
+        points,
+        summary: firstPoint && latestPoint
+          ? {
+            firstPoint,
+            latestPoint,
+            absoluteChange: latestPoint.value - firstPoint.value,
+          }
+          : null,
+      };
+      requireJsonBudget(
+        result,
+        MAX_MEASUREMENT_RESPONSE_BYTES,
+        'The measurement query exceeds the MCP response limit.',
+      );
+      return result;
     },
 
     async getTrainingMetric(uid: string, metricKind: string) {

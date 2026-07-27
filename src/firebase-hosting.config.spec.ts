@@ -258,7 +258,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-07-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-07-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');

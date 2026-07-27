@@ -782,13 +782,19 @@ describe('help.content', () => {
   it('documents MCP scopes, redaction, and revocation', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
-    expect(dataAndPrivacySection?.content).toContain('**Activity and Training metrics**');
+    expect(dataAndPrivacySection?.content).toContain('**Activity, body measurements, and Training metrics**');
     expect(dataAndPrivacySection?.content).toContain('**Individual activity details**');
     expect(dataAndPrivacySection?.content).toContain('**Sleep summaries**');
     expect(dataAndPrivacySection?.content).toContain('**Saved routes and waypoints**');
     expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
     expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
-    expect(dataAndPrivacySection?.content).toContain('Together with Activity and Training metric access');
+    expect(dataAndPrivacySection?.content).toContain('first-class body-measurement history');
+    expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
+    expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
+    expect(dataAndPrivacySection?.content).toContain('not a medical or health assessment');
+    expect(dataAndPrivacySection?.content).toContain('exact source measurement timestamps');
+    expect(dataAndPrivacySection?.content).toContain('provider/device metadata');
+    expect(dataAndPrivacySection?.content).toContain('Together with metric access');
     expect(dataAndPrivacySection?.content).toContain('unrequested stored stats are excluded');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
     expect(dataAndPrivacySection?.content).toContain('exact start/end latitude/longitude coordinates when available');

@@ -17,6 +17,12 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 - **Sports Lib numeric event stat:** the MCP catalog must discover it from the public `DataStore`, canonicalize it through
   `DynamicDataLoader`, and expose it only when that canonical stat is actually persisted for the user. Do not add a second
   hand-maintained metric registry.
+- **First-class body measurement:** keep the automatic numeric Sports Lib catalog authoritative for class existence,
+  canonical type, unit, and numeric validation. Add a deliberately allowlisted semantic entry in
+  `functions/src/mcp/measurement-catalog.ts` only when the value is meaningful and safe as a personal measurement.
+  Preserve identity-free date buckets; never expose exact source timestamps, event/activity identity, names, labels,
+  provider/device metadata, or source provenance. Update consent, Help, Policies, the public MCP page, and focused
+  catalog/query tests in the same change.
 - **Training-derived kind:** register it in `shared/derived-metrics.ts`, preserve the normal snapshot build lifecycle, and
   expose only a ready server-side snapshot.
 - **Sleep field or provider:** update the normalized contract in `shared/sleep.ts`, then deliberately decide whether it
@@ -38,8 +44,9 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 2. Determine whether historical event reparsing or a derived schema bump is required. Document and test that transition.
 3. Preserve the explicit IANA timezone contract for date bucketing and the legacy local-time behavior for existing
    aggregation callers that omit a timezone.
-4. Treat `functions/src/mcp/metric-catalog.ts` and `functions/src/mcp/data.service.ts` as the MCP projection boundary.
-   Expand allowlists deliberately; do not return whole Firestore documents.
+4. Treat `functions/src/mcp/metric-catalog.ts`, `functions/src/mcp/measurement-catalog.ts`, and
+   `functions/src/mcp/data.service.ts` as the MCP projection boundary. Expand allowlists deliberately; do not return
+   whole Firestore documents.
 5. Keep OAuth scopes least-privilege: `metrics:read`, `sleep:read`, `activity-details:read`, and `routes:read` remain
    independent grants. Keep queries bounded, references/cursors UID-and-connection-bound, and tools read-only. Update
    OAuth metadata, consent, Settings, Help, policies, and `docs/mcp-server.md` when the user-visible contract moves.
@@ -52,6 +59,8 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 Add or update focused tests for:
 
 - automatic Sports Lib discovery and alias canonicalization;
+- first-class measurement catalog resolution, positive/valid value handling, timezone/DST bucketing, aggregation,
+  range/work/response limits, missing history, and explicit identity/provenance exclusion;
 - persistence availability and any reparse expectation;
 - Training ready-state handling and identity redaction;
 - sleep safe projection and explicit raw/provider-field exclusion;

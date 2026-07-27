@@ -33,10 +33,17 @@ describe('MCP client access policy', () => {
     const content = topic?.content.join(' ') || '';
 
     expect(topic?.title).toBe('MCP Client Access');
+    expect(topic?.summary).toContain('body-measurement');
     expect(content).toContain('one or more requested read-only permissions');
     expect(content).toContain('excludes precise latitude/longitude metrics');
     expect(content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
-    expect(content).toContain('Together with Activity and Training metric access');
+    expect(content).toContain('Metric and body-measurement permission');
+    expect(content).toContain('bounded body-measurement history');
+    expect(content).toContain('identity-free day, week, or month values');
+    expect(content).toContain('range of at most 366 days');
+    expect(content).toContain('exact source measurement timestamps');
+    expect(content).toContain('provider/device metadata');
+    expect(content).toContain('Together with metric access');
     expect(content).toContain('unrequested stored stats are excluded');
     expect(content).toContain('imported device/provider source keys');
     expect(content).toContain('MTB jump measurements');

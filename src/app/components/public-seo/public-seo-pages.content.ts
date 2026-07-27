@@ -332,10 +332,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
     title: 'Read-only MCP Server for Training Data',
-    description: 'Connect ChatGPT and compatible MCP clients to your training data through a read-only MCP server for metrics, activity details, sleep summaries, and saved routes.',
+    description: 'Connect ChatGPT and compatible MCP clients to activity metrics, body-weight history, Training analysis, sleep summaries, activity details, and saved routes through a read-only MCP server.',
     h1: 'Connect ChatGPT to your training data with a read-only MCP server',
     intro: 'Connect ChatGPT or another compatible Model Context Protocol client to Quantified Self, approve only the read-only data categories you want it to use, and ask questions about your training history without exposing your entire account by default.',
-    chips: ['MCP server', 'ChatGPT', 'Read-only', 'Activity metrics', 'Sleep summaries', 'Saved routes'],
+    chips: ['MCP server', 'ChatGPT', 'Read-only', 'Activity metrics', 'Body weight', 'Sleep summaries', 'Saved routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Set Up MCP', '/help', 'stroked', undefined, 'data-and-privacy'),
@@ -349,8 +349,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         items: [
           {
             icon: 'monitoring',
-            title: 'Activity and Training metrics',
-            copy: 'Discover available metrics, inspect day, week, or month trends, and query ready Training analysis such as load, readiness, intensity, durability, and sport-specific evidence.',
+            title: 'Activity, body measurements, and Training metrics',
+            copy: 'Discover available activity metrics, query bounded identity-free body-weight history by day, week, or month, and inspect ready Training analysis such as load, readiness, intensity, durability, and sport-specific evidence.',
           },
           {
             icon: 'directions_run',
@@ -377,7 +377,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Activity metrics, individual activity details, sleep summaries, and saved routes are independent grants. Adding a new category requires another explicit approval.',
+            copy: 'Activity metrics, body measurements, and Training share one metric grant; individual activity details, sleep summaries, and saved routes remain independent grants. Adding a separate category requires another explicit approval.',
           },
           {
             icon: 'lock',
@@ -400,7 +400,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What does the Quantified Self MCP server do?',
-        answer: 'It gives a compatible external client a bounded, read-only way to discover and query approved Quantified Self activity metrics, Training analysis, individual activity details, sleep summaries, and saved routes.',
+        answer: 'It gives a compatible external client a bounded, read-only way to discover and query approved Quantified Self activity metrics, body-weight history, Training analysis, individual activity details, sleep summaries, and saved routes.',
       },
       {
         question: 'Can I use the MCP server with ChatGPT?',

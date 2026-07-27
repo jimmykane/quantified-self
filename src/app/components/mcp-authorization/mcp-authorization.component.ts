@@ -21,8 +21,8 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   description: string;
 }> = {
   'metrics:read': {
-    title: 'Activity and Training metrics',
-    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
+    title: 'Activity, body measurements, and Training metrics',
+    description: 'Read persisted numeric activity metrics, bounded identity-free body-measurement history such as weight, and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
   },
   'sleep:read': {
     title: 'Sleep summaries',

@@ -14,6 +14,7 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataStartPosition,
+  DataWeight,
   encodeRoutePolyline5,
   EventImporterJSON,
   EventInterface,
@@ -1733,6 +1734,206 @@ describe('MCP data service', () => {
       }),
     ]);
     expect(dependencies.importEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists first-class body-measurement capabilities', async () => {
+    const result = await createMcpDataService(dependencies).listMeasurementTypes();
+
+    expect(result.measurementTypes).toEqual([
+      expect.objectContaining({
+        id: 'body_weight',
+        canonicalMetric: expect.objectContaining({
+          type: DataWeight.type,
+          unit: 'kg',
+        }),
+        defaultAggregation: 'median',
+        defaultInterval: 'day',
+        maximumRangeDays: 366,
+      }),
+    ]);
+  });
+
+  it('returns identity-free daily median body-weight measurements in an IANA timezone', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
+      {
+        id: 'weight-1',
+        data: {
+          startDate: Date.parse('2024-03-31T00:30:00.000Z'),
+          stats: { [DataWeight.type]: 70 },
+          name: 'Private morning weigh-in',
+          sourceKey: 'private-source-key',
+          creator: { name: 'Private scale' },
+        },
+      },
+      {
+        id: 'weight-2',
+        data: {
+          startDate: Date.parse('2024-03-31T01:30:00.000Z'),
+          stats: { [DataWeight.type]: 72 },
+          previousSourceKey: 'private-previous-source',
+        },
+      },
+      {
+        id: 'benchmark-1',
+        data: {
+          startDate: Date.parse('2024-03-31T02:30:00.000Z'),
+          isMerge: true,
+          stats: { [DataWeight.type]: 200 },
+        },
+      },
+      {
+        id: 'weight-3',
+        data: {
+          startDate: Date.parse('2024-04-01T04:00:00.000Z'),
+          stats: { [DataWeight.type]: 73 },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2024-03-30T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-02T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result).toMatchObject({
+      measurementType: {
+        id: 'body_weight',
+        canonicalMetric: {
+          type: DataWeight.type,
+          unit: 'kg',
+        },
+      },
+      timeZone: 'Europe/Helsinki',
+      aggregation: 'median',
+      interval: 'day',
+      measurementCount: 3,
+      points: [{
+        bucketStartTimeMs: Date.parse('2024-03-30T22:00:00.000Z'),
+        value: 71,
+        measurementCount: 2,
+      }, {
+        bucketStartTimeMs: Date.parse('2024-03-31T21:00:00.000Z'),
+        value: 73,
+        measurementCount: 1,
+      }],
+      summary: {
+        absoluteChange: 2,
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('weight-1');
+    expect(serialized).not.toContain('Private morning weigh-in');
+    expect(serialized).not.toContain('private-source-key');
+    expect(serialized).not.toContain('private-previous-source');
+    expect(serialized).not.toContain('Private scale');
+  });
+
+  it('supports natural body-weight aliases and latest-within-bucket aggregation', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
+      {
+        id: 'weight-newer',
+        data: {
+          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
+          stats: { [DataWeight.type]: 70.5 },
+        },
+      },
+      {
+        id: 'weight-older',
+        data: {
+          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
+          stats: { [DataWeight.type]: 71 },
+        },
+      },
+      {
+        id: 'weight-invalid',
+        data: {
+          startDate: Date.parse('2026-07-26T09:00:00.000Z'),
+          stats: { [DataWeight.type]: 0 },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body mass',
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'latest',
+      interval: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(result.measurementCount).toBe(2);
+    expect(result.points).toEqual([{
+      bucketStartTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      value: 70.5,
+      measurementCount: 2,
+    }]);
+  });
+
+  it('rejects unknown measurement types before reading events', async () => {
+    await expect(createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'latitude',
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+  });
+
+  it('keeps measurement ranges bounded and represents missing history explicitly', async () => {
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2025-01-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-01-03T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'month',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+
+    await expect(service.queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'Not/A_Timezone',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_timezone',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+
+    const empty = await service.queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'month',
+      timeZone: 'UTC',
+    });
+    expect(empty).toMatchObject({
+      measurementCount: 0,
+      points: [],
+      summary: null,
+    });
   });
 
   it('ignores unrelated legacy event fields that Sports Lib cannot import', async () => {
