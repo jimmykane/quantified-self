@@ -227,8 +227,8 @@ interface OrderedDocumentCursor {
 }
 
 interface ActivityListCursor extends OrderedDocumentCursor {
-  startTimeMs: number;
-  endTimeMs: number;
+  startTimeMs: number | null;
+  endTimeMs: number | null;
 }
 
 type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
@@ -350,8 +350,8 @@ export interface McpDataServiceDependencies {
   ) => Promise<RawDocument[]>;
   fetchActivityDocuments: (
     uid: string,
-    startTimeMs: number,
-    endTimeMs: number,
+    startTimeMs: number | undefined,
+    endTimeMs: number | undefined,
     limit: number,
     cursor?: OrderedDocumentCursor,
     includeLocation?: boolean,
@@ -557,9 +557,13 @@ const defaultDependencies: McpDataServiceDependencies = {
     let query = admin.firestore()
       .collection('users')
       .doc(uid)
-      .collection('activities')
-      .where('eventStartDate', '>=', new Date(startTimeMs))
-      .where('eventStartDate', '<=', new Date(endTimeMs))
+      .collection('activities') as admin.firestore.Query;
+    if (startTimeMs !== undefined && endTimeMs !== undefined) {
+      query = query
+        .where('eventStartDate', '>=', new Date(startTimeMs))
+        .where('eventStartDate', '<=', new Date(endTimeMs));
+    }
+    query = query
       .orderBy('eventStartDate', 'desc')
       .orderBy(FieldPath.documentId(), 'desc')
       .limit(limit)
@@ -879,6 +883,23 @@ function validateBoundedRange(startTimeMs: number, endTimeMs: number): void {
   }
 }
 
+function validateOptionalBoundedRange(
+  startTimeMs: number | undefined,
+  endTimeMs: number | undefined,
+): void {
+  const hasStartTime = startTimeMs !== undefined;
+  const hasEndTime = endTimeMs !== undefined;
+  if (hasStartTime !== hasEndTime) {
+    throw new McpDataError(
+      'invalid_request',
+      'start and end must either both be provided or both be omitted.',
+    );
+  }
+  if (hasStartTime && hasEndTime) {
+    validateBoundedRange(startTimeMs, endTimeMs);
+  }
+}
+
 function requireTimeZone(timeZone: string): string {
   const normalized = `${timeZone || ''}`.trim();
   if (!isValidIanaTimeZone(normalized)) {
@@ -1128,11 +1149,21 @@ function decodeActivityListCursor(
     input.connectionId,
     'pagination cursor',
   ) as unknown as Partial<ActivityListCursor>;
+  const cursorStartTimeMs = parsed.startTimeMs ?? null;
+  const cursorEndTimeMs = parsed.endTimeMs ?? null;
   if (
     !Number.isSafeInteger(parsed.timeMs)
     || !isValidFirestoreDocumentId(parsed.id)
-    || parsed.startTimeMs !== input.startTimeMs
-    || parsed.endTimeMs !== input.endTimeMs
+    || (
+      cursorStartTimeMs !== null
+      && !Number.isSafeInteger(cursorStartTimeMs)
+    )
+    || (
+      cursorEndTimeMs !== null
+      && !Number.isSafeInteger(cursorEndTimeMs)
+    )
+    || cursorStartTimeMs !== (input.startTimeMs ?? null)
+    || cursorEndTimeMs !== (input.endTimeMs ?? null)
   ) {
     throw new McpDataError('invalid_request', 'The pagination cursor is invalid.');
   }
@@ -1151,8 +1182,8 @@ function encodeActivityListCursor(
 ): string {
   return encodeOpaqueValue('activity_cursor', {
     ...cursor,
-    startTimeMs: input.startTimeMs,
-    endTimeMs: input.endTimeMs,
+    startTimeMs: input.startTimeMs ?? null,
+    endTimeMs: input.endTimeMs ?? null,
   }, input.uid, input.connectionId);
 }
 
@@ -2248,8 +2279,8 @@ export interface ListActivitiesInput {
   uid: string;
   connectionId: string;
   appBaseUrl: string;
-  startTimeMs: number;
-  endTimeMs: number;
+  startTimeMs?: number;
+  endTimeMs?: number;
   includeLocation?: boolean;
   cursor?: string;
   limit?: number;
@@ -3193,7 +3224,7 @@ export function createMcpDataService(
     },
 
     async listActivities(input: ListActivitiesInput) {
-      validateBoundedRange(input.startTimeMs, input.endTimeMs);
+      validateOptionalBoundedRange(input.startTimeMs, input.endTimeMs);
       const limit = Math.min(
         MAX_ACTIVITY_PAGE_SIZE,
         Math.max(1, Math.floor(input.limit || 25)),

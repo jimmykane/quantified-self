@@ -358,7 +358,7 @@ The analytics and map entries follow the
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Paginated safe activity summaries, opaque references, signed-in app links, and optional exact start/end coordinates |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Paginated newest-first safe activity summaries, optional paired date bounds, opaque references, signed-in app links, and optional exact start/end coordinates |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
@@ -530,6 +530,14 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
+Activity discovery metadata explicitly maps workout, exercise-session, today, last, latest, and most-recent requests to
+`list_activities`. The list is always newest first. `start` and `end` are an optional pair: when omitted, the query starts
+at the newest persisted activity across the user's history, so a latest-workout request is one bounded call with
+`limit: 1`; when present, the existing 366-day range limit applies. Aggregate event metrics and Training snapshots are
+not evidence that an individual activity is unavailable, and scope-aware server instructions direct clients to check
+the activity list before making that conclusion. Activity-list cursors bind both to the connection and to either the
+exact requested range or the explicit unbounded mode.
+
 `find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
 scope, it reuses the location field mask and safe summary projection. It matches only the persisted
 start and end positions, not the raw activity track: the response reports the nearest matching coordinate, whether it
@@ -595,10 +603,11 @@ validated coordinates, altitude, distance, route/point indexes, and a short norm
 descriptions, links, extensions, raw source bytes, and track points are never returned. The direct route URL uses the
 existing `/user/{uid}/route/{routeId}` page and still requires normal sign-in.
 
-The activity list orders and ranges on `eventStartDate`; the route list orders on `importedAt`. In both cases the
-document name is only a deterministic pagination tie-breaker. These query shapes use Firestore's automatic single-field
-indexes, so the MCP surface adds no composite index or index configuration. All-history nearby activity scans use the
-same `eventStartDate` order without a range predicate; optional bounded dates use the existing range-and-order shape.
+The activity list orders on `eventStartDate` and applies an optional paired range on the same field; the route list
+orders on `importedAt`. In both cases the document name is only a deterministic pagination tie-breaker. These query
+shapes use Firestore's automatic single-field indexes, so the MCP surface adds no composite index or index
+configuration. All-history activity lists and nearby scans use the same `eventStartDate` order without a range
+predicate; optional bounded dates use the existing range-and-order shape.
 
 ## Nearby-location resolution
 
@@ -657,8 +666,9 @@ deliberately.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
-- Activity date ranges are at most 366 days. Activity and route list pages are at most 100 entries, read only one page
-  plus a continuation sentinel per call, and reject more than 512 KiB of cumulative selected data.
+- Activity date ranges, when supplied, are at most 366 days. An omitted activity range starts newest-first across
+  history. Activity and route list pages are at most 100 entries, read only one page plus a continuation sentinel per
+  call, and reject more than 512 KiB of cumulative selected data.
 - Nearby activity calls scan at most 100 summaries, return at most 25 matches and 256 KiB, and can traverse all history
   only through encrypted query-bound pages.
 - Nearby route calls scan at most 50 summaries, load at most 12 persisted previews, process at most 1 MiB and 20,000

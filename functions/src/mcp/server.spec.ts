@@ -470,7 +470,72 @@ describe('MCP HTTP scope enforcement', () => {
       );
       expect(client.getInstructions()).not.toContain('query_measurements');
       expect(client.getInstructions()).not.toContain('list_metrics');
+      expect(client.getInstructions()).not.toContain('list_activities');
       expect(client.getInstructions()).not.toContain('body weight');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('routes specific and latest-workout requests to newest-first activity discovery', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.MetricsRead,
+        MCP_OAUTH_SCOPES.MeasurementsRead,
+      ],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'activity-routing-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      const activityInstructionIndex = instructions.indexOf(
+        'For a specific workout, activity, or exercise session',
+      );
+      const listActivities = (await client.listTools()).tools
+        .find(tool => tool.name === 'list_activities');
+      const inputSchema = listActivities?.inputSchema as {
+        properties?: Record<string, Record<string, unknown>>;
+        required?: string[];
+      } | undefined;
+
+      expect(activityInstructionIndex).toBeGreaterThanOrEqual(0);
+      expect(activityInstructionIndex).toBeLessThan(512);
+      expect(instructions).toContain(
+        'aggregate metrics and Training snapshots do not contain individual activity records',
+      );
+      expect(listActivities?.description).toContain('today’s');
+      expect(listActivities?.description).toContain('latest');
+      expect(listActivities?.description).toContain('Results are newest first');
+      expect(inputSchema?.required || []).not.toContain('start');
+      expect(inputSchema?.required || []).not.toContain('end');
+      expect(inputSchema?.properties?.start?.description).toContain(
+        'Provide start and end together',
+      );
+      expect(inputSchema?.properties?.limit?.description).toContain(
+        'latest or last workout',
+      );
+
+      const partialRange = await client.callTool({
+        name: 'list_activities',
+        arguments: {
+          start: '2026-07-27T00:00:00.000+03:00',
+        },
+      });
+      expect(partialRange.isError).toBe(true);
+      expect(JSON.stringify(partialRange)).toContain(
+        'start and end must either both be provided or both be omitted',
+      );
     } finally {
       await client.close();
       await server.close();
@@ -632,7 +697,7 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getServerVersion()).toEqual({
         name: 'quantified-self',
         title: 'Quantified Self',
-        version: '1.1.0',
+        version: '1.1.1',
         description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [

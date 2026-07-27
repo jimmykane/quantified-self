@@ -343,6 +343,11 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const instructions = [
     'Use only the read-only tools exposed for the permissions this connection was granted.',
   ];
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
+    instructions.push(
+      'For a specific workout, activity, or exercise session—including today’s, yesterday’s, latest, last, or most recent—call list_activities before concluding it is unavailable; aggregate metrics and Training snapshots do not contain individual activity records. Omit dates and use limit 1 for the latest activity; use explicit local-day bounds for a calendar date.',
+    );
+  }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
     instructions.push(
       'Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment.',
@@ -378,7 +383,7 @@ export function createMcpServer(
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
-    version: '1.1.0',
+    version: '1.1.1',
     description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
     websiteUrl: publicBaseUrl,
     icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
@@ -566,13 +571,22 @@ export function createMcpServer(
     server.registerTool('list_activities', {
       title: 'List activities',
       description: activityLocationAvailable
-        ? 'List bounded activity summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
-        : 'List bounded non-location activity summaries with opaque references and direct authenticated app links. Location fields are redacted.',
+        ? 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first; omit both dates and use limit 1 for the latest activity, or provide both dates for a bounded period. Returns safe summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
+        : 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first; omit both dates and use limit 1 for the latest activity, or provide both dates for a bounded period. Returns safe non-location summaries with opaque references and direct authenticated app links; location fields are redacted.',
       inputSchema: {
-        start: MCP_ISO_DATE_TIME_SCHEMA,
-        end: MCP_ISO_DATE_TIME_SCHEMA,
+        start: MCP_ISO_DATE_TIME_SCHEMA
+          .describe('Optional inclusive period start. Provide start and end together; omit both for newest-first activity history.')
+          .optional(),
+        end: MCP_ISO_DATE_TIME_SCHEMA
+          .describe('Optional inclusive period end. Provide start and end together; omit both for newest-first activity history.')
+          .optional(),
         cursor: MCP_CURSOR_SCHEMA.optional(),
-        limit: z.number().int().min(1).max(100).default(25),
+        limit: z.number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(25)
+          .describe('Maximum activities to return. Use 1 when the user asks for the latest or last workout.'),
       },
       outputSchema: outputSchemas.list_activities,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
@@ -580,8 +594,12 @@ export function createMcpServer(
       uid: auth.uid,
       connectionId: auth.connectionId,
       appBaseUrl: publicBaseUrl,
-      startTimeMs: parseMcpDateTime(input.start, 'start'),
-      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      startTimeMs: input.start
+        ? parseMcpDateTime(input.start, 'start')
+        : undefined,
+      endTimeMs: input.end
+        ? parseMcpDateTime(input.end, 'end')
+        : undefined,
       includeLocation: activityLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,

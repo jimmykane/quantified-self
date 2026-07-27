@@ -9,10 +9,11 @@ Resolve activities through opaque public references and request only the detail 
 
 ## Workflow
 
-1. Find the target activity with a bounded date range and retain its opaque activity reference. For “latest,” scan
-   newest-first within the largest supported single range, state that boundary if no match is found, and ask before
-   searching older history. When a family term such as run could include trail, treadmill, indoor, or virtual variants,
-   clarify only when that distinction can change the answer.
+1. Find the target activity and retain its opaque activity reference. For “latest,” omit the date bounds and request one
+   newest-first result. For “today” or another calendar date, use explicit bounds for the user's local day. Never infer
+   that an individual workout is unavailable from aggregate metrics or a Training snapshot. When a family term such as
+   run could include trail, treadmill, indoor, or virtual variants, clarify only when that distinction can change the
+   answer.
 2. Use the activity summary first. Request selected canonical metrics, laps, jumps, or swim lengths only when relevant
    to the activity type and question.
 3. Before charting, discover the chart metrics supported for the activity type. Request only the needed series and

@@ -1216,6 +1216,84 @@ describe('MCP data service', () => {
     );
   });
 
+  it('lists the latest activity without date bounds and binds unbounded cursors', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    const service = createMcpDataService(dependencies);
+    const unboundedInput = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    };
+    const firstPage = await service.listActivities(unboundedInput);
+
+    expect(firstPage.activities).toEqual([
+      expect.objectContaining({
+        startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+      }),
+    ]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      2,
+      undefined,
+      undefined,
+    );
+
+    await expect(service.listActivities({
+      ...unboundedInput,
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(1);
+
+    await service.listActivities({
+      ...unboundedInput,
+      cursor: firstPage.nextCursor!,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenLastCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      2,
+      {
+        timeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        id: 'activity-1',
+      },
+      undefined,
+    );
+  });
+
+  it('rejects a partially bounded activity list before reading Firestore', async () => {
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+      message: 'start and end must either both be provided or both be omitted.',
+    });
+    expect(dependencies.fetchActivityDocuments).not.toHaveBeenCalled();
+  });
+
   it('projects swim lengths through an explicit field allowlist', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),

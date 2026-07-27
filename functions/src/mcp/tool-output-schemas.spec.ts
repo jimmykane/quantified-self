@@ -808,8 +808,7 @@ const successfulToolArguments: Record<
     timeZone: 'Europe/Helsinki',
   },
   list_activities: {
-    start: '2026-07-01T00:00:00.000Z',
-    end: '2026-07-02T00:00:00.000Z',
+    limit: 1,
   },
   find_activities_near_location: {
     location: coordinate,
@@ -960,7 +959,8 @@ describe('MCP public output contracts', () => {
   });
 
   it('advertises strict schemas and validates every successful tool call', async () => {
-    const connection = await connectFixtureServer(createFixtureDataService());
+    const dataService = createFixtureDataService();
+    const connection = await connectFixtureServer(dataService);
     connections.push(connection);
     const tools = (await connection.client.listTools()).tools;
     expect(tools.map(tool => tool.name).sort()).toEqual(
@@ -1030,6 +1030,13 @@ describe('MCP public output contracts', () => {
         expect(JSON.parse(text.text)).toEqual(result.structuredContent);
       }
     }
+    expect(dataService.listActivities).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startTimeMs: undefined,
+        endTimeMs: undefined,
+        limit: 1,
+      }),
+    );
 
     const distanceChart = await connection.client.callTool({
       name: 'get_activity_chart_data',
