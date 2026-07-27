@@ -133,7 +133,8 @@ function buildPaidPlan(product: StripeProduct): PublicPlanViewModel | null {
         return null;
     }
 
-    const role = normalizePaidRole(product.role ?? product.metadata?.['role']);
+    const role = normalizePaidRole(product.role)
+        ?? normalizePaidRole(product.metadata?.['role']);
     if (!role) {
         return null;
     }
@@ -169,7 +170,8 @@ function buildPaidPrice(product: StripeProduct, price: StripePrice): PublicPlanP
         yearlySavingsLabel: getYearlySavingsLabel(product, price),
         showYearlySwitchHint: cadence?.interval === 'month'
             && (product.prices ?? []).some((candidate) => isDisplayablePaidPrice(candidate)
-                && getRecurringCadence(candidate)?.interval === 'year'),
+                && getRecurringCadence(candidate)?.interval === 'year'
+                && candidate.currency.toLowerCase() === price.currency.toLowerCase()),
     };
 }
 

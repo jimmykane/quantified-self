@@ -140,6 +140,26 @@ describe('PublicPricingComponent', () => {
         expect(text).toContain('Paid plans are temporarily unavailable');
         expect(text).not.toContain('Loading plans...');
     });
+
+    it('replaces an indefinitely pending catalog with the Starter fallback after the timeout', async () => {
+        vi.useFakeTimers();
+        try {
+            paymentService.getProducts.mockReturnValue(new Subject<StripeProduct[]>());
+            fixture.detectChanges();
+
+            expect(fixture.nativeElement.textContent).toContain('Loading plans...');
+
+            await vi.advanceTimersByTimeAsync(10_000);
+            fixture.detectChanges();
+
+            const text = fixture.nativeElement.textContent as string;
+            expect(text).toContain('Starter');
+            expect(text).toContain('Paid plans are temporarily unavailable');
+            expect(text).not.toContain('Loading plans...');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });
 
 describe('buildPublicPricingCatalog', () => {
@@ -179,5 +199,41 @@ describe('buildPublicPricingCatalog', () => {
         expect(yearlyPrice?.yearlySavingsLabel).toBe('Save 20% vs monthly');
         expect(catalog.plans.find((plan) => plan.id === 'invalid')).toBeUndefined();
         expect(catalog.plans.find((plan) => plan.id === 'inactive')).toBeUndefined();
+    });
+
+    it('does not advertise a yearly switch across different currencies', () => {
+        const basicProduct = PAID_PRODUCTS[0];
+        const monthlyPrice = basicProduct.prices?.[0];
+        const yearlyPrice = basicProduct.prices?.[1];
+        expect(monthlyPrice).toBeTruthy();
+        expect(yearlyPrice).toBeTruthy();
+
+        const catalog = buildPublicPricingCatalog([{
+            ...basicProduct,
+            prices: [
+                monthlyPrice!,
+                {
+                    ...yearlyPrice!,
+                    currency: 'gbp',
+                },
+            ],
+        }]);
+        const basicPlan = catalog.plans.find((plan) => plan.role === 'basic');
+        const monthlyView = basicPlan?.prices.find((price) => price.id === monthlyPrice?.id);
+        const yearlyView = basicPlan?.prices.find((price) => price.id === yearlyPrice?.id);
+
+        expect(monthlyView?.showYearlySwitchHint).toBe(false);
+        expect(yearlyView?.yearlySavingsLabel).toBeNull();
+    });
+
+    it('falls back to metadata when the product-level role is stale', () => {
+        const catalog = buildPublicPricingCatalog([{
+            ...PAID_PRODUCTS[0],
+            role: 'membership',
+            metadata: { role: 'basic' },
+        }]);
+
+        expect(catalog.plans.map((plan) => plan.role)).toEqual(['free', 'basic']);
+        expect(catalog.paidPlansUnavailable).toBe(false);
     });
 });
