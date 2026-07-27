@@ -91,7 +91,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('body measurements, individual activity details');
     expect(text).toContain('identity-free body-weight history');
     expect(text).toContain('Sleep sessions and summaries');
-    expect(text).toContain('Saved routes and nearby search');
+    expect(text).toContain('Saved-route summaries and optional locations');
+    expect(text).toContain('Individual activity details and charts');
     expect(text).toContain('No settings or data writes');
     expect(text).toContain('ChatGPT is an external client with its own privacy and retention practices');
     expect(mcpFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(8);

@@ -10,6 +10,7 @@ import {
   createMcpOAuthService,
   createPkceChallenge,
   fetchClientMetadataDocument,
+  hasValidMcpScopeDependencies,
   hashOpaqueValue,
   isPrivateAddress,
   McpConnection,
@@ -273,17 +274,47 @@ function authorizationParams(verifier: string) {
 }
 
 describe('MCP OAuth service', () => {
+  it('enforces the complete parent and location scope dependency matrix', () => {
+    const states = [false, true];
+    for (const activityDetails of states) {
+      for (const activityLocation of states) {
+        for (const routes of states) {
+          for (const routeLocation of states) {
+            const scopes = [
+              ...(activityDetails ? [MCP_OAUTH_SCOPES.ActivityDetailsRead] : []),
+              ...(activityLocation ? [MCP_OAUTH_SCOPES.ActivityLocationRead] : []),
+              ...(routes ? [MCP_OAUTH_SCOPES.RoutesRead] : []),
+              ...(routeLocation ? [MCP_OAUTH_SCOPES.RouteLocationRead] : []),
+            ];
+            expect(hasValidMcpScopeDependencies(scopes)).toBe(
+              (!activityLocation || activityDetails)
+              && (!routeLocation || routes),
+            );
+          }
+        }
+      }
+    }
+  });
+
   it('accepts each independent read scope', () => {
     expect(normalizeOAuthScopes(
-      'metrics:read measurements:read activity-details:read routes:read sleep:read',
+      'metrics:read measurements:read activity-details:read activity-location:read routes:read route-location:read sleep:read',
     )).toEqual([
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.MeasurementsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
       MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
       MCP_OAUTH_SCOPES.SleepRead,
     ]);
     expect(() => normalizeOAuthScopes('activity-details:write')).toThrow(
+      expect.objectContaining({ code: 'invalid_scope' }),
+    );
+    expect(() => normalizeOAuthScopes('activity-location:read')).toThrow(
+      expect.objectContaining({ code: 'invalid_scope' }),
+    );
+    expect(() => normalizeOAuthScopes('route-location:read')).toThrow(
       expect.objectContaining({ code: 'invalid_scope' }),
     );
   });

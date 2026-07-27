@@ -176,18 +176,21 @@
         <li><mat-icon aria-hidden="true">query_stats</mat-icon>{{ scopeLabels['metrics:read'] }}</li>
         <li><mat-icon aria-hidden="true">monitor_weight</mat-icon>{{ scopeLabels['measurements:read'] }}</li>
         <li><mat-icon aria-hidden="true">directions_run</mat-icon>{{ scopeLabels['activity-details:read'] }}</li>
+        <li><mat-icon aria-hidden="true">location_on</mat-icon>{{ scopeLabels['activity-location:read'] }}</li>
         <li><mat-icon aria-hidden="true">bedtime</mat-icon>{{ scopeLabels['sleep:read'] }}</li>
         <li><mat-icon aria-hidden="true">route</mat-icon>{{ scopeLabels['routes:read'] }}</li>
+        <li><mat-icon aria-hidden="true">map</mat-icon>{{ scopeLabels['route-location:read'] }}</li>
       </ul>
 
       <mat-divider></mat-divider>
 
       <p>
-        Individual activity details may include exact start, end, and jump coordinates that can reveal sensitive
-        locations. Nearby activity and route searches can use these coordinates and saved preview geometry. Place-name
-        searches send the location text to Mapbox; direct-coordinate searches do not. You can review or disconnect a
-        client from the MCP connections card at any time. A client appears there only after it finishes authorization;
-        abandoned attempts expire automatically.
+        Activity details include non-location summaries, laps, jumps, swim lengths, and bounded on-demand chart
+        series. Exact starts, ends, jump positions, and breadcrumb traces require Activity locations. Saved-route
+        summaries exclude bounds and geometry; those require Saved-route locations and geometry. The two location
+        permissions are independent. Place-name searches send the location text to Mapbox; direct-coordinate searches
+        do not. You can review or disconnect a client at any time. Existing clients must reconnect to gain either new
+        location permission.
       </p>
     </mat-card-content>
   </mat-card>

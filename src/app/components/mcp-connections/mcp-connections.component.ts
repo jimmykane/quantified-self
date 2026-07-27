@@ -21,7 +21,9 @@ interface McpConnection {
     | 'measurements:read'
     | 'sleep:read'
     | 'activity-details:read'
+    | 'activity-location:read'
     | 'routes:read'
+    | 'route-location:read'
   >;
   createdAtMs: number;
   lastUsedAtMs: number | null;
@@ -58,7 +60,9 @@ export class McpConnectionsComponent implements OnInit {
     'measurements:read': 'Body measurements',
     'sleep:read': 'Sleep summaries',
     'activity-details:read': 'Individual activity details',
-    'routes:read': 'Saved routes and waypoints',
+    'activity-location:read': 'Activity locations',
+    'routes:read': 'Saved-route summaries',
+    'route-location:read': 'Saved-route locations and geometry',
   };
   readonly mcpEndpoint = `${this.windowService.currentDomain}/mcp`;
 

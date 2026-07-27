@@ -15,10 +15,25 @@ export const MCP_OAUTH_SCOPES = {
   MeasurementsRead: 'measurements:read',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
+  ActivityLocationRead: 'activity-location:read',
   RoutesRead: 'routes:read',
+  RouteLocationRead: 'route-location:read',
 } as const;
 
 export type McpOAuthScope = typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES];
+
+export function hasValidMcpScopeDependencies(
+  scopes: readonly McpOAuthScope[],
+): boolean {
+  const selected = new Set(scopes);
+  return !(
+    selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
+    && !selected.has(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+  ) && !(
+    selected.has(MCP_OAUTH_SCOPES.RouteLocationRead)
+    && !selected.has(MCP_OAUTH_SCOPES.RoutesRead)
+  );
+}
 
 export const MCP_OAUTH_COLLECTIONS = {
   authorizationRequests: 'mcpOAuthAuthorizationRequests',
@@ -506,6 +521,16 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             'The requested scope exceeds the refresh token grant.',
           );
         }
+        const nextScopes = input.requestedScopes || refresh.scopes;
+        if (
+          !hasValidMcpScopeDependencies(refresh.scopes)
+          || !hasValidMcpScopeDependencies(nextScopes)
+        ) {
+          throw new McpOAuthError(
+            'invalid_scope',
+            'The authorization grant contains an invalid dependent scope.',
+          );
+        }
         transaction.update(refreshRef, {
           active: false,
           rotatedAtMs: input.nowMs,
@@ -516,7 +541,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             ...input.nextAccessTokenRecord,
             uid: refresh.uid,
             connectionId: refresh.connectionId,
-            scopes: input.requestedScopes || refresh.scopes,
+            scopes: nextScopes,
             expireAt: timestamp(input.nextAccessTokenRecord.expiresAtMs),
           },
         );
@@ -526,7 +551,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             ...input.nextRefreshTokenRecord,
             uid: refresh.uid,
             connectionId: refresh.connectionId,
-            scopes: input.requestedScopes || refresh.scopes,
+            scopes: nextScopes,
             familyId: refresh.familyId,
             active: true,
             expireAt: timestamp(input.nextRefreshTokenRecord.expiresAtMs),
@@ -534,7 +559,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         );
         transaction.update(activeConnectionRef, {
           status: 'active',
-          scopes: input.requestedScopes || refresh.scopes,
+          scopes: nextScopes,
           lastUsedAtMs: input.nowMs,
           expireAt: admin.firestore.FieldValue.delete(),
         });
@@ -733,6 +758,12 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
     throw new McpOAuthError(
       'invalid_scope',
       `Only ${Object.values(MCP_OAUTH_SCOPES).join(', ')} can be requested.`,
+    );
+  }
+  if (!hasValidMcpScopeDependencies(unique as McpOAuthScope[])) {
+    throw new McpOAuthError(
+      'invalid_scope',
+      'Location scopes require their matching activity-detail or saved-route scope.',
     );
   }
   return unique as McpOAuthScope[];
@@ -1261,6 +1292,13 @@ export function createMcpOAuthService(
       const nowMs = resolvedDependencies.now();
       if (!token || token.expiresAtMs <= nowMs || token.audience !== audience) {
         throw new McpOAuthError('invalid_grant', 'The access token is invalid or expired.', 401);
+      }
+      if (!hasValidMcpScopeDependencies(token.scopes)) {
+        throw new McpOAuthError(
+          'invalid_grant',
+          'The access token contains an invalid dependent scope.',
+          401,
+        );
       }
       const connection = await store.getConnection(token.uid, token.connectionId);
       if (!isActiveMcpConnection(connection)) {

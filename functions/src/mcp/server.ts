@@ -11,6 +11,12 @@ import {
   McpDataError,
 } from './data.service';
 import {
+  MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS,
+  MCP_ACTIVITY_CHART_DEFAULT_POINTS,
+  MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS,
+  MCP_ACTIVITY_CHART_MAX_POINTS,
+} from './activity-chart.service';
+import {
   MCP_MEASUREMENT_TYPE_IDS,
 } from './measurement-catalog';
 import {
@@ -471,9 +477,14 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
+    const activityLocationAvailable = auth.scopes.includes(
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    );
     server.registerTool('list_activities', {
       title: 'List activities',
-      description: 'List bounded activity summaries, including exact start and end coordinates when present, with opaque references and direct authenticated app links.',
+      description: activityLocationAvailable
+        ? 'List bounded activity summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
+        : 'List bounded non-location activity summaries with opaque references and direct authenticated app links. Location fields are redacted.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
@@ -487,42 +498,45 @@ export function createMcpServer(
       appBaseUrl: publicBaseUrl,
       startTimeMs: parseMcpDateTime(input.start, 'start'),
       endTimeMs: parseMcpDateTime(input.end, 'end'),
+      includeLocation: activityLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
     })));
 
-    server.registerTool('find_activities_near_location', {
-      title: 'Find activities near a location',
-      description: 'Find activities whose exact start or end coordinate is within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Dates are optional, and results are returned newest first in bounded scan pages.',
-      inputSchema: {
-        location: MCP_NEARBY_LOCATION_SCHEMA,
-        radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
-        start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
-        end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
-        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
-        cursor: MCP_CURSOR_SCHEMA.optional(),
-        limit: z.number().int().min(1).max(25).default(10),
-      },
-      annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool(
-      'find_activities_near_location',
-      () => dataService.findActivitiesNearLocation({
-        uid: auth.uid,
-        connectionId: auth.connectionId,
-        appBaseUrl: publicBaseUrl,
-        location: input.location,
-        radiusMeters: input.radiusMeters,
-        startTimeMs: input.start
-          ? parseMcpDateTime(input.start, 'start')
-          : undefined,
-        endTimeMs: input.end
-          ? parseMcpDateTime(input.end, 'end')
-          : undefined,
-        activityTypes: input.activityTypes,
-        cursor: input.cursor,
-        limit: input.limit,
-      }),
-    ));
+    if (activityLocationAvailable) {
+      server.registerTool('find_activities_near_location', {
+        title: 'Find activities near a location',
+        description: 'Find activities whose exact start or end coordinate is within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Dates are optional, and results are returned newest first in bounded scan pages.',
+        inputSchema: {
+          location: MCP_NEARBY_LOCATION_SCHEMA,
+          radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+          start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+          end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+          activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+          cursor: MCP_CURSOR_SCHEMA.optional(),
+          limit: z.number().int().min(1).max(25).default(10),
+        },
+        annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool(
+        'find_activities_near_location',
+        () => dataService.findActivitiesNearLocation({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          appBaseUrl: publicBaseUrl,
+          location: input.location,
+          radiusMeters: input.radiusMeters,
+          startTimeMs: input.start
+            ? parseMcpDateTime(input.start, 'start')
+            : undefined,
+          endTimeMs: input.end
+            ? parseMcpDateTime(input.end, 'end')
+            : undefined,
+          activityTypes: input.activityTypes,
+          cursor: input.cursor,
+          limit: input.limit,
+        }),
+      ));
+    }
 
     server.registerTool('list_activity_laps', {
       title: 'List activity laps',
@@ -543,7 +557,9 @@ export function createMcpServer(
 
     server.registerTool('list_activity_jumps', {
       title: 'List activity jumps',
-      description: 'List MTB jump measurements for one activity, including exact coordinates when present.',
+      description: activityLocationAvailable
+        ? 'List MTB jump measurements for one activity, including exact coordinates when present.'
+        : 'List MTB jump measurements for one activity with coordinates redacted.',
       inputSchema: {
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         cursor: MCP_CURSOR_SCHEMA.optional(),
@@ -554,6 +570,7 @@ export function createMcpServer(
       uid: auth.uid,
       connectionId: auth.connectionId,
       activityRef: input.activityRef,
+      includeLocation: activityLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
     })));
@@ -576,6 +593,55 @@ export function createMcpServer(
         cursor: input.cursor,
         limit: input.limit,
       }),
+    ));
+
+    server.registerTool('list_activity_chart_metrics', {
+      title: 'List activity chart metrics',
+      description: 'List the static chart-stream catalog, canonical units, axes, and point limits. This does not read an activity or original source file.',
+      inputSchema: {
+        activityType: z.string().min(1).max(120).optional(),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'list_activity_chart_metrics',
+      async () => dataService.listActivityChartMetrics(input.activityType),
+    ));
+
+    server.registerTool('get_activity_chart_data', {
+      title: 'Get activity chart data',
+      description: 'Parse the existing original source on demand and return bounded, whole-activity chart series. Original files, full-resolution recordings, absolute sample timestamps, and unrequested streams are never returned. Breadcrumb coordinates require activity-location access.',
+      inputSchema: {
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        metrics: z.array(z.string().min(1).max(120)).min(1).max(4),
+        xAxis: z.enum(['elapsed_time', 'distance']).default('elapsed_time'),
+        maxPoints: z.number().int().min(2).max(MCP_ACTIVITY_CHART_MAX_POINTS)
+          .default(MCP_ACTIVITY_CHART_DEFAULT_POINTS),
+        includeLocation: z.boolean().default(false),
+        maxLocationPoints: z.number().int().min(2)
+          .max(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS)
+          .default(MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS),
+      },
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_activity_chart_data',
+      () => {
+        if (input.includeLocation && !activityLocationAvailable) {
+          throw new McpDataError(
+            'invalid_request',
+            'Activity breadcrumb coordinates require activity-location:read.',
+          );
+        }
+        return dataService.getActivityChartData({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          activityRef: input.activityRef,
+          metrics: input.metrics,
+          xAxis: input.xAxis,
+          maxPoints: input.maxPoints,
+          includeLocation: input.includeLocation,
+          maxLocationPoints: input.maxLocationPoints,
+        });
+      },
     ));
   }
 
@@ -605,9 +671,14 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
+    const routeLocationAvailable = auth.scopes.includes(
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    );
     server.registerTool('list_routes', {
       title: 'List saved routes',
-      description: 'List bounded saved-route summaries, exact bounds, opaque references, and direct authenticated app links.',
+      description: routeLocationAvailable
+        ? 'List bounded saved-route summaries, exact bounds, opaque references, and direct authenticated app links.'
+        : 'List bounded non-location saved-route summaries, opaque references, and direct authenticated app links. Bounds are redacted.',
       inputSchema: {
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(25),
@@ -617,60 +688,63 @@ export function createMcpServer(
       uid: auth.uid,
       connectionId: auth.connectionId,
       appBaseUrl: publicBaseUrl,
+      includeLocation: routeLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
     })));
 
-    server.registerTool('find_routes_near_location', {
-      title: 'Find saved routes near a location',
-      description: 'Find saved routes whose persisted preview passes within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
-      inputSchema: {
-        location: MCP_NEARBY_LOCATION_SCHEMA,
-        radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
-        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
-        cursor: MCP_CURSOR_SCHEMA.optional(),
-        limit: z.number().int().min(1).max(10).default(10),
-      },
-      annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool(
-      'find_routes_near_location',
-      () => dataService.findRoutesNearLocation({
+    if (routeLocationAvailable) {
+      server.registerTool('find_routes_near_location', {
+        title: 'Find saved routes near a location',
+        description: 'Find saved routes whose persisted preview passes within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
+        inputSchema: {
+          location: MCP_NEARBY_LOCATION_SCHEMA,
+          radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+          activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+          cursor: MCP_CURSOR_SCHEMA.optional(),
+          limit: z.number().int().min(1).max(10).default(10),
+        },
+        annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool(
+        'find_routes_near_location',
+        () => dataService.findRoutesNearLocation({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          appBaseUrl: publicBaseUrl,
+          location: input.location,
+          radiusMeters: input.radiusMeters,
+          activityTypes: input.activityTypes,
+          cursor: input.cursor,
+          limit: input.limit,
+        }),
+      ));
+
+      server.registerTool('get_route_geometry', {
+        title: 'Get saved-route geometry',
+        description: 'Get the bounded polyline5 preview geometry, exact bounds, and explicit start and end coordinates for each segment of one saved route.',
+        inputSchema: {
+          routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool('get_route_geometry', () => dataService.getRouteGeometry({
         uid: auth.uid,
         connectionId: auth.connectionId,
-        appBaseUrl: publicBaseUrl,
-        location: input.location,
-        radiusMeters: input.radiusMeters,
-        activityTypes: input.activityTypes,
-        cursor: input.cursor,
-        limit: input.limit,
-      }),
-    ));
+        routeRef: input.routeRef,
+      })));
 
-    server.registerTool('get_route_geometry', {
-      title: 'Get saved-route geometry',
-      description: 'Get the bounded polyline5 preview geometry, exact bounds, and explicit start and end coordinates for each segment of one saved route.',
-      inputSchema: {
-        routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-      },
-      annotations: READ_ONLY_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool('get_route_geometry', () => dataService.getRouteGeometry({
-      uid: auth.uid,
-      connectionId: auth.connectionId,
-      routeRef: input.routeRef,
-    })));
-
-    server.registerTool('list_route_waypoints', {
-      title: 'List saved-route waypoints',
-      description: 'List bounded, allowlisted waypoint coordinates parsed from one saved FIT or GPX route source.',
-      inputSchema: {
-        routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-      },
-      annotations: READ_ONLY_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool('list_route_waypoints', () => dataService.listRouteWaypoints({
-      uid: auth.uid,
-      connectionId: auth.connectionId,
-      routeRef: input.routeRef,
-    })));
+      server.registerTool('list_route_waypoints', {
+        title: 'List saved-route waypoints',
+        description: 'List bounded, allowlisted waypoint coordinates parsed from one saved FIT or GPX route source.',
+        inputSchema: {
+          routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool('list_route_waypoints', () => dataService.listRouteWaypoints({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        routeRef: input.routeRef,
+      })));
+    }
   }
 
   return server;
@@ -688,6 +762,11 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   const toolName = params && typeof params === 'object'
     ? `${(params as Record<string, unknown>).name || ''}`
     : '';
+  const toolArguments = params && typeof params === 'object'
+    && (params as Record<string, unknown>).arguments
+    && typeof (params as Record<string, unknown>).arguments === 'object'
+    ? (params as Record<string, unknown>).arguments as Record<string, unknown>
+    : {};
   if (toolName === 'get_activity_metrics') {
     return [
       MCP_OAUTH_SCOPES.MetricsRead,
@@ -698,20 +777,43 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     return [MCP_OAUTH_SCOPES.SleepRead];
   }
   if ([
-    'list_activities',
     'find_activities_near_location',
+  ].includes(toolName)) {
+    return [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ];
+  }
+  if (
+    toolName === 'get_activity_chart_data'
+    && toolArguments.includeLocation === true
+  ) {
+    return [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ];
+  }
+  if ([
+    'list_activities',
     'list_activity_laps',
     'list_activity_jumps',
     'list_activity_swim_lengths',
+    'list_activity_chart_metrics',
+    'get_activity_chart_data',
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.ActivityDetailsRead];
   }
   if ([
-    'list_routes',
     'find_routes_near_location',
     'get_route_geometry',
     'list_route_waypoints',
   ].includes(toolName)) {
+    return [
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ];
+  }
+  if (toolName === 'list_routes') {
     return [MCP_OAUTH_SCOPES.RoutesRead];
   }
   if ([

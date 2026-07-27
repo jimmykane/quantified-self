@@ -19,13 +19,17 @@ describe('McpConnectionsComponent', () => {
       'measurements:read',
       'sleep:read',
       'activity-details:read',
+      'activity-location:read',
       'routes:read',
+      'route-location:read',
     ] as Array<
       | 'metrics:read'
       | 'measurements:read'
       | 'sleep:read'
       | 'activity-details:read'
+      | 'activity-location:read'
       | 'routes:read'
+      | 'route-location:read'
     >,
     createdAtMs: 1_700_000_000_000,
     lastUsedAtMs: 1_700_001_000_000,
@@ -69,7 +73,9 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Body measurements');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
-    expect(content).toContain('Saved routes and waypoints');
+    expect(content).toContain('Activity locations');
+    expect(content).toContain('Saved-route summaries');
+    expect(content).toContain('Saved-route locations and geometry');
   });
 
   it('uses a standard glass-card stack matching the connection workspace', async () => {
@@ -112,14 +118,13 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('ChatGPT setup');
     expect(content).toContain('https://quantified-self.io/mcp');
     expect(content).toContain('Copy endpoint');
-    expect(content).toContain('exact start, end, and jump coordinates');
-    expect(content).toContain('reveal sensitive locations');
+    expect(content).toContain('Exact starts, ends, jump positions, and breadcrumb traces');
+    expect(content).toContain('location permissions are independent');
     expect(content).toContain('ChatGPT app icon');
     expect(content).toContain('Download 96 px · 3.3 KB');
     expect(content).toContain('Download 192 px · 9.9 KB');
-    expect(content).toContain('client from the MCP connections card at any time');
-    expect(content).toContain('only after it finishes authorization');
-    expect(content).toContain('abandoned attempts expire automatically');
+    expect(content).toContain('review or disconnect a client at any time');
+    expect(content).toContain('Existing clients must reconnect');
     expect(content).toContain('Authorizing on Android');
     expect(content).toContain('Desktop setup is the most reliable option');
     expect(content).toContain('Open supported links');

@@ -83,17 +83,20 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
   `activity-details:read` is also granted;
 - `measurements:read` for bounded identity-free first-class body-measurement history;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
-- `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, start/end proximity
-  searches, laps, swim lengths, and MTB jumps; and
-- `routes:read` for saved-route summaries, preview geometry, preview proximity searches, and waypoints.
+- `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
+  selected metrics, and on-demand chart series;
+- `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
+  nearby activity search, and chart breadcrumbs;
+- `routes:read` for non-location saved-route summaries; and
+- `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
+  endpoints, and waypoints.
 
-The scopes remain independent grants. Existing metric or sleep connections do not acquire activity-detail or route
-access automatically; the client must start a new authorization request and the user must approve the requested scope.
-Activity-detail consent
-states that activity starts, ends, and individual jumps can include exact coordinates that may reveal a home, workplace,
-frequent trailhead, or other sensitive location. Saved-route consent states that route bounds, simplified geometry, and
-waypoint coordinates can expose exact locations. Consent also states that place-name proximity searches send only the
-supplied location text to Mapbox for forward geocoding, while direct-coordinate searches do not call Mapbox.
+The location scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
+selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
+validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location
+remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
+scope to regain coordinate-bearing tools. Consent explains that coordinates may reveal sensitive places and that
+place-name searches send only supplied location text to Mapbox; direct-coordinate searches do not call Mapbox.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -215,15 +218,17 @@ The analytics and map entries follow the
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `list_activities` | `activity-details:read` | Paginated safe activity summaries with optional exact start/end coordinates, opaque references, and signed-in app links |
-| `find_activities_near_location` | `activity-details:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Paginated safe activity summaries, opaque references, signed-in app links, and optional exact start/end coordinates |
+| `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
-| `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements, including exact coordinates when present |
+| `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
-| `list_routes` | `routes:read` | Paginated saved-route summaries, exact bounds, opaque references, and signed-in app links |
-| `find_routes_near_location` | `routes:read` | Bounded newest-first scan measuring a location against persisted route previews |
-| `get_route_geometry` | `routes:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
-| `list_route_waypoints` | `routes:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
+| `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
+| `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
+| `list_routes` | `routes:read` | Paginated non-location saved-route summaries, opaque references, and signed-in app links; exact bounds require `route-location:read` |
+| `find_routes_near_location` | `routes:read` + `route-location:read` | Bounded newest-first scan measuring a location against persisted route previews |
+| `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
+| `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
 Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
 tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
@@ -302,26 +307,28 @@ events, privacy filtering, query bounds, and the MCP transport.
 
 ## Individual activity-detail projection
 
-`activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. List queries select
-only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a signed-in app link,
-the latitude/longitude leaves of the persisted `Start Position` and `End Position` stats, and a fixed set of numeric
-summary stats. Detail calls select exactly one persisted array: `laps`, `events` for jumps, or `swimLengths`.
+`activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. Non-location list
+queries select only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a
+signed-in app link, and a fixed set of numeric summary stats. The four persisted `Start Position`/`End Position`
+coordinate leaves enter the query only when `activity-location:read` is present. Detail calls select exactly one
+persisted array: `laps`, `events` for jumps, or `swimLengths`.
 Per-activity metric calls select only `eventID` plus the requested canonical `stats.<type>` leaves. They never hydrate a
 whole activity document or position map.
 
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
 average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
 distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
-height, hang time, speed, rotations, score, and latitude/longitude. Activity summaries expose optional `startPosition`
-and `endPosition` objects containing only validated `latitudeDegrees` and `longitudeDegrees`; missing, partial,
-non-finite, or out-of-range pairs become `null`. Per-activity metric requests expose only selected finite numeric values
+height, hang time, speed, rotations, and score. With `activity-location:read`, they may also expose latitude/longitude,
+and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
+coordinate fields are omitted and `locationRedacted` is true. Per-activity metric requests expose only selected finite numeric values
 from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and
 unrequested stats, internal ID fields, device/provider creator data, source keys, original files, nested position
 metadata, and parser extensions are excluded.
 
 Sports Lib already derives these positions from the first and last available activity position when an importer does not
 provide them, and the normal activity writer persists both stats. Historical activities that do not contain a complete
-stored pair return `null`; no reparse or backfill is required. Selecting the four coordinate leaves does not change the
+stored pair return `null` when location access is granted; no reparse or backfill is required. Selecting the four
+coordinate leaves does not change the
 activity query filters or ordering, so it adds no composite index.
 
 `list_activities` returns an encrypted `activityRef`, not the activity or event document ID. References and detail
@@ -329,7 +336,8 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
-`find_activities_near_location` reuses the same field mask and safe summary projection. It matches only the persisted
+`find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
+scope, it reuses the location field mask and safe summary projection. It matches only the persisted
 start and end positions, not the raw activity track: the response reports the nearest matching coordinate, whether it
 was the start or end, and the great-circle distance. An optional paired start/end date filter retains the 366-day bound.
 If dates are omitted, the scan starts with the newest activity and continues through encrypted, query-bound cursors.
@@ -337,13 +345,40 @@ Each call examines at most 100 activity documents, processes at most 512 KiB of 
 25 matches and 256 KiB, and reports whether the history scan is complete. Results preserve newest-first scan order; they
 are not globally sorted by distance.
 
+## On-demand activity chart projection
+
+`list_activity_chart_metrics(activityType?)` is a static catalog. `get_activity_chart_data` accepts one to four metrics,
+an `elapsed_time` or `distance` axis, at most 400 points per metric, and an optional breadcrumb of at most 1,000 points.
+The catalog covers heart rate, power, cadence, altitude, grade, distance, speed, running pace, swim pace, and trail
+grade-adjusted pace/speed with canonical units.
+
+The service decrypts the connection-bound `activityRef`, reads only the target event source metadata and its bounded
+activity identity set, and validates every object path under `users/{uid}/events/{eventId}/` in an approved project
+bucket. It streams at most four FIT, GPX, TCX, Suunto JSON/SML, or gzip source files. Sports Lib receives only requested
+streams plus derivation and axis dependencies. Multi-file events reuse `EventUtilities.mergeEvents`. The pure shared
+identity matcher tries source key and then progressively narrower unique identity signatures; ambiguity fails closed.
+
+This path never calls reparse persistence, metadata auto-healing, ID assignment, regeneration, event/activity writers,
+or source writes. Parsed objects are discarded after projection. Scalar streams preserve endpoints and per-bucket
+minima/maxima across the complete activity. Breadcrumb selection preserves path endpoints and aligned elapsed-time or
+distance values. An explicit location request is rejected before coordinate fields, Storage, parser, or Mapbox work
+unless `activity-location:read` is present.
+
+Responses contain parallel chart arrays, canonical units, and source/returned/missing sample counts. They exclude
+original files, internal IDs, source keys, provider/device metadata, parser extensions, absolute sample timestamps,
+unrequested streams, and full-resolution recordings. Historical availability depends on the original source remaining
+available and within budgets; no backfill or persistent cache is created.
+
 ## Saved-route projection
 
 `routes:read` lists `users/{uid}/routes` through a field mask containing the route name, timestamps, activity types,
-counts, bounds, and the same fixed summary-stat allowlist. It excludes source/delivery provenance, provider IDs, Storage
+counts, and the same fixed summary-stat allowlist. Bounds enter the field mask only with `route-location:read`; otherwise
+they are omitted and `locationRedacted` is true. It excludes source/delivery provenance, provider IDs, Storage
 metadata, creator data, route comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and
 cursors use the same UID-and-connection-bound authenticated-encryption design as activity references.
 
+`get_route_geometry`, `find_routes_near_location`, and `list_route_waypoints` are not registered without
+`route-location:read`, and missing permission is rejected before preview, Storage, parser, or Mapbox work.
 `get_route_geometry` reads only the persisted Sports Lib route preview. The response fixes the contract to preview
 version 1, `polyline5`, precision 5, exact bounds, at most 20 segments and 5,000 decoded preview points. Segment IDs and
 names are excluded. Each segment includes explicit `startPosition` and `endPosition` values derived from the first and
@@ -437,11 +472,18 @@ deliberately.
   most 100 entries and 256 KiB per page.
 - Per-activity metric calls accept at most 25 requested types, process at most 64 KiB of selected document data, and
   return at most 32 KiB.
+- On-demand activity charts accept one to four metrics, default to 300 and allow at most 400 points per metric, and
+  default to 500 and allow at most 1,000 breadcrumb points. One parse may read at most four files, 12 MiB cumulative
+  raw/compressed bytes, 64 MiB cumulative decompressed bytes, and 250,000 selected samples, with a 20-second internal
+  runtime and 256 KiB response limit. Larger valid streams are downsampled over the complete domain; hard point,
+  source, sample, runtime, decompression, and response overruns fail the whole request.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
   decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was
   truncated.
 - Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
+- On-demand source parsing is additionally limited to six requests per connection and twelve per user per minute using
+  opaque documents in the existing TTL-managed `mcpOAuthRateLimits` collection.
 - Place-name geocoding is additionally limited to 30 requests per MCP connection per minute; coordinate input bypasses
   Mapbox and this provider-specific counter. The geocoding counter transaction rechecks account-deletion state before
   writing, preventing an in-flight lookup from recreating MCP state after user cleanup.

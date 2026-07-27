@@ -56,7 +56,7 @@
           @for (option of scopeOptions(); track option.scope) {
             <mat-checkbox
               [checked]="option.selected"
-              [disabled]="deciding() !== null"
+              [disabled]="option.disabled"
               (change)="toggleScope(option.scope, $event)">
               <span class="mcp-authorization__permission-copy">
                 <strong>{{ option.title }}</strong>
@@ -65,16 +65,15 @@
             </mat-checkbox>
           }
           <p class="mcp-authorization__privacy">
-            This connection is read-only. Activity-detail access may include exact activity start, end, and jump
-            coordinates, which can reveal your home, workplace, frequent trailhead, or other sensitive locations.
-            When both activity-detail and metric access are granted, a client may also request selected canonical
-            numeric metrics for an individual activity.
-            Saved-route access may include exact bounds, preview geometry with segment endpoints, and waypoint
-            coordinates. If the client searches by place name, Quantified Self sends that location text to Mapbox to
-            resolve coordinates; direct-coordinate searches stay within Quantified Self. Raw streams, original files,
-            provider payloads, credentials, precise-position metrics, nonnumeric stats, and unrequested activity stats
-            are not returned. Direct app links contain stable account/event or route paths and still require your
-            normal sign-in.
+            This connection is read-only. Activity details and saved-route summaries exclude locations unless you
+            separately approve their matching location permission. Activity locations can reveal exact starts, ends,
+            MTB jumps, and bounded breadcrumb traces. Saved-route locations can reveal exact bounds, preview geometry,
+            segment endpoints, and waypoints. These permissions are independent: granting one never grants the other.
+            Place-name searches send only the location text to Mapbox; direct-coordinate searches stay within
+            Quantified Self. Activity chart requests parse an existing original file only for the requested streams,
+            return bounded downsampled values, and do not store another copy. Original files, provider payloads,
+            credentials, device/source metadata, absolute sample timestamps, full-resolution recordings, and
+            unrequested streams are not returned. Direct application links still require your normal sign-in.
           </p>
         </section>
       } @else {

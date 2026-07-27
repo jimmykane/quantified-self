@@ -68,7 +68,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.copy.includes('disconnected from Connections'))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('identity-free body-weight history')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
-    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('exact start, end, jump, route, or waypoint coordinates'))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.aiInsights.h1).toBe('AI insights for endurance training data');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('chart-backed AI insights');

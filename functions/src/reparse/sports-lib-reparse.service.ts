@@ -39,6 +39,10 @@ import {
 } from '../shared/user-deletion-guard';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
 import { getEventTags, preserveEventTagsOnRewrite } from '../../../shared/event-tags';
+import {
+    ActivityIdentityLike,
+    resolveActivityIdentityAssignments,
+} from '../shared/activity-identity-matcher';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
@@ -971,19 +975,6 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     }
 }
 
-type ActivityIdentityLike = {
-    getID?: () => string | null | undefined;
-    setID?: (id: string) => unknown;
-    toJSON?: () => unknown;
-    startDate?: unknown;
-    endDate?: unknown;
-    type?: unknown;
-    creator?: { name?: string };
-    getStat?: (statType: string) => { getValue?: () => unknown } | null;
-    sourceActivityKey?: string;
-    fingerprintPayload?: unknown;
-};
-
 export interface ActivityEditCarryoverResult {
     assignments: Map<number, number>;
     unmatchedParsedIndexes: number[];
@@ -1078,37 +1069,6 @@ function getActivityStatValue(activity: ActivityIdentityLike, statType: string):
 function getRoundedStat(activity: ActivityIdentityLike, statType: string): string {
     const value = getActivityStatValue(activity, statType);
     return value === null ? 'na' : `${Math.round(value)}`;
-}
-
-function getStrictIdentitySignature(activity: ActivityIdentityLike): string | null {
-    const startMs = toTimestampMs(activity.startDate);
-    if (startMs === null) {
-        return null;
-    }
-    const endMs = toTimestampMs(activity.endDate);
-    const type = normalizeIdentityType(activity.type);
-    const roundedDuration = getRoundedStat(activity, DataDuration.type);
-    const roundedDistance = getRoundedStat(activity, DataDistance.type);
-    return [startMs, endMs ?? 'na', type, roundedDuration, roundedDistance].join('|');
-}
-
-function getTimeTypeIdentitySignature(activity: ActivityIdentityLike): string | null {
-    const startMs = toTimestampMs(activity.startDate);
-    if (startMs === null) {
-        return null;
-    }
-    const endMs = toTimestampMs(activity.endDate);
-    const type = normalizeIdentityType(activity.type);
-    return [startMs, endMs ?? 'na', type].join('|');
-}
-
-function getStartIdentitySignature(activity: ActivityIdentityLike): string | null {
-    const startMs = toTimestampMs(activity.startDate);
-    if (startMs === null) {
-        return null;
-    }
-    const type = normalizeIdentityType(activity.type);
-    return [startMs, type].join('|');
 }
 
 function buildSourceActivityKey(sourceContentHash: string, sourceActivityFingerprint: string, occurrence: number): string {
@@ -1359,112 +1319,6 @@ function stampSourceActivityKeysForActivities(
     });
 }
 
-function assignUniqueMatchesBySignature(
-    existingActivities: ActivityIdentityLike[],
-    parsedActivities: ActivityIdentityLike[],
-    assignments: Map<number, number>,
-    usedExistingIndexes: Set<number>,
-    signatureResolver: (activity: ActivityIdentityLike) => string | null,
-): void {
-    const existingBySignature = new Map<string, number[]>();
-    existingActivities.forEach((activity, index) => {
-        if (usedExistingIndexes.has(index)) {
-            return;
-        }
-        const signature = signatureResolver(activity);
-        if (!signature) {
-            return;
-        }
-        const existingIndexes = existingBySignature.get(signature) || [];
-        existingIndexes.push(index);
-        existingBySignature.set(signature, existingIndexes);
-    });
-
-    const parsedBySignature = new Map<string, number[]>();
-    parsedActivities.forEach((activity, index) => {
-        if (assignments.has(index)) {
-            return;
-        }
-        const signature = signatureResolver(activity);
-        if (!signature) {
-            return;
-        }
-        const parsedIndexes = parsedBySignature.get(signature) || [];
-        parsedIndexes.push(index);
-        parsedBySignature.set(signature, parsedIndexes);
-    });
-
-    parsedBySignature.forEach((parsedIndexes, signature) => {
-        const existingIndexes = existingBySignature.get(signature) || [];
-        if (parsedIndexes.length !== 1 || existingIndexes.length !== 1) {
-            return;
-        }
-        const parsedIndex = parsedIndexes[0];
-        const existingIndex = existingIndexes[0];
-        assignments.set(parsedIndex, existingIndex);
-        usedExistingIndexes.add(existingIndex);
-    });
-}
-
-function resolveActivityEditAssignments(
-    existingActivities: ActivityIdentityLike[],
-    parsedActivities: ActivityIdentityLike[],
-): ActivityEditCarryoverResult {
-    const assignments = new Map<number, number>();
-    const usedExistingIndexes = new Set<number>();
-
-    assignUniqueMatchesBySignature(
-        existingActivities,
-        parsedActivities,
-        assignments,
-        usedExistingIndexes,
-        getActivitySourceActivityKey,
-    );
-    assignUniqueMatchesBySignature(
-        existingActivities,
-        parsedActivities,
-        assignments,
-        usedExistingIndexes,
-        getStrictIdentitySignature,
-    );
-    assignUniqueMatchesBySignature(
-        existingActivities,
-        parsedActivities,
-        assignments,
-        usedExistingIndexes,
-        getTimeTypeIdentitySignature,
-    );
-    assignUniqueMatchesBySignature(
-        existingActivities,
-        parsedActivities,
-        assignments,
-        usedExistingIndexes,
-        getStartIdentitySignature,
-    );
-
-    const unmatchedParsedIndexes = parsedActivities
-        .map((_activity, index) => index)
-        .filter(index => !assignments.has(index));
-    const unmatchedExistingIndexes = existingActivities
-        .map((_activity, index) => index)
-        .filter(index => !usedExistingIndexes.has(index));
-
-    if (unmatchedParsedIndexes.length === 1 && unmatchedExistingIndexes.length === 1) {
-        assignments.set(unmatchedParsedIndexes[0], unmatchedExistingIndexes[0]);
-        return {
-            assignments,
-            unmatchedParsedIndexes: [],
-            unmatchedExistingIndexes: [],
-        };
-    }
-
-    return {
-        assignments,
-        unmatchedParsedIndexes,
-        unmatchedExistingIndexes,
-    };
-}
-
 function toComparableExistingActivity(existingDoc: Pick<admin.firestore.QueryDocumentSnapshot, 'id' | 'data'>): ActivityIdentityLike {
     const raw = existingDoc.data() as Record<string, unknown> || {};
     const stats = raw.stats && typeof raw.stats === 'object'
@@ -1509,7 +1363,10 @@ export function resolveActivityEditCarryover(
 ): ActivityEditCarryoverResult {
     const activities = parsedEvent.getActivities();
     const existingComparableActivities = existingActivityDocs.map(toComparableExistingActivity);
-    const assignmentResult = resolveActivityEditAssignments(existingComparableActivities, activities as ActivityIdentityLike[]);
+    const assignmentResult = resolveActivityIdentityAssignments(
+        existingComparableActivities,
+        activities as ActivityIdentityLike[],
+    );
 
     assignmentResult.assignments.forEach((existingIndex, parsedIndex) => {
         const activity = activities[parsedIndex] as ActivityIdentityLike | undefined;

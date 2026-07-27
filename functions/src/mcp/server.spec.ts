@@ -92,15 +92,41 @@ describe('MCP HTTP scope enforcement', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'get_route_geometry' },
-    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    })).toEqual([
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'find_activities_near_location' },
-    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    })).toEqual([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'find_routes_near_location' },
-    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    })).toEqual([
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: {
+        name: 'get_activity_chart_data',
+        arguments: { includeLocation: false },
+      },
+    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: {
+        name: 'get_activity_chart_data',
+        arguments: { includeLocation: true },
+      },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'get_activity_metrics' },
@@ -149,8 +175,9 @@ describe('MCP HTTP scope enforcement', () => {
       'query_sleep_summary',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
-      'find_activities_near_location',
+      'get_activity_chart_data',
       'list_activities',
+      'list_activity_chart_metrics',
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
@@ -159,10 +186,11 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
     ])).resolves.toEqual([
-      'find_activities_near_location',
+      'get_activity_chart_data',
       'get_activity_metrics',
       'get_training_metric',
       'list_activities',
+      'list_activity_chart_metrics',
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
@@ -170,9 +198,41 @@ describe('MCP HTTP scope enforcement', () => {
       'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
+      'list_routes',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ])).resolves.toEqual([
       'find_routes_near_location',
       'get_route_geometry',
       'list_route_waypoints',
+      'list_routes',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ])).resolves.toEqual([
+      'find_activities_near_location',
+      'get_activity_chart_data',
+      'list_activities',
+      'list_activity_chart_metrics',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+      MCP_OAUTH_SCOPES.RoutesRead,
+    ])).resolves.toEqual([
+      'find_activities_near_location',
+      'get_activity_chart_data',
+      'list_activities',
+      'list_activity_chart_metrics',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
       'list_routes',
     ]);
   });
@@ -320,7 +380,9 @@ describe('MCP HTTP scope enforcement', () => {
       connectionId: 'connection-1',
       scopes: [
         MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead,
         MCP_OAUTH_SCOPES.RoutesRead,
+        MCP_OAUTH_SCOPES.RouteLocationRead,
       ],
     }, 'https://quantified-self.io');
     const client = new Client({
@@ -354,7 +416,10 @@ describe('MCP HTTP scope enforcement', () => {
       uid: 'user-1',
       clientId: 'https://client.example/mcp.json',
       connectionId: 'connection-1',
-      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead,
+      ],
     }, 'https://quantified-self.io');
     const client = new Client({
       name: 'schema-test-client',
@@ -388,7 +453,10 @@ describe('MCP HTTP scope enforcement', () => {
       uid: 'user-1',
       clientId: 'https://client.example/mcp.json',
       connectionId: 'connection-1',
-      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead,
+      ],
     }, 'https://quantified-self.io');
     const client = new Client({
       name: 'metadata-test-client',

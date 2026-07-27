@@ -30,12 +30,19 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   intervals, or raw HRV, SpO2, or respiration samples.
 - **Activity-detail field:** decide whether it belongs in the explicit activity summary, lap, jump, or swim-length
   projection. Never forward whole activity documents, raw streams, creator/device metadata, source keys, names/notes,
-  internal identifier fields, arbitrary stats, or parser extensions. Exact activity start/end and jump coordinates
-  require the `activity-details:read` scope and matching consent/policy wording that explains the sensitive-location
-  risk.
+  internal identifier fields, arbitrary stats, or parser extensions. Exact activity start/end and jump coordinates,
+  nearby search, and chart breadcrumbs require dependent `activity-location:read` in addition to
+  `activity-details:read`.
+- **On-demand activity chart stream:** add deliberate aliases and canonical units to
+  `functions/src/mcp/activity-chart.service.ts`, request only the stream and Sports Lib derivation dependencies, and
+  preserve the existing original-file-only workflow. Keep file, raw/decompressed byte, selected-sample, runtime,
+  response, point, and per-connection/user parse budgets. Downsample the complete domain; never crop, persist parsed
+  output, invoke reparse/auto-healing, or return original files, full-resolution streams, absolute sample timestamps,
+  source metadata, or unrequested streams.
 - **Saved-route field or parser output:** decide whether it belongs in the explicit route summary, preview, or waypoint
   projection. Never forward original files, raw points/streams, Storage paths, source/delivery provenance, waypoint text,
-  links, or extensions. Exact route bounds, preview geometry, and waypoint coordinates require `routes:read`.
+  links, or extensions. Exact route bounds, preview geometry, nearby search, and waypoint coordinates require dependent
+  `route-location:read` in addition to `routes:read`.
 
 ## Implementation Contract
 
@@ -48,7 +55,9 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    `functions/src/mcp/data.service.ts` as the MCP projection boundary. Expand allowlists deliberately; do not return
    whole Firestore documents.
 5. Keep OAuth scopes least-privilege: `metrics:read`, `measurements:read`, `sleep:read`, `activity-details:read`, and
-   `routes:read` remain independent grants. First-class measurement types must also be excluded from generic and
+   `routes:read` remain data grants. `activity-location:read` depends on activity details and `route-location:read`
+   depends on routes; the two location domains remain independent. Enforce those dependencies in consent, approval,
+   refresh, bearer validation, HTTP prechecks, tool registration, and data reads. First-class measurement types must also be excluded from generic and
    per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
    UID-and-connection-bound, and tools read-only. Update OAuth metadata, consent, Settings, Help, policies, and
    `docs/mcp-server.md` when the user-visible contract moves.
@@ -66,7 +75,9 @@ Add or update focused tests for:
 - persistence availability and any reparse expectation;
 - Training ready-state handling and identity redaction;
 - sleep safe projection and explicit raw/provider-field exclusion;
-- activity-detail and route allowlists, exact-coordinate consent, opaque-reference binding, and source/response limits;
+- activity-detail and route allowlists, parent/location authorization matrices, exact-coordinate redaction,
+  opaque-reference binding, selective on-demand parsing, identity ambiguity, complete-domain downsampling, and every
+  source/sample/runtime/point/response/rate limit;
 - IANA timezone/DST bucketing;
 - scope denial and query limits.
 

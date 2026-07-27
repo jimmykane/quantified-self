@@ -354,8 +354,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'directions_run',
-            title: 'Individual activity details',
-            copy: 'Find activities by time or nearby start and end positions, then inspect bounded summaries, laps, swim lengths, MTB jumps, app links, and selected numeric Sports Lib metrics.',
+            title: 'Individual activity details and charts',
+            copy: 'Inspect non-location summaries, laps, swim lengths, MTB jumps, app links, selected numeric metrics, and bounded chart-ready heart-rate, power, cadence, altitude, grade, speed, distance, or pace data parsed temporarily from an existing original file.',
           },
           {
             icon: 'bedtime',
@@ -364,8 +364,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'route',
-            title: 'Saved routes and nearby search',
-            copy: 'Search saved routes near coordinates or a place, and inspect bounded route metrics, simplified geometry, segment start and end positions, and waypoint coordinates.',
+            title: 'Saved-route summaries and optional locations',
+            copy: 'Read names, activity types, metrics, counts, and timestamps with the summary permission. A separate saved-route location permission enables exact bounds, simplified geometry, nearby search, segment endpoints, and waypoints.',
           },
         ],
       },
@@ -377,7 +377,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Activity and Training metrics, body measurements, individual activity details, sleep summaries, and saved routes are independent grants. Existing connections do not gain a new category without another explicit approval.',
+            copy: 'Activity and Training metrics, body measurements, individual activity details, activity locations, sleep summaries, saved-route summaries, and saved-route locations are explicit grants. Each location scope depends on its matching data scope, and the activity and route location domains remain independent.',
           },
           {
             icon: 'lock',
@@ -387,7 +387,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'shield',
             title: 'Safe projections and location warnings',
-            copy: 'Raw files, raw streams, provider credentials, and device provenance are excluded. Activity details and route scopes can include exact coordinates, so authorize location access only for clients you trust.',
+            copy: 'Original files, full-resolution recordings, absolute sample timestamps, unrequested streams, provider credentials, source keys, and device provenance are excluded. Exact coordinates appear only under the matching location permission.',
           },
           {
             icon: 'location_searching',
@@ -412,11 +412,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does MCP access expose my original activity or route files?',
-        answer: 'No. Original files, raw streams, provider payloads, credentials, and storage paths are excluded. Results use bounded summaries and safe projections for the specific tool and permission.',
+        answer: 'No. An activity chart may selectively parse an existing original file in memory, but the file itself, full-resolution recording, absolute sample timestamps, unrequested streams, provider payloads, credentials, and storage paths are not returned or copied into another activity store.',
       },
       {
         question: 'Can an MCP client see exact locations?',
-        answer: 'Only if you approve individual activity details or saved-route access. Those scopes can return exact start, end, jump, route, or waypoint coordinates and may reveal sensitive places such as a home, workplace, or frequent trailhead.',
+        answer: 'Only if you separately approve Activity locations or Saved-route locations and geometry. Activity location covers starts, ends, MTB jumps, nearby activity search, and optional breadcrumbs. Route location covers bounds, previews, segment endpoints, nearby route search, and waypoints. Granting one never exposes the other.',
       },
     ],
     closingTitle: 'Choose the data scopes, then keep control',
