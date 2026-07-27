@@ -1,42 +1,44 @@
 ---
 name: analyze-quantified-self
-description: Analyze the user's authorized Quantified Self fitness and health data through its read-only MCP tools. Use for questions about activities, workout charts, body measurements such as weight, Training-derived metrics, recovery, sleep, routes, waypoints, or location-based activity and route history.
+description: Compare the user's authorized Quantified Self data across two or more health and fitness domains through its read-only MCP tools. Use for cross-domain questions such as sleep versus training, weight versus activity, or recovery trends that require combining measurements, Training metrics, sleep, activities, or routes; use the focused Quantified Self skills for single-domain requests or multiple independent summaries that do not need comparison.
 ---
 
 # Analyze Quantified Self
 
-Use Quantified Self as the source of record. Discover the available public tools and metrics instead of guessing from
-tool names or assuming a data category is unavailable.
+Use Quantified Self as the source of record for cross-domain analysis. Keep each domain's recorded values, aggregation
+rules, permissions, and coverage distinct until they are aligned for comparison.
 
-## Query Workflow
+## Cross-Domain Workflow
 
-1. Inspect the relevant catalog before concluding data is unavailable:
-   - Use measurement discovery for weight and other body measurements.
-   - Use metric discovery for activity statistics and Training-derived snapshots.
-   - Use chart-metric discovery before requesting an activity chart.
-2. Start with the cheapest summary query that can answer the request. Parse an original activity source only when the
-   user asks for chart-series detail that summaries cannot provide.
-3. Request the narrowest date range, page size, metric set, and location access needed. Continue through pagination
-   only when the user's question requires more history.
-4. Treat a missing permission, an unavailable source file, a processing budget, and genuinely absent data as different
-   outcomes. Explain which one applies. If access is missing, tell the user which Quantified Self permission must be
-   granted through reconnection; do not claim that the data do not exist.
-5. Use the units, timezone, date range, counts, pagination state, and missing-sample metadata returned by the tools.
-   Never infer units or silently treat missing values as zero.
+1. Confirm that the question needs at least two domains. Prefer the matching focused plugin skill when one domain is
+   sufficient, and use focused skills independently when the user requests separate summaries without a comparison.
+   For an unqualified recovery or readiness question, clarify whether the user means Training, sleep, or a comparison
+   between them before choosing a workflow.
+2. Discover the relevant measurement, metric, sleep, activity, or route capabilities before concluding that data are
+   unavailable.
+3. Choose one bounded comparison period and IANA timezone. Query the cheapest summary from each domain before
+   requesting individual sessions, activities, charts, or locations.
+4. Align results only on comparable time buckets. Preserve each result's units, aggregation, coverage, freshness,
+   pagination state, and missing values.
+5. Describe association rather than causation. Call out sparse or mismatched coverage that weakens the comparison.
 
-## Privacy and Interpretation
+## Permissions and Privacy
 
-- Ask for activity or route locations only when they materially help answer the request.
+- Treat a missing permission, unavailable source, processing budget, incomplete page, and genuinely absent data as
+  different outcomes. Name the permission that must be granted through reconnection.
+- Map each domain to its grant: Training and aggregate metrics use `metrics:read`, body measurements use
+  `measurements:read`, sleep uses `sleep:read`, individual activities use `activity-details:read`, and saved routes use
+  `routes:read`. Selected per-activity metrics also need `metrics:read`.
+- Request activity or route locations only when they materially affect the comparison. Activity coordinates require
+  `activity-location:read`; route coordinates require `route-location:read`. One never grants the other.
 - Do not expose or speculate about internal identifiers, source files, provider or device provenance, or other fields
   outside the public tool results.
-- Distinguish recorded measurements, aggregated event metrics, and Training-derived metrics. State the applicable
-  window and freshness when interpreting a derived value.
+- Distinguish recorded measurements, aggregated activity metrics, normalized sleep data, and Training-derived
+  snapshots.
 - Describe trends and uncertainty without diagnosing a condition or presenting the result as medical advice.
-- When history is partial, say whether a page cursor, scan limit, original-source availability, or missing samples
-  constrain the conclusion.
 
 ## Response Style
 
-- Lead with the answer, then show the evidence and period used.
-- Keep charts and tables compact and label every axis or value with its returned canonical unit.
-- Call out material limitations instead of burying them.
+- Lead with the cross-domain finding, then show the evidence and period from each domain.
+- Keep comparisons compact and label every value with its returned unit and time window.
+- State material permission, coverage, and interpretation limits next to the conclusion.

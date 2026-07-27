@@ -68,22 +68,45 @@ download, and focused MCP/frontend tests aligned whenever any asset changes.
 ## Repository-local plugin
 
 The repository includes a local marketplace package that combines the registered Quantified Self MCP app, branding,
-starter prompts, and the bundled `analyze-quantified-self` skill. This is a development and local-installation surface,
-not a public marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the
-plugin does not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it
-is not a mobile installation path and does not publish anything to the universal plugin directory.
+starter prompts, and six bundled workflow skills. This is a development and local-installation surface, not a public
+marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the plugin does
+not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it is not a
+mobile installation path and does not publish anything to the universal plugin directory.
 
 Committed source lives under `plugins/quantified-self/`, with the marketplace at
-`.agents/plugins/marketplace.json`. `plugin.template.json`, the skill, and marketplace metadata are reusable. An
+`.agents/plugins/marketplace.json`. `plugin.template.json`, the skills, and marketplace metadata are reusable. An
 explicit build generates three ignored files: the cache-busted `.codex-plugin/plugin.json`, the account-bound
 `.app.json`, and a copy of the existing public 256px icon. The ChatGPT technical app ID is machine/account-specific. It
 must come from `QS_CHATGPT_APP_ID` or the ignored `.local/quantified-self-plugin.json`; it is never committed, placed in
 the manifest template, or printed by the tooling. OAuth tokens and client secrets are not accepted or stored.
 
+The bundled skills divide ownership deliberately:
+
+| Skill | Responsibility | Primary permission |
+| --- | --- | --- |
+| `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
+| `analyze-quantified-self-training` | Training load, volume, performance trends, and Training-derived metrics | `metrics:read` |
+| `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, naps, and sleep-oriented trends | `sleep:read` |
+| `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
+| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
+| `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
+
+All six skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
+descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
+skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
+is intentionally bounded. Skills discover the authenticated server's live tools and catalogs rather than copying tool
+names or metric IDs, so OAuth remains the authority for which tools are visible.
+
 The tooling is a private package under `tools/quantified-self-plugin/`. It pins the official `@openai/codex` CLI in its
-own lockfile, keeping the binary out of normal Angular installs. Dependabot proposes isolated CLI upgrades. The
-generator uses Node built-ins, while validation uses a pinned YAML parser for the bundled skill metadata and the
-official CLI ingestion path—not a community manifest-types package—as the installation compatibility authority.
+own lockfile, keeping the binary out of normal Angular installs. Dependabot proposes isolated CLI upgrades. Explicit
+plugin commands bootstrap that isolated package; source validation uses its pinned YAML parser for bundled skill
+metadata, while the official CLI ingestion path—not a community manifest-types package—is the installation
+compatibility authority.
+
+`BUNDLED_SKILL_NAMES` is the exhaustive source registry. Before generating account-bound files, validation requires the
+source skill directory to contain exactly those six real directories and validates every frontmatter identity, UI
+label, prompt reference, MCP dependency, and invocation policy. Isolated installation then compares every file in the
+installed and source skill trees recursively; missing, modified, unexpected, or symlinked content fails closed.
 
 ### Initial local setup
 
@@ -131,16 +154,31 @@ marketplace discovery/install check. It never reads or writes a contributor's Co
 | --- | --- |
 | Server implementation or bug fix that preserves public tools, schemas, scopes, and instructions | Deploy through the separately approved release workflow; no local plugin rebuild |
 | Tool name, description, input/output schema, scope, or server instruction | Run MCP contract tests, deploy separately, rescan the registered ChatGPT developer app, and test in a new conversation |
-| Plugin-only metadata, starter prompt, marketplace entry, or bundled skill | Run the plugin unit suite and `plugin:validate`, then run `plugin:sync` locally |
+| Plugin-only metadata, starter prompt, marketplace entry, or bundled skill | Review affected focused and cross-domain skills, update registry/fixtures when membership changes, run the official skill validators, plugin unit suite, and `plugin:validate`, then run `plugin:sync` locally |
 | Shared MCP/plugin icon or branding | Run the focused MCP/frontend and plugin tests, validate and sync the local plugin, and update the registered ChatGPT developer app's uploaded icon separately; local tooling cannot change that registration |
 | Replacement registered ChatGPT technical app ID | Set the new ID in `QS_CHATGPT_APP_ID`, rerun `plugin:configure`, then run `plugin:sync`; never hand-edit or commit `.app.json` |
 | External Codex CLI dependency | Review the isolated dependency-update PR and pass the full plugin validation workflow |
 
-The skill intentionally does not copy the complete MCP tool or metric catalog. It instructs the client to use the live
-discovery tools, distinguish absent data from missing permission or source availability, prefer summary queries before
-on-demand source parsing, preserve returned units/timezones/pagination, request location only when needed, and avoid
-medical diagnosis. When a public MCP contract changes, review whether that workflow guidance or the three starter
-prompts also need adjustment.
+The skills intentionally do not copy the complete MCP tool or metric catalog. They instruct the client to discover the
+live authorized surface, distinguish absent data from missing permission or source availability, prefer summaries
+before on-demand source parsing, preserve returned units/timezones/pagination, request location only when needed, and
+avoid medical diagnosis. When a public MCP contract changes, review every affected focused skill, the cross-domain
+skill when another domain may consume the result, all affected skill-level prompts, and the three manifest-level
+prompts.
+
+When adding or changing a bundled workflow:
+
+1. Generate a new folder with the official skill scaffolder; keep only `SKILL.md` and `agents/openai.yaml` unless the
+   workflow genuinely needs another resource.
+2. Make its trigger metadata narrow and non-overlapping, declare exactly one hosted Quantified Self MCP dependency, and
+   keep implicit invocation enabled.
+3. Update `BUNDLED_SKILL_NAMES`, fixtures, integrity tests, README, and this table in the same change. The source
+   directory must contain exactly the registered set.
+4. Run the official validator for every skill, the plugin unit suite, dependency audit, fixture-ID
+   `npm run plugin:validate`, isolated marketplace installation, forward prompts for affected and ambiguous workflows,
+   and `git diff --check`.
+5. Keep generated app mappings, cache-busted manifests, copied assets, local IDs, and installed plugin caches out of
+   Git. Install into a real profile only through a later explicit `npm run plugin:sync`.
 
 ## OAuth and authorization
 
