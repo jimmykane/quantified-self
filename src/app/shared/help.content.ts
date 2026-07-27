@@ -832,7 +832,7 @@ Review and revoke authorized MCP clients under [**Connections -> MCP**](/service
 2. Use the Quantified Self MCP endpoint: **https://quantified-self.io/mcp**.
 3. Let ChatGPT scan the available tools, then sign in to Quantified Self and approve the read-only permissions you want to grant.
 4. Start a new chat, select the Quantified Self app, and ask about activity metrics, body-weight history or trends, activity charts, sleep summaries, saved routes, or—if you granted the matching location permission—activities that started or ended near a place and routes that pass near a place.
-5. If ChatGPT asks for an app icon, download either [96 x 96 PNG (3.3 KB)](/assets/favicons/android-chrome-96x96.png) or [192 x 192 PNG (9.9 KB)](/assets/favicons/android-chrome-192x192.png). Both stay under its current 10 KB upload limit. MCP clients that render server metadata can discover these icons automatically.
+5. If ChatGPT asks for an app icon, download the recommended [256 x 256 PNG (9.4 KB)](/assets/favicons/quantified-self-chatgpt-icon-256x256.png). It meets ChatGPT's preferred minimum dimensions and stays under its current 10 KB upload limit. MCP clients that render server metadata can discover an icon automatically.
 
 ### Android authorization handoff
 

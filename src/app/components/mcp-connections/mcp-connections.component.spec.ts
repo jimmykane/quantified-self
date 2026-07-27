@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -121,8 +123,9 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Exact starts, ends, jump positions, and breadcrumb traces');
     expect(content).toContain('location permissions are independent');
     expect(content).toContain('ChatGPT app icon');
-    expect(content).toContain('Download 96 px · 3.3 KB');
-    expect(content).toContain('Download 192 px · 9.9 KB');
+    expect(content).toContain('recommended size');
+    expect(content).toContain('under its 10 KB limit');
+    expect(content).toContain('Download recommended icon · 256 px · 9.4 KB');
     expect(content).toContain('review or disconnect a client at any time');
     expect(content).toContain('Existing clients must reconnect');
     expect(content).toContain('Authorizing on Android');
@@ -136,15 +139,19 @@ describe('McpConnectionsComponent', () => {
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',
     );
-    expect(iconDownloads).toHaveLength(2);
+    expect(iconDownloads).toHaveLength(1);
     expect(iconDownloads[0].getAttribute('href'))
-      .toBe('/assets/favicons/android-chrome-96x96.png');
+      .toBe('/assets/favicons/quantified-self-chatgpt-icon-256x256.png');
     expect(iconDownloads[0].getAttribute('download'))
-      .toBe('quantified-self-chatgpt-icon-96.png');
-    expect(iconDownloads[1].getAttribute('href'))
-      .toBe('/assets/favicons/android-chrome-192x192.png');
-    expect(iconDownloads[1].getAttribute('download'))
-      .toBe('quantified-self-chatgpt-icon-192.png');
+      .toBe('quantified-self-chatgpt-icon-256x256.png');
+
+    const iconAsset = readFileSync(resolve(
+      process.cwd(),
+      'src/assets/favicons/quantified-self-chatgpt-icon-256x256.png',
+    ));
+    expect(iconAsset.readUInt32BE(16)).toBe(256);
+    expect(iconAsset.readUInt32BE(20)).toBe(256);
+    expect(iconAsset.byteLength).toBeLessThanOrEqual(10_000);
 
     fixture.componentInstance.copyEndpoint();
 

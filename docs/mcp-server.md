@@ -49,19 +49,20 @@ the same change.
 
 ## Server presentation metadata
 
-The MCP initialize response identifies the server as **Quantified Self** and advertises two public PNG icon variants:
+The MCP initialize response identifies the server as **Quantified Self** and advertises three public PNG icon variants:
 
 | Asset | Dimensions | File size | Purpose |
 | --- | --- | --- | --- |
-| `/assets/favicons/android-chrome-96x96.png` | 96 x 96 | 3.3 KB | Compact ChatGPT upload and MCP client metadata |
-| `/assets/favicons/android-chrome-192x192.png` | 192 x 192 | 9.9 KB | Higher-density ChatGPT upload and MCP client metadata |
+| `/assets/favicons/android-chrome-96x96.png` | 96 x 96 | 3.3 KB | Compact MCP client metadata |
+| `/assets/favicons/android-chrome-192x192.png` | 192 x 192 | 9.9 KB | Higher-density MCP client metadata |
 | `/assets/favicons/android-chrome-512x512.png` | 512 x 512 | 47.8 KB | High-density MCP client metadata only |
+| `/assets/favicons/quantified-self-chatgpt-icon-256x256.png` | 256 x 256 | 9.4 KB | Recommended manual ChatGPT upload |
 
-All three files must remain public, square transparent PNGs. The 96px and 192px assets stay below ChatGPT's current 10 KB
-icon-upload limit; the 512px asset is intentionally advertised only in MCP metadata. MCP clients may render the metadata
-automatically, but rendering is optional; the Connections MCP tab and Help page therefore also offer direct downloads
-for ChatGPT's manual icon upload. Keep the metadata, both download links, and the focused MCP/frontend tests aligned
-whenever any asset changes.
+All four files must remain public, square transparent PNGs. The dedicated 256px asset meets ChatGPT's preferred minimum
+dimensions and stays below its current 10 KB icon-upload limit. The 512px asset is intentionally advertised only in MCP
+metadata. MCP clients may render metadata icons automatically, but rendering is optional; the Connections MCP tab and
+Help page therefore offer the dedicated 256px download for ChatGPT's manual icon upload. Keep the metadata, manual
+download, and focused MCP/frontend tests aligned whenever any asset changes.
 
 ## OAuth and authorization
 
