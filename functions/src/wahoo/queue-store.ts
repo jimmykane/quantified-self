@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -99,11 +100,11 @@ function isNewerRevision(
       && existingSummaryID !== incomingSummaryID);
 }
 
-function clearProcessingLeaseUpdate(): Record<string, admin.firestore.FieldValue> {
+function clearProcessingLeaseUpdate(): Record<string, FieldValue> {
   return {
-    processingOwner: admin.firestore.FieldValue.delete(),
-    processingRevision: admin.firestore.FieldValue.delete(),
-    processingLeaseExpiresAt: admin.firestore.FieldValue.delete(),
+    processingOwner: FieldValue.delete(),
+    processingRevision: FieldValue.delete(),
+    processingLeaseExpiresAt: FieldValue.delete(),
   };
 }
 
@@ -387,7 +388,7 @@ export async function releaseWahooEventPublicationLease(
     transaction.update(mappingRef, {
       eventPublicationLeases: remainingLeases.length > 0
         ? remainingLeases
-        : admin.firestore.FieldValue.delete(),
+        : FieldValue.delete(),
     });
   });
 }

@@ -81,8 +81,6 @@ const hoisted = vi.hoisted(() => {
         batch: vi.fn(),
         runTransaction,
     });
-    (firestore as any).FieldValue = { serverTimestamp };
-
     const bucketSave = vi.fn();
     const bucketCopy = vi.fn();
     const bucketDelete = vi.fn();
@@ -138,6 +136,12 @@ vi.mock('firebase-admin', () => ({
     firestore: hoisted.firestore,
     storage: hoisted.storage,
     auth: hoisted.auth,
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: hoisted.serverTimestamp,
+    },
 }));
 
 vi.mock('./shared/user-deletion-guard', () => ({

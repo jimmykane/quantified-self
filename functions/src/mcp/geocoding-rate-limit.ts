@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import {
   getUserDeletionGuardStateInTransaction,
@@ -78,7 +79,7 @@ const defaultDependencies: McpGeocodingRateLimitDependencies = {
       },
     }));
   },
-  timestampFromMillis: value => admin.firestore.Timestamp.fromMillis(value),
+  timestampFromMillis: value => Timestamp.fromMillis(value),
 };
 
 export function buildMcpGeocodingRateLimitBucketId(

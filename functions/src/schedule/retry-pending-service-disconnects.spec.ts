@@ -21,17 +21,9 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 vi.mock('firebase-admin', () => {
-  const firestore = Object.assign(() => ({
+  const firestore = () => ({
     collection: hoisted.collection,
     doc: hoisted.doc,
-  }), {
-    FieldPath: {
-      documentId: vi.fn(() => '__name__'),
-    },
-    Timestamp: {
-      now: vi.fn(() => ({ toMillis: () => 1_000 })),
-      fromMillis: vi.fn((value: number) => ({ toMillis: () => value })),
-    },
   });
 
   return {
@@ -39,6 +31,16 @@ vi.mock('firebase-admin', () => {
     firestore,
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldPath: {
+    documentId: vi.fn(() => '__name__'),
+  },
+  Timestamp: {
+    now: vi.fn(() => ({ toMillis: () => 1_000 })),
+    fromMillis: vi.fn((value: number) => ({ toMillis: () => value })),
+  },
+}));
 
 vi.mock('../tokens', () => ({
   getTokenData: hoisted.getTokenData,

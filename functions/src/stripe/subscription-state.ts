@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { calculateGracePeriodEnd } from '../../../shared/limits';
 
 export interface SubscriptionSnapshotLike {
@@ -10,7 +10,7 @@ export interface CanonicalEndingSubscription {
     subscriptionId: string;
     subscription: FirebaseFirestore.DocumentData;
     currentPeriodEndMs: number;
-    scheduledGracePeriodUntil: admin.firestore.Timestamp;
+    scheduledGracePeriodUntil: Timestamp;
 }
 
 export function getTimestampMillis(value: unknown): number | null {
@@ -52,13 +52,13 @@ export function isActiveSubscription(
 
 export function getGracePeriodUntilFromSubscriptionPeriodEnd(
     subscription: FirebaseFirestore.DocumentData | undefined,
-): admin.firestore.Timestamp | null {
+): Timestamp | null {
     const currentPeriodEndMs = getTimestampMillis(subscription?.current_period_end);
     if (currentPeriodEndMs === null) {
         return null;
     }
 
-    return admin.firestore.Timestamp.fromDate(calculateGracePeriodEnd(currentPeriodEndMs));
+    return Timestamp.fromDate(calculateGracePeriodEnd(currentPeriodEndMs));
 }
 
 export function getCanonicalEndingSubscription(

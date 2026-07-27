@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -118,8 +119,8 @@ export async function finishWahooHistoryLease(
     const snapshot = await transaction.get(metaRef);
     if (`${snapshot.data()?.historyImportLeaseOwner || ''}` !== leaseOwner) return;
     const update: Record<string, unknown> = {
-      historyImportLeaseOwner: admin.firestore.FieldValue.delete(),
-      historyImportLeaseExpiresAt: admin.firestore.FieldValue.delete(),
+      historyImportLeaseOwner: FieldValue.delete(),
+      historyImportLeaseExpiresAt: FieldValue.delete(),
     };
     if (completed) {
       update.didLastHistoryImport = Date.now();

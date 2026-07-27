@@ -42,7 +42,7 @@ export type {
   ServiceDisconnectPendingReason,
 } from './service-disconnect-pending-state';
 
-function buildPendingDisconnectFieldDeletes(): Record<string, admin.firestore.FieldValue> {
+function buildPendingDisconnectFieldDeletes(): Record<string, FieldValue> {
   return {
     disconnectState: FieldValue.delete(),
     disconnectReason: FieldValue.delete(),

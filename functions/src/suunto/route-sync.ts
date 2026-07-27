@@ -4,6 +4,7 @@ import * as functions from 'firebase-functions/v1';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 import { verifySuuntoWebhookSignature } from './webhook-signature';
@@ -105,12 +106,12 @@ async function updateSuuntoRouteImportMeta(
     failedRouteImportProviderCount: summary.failedProviderCount,
     totalRoutesFromLastRouteImportCount: summary.totalCount,
     routeImportStatesByProviderSourceKey,
-    routeImportStatesByProviderUserId: admin.firestore.FieldValue.delete(),
+    routeImportStatesByProviderUserId: FieldValue.delete(),
     ...(summary.failedProviderCount === 0
       && completedProviderCount === routeImportStatesByProviderSourceKey.length
       && completedProviderCount > 0
       ? { didLastRouteImport: completedAt }
-      : { didLastRouteImport: admin.firestore.FieldValue.delete() }),
+      : { didLastRouteImport: FieldValue.delete() }),
   }, { merge: true });
 }
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 
 // Mock dependencies using vi.hoisted for top-level access
 const {
@@ -20,25 +21,6 @@ const {
         doc: vi.fn(),
         recursiveDelete: vi.fn().mockResolvedValue(undefined),
     };
-    fs.Timestamp = {
-        now: () => ({
-            toMillis: () => Date.now(),
-            toDate: () => new Date(),
-            toISOString: () => new Date().toISOString()
-        }),
-        fromDate: (d: Date) => ({
-            toDate: () => d,
-            toMillis: () => d.getTime(),
-            toISOString: () => d.toISOString()
-        })
-    };
-    fs.FieldValue = {
-        serverTimestamp: () => 'SERVER_TIMESTAMP',
-        delete: () => 'DELETE_SENTINEL'
-    };
-    fs.FieldPath = {
-        documentId: vi.fn(() => '__name__')
-    };
     return {
         mockGetUser: auth.getUser,
         mockSetCustomUserClaims: auth.setCustomUserClaims,
@@ -50,6 +32,28 @@ const {
     };
 });
 
+const modularFirestoreStatics = vi.hoisted(() => ({
+    Timestamp: {
+        now: () => ({
+            toMillis: () => Date.now(),
+            toDate: () => new Date(),
+            toISOString: () => new Date().toISOString()
+        }),
+        fromDate: (d: Date) => ({
+            toDate: () => d,
+            toMillis: () => d.getTime(),
+            toISOString: () => d.toISOString()
+        })
+    },
+    FieldValue: {
+        serverTimestamp: () => 'SERVER_TIMESTAMP',
+        delete: () => 'DELETE_SENTINEL'
+    },
+    FieldPath: {
+        documentId: vi.fn(() => '__name__')
+    },
+}));
+
 // Mock firebase-admin
 vi.mock('firebase-admin', () => {
     const authMock = vi.fn(() => mockAuthInstance);
@@ -60,6 +64,8 @@ vi.mock('firebase-admin', () => {
         firestore: firestoreMock
     };
 });
+
+vi.mock('firebase-admin/firestore', () => modularFirestoreStatics);
 
 // Mock firebase-functions
 vi.mock('firebase-functions/v2/scheduler', () => ({
@@ -193,7 +199,7 @@ describe('enforceSubscriptionLimits', () => {
 
         // Mock system doc fetch for grace period
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(futureDate) });
+            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: Timestamp.fromDate(futureDate) });
             return mockDoc({});
         });
 
@@ -217,7 +223,7 @@ describe('enforceSubscriptionLimits', () => {
 
         // Mock system docs
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path.includes('system/status')) return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(futureDate) });
+            if (path.includes('system/status')) return mockDoc({ gracePeriodUntil: Timestamp.fromDate(futureDate) });
             return mockDoc({});
         });
 
@@ -248,7 +254,7 @@ describe('enforceSubscriptionLimits', () => {
         });
 
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(futureDate) });
+            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: Timestamp.fromDate(futureDate) });
             return mockDoc({});
         });
 
@@ -337,7 +343,7 @@ describe('enforceSubscriptionLimits', () => {
 
     it('should disconnect and clear claims when grace period has expired (free user)', async () => {
         const pastDate = new Date(Date.now() - 100000);
-        const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+        const systemDoc = mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
 
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
             if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
@@ -381,7 +387,7 @@ describe('enforceSubscriptionLimits', () => {
 
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
             if (path === 'users/user1/system/status') {
-                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+                return mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
             }
             return mockDoc({});
         });
@@ -408,7 +414,7 @@ describe('enforceSubscriptionLimits', () => {
 
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
             if (path === 'users/user1/system/status') {
-                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+                return mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
             }
             return mockDoc({});
         });
@@ -450,7 +456,7 @@ describe('enforceSubscriptionLimits', () => {
 
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
             if (path === 'users/user1/system/status') {
-                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+                return mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
             }
             return mockDoc({});
         });
@@ -595,7 +601,7 @@ describe('enforceSubscriptionLimits', () => {
 
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
             if (path === 'users/user1/system/status') {
-                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+                return mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
             }
             return mockDoc({});
         });
@@ -637,7 +643,7 @@ describe('enforceSubscriptionLimits', () => {
         });
 
         mockFirestoreInstance.doc.mockImplementation(() =>
-            mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) })
+            mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) })
         );
 
         // Make one deauth fail
@@ -659,7 +665,7 @@ describe('enforceSubscriptionLimits', () => {
         const systemDoc = {
             get: vi.fn().mockResolvedValue({
                 exists: true,
-                data: () => ({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) })
+                data: () => ({ gracePeriodUntil: Timestamp.fromDate(pastDate) })
             }),
             set: vi.fn().mockRejectedValue(new Error('system set failed')),
             update: vi.fn().mockResolvedValue({}),
@@ -692,7 +698,7 @@ describe('enforceSubscriptionLimits', () => {
 
     it('should clean orphaned roots and continue deauthorization when clearing claims hits auth/user-not-found', async () => {
         const pastDate = new Date(Date.now() - 100000);
-        const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+        const systemDoc = mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
 
         mockGetUser.mockRejectedValueOnce({ code: 'auth/user-not-found' } as any);
 
@@ -721,7 +727,7 @@ describe('enforceSubscriptionLimits', () => {
 
     it('should preserve unrelated claims while clearing subscription access', async () => {
         const pastDate = new Date(Date.now() - 100000);
-        const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+        const systemDoc = mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
 
         mockGetUser.mockResolvedValue({
             customClaims: {
@@ -760,7 +766,7 @@ describe('enforceSubscriptionLimits', () => {
 
     it('should fall back to empty claims when the auth user has no custom claims', async () => {
         const pastDate = new Date(Date.now() - 100000);
-        const systemDoc = mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+        const systemDoc = mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
 
         mockGetUser.mockResolvedValue({
             uid: 'user1'
@@ -800,7 +806,7 @@ describe('enforceSubscriptionLimits', () => {
 
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
             if (path === 'users/user1/system/status') {
-                return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+                return mockDoc({ gracePeriodUntil: Timestamp.fromDate(pastDate) });
             }
             return mockDoc({});
         });

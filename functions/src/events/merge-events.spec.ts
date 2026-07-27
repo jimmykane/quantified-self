@@ -189,12 +189,6 @@ vi.mock('firebase-admin', () => {
     }),
   }));
 
-  Object.assign(firestoreFn, {
-    FieldValue: {
-      serverTimestamp: hoisted.mockServerTimestamp,
-    },
-  });
-
   return {
     firestore: firestoreFn,
     storage: () => ({
@@ -232,6 +226,12 @@ vi.mock('firebase-admin', () => {
     }),
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    serverTimestamp: hoisted.mockServerTimestamp,
+  },
+}));
 
 vi.mock('@sports-alliance/sports-lib', () => ({
   EventImporterJSON: hoisted.mockEventImporterJSON,

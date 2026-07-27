@@ -17,21 +17,23 @@ const {
 }));
 
 vi.mock('firebase-admin', () => {
-    const firestore = Object.assign(() => ({
+    const firestore = () => ({
         collection: mockCollection,
-    }), {
-        FieldValue: {
-            serverTimestamp: mockServerTimestamp,
-        },
-        Timestamp: {
-            fromDate: mockFromDate,
-        },
     });
 
     return {
         firestore,
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: mockServerTimestamp,
+    },
+    Timestamp: {
+        fromDate: mockFromDate,
+    },
+}));
 
 vi.mock('firebase-functions/logger', () => ({
     error: vi.fn(),

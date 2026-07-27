@@ -68,15 +68,8 @@ const hoisted = vi.hoisted(() => {
 });
 
 vi.mock('firebase-admin', () => {
-    const firestore = Object.assign(() => ({
+    const firestore = () => ({
         collection: hoisted.collection,
-    }), {
-        FieldValue: {
-            delete: vi.fn(() => hoisted.deleteSentinel),
-        },
-        Timestamp: {
-            fromDate: hoisted.timestampFromDate,
-        },
     });
 
     return {
@@ -84,6 +77,15 @@ vi.mock('firebase-admin', () => {
         firestore,
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        delete: vi.fn(() => hoisted.deleteSentinel),
+    },
+    Timestamp: {
+        fromDate: hoisted.timestampFromDate,
+    },
+}));
 
 vi.mock('firebase-functions/logger', () => ({
     info: hoisted.loggerInfo,

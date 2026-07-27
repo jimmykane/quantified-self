@@ -73,13 +73,9 @@ const {
 });
 
 vi.mock('firebase-admin', () => {
-  const firestore = Object.assign(() => ({
+  const firestore = () => ({
     runTransaction: mockRunTransaction,
     recursiveDelete: mockRecursiveDelete,
-  }), {
-    FieldValue: {
-      delete: vi.fn().mockReturnValue('delete-sentinel'),
-    },
   });
 
   return {
@@ -89,6 +85,12 @@ vi.mock('firebase-admin', () => {
     firestore,
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    delete: vi.fn().mockReturnValue('delete-sentinel'),
+  },
+}));
 
 vi.mock('./service-connection-meta', () => ({
   markServiceReconnectRequired: mockMarkServiceReconnectRequired,

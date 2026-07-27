@@ -30,6 +30,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 import { getStripe } from './client';
@@ -418,7 +419,7 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
                 }
 
                 transaction.set(systemStatusRef, {
-                    claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+                    claimsUpdatedAt: FieldValue.serverTimestamp()
                 }, { merge: true });
                 return true;
             });

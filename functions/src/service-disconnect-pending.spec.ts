@@ -18,12 +18,8 @@ const hoisted = vi.hoisted(() => ({
 }));
 
 vi.mock('firebase-admin', () => {
-  const firestore = Object.assign(() => ({
+  const firestore = () => ({
     runTransaction: hoisted.runTransaction,
-  }), {
-    Timestamp: {
-      fromMillis: vi.fn((value: number) => ({ toMillis: () => value })),
-    },
   });
 
   return {
@@ -35,6 +31,9 @@ vi.mock('firebase-admin', () => {
 vi.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     delete: hoisted.fieldValueDelete,
+  },
+  Timestamp: {
+    fromMillis: vi.fn((value: number) => ({ toMillis: () => value })),
   },
 }));
 

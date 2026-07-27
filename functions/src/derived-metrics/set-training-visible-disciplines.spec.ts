@@ -15,9 +15,7 @@ const hoisted = vi.hoisted(() => {
         set: transactionSet,
     }));
     const doc = vi.fn((path: string) => ({ path }));
-    const firestore = Object.assign(vi.fn(() => ({ doc, runTransaction })), {
-        FieldValue: { delete: vi.fn(() => ({ __delete__: true })) },
-    });
+    const firestore = vi.fn(() => ({ doc, runTransaction }));
     return {
         transactionSet,
         runTransaction,
@@ -30,6 +28,9 @@ const hoisted = vi.hoisted(() => {
 });
 
 vi.mock('firebase-admin', () => ({ firestore: hoisted.firestore }));
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: { delete: vi.fn(() => ({ __delete__: true })) },
+}));
 vi.mock('../../../shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: { setTrainingVisibleDisciplines: { region: 'europe-west2' } },
 }));
