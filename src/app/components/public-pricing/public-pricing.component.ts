@@ -280,6 +280,11 @@ function buildFeatures(role: PublicPlanRole): PublicPlanFeatureViewModel[] {
             iconClass: standardIconClass,
             label: getRouteLimitLabel(role),
         },
+        {
+            icon: standardIcon,
+            iconClass: standardIconClass,
+            label: 'Read-only MCP access',
+        },
     ];
 
     if (role === 'free') {

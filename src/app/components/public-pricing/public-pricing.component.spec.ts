@@ -240,6 +240,15 @@ describe('buildPublicPricingCatalog', () => {
         expect(catalog.plans.find((plan) => plan.id === 'inactive')).toBeUndefined();
     });
 
+    it('includes read-only MCP access in every plan', () => {
+        const catalog = buildPublicPricingCatalog(PAID_PRODUCTS);
+
+        expect(catalog.plans).toHaveLength(3);
+        for (const plan of catalog.plans) {
+            expect(plan.features.map((feature) => feature.label)).toContain('Read-only MCP access');
+        }
+    });
+
     it('does not advertise a yearly switch across different currencies', () => {
         const basicProduct = PAID_PRODUCTS[0];
         const monthlyPrice = basicProduct.prices?.[0];
