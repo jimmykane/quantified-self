@@ -1,6 +1,29 @@
-<div class="pricing-container">
+<div class="pricing-container" [attr.data-style-variant]="styleVariant()">
   <h1>Choose Your Plan</h1>
   <p class="pricing-intro">Start free, then upgrade whenever you need more history, automation, or sync.</p>
+
+  <section class="style-preview-controls" aria-labelledby="style-preview-title">
+    <div class="style-preview-copy">
+      <span class="style-preview-kicker">Design preview</span>
+      <h2 id="style-preview-title">Choose a visual direction</h2>
+      <p>{{ activeStyleVariant().description }}</p>
+    </div>
+
+    <mat-button-toggle-group
+      class="style-preview-toggle"
+      aria-label="Pricing style preview"
+      hideSingleSelectionIndicator
+      [value]="styleVariant()"
+      (change)="selectStyleVariant($event.value)">
+      @for (variant of styleVariants; track variant.id) {
+        <mat-button-toggle
+          [class.style-preview-toggle-wide]="variant.id === 'fusion'"
+          [value]="variant.id">
+          {{ variant.label }}
+        </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+  </section>
 
   @if (catalog$ | async; as catalog) {
     @if (catalog.paidPlansUnavailable) {
@@ -12,11 +35,15 @@
 
     <div class="products-grid">
       @for (plan of catalog.plans; track plan.id) {
-        <mat-card
-          class="product-card"
-          [class.pro-card]="plan.role === 'pro'"
-          [class.basic-card]="plan.role === 'basic'"
-          [class.free-card]="plan.role === 'free'">
+        <div class="product-card-shell">
+          @if (plan.role === 'pro') {
+            <span class="plan-badge">Recommended</span>
+          }
+          <mat-card
+            class="product-card"
+            [class.pro-card]="plan.role === 'pro'"
+            [class.basic-card]="plan.role === 'basic'"
+            [class.free-card]="plan.role === 'free'">
           <mat-card-header>
             <mat-card-title>
               <h2 class="plan-title">{{ plan.title }}</h2>
@@ -73,7 +100,7 @@
                   </button>
                 } @else {
                   <button
-                    mat-flat-button
+                    mat-stroked-button
                     type="button"
                     class="subscribe-btn qs-mat-primary"
                     [attr.data-plan-role]="plan.role"
@@ -90,7 +117,8 @@
               </div>
             }
           </mat-card-content>
-        </mat-card>
+          </mat-card>
+        </div>
       }
     </div>
   } @else {

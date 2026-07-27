@@ -106,7 +106,11 @@ describe('PublicPricingComponent', () => {
         const planHeadings = Array.from(
             fixture.nativeElement.querySelectorAll('h2.plan-title') as NodeListOf<HTMLHeadingElement>,
         ).map((heading) => heading.textContent?.trim());
+        const planBadge = fixture.nativeElement.querySelector('.plan-badge') as HTMLElement;
         expect(planHeadings).toEqual(['Starter', 'Basic', 'Pro']);
+        expect(planBadge.textContent?.trim()).toBe('Recommended');
+        expect(planBadge.parentElement?.classList.contains('product-card-shell')).toBe(true);
+        expect(planBadge.closest('mat-card')).toBeNull();
     });
 
     it('keeps the loading state independent from membership verification', () => {
@@ -142,6 +146,27 @@ describe('PublicPricingComponent', () => {
         expect(router.navigate).toHaveBeenCalledWith(['/login'], {
             queryParams: { returnUrl: '/subscriptions' },
         });
+    });
+
+    it('switches between all seven visual previews without changing the catalog', () => {
+        fixture.detectChanges();
+        const component = fixture.componentInstance;
+        const pricingContainer = fixture.debugElement.query(By.css('.pricing-container'));
+
+        expect(component.styleVariants).toHaveLength(7);
+        expect(component.styleVariant()).toBe('fusion');
+        expect(component.activeStyleVariant().description)
+            .toBe('Balanced cards with clean, borderless price choices.');
+        expect(pricingContainer.attributes['data-style-variant']).toBe('fusion');
+        expect(fixture.nativeElement.querySelectorAll('.style-preview-toggle-wide')).toHaveLength(1);
+
+        component.selectStyleVariant('editorial');
+        fixture.detectChanges();
+
+        expect(component.styleVariant()).toBe('editorial');
+        expect(component.activeStyleVariant().label).toBe('4 · Editorial');
+        expect(pricingContainer.attributes['data-style-variant']).toBe('editorial');
+        expect(fixture.nativeElement.querySelectorAll('.product-card')).toHaveLength(3);
     });
 
     it('shows Starter and a recoverable notice when paid plans fail to load', () => {

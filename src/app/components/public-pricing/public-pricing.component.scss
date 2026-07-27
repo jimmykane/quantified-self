@@ -1,8 +1,62 @@
+@use '../../../styles/breakpoints' as bp;
+
+:host {
+  display: block;
+}
+
 .pricing-intro {
   max-width: 640px;
-  margin: -16px 0 28px;
+  margin: -16px 0 24px;
   text-align: center;
   color: var(--mat-sys-on-surface-variant);
+}
+
+.style-preview-controls {
+  box-sizing: border-box;
+  width: min(1120px, 100%);
+  margin: 0 0 32px;
+  padding: 18px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 18px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.style-preview-copy {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 14px;
+  text-align: center;
+
+  h2,
+  p {
+    margin: 0;
+  }
+
+  h2 {
+    font: var(--mat-sys-title-medium);
+  }
+
+  p {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-medium);
+  }
+}
+
+.style-preview-kicker {
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.style-preview-toggle {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  width: 100%;
+
+  mat-button-toggle {
+    min-width: 0;
+  }
 }
 
 .catalog-status {
@@ -26,4 +80,610 @@
   margin: 0;
   font: inherit;
   letter-spacing: inherit;
+}
+
+.plan-badge {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  padding: 3px 10px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 999px;
+  background: var(--mat-sys-surface-container-lowest);
+  box-shadow: none;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0.01em;
+}
+
+.pricing-container {
+  .product-card-shell {
+    position: relative;
+    display: flex;
+    min-width: 0;
+  }
+
+  .product-card {
+    width: 100%;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-top-width: 1px;
+    box-shadow: none;
+    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+
+    &:hover {
+      box-shadow: none;
+    }
+  }
+
+  .features-list,
+  .plan-price-section {
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  .product-card.free-card,
+  .product-card.basic-card,
+  .product-card.pro-card {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .product-card.pro-card {
+    box-shadow: none;
+    transform: none;
+
+    &:hover {
+      transform: none;
+    }
+  }
+}
+
+// 1. Balanced: the safest evolution of the current three-card layout.
+.pricing-container[data-style-variant='balanced'] {
+  .products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 1080px;
+    gap: 20px;
+  }
+
+  .product-card {
+    min-width: 0;
+
+    &:hover {
+      transform: translateY(-2px);
+      border-color: var(--mat-sys-outline);
+    }
+  }
+
+  .product-card.pro-card {
+    border: 2px solid var(--mat-sys-primary);
+    background: color-mix(in srgb, var(--mat-sys-primary-container) 15%, var(--mat-sys-surface));
+
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+
+  .plan-badge {
+    display: inline-flex;
+  }
+}
+
+// 2. Spotlight: makes Pro the visual destination while keeping Starter and Basic available.
+.pricing-container[data-style-variant='spotlight'] {
+  .products-grid {
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 0.88fr) minmax(0, 1.06fr);
+    align-items: start;
+    max-width: 1160px;
+    gap: 18px;
+  }
+
+  .product-card {
+    margin-top: 24px;
+  }
+
+  .product-card.pro-card {
+    margin-top: 0;
+    border: 2px solid var(--mat-sys-primary);
+    background: color-mix(in srgb, var(--mat-sys-primary-container) 24%, var(--mat-sys-surface));
+    transform: none;
+
+    mat-card-header {
+      padding-top: 18px;
+    }
+
+    .price-section {
+      padding: 14px;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--mat-sys-surface-container-high) 75%, transparent);
+    }
+
+    .plan-price-section + .plan-price-section {
+      margin-top: 12px;
+      border-top: 0;
+    }
+  }
+
+  .plan-badge {
+    display: inline-flex;
+  }
+}
+
+// 3. Price tiles: preserves plan cards but compresses the recurring options.
+.pricing-container[data-style-variant='price-tiles'] {
+  .products-grid {
+    grid-template-columns: repeat(3, minmax(0, 350px));
+    max-width: 1120px;
+    gap: 20px;
+  }
+
+  .product-card mat-card-content {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .features-list {
+    grid-column: 1 / -1;
+    margin-bottom: 6px;
+  }
+
+  .card-spacer {
+    display: none;
+  }
+
+  .plan-price-section {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 14px 12px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 14px;
+    background: var(--mat-sys-surface-container-low);
+
+    .price {
+      font-size: 1.75rem;
+    }
+
+    .trial-offer-copy {
+      min-height: 3.2em;
+    }
+
+    button {
+      margin-top: auto;
+      font-size: 0.9rem;
+    }
+  }
+
+  .plan-price-section + .plan-price-section {
+    margin: 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .free-card .plan-price-section {
+    grid-column: 1 / -1;
+  }
+
+  .product-card.pro-card {
+    border-color: color-mix(in srgb, var(--mat-sys-primary) 65%, var(--mat-sys-outline-variant));
+  }
+}
+
+// 4. Editorial: horizontal plan rows with distinct content and price columns.
+.pricing-container[data-style-variant='editorial'] {
+  .products-grid {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 1160px;
+    gap: 14px;
+  }
+
+  .product-card {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    height: auto;
+    overflow: visible;
+  }
+
+  .product-card mat-card-header {
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px;
+    border-right: 1px solid var(--mat-sys-outline-variant);
+    text-align: left;
+
+    mat-card-subtitle {
+      max-width: none;
+    }
+  }
+
+  .product-card mat-card-content {
+    display: grid;
+    grid-template-columns: minmax(250px, 1fr) repeat(2, minmax(170px, 0.58fr));
+    align-items: stretch;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .features-list {
+    margin: 0;
+  }
+
+  .card-spacer {
+    display: none;
+  }
+
+  .plan-price-section {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 14px;
+    background: var(--mat-sys-surface-container-low);
+
+    .price {
+      font-size: 1.7rem;
+    }
+
+    button {
+      margin-top: auto;
+    }
+  }
+
+  .plan-price-section + .plan-price-section {
+    margin: 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .free-card .plan-price-section {
+    grid-column: 2 / -1;
+    width: min(250px, 100%);
+    justify-self: start;
+  }
+
+  .product-card.pro-card {
+    border-left: 4px solid var(--mat-sys-primary);
+  }
+}
+
+// 5. Soft panels: friendly tonal headers and inset feature panels.
+.pricing-container[data-style-variant='soft-panels'] {
+  .products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 1120px;
+    gap: 20px;
+  }
+
+  .product-card {
+    border: 0;
+    background: var(--mat-sys-surface-container-low);
+  }
+
+  .product-card mat-card-header {
+    margin: 10px;
+    padding: 18px 16px;
+    border-radius: 14px;
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  .product-card.basic-card mat-card-header {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  .product-card.pro-card mat-card-header {
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+  }
+
+  .features-list {
+    padding: 14px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--mat-sys-surface-container-high) 72%, transparent);
+  }
+
+  .plan-price-section {
+    padding: 14px 4px 0;
+  }
+}
+
+// 6. Minimal: one comparison surface instead of three independent floating cards.
+.pricing-container[data-style-variant='minimal'] {
+  .products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 1120px;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 22px;
+    background: var(--mat-sys-surface);
+  }
+
+  .product-card,
+  .product-card.free-card,
+  .product-card.basic-card,
+  .product-card.pro-card {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    transform: none;
+
+    &:hover {
+      transform: none;
+      background: var(--mat-sys-surface-container-low);
+    }
+  }
+
+  .product-card-shell + .product-card-shell .product-card {
+    border-left: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .product-card mat-card-header {
+    align-items: flex-start;
+    text-align: left;
+
+    mat-card-subtitle {
+      max-width: none;
+    }
+  }
+
+  .plan-price-section {
+    text-align: left;
+
+    .price {
+      justify-content: flex-start;
+    }
+  }
+
+  .product-card.pro-card mat-card-header {
+    color: var(--mat-sys-primary);
+  }
+}
+
+// 7. Fusion: combines Balanced hierarchy, Soft Panels surfaces, and Price Tiles density.
+.pricing-container[data-style-variant='fusion'] {
+  .products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 1120px;
+    gap: 20px;
+  }
+
+  .product-card {
+    min-width: 0;
+    border: 1px solid var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface);
+
+    &:hover {
+      transform: translateY(-2px);
+      border-color: var(--mat-sys-outline);
+    }
+  }
+
+  .product-card.pro-card {
+    border: 2px solid var(--mat-sys-primary);
+    background: color-mix(in srgb, var(--mat-sys-primary-container) 15%, var(--mat-sys-surface));
+
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+
+  .plan-badge {
+    display: inline-flex;
+  }
+
+  .product-card mat-card-content {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr) 16.625rem;
+    align-items: stretch;
+    gap: 12px 0;
+  }
+
+  .features-list {
+    grid-column: 1 / -1;
+  }
+
+  .card-spacer {
+    display: none;
+  }
+
+  .product-card .plan-price-section {
+    margin: 0;
+    padding: 14px 16px;
+    height: 16.625rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+
+    .price {
+      margin: 0;
+      font-size: 1.65rem;
+      white-space: nowrap;
+
+      .interval {
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+    }
+
+    .trial-offer-copy {
+      margin: 0;
+      min-height: 0;
+    }
+
+    .yearly-savings-label,
+    .trial-cta-note {
+      margin: 0;
+    }
+
+    .yearly-savings-label {
+      justify-self: center;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      color: var(--mat-sys-primary);
+      font: var(--mat-sys-label-medium);
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    button {
+      font-size: 0.9rem;
+    }
+
+    .subscribe-btn {
+      --mat-button-outlined-outline-color:
+        color-mix(in srgb, var(--mat-sys-primary) 55%, var(--mat-sys-outline-variant));
+    }
+  }
+
+  .free-card .plan-price-section {
+    display: flex;
+    flex-direction: column;
+
+    button {
+      margin-top: auto;
+    }
+  }
+
+  .basic-card .plan-price-section,
+  .pro-card .plan-price-section {
+    display: grid;
+    grid-template-rows: auto 40px minmax(50px, auto) 44px;
+    align-items: start;
+    gap: 10px;
+
+    .price {
+      grid-row: 1;
+    }
+
+    .yearly-savings-label,
+    .trial-cta-note {
+      grid-row: 2;
+      align-self: center;
+    }
+
+    .trial-offer-copy {
+      grid-row: 3;
+      align-self: start;
+    }
+
+    button {
+      grid-row: 4;
+      align-self: end;
+      margin-top: 0;
+    }
+  }
+
+  .product-card .plan-price-section + .plan-price-section {
+    margin: 0;
+    padding-top: 14px;
+    border-top: 0;
+    border-left: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .free-card .plan-price-section {
+    grid-column: 1 / -1;
+  }
+}
+
+@include bp.handset-or-tablet-portrait {
+  .style-preview-toggle {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    .style-preview-toggle-wide {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .pricing-container[data-style-variant] {
+    .products-grid {
+      grid-template-columns: minmax(0, 560px);
+      max-width: 560px;
+      gap: 16px;
+    }
+
+    .product-card,
+    .product-card.pro-card {
+      display: flex;
+      margin-top: 0;
+      transform: none;
+    }
+  }
+
+  .pricing-container[data-style-variant='editorial'] {
+    .product-card mat-card-header {
+      align-items: center;
+      border-right: 0;
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
+      text-align: center;
+    }
+
+    .product-card mat-card-content {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .features-list {
+      grid-column: 1 / -1;
+    }
+
+    .free-card .plan-price-section {
+      grid-column: 1 / -1;
+      justify-self: center;
+    }
+  }
+
+  .pricing-container[data-style-variant='minimal'] {
+    .products-grid {
+      border-radius: 18px;
+    }
+
+    .product-card-shell + .product-card-shell .product-card {
+      border-top: 1px solid var(--mat-sys-outline-variant);
+      border-left: 0;
+    }
+  }
+}
+
+@include bp.xsmall {
+  .style-preview-controls {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .style-preview-toggle {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pricing-container[data-style-variant='price-tiles'],
+  .pricing-container[data-style-variant='editorial'],
+  .pricing-container[data-style-variant='fusion'] {
+    .product-card mat-card-content {
+      display: flex;
+    }
+
+    .plan-price-section {
+      width: 100%;
+    }
+  }
+
+  .pricing-container[data-style-variant='fusion'] {
+    .product-card .plan-price-section {
+      height: auto;
+    }
+
+    .product-card .plan-price-section + .plan-price-section {
+      border-top: 1px solid var(--mat-sys-outline-variant);
+      border-left: 0;
+    }
+  }
 }
