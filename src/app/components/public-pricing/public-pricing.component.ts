@@ -1,7 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -13,14 +12,6 @@ import { LoggerService } from '../../services/logger.service';
 
 type PublicPlanRole = 'free' | 'basic' | 'pro';
 type RecurringInterval = 'day' | 'week' | 'month' | 'year';
-type PublicPricingStyleVariant =
-    'balanced' | 'spotlight' | 'price-tiles' | 'editorial' | 'soft-panels' | 'minimal' | 'fusion';
-
-interface PublicPricingStyleOption {
-    id: PublicPricingStyleVariant;
-    label: string;
-    description: string;
-}
 
 interface PublicPlanFeatureViewModel {
     icon: string;
@@ -83,7 +74,6 @@ const PUBLIC_PLAN_COPY: Record<PublicPlanRole, { title: string; subtitle: string
         CommonModule,
         MatCardModule,
         MatButtonModule,
-        MatButtonToggleModule,
         MatIconModule,
         MatProgressSpinnerModule,
     ],
@@ -95,47 +85,6 @@ export class PublicPricingComponent {
     private readonly logger = inject(LoggerService);
     private readonly router = inject(Router);
 
-    readonly styleVariants: readonly PublicPricingStyleOption[] = [
-        {
-            id: 'balanced',
-            label: '1 · Balanced',
-            description: 'Equal cards with a calm Pro emphasis and generous spacing.',
-        },
-        {
-            id: 'spotlight',
-            label: '2 · Spotlight',
-            description: 'A larger Pro card creates a clear recommended upgrade path.',
-        },
-        {
-            id: 'price-tiles',
-            label: '3 · Price tiles',
-            description: 'Monthly and yearly options sit side by side for faster comparison.',
-        },
-        {
-            id: 'editorial',
-            label: '4 · Editorial',
-            description: 'Wide plan rows prioritize scanning and reduce vertical page length.',
-        },
-        {
-            id: 'soft-panels',
-            label: '5 · Soft panels',
-            description: 'Tonal Material surfaces create friendly, distinct membership tiers.',
-        },
-        {
-            id: 'minimal',
-            label: '6 · Minimal',
-            description: 'One restrained comparison surface with clean column dividers.',
-        },
-        {
-            id: 'fusion',
-            label: '7 · Fusion',
-            description: 'Balanced cards with clean, borderless price choices.',
-        },
-    ];
-    readonly styleVariant = signal<PublicPricingStyleVariant>('fusion');
-    readonly activeStyleVariant = computed(() =>
-        this.styleVariants.find((option) => option.id === this.styleVariant()) ?? this.styleVariants[0]);
-
     readonly catalog$: Observable<PublicPricingCatalog> = defer(() => this.paymentService.getProducts()).pipe(
         timeout({ first: PUBLIC_PRODUCTS_TIMEOUT_MS }),
         map((products) => buildPublicPricingCatalog(products)),
@@ -145,10 +94,6 @@ export class PublicPricingComponent {
         }),
         shareReplay({ bufferSize: 1, refCount: true }),
     );
-
-    selectStyleVariant(variant: PublicPricingStyleVariant): void {
-        this.styleVariant.set(variant);
-    }
 
     continueToMembership(): void {
         void this.router.navigate(['/login'], {

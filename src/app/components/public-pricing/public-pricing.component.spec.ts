@@ -148,24 +148,13 @@ describe('PublicPricingComponent', () => {
         });
     });
 
-    it('switches between all seven visual previews without changing the catalog', () => {
+    it('renders the selected plan-card presentation without design preview controls', () => {
         fixture.detectChanges();
-        const component = fixture.componentInstance;
         const pricingContainer = fixture.debugElement.query(By.css('.pricing-container'));
 
-        expect(component.styleVariants).toHaveLength(7);
-        expect(component.styleVariant()).toBe('fusion');
-        expect(component.activeStyleVariant().description)
-            .toBe('Balanced cards with clean, borderless price choices.');
-        expect(pricingContainer.attributes['data-style-variant']).toBe('fusion');
-        expect(fixture.nativeElement.querySelectorAll('.style-preview-toggle-wide')).toHaveLength(1);
-
-        component.selectStyleVariant('editorial');
-        fixture.detectChanges();
-
-        expect(component.styleVariant()).toBe('editorial');
-        expect(component.activeStyleVariant().label).toBe('4 · Editorial');
-        expect(pricingContainer.attributes['data-style-variant']).toBe('editorial');
+        expect(pricingContainer.attributes['data-style-variant']).toBeUndefined();
+        expect(fixture.nativeElement.querySelector('.style-preview-controls')).toBeNull();
+        expect(fixture.nativeElement.textContent).not.toContain('Design preview');
         expect(fixture.nativeElement.querySelectorAll('.product-card')).toHaveLength(3);
     });
 

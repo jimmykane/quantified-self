@@ -6,6 +6,9 @@
   </div>
   } @else {
   <h1>{{ currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
+  @if (currentRole !== 'pro' && currentRole !== 'basic') {
+  <p class="pricing-intro">Start free, then upgrade whenever you need more history, automation, or sync.</p>
+  }
 
   @if (currentRole === 'pro' || currentRole === 'basic') {
   <div class="manage-subscription-container">
@@ -107,13 +110,19 @@
   } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
     @for (product of products; track product.id) {
-    <mat-card class="product-card"
-      [class.current-plan-highlight]="(product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || product.metadata['role'] === currentRole"
-      [class.pro-card]="product.metadata['role'] === 'pro'" [class.basic-card]="product.metadata['role'] === 'basic'"
-      [class.free-card]="product.metadata['role'] === 'free'">
+    <div class="product-card-shell">
+      @if (product.metadata['role'] === 'pro') {
+      <span class="plan-badge">Recommended</span>
+      }
+      <mat-card class="product-card"
+        [class.single-price-card]="product.prices?.length === 1"
+        [class.current-plan-highlight]="(product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || product.metadata['role'] === currentRole"
+        [class.pro-card]="product.metadata['role'] === 'pro'" [class.basic-card]="product.metadata['role'] === 'basic'"
+        [class.free-card]="product.metadata['role'] === 'free'">
 
       <mat-card-header>
         <mat-card-title>
+          <h2 class="plan-title">
           @if (product.metadata['role'] === 'free') {
           Starter
           } @else if (product.metadata['role'] === 'basic') {
@@ -123,6 +132,7 @@
           } @else {
           {{ product.name }}
           }
+          </h2>
         </mat-card-title>
         @if (product.metadata['role'] === 'free') {
         <mat-card-subtitle>Everything you need to get started. Free forever.</mat-card-subtitle>
@@ -138,16 +148,18 @@
         <div class="features-list">
           @if (product.metadata['role'] === 'free') {
           <ul>
-            <li><mat-icon style="color: grey">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon style="color: grey">check</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
-            <li><mat-icon style="color: grey">check</mat-icon> Manual uploads</li>
-            <li><mat-icon style="color: grey">check</mat-icon> Core analysis tools</li>
-            <li><mat-icon style="color: grey">check</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="free-feature-icon">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="free-feature-icon">check</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="free-feature-icon">check</mat-icon> Read-only MCP access</li>
+            <li><mat-icon class="free-feature-icon">check</mat-icon> Manual uploads</li>
+            <li><mat-icon class="free-feature-icon">check</mat-icon> Core analysis tools</li>
+            <li><mat-icon class="free-feature-icon">check</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
           </ul>
           } @else if (product.metadata['role'] === 'basic') {
           <ul>
             <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="qs-color-accent">check</mat-icon> Read-only MCP access</li>
             <li><mat-icon class="qs-color-accent">check</mat-icon> Manual uploads</li>
             <li><mat-icon class="qs-color-accent">check</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-primary">favorite</mat-icon> Supports independent, privacy-first development</li>
@@ -156,6 +168,7 @@
           <ul>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getActivityLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getRouteLimitLabel(product.metadata['role']) }}</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Read-only MCP access</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Automatic activity imports from your watch</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Cross-device sync</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getAiInsightsLimitLabel(product.metadata['role']) }}</li>
@@ -176,7 +189,7 @@
             } @else {
             {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() : 'symbol' : ((price.unit_amount || 0) % 100 === 0 ? '1.0-0' : '1.2-2') }}
             }
-            <span *ngIf="price.type === 'recurring'" class="interval">/ {{ getPriceIntervalLabel(price) }}</span>
+            <span *ngIf="price.type === 'recurring' && price.unit_amount !== 0" class="interval">/ {{ getPriceIntervalLabel(price) }}</span>
           </h3>
 
           @if (yearlySavingsLabel) {
@@ -185,7 +198,7 @@
 
           @if (trialDays !== null) {
           <p class="trial-offer-copy">
-            {{ trialDays }}-day free trial for new members. No card needed.
+            {{ trialDays }}-day free trial for eligible new members. No card needed.
           </p>
           }
 
@@ -244,7 +257,8 @@
 
         </div>
       </mat-card-content>
-    </mat-card>
+      </mat-card>
+    </div>
     }
   </div>
   <ng-template #loading>
