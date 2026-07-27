@@ -541,8 +541,7 @@
     }
 
     .subscribe-btn {
-      --mat-button-outlined-outline-color:
-        color-mix(in srgb, var(--mat-sys-primary) 55%, var(--mat-sys-outline-variant));
+      border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 82%, var(--mat-sys-on-surface));
     }
   }
 
