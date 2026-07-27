@@ -17,3 +17,6 @@ service-account.json
 
 # Exported files
 users_export.csv
+
+# Local debug/download scratch files
+tmp/
