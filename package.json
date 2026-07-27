@@ -24,9 +24,9 @@
     "plugin:tools": "npm --prefix tools/quantified-self-plugin ci",
     "plugin:configure": "node tools/quantified-self-plugin/plugin-tool.mjs configure",
     "plugin:build": "node tools/quantified-self-plugin/plugin-tool.mjs build",
-    "plugin:validate": "node tools/quantified-self-plugin/plugin-tool.mjs validate",
+    "plugin:validate": "npm run plugin:tools && node tools/quantified-self-plugin/plugin-tool.mjs validate",
     "plugin:setup": "npm run plugin:tools && node tools/quantified-self-plugin/plugin-tool.mjs setup",
-    "plugin:sync": "node tools/quantified-self-plugin/plugin-tool.mjs sync",
+    "plugin:sync": "npm run plugin:tools && node tools/quantified-self-plugin/plugin-tool.mjs sync",
     "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --org dimitrios-kanellopoulos --project quantified-self --release $(node -p 'require(\"./package.json\").version') dist/browser --url-prefix '~/'",
     "e2e": "ng e2e"
   },

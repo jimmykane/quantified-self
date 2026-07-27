@@ -70,7 +70,8 @@ download, and focused MCP/frontend tests aligned whenever any asset changes.
 The repository includes a local marketplace package that combines the registered Quantified Self MCP app, branding,
 starter prompts, and the bundled `analyze-quantified-self` skill. This is a development and local-installation surface,
 not a public marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the
-plugin does not authorize a user automatically.
+plugin does not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it
+is not a mobile installation path and does not publish anything to the universal plugin directory.
 
 Committed source lives under `plugins/quantified-self/`, with the marketplace at
 `.agents/plugins/marketplace.json`. `plugin.template.json`, the skill, and marketplace metadata are reusable. An
@@ -81,8 +82,8 @@ the manifest template, or printed by the tooling. OAuth tokens and client secret
 
 The tooling is a private package under `tools/quantified-self-plugin/`. It pins the official `@openai/codex` CLI in its
 own lockfile, keeping the binary out of normal Angular installs. Dependabot proposes isolated CLI upgrades. The
-generator uses only Node built-ins, and the official CLI ingestion path—not a community manifest-types package—is the
-installation compatibility authority.
+generator uses Node built-ins, while validation uses a pinned YAML parser for the bundled skill metadata and the
+official CLI ingestion path—not a community manifest-types package—as the installation compatibility authority.
 
 ### Initial local setup
 
@@ -103,8 +104,8 @@ installation compatibility authority.
    npm run plugin:setup
    ```
 
-4. Complete the normal Quantified Self OAuth flow and start a new conversation so the installed skill and app are
-   loaded.
+4. Restart the ChatGPT desktop app if it is open, complete the normal Quantified Self OAuth flow, and test in a new
+   ChatGPT or Codex conversation so the installed skill and app are loaded.
 
 The generated local config is written with owner-only permissions where the platform supports them. Setup detects a
 marketplace name or repository-root collision and fails instead of rewriting another configured source. It uses normal
@@ -116,13 +117,13 @@ marketplace name or repository-root collision and fails instead of rewriting ano
 | --- | --- |
 | `npm run plugin:tools` | Installs the isolated pinned CLI package |
 | `npm run plugin:build` | Generates the account-bound local bundle with one fresh `+codex.local-<UTC timestamp>` suffix |
-| `npm run plugin:validate` | Rebuilds, discovers, installs, and inspects the plugin using a temporary `CODEX_HOME` |
-| `npm run plugin:sync` | Explicitly rebuilds, validates, and reinstalls the configured local plugin |
+| `npm run plugin:validate` | Installs the pinned CLI, then rebuilds, discovers, installs, and inspects the plugin using a temporary `CODEX_HOME` |
+| `npm run plugin:sync` | Installs the pinned CLI, then explicitly rebuilds, validates, and reinstalls the configured local plugin |
 
 Ordinary Angular and Functions builds do not run any of these commands and never change a developer's installed
-plugins. After `plugin:sync`, start a new conversation. CI supplies a non-production fixture app ID and deterministic
-cachebuster, runs the generator tests, and performs the same isolated marketplace discovery/install check. It never
-reads or writes a contributor's Codex profile.
+plugins. After `plugin:sync`, restart the ChatGPT desktop app if it is open and test in a new conversation. CI supplies
+a non-production fixture app ID and deterministic cachebuster, runs the generator tests, and performs the same isolated
+marketplace discovery/install check. It never reads or writes a contributor's Codex profile.
 
 ### Update matrix
 
@@ -130,7 +131,9 @@ reads or writes a contributor's Codex profile.
 | --- | --- |
 | Server implementation or bug fix that preserves public tools, schemas, scopes, and instructions | Deploy through the separately approved release workflow; no local plugin rebuild |
 | Tool name, description, input/output schema, scope, or server instruction | Run MCP contract tests, deploy separately, rescan the registered ChatGPT developer app, and test in a new conversation |
-| Plugin metadata, starter prompt, icon, marketplace entry, or bundled skill | Run the plugin unit suite and `plugin:validate`, then run `plugin:sync` locally |
+| Plugin-only metadata, starter prompt, marketplace entry, or bundled skill | Run the plugin unit suite and `plugin:validate`, then run `plugin:sync` locally |
+| Shared MCP/plugin icon or branding | Run the focused MCP/frontend and plugin tests, validate and sync the local plugin, and update the registered ChatGPT developer app's uploaded icon separately; local tooling cannot change that registration |
+| Replacement registered ChatGPT technical app ID | Set the new ID in `QS_CHATGPT_APP_ID`, rerun `plugin:configure`, then run `plugin:sync`; never hand-edit or commit `.app.json` |
 | External Codex CLI dependency | Review the isolated dependency-update PR and pass the full plugin validation workflow |
 
 The skill intentionally does not copy the complete MCP tool or metric catalog. It instructs the client to use the live

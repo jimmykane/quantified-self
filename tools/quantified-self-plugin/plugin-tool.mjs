@@ -8,15 +8,17 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { constants as fsConstants, realpathSync } from 'node:fs';
+import { constants as fsConstants, existsSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import { isDeepStrictEqual } from 'node:util';
 
 export const PLUGIN_NAME = 'quantified-self';
 export const MARKETPLACE_NAME = 'quantified-self-local';
+const ANALYSIS_SKILL_NAME = 'analyze-quantified-self';
 
 const TOOL_ROOT = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_REPO_ROOT = resolve(TOOL_ROOT, '..', '..');
@@ -43,16 +45,26 @@ function pathsFor(repoRoot) {
       'quantified-self-chatgpt-icon-256x256.png',
     ),
     iconPath: join(pluginRoot, 'assets', 'quantified-self.png'),
-    marketplacePath: join(normalizedRoot, '.agents', 'plugins', 'marketplace.json'),
     configPath: join(normalizedRoot, '.local', 'quantified-self-plugin.json'),
     codexPath: join(
       normalizedRoot,
       'tools',
       'quantified-self-plugin',
       'node_modules',
-      '.bin',
-      process.platform === 'win32' ? 'codex.cmd' : 'codex',
+      '@openai',
+      'codex',
+      'bin',
+      'codex.js',
     ),
+  };
+}
+
+function analysisSkillPaths(paths) {
+  const skillRoot = join(paths.pluginRoot, 'skills', ANALYSIS_SKILL_NAME);
+  return {
+    skillRoot,
+    skillPath: join(skillRoot, 'SKILL.md'),
+    agentPath: join(skillRoot, 'agents', 'openai.yaml'),
   };
 }
 
@@ -214,7 +226,27 @@ export async function buildPlugin({
   now = new Date(),
 } = {}) {
   const paths = pathsFor(repoRoot);
+  const skillPaths = analysisSkillPaths(paths);
+  assertSafeChild(paths.repoRoot, paths.pluginRoot, 'Plugin root');
+  assertSafeChild(
+    paths.repoRoot,
+    paths.configPath,
+    'Local plugin configuration',
+  );
+  assertSafeChild(paths.repoRoot, paths.sourceIconPath, 'Plugin source icon');
+  assertSafeChild(paths.pluginRoot, skillPaths.skillRoot, 'Bundled analysis skill');
+  assertSafeChild(
+    skillPaths.skillRoot,
+    skillPaths.skillPath,
+    'Bundled analysis skill instructions',
+  );
+  assertSafeChild(
+    skillPaths.skillRoot,
+    skillPaths.agentPath,
+    'Bundled analysis skill agent configuration',
+  );
   for (const [label, path] of [
+    ['Plugin manifest template', paths.templatePath],
     ['Plugin manifest', paths.manifestPath],
     ['App manifest', paths.appPath],
     ['Plugin icon', paths.iconPath],
@@ -249,10 +281,14 @@ export async function buildPlugin({
     },
   };
 
-  await readFile(paths.sourceIconPath);
-  await writeJsonAtomic(paths.manifestPath, manifest);
+  await Promise.all([
+    readFile(paths.sourceIconPath),
+    readFile(skillPaths.skillPath),
+    readFile(skillPaths.agentPath),
+  ]);
   await writeJsonAtomic(paths.appPath, appManifest, 0o600);
   await copyFileAtomic(paths.sourceIconPath, paths.iconPath);
+  await writeJsonAtomic(paths.manifestPath, manifest);
 
   return {
     pluginRoot: paths.pluginRoot,
@@ -263,6 +299,150 @@ export async function buildPlugin({
   };
 }
 
+function assertObjectWithKeys(value, expectedKeys, label) {
+  if (value === null || Array.isArray(value) || typeof value !== 'object') {
+    throw new Error(`${label} must be an object.`);
+  }
+  if (expectedKeys !== undefined) {
+    const actualKeys = Object.keys(value).sort();
+    const normalizedExpectedKeys = [...expectedKeys].sort();
+    if (!isDeepStrictEqual(actualKeys, normalizedExpectedKeys)) {
+      throw new Error(`${label} has unsupported or missing fields.`);
+    }
+  }
+  return value;
+}
+
+function assertNonEmptyString(value, label) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+  return value;
+}
+
+async function parseYamlObject(contents, label) {
+  const { parseDocument } = await import('yaml');
+  const document = parseDocument(contents, {
+    prettyErrors: false,
+    strict: true,
+    uniqueKeys: true,
+  });
+  if (document.errors.length > 0) {
+    throw new Error(`${label} is not valid YAML.`);
+  }
+  return assertObjectWithKeys(document.toJS(), undefined, label);
+}
+
+async function validatePluginSourceAtPaths(paths) {
+  const skillPaths = analysisSkillPaths(paths);
+  assertSafeChild(paths.repoRoot, paths.pluginRoot, 'Plugin root');
+  assertSafeChild(paths.pluginRoot, skillPaths.skillRoot, 'Bundled analysis skill');
+  assertSafeChild(
+    skillPaths.skillRoot,
+    skillPaths.skillPath,
+    'Bundled analysis skill instructions',
+  );
+  assertSafeChild(
+    skillPaths.skillRoot,
+    skillPaths.agentPath,
+    'Bundled analysis skill agent configuration',
+  );
+  const [skillContents, agentContents] = await Promise.all([
+    readFile(skillPaths.skillPath, 'utf8'),
+    readFile(skillPaths.agentPath, 'utf8'),
+  ]);
+  const frontmatterMatch =
+    /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(skillContents);
+  if (!frontmatterMatch) {
+    throw new Error('Bundled analysis skill frontmatter is missing or malformed.');
+  }
+  const frontmatter = assertObjectWithKeys(
+    await parseYamlObject(
+      frontmatterMatch[1],
+      'Bundled analysis skill frontmatter',
+    ),
+    ['name', 'description'],
+    'Bundled analysis skill frontmatter',
+  );
+  if (
+    frontmatter.name !== ANALYSIS_SKILL_NAME
+    || !assertNonEmptyString(
+      frontmatter.description,
+      'Bundled analysis skill description',
+    )
+  ) {
+    throw new Error('Bundled analysis skill identity is invalid.');
+  }
+
+  const agent = assertObjectWithKeys(
+    await parseYamlObject(agentContents, 'Bundled analysis skill agent configuration'),
+    ['interface', 'dependencies', 'policy'],
+    'Bundled analysis skill agent configuration',
+  );
+  const interfaceConfig = assertObjectWithKeys(
+    agent.interface,
+    ['display_name', 'short_description', 'default_prompt'],
+    'Bundled analysis skill interface',
+  );
+  assertNonEmptyString(
+    interfaceConfig.display_name,
+    'Bundled analysis skill display name',
+  );
+  assertNonEmptyString(
+    interfaceConfig.short_description,
+    'Bundled analysis skill short description',
+  );
+  const defaultPrompt = assertNonEmptyString(
+    interfaceConfig.default_prompt,
+    'Bundled analysis skill default prompt',
+  );
+  if (!defaultPrompt.includes(`$${ANALYSIS_SKILL_NAME}`)) {
+    throw new Error('Bundled analysis skill default prompt must name the skill.');
+  }
+
+  const dependencies = assertObjectWithKeys(
+    agent.dependencies,
+    ['tools'],
+    'Bundled analysis skill dependencies',
+  );
+  if (!Array.isArray(dependencies.tools) || dependencies.tools.length !== 1) {
+    throw new Error('Bundled analysis skill must declare exactly one MCP dependency.');
+  }
+  const [tool] = dependencies.tools;
+  assertObjectWithKeys(
+    tool,
+    ['type', 'value', 'description', 'transport', 'url'],
+    'Bundled analysis skill MCP dependency',
+  );
+  assertNonEmptyString(
+    tool.description,
+    'Bundled analysis skill MCP dependency description',
+  );
+  if (
+    tool.type !== 'mcp'
+    || tool.value !== PLUGIN_NAME
+    || tool.transport !== 'streamable_http'
+    || tool.url !== 'https://quantified-self.io/mcp'
+  ) {
+    throw new Error('Bundled analysis skill MCP dependency is invalid.');
+  }
+
+  const policy = assertObjectWithKeys(
+    agent.policy,
+    ['allow_implicit_invocation'],
+    'Bundled analysis skill policy',
+  );
+  if (policy.allow_implicit_invocation !== true) {
+    throw new Error('Bundled analysis skill must allow implicit invocation.');
+  }
+}
+
+export async function validatePluginSource({
+  repoRoot = DEFAULT_REPO_ROOT,
+} = {}) {
+  await validatePluginSourceAtPaths(pathsFor(repoRoot));
+}
+
 function parseJsonOutput(result, label) {
   try {
     return JSON.parse(result.stdout);
@@ -271,21 +451,35 @@ function parseJsonOutput(result, label) {
   }
 }
 
+export function createCodexEnvironment({
+  environment = process.env,
+  codexHome,
+} = {}) {
+  const childEnvironment = { ...environment };
+  for (const key of Object.keys(childEnvironment)) {
+    if (
+      key.toUpperCase() === 'QS_CHATGPT_APP_ID'
+      || key.toUpperCase() === 'QS_PLUGIN_CACHEBUSTER'
+    ) {
+      delete childEnvironment[key];
+    }
+  }
+  if (codexHome) {
+    childEnvironment.CODEX_HOME = codexHome;
+  }
+  return childEnvironment;
+}
+
 function runCodex(paths, args, { codexHome, secrets = [] } = {}) {
-  const environment = {
-    ...process.env,
-    ...(codexHome ? { CODEX_HOME: codexHome } : {}),
-  };
-  const result = spawnSync(paths.codexPath, args, {
-    cwd: paths.repoRoot,
-    encoding: 'utf8',
-    env: environment,
-    maxBuffer: 4 * 1024 * 1024,
-    shell: process.platform === 'win32',
-  });
-  if (result.error?.code === 'ENOENT') {
+  if (!existsSync(paths.codexPath)) {
     throw new Error('Codex plugin tooling is not installed. Run npm run plugin:setup.');
   }
+  const result = spawnSync(process.execPath, [paths.codexPath, ...args], {
+    cwd: paths.repoRoot,
+    encoding: 'utf8',
+    env: createCodexEnvironment({ codexHome }),
+    maxBuffer: 4 * 1024 * 1024,
+  });
   if (result.error) {
     throw new Error(`Codex CLI failed to start: ${result.error.message}`);
   }
@@ -326,6 +520,13 @@ function normalizePathForComparison(path) {
   }
 }
 
+export function pathsAreEquivalent(firstPath, secondPath) {
+  return (
+    normalizePathForComparison(firstPath)
+    === normalizePathForComparison(secondPath)
+  );
+}
+
 export function classifyMarketplaceRegistration(marketplaces, repoRoot) {
   if (!Array.isArray(marketplaces)) {
     throw new Error('Codex returned an invalid marketplace listing.');
@@ -349,7 +550,7 @@ export function classifyMarketplaceRegistration(marketplaces, repoRoot) {
   }
   const [byName] = matchingNames;
   if (byName) {
-    if (normalizePathForComparison(byName.root) !== normalizedRoot) {
+    if (!pathsAreEquivalent(byName.root, normalizedRoot)) {
       throw new Error(
         `Marketplace ${MARKETPLACE_NAME} already points to a different repository.`,
       );
@@ -357,7 +558,7 @@ export function classifyMarketplaceRegistration(marketplaces, repoRoot) {
     return 'existing';
   }
   const matchingRoots = marketplaces.filter(
-    (marketplace) => normalizePathForComparison(marketplace.root) === normalizedRoot,
+    (marketplace) => pathsAreEquivalent(marketplace.root, normalizedRoot),
   );
   if (matchingRoots.length > 1) {
     throw new Error('This repository is registered as more than one marketplace.');
@@ -371,12 +572,76 @@ export function classifyMarketplaceRegistration(marketplaces, repoRoot) {
   return 'add';
 }
 
+export function assertInstalledPluginResult(installed, expectedVersion) {
+  if (
+    installed === null
+    || typeof installed !== 'object'
+    || installed.pluginId !== `${PLUGIN_NAME}@${MARKETPLACE_NAME}`
+    || installed.version !== expectedVersion
+    || typeof installed.installedPath !== 'string'
+    || !installed.installedPath
+  ) {
+    throw new Error('Codex installed an unexpected plugin result.');
+  }
+  return installed;
+}
+
+async function validateInstalledPluginBundle({
+  paths,
+  installedPath,
+  expectedVersion,
+  appId,
+}) {
+  const skillPath = join('skills', 'analyze-quantified-self');
+  const [
+    installedManifest,
+    sourceManifest,
+    installedApp,
+    sourceApp,
+    installedSkill,
+    sourceSkill,
+    installedSkillConfig,
+    sourceSkillConfig,
+    installedIcon,
+    sourceIcon,
+  ] = await Promise.all([
+    readJson(
+      join(installedPath, '.codex-plugin', 'plugin.json'),
+      'Installed plugin manifest',
+    ),
+    readJson(paths.manifestPath, 'Generated plugin manifest'),
+    readJson(join(installedPath, '.app.json'), 'Installed app manifest'),
+    readJson(paths.appPath, 'Generated app manifest'),
+    readFile(join(installedPath, skillPath, 'SKILL.md')),
+    readFile(join(paths.pluginRoot, skillPath, 'SKILL.md')),
+    readFile(join(installedPath, skillPath, 'agents', 'openai.yaml')),
+    readFile(join(paths.pluginRoot, skillPath, 'agents', 'openai.yaml')),
+    readFile(join(installedPath, 'assets', 'quantified-self.png')),
+    readFile(paths.sourceIconPath),
+  ]);
+  if (
+    !isDeepStrictEqual(installedManifest, sourceManifest)
+    || !isDeepStrictEqual(installedApp, sourceApp)
+    || installedManifest.name !== PLUGIN_NAME
+    || installedManifest.version !== expectedVersion
+    || installedManifest.apps !== './.app.json'
+    || installedManifest.skills !== './skills/'
+    || installedApp.apps?.[PLUGIN_NAME]?.id !== appId
+    || !installedSkill.equals(sourceSkill)
+    || !installedSkillConfig.equals(sourceSkillConfig)
+    || !installedIcon.equals(sourceIcon)
+  ) {
+    throw new Error('The installed plugin bundle is incomplete or inconsistent.');
+  }
+}
+
 export async function validateWithCodex({
   repoRoot = DEFAULT_REPO_ROOT,
   expectedVersion,
   appId,
 } = {}) {
   const paths = pathsFor(repoRoot);
+  await validatePluginSourceAtPaths(paths);
   const isolatedHome = await mkdtemp(join(tmpdir(), 'quantified-self-plugin-'));
   try {
     const addMarketplace = parseJsonOutput(
@@ -388,7 +653,7 @@ export async function validateWithCodex({
     );
     if (
       addMarketplace.marketplaceName !== MARKETPLACE_NAME
-      || normalizePathForComparison(addMarketplace.installedRoot) !== paths.repoRoot
+      || !pathsAreEquivalent(addMarketplace.installedRoot, paths.repoRoot)
     ) {
       throw new Error('Codex registered an unexpected marketplace.');
     }
@@ -407,55 +672,24 @@ export async function validateWithCodex({
       throw new Error('Codex did not discover the expected plugin version.');
     }
 
-    const installed = parseJsonOutput(
-      runCodex(
-        paths,
-        ['plugin', 'add', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`, '--json'],
-        { codexHome: isolatedHome, secrets: [appId] },
+    const installed = assertInstalledPluginResult(
+      parseJsonOutput(
+        runCodex(
+          paths,
+          ['plugin', 'add', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`, '--json'],
+          { codexHome: isolatedHome, secrets: [appId] },
+        ),
+        'Plugin installation',
       ),
-      'Plugin installation',
+      expectedVersion,
     );
-    if (
-      installed.pluginId !== `${PLUGIN_NAME}@${MARKETPLACE_NAME}`
-      || installed.version !== expectedVersion
-      || typeof installed.installedPath !== 'string'
-      || !installed.installedPath
-    ) {
-      throw new Error('Codex installed an unexpected plugin result.');
-    }
     assertSafeChild(isolatedHome, installed.installedPath, 'Installed plugin');
-    const installedManifest = await readJson(
-      join(installed.installedPath, '.codex-plugin', 'plugin.json'),
-      'Installed plugin manifest',
-    );
-    const installedApp = await readJson(
-      join(installed.installedPath, '.app.json'),
-      'Installed app manifest',
-    );
-    const installedSkill = await readFile(
-      join(
-        installed.installedPath,
-        'skills',
-        'analyze-quantified-self',
-        'SKILL.md',
-      ),
-      'utf8',
-    );
-    const [installedIcon, sourceIcon] = await Promise.all([
-      readFile(join(installed.installedPath, 'assets', 'quantified-self.png')),
-      readFile(paths.sourceIconPath),
-    ]);
-    if (
-      installedManifest.name !== PLUGIN_NAME
-      || installedManifest.version !== expectedVersion
-      || installedManifest.apps !== './.app.json'
-      || installedManifest.skills !== './skills/'
-      || installedApp.apps?.[PLUGIN_NAME]?.id !== appId
-      || installedSkill.includes('[TODO')
-      || !installedIcon.equals(sourceIcon)
-    ) {
-      throw new Error('The installed plugin bundle is incomplete or inconsistent.');
-    }
+    await validateInstalledPluginBundle({
+      paths,
+      installedPath: installed.installedPath,
+      expectedVersion,
+      appId,
+    });
 
     const listed = parseJsonOutput(
       runCodex(paths, ['plugin', 'list', '--json'], {
@@ -491,18 +725,24 @@ async function ensureMarketplace(paths, appId) {
   });
 }
 
-async function installLocally(paths, appId) {
-  const installed = parseJsonOutput(
-    runCodex(
-      paths,
-      ['plugin', 'add', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`, '--json'],
-      { secrets: [appId] },
+async function installLocally(paths, appId, expectedVersion) {
+  const installed = assertInstalledPluginResult(
+    parseJsonOutput(
+      runCodex(
+        paths,
+        ['plugin', 'add', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`, '--json'],
+        { secrets: [appId] },
+      ),
+      'Local plugin installation',
     ),
-    'Local plugin installation',
+    expectedVersion,
   );
-  if (installed.pluginId !== `${PLUGIN_NAME}@${MARKETPLACE_NAME}`) {
-    throw new Error('Codex installed an unexpected local plugin.');
-  }
+  await validateInstalledPluginBundle({
+    paths,
+    installedPath: installed.installedPath,
+    expectedVersion,
+    appId,
+  });
   return installed;
 }
 
@@ -511,7 +751,11 @@ function parseArguments(argv) {
   const options = {};
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
-    if (!['--cachebuster', '--repo-root'].includes(argument)) {
+    const allowedArguments =
+      command === 'configure'
+        ? ['--repo-root']
+        : ['--cachebuster', '--repo-root'];
+    if (!allowedArguments.includes(argument)) {
       throw new Error(`Unknown argument: ${argument}`);
     }
     const value = rest[index + 1];
@@ -543,6 +787,9 @@ async function runCommand(argv) {
   }
 
   const paths = pathsFor(options.repoRoot ?? DEFAULT_REPO_ROOT);
+  if (command !== 'build') {
+    await validatePluginSourceAtPaths(paths);
+  }
   const resolvedAppId = await resolveAppId({
     explicitAppId: options.appId,
     environment: process.env,
@@ -565,14 +812,16 @@ async function runCommand(argv) {
   }
 
   await ensureMarketplace(paths, resolvedAppId);
-  const installed = await installLocally(paths, resolvedAppId);
+  const installed = await installLocally(paths, resolvedAppId, built.version);
   console.log(`Installed ${installed.pluginId} ${installed.version}.`);
-  console.log('Start a new ChatGPT or Codex conversation to load the updated plugin.');
+  console.log(
+    'Restart the ChatGPT desktop app if it is open, then test the plugin in a new ChatGPT or Codex conversation.',
+  );
 }
 
 const isMainModule =
   process.argv[1] !== undefined
-  && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+  && pathsAreEquivalent(fileURLToPath(import.meta.url), process.argv[1]);
 
 if (isMainModule) {
   runCommand(process.argv.slice(2)).catch((error) => {

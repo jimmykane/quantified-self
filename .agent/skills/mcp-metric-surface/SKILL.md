@@ -105,6 +105,6 @@ Add or update focused tests for:
 
 Then run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts` plus the focused Functions tests,
 `npm --prefix functions run build`, the affected frontend tests, the Firestore rules suite when access changes,
-`npm --prefix tools/quantified-self-plugin test`, a fixture-ID `npm run plugin:validate` when the local package or public
-tool contract is affected, and `git diff --check`. Do not deploy, publish Sports Lib, start a production reparse, install
-the plugin into a real profile, or mutate cloud configuration as part of this workflow.
+`npm run plugin:tools`, `npm --prefix tools/quantified-self-plugin test`, a fixture-ID `npm run plugin:validate` when the
+local package or public tool contract is affected, and `git diff --check`. Do not deploy, publish Sports Lib, start a
+production reparse, install the plugin into a real profile, or mutate cloud configuration as part of this workflow.
