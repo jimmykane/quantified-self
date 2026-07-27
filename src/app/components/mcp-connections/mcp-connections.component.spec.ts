@@ -78,6 +78,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Activity locations');
     expect(content).toContain('Saved-route summaries');
     expect(content).toContain('Saved-route locations and geometry');
+    expect(content).toContain('Disconnect here remains authoritative');
   });
 
   it('uses a standard glass-card stack matching the connection workspace', async () => {

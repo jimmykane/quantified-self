@@ -71,6 +71,9 @@ describe('MCP client access policy', () => {
     expect(content).toContain('becomes active and appears in Connections only after');
     expect(content).toContain('Abandoned pending approvals expire automatically');
     expect(content).toContain('Connections -> MCP');
+    expect(content).toContain('standard server-to-server token-revocation endpoint');
+    expect(content).toContain('Disconnect in Connections remains the authoritative control');
+    expect(content).toContain('without affecting other MCP clients');
     expect(content).toContain('retain data it already received');
   });
 });

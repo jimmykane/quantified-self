@@ -24,6 +24,7 @@ vi.mock('firebase-admin', () => ({
 import {
   AccessTokenRecord,
   buildMcpAuthorizationStartRateLimitBucketId,
+  buildMcpRevocationRateLimitBucketId,
   buildFirestoreMcpOAuthStore,
   cleanupMcpOAuthStateForUser,
   McpOAuthCleanupIncompleteError,
@@ -150,23 +151,8 @@ describe('Firestore MCP OAuth store', () => {
       set: vi.fn(),
       update: vi.fn(),
     };
-    const emptyCredentialQuery = {
-      where: vi.fn(),
-      get: vi.fn(async () => ({ docs: [] })),
-    };
-    emptyCredentialQuery.where.mockReturnValue(emptyCredentialQuery);
     const db = {
-      collection: vi.fn((name: string) => {
-        if (
-          name === MCP_OAUTH_COLLECTIONS.accessTokens
-          || name === MCP_OAUTH_COLLECTIONS.refreshTokens
-          || name === MCP_OAUTH_COLLECTIONS.authorizationCodes
-        ) {
-          return emptyCredentialQuery;
-        }
-        return fakeDocumentReference(name);
-      }),
-      recursiveDelete: vi.fn(),
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
       runTransaction: vi.fn(async (
         handler: (value: typeof transaction) => Promise<unknown>,
       ) => handler(transaction)),
@@ -174,8 +160,11 @@ describe('Firestore MCP OAuth store', () => {
     firestoreMock.mockReturnValue(db);
 
     await buildFirestoreMcpOAuthStore().revokeConnection(
-      'user-1',
-      'connection-1',
+      {
+        kind: 'owner',
+        uid: 'user-1',
+        connectionId: 'connection-1',
+      },
       5_000,
     );
 
@@ -190,8 +179,7 @@ describe('Firestore MCP OAuth store', () => {
       },
       { merge: true },
     );
-    expect(emptyCredentialQuery.get).toHaveBeenCalledTimes(3);
-    expect(db.recursiveDelete).not.toHaveBeenCalled();
+    expect(transaction.get).toHaveBeenCalledTimes(3);
   });
 
   it('atomically activates a pending connection and removes its TTL on code exchange', async () => {
@@ -360,6 +348,172 @@ describe('Firestore MCP OAuth store', () => {
       code: 'temporarily_unavailable',
       statusCode: 429,
     });
+  });
+
+  it('bounds public token revocation by both client and requester without storing raw keys', async () => {
+    const rateLimits = buildAuthorizationStartRateLimitFirestore();
+    const store = buildFirestoreMcpOAuthStore();
+    const clientId = 'https://client.example/mcp.json';
+    const requesterKey = '203.0.113.10';
+
+    for (let count = 0; count < 30; count++) {
+      await store.consumeRevocationRateLimit({
+        clientId,
+        requesterKey,
+        nowMs: 61_000,
+      });
+    }
+    await expect(store.consumeRevocationRateLimit({
+      clientId,
+      requesterKey,
+      nowMs: 61_000,
+    })).rejects.toMatchObject<McpOAuthError>({
+      code: 'temporarily_unavailable',
+      statusCode: 429,
+    });
+
+    const clientBucketId = buildMcpRevocationRateLimitBucketId(
+      'revocation_client',
+      clientId,
+      60_000,
+    );
+    expect(rateLimits.documents.get(
+      `${MCP_OAUTH_COLLECTIONS.rateLimits}/${clientBucketId}`,
+    )).toEqual(expect.objectContaining({
+      rateLimitType: 'revocation_client',
+      windowStartMs: 60_000,
+      count: 30,
+    }));
+    expect(JSON.stringify([...rateLimits.documents])).not.toContain(clientId);
+    expect(JSON.stringify([...rateLimits.documents])).not.toContain(requesterKey);
+  });
+
+  it('bounds token revocation across rotating client IDs from one requester', async () => {
+    buildAuthorizationStartRateLimitFirestore();
+    const store = buildFirestoreMcpOAuthStore();
+    const requesterKey = '203.0.113.10';
+
+    for (let count = 0; count < 60; count++) {
+      await store.consumeRevocationRateLimit({
+        clientId: `https://client-${count}.example/mcp.json`,
+        requesterKey,
+        nowMs: 61_000,
+      });
+    }
+    await expect(store.consumeRevocationRateLimit({
+      clientId: 'https://client-over-limit.example/mcp.json',
+      requesterKey,
+      nowMs: 61_000,
+    })).rejects.toMatchObject<McpOAuthError>({
+      code: 'temporarily_unavailable',
+      statusCode: 429,
+    });
+  });
+
+  it('resolves only a hashed token document and revokes its client-bound connection', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'mcpOAuthAccessTokens/submitted-token-hash') {
+          return fakeSnapshot(true, {
+            uid: 'user-1',
+            connectionId: 'connection-1',
+            clientId: 'https://client.example/mcp.json',
+            expiresAtMs: 10_000,
+          });
+        }
+        if (ref.path === 'mcpOAuthRefreshTokens/submitted-token-hash') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1') {
+          return fakeSnapshot(true);
+        }
+        if (ref.path === 'userDeletionTombstones/user-1') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1/mcpConnections/connection-1') {
+          return fakeSnapshot(true, {
+            clientId: 'https://client.example/mcp.json',
+            status: 'active',
+            revokedAtMs: null,
+          });
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+
+    await buildFirestoreMcpOAuthStore().revokeConnection({
+      kind: 'token',
+      tokenHash: 'submitted-token-hash',
+      tokenTypeHint: 'access_token',
+      clientId: 'https://client.example/mcp.json',
+    }, 5_000);
+
+    expect(transaction.get.mock.calls.map(([ref]) => ref.path)).toEqual([
+      'mcpOAuthAccessTokens/submitted-token-hash',
+      'mcpOAuthRefreshTokens/submitted-token-hash',
+      'users/user-1',
+      'userDeletionTombstones/user-1',
+      'users/user-1/mcpConnections/connection-1',
+    ]);
+    expect(transaction.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'users/user-1/mcpConnections/connection-1',
+      }),
+      {
+        status: 'revoked',
+        revokedAtMs: 5_000,
+        expireAt: { deleteField: true },
+      },
+      { merge: true },
+    );
+  });
+
+  it('does not revoke a token owned by a different public client', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'mcpOAuthAccessTokens/submitted-token-hash') {
+          return fakeSnapshot(true, {
+            uid: 'user-1',
+            connectionId: 'connection-1',
+            clientId: 'https://owner.example/mcp.json',
+            expiresAtMs: 10_000,
+          });
+        }
+        if (ref.path === 'mcpOAuthRefreshTokens/submitted-token-hash') {
+          return fakeSnapshot(false);
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+
+    await buildFirestoreMcpOAuthStore().revokeConnection({
+      kind: 'token',
+      tokenHash: 'submitted-token-hash',
+      tokenTypeHint: 'access_token',
+      clientId: 'https://other.example/mcp.json',
+    }, 5_000);
+
+    expect(transaction.get).toHaveBeenCalledTimes(2);
+    expect(transaction.set).not.toHaveBeenCalled();
+    expect(transaction.update).not.toHaveBeenCalled();
   });
 
   function buildCleanupFirestore(
@@ -721,8 +875,11 @@ describe('Firestore MCP OAuth store', () => {
     firestoreMock.mockReturnValue(db);
 
     await buildFirestoreMcpOAuthStore().revokeConnection(
-      'user-1',
-      'connection-1',
+      {
+        kind: 'owner',
+        uid: 'user-1',
+        connectionId: 'connection-1',
+      },
       5_000,
     );
 

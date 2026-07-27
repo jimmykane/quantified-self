@@ -207,6 +207,62 @@ function parseFormBody(request: Request): Record<string, unknown> {
   return parseMcpFormEncodedBody(raw);
 }
 
+export function buildMcpAuthorizationServerMetadata(baseUrl: string) {
+  return {
+    issuer: baseUrl,
+    authorization_endpoint: `${baseUrl}/oauth/authorize`,
+    token_endpoint: `${baseUrl}/oauth/token`,
+    revocation_endpoint: `${baseUrl}/oauth/revoke`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'refresh_token'],
+    token_endpoint_auth_methods_supported: ['none'],
+    revocation_endpoint_auth_methods_supported: ['none'],
+    code_challenge_methods_supported: ['S256'],
+    scopes_supported: Object.values(MCP_OAUTH_SCOPES),
+    client_id_metadata_document_supported: true,
+    resource_indicators_supported: true,
+  };
+}
+
+interface McpRevocationHttpResponse {
+  set(name: string, value: string): unknown;
+  status(statusCode: number): {
+    json(body: unknown): unknown;
+    send(body?: unknown): unknown;
+  };
+}
+
+export async function handleMcpRevocationRequest(
+  request: Request,
+  response: McpRevocationHttpResponse,
+  service: Pick<ReturnType<typeof createMcpOAuthService>, 'revokeToken'> = getOAuthService(),
+): Promise<void> {
+  noStore(response);
+  if (!isMcpFormUrlEncodedContentType(request.get('content-type'))) {
+    response.status(400).json({
+      error: 'invalid_request',
+      error_description: 'The revocation request must use application/x-www-form-urlencoded.',
+    });
+    return;
+  }
+  if (!isMcpRequestBodyWithinLimit(request.body, request.get('content-length'))) {
+    response.status(413).json({
+      error: 'invalid_request',
+      error_description: 'The revocation request body is too large.',
+    });
+    return;
+  }
+  try {
+    const params = parseFormBody(request);
+    await service.revokeToken(params, {
+      requesterKey: resolveMcpAuthorizationRequesterKey(request),
+    });
+    response.status(200).send('');
+  } catch (error) {
+    sendOAuthError(response, error);
+  }
+}
+
 export function parseMcpDateTime(value: string, field: string): number {
   if (!MCP_ISO_DATE_TIME_SCHEMA.safeParse(value).success) {
     throw new McpDataError(
@@ -977,18 +1033,7 @@ export const mcpApi = onRequest({
 
   if (request.method === 'GET' && path === '/.well-known/oauth-authorization-server') {
     response.set('Cache-Control', 'public, max-age=300');
-    response.json({
-      issuer: baseUrl,
-      authorization_endpoint: `${baseUrl}/oauth/authorize`,
-      token_endpoint: `${baseUrl}/oauth/token`,
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: ['none'],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: Object.values(MCP_OAUTH_SCOPES),
-      client_id_metadata_document_supported: true,
-      resource_indicators_supported: true,
-    });
+    response.json(buildMcpAuthorizationServerMetadata(baseUrl));
     return;
   }
 
@@ -1010,6 +1055,11 @@ export const mcpApi = onRequest({
       }
       sendOAuthError(response, error);
     }
+    return;
+  }
+
+  if (request.method === 'POST' && path === '/oauth/revoke') {
+    await handleMcpRevocationRequest(request, response);
     return;
   }
 

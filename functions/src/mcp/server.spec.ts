@@ -11,9 +11,11 @@ import {
   rejectRepeatedOAuthParameters,
 } from './oauth.service';
 import {
+  buildMcpAuthorizationServerMetadata,
   classifyMcpBearerFailure,
   createMcpServer,
   formatMcpToolError,
+  handleMcpRevocationRequest,
   isMcpFormUrlEncodedContentType,
   isMcpRequestBodyWithinLimit,
   parseMcpBearerToken,
@@ -27,6 +29,141 @@ import {
 } from './server';
 
 describe('MCP HTTP scope enforcement', () => {
+  function buildRevocationHttpHarness(input?: {
+    body?: unknown;
+    contentType?: string;
+    contentLength?: string;
+    forwardedFor?: string;
+  }) {
+    const headers = new Map<string, string>();
+    const json = vi.fn();
+    const send = vi.fn();
+    let statusCode: number | null = null;
+    const response = {
+      set: vi.fn((name: string, value: string) => {
+        headers.set(name, value);
+      }),
+      status: vi.fn((value: number) => {
+        statusCode = value;
+        return { json, send };
+      }),
+    };
+    const request = {
+      body: input?.body ?? '',
+      ip: '198.51.100.20',
+      get: (name: string) => {
+        const normalized = name.toLowerCase();
+        if (normalized === 'content-type') {
+          return input?.contentType ?? 'application/x-www-form-urlencoded';
+        }
+        if (normalized === 'content-length') {
+          return input?.contentLength;
+        }
+        if (normalized === 'x-forwarded-for') {
+          return input?.forwardedFor;
+        }
+        return undefined;
+      },
+    } as Parameters<typeof handleMcpRevocationRequest>[0];
+    return {
+      request,
+      response: response as Parameters<typeof handleMcpRevocationRequest>[1],
+      headers,
+      json,
+      send,
+      statusCode: () => statusCode,
+    };
+  }
+
+  it('advertises RFC 7009 revocation for public CIMD clients', () => {
+    expect(buildMcpAuthorizationServerMetadata('https://quantified-self.io'))
+      .toEqual(expect.objectContaining({
+        issuer: 'https://quantified-self.io',
+        token_endpoint: 'https://quantified-self.io/oauth/token',
+        revocation_endpoint: 'https://quantified-self.io/oauth/revoke',
+        token_endpoint_auth_methods_supported: ['none'],
+        revocation_endpoint_auth_methods_supported: ['none'],
+      }));
+  });
+
+  it('accepts a form-encoded server-to-server revocation request with an empty 200 response', async () => {
+    const clientId = 'https://client.example/mcp.json';
+    const harness = buildRevocationHttpHarness({
+      body: new URLSearchParams({
+        token: 'opaque-token',
+        token_type_hint: 'refresh_token',
+        client_id: clientId,
+      }).toString(),
+      forwardedFor: '203.0.113.10, 10.0.0.1',
+    });
+    const revokeToken = vi.fn().mockResolvedValue(undefined);
+
+    await handleMcpRevocationRequest(
+      harness.request,
+      harness.response,
+      { revokeToken },
+    );
+
+    expect(revokeToken).toHaveBeenCalledWith({
+      token: 'opaque-token',
+      token_type_hint: 'refresh_token',
+      client_id: clientId,
+    }, {
+      requesterKey: '203.0.113.10',
+    });
+    expect(harness.statusCode()).toBe(200);
+    expect(harness.send).toHaveBeenCalledWith('');
+    expect(harness.json).not.toHaveBeenCalled();
+    expect(harness.headers.get('Cache-Control')).toBe('no-store');
+    expect(harness.headers.get('Pragma')).toBe('no-cache');
+  });
+
+  it('maps pre-auth revocation throttling to a bounded OAuth error response', async () => {
+    const harness = buildRevocationHttpHarness({
+      body: 'token=opaque-token&client_id=https%3A%2F%2Fclient.example%2Fmcp.json',
+    });
+    const revokeToken = vi.fn().mockRejectedValue(new McpOAuthError(
+      'temporarily_unavailable',
+      'The token revocation rate limit was exceeded.',
+      429,
+    ));
+
+    await handleMcpRevocationRequest(
+      harness.request,
+      harness.response,
+      { revokeToken },
+    );
+
+    expect(harness.statusCode()).toBe(429);
+    expect(harness.headers.get('Retry-After')).toBe('60');
+    expect(harness.json).toHaveBeenCalledWith({
+      error: 'temporarily_unavailable',
+      error_description: 'The token revocation rate limit was exceeded.',
+    });
+    expect(harness.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-form revocation bodies before calling the OAuth service', async () => {
+    const harness = buildRevocationHttpHarness({
+      body: { token: 'opaque-token' },
+      contentType: 'application/json',
+    });
+    const revokeToken = vi.fn();
+
+    await handleMcpRevocationRequest(
+      harness.request,
+      harness.response,
+      { revokeToken },
+    );
+
+    expect(harness.statusCode()).toBe(400);
+    expect(harness.json).toHaveBeenCalledWith({
+      error: 'invalid_request',
+      error_description: 'The revocation request must use application/x-www-form-urlencoded.',
+    });
+    expect(revokeToken).not.toHaveBeenCalled();
+  });
+
   it('uses only canonical allowlisted origins for OAuth issuer and audience URLs', () => {
     const requestWithHost = (host: string) => ({
       get: (name: string) => name.toLowerCase() === 'x-forwarded-host' ? host : undefined,

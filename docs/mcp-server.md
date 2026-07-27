@@ -29,6 +29,7 @@ Hosting routes these paths to `mcpApi`:
 | `/.well-known/oauth-authorization-server` | OAuth authorization-server metadata |
 | `/oauth/authorize` | Starts an authorization-code request |
 | `/oauth/token` | Exchanges or refreshes an OAuth token |
+| `/oauth/revoke` | Revokes an access or refresh token and its connection grant |
 | `/mcp` | Read-only MCP Streamable HTTP endpoint |
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
@@ -109,6 +110,22 @@ omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoe
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
 parameters.
 
+The authorization-server metadata advertises the RFC 7009 revocation endpoint and
+`revocation_endpoint_auth_methods_supported: ["none"]`. Quantified Self supports public CIMD clients only: a revocation
+request is a server-to-server `POST` with an `application/x-www-form-urlencoded` body containing `token`, optional
+`token_type_hint`, and the exact HTTPS Client ID Metadata Document URL in `client_id`. There is no client secret, HTTP
+Basic client authentication, browser redirect, or revocation callback. Unknown token-type hints are ignored and the
+lookup expands across both supported token types.
+
+Revocation consumes fixed-window limits before credential lookup, hashes the submitted token immediately, and performs
+the same two primary-key Firestore reads at the access-token and refresh-token hash document IDs. The stored token must
+be unexpired and bound to the submitted `client_id`; the connection record must carry the same client ID. Rotated
+refresh-token records remain bound to their family until TTL so a concurrent rotation cannot escape a revocation retry.
+The endpoint validates the CIMD URL structurally but does not fetch it; the exact stored token and connection bindings
+are authoritative, so a revocation request cannot trigger client-controlled DNS or HTTPS work.
+Unknown, expired, already-rotated, already-revoked, and wrong-client tokens all receive the same empty HTTP 200 response
+and do not reveal whether a token existed.
+
 Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
 responses, private or loopback metadata hosts, unsupported grant types, and redirect URIs that were not registered.
 Loopback HTTP is allowed only for the client's redirect URI and is called out in the consent UI.
@@ -134,14 +151,21 @@ treated as active, and the next authorized request or refresh removes its stale 
 descendant collections by design.
 
 Browser Firestore access to every MCP collection is denied; authenticated, App Check-protected callables mediate
-consent, listing, and revocation. Revocation transactionally rechecks account-deletion state before changing the
-connection to revoked, then deletes active tokens and codes. Bearer authentication requires an active connection and
-performs the same account-deletion check before recording usage or running a tool, while account deletion recursively
-removes connection and OAuth state. OAuth cleanup reads at most 51 documents per page, deletes at most 10 document roots
-concurrently, and caps one trigger attempt at 250 deletions. The Auth deletion trigger continues mail,
-provider-identifier, and queue cleanup if that bounded pass fails or has more work, then fails retryably so Firebase
-durably invokes the idempotent cleanup again. All short-lived MCP records use `expireAt` TTL configuration in
-`firestore.indexes.json`.
+consent, listing, and dashboard revocation. Both Dashboard Disconnect and `/oauth/revoke` use the same idempotent
+transactional connection transition. It rechecks account-deletion state, changes exactly one connection to `revoked`,
+and preserves the first terminal state under concurrent requests. Bearer authentication, authorization-code exchange,
+and every refresh-token rotation require that connection to remain active, so changing this single record immediately
+invalidates every access token and every refresh token in the family without an unbounded query or deletion fan-out.
+The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation never
+deletes or changes the CIMD client.
+
+Connections > MCP remains the authoritative user control because an external client may not call the revocation
+endpoint when the user removes or uninstalls it. Bearer authentication performs the same account-deletion check before
+recording usage or running a tool, while account deletion recursively removes connection and OAuth state. OAuth cleanup
+reads at most 51 documents per page, deletes at most 10 document roots concurrently, and caps one trigger attempt at
+250 deletions. The Auth deletion trigger continues mail, provider-identifier, and queue cleanup if that bounded pass
+fails or has more work, then fails retryably so Firebase durably invokes the idempotent cleanup again. All short-lived
+MCP records use `expireAt` TTL configuration in `firestore.indexes.json`.
 
 ## Consent-page browser policy
 
@@ -545,8 +569,13 @@ deliberately.
   writing, preventing an in-flight lookup from recreating MCP state after user cleanup.
 - Public authorization starts are limited before client-metadata retrieval to 10 per client ID and 30 per requester
   address per minute.
+- Public token revocations are limited before hashed-token lookup to 30 per client ID and 60 per requester address per
+  minute. Rate-limit document IDs hash both raw keys. Each accepted endpoint request performs exactly two hash-document
+  lookups and, only for a matching token, the bounded account-guard and single-connection reads in that same
+  transaction.
 - Requests require valid IANA timezones where local date bucketing is relevant.
-- Logs must not contain bearer tokens, authorization codes, client payloads, event data, sleep data, or user IDs.
+- Logs must not contain access or refresh tokens, authorization codes, client payloads, event data, sleep data, or user
+  IDs.
 
 ## Local verification and release
 
