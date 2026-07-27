@@ -32,7 +32,9 @@ import {
   McpDataServiceDependencies,
   resolveMcpActivitySourcePath,
   resolveMcpRouteSourcePath,
+  SAFE_ACTIVITY_LOCATION_FIELDS,
 } from './data.service';
+import { McpActivityChartRateLimitError } from './activity-chart-rate-limit';
 
 function makeEvent(
   startDate: string,
@@ -141,6 +143,7 @@ function routeDocument(overrides: Record<string, unknown> = {}) {
       name: 'Ridge loop',
       createdAt: new Date('2026-06-30T10:00:00.000Z'),
       importedAt: new Date('2026-07-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-07-02T10:00:00.000Z'),
       activityTypes: [ActivityTypes.Cycling],
       routeCount: 1,
       waypointCount: 2,
@@ -384,6 +387,15 @@ describe('MCP data service', () => {
     );
   });
 
+  it('includes both start and end coordinate leaves in nearby-activity reads', () => {
+    expect(SAFE_ACTIVITY_LOCATION_FIELDS.map(field => String(field))).toEqual([
+      'stats.`Start Position`.latitudeDegrees',
+      'stats.`Start Position`.longitudeDegrees',
+      'stats.`End Position`.latitudeDegrees',
+      'stats.`End Position`.longitudeDegrees',
+    ]);
+  });
+
   it('redacts activity and route coordinates while preserving non-location summaries', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
@@ -538,6 +550,126 @@ describe('MCP data service', () => {
       expect.objectContaining({ generation: '123' }),
       1024,
     );
+  });
+
+  it('rejects incompatible chart metrics before rate limits or source access', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      event: {
+        id: 'event-1',
+        data: {
+          originalFiles: [{
+            path: 'users/user-1/events/event-1/original.fit',
+          }],
+        },
+      },
+      activities: [{
+        id: 'activity-1',
+        data: {
+          eventID: 'event-1',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+          type: ActivityTypes.Cycling,
+        },
+      }],
+    });
+
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['swim_pace'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.consumeActivityChartRateLimit).not.toHaveBeenCalled();
+    expect(dependencies.downloadActivityChartSource).not.toHaveBeenCalled();
+    expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+  });
+
+  it('does not expose parser, merge, storage, or rate-limit error details', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      event: {
+        id: 'event-1',
+        data: {
+          originalFiles: [{
+            path: 'users/user-1/events/event-1/original.fit',
+          }],
+        },
+      },
+      activities: [{
+        id: 'activity-1',
+        data: {
+          eventID: 'event-1',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+          type: ActivityTypes.Cycling,
+        },
+      }],
+    });
+
+    vi.mocked(dependencies.consumeActivityChartRateLimit)
+      .mockRejectedValueOnce(new McpActivityChartRateLimitError());
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject({
+      code: 'temporarily_unavailable',
+      message: 'Activity chart parsing is temporarily rate limited. Retry later.',
+    });
+
+    vi.mocked(dependencies.consumeActivityChartRateLimit)
+      .mockResolvedValue(undefined);
+    vi.mocked(dependencies.buildActivityChartData)
+      .mockRejectedValueOnce(new Error('parser leaked /private/storage/path.fit'));
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject({
+      code: 'detail_not_available',
+      message: 'The original activity could not be charted.',
+    });
+
+    vi.mocked(dependencies.buildActivityChartData)
+      .mockRejectedValueOnce(new Error('merge exceeded owner-secret limit'));
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject({
+      code: 'query_too_large',
+      message: 'The activity chart request exceeds a processing limit.',
+    });
   });
 
   it('returns only explicitly selected canonical numeric metrics for a referenced activity', async () => {
@@ -1212,6 +1344,7 @@ describe('MCP data service', () => {
       name: 'Ridge loop',
       createdAtMs: Date.parse('2026-06-30T10:00:00.000Z'),
       importedAtMs: Date.parse('2026-07-01T10:00:00.000Z'),
+      updatedAtMs: Date.parse('2026-07-02T10:00:00.000Z'),
       activityTypes: [ActivityTypes.Cycling],
       routeCount: 1,
       waypointCount: 2,

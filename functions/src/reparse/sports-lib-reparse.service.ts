@@ -1366,6 +1366,7 @@ export function resolveActivityEditCarryover(
     const assignmentResult = resolveActivityIdentityAssignments(
         existingComparableActivities,
         activities as ActivityIdentityLike[],
+        { allowSingleRemainingFallback: true },
     );
 
     assignmentResult.assignments.forEach((existingIndex, parsedIndex) => {

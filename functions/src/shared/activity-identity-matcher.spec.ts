@@ -75,4 +75,30 @@ describe('activity identity matcher', () => {
     expect(result.unmatchedParsedIndexes).toEqual([0, 1]);
     expect(result.unmatchedExistingIndexes).toEqual([0, 1]);
   });
+
+  it('fails closed when the only remaining parsed and persisted identities disagree', () => {
+    const result = resolveActivityIdentityAssignments([
+      identity('persisted-source', Date.parse('2026-07-01T08:00:00.000Z')),
+    ], [
+      identity('different-source', Date.parse('2026-07-02T08:00:00.000Z')),
+    ]);
+
+    expect(result.assignments.size).toBe(0);
+    expect(result.unmatchedParsedIndexes).toEqual([0]);
+    expect(result.unmatchedExistingIndexes).toEqual([0]);
+  });
+
+  it('retains the one-remaining-item fallback only when a legacy caller requests it', () => {
+    const result = resolveActivityIdentityAssignments([
+      identity('persisted-source', Date.parse('2026-07-01T08:00:00.000Z')),
+    ], [
+      identity('different-source', Date.parse('2026-07-02T08:00:00.000Z')),
+    ], {
+      allowSingleRemainingFallback: true,
+    });
+
+    expect([...result.assignments.entries()]).toEqual([[0, 0]]);
+    expect(result.unmatchedParsedIndexes).toEqual([]);
+    expect(result.unmatchedExistingIndexes).toEqual([]);
+  });
 });

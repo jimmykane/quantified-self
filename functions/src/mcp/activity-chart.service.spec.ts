@@ -1,12 +1,21 @@
 import {
   ActivityTypes,
+  DataAltitude,
+  DataAltitudeSmooth,
   DataDistance,
+  DataGrade,
+  DataGradeAdjustedPace,
+  DataGradeAdjustedSpeed,
+  DataGradeSmooth,
   DataHeartRate,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
   DataPace,
+  DataPower,
+  DataSpeed,
   DataSwimPace,
   EventImporterJSON,
+  EventUtilities,
   FileType,
   Privacy,
 } from '@sports-alliance/sports-lib';
@@ -142,7 +151,12 @@ describe('MCP on-demand activity charts', () => {
     });
     expect(parseSource.mock.calls[0][0]).toEqual(Buffer.from('prepared'));
     expect(parseSource.mock.calls[0][2].streams.includeTypes).toEqual(
-      expect.arrayContaining([DataHeartRate.type, DataDistance.type]),
+      expect.arrayContaining([
+        DataHeartRate.type,
+        DataDistance.type,
+        DataLatitudeDegrees.type,
+        DataLongitudeDegrees.type,
+      ]),
     );
     expect(JSON.stringify(result)).not.toContain('Private');
     expect(JSON.stringify(result)).not.toContain('serial');
@@ -216,6 +230,55 @@ describe('MCP on-demand activity charts', () => {
     },
   );
 
+  it('retains transitive Sports Lib derivation streams for budget accounting', async () => {
+    const startDate = Date.parse('2026-07-01T08:00:00.000Z');
+    const parsed = eventWithActivities([
+      activityJson(startDate, {
+        [DataGradeAdjustedPace.type]: [300, 295],
+        [DataGradeAdjustedSpeed.type]: [3.33, 3.39],
+        [DataSpeed.type]: [3.33, 3.39],
+        [DataGradeSmooth.type]: [1, 2],
+        [DataGrade.type]: [1, 2],
+        [DataDistance.type]: [0, 3.33],
+        [DataAltitudeSmooth.type]: [100, 101],
+        [DataAltitude.type]: [100, 101],
+        [DataLatitudeDegrees.type]: [39.1, 39.2],
+        [DataLongitudeDegrees.type]: [20.1, 20.2],
+      }),
+    ]);
+    const parseSource = vi.fn().mockResolvedValue(parsed);
+
+    const result = await getActivityChartDataFromSources({
+      sourceFiles: [{ path: 'original.fit', startDate: new Date(startDate) }],
+      existingActivities: [persistedIdentity(startDate, 2)],
+      targetExistingIndex: 0,
+    }, {
+      metrics: ['grade_adjusted_pace'],
+      xAxis: 'elapsed_time',
+    }, {
+      loadSource: vi.fn().mockResolvedValue(Buffer.from('source')),
+      parseSource,
+    });
+
+    expect(parseSource.mock.calls[0][2].streams.includeTypes).toEqual(
+      expect.arrayContaining([
+        DataGradeAdjustedPace.type,
+        DataGradeAdjustedSpeed.type,
+        DataSpeed.type,
+        DataGradeSmooth.type,
+        DataGrade.type,
+        DataDistance.type,
+        DataAltitudeSmooth.type,
+        DataAltitude.type,
+        DataLatitudeDegrees.type,
+        DataLongitudeDegrees.type,
+      ]),
+    );
+    expect(result.series[0].values).toEqual([300, 295]);
+    expect(parsed.getActivities()[0].getAllStreams().map(stream => stream.type))
+      .toEqual([DataGradeAdjustedPace.type]);
+  });
+
   it('returns an aligned bounded breadcrumb only when requested', async () => {
     const startDate = Date.parse('2026-07-01T08:00:00.000Z');
     const parsed = eventWithActivities([
@@ -247,6 +310,139 @@ describe('MCP on-demand activity charts', () => {
       returnedSampleCount: 3,
       missingSampleCount: 1,
     });
+  });
+
+  it('counts every importer-materialized stream before pruning unrequested data', async () => {
+    const startDate = Date.parse('2026-07-01T08:00:00.000Z');
+    const parsed = eventWithActivities([
+      activityJson(startDate, {
+        [DataHeartRate.type]: [100],
+        [DataPower.type]: Array.from(
+          { length: MCP_ACTIVITY_CHART_MAX_SELECTED_SAMPLES },
+          () => 200,
+        ),
+      }),
+    ]);
+
+    await expect(getActivityChartDataFromSources({
+      sourceFiles: [{ path: 'original.fit', startDate: new Date(startDate) }],
+      existingActivities: [
+        persistedIdentity(startDate, MCP_ACTIVITY_CHART_MAX_SELECTED_SAMPLES),
+      ],
+      targetExistingIndex: 0,
+    }, {
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    }, {
+      loadSource: vi.fn().mockResolvedValue(Buffer.from('source')),
+      parseSource: vi.fn().mockResolvedValue(parsed),
+    })).rejects.toThrow('selected-sample');
+  });
+
+  it('removes every stream outside the requested public chart allowlist', async () => {
+    const startDate = Date.parse('2026-07-01T08:00:00.000Z');
+    const parsed = eventWithActivities([
+      activityJson(startDate, {
+        [DataHeartRate.type]: [100, 101],
+        [DataPower.type]: [220, 225],
+        [DataPace.type]: [300, 295],
+      }),
+    ]);
+
+    await getActivityChartDataFromSources({
+      sourceFiles: [{ path: 'original.fit', startDate: new Date(startDate) }],
+      existingActivities: [persistedIdentity(startDate, 2)],
+      targetExistingIndex: 0,
+    }, {
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    }, {
+      loadSource: vi.fn().mockResolvedValue(Buffer.from('source')),
+      parseSource: vi.fn().mockResolvedValue(parsed),
+    });
+
+    expect(parsed.getActivities()[0].getStreamData(DataHeartRate.type)).toEqual([
+      100,
+      101,
+    ]);
+    expect(parsed.getActivities()[0].getAllStreams().map(stream => stream.type))
+      .toEqual([DataHeartRate.type]);
+  });
+
+  it('bounds and prunes streams materialized by multi-source merging', async () => {
+    const startDate = Date.parse('2026-07-01T08:00:00.000Z');
+    const parsedSources = [
+      eventWithActivities([
+        activityJson(startDate, { [DataHeartRate.type]: [100] }),
+      ]),
+      eventWithActivities([
+        activityJson(startDate + 60_000, { [DataHeartRate.type]: [101] }),
+      ]),
+    ];
+    const merged = eventWithActivities([
+      activityJson(startDate, {
+        [DataHeartRate.type]: [100, 101],
+        [DataPower.type]: [220, 225],
+        [DataPace.type]: [300, 295],
+      }),
+    ]);
+    const mergeSpy = vi.spyOn(EventUtilities, 'mergeEvents')
+      .mockReturnValue(merged);
+
+    try {
+      await getActivityChartDataFromSources({
+        sourceFiles: [
+          { path: 'first.fit', startDate: new Date(startDate) },
+          { path: 'second.fit', startDate: new Date(startDate + 60_000) },
+        ],
+        existingActivities: [persistedIdentity(startDate, 2)],
+        targetExistingIndex: 0,
+      }, {
+        metrics: ['heart_rate'],
+        xAxis: 'elapsed_time',
+      }, {
+        loadSource: vi.fn().mockResolvedValue(Buffer.from('source')),
+        parseSource: vi.fn()
+          .mockResolvedValueOnce(parsedSources[0])
+          .mockResolvedValueOnce(parsedSources[1]),
+      });
+
+      expect(merged.getActivities()[0].getAllStreams().map(stream => stream.type))
+        .toEqual([DataHeartRate.type]);
+
+      const oversizedMerged = eventWithActivities([
+        activityJson(startDate, {
+          [DataHeartRate.type]: [100],
+          [DataPower.type]: Array.from(
+            { length: MCP_ACTIVITY_CHART_MAX_SELECTED_SAMPLES },
+            () => 200,
+          ),
+        }),
+      ]);
+      mergeSpy.mockReturnValue(oversizedMerged);
+      await expect(getActivityChartDataFromSources({
+        sourceFiles: [
+          { path: 'first.fit', startDate: new Date(startDate) },
+          { path: 'second.fit', startDate: new Date(startDate + 60_000) },
+        ],
+        existingActivities: [persistedIdentity(startDate, 1)],
+        targetExistingIndex: 0,
+      }, {
+        metrics: ['heart_rate'],
+        xAxis: 'elapsed_time',
+      }, {
+        loadSource: vi.fn().mockResolvedValue(Buffer.from('source')),
+        parseSource: vi.fn()
+          .mockResolvedValueOnce(eventWithActivities([
+            activityJson(startDate, { [DataHeartRate.type]: [100] }),
+          ]))
+          .mockResolvedValueOnce(eventWithActivities([
+            activityJson(startDate + 60_000, { [DataHeartRate.type]: [101] }),
+          ])),
+      })).rejects.toThrow('selected-sample');
+    } finally {
+      mergeSpy.mockRestore();
+    }
   });
 
   it('spatially simplifies breadcrumbs while preserving endpoints and aligned axes', async () => {
@@ -474,7 +670,11 @@ describe('MCP on-demand activity charts', () => {
       startDate,
       endDate: startDate + 1_000,
       type: oversizedActivityType,
-      getAllStreams: () => [{ getData: () => [100, 101] }],
+      getAllStreams: () => [{
+        type: DataHeartRate.type,
+        getData: () => [100, 101],
+      }],
+      removeStream: vi.fn(),
       getStreamData: (type: string) => (
         type === DataHeartRate.type ? [100, 101] : []
       ),

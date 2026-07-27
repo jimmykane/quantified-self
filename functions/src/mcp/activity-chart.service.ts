@@ -1,12 +1,16 @@
 import {
   ActivityInterface,
+  ActivityTypeGroups,
+  ActivityTypes,
   ActivityTypesHelper,
   DataAltitude,
+  DataAltitudeSmooth,
   DataCadence,
   DataDistance,
   DataGrade,
   DataGradeAdjustedPace,
   DataGradeAdjustedSpeed,
+  DataGradeSmooth,
   DataHeartRate,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
@@ -45,17 +49,43 @@ interface ChartMetricDefinition {
   streamType: string;
   unit: string;
   aliases: readonly string[];
-  families: readonly string[];
+  availability: 'always' | 'outdoor' | 'speed-derived';
+  parserDependencyStreamTypes: readonly string[];
 }
 
-const CHART_METRICS: readonly ChartMetricDefinition[] = [
+const POSITION_STREAM_TYPES = [
+  DataLatitudeDegrees.type,
+  DataLongitudeDegrees.type,
+] as const;
+const DISTANCE_DEPENDENCY_STREAM_TYPES = [
+  ...POSITION_STREAM_TYPES,
+] as const;
+const SPEED_DEPENDENCY_STREAM_TYPES = [
+  ...POSITION_STREAM_TYPES,
+] as const;
+const GRADE_DEPENDENCY_STREAM_TYPES = [
+  DataDistance.type,
+  DataAltitudeSmooth.type,
+  DataAltitude.type,
+  ...DISTANCE_DEPENDENCY_STREAM_TYPES,
+] as const;
+const GRADE_ADJUSTED_SPEED_DEPENDENCY_STREAM_TYPES = [
+  DataSpeed.type,
+  DataGradeSmooth.type,
+  DataGrade.type,
+  ...SPEED_DEPENDENCY_STREAM_TYPES,
+  ...GRADE_DEPENDENCY_STREAM_TYPES,
+] as const;
+
+export const MCP_ACTIVITY_CHART_METRICS = [
   {
     id: 'heart_rate',
     label: 'Heart rate',
     streamType: DataHeartRate.type,
     unit: 'beats_per_minute',
     aliases: ['heart rate', 'hr', DataHeartRate.type],
-    families: ['all'],
+    availability: 'always',
+    parserDependencyStreamTypes: [],
   },
   {
     id: 'power',
@@ -63,7 +93,8 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataPower.type,
     unit: 'watts',
     aliases: ['watts', DataPower.type],
-    families: ['all'],
+    availability: 'always',
+    parserDependencyStreamTypes: [],
   },
   {
     id: 'cadence',
@@ -71,7 +102,8 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataCadence.type,
     unit: 'revolutions_per_minute',
     aliases: ['rpm', DataCadence.type],
-    families: ['all'],
+    availability: 'always',
+    parserDependencyStreamTypes: [],
   },
   {
     id: 'altitude',
@@ -79,7 +111,8 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataAltitude.type,
     unit: 'meters',
     aliases: ['elevation', DataAltitude.type],
-    families: ['outdoor'],
+    availability: 'outdoor',
+    parserDependencyStreamTypes: [],
   },
   {
     id: 'grade',
@@ -87,7 +120,8 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataGrade.type,
     unit: 'percent',
     aliases: ['slope', DataGrade.type],
-    families: ['outdoor'],
+    availability: 'outdoor',
+    parserDependencyStreamTypes: GRADE_DEPENDENCY_STREAM_TYPES,
   },
   {
     id: 'distance',
@@ -95,7 +129,8 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataDistance.type,
     unit: 'meters',
     aliases: [DataDistance.type],
-    families: ['all'],
+    availability: 'always',
+    parserDependencyStreamTypes: DISTANCE_DEPENDENCY_STREAM_TYPES,
   },
   {
     id: 'speed',
@@ -103,7 +138,8 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataSpeed.type,
     unit: 'meters_per_second',
     aliases: [DataSpeed.type],
-    families: ['all'],
+    availability: 'speed-derived',
+    parserDependencyStreamTypes: SPEED_DEPENDENCY_STREAM_TYPES,
   },
   {
     id: 'pace',
@@ -111,7 +147,11 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataPace.type,
     unit: 'seconds_per_kilometer',
     aliases: ['running pace', DataPace.type],
-    families: ['running'],
+    availability: 'speed-derived',
+    parserDependencyStreamTypes: [
+      DataSpeed.type,
+      ...SPEED_DEPENDENCY_STREAM_TYPES,
+    ],
   },
   {
     id: 'swim_pace',
@@ -119,7 +159,11 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataSwimPace.type,
     unit: 'seconds_per_100_meters',
     aliases: ['swimming pace', DataSwimPace.type],
-    families: ['swimming'],
+    availability: 'speed-derived',
+    parserDependencyStreamTypes: [
+      DataSpeed.type,
+      ...SPEED_DEPENDENCY_STREAM_TYPES,
+    ],
   },
   {
     id: 'grade_adjusted_speed',
@@ -127,7 +171,9 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataGradeAdjustedSpeed.type,
     unit: 'meters_per_second',
     aliases: ['gap speed', DataGradeAdjustedSpeed.type],
-    families: ['trail'],
+    availability: 'speed-derived',
+    parserDependencyStreamTypes:
+      GRADE_ADJUSTED_SPEED_DEPENDENCY_STREAM_TYPES,
   },
   {
     id: 'grade_adjusted_pace',
@@ -135,9 +181,13 @@ const CHART_METRICS: readonly ChartMetricDefinition[] = [
     streamType: DataGradeAdjustedPace.type,
     unit: 'seconds_per_kilometer',
     aliases: ['gap', 'grade adjusted pace', DataGradeAdjustedPace.type],
-    families: ['trail'],
+    availability: 'speed-derived',
+    parserDependencyStreamTypes: [
+      DataGradeAdjustedSpeed.type,
+      ...GRADE_ADJUSTED_SPEED_DEPENDENCY_STREAM_TYPES,
+    ],
   },
-] as const;
+] as const satisfies readonly ChartMetricDefinition[];
 
 function normalizeMetricName(value: string): string {
   return value.trim().toLowerCase().replace(/[-_\s]+/g, ' ');
@@ -145,39 +195,63 @@ function normalizeMetricName(value: string): string {
 
 function resolveMetric(value: string): ChartMetricDefinition | null {
   const normalized = normalizeMetricName(value);
-  return CHART_METRICS.find(metric => (
+  return MCP_ACTIVITY_CHART_METRICS.find(metric => (
     normalizeMetricName(metric.id) === normalized
     || metric.aliases.some(alias => normalizeMetricName(alias) === normalized)
   )) || null;
 }
 
-function activityFamily(activityType: string | undefined): string {
-  const normalized = `${activityType || ''}`.toLowerCase();
-  if (normalized.includes('trail')) {
-    return 'trail';
+function isChartMetricSupportedForActivityType(
+  metric: ChartMetricDefinition,
+  activityType: ActivityTypes,
+): boolean {
+  if (metric.availability === 'always') {
+    return true;
   }
-  if (normalized.includes('run') || normalized.includes('walk') || normalized.includes('hike')) {
-    return 'running';
+  if (metric.availability === 'outdoor') {
+    const activityGroup = ActivityTypesHelper.getActivityGroupForActivityType(
+      activityType,
+    );
+    return !ActivityTypesHelper.isIndoorActivityType(activityType)
+      && activityGroup !== ActivityTypeGroups.SwimmingGroup
+      && activityGroup !== ActivityTypeGroups.WaterSportsGroup;
   }
-  if (normalized.includes('swim')) {
-    return 'swimming';
+  const supportedDerivedTypes = new Set([
+    ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(activityType),
+    ...ActivityTypesHelper.altiDistanceSpeedDerivedDataTypesToUseForActivityType(
+      activityType,
+    ),
+  ]);
+  return supportedDerivedTypes.has(metric.streamType);
+}
+
+export function getUnsupportedActivityChartMetrics(
+  requestedMetrics: readonly string[],
+  activityType: string,
+): string[] {
+  const resolvedActivityType = ActivityTypesHelper.resolveActivityType(
+    activityType,
+  );
+  if (!resolvedActivityType) {
+    return [...requestedMetrics];
   }
-  return normalized ? 'outdoor' : 'all';
+  return requestedMetrics.filter((requestedMetric) => {
+    const metric = resolveMetric(requestedMetric);
+    return !metric
+      || !isChartMetricSupportedForActivityType(metric, resolvedActivityType);
+  });
 }
 
 export function listActivityChartMetrics(activityType?: string) {
   const resolvedType = activityType
     ? ActivityTypesHelper.resolveActivityType(activityType)
     : null;
-  const family = activityFamily(resolvedType ? String(resolvedType) : activityType);
   return {
     activityType: resolvedType ? String(resolvedType) : null,
-    metrics: CHART_METRICS
+    metrics: MCP_ACTIVITY_CHART_METRICS
       .filter(metric => (
-        !activityType
-        || metric.families.includes('all')
-        || metric.families.includes(family)
-        || (family === 'trail' && metric.families.includes('running'))
+        !resolvedType
+        || isChartMetricSupportedForActivityType(metric, resolvedType)
       ))
       .map(metric => ({
         metric: metric.id,
@@ -481,6 +555,29 @@ function buildXAxis(
   return Array.from({ length: sourceLength }, (_unused, index) => index);
 }
 
+function countMaterializedSamples(event: EventInterface): number {
+  return event.getActivities().reduce(
+    (eventSum, activity) => eventSum + activity.getAllStreams()
+      .reduce((activitySum, stream) => (
+        activitySum + stream.getData().length
+      ), 0),
+    0,
+  );
+}
+
+function pruneUnselectedStreams(
+  event: EventInterface,
+  selectedStreamTypes: ReadonlySet<string>,
+): void {
+  event.getActivities().forEach((activity) => {
+    [...activity.getAllStreams()].forEach((stream) => {
+      if (!selectedStreamTypes.has(stream.type)) {
+        activity.removeStream(stream);
+      }
+    });
+  });
+}
+
 export async function getActivityChartDataFromSources(
   context: ActivityChartSourceContext,
   input: ActivityChartDataInput,
@@ -535,12 +632,22 @@ export async function getActivityChartDataFromSources(
       ...metrics.map(metric => metric.streamType),
       ...(input.xAxis === 'distance' ? [DataDistance.type] : []),
       ...(input.includeLocation
-        ? [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
+        ? POSITION_STREAM_TYPES
         : []),
     ]),
   ];
   const selectedStreamTypes = new Set(requestedStreams);
-  let selectedSampleCount = 0;
+  const parserStreams = [
+    ...new Set([
+      ...requestedStreams,
+      ...metrics.flatMap(metric => metric.parserDependencyStreamTypes),
+      ...(input.xAxis === 'distance'
+        ? DISTANCE_DEPENDENCY_STREAM_TYPES
+        : []),
+    ]),
+  ];
+  const parserStreamTypes = new Set(parserStreams);
+  let materializedSampleCount = 0;
   for (const sourceFile of context.sourceFiles) {
     assertRuntime(startedAtMs, now);
     sourceExtension(sourceFile.path);
@@ -563,27 +670,30 @@ export async function getActivityChartDataFromSources(
     const parsedSource = await parseSource(
       prepared,
       sourceFile.path,
-      createParsingOptions({}, requestedStreams),
+      createParsingOptions({}, parserStreams),
     );
-    selectedSampleCount += parsedSource.getActivities().reduce(
-      (eventSum, parsedActivity) => eventSum + [...selectedStreamTypes].reduce(
-        (activitySum, streamType) => (
-          activitySum + parsedActivity.getStreamData(streamType).length
-        ),
-        0,
-      ),
-      0,
-    );
-    if (selectedSampleCount > MCP_ACTIVITY_CHART_MAX_SELECTED_SAMPLES) {
+    materializedSampleCount += countMaterializedSamples(parsedSource);
+    if (materializedSampleCount > MCP_ACTIVITY_CHART_MAX_SELECTED_SAMPLES) {
       throw new ActivityChartBudgetError(
         'The requested activity streams exceed the selected-sample limit.',
       );
     }
+    // Sports Lib prunes importer-only derivation dependencies to includeTypes
+    // before returning. Keep the explicit dependency closure through merging so
+    // every materialized chart/dependency sample remains budget-accounted.
+    pruneUnselectedStreams(parsedSource, parserStreamTypes);
     events.push(parsedSource);
     assertRuntime(startedAtMs, now);
   }
 
   const parsedEvent = events.length === 1 ? events[0] : EventUtilities.mergeEvents(events);
+  if (countMaterializedSamples(parsedEvent) > MCP_ACTIVITY_CHART_MAX_SELECTED_SAMPLES) {
+    throw new ActivityChartBudgetError(
+      'The merged activity streams exceed the selected-sample limit.',
+    );
+  }
+  pruneUnselectedStreams(parsedEvent, selectedStreamTypes);
+  assertRuntime(startedAtMs, now);
   const parsedActivities = parsedEvent.getActivities();
   const assignments = resolveActivityIdentityAssignments(
     context.existingActivities,

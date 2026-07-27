@@ -21,6 +21,15 @@ export interface ActivityIdentityAssignmentResult {
   unmatchedExistingIndexes: number[];
 }
 
+export interface ActivityIdentityAssignmentOptions {
+  /**
+   * Preserves the legacy reparse carry-over behavior when exactly one parsed
+   * and persisted activity remain. Read-only consumers must leave this false
+   * so a mismatched identity fails closed.
+   */
+  allowSingleRemainingFallback?: boolean;
+}
+
 function toTimestampMs(value: unknown): number | null {
   if (value instanceof Date) {
     return Number.isFinite(value.getTime()) ? value.getTime() : null;
@@ -135,6 +144,7 @@ function assignUniqueMatches(
 export function resolveActivityIdentityAssignments(
   existing: readonly ActivityIdentityLike[],
   parsed: readonly ActivityIdentityLike[],
+  options: ActivityIdentityAssignmentOptions = {},
 ): ActivityIdentityAssignmentResult {
   const assignments = new Map<number, number>();
   const usedExisting = new Set<number>();
@@ -154,7 +164,11 @@ export function resolveActivityIdentityAssignments(
   const unmatchedExistingIndexes = existing
     .map((_activity, index) => index)
     .filter(index => !usedExisting.has(index));
-  if (unmatchedParsedIndexes.length === 1 && unmatchedExistingIndexes.length === 1) {
+  if (
+    options.allowSingleRemainingFallback === true
+    && unmatchedParsedIndexes.length === 1
+    && unmatchedExistingIndexes.length === 1
+  ) {
     assignments.set(unmatchedParsedIndexes[0], unmatchedExistingIndexes[0]);
     return {
       assignments,

@@ -98,6 +98,7 @@ import {
   ActivityChartServiceDependencies,
   ActivityChartSourceContext,
   getActivityChartDataFromSources,
+  getUnsupportedActivityChartMetrics,
   listActivityChartMetrics,
   MCP_ACTIVITY_CHART_MAX_SOURCE_FILES,
 } from './activity-chart.service';
@@ -173,7 +174,7 @@ const SAFE_ACTIVITY_SUMMARY_FIELDS = [
   ...SAFE_SUMMARY_STAT_FIELDS,
   new FieldPath('stats', 'Jump Count'),
 ] as const;
-const SAFE_ACTIVITY_LOCATION_FIELDS = [
+export const SAFE_ACTIVITY_LOCATION_FIELDS = [
   new FieldPath('stats', DataStartPosition.type, 'latitudeDegrees'),
   new FieldPath('stats', DataStartPosition.type, 'longitudeDegrees'),
   new FieldPath('stats', DataEndPosition.type, 'latitudeDegrees'),
@@ -611,6 +612,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'powerMeter',
         'trainer',
         ...SAFE_ACTIVITY_SUMMARY_FIELDS,
+        ...SAFE_ACTIVITY_LOCATION_FIELDS,
       );
     if (cursor) {
       query = query.startAfter(new Date(cursor.timeMs), cursor.id);
@@ -741,6 +743,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'name',
         'createdAt',
         'importedAt',
+        'updatedAt',
         'activityTypes',
         'routeCount',
         'waypointCount',
@@ -2356,6 +2359,7 @@ interface SafeRouteListEntry {
     name: string;
     createdAtMs: number | null;
     importedAtMs: number;
+    updatedAtMs: number | null;
     activityTypes: string[];
     routeCount: number | null;
     waypointCount: number | null;
@@ -2611,6 +2615,7 @@ function projectRouteListEntry(
       name,
       createdAtMs: asTimestampMs(document.data.createdAt),
       importedAtMs,
+      updatedAtMs: asTimestampMs(document.data.updatedAt),
       activityTypes: normalizeActivityTypes(document.data.activityTypes),
       routeCount: asSafeInteger(document.data.routeCount),
       waypointCount: asSafeInteger(document.data.waypointCount),
@@ -2907,6 +2912,24 @@ async function getActivityChartData(
       'The referenced activity is not available for charting.',
     );
   }
+  const targetActivityType = normalizeActivityType(
+    context.activities[targetExistingIndex].data.type,
+  );
+  if (!targetActivityType) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The referenced activity type is not available for charting.',
+    );
+  }
+  if (
+    getUnsupportedActivityChartMetrics(input.metrics, targetActivityType)
+      .length > 0
+  ) {
+    throw new McpDataError(
+      'invalid_metric',
+      'One or more chart metrics are not supported for this activity type.',
+    );
+  }
   const sourceFiles = extractActivityChartSourceFiles(context.event.data);
   if (
     sourceFiles.length === 0
@@ -2940,18 +2963,21 @@ async function getActivityChartData(
       throw error;
     }
     if (error instanceof McpActivityChartRateLimitError) {
-      throw new McpDataError('temporarily_unavailable', error.message);
+      throw new McpDataError(
+        'temporarily_unavailable',
+        'Activity chart parsing is temporarily rate limited. Retry later.',
+      );
     }
     const message = error instanceof Error ? error.message : '';
     if (/limit|exceed|bounded/i.test(message)) {
       throw new McpDataError(
         'query_too_large',
-        message || 'The activity chart request exceeds a processing limit.',
+        'The activity chart request exceeds a processing limit.',
       );
     }
     throw new McpDataError(
       'detail_not_available',
-      message || 'The original activity could not be charted.',
+      'The original activity could not be charted.',
     );
   }
 }
