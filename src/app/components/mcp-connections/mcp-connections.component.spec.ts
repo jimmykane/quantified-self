@@ -16,11 +16,13 @@ describe('McpConnectionsComponent', () => {
     redirectHost: 'client.example',
     scopes: [
       'metrics:read',
+      'measurements:read',
       'sleep:read',
       'activity-details:read',
       'routes:read',
     ] as Array<
       | 'metrics:read'
+      | 'measurements:read'
       | 'sleep:read'
       | 'activity-details:read'
       | 'routes:read'
@@ -63,7 +65,8 @@ describe('McpConnectionsComponent', () => {
 
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Training Copilot');
-    expect(content).toContain('Activity, body measurements, and Training metrics');
+    expect(content).toContain('Activity and Training metrics');
+    expect(content).toContain('Body measurements');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('Saved routes and waypoints');
@@ -123,7 +126,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('no active connection is created');
     expect(content).toContain('Authorization and data access');
     expect(content).toContain('any combination of these access categories');
-    expect(content).toContain('metrics and body measurements');
+    expect(content).toContain('metrics, body measurements');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',

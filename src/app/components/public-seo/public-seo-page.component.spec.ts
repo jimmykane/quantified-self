@@ -87,7 +87,8 @@ describe('PublicSeoPageComponent', () => {
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
     expect(text).toContain('Connect ChatGPT to your training data with a read-only MCP server');
-    expect(text).toContain('Activity, body measurements, and Training metrics');
+    expect(text).toContain('Activity, body measurement, and Training analysis');
+    expect(text).toContain('body measurements, individual activity details');
     expect(text).toContain('identity-free body-weight history');
     expect(text).toContain('Sleep sessions and summaries');
     expect(text).toContain('Saved routes and nearby search');

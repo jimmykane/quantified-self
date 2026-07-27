@@ -37,7 +37,9 @@ interface McpMeasurementDefinition {
   currentTrend: {
     tool: 'get_training_metric';
     metricKind: DerivedMetricKind;
+    requiredScope: 'metrics:read';
     windowDays: number;
+    dayBoundaryTimeZone: 'UTC';
     readiness: 'ready_snapshot_required';
   };
 }
@@ -52,6 +54,7 @@ export interface McpMeasurementDescriptor {
   defaultInterval: McpMeasurementInterval;
   supportedIntervals: readonly McpMeasurementInterval[];
   maximumRangeDays: 366;
+  requiresExplicitIanaTimeZone: true;
   currentTrend: McpMeasurementDefinition['currentTrend'];
 }
 
@@ -85,7 +88,9 @@ const MCP_MEASUREMENT_DEFINITIONS: Record<
     currentTrend: {
       tool: 'get_training_metric',
       metricKind: DERIVED_METRIC_KINDS.BodyWeightTrend,
+      requiredScope: 'metrics:read',
       windowDays: 28,
+      dayBoundaryTimeZone: 'UTC',
       readiness: 'ready_snapshot_required',
     },
   },
@@ -118,6 +123,7 @@ export function getMcpMeasurementCatalog(): McpMeasurementDescriptor[] {
       defaultInterval: definition.defaultInterval,
       supportedIntervals: definition.supportedIntervals,
       maximumRangeDays: 366,
+      requiresExplicitIanaTimeZone: true,
       currentTrend: definition.currentTrend,
     }];
   });
@@ -133,6 +139,15 @@ export function resolveMcpMeasurementDefinition(
       normalizeMeasurementType(definition.id) === normalized
       || definition.aliases.some(alias => normalizeMeasurementType(alias) === normalized)
     )) || null;
+}
+
+export function isFirstClassMcpMeasurementMetric(
+  canonicalMetricType: string,
+): boolean {
+  return MCP_MEASUREMENT_TYPE_IDS.some(id => (
+    MCP_MEASUREMENT_DEFINITIONS[id].canonicalMetricType
+    === canonicalMetricType
+  ));
 }
 
 export function isMcpMeasurementValueAllowed(

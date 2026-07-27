@@ -411,6 +411,16 @@ describe('MCP data service', () => {
       uid: 'user-1',
       connectionId: 'connection-1',
       activityRef,
+      metrics: [DataWeight.type],
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.fetchActivityMetricDocument).not.toHaveBeenCalled();
+
+    await expect(service.getActivityMetrics({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
       metrics: Array.from({ length: 26 }, () => DataDistance.type),
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_request',
@@ -1753,6 +1763,44 @@ describe('MCP data service', () => {
     ]);
   });
 
+  it('keeps first-class measurements out of generic metric discovery and queries', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([{
+      id: 'weight-1',
+      data: {
+        startDate: Date.parse('2026-07-26T08:00:00.000Z'),
+        stats: {
+          [DataWeight.type]: 71.2,
+          [DataDistance.type]: 5_000,
+        },
+      },
+    }]);
+    const service = createMcpDataService(dependencies);
+
+    const catalog = await service.listMetrics({
+      uid: 'user-1',
+    });
+    expect(catalog.eventMetrics.map(metric => metric.type)).toContain(
+      DataDistance.type,
+    );
+    expect(catalog.eventMetrics.map(metric => metric.type)).not.toContain(
+      DataWeight.type,
+    );
+
+    await expect(service.queryMetric({
+      uid: 'user-1',
+      metric: DataWeight.type,
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'average',
+      groupBy: 'date',
+      interval: 'daily',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+  });
+
   it('returns identity-free daily median body-weight measurements in an IANA timezone', async () => {
     vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
       {
@@ -1831,6 +1879,42 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('private-source-key');
     expect(serialized).not.toContain('private-previous-source');
     expect(serialized).not.toContain('Private scale');
+  });
+
+  it('keeps even-count medians finite when all persisted values are finite', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
+      {
+        id: 'weight-extreme-1',
+        data: {
+          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
+          stats: { [DataWeight.type]: Number.MAX_VALUE },
+        },
+      },
+      {
+        id: 'weight-extreme-2',
+        data: {
+          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
+          stats: { [DataWeight.type]: Number.MAX_VALUE },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(result.points).toEqual([{
+      bucketStartTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      value: Number.MAX_VALUE,
+      measurementCount: 2,
+    }]);
+    expect(Number.isFinite(result.points[0].value)).toBe(true);
   });
 
   it('supports natural body-weight aliases and latest-within-bucket aggregation', async () => {

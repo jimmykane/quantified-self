@@ -12,6 +12,7 @@ import { LoggerService } from '../../services/logger.service';
 
 type McpScope =
   | 'metrics:read'
+  | 'measurements:read'
   | 'sleep:read'
   | 'activity-details:read'
   | 'routes:read';
@@ -21,8 +22,12 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   description: string;
 }> = {
   'metrics:read': {
-    title: 'Activity, body measurements, and Training metrics',
-    description: 'Read persisted numeric activity metrics, bounded identity-free body-measurement history such as weight, and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
+    title: 'Activity and Training metrics',
+    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
+  },
+  'measurements:read': {
+    title: 'Body measurements',
+    description: 'Read bounded identity-free body-measurement history such as weight. Values are grouped by day, week, or month; exact source timestamps, event or activity identity, provider, device, and source details are excluded.',
   },
   'sleep:read': {
     title: 'Sleep summaries',

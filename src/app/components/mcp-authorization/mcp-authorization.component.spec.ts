@@ -31,6 +31,7 @@ describe('McpAuthorizationComponent', () => {
             redirectHost: 'client.example',
             scopes: [
               'metrics:read',
+              'measurements:read',
               'sleep:read',
               'activity-details:read',
               'routes:read',
@@ -72,8 +73,10 @@ describe('McpAuthorizationComponent', () => {
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Training Copilot');
     expect(content).toContain('https://client.example/oauth/callback');
-    expect(content).toContain('Activity, body measurements, and Training metrics');
-    expect(content).toContain('bounded identity-free body-measurement history such as weight');
+    expect(content).toContain('Activity and Training metrics');
+    expect(content).toContain('Body measurements');
+    expect(content).toContain('Read bounded identity-free body-measurement history such as weight');
+    expect(content).toContain('exact source timestamps');
     expect(content).toContain('selected canonical numeric metrics for one activity');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
@@ -136,6 +139,7 @@ describe('McpAuthorizationComponent', () => {
       approved: true,
       grantedScopes: [
         'metrics:read',
+        'measurements:read',
         'sleep:read',
         'activity-details:read',
         'routes:read',

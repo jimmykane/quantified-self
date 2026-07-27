@@ -266,10 +266,30 @@ async function runReadOnlyTool(
   }
 }
 
+function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
+  const instructions = [
+    'Use only the read-only tools exposed for the permissions this connection was granted.',
+  ];
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
+    instructions.push(
+      'Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment.',
+    );
+  }
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
+    instructions.push(
+      'Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics.',
+    );
+  }
+  return instructions.join(' ');
+}
+
 export function createMcpServer(
   auth: AuthenticatedMcpRequest,
   publicBaseUrl: string,
 ): McpServer {
+  const measurementToolsAvailable = auth.scopes.includes(
+    MCP_OAUTH_SCOPES.MeasurementsRead,
+  );
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
@@ -282,10 +302,10 @@ export function createMcpServer(
       sizes: [...icon.sizes],
     })),
   }, {
-    instructions: 'Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics.',
+    instructions: buildMcpServerInstructions(auth),
   });
 
-  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
+  if (measurementToolsAvailable) {
     server.registerTool('list_measurement_types', {
       title: 'List body measurement types',
       description: 'List first-class personal measurement capabilities such as body weight, including units, supported trend aggregations, date intervals, range limits, and the optional current Training snapshot.',
@@ -311,7 +331,10 @@ export function createMcpServer(
           'latest',
         ]).default('median'),
         interval: z.enum(['day', 'week', 'month']).default('day'),
-        timeZone: z.string().min(1).max(80),
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Required IANA time zone used for day, week, and month boundaries.'),
       },
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -326,10 +349,14 @@ export function createMcpServer(
         timeZone: input.timeZone,
       }),
     ));
+  }
 
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
     server.registerTool('list_metrics', {
       title: 'List available activity and Training metrics',
-      description: 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities. For body weight or other personal measurements, use list_measurement_types.',
+      description: measurementToolsAvailable
+        ? 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities. For body weight or other personal measurements, use list_measurement_types.'
+        : 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities.',
       inputSchema: {
         search: z.string().max(120).optional(),
         cursor: z.string().max(256).optional(),
@@ -345,7 +372,9 @@ export function createMcpServer(
 
     server.registerTool('query_metric', {
       title: 'Query an activity or event metric',
-      description: 'Aggregate one persisted numeric Sports Lib activity or event metric over a bounded date range. For body weight, body mass, weigh-ins, or measurement trends, use query_measurements.',
+      description: measurementToolsAvailable
+        ? 'Aggregate one persisted numeric Sports Lib activity or event metric over a bounded date range. For body weight, body mass, weigh-ins, or measurement trends, use query_measurements.'
+        : 'Aggregate one persisted numeric Sports Lib activity or event metric over a bounded date range.',
       inputSchema: {
         metric: z.string().min(1).max(160),
         start: MCP_ISO_DATE_TIME_SCHEMA,
@@ -381,7 +410,9 @@ export function createMcpServer(
 
     server.registerTool('get_training_metric', {
       title: 'Get a Training metric',
-      description: 'Read one ready Training-derived snapshot without event or activity identifiers and labels. The body_weight_trend kind is a current 28-day Training snapshot; use query_measurements for explicit body-weight history.',
+      description: measurementToolsAvailable
+        ? 'Read one ready Training-derived snapshot without event or activity identifiers and labels. The body_weight_trend kind is a current 28-day Training snapshot; use query_measurements for explicit body-weight history.'
+        : 'Read one ready Training-derived snapshot without event or activity identifiers and labels. The body_weight_trend kind is a current 28-day Training snapshot.',
       inputSchema: {
         metricKind: z.string().min(1).max(120),
       },
@@ -686,6 +717,10 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   if ([
     'list_measurement_types',
     'query_measurements',
+  ].includes(toolName)) {
+    return [MCP_OAUTH_SCOPES.MeasurementsRead];
+  }
+  if ([
     'list_metrics',
     'query_metric',
     'get_training_metric',

@@ -18,6 +18,7 @@ interface McpConnection {
   redirectHost: string;
   scopes: Array<
     | 'metrics:read'
+    | 'measurements:read'
     | 'sleep:read'
     | 'activity-details:read'
     | 'routes:read'
@@ -53,7 +54,8 @@ export class McpConnectionsComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly revokingConnectionId = signal<string | null>(null);
   readonly scopeLabels: Record<McpConnection['scopes'][number], string> = {
-    'metrics:read': 'Activity, body measurements, and Training metrics',
+    'metrics:read': 'Activity and Training metrics',
+    'measurements:read': 'Body measurements',
     'sleep:read': 'Sleep summaries',
     'activity-details:read': 'Individual activity details',
     'routes:read': 'Saved routes and waypoints',

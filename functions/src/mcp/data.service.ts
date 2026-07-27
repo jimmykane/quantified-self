@@ -67,6 +67,7 @@ import {
 } from './metric-catalog';
 import {
   getMcpMeasurementCatalog,
+  isFirstClassMcpMeasurementMetric,
   isMcpMeasurementValueAllowed,
   McpMeasurementAggregation,
   McpMeasurementDescriptor,
@@ -1608,9 +1609,14 @@ function aggregateMeasurementBucket(
     case 'median': {
       const sorted = [...values].sort((left, right) => left - right);
       const middle = Math.floor(sorted.length / 2);
-      return sorted.length % 2 === 0
-        ? (sorted[middle - 1] + sorted[middle]) / 2
-        : sorted[middle];
+      if (sorted.length % 2 !== 0) {
+        return sorted[middle];
+      }
+      const lower = sorted[middle - 1];
+      const upper = sorted[middle];
+      return lower < 0 && upper > 0
+        ? (lower + upper) / 2
+        : lower + ((upper - lower) / 2);
     }
     case 'average':
       return values.reduce((average, value, index) => (
@@ -2505,7 +2511,7 @@ async function getActivityMetrics(
       );
     }
     const metric = resolveSportsLibNumericMetric(requestedType);
-    if (!metric) {
+    if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
       throw new McpDataError(
         'invalid_metric',
         'Each activity metric must be a supported numeric Sports Lib type.',
@@ -2594,7 +2600,7 @@ export function createMcpDataService(
         scannedDocs
           .filter(doc => !isBenchmarkEventForTrainingMetrics(doc.data))
           .map(doc => doc.data.stats as Record<string, unknown> | undefined),
-      );
+      ).filter(metric => !isFirstClassMcpMeasurementMetric(metric.type));
       const search = `${input.search || ''}`.trim().toLowerCase();
       const filtered = available.filter(metric => (
         (!search || `${metric.type} ${metric.displayType} ${metric.unit}`.toLowerCase().includes(search))
@@ -2620,7 +2626,7 @@ export function createMcpDataService(
       validateBoundedRange(input.startTimeMs, input.endTimeMs);
       const timeZone = requireTimeZone(input.timeZone);
       const metric = resolveSportsLibNumericMetric(input.metric);
-      if (!metric) {
+      if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
         throw new McpDataError('invalid_metric', 'The metric is not a supported numeric Sports Lib type.');
       }
       const activityTypes = resolveActivityTypes(input.activityTypes);

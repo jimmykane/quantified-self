@@ -35,9 +35,13 @@ describe('MCP client access policy', () => {
     expect(topic?.title).toBe('MCP Client Access');
     expect(topic?.summary).toContain('body-measurement');
     expect(content).toContain('one or more requested read-only permissions');
-    expect(content).toContain('excludes precise latitude/longitude metrics');
+    expect(content).toContain(
+      'excludes precise latitude/longitude and first-class body-measurement metrics',
+    );
     expect(content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
-    expect(content).toContain('Metric and body-measurement permission');
+    expect(content).toContain('Metric permission');
+    expect(content).toContain('Body-measurement permission');
+    expect(content).toContain('do not automatically gain body-measurement');
     expect(content).toContain('bounded body-measurement history');
     expect(content).toContain('identity-free day, week, or month values');
     expect(content).toContain('range of at most 366 days');

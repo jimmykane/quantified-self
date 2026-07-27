@@ -273,11 +273,12 @@ function authorizationParams(verifier: string) {
 }
 
 describe('MCP OAuth service', () => {
-  it('accepts the separate activity-detail and saved-route read scopes', () => {
+  it('accepts each independent read scope', () => {
     expect(normalizeOAuthScopes(
-      'metrics:read activity-details:read routes:read sleep:read',
+      'metrics:read measurements:read activity-details:read routes:read sleep:read',
     )).toEqual([
       MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.MeasurementsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.RoutesRead,
       MCP_OAUTH_SCOPES.SleepRead,

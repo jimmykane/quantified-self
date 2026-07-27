@@ -62,7 +62,7 @@ describe('MCP HTTP scope enforcement', () => {
     )).toBe('unknown');
   });
 
-  it('requires metrics scope for metrics tools', () => {
+  it('requires independent metrics and measurement scopes', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'query_metric' },
@@ -70,11 +70,11 @@ describe('MCP HTTP scope enforcement', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'query_measurements' },
-    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+    })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'list_measurement_types' },
-    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+    })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -135,10 +135,14 @@ describe('MCP HTTP scope enforcement', () => {
 
     await expect(listToolNames([MCP_OAUTH_SCOPES.MetricsRead])).resolves.toEqual([
       'get_training_metric',
-      'list_measurement_types',
       'list_metrics',
-      'query_measurements',
       'query_metric',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.MeasurementsRead,
+    ])).resolves.toEqual([
+      'list_measurement_types',
+      'query_measurements',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
       'list_sleep_sessions',
@@ -162,9 +166,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
-      'list_measurement_types',
       'list_metrics',
-      'query_measurements',
       'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
@@ -181,7 +183,10 @@ describe('MCP HTTP scope enforcement', () => {
       uid: 'user-1',
       clientId: 'https://client.example/mcp.json',
       connectionId: 'connection-1',
-      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      scopes: [
+        MCP_OAUTH_SCOPES.MeasurementsRead,
+        MCP_OAUTH_SCOPES.MetricsRead,
+      ],
     }, 'https://quantified-self.io');
     const client = new Client({
       name: 'measurement-metadata-test-client',
@@ -195,6 +200,10 @@ describe('MCP HTTP scope enforcement', () => {
       const listMeasurements = tools.find(tool => tool.name === 'list_measurement_types');
       const queryMeasurements = tools.find(tool => tool.name === 'query_measurements');
       const queryMetric = tools.find(tool => tool.name === 'query_metric');
+      const measurementCatalog = await client.callTool({
+        name: 'list_measurement_types',
+        arguments: {},
+      });
 
       expect(client.getInstructions()).toContain('body weight, body mass, weigh-ins');
       expect(client.getInstructions()).toContain('not a medical or health assessment');
@@ -215,7 +224,20 @@ describe('MCP HTTP scope enforcement', () => {
           interval: {
             default: 'day',
           },
+          timeZone: {
+            description: expect.stringContaining('Required IANA time zone'),
+          },
         },
+      });
+      expect(measurementCatalog.structuredContent).toMatchObject({
+        measurementTypes: [{
+          id: 'body_weight',
+          requiresExplicitIanaTimeZone: true,
+          currentTrend: {
+            requiredScope: 'metrics:read',
+            dayBoundaryTimeZone: 'UTC',
+          },
+        }],
       });
       expect(queryMeasurements?.annotations).toMatchObject({
         readOnlyHint: true,
@@ -223,6 +245,67 @@ describe('MCP HTTP scope enforcement', () => {
         idempotentHint: true,
         openWorldHint: false,
       });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('does not instruct connections to use tools outside their granted scopes', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.SleepRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'sleep-instructions-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getInstructions()).toContain(
+        'tools exposed for the permissions this connection was granted',
+      );
+      expect(client.getInstructions()).not.toContain('query_measurements');
+      expect(client.getInstructions()).not.toContain('list_metrics');
+      expect(client.getInstructions()).not.toContain('body weight');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('does not advertise measurement routing to a metrics-only connection', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'metrics-instructions-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const advertisedMetadata = JSON.stringify({
+        instructions: client.getInstructions(),
+        tools: (await client.listTools()).tools,
+      });
+
+      expect(advertisedMetadata).not.toContain('query_measurements');
+      expect(advertisedMetadata).not.toContain('list_measurement_types');
+      expect(client.getInstructions()).toContain(
+        'Use list_metrics and query_metric for activity',
+      );
     } finally {
       await client.close();
       await server.close();

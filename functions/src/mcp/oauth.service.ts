@@ -12,6 +12,7 @@ import {
 
 export const MCP_OAUTH_SCOPES = {
   MetricsRead: 'metrics:read',
+  MeasurementsRead: 'measurements:read',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
   RoutesRead: 'routes:read',

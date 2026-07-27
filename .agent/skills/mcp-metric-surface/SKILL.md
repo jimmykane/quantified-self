@@ -47,9 +47,11 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 4. Treat `functions/src/mcp/metric-catalog.ts`, `functions/src/mcp/measurement-catalog.ts`, and
    `functions/src/mcp/data.service.ts` as the MCP projection boundary. Expand allowlists deliberately; do not return
    whole Firestore documents.
-5. Keep OAuth scopes least-privilege: `metrics:read`, `sleep:read`, `activity-details:read`, and `routes:read` remain
-   independent grants. Keep queries bounded, references/cursors UID-and-connection-bound, and tools read-only. Update
-   OAuth metadata, consent, Settings, Help, policies, and `docs/mcp-server.md` when the user-visible contract moves.
+5. Keep OAuth scopes least-privilege: `metrics:read`, `measurements:read`, `sleep:read`, `activity-details:read`, and
+   `routes:read` remain independent grants. First-class measurement types must also be excluded from generic and
+   per-activity metric paths so those tools cannot bypass `measurements:read`. Keep queries bounded, references/cursors
+   UID-and-connection-bound, and tools read-only. Update OAuth metadata, consent, Settings, Help, policies, and
+   `docs/mcp-server.md` when the user-visible contract moves.
 6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby
    sensitive fields, confirm historical persistence/reparse expectations, review the Firestore query/index shape, and
    document units and operational limits. A Sports Lib export alone never authorizes MCP exposure.
@@ -59,7 +61,7 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 Add or update focused tests for:
 
 - automatic Sports Lib discovery and alias canonicalization;
-- first-class measurement catalog resolution, positive/valid value handling, timezone/DST bucketing, aggregation,
+- first-class measurement catalog resolution, measurement-specific value validation, timezone/DST bucketing, aggregation,
   range/work/response limits, missing history, and explicit identity/provenance exclusion;
 - persistence availability and any reparse expectation;
 - Training ready-state handling and identity redaction;

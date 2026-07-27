@@ -6,6 +6,7 @@ import {
 } from '../../../shared/derived-metrics';
 import {
   getMcpMeasurementCatalog,
+  isFirstClassMcpMeasurementMetric,
   isMcpMeasurementValueAllowed,
   resolveMcpMeasurementDefinition,
 } from './measurement-catalog';
@@ -31,10 +32,13 @@ describe('MCP measurement catalog', () => {
       defaultInterval: 'day',
       supportedIntervals: ['day', 'week', 'month'],
       maximumRangeDays: 366,
+      requiresExplicitIanaTimeZone: true,
       currentTrend: {
         tool: 'get_training_metric',
         metricKind: DERIVED_METRIC_KINDS.BodyWeightTrend,
+        requiredScope: 'metrics:read',
         windowDays: 28,
+        dayBoundaryTimeZone: 'UTC',
         readiness: 'ready_snapshot_required',
       },
     }]);
@@ -45,6 +49,8 @@ describe('MCP measurement catalog', () => {
 
     expect(bodyWeight?.id).toBe('body_weight');
     expect(bodyWeight?.canonicalMetricType).toBe(DataWeight.type);
+    expect(isFirstClassMcpMeasurementMetric(DataWeight.type)).toBe(true);
+    expect(isFirstClassMcpMeasurementMetric('Latitude')).toBe(false);
     expect(resolveMcpMeasurementDefinition('latitude')).toBeNull();
   });
 

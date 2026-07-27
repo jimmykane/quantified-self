@@ -79,8 +79,9 @@ behavior.
 
 The server implements OAuth authorization code with PKCE S256 and refresh-token rotation. It supports:
 
-- `metrics:read` for event metrics, bounded identity-free body-measurement history, ready Training-derived snapshots,
-  and selected per-activity metrics when `activity-details:read` is also granted;
+- `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
+  `activity-details:read` is also granted;
+- `measurements:read` for bounded identity-free first-class body-measurement history;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, start/end proximity
   searches, laps, swim lengths, and MTB jumps; and
@@ -206,8 +207,8 @@ The analytics and map entries follow the
 
 | Tool | Scope | Result |
 | --- | --- | --- |
-| `list_measurement_types` | `metrics:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
-| `query_measurements` | `metrics:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
+| `list_measurement_types` | `measurements:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
+| `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
@@ -262,7 +263,8 @@ Adding a numeric Sports Lib class still does not silently expose it as a body me
 The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` values in persisted event stats.
 `list_measurement_types` describes its kilogram storage unit, median default, supported median/average/minimum/maximum/
 latest aggregations, day/week/month intervals, 366-day range limit, and the optional ready
-`body_weight_trend` Training snapshot.
+`body_weight_trend` Training snapshot, including that snapshot's separate `metrics:read` requirement and UTC day
+boundary.
 
 `query_measurements` reads the same bounded event pages as `query_metric`, excludes benchmark merges, resolves the
 requested persisted value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
@@ -272,10 +274,11 @@ ID, exact source measurement timestamp, activity type, event/activity identity, 
 or source provenance. Multiple same-bucket values default to a median; `latest` means the chronologically latest value
 inside that bucket. The capability describes these as recorded values, not a medical or health assessment.
 
-The generic `query_metric` path continues to accept `Weight` for backward compatibility, but MCP instructions and tool
-descriptions direct body-weight, body-mass, weigh-in, history, and trend requests to the first-class measurement tools.
-The existing `body_weight_trend` snapshot remains the fast 28-day Training view, not the historical measurement API.
-No new Firestore collection, composite index, persistence format, reparse, or backfill is required.
+The generic metric discovery, `query_metric`, and per-activity metric paths exclude canonical first-class measurement
+types, so `metrics:read` cannot bypass the separate `measurements:read` grant. Existing clients must complete
+authorization for the new scope before the measurement tools are registered. The existing `body_weight_trend` snapshot
+remains the fast 28-day Training view under the pre-existing Training metric permission, not the historical measurement
+API. No new Firestore collection, composite index, persistence format, reparse, or backfill is required.
 
 To add another first-class measurement, add one explicit semantic definition backed by an already eligible canonical
 Sports Lib numeric type, define its value-validity rule, supported aggregations and intervals, and user-facing meaning,

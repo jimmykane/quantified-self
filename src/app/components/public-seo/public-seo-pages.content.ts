@@ -349,7 +349,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         items: [
           {
             icon: 'monitoring',
-            title: 'Activity, body measurements, and Training metrics',
+            title: 'Activity, body measurement, and Training analysis',
             copy: 'Discover available activity metrics, query bounded identity-free body-weight history by day, week, or month, and inspect ready Training analysis such as load, readiness, intensity, durability, and sport-specific evidence.',
           },
           {
@@ -377,7 +377,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Activity metrics, body measurements, and Training share one metric grant; individual activity details, sleep summaries, and saved routes remain independent grants. Adding a separate category requires another explicit approval.',
+            copy: 'Activity and Training metrics, body measurements, individual activity details, sleep summaries, and saved routes are independent grants. Existing connections do not gain a new category without another explicit approval.',
           },
           {
             icon: 'lock',
