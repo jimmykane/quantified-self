@@ -431,6 +431,17 @@ describe('EventCardLapsComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
     });
 
+    it('should keep the metric search field within the lap column menu', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),
+            'utf8',
+        );
+
+        expect(styles).toContain('.lap-column-search-field');
+        expect(styles).toContain('box-sizing: border-box;');
+        expect(styles).toContain('width: calc(100% - 32px) !important;');
+    });
+
     it('should not render the index column header icon', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.html'),

@@ -50,8 +50,10 @@
 }
 
 .lap-column-search-field {
+  box-sizing: border-box;
   display: block;
   margin: 12px 16px 0;
+  width: calc(100% - 32px) !important;
 }
 
 .lap-column-menu-empty {
