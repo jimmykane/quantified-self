@@ -491,6 +491,8 @@ describe('help.content', () => {
     expect(plansSection?.content).toContain(`Up to **${USAGE_LIMITS.basic.toLocaleString('en-US')} activities**`);
     expect(plansSection?.content).toContain(`Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
     expect(plansSection?.content).toContain('**Unlimited saved routes**');
+    expect(plansSection?.content).toContain('public pricing page shows the exact trial length as an offer for eligible new members');
+    expect(plansSection?.content).toContain('Trial eligibility is confirmed after sign-in');
     expect(plansSection?.content).toContain('Existing activities and routes are retained. New uploads follow your current plan limits.');
     expect(uploadsSection?.content).toContain(`**Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
     expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
