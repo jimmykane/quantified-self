@@ -254,9 +254,9 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
-  it('marks MCP and Wahoo discovery surfaces as recently updated in sitemap', () => {
+  it('marks recently updated public discovery surfaces in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-07-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-07-26');

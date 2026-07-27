@@ -102,6 +102,11 @@ describe('PublicPricingComponent', () => {
         expect(text).toContain('Pro');
         expect(text).toContain('30-day free trial for eligible new members');
         expect(text).not.toContain('Verifying subscription');
+
+        const planHeadings = Array.from(
+            fixture.nativeElement.querySelectorAll('h2.plan-title') as NodeListOf<HTMLHeadingElement>,
+        ).map((heading) => heading.textContent?.trim());
+        expect(planHeadings).toEqual(['Starter', 'Basic', 'Pro']);
     });
 
     it('keeps the loading state independent from membership verification', () => {
@@ -111,8 +116,11 @@ describe('PublicPricingComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent as string;
+        const loadingState = fixture.debugElement.query(By.css('.loading-state'));
         expect(text).toContain('Loading plans...');
         expect(text).not.toContain('Verifying subscription');
+        expect(loadingState.attributes['role']).toBe('status');
+        expect(loadingState.attributes['aria-live']).toBe('polite');
     });
 
     it('routes every plan choice through login to the membership area', () => {
@@ -120,6 +128,12 @@ describe('PublicPricingComponent', () => {
         const buttons = fixture.debugElement.queryAll(By.css('button[data-plan-role]'));
 
         expect(buttons).toHaveLength(4);
+        expect(buttons.map((button) => button.attributes['aria-label'])).toEqual([
+            'Starter: Start Free',
+            'Basic: Choose Monthly',
+            'Basic: Choose Yearly',
+            'Pro: Choose Monthly',
+        ]);
         for (const button of buttons) {
             button.triggerEventHandler('click');
         }
@@ -234,6 +248,38 @@ describe('buildPublicPricingCatalog', () => {
         }]);
 
         expect(catalog.plans.map((plan) => plan.role)).toEqual(['free', 'basic']);
+        expect(catalog.paidPlansUnavailable).toBe(false);
+    });
+
+    it('ignores malformed prices without hiding valid prices from the same plan', () => {
+        const basicProduct = PAID_PRODUCTS[0];
+        const validPrice = basicProduct.prices?.[0];
+        expect(validPrice).toBeTruthy();
+
+        const catalog = buildPublicPricingCatalog([{
+            ...basicProduct,
+            prices: [
+                {
+                    ...validPrice!,
+                    id: 'price_invalid_currency',
+                    currency: 'not-a-currency',
+                },
+                {
+                    ...validPrice!,
+                    id: 'price_non_finite',
+                    unit_amount: Number.NaN,
+                },
+                {
+                    ...validPrice!,
+                    id: 'price_fractional_minor_units',
+                    unit_amount: 499.5,
+                },
+                validPrice!,
+            ],
+        }]);
+        const basicPlan = catalog.plans.find((plan) => plan.role === 'basic');
+
+        expect(basicPlan?.prices.map((price) => price.id)).toEqual(['price_basic_monthly']);
         expect(catalog.paidPlansUnavailable).toBe(false);
     });
 });

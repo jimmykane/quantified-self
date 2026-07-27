@@ -18,7 +18,9 @@
           [class.basic-card]="plan.role === 'basic'"
           [class.free-card]="plan.role === 'free'">
           <mat-card-header>
-            <mat-card-title>{{ plan.title }}</mat-card-title>
+            <mat-card-title>
+              <h2 class="plan-title">{{ plan.title }}</h2>
+            </mat-card-title>
             <mat-card-subtitle>{{ plan.subtitle }}</mat-card-subtitle>
           </mat-card-header>
 
@@ -65,6 +67,7 @@
                     type="button"
                     [attr.data-plan-role]="plan.role"
                     [attr.data-price-id]="price.id"
+                    [attr.aria-label]="plan.title + ': ' + price.ctaLabel"
                     (click)="continueToMembership()">
                     {{ price.ctaLabel }}
                   </button>
@@ -75,6 +78,7 @@
                     class="subscribe-btn qs-mat-primary"
                     [attr.data-plan-role]="plan.role"
                     [attr.data-price-id]="price.id"
+                    [attr.aria-label]="plan.title + ': ' + price.ctaLabel"
                     (click)="continueToMembership()">
                     {{ price.ctaLabel }}
                   </button>
@@ -90,7 +94,7 @@
       }
     </div>
   } @else {
-    <div class="loading-state">
+    <div class="loading-state" role="status" aria-live="polite">
       <mat-spinner diameter="40"></mat-spinner>
       <p>Loading plans...</p>
     </div>

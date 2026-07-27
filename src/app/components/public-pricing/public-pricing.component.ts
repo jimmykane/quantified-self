@@ -158,11 +158,12 @@ function buildPaidPlan(product: StripeProduct): PublicPlanViewModel | null {
 function buildPaidPrice(product: StripeProduct, price: StripePrice): PublicPlanPriceViewModel {
     const cadence = getRecurringCadence(price);
     const amountMinor = price.unit_amount ?? 0;
+    const currency = normalizeCurrency(price.currency) ?? 'USD';
 
     return {
         id: price.id,
         amount: amountMinor / 100,
-        currency: price.currency.toUpperCase(),
+        currency,
         digitsInfo: amountMinor % 100 === 0 ? '1.0-0' : '1.2-2',
         intervalLabel: cadence ? getIntervalLabel(cadence) : null,
         ctaLabel: cadence ? getCtaLabel(cadence) : 'Choose Plan',
@@ -171,7 +172,7 @@ function buildPaidPrice(product: StripeProduct, price: StripePrice): PublicPlanP
         showYearlySwitchHint: cadence?.interval === 'month'
             && (product.prices ?? []).some((candidate) => isDisplayablePaidPrice(candidate)
                 && getRecurringCadence(candidate)?.interval === 'year'
-                && candidate.currency.toLowerCase() === price.currency.toLowerCase()),
+                && normalizeCurrency(candidate.currency) === currency),
     };
 }
 
@@ -179,8 +180,20 @@ function isDisplayablePaidPrice(price: StripePrice): boolean {
     return price.active
         && price.type === 'recurring'
         && typeof price.unit_amount === 'number'
+        && Number.isFinite(price.unit_amount)
+        && Number.isInteger(price.unit_amount)
         && price.unit_amount > 0
+        && normalizeCurrency(price.currency) !== null
         && getRecurringCadence(price) !== null;
+}
+
+function normalizeCurrency(currency: unknown): string | null {
+    if (typeof currency !== 'string') {
+        return null;
+    }
+
+    const normalizedCurrency = currency.trim().toUpperCase();
+    return /^[A-Z]{3}$/.test(normalizedCurrency) ? normalizedCurrency : null;
 }
 
 function normalizePaidRole(role: string | null | undefined): 'basic' | 'pro' | null {
@@ -331,7 +344,7 @@ function getYearlySavingsLabel(product: StripeProduct, price: StripePrice): stri
         .filter((candidate) => candidate.id !== price.id
             && isDisplayablePaidPrice(candidate)
             && getRecurringCadence(candidate)?.interval === 'month')
-        .filter((candidate) => candidate.currency.toLowerCase() === price.currency.toLowerCase());
+        .filter((candidate) => normalizeCurrency(candidate.currency) === normalizeCurrency(price.currency));
     const monthlyPrice = monthlyPrices.find((candidate) => getRecurringCadence(candidate)?.intervalCount === 1)
         ?? monthlyPrices[0];
     const monthlyAnnualizedAmount = monthlyPrice ? getAnnualizedAmount(monthlyPrice) : null;
@@ -349,7 +362,10 @@ function getYearlySavingsLabel(product: StripeProduct, price: StripePrice): stri
 }
 
 function getAnnualizedAmount(price: StripePrice): number | null {
-    if (typeof price.unit_amount !== 'number' || price.unit_amount <= 0) {
+    if (typeof price.unit_amount !== 'number'
+        || !Number.isFinite(price.unit_amount)
+        || !Number.isInteger(price.unit_amount)
+        || price.unit_amount <= 0) {
         return null;
     }
 
