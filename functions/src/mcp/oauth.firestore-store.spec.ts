@@ -182,6 +182,48 @@ describe('Firestore MCP OAuth store', () => {
     expect(transaction.get).toHaveBeenCalledTimes(3);
   });
 
+  it('preserves the first terminal state when a concurrent revocation already won', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'users/user-1') {
+          return fakeSnapshot(true);
+        }
+        if (ref.path === 'userDeletionTombstones/user-1') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1/mcpConnections/connection-1') {
+          return fakeSnapshot(true, {
+            status: 'revoked',
+            revokedAtMs: 4_000,
+          });
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+
+    await buildFirestoreMcpOAuthStore().revokeConnection(
+      {
+        kind: 'owner',
+        uid: 'user-1',
+        connectionId: 'connection-1',
+      },
+      5_000,
+    );
+
+    expect(transaction.get).toHaveBeenCalledTimes(3);
+    expect(transaction.set).not.toHaveBeenCalled();
+    expect(transaction.update).not.toHaveBeenCalled();
+  });
+
   it('atomically activates a pending connection and removes its TTL on code exchange', async () => {
     const transaction = {
       get: vi.fn(async (ref: FakeDocumentReference) => {
@@ -512,6 +554,58 @@ describe('Firestore MCP OAuth store', () => {
     }, 5_000);
 
     expect(transaction.get).toHaveBeenCalledTimes(2);
+    expect(transaction.set).not.toHaveBeenCalled();
+    expect(transaction.update).not.toHaveBeenCalled();
+  });
+
+  it('does not revoke when the token and connection client bindings disagree', async () => {
+    const transaction = {
+      get: vi.fn(async (ref: FakeDocumentReference) => {
+        if (ref.path === 'mcpOAuthAccessTokens/submitted-token-hash') {
+          return fakeSnapshot(true, {
+            uid: 'user-1',
+            connectionId: 'connection-1',
+            clientId: 'https://client.example/mcp.json',
+            expiresAtMs: 10_000,
+          });
+        }
+        if (ref.path === 'mcpOAuthRefreshTokens/submitted-token-hash') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1') {
+          return fakeSnapshot(true);
+        }
+        if (ref.path === 'userDeletionTombstones/user-1') {
+          return fakeSnapshot(false);
+        }
+        if (ref.path === 'users/user-1/mcpConnections/connection-1') {
+          return fakeSnapshot(true, {
+            clientId: 'https://different-client.example/mcp.json',
+            status: 'active',
+            revokedAtMs: null,
+          });
+        }
+        throw new Error(`Unexpected Firestore read: ${ref.path}`);
+      }),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    const db = {
+      collection: vi.fn((name: string) => fakeDocumentReference(name)),
+      runTransaction: vi.fn(async (
+        handler: (value: typeof transaction) => Promise<unknown>,
+      ) => handler(transaction)),
+    };
+    firestoreMock.mockReturnValue(db);
+
+    await buildFirestoreMcpOAuthStore().revokeConnection({
+      kind: 'token',
+      tokenHash: 'submitted-token-hash',
+      tokenTypeHint: 'access_token',
+      clientId: 'https://client.example/mcp.json',
+    }, 5_000);
+
+    expect(transaction.get).toHaveBeenCalledTimes(5);
     expect(transaction.set).not.toHaveBeenCalled();
     expect(transaction.update).not.toHaveBeenCalled();
   });
