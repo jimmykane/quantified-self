@@ -219,7 +219,8 @@ The `resource` value and token audience must exactly match the public `/mcp` URL
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
 SHA-256 hashes, expire after one hour, and are audience-bound. Refresh tokens expire after 30 days and rotate on use.
 When a refresh request narrows the connection grant, previously issued access tokens with broader scopes stop working.
-Reuse of an already-rotated refresh token revokes the connection and makes active descendant tokens unusable.
+Reuse of an already-rotated refresh token revokes its current grant and makes active descendant tokens unusable. A replay
+from an older grant generation cannot revoke a replacement grant or cancel a separately approved reauthorization.
 Authorization codes are single-use and expire after five minutes. A valueless OAuth `state` parameter is treated as
 omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoed exactly.
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
@@ -257,22 +258,51 @@ Firestore holds short-lived OAuth records in:
 - `mcpOAuthRateLimits`.
 
 Connection metadata lives at `users/{uid}/mcpConnections/{connectionId}` and follows `pending -> active -> revoked`.
-Approval creates a pending record whose `expireAt` matches the five-minute authorization-code expiry. The successful
-code-exchange transaction creates the credentials, changes the connection to active, stamps `lastUsedAtMs`, and removes
-`expireAt` atomically. Connections lists active records only. For compatibility, pre-lifecycle records with a non-null
-`lastUsedAtMs` remain active, while old unexchanged records with no usage are hidden. Firestore TTL removes new abandoned
-pending records. A mixed-version rollout is also recoverable: a pending record with completed-exchange usage evidence is
-treated as active, and the next authorized request or refresh removes its stale TTL. Connection documents have no
-descendant collections by design.
+For current records, `connectionId` is a SHA-256-derived document-safe identifier over the exact verified CIMD
+`client_id`. The user subcollection supplies the account boundary, giving one logical connection per account and exact
+client identity without storing the client ID in a document path. Do not normalize or derive identity from the client
+name, redirect host, or user agent.
+
+The first approval creates a pending record whose `expireAt` matches the five-minute authorization-code expiry. Approval
+for an existing logical connection records only the latest pending code hash and expiry; it does not change the current
+status, scopes, client display metadata, grant generation, or TTL. The successful code-exchange transaction must match
+that latest unexpired marker. It creates credentials, assigns a new refresh-family-backed `grantId`, replaces the
+connection scopes and display metadata, changes the connection to active, stamps `lastUsedAtMs`, and removes pending
+markers and `expireAt` atomically. Until that exchange commits, an existing active grant remains usable and an existing
+revocation remains authoritative. Therefore failed or abandoned reauthorization cannot replace a live grant, while a
+successful reauthorization invalidates the previous generation without creating a second visible connection.
+
+Connections lists active records only. A canonical active or revoked record with `supersedesLegacy` hides and
+transactionally invalidates older random-ID records for the same exact client. A canonical pending record does not
+suppress a completed legacy connection, which keeps mixed-version rollouts usable until cutover succeeds. Pre-lifecycle
+records with a non-null `lastUsedAtMs` remain active while no canonical suppressor exists; old unexchanged records with no
+usage are hidden. Canonical active records fail closed if their `grantId` is missing, while legacy random-ID records
+without a generation retain their compatibility path until superseded. Firestore TTL removes first-time abandoned
+pending records and authorization-code documents; an expired marker on a live connection is inert and can be replaced
+by a later approval. Connection documents have no descendant collections by design. Grant-generation, pending-marker,
+suppressor, and connection-audience fields are read only through document-ID lookups and are exempt from automatic
+single-field indexing; the existing `createdAtMs` ordering remains the only connection-list query requirement.
 
 Browser Firestore access to every MCP collection is denied; authenticated, App Check-protected callables mediate
-consent, listing, and dashboard revocation. Both Dashboard Disconnect and `/oauth/revoke` use the same idempotent
-transactional connection transition. It rechecks account-deletion state, changes exactly one connection to `revoked`,
-and preserves the first terminal state under concurrent requests. Bearer authentication, authorization-code exchange,
-and every refresh-token rotation require that connection to remain active, so changing this single record immediately
-invalidates every access token and every refresh token in the family without an unbounded query or deletion fan-out.
-The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation never
-deletes or changes the CIMD client.
+consent, listing, and dashboard revocation. The list callable returns an explicit display allowlist and never exposes
+`grantId`, pending-code hashes, suppressor flags, audience, status, or revocation internals. Dashboard Disconnect is an
+owner-authoritative logical-client operation: it rechecks account-deletion state, clears any pending authorization
+marker, preserves an existing terminal timestamp, and creates or updates the canonical revoked suppressor even when the
+selected legacy row was already revoked. This makes all older duplicate records for that exact client unusable and
+hidden without affecting a different CIMD client.
+
+`/oauth/revoke` is intentionally grant-scoped. It revokes only when the submitted token belongs to the connection's
+current `grantId`; an old-generation token receives the normal private HTTP 200 response but cannot revoke a replacement.
+Grant-scoped token revocation and current-family refresh replay preserve a separately approved pending authorization.
+The Firestore transaction conflict rules make both race orders safe: if old-grant revocation commits first, the pending
+code can still activate its replacement; if code exchange commits first, the stale revocation retries against the new
+generation and becomes a no-op. Owner Disconnect instead cancels both the current grant and pending replacement.
+
+Bearer authentication and refresh rotation validate the active connection, exact client binding, canonical legacy
+suppressor, scopes, and grant generation both before and inside the transactional usage write. Changing the canonical
+record therefore invalidates the superseded access and refresh credentials without an unbounded query or deletion
+fan-out. The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation
+never deletes or changes the CIMD client.
 
 Connections > MCP remains the authoritative user control because an external client may not call the revocation
 endpoint when the user removes or uninstalls it. Bearer authentication performs the same account-deletion check before

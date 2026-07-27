@@ -107,7 +107,7 @@ export class McpConnectionsComponent implements OnInit {
         connectionId: connection.connectionId,
       });
       this.connections.update(connections =>
-        connections.filter(current => current.connectionId !== connection.connectionId));
+        connections.filter(current => current.clientId !== connection.clientId));
       this.snackBar.open(`${connection.clientName} was disconnected.`, undefined, { duration: 4000 });
     } catch (error) {
       this.logger.error('[McpConnectionsComponent] Failed to revoke MCP connection', error);

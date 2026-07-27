@@ -69,10 +69,14 @@ describe('MCP client access policy', () => {
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('stored server-side only as hashes');
     expect(content).toContain('becomes active and appears in Connections only after');
-    expect(content).toContain('Abandoned pending approvals expire automatically');
+    expect(content).toContain('same exact verified client identity');
+    expect(content).toContain('leaves its current grant usable');
+    expect(content).toContain('rather than creating another logical connection');
+    expect(content).toContain('Failed or abandoned reauthorization does not replace');
     expect(content).toContain('Connections -> MCP');
     expect(content).toContain('standard server-to-server token-revocation endpoint');
     expect(content).toContain('Disconnect in Connections remains the authoritative control');
+    expect(content).toContain('any older duplicate records');
     expect(content).toContain('without affecting other MCP clients');
     expect(content).toContain('retain data it already received');
   });

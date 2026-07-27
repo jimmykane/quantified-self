@@ -179,6 +179,30 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('does not index internal MCP grant-coordination fields that are read only by document ID', () => {
+        const config = loadFirestoreIndexes();
+        const unindexedFields = [
+            ['mcpOAuthAuthorizationCodes', 'clientName'],
+            ['mcpOAuthAuthorizationCodes', 'redirectHost'],
+            ['mcpConnections', 'audience'],
+            ['mcpConnections', 'grantId'],
+            ['mcpConnections', 'supersedesLegacy'],
+            ['mcpConnections', 'pendingAuthorizationCodeHash'],
+            ['mcpConnections', 'pendingAuthorizationApprovedAtMs'],
+            ['mcpConnections', 'pendingAuthorizationExpiresAtMs'],
+            ['mcpOAuthAccessTokens', 'grantId'],
+        ];
+
+        for (const [collectionGroup, fieldPath] of unindexedFields) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup,
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
+    });
+
     it('keeps dashboard route preview recency query deployable', () => {
         const config = loadFirestoreIndexes();
 

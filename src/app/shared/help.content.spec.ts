@@ -828,10 +828,14 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');
+    expect(dataAndPrivacySection?.content).toContain('keeps its current grant usable');
+    expect(dataAndPrivacySection?.content).toContain('instead of creating another logical connection');
     expect(dataAndPrivacySection?.content).toContain('Failed or abandoned authorization attempts');
+    expect(dataAndPrivacySection?.content).toContain('do not replace an existing grant');
     expect(dataAndPrivacySection?.content).toContain('standard server-to-server token revocation');
     expect(dataAndPrivacySection?.content).toContain('Disconnect** in Connections remains the authoritative control');
-    expect(dataAndPrivacySection?.content).toContain('without affecting your other clients');
+    expect(dataAndPrivacySection?.content).toContain('any older duplicate records');
+    expect(dataAndPrivacySection?.content).toContain('without affecting your other MCP clients');
   });
 
   it('directs account deletion to the Account settings section', () => {
