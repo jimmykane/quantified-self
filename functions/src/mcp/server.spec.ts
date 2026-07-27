@@ -11,9 +11,11 @@ import {
   rejectRepeatedOAuthParameters,
 } from './oauth.service';
 import {
+  buildMcpAuthorizationServerMetadata,
   classifyMcpBearerFailure,
   createMcpServer,
   formatMcpToolError,
+  handleMcpRevocationRequest,
   isMcpFormUrlEncodedContentType,
   isMcpRequestBodyWithinLimit,
   parseMcpBearerToken,
@@ -27,6 +29,141 @@ import {
 } from './server';
 
 describe('MCP HTTP scope enforcement', () => {
+  function buildRevocationHttpHarness(input?: {
+    body?: unknown;
+    contentType?: string;
+    contentLength?: string;
+    forwardedFor?: string;
+  }) {
+    const headers = new Map<string, string>();
+    const json = vi.fn();
+    const send = vi.fn();
+    let statusCode: number | null = null;
+    const response = {
+      set: vi.fn((name: string, value: string) => {
+        headers.set(name, value);
+      }),
+      status: vi.fn((value: number) => {
+        statusCode = value;
+        return { json, send };
+      }),
+    };
+    const request = {
+      body: input?.body ?? '',
+      ip: '198.51.100.20',
+      get: (name: string) => {
+        const normalized = name.toLowerCase();
+        if (normalized === 'content-type') {
+          return input?.contentType ?? 'application/x-www-form-urlencoded';
+        }
+        if (normalized === 'content-length') {
+          return input?.contentLength;
+        }
+        if (normalized === 'x-forwarded-for') {
+          return input?.forwardedFor;
+        }
+        return undefined;
+      },
+    } as Parameters<typeof handleMcpRevocationRequest>[0];
+    return {
+      request,
+      response: response as Parameters<typeof handleMcpRevocationRequest>[1],
+      headers,
+      json,
+      send,
+      statusCode: () => statusCode,
+    };
+  }
+
+  it('advertises RFC 7009 revocation for public CIMD clients', () => {
+    expect(buildMcpAuthorizationServerMetadata('https://quantified-self.io'))
+      .toEqual(expect.objectContaining({
+        issuer: 'https://quantified-self.io',
+        token_endpoint: 'https://quantified-self.io/oauth/token',
+        revocation_endpoint: 'https://quantified-self.io/oauth/revoke',
+        token_endpoint_auth_methods_supported: ['none'],
+        revocation_endpoint_auth_methods_supported: ['none'],
+      }));
+  });
+
+  it('accepts a form-encoded server-to-server revocation request with an empty 200 response', async () => {
+    const clientId = 'https://client.example/mcp.json';
+    const harness = buildRevocationHttpHarness({
+      body: new URLSearchParams({
+        token: 'opaque-token',
+        token_type_hint: 'refresh_token',
+        client_id: clientId,
+      }).toString(),
+      forwardedFor: '203.0.113.10, 10.0.0.1',
+    });
+    const revokeToken = vi.fn().mockResolvedValue(undefined);
+
+    await handleMcpRevocationRequest(
+      harness.request,
+      harness.response,
+      { revokeToken },
+    );
+
+    expect(revokeToken).toHaveBeenCalledWith({
+      token: 'opaque-token',
+      token_type_hint: 'refresh_token',
+      client_id: clientId,
+    }, {
+      requesterKey: '203.0.113.10',
+    });
+    expect(harness.statusCode()).toBe(200);
+    expect(harness.send).toHaveBeenCalledWith('');
+    expect(harness.json).not.toHaveBeenCalled();
+    expect(harness.headers.get('Cache-Control')).toBe('no-store');
+    expect(harness.headers.get('Pragma')).toBe('no-cache');
+  });
+
+  it('maps pre-auth revocation throttling to a bounded OAuth error response', async () => {
+    const harness = buildRevocationHttpHarness({
+      body: 'token=opaque-token&client_id=https%3A%2F%2Fclient.example%2Fmcp.json',
+    });
+    const revokeToken = vi.fn().mockRejectedValue(new McpOAuthError(
+      'temporarily_unavailable',
+      'The token revocation rate limit was exceeded.',
+      429,
+    ));
+
+    await handleMcpRevocationRequest(
+      harness.request,
+      harness.response,
+      { revokeToken },
+    );
+
+    expect(harness.statusCode()).toBe(429);
+    expect(harness.headers.get('Retry-After')).toBe('60');
+    expect(harness.json).toHaveBeenCalledWith({
+      error: 'temporarily_unavailable',
+      error_description: 'The token revocation rate limit was exceeded.',
+    });
+    expect(harness.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-form revocation bodies before calling the OAuth service', async () => {
+    const harness = buildRevocationHttpHarness({
+      body: { token: 'opaque-token' },
+      contentType: 'application/json',
+    });
+    const revokeToken = vi.fn();
+
+    await handleMcpRevocationRequest(
+      harness.request,
+      harness.response,
+      { revokeToken },
+    );
+
+    expect(harness.statusCode()).toBe(400);
+    expect(harness.json).toHaveBeenCalledWith({
+      error: 'invalid_request',
+      error_description: 'The revocation request must use application/x-www-form-urlencoded.',
+    });
+    expect(revokeToken).not.toHaveBeenCalled();
+  });
+
   it('uses only canonical allowlisted origins for OAuth issuer and audience URLs', () => {
     const requestWithHost = (host: string) => ({
       get: (name: string) => name.toLowerCase() === 'x-forwarded-host' ? host : undefined,
@@ -62,11 +199,19 @@ describe('MCP HTTP scope enforcement', () => {
     )).toBe('unknown');
   });
 
-  it('requires metrics scope for metrics tools', () => {
+  it('requires independent metrics and measurement scopes', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'query_metric' },
     })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'query_measurements' },
+    })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'list_measurement_types' },
+    })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -84,15 +229,41 @@ describe('MCP HTTP scope enforcement', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'get_route_geometry' },
-    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    })).toEqual([
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'find_activities_near_location' },
-    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    })).toEqual([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'find_routes_near_location' },
-    })).toEqual([MCP_OAUTH_SCOPES.RoutesRead]);
+    })).toEqual([
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: {
+        name: 'get_activity_chart_data',
+        arguments: { includeLocation: false },
+      },
+    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: {
+        name: 'get_activity_chart_data',
+        arguments: { includeLocation: true },
+      },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'get_activity_metrics' },
@@ -130,13 +301,20 @@ describe('MCP HTTP scope enforcement', () => {
       'list_metrics',
       'query_metric',
     ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.MeasurementsRead,
+    ])).resolves.toEqual([
+      'list_measurement_types',
+      'query_measurements',
+    ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
       'list_sleep_sessions',
       'query_sleep_summary',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
-      'find_activities_near_location',
+      'get_activity_chart_data',
       'list_activities',
+      'list_activity_chart_metrics',
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
@@ -145,10 +323,11 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
     ])).resolves.toEqual([
-      'find_activities_near_location',
+      'get_activity_chart_data',
       'get_activity_metrics',
       'get_training_metric',
       'list_activities',
+      'list_activity_chart_metrics',
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
@@ -156,11 +335,178 @@ describe('MCP HTTP scope enforcement', () => {
       'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
+      'list_routes',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ])).resolves.toEqual([
       'find_routes_near_location',
       'get_route_geometry',
       'list_route_waypoints',
       'list_routes',
     ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ])).resolves.toEqual([
+      'find_activities_near_location',
+      'get_activity_chart_data',
+      'list_activities',
+      'list_activity_chart_metrics',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+      MCP_OAUTH_SCOPES.RoutesRead,
+    ])).resolves.toEqual([
+      'find_activities_near_location',
+      'get_activity_chart_data',
+      'list_activities',
+      'list_activity_chart_metrics',
+      'list_activity_jumps',
+      'list_activity_laps',
+      'list_activity_swim_lengths',
+      'list_routes',
+    ]);
+  });
+
+  it('advertises first-class body-measurement routing and safe tool metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [
+        MCP_OAUTH_SCOPES.MeasurementsRead,
+        MCP_OAUTH_SCOPES.MetricsRead,
+      ],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'measurement-metadata-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tools = (await client.listTools()).tools;
+      const listMeasurements = tools.find(tool => tool.name === 'list_measurement_types');
+      const queryMeasurements = tools.find(tool => tool.name === 'query_measurements');
+      const queryMetric = tools.find(tool => tool.name === 'query_metric');
+      const measurementCatalog = await client.callTool({
+        name: 'list_measurement_types',
+        arguments: {},
+      });
+
+      expect(client.getInstructions()).toContain('body weight, body mass, weigh-ins');
+      expect(client.getInstructions()).toContain('not a medical or health assessment');
+      expect(client.getInstructions()).toContain('Use list_metrics and query_metric for activity');
+      expect(listMeasurements?.description).toContain('body weight');
+      expect(queryMeasurements?.description).toContain('identity-free');
+      expect(queryMeasurements?.description).toContain('provider, device, source, event, and activity identity are excluded');
+      expect(queryMeasurements?.description).toContain('not a medical or health assessment');
+      expect(queryMetric?.description).toContain('use query_measurements');
+      expect(queryMeasurements?.inputSchema).toMatchObject({
+        properties: {
+          measurementType: {
+            enum: ['body_weight'],
+          },
+          aggregation: {
+            default: 'median',
+          },
+          interval: {
+            default: 'day',
+          },
+          timeZone: {
+            description: expect.stringContaining('Required IANA time zone'),
+          },
+        },
+      });
+      expect(measurementCatalog.structuredContent).toMatchObject({
+        measurementTypes: [{
+          id: 'body_weight',
+          requiresExplicitIanaTimeZone: true,
+          currentTrend: {
+            requiredScope: 'metrics:read',
+            dayBoundaryTimeZone: 'UTC',
+          },
+        }],
+      });
+      expect(queryMeasurements?.annotations).toMatchObject({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('does not instruct connections to use tools outside their granted scopes', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.SleepRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'sleep-instructions-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getInstructions()).toContain(
+        'tools exposed for the permissions this connection was granted',
+      );
+      expect(client.getInstructions()).not.toContain('query_measurements');
+      expect(client.getInstructions()).not.toContain('list_metrics');
+      expect(client.getInstructions()).not.toContain('body weight');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('does not advertise measurement routing to a metrics-only connection', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'metrics-instructions-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const advertisedMetadata = JSON.stringify({
+        instructions: client.getInstructions(),
+        tools: (await client.listTools()).tools,
+      });
+
+      expect(advertisedMetadata).not.toContain('query_measurements');
+      expect(advertisedMetadata).not.toContain('list_measurement_types');
+      expect(client.getInstructions()).toContain(
+        'Use list_metrics and query_metric for activity',
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('marks place-search tools as read-only operations that may call Mapbox', async () => {
@@ -171,7 +517,9 @@ describe('MCP HTTP scope enforcement', () => {
       connectionId: 'connection-1',
       scopes: [
         MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead,
         MCP_OAUTH_SCOPES.RoutesRead,
+        MCP_OAUTH_SCOPES.RouteLocationRead,
       ],
     }, 'https://quantified-self.io');
     const client = new Client({
@@ -205,7 +553,10 @@ describe('MCP HTTP scope enforcement', () => {
       uid: 'user-1',
       clientId: 'https://client.example/mcp.json',
       connectionId: 'connection-1',
-      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead,
+      ],
     }, 'https://quantified-self.io');
     const client = new Client({
       name: 'schema-test-client',
@@ -239,7 +590,10 @@ describe('MCP HTTP scope enforcement', () => {
       uid: 'user-1',
       clientId: 'https://client.example/mcp.json',
       connectionId: 'connection-1',
-      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead,
+      ],
     }, 'https://quantified-self.io');
     const client = new Client({
       name: 'metadata-test-client',
@@ -278,8 +632,8 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getServerVersion()).toEqual({
         name: 'quantified-self',
         title: 'Quantified Self',
-        version: '1.0.0',
-        description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+        version: '1.1.0',
+        description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [
           {

@@ -61,7 +61,7 @@ const topLevelRoutes: Routes = [
   },
   {
     path: 'pricing',
-    loadComponent: () => import('./components/pricing/pricing.component').then(m => m.PricingComponent),
+    loadComponent: () => import('./components/public-pricing/public-pricing.component').then(m => m.PublicPricingComponent),
     // Public route
     canMatch: [pricingRedirectGuard],
     data: {

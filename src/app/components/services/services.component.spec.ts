@@ -22,6 +22,7 @@ import { MatIconRegistry } from '@angular/material/icon';
 import { SharedModule } from '../../modules/shared.module';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -32,6 +33,7 @@ describe('ServicesComponent', () => {
     let mockActivatedRoute: any;
     let mockIconRegistry: any;
     let mockDialog: any;
+    let mockAnalyticsService: any;
     let dialogClosed$: Subject<void>;
 
     beforeEach(async () => {
@@ -76,6 +78,9 @@ describe('ServicesComponent', () => {
                 close: vi.fn(),
             })),
         };
+        mockAnalyticsService = {
+            logEvent: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [ServicesComponent],
@@ -89,6 +94,7 @@ describe('ServicesComponent', () => {
                 { provide: AppEventService, useValue: {} },
                 { provide: AppWindowService, useValue: {} },
                 { provide: MatDialog, useValue: mockDialog },
+                { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: MatIconRegistry, useValue: mockIconRegistry }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -98,6 +104,7 @@ describe('ServicesComponent', () => {
     beforeEach(() => {
         fixture = TestBed.createComponent(ServicesComponent);
         component = fixture.componentInstance;
+        component.hasProAccess = true;
     });
 
     it('should create', () => {
@@ -135,6 +142,24 @@ describe('ServicesComponent', () => {
             queryParams: { serviceName: ServiceNames.GarminAPI },
             queryParamsHandling: 'merge',
         });
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('service_section_selected', {
+            section: 'garmin',
+            service_name: ServiceNames.GarminAPI,
+            access: 'pro',
+        });
+    });
+
+    it('defaults non-Pro users to MCP and Pro users to Garmin without overriding explicit provider links', () => {
+        component.hasProAccess = false;
+        expect((component as any).getSectionFromServiceName(null)).toBe('mcp');
+        expect((component as any).getSectionFromServiceName('unknown')).toBe('mcp');
+        expect((component as any).getSectionFromServiceName(ServiceNames.GarminAPI)).toBe('garmin');
+        expect((component as any).getSectionFromServiceName(ServiceNames.SuuntoApp)).toBe('suunto');
+        expect((component as any).getSectionFromServiceName(ServiceNames.COROSAPI)).toBe('coros');
+        expect((component as any).getSectionFromServiceName(ServiceNames.WahooAPI)).toBe('wahoo');
+
+        component.hasProAccess = true;
+        expect((component as any).getSectionFromServiceName(null)).toBe('garmin');
     });
 
     it('should expose service navigation sections in display order', () => {
@@ -210,13 +235,65 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const providerSelector = fixture.nativeElement.querySelector('.provider-selector--mobile');
-        const providerLabels = Array.from(providerSelector.querySelectorAll('mat-button-toggle'))
-            .map((toggle: Element) => toggle.textContent?.trim());
+        const providerLabels = Array.from(providerSelector.querySelectorAll('.provider-selector__mobile-option > span:first-child'))
+            .map((label: Element) => label.textContent?.trim());
 
         expect(providerSelector.tagName.toLowerCase()).toBe('mat-button-toggle-group');
         expect(providerLabels).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo', 'MCP']);
         expect(providerSelector.querySelectorAll('app-service-source-icon')).toHaveLength(0);
         expect(component.serviceSectionOptions.some(section => section.serviceName === ServiceNames.WahooAPI)).toBe(true);
+    });
+
+    it('marks provider tabs as Pro and MCP as Free for non-Pro users', () => {
+        component.hasProAccess = false;
+        fixture.detectChanges();
+
+        const selector = fixture.nativeElement.querySelector('.provider-selector--mobile');
+        const entitlementLabels = Array.from(selector.querySelectorAll('.provider-selector__entitlement mat-chip'))
+            .map((chip: Element) => chip.textContent?.trim());
+        const ariaLabels = Array.from(selector.querySelectorAll('mat-button-toggle button'))
+            .map((button: Element) => button.getAttribute('aria-label'));
+
+        expect(entitlementLabels).toEqual(['PRO', 'PRO', 'PRO', 'PRO', 'FREE']);
+        expect(ariaLabels).toEqual([
+            'Garmin, Pro feature',
+            'Suunto, Pro feature',
+            'COROS, Pro feature',
+            'Wahoo, Pro feature',
+            'MCP, Free',
+        ]);
+    });
+
+    it('hides entitlement labels for Pro users', () => {
+        component.hasProAccess = true;
+        fixture.detectChanges();
+
+        const selector = fixture.nativeElement.querySelector('.provider-selector--mobile');
+
+        expect(selector.querySelectorAll('.provider-selector__entitlement')).toHaveLength(0);
+    });
+
+    it('refreshes Pro access when the current user entitlement changes', async () => {
+        const userUpdates$ = new Subject<User>();
+        mockAuthService.user$ = userUpdates$;
+        component.processUser({
+            uid: 'user-1',
+            stripeRole: 'basic',
+        } as User, false);
+
+        await component.ngOnInit();
+
+        userUpdates$.next({
+            uid: 'user-1',
+            stripeRole: 'pro',
+        } as User);
+        expect(component.hasProAccess).toBe(true);
+
+        userUpdates$.next({
+            uid: 'user-1',
+            stripeRole: 'basic',
+        } as User);
+        expect(component.hasProAccess).toBe(false);
     });
 
     it('renders the desktop connection selector with MCP after Wahoo', () => {
@@ -251,6 +328,46 @@ describe('ServicesComponent', () => {
         expect(dataFlow.textContent).toContain('No services connected');
         expect(dataFlow.textContent).toContain('Connect a service below');
         expect(dataFlow.querySelector('.service-data-flow__matrix')).toBeNull();
+    });
+
+    it('shows a direct Pro data-flow action instead of a connection prompt to non-Pro users', () => {
+        component.hasProAccess = false;
+        fixture.detectChanges();
+        component.activeSection = 'garmin';
+        fixture.detectChanges();
+
+        const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
+        const upgradeButton = dataFlow.querySelector('.service-data-flow__upgrade') as HTMLButtonElement;
+
+        expect(dataFlow.textContent).toContain('Unlock provider data flow with Pro');
+        expect(dataFlow.textContent).not.toContain('Connect a service below');
+        expect(upgradeButton).toBeTruthy();
+
+        component.openActiveProviderDataFlowPlans();
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('upsell_triggered', {
+            service_name: ServiceNames.GarminAPI,
+            source: 'data_flow',
+            feature: 'provider_data_flow',
+        });
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
+    });
+
+    it('sends non-Pro capability actions to subscriptions without opening a tool dialog', () => {
+        component.hasProAccess = false;
+        (component as any).serviceToolsDialog = {};
+
+        component.openServiceTools('garmin', {
+            title: 'Sleep history',
+            tool: 'history',
+        });
+
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('upsell_triggered', {
+            service_name: ServiceNames.GarminAPI,
+            source: 'capability_card',
+            feature: 'history',
+        });
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/subscriptions']);
     });
 
     it('starts the data-flow panel collapsed and lets the user expand it', () => {
@@ -441,18 +558,18 @@ describe('ServicesComponent', () => {
         expect(servicePanels.length).toBe(5);
         expect(garminOverview).toBeTruthy();
         expect(corosOverview).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(false);
-        expect(fixture.nativeElement.querySelector('[aria-label="suunto app" i]').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('[aria-label="wahoo" i]').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('[aria-label="mcp" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="garmin connect" i]').hidden).toBe(false);
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="suunto app" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="coros" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="wahoo" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="mcp" i]').hidden).toBe(true);
         expect(fixture.nativeElement.querySelector('app-mcp-connections')).toBeNull();
 
         component.activeSection = 'coros';
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('[aria-label="garmin connect" i]').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('[aria-label="coros" i]').hidden).toBe(false);
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="garmin connect" i]').hidden).toBe(true);
+        expect(fixture.nativeElement.querySelector('.service-detail[aria-label="coros" i]').hidden).toBe(false);
         expect(servicePanels[0].querySelector('.service-overview')).toBe(garminOverview);
         expect(servicePanels[2].querySelector('.service-overview')).toBe(corosOverview);
     });
@@ -661,6 +778,42 @@ describe('ServicesComponent', () => {
         expect(mockDialog.open).not.toHaveBeenCalled();
     });
 
+    it('describes non-Pro automatic sync without implying an unconfigured route exists', () => {
+        fixture.detectChanges();
+        component.processUser({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' } as User, false);
+        component.activeSection = 'garmin';
+        fixture.detectChanges();
+
+        const garminPanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
+        const summary = garminPanel.querySelector('.service-sync-summary');
+
+        expect(summary.textContent).toContain('Automatic sync');
+        expect(summary.textContent).toContain('Provider delivery is available with Pro');
+        expect(summary.textContent).not.toContain('Configured provider delivery is paused');
+    });
+
+    it('marks configured provider delivery as paused after Pro access ends', () => {
+        fixture.detectChanges();
+        component.processUser({
+            uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2',
+            settings: {
+                serviceSyncSettings: {
+                    activitySyncRoutes: {
+                        [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+                    },
+                },
+            },
+        } as User, false);
+        component.activeSection = 'garmin';
+        fixture.detectChanges();
+
+        const garminPanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
+        const summary = garminPanel.querySelector('.service-sync-summary');
+
+        expect(summary.textContent).toContain('Configured provider delivery is paused without Pro access');
+        expect(summary.textContent).toContain('Garmin → Suunto App');
+    });
+
     it('refreshes the summary when sync settings change for the signed-in user', async () => {
         const userUpdates$ = new Subject<User>();
         mockAuthService.user$ = userUpdates$;
@@ -744,8 +897,8 @@ describe('ServicesComponent', () => {
         const actionRule = styles.match(/\.service-overview-card__action\s*\{[^}]*\}/)?.[0] ?? '';
 
         expect(template).toContain('class="service-overview-card__action"');
-        expect(template).toContain('<span>Manage</span>');
-        expect(template).toContain('<mat-icon>arrow_forward</mat-icon>');
+        expect(template).toContain("hasProAccess ? 'Manage' : 'Unlock with Pro'");
+        expect(template).toContain("hasProAccess ? 'arrow_forward' : 'workspace_premium'");
         expect(actionRule).toContain('min-width: 104px');
         expect(styles).toContain('border-bottom: 1px solid var(--mat-sys-outline-variant)');
     });

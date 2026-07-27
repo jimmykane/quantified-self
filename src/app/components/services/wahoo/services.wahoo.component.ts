@@ -82,10 +82,6 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
     void this.hydrateWahooAccountId();
   }
 
-  protected override get canDisconnectWithoutProAccess(): boolean {
-    return true;
-  }
-
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
     return token.redirect_uri;
   }

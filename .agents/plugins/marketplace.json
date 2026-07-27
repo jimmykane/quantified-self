@@ -1,0 +1,20 @@
+{
+  "name": "quantified-self-local",
+  "interface": {
+    "displayName": "Quantified Self Local"
+  },
+  "plugins": [
+    {
+      "name": "quantified-self",
+      "source": {
+        "source": "local",
+        "path": "./plugins/quantified-self"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Lifestyle"
+    }
+  ]
+}

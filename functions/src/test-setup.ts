@@ -184,9 +184,32 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         RunningGroup: 'running_group',
         TrailRunningGroup: 'trail_running_group',
         SwimmingGroup: 'swimming_group',
+        WaterSportsGroup: 'water_sports_group',
     },
     ActivityTypesHelper: {
         resolveActivityType: actual.ActivityTypesHelper.resolveActivityType.bind(actual.ActivityTypesHelper),
+        getActivityGroupForActivityType: (activityType: string) => {
+            const resolvedActivityType = actual.ActivityTypesHelper
+                .resolveActivityType(activityType);
+            if (!resolvedActivityType) {
+                throw new Error('Unknown activity type.');
+            }
+            return actual.ActivityTypesHelper.getActivityGroupForActivityType(
+                resolvedActivityType,
+            );
+        },
+        speedDerivedDataTypesToUseForActivityType:
+            actual.ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType.bind(
+                actual.ActivityTypesHelper,
+            ),
+        altiDistanceSpeedDerivedDataTypesToUseForActivityType:
+            actual.ActivityTypesHelper.altiDistanceSpeedDerivedDataTypesToUseForActivityType.bind(
+                actual.ActivityTypesHelper,
+            ),
+        isIndoorActivityType:
+            actual.ActivityTypesHelper.isIndoorActivityType.bind(
+                actual.ActivityTypesHelper,
+            ),
         getActivityTypesForActivityGroup: (group: string) => {
             switch (group) {
                 case 'cycling_group':

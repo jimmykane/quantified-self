@@ -5,19 +5,35 @@ import { BlockList, isIP, LookupFunction } from 'node:net';
 import { Agent } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import fetch from 'node-fetch';
-import * as logger from 'firebase-functions/logger';
+import { FieldValue } from 'firebase-admin/firestore';
 import {
   getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
 
 export const MCP_OAUTH_SCOPES = {
   MetricsRead: 'metrics:read',
+  MeasurementsRead: 'measurements:read',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
+  ActivityLocationRead: 'activity-location:read',
   RoutesRead: 'routes:read',
+  RouteLocationRead: 'route-location:read',
 } as const;
 
 export type McpOAuthScope = typeof MCP_OAUTH_SCOPES[keyof typeof MCP_OAUTH_SCOPES];
+
+export function hasValidMcpScopeDependencies(
+  scopes: readonly McpOAuthScope[],
+): boolean {
+  const selected = new Set(scopes);
+  return !(
+    selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
+    && !selected.has(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+  ) && !(
+    selected.has(MCP_OAUTH_SCOPES.RouteLocationRead)
+    && !selected.has(MCP_OAUTH_SCOPES.RoutesRead)
+  );
+}
 
 export const MCP_OAUTH_COLLECTIONS = {
   authorizationRequests: 'mcpOAuthAuthorizationRequests',
@@ -35,6 +51,8 @@ const REFRESH_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const MCP_REQUESTS_PER_MINUTE = 120;
 const MCP_AUTHORIZATION_STARTS_PER_CLIENT_PER_MINUTE = 10;
 const MCP_AUTHORIZATION_STARTS_PER_REQUESTER_PER_MINUTE = 30;
+const MCP_REVOCATIONS_PER_CLIENT_PER_MINUTE = 30;
+const MCP_REVOCATIONS_PER_REQUESTER_PER_MINUTE = 60;
 const MCP_RATE_LIMIT_DOCUMENT_LIFETIME_MS = 5 * 60 * 1000;
 const MCP_OAUTH_CLEANUP_PAGE_SIZE = 50;
 const MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY = 10;
@@ -225,8 +243,30 @@ export interface AuthorizationStartRateLimitInput {
   nowMs: number;
 }
 
+export interface RevocationRateLimitInput {
+  clientId: string;
+  requesterKey: string;
+  nowMs: number;
+}
+
+export type McpTokenTypeHint = 'access_token' | 'refresh_token' | null;
+
+export type McpConnectionRevocationTarget =
+  | {
+    kind: 'owner';
+    uid: string;
+    connectionId: string;
+  }
+  | {
+    kind: 'token';
+    tokenHash: string;
+    tokenTypeHint: McpTokenTypeHint;
+    clientId: string;
+  };
+
 export interface McpOAuthStore {
   consumeAuthorizationStartRateLimit(input: AuthorizationStartRateLimitInput): Promise<void>;
+  consumeRevocationRateLimit(input: RevocationRateLimitInput): Promise<void>;
   saveAuthorizationRequest(record: AuthorizationRequestRecord): Promise<void>;
   getAuthorizationRequest(requestId: string): Promise<AuthorizationRequestRecord | null>;
   approveAuthorization(input: AuthorizationApprovalInput): Promise<AuthorizationRequestRecord>;
@@ -237,7 +277,7 @@ export interface McpOAuthStore {
   getConnection(uid: string, connectionId: string): Promise<McpConnection | null>;
   recordAuthorizedRequest(token: AccessTokenRecord, nowMs: number): Promise<void>;
   listConnections(uid: string): Promise<McpConnection[]>;
-  revokeConnection(uid: string, connectionId: string, nowMs: number): Promise<void>;
+  revokeConnection(target: McpConnectionRevocationTarget, nowMs: number): Promise<void>;
 }
 
 function timestamp(ms: number): admin.firestore.Timestamp {
@@ -275,23 +315,16 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
     .doc(uid)
     .collection(MCP_OAUTH_COLLECTIONS.userConnections)
     .doc(connectionId);
-  // Connection documents are leaf records by design. Pending records use
-  // Firestore TTL, whose document deletion does not recursively delete descendants.
-  const deleteCredentialStateForConnection = async (
-    uid: string,
-    connectionId: string,
-  ): Promise<void> => {
-    for (const collectionName of [
-      MCP_OAUTH_COLLECTIONS.accessTokens,
-      MCP_OAUTH_COLLECTIONS.refreshTokens,
-      MCP_OAUTH_COLLECTIONS.authorizationCodes,
-    ]) {
-      const snapshot = await collection(collectionName)
-        .where('uid', '==', uid)
-        .where('connectionId', '==', connectionId)
-        .get();
-      await Promise.all(snapshot.docs.map(doc => db.recursiveDelete(doc.ref)));
-    }
+  const markConnectionRevoked = (
+    transaction: admin.firestore.Transaction,
+    ref: admin.firestore.DocumentReference,
+    nowMs: number,
+  ): void => {
+    transaction.set(ref, {
+      status: 'revoked',
+      revokedAtMs: nowMs,
+      expireAt: FieldValue.delete(),
+    }, { merge: true });
   };
 
   return {
@@ -341,6 +374,59 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         });
         transaction.set(requesterRateLimitRef, {
           rateLimitType: 'authorization_start_requester',
+          windowStartMs,
+          count: nextRequesterCount,
+          expireAt,
+        });
+      });
+    },
+
+    async consumeRevocationRateLimit(input) {
+      const windowStartMs = Math.floor(input.nowMs / 60000) * 60000;
+      const clientRateLimitRef = collection(MCP_OAUTH_COLLECTIONS.rateLimits).doc(
+        buildMcpRevocationRateLimitBucketId(
+          'revocation_client',
+          input.clientId,
+          windowStartMs,
+        ),
+      );
+      const requesterRateLimitRef = collection(MCP_OAUTH_COLLECTIONS.rateLimits).doc(
+        buildMcpRevocationRateLimitBucketId(
+          'revocation_requester',
+          input.requesterKey,
+          windowStartMs,
+        ),
+      );
+
+      await db.runTransaction(async (transaction) => {
+        const clientRateLimit = documentData<{ count?: number }>(
+          await transaction.get(clientRateLimitRef),
+        );
+        const requesterRateLimit = documentData<{ count?: number }>(
+          await transaction.get(requesterRateLimitRef),
+        );
+        const nextClientCount = Number(clientRateLimit?.count || 0) + 1;
+        const nextRequesterCount = Number(requesterRateLimit?.count || 0) + 1;
+        if (
+          nextClientCount > MCP_REVOCATIONS_PER_CLIENT_PER_MINUTE
+          || nextRequesterCount > MCP_REVOCATIONS_PER_REQUESTER_PER_MINUTE
+        ) {
+          throw new McpOAuthError(
+            'temporarily_unavailable',
+            'The token revocation rate limit was exceeded.',
+            429,
+          );
+        }
+
+        const expireAt = timestamp(windowStartMs + MCP_RATE_LIMIT_DOCUMENT_LIFETIME_MS);
+        transaction.set(clientRateLimitRef, {
+          rateLimitType: 'revocation_client',
+          windowStartMs,
+          count: nextClientCount,
+          expireAt,
+        });
+        transaction.set(requesterRateLimitRef, {
+          rateLimitType: 'revocation_requester',
           windowStartMs,
           count: nextRequesterCount,
           expireAt,
@@ -457,7 +543,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         transaction.update(activeConnectionRef, {
           status: 'active',
           lastUsedAtMs: input.nowMs,
-          expireAt: admin.firestore.FieldValue.delete(),
+          expireAt: FieldValue.delete(),
         });
         return code;
       });
@@ -488,12 +574,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.');
         }
         if (refresh.active !== true) {
-          transaction.update(activeConnectionRef, {
-            status: 'revoked',
-            revokedAtMs: input.nowMs,
-            lastUsedAtMs: input.nowMs,
-            expireAt: admin.firestore.FieldValue.delete(),
-          });
+          markConnectionRevoked(transaction, activeConnectionRef, input.nowMs);
           return { refresh, replayed: true as const };
         }
         if (
@@ -503,6 +584,16 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           throw new McpOAuthError(
             'invalid_scope',
             'The requested scope exceeds the refresh token grant.',
+          );
+        }
+        const nextScopes = input.requestedScopes || refresh.scopes;
+        if (
+          !hasValidMcpScopeDependencies(refresh.scopes)
+          || !hasValidMcpScopeDependencies(nextScopes)
+        ) {
+          throw new McpOAuthError(
+            'invalid_scope',
+            'The authorization grant contains an invalid dependent scope.',
           );
         }
         transaction.update(refreshRef, {
@@ -515,7 +606,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             ...input.nextAccessTokenRecord,
             uid: refresh.uid,
             connectionId: refresh.connectionId,
-            scopes: input.requestedScopes || refresh.scopes,
+            scopes: nextScopes,
             expireAt: timestamp(input.nextAccessTokenRecord.expiresAtMs),
           },
         );
@@ -525,7 +616,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             ...input.nextRefreshTokenRecord,
             uid: refresh.uid,
             connectionId: refresh.connectionId,
-            scopes: input.requestedScopes || refresh.scopes,
+            scopes: nextScopes,
             familyId: refresh.familyId,
             active: true,
             expireAt: timestamp(input.nextRefreshTokenRecord.expiresAtMs),
@@ -533,23 +624,13 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         );
         transaction.update(activeConnectionRef, {
           status: 'active',
-          scopes: input.requestedScopes || refresh.scopes,
+          scopes: nextScopes,
           lastUsedAtMs: input.nowMs,
-          expireAt: admin.firestore.FieldValue.delete(),
+          expireAt: FieldValue.delete(),
         });
         return { refresh, replayed: false as const };
       });
       if (outcome.replayed) {
-        try {
-          await deleteCredentialStateForConnection(
-            outcome.refresh.uid,
-            outcome.refresh.connectionId,
-          );
-        } catch (error) {
-          logger.error('[MCP OAuth] Failed to delete credentials after refresh-token reuse', {
-            errorName: error instanceof Error ? error.name : 'unknown',
-          });
-        }
         throw new McpOAuthError(
           'invalid_grant',
           'Refresh-token reuse was detected and the MCP connection was revoked.',
@@ -615,7 +696,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         transaction.update(activeConnectionRef, {
           status: 'active',
           lastUsedAtMs: nowMs,
-          expireAt: admin.firestore.FieldValue.delete(),
+          expireAt: FieldValue.delete(),
         });
       });
     },
@@ -632,9 +713,54 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
       })) as McpConnection[];
     },
 
-    async revokeConnection(uid, connectionId, nowMs) {
-      const ref = connectionRef(uid, connectionId);
-      const shouldDeleteCredentials = await db.runTransaction(async (transaction) => {
+    async revokeConnection(target, nowMs) {
+      await db.runTransaction(async (transaction) => {
+        let uid: string;
+        let connectionId: string;
+        let expectedClientId: string | null = null;
+
+        if (target.kind === 'token') {
+          // OAuth credential documents are keyed by SHA-256 token hashes. Keep
+          // this lookup to the same two primary-key reads below; never scan
+          // by ownership or persist/query the submitted raw token.
+          const collectionOrder = target.tokenTypeHint === 'refresh_token'
+            ? [
+              MCP_OAUTH_COLLECTIONS.refreshTokens,
+              MCP_OAUTH_COLLECTIONS.accessTokens,
+            ]
+            : [
+              MCP_OAUTH_COLLECTIONS.accessTokens,
+              MCP_OAUTH_COLLECTIONS.refreshTokens,
+            ];
+          let matchedToken: AccessTokenRecord | RefreshTokenRecord | null = null;
+
+          for (const collectionName of collectionOrder) {
+            const candidate = documentData<AccessTokenRecord | RefreshTokenRecord>(
+              await transaction.get(
+                collection(collectionName).doc(target.tokenHash),
+              ),
+            );
+            if (
+              !matchedToken
+              && candidate
+              && candidate.clientId === target.clientId
+              && candidate.expiresAtMs > nowMs
+            ) {
+              matchedToken = candidate;
+            }
+          }
+
+          if (!matchedToken) {
+            return;
+          }
+          uid = matchedToken.uid;
+          connectionId = matchedToken.connectionId;
+          expectedClientId = target.clientId;
+        } else {
+          uid = target.uid;
+          connectionId = target.connectionId;
+        }
+
         const guard = await getUserDeletionGuardStateInTransaction(
           db,
           transaction,
@@ -642,23 +768,24 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           nowMs,
         );
         if (guard.shouldSkip) {
-          return false;
+          return;
         }
+        const ref = connectionRef(uid, connectionId);
         const connection = await transaction.get(ref);
         if (!connection.exists) {
-          return false;
+          return;
         }
-        transaction.set(ref, {
-          status: 'revoked',
-          revokedAtMs: nowMs,
-          expireAt: admin.firestore.FieldValue.delete(),
-        }, { merge: true });
-        return true;
+        const current = documentData<McpConnection>(connection);
+        if (
+          !current
+          || (expectedClientId !== null && current.clientId !== expectedClientId)
+          || current.status === 'revoked'
+          || current.revokedAtMs !== null
+        ) {
+          return;
+        }
+        markConnectionRevoked(transaction, ref, nowMs);
       });
-      if (!shouldDeleteCredentials) {
-        return;
-      }
-      await deleteCredentialStateForConnection(uid, connectionId);
     },
   };
 }
@@ -690,6 +817,18 @@ export function buildMcpAuthorizationStartRateLimitBucketId(
   return hashOpaqueValue(`${rateLimitType}:${key}:${windowStartMs}`);
 }
 
+export type McpRevocationRateLimitType =
+  | 'revocation_client'
+  | 'revocation_requester';
+
+export function buildMcpRevocationRateLimitBucketId(
+  rateLimitType: McpRevocationRateLimitType,
+  key: string,
+  windowStartMs: number,
+): string {
+  return hashOpaqueValue(`${rateLimitType}:${key}:${windowStartMs}`);
+}
+
 export function createPkceChallenge(verifier: string): string {
   return hashOpaqueValue(verifier);
 }
@@ -708,6 +847,52 @@ function requireOpaqueDocumentId(value: unknown, name: string): string {
     throw new McpOAuthError('invalid_request', `${name} is invalid.`);
   }
   return exact;
+}
+
+function parseClientMetadataDocumentUrl(clientId: string): URL {
+  if (clientId !== clientId.trim()) {
+    throw new McpOAuthError(
+      'invalid_client',
+      'client_id must be an HTTPS metadata document URL with a path.',
+    );
+  }
+  let clientUrl: URL;
+  try {
+    clientUrl = new URL(clientId);
+  } catch {
+    throw new McpOAuthError(
+      'invalid_client',
+      'client_id must be an HTTPS metadata document URL.',
+    );
+  }
+  const literalHostname = clientUrl.hostname.replace(/^\[|\]$/g, '');
+  if (
+    clientUrl.protocol !== 'https:'
+    || clientUrl.pathname === '/'
+    || clientUrl.username
+    || clientUrl.password
+    || clientUrl.hash
+    || clientUrl.hostname === 'localhost'
+    || (isIP(literalHostname) !== 0 && isPrivateAddress(literalHostname))
+  ) {
+    throw new McpOAuthError(
+      'invalid_client',
+      'client_id must be an HTTPS metadata document URL with a path.',
+    );
+  }
+  return clientUrl;
+}
+
+function requirePublicClientId(value: unknown): string {
+  const clientId = requireString(value, 'client_id');
+  parseClientMetadataDocumentUrl(clientId);
+  return clientId;
+}
+
+function readMcpTokenTypeHint(value: unknown): McpTokenTypeHint {
+  return value === 'access_token' || value === 'refresh_token'
+    ? value
+    : null;
 }
 
 function readOptionalOAuthState(value: unknown): string | null {
@@ -732,6 +917,12 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
     throw new McpOAuthError(
       'invalid_scope',
       `Only ${Object.values(MCP_OAUTH_SCOPES).join(', ')} can be requested.`,
+    );
+  }
+  if (!hasValidMcpScopeDependencies(unique as McpOAuthScope[])) {
+    throw new McpOAuthError(
+      'invalid_scope',
+      'Location scopes require their matching activity-detail or saved-route scope.',
     );
   }
   return unique as McpOAuthScope[];
@@ -886,25 +1077,7 @@ export function validateClientMetadataDocument(
 }
 
 export async function fetchClientMetadataDocument(clientId: string): Promise<ClientMetadata> {
-  if (clientId !== clientId.trim()) {
-    throw new McpOAuthError('invalid_client', 'client_id must be an HTTPS metadata document URL with a path.');
-  }
-  let clientUrl: URL;
-  try {
-    clientUrl = new URL(clientId);
-  } catch {
-    throw new McpOAuthError('invalid_client', 'client_id must be an HTTPS metadata document URL.');
-  }
-  if (
-    clientUrl.protocol !== 'https:'
-    || clientUrl.pathname === '/'
-    || clientUrl.username
-    || clientUrl.password
-    || clientUrl.hash
-    || clientUrl.hostname === 'localhost'
-  ) {
-    throw new McpOAuthError('invalid_client', 'client_id must be an HTTPS metadata document URL with a path.');
-  }
+  const clientUrl = parseClientMetadataDocumentUrl(clientId);
 
   const addresses = await lookup(clientUrl.hostname, { all: true, verbatim: true }).catch(() => []);
   if (!addresses.length || addresses.some(result => isPrivateAddress(result.address))) {
@@ -951,7 +1124,11 @@ export interface McpAuthorizationStartContext {
   requesterKey?: string;
 }
 
-function normalizeAuthorizationRequesterKey(value: unknown): string {
+export interface McpRevocationContext {
+  requesterKey?: string;
+}
+
+function normalizeOAuthRequesterKey(value: unknown): string {
   return typeof value === 'string' && value.length > 0 && value.length <= 128
     ? value
     : 'unknown';
@@ -979,7 +1156,7 @@ export function createMcpOAuthService(
       const nowMs = resolvedDependencies.now();
       await store.consumeAuthorizationStartRateLimit({
         clientId,
-        requesterKey: normalizeAuthorizationRequesterKey(context?.requesterKey),
+        requesterKey: normalizeOAuthRequesterKey(context?.requesterKey),
         nowMs,
       });
       const metadata = await resolvedDependencies.fetchClientMetadata(clientId);
@@ -1254,12 +1431,41 @@ export function createMcpOAuthService(
       };
     },
 
+    async revokeToken(
+      params: Record<string, unknown>,
+      context?: McpRevocationContext,
+    ): Promise<void> {
+      rejectRepeatedOAuthParameters(params);
+      const tokenHash = hashOpaqueValue(requireString(params.token, 'token', 4096));
+      const clientId = requirePublicClientId(params.client_id);
+      const tokenTypeHint = readMcpTokenTypeHint(params.token_type_hint);
+      const nowMs = resolvedDependencies.now();
+      await store.consumeRevocationRateLimit({
+        clientId,
+        requesterKey: normalizeOAuthRequesterKey(context?.requesterKey),
+        nowMs,
+      });
+      await store.revokeConnection({
+        kind: 'token',
+        tokenHash,
+        tokenTypeHint,
+        clientId,
+      }, nowMs);
+    },
+
     async authenticateBearer(rawToken: string, audience: string) {
       const tokenHash = hashOpaqueValue(requireString(rawToken, 'access_token'));
       const token = await store.getAccessToken(tokenHash);
       const nowMs = resolvedDependencies.now();
       if (!token || token.expiresAtMs <= nowMs || token.audience !== audience) {
         throw new McpOAuthError('invalid_grant', 'The access token is invalid or expired.', 401);
+      }
+      if (!hasValidMcpScopeDependencies(token.scopes)) {
+        throw new McpOAuthError(
+          'invalid_grant',
+          'The access token contains an invalid dependent scope.',
+          401,
+        );
       }
       const connection = await store.getConnection(token.uid, token.connectionId);
       if (!isActiveMcpConnection(connection)) {
@@ -1287,8 +1493,11 @@ export function createMcpOAuthService(
 
     revokeConnection(uid: string, connectionId: string) {
       return store.revokeConnection(
-        uid,
-        requireOpaqueDocumentId(connectionId, 'connection_id'),
+        {
+          kind: 'owner',
+          uid,
+          connectionId: requireOpaqueDocumentId(connectionId, 'connection_id'),
+        },
         resolvedDependencies.now(),
       );
     },

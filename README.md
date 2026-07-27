@@ -147,6 +147,16 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
+| Local plugin tooling | `npm run plugin:tools` | Installs the isolated pinned Codex CLI dependency |
+| Local plugin setup | `npm run plugin:setup` | Explicitly builds, validates, registers, and installs the configured plugin |
+| Local plugin validation | `npm run plugin:validate` | Uses an isolated temporary Codex profile |
+| Local plugin refresh | `npm run plugin:sync` | Explicitly rebuilds and reinstalls; normal app builds never do this |
+
+The repository-local Quantified Self plugin bundles the registered read-only MCP app with an analysis skill. Configure
+its account-specific ChatGPT technical app ID once by setting `QS_CHATGPT_APP_ID` and running
+`npm run plugin:configure`, then run `npm run plugin:setup`. Generated app mappings and cache-busted manifests are
+ignored. Restart the ChatGPT desktop app after setup or sync, then test in a new conversation. See the
+[MCP server documentation](docs/mcp-server.md#repository-local-plugin) for the complete lifecycle and update matrix.
 
 ## Deployment and self-hosting
 

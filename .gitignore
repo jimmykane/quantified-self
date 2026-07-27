@@ -9,6 +9,7 @@ yarn-error.log
 
 # dependencies
 /node_modules
+/tools/quantified-self-plugin/node_modules
 
 # IDEs and editors
 /.idea
@@ -71,6 +72,12 @@ licenses.json
 /certs
 functions/.env
 src/environments/mapbox-token.local.ts
+
+# Local Quantified Self plugin configuration and generated bundle files
+/.local/quantified-self-plugin.json
+/plugins/quantified-self/.app.json
+/plugins/quantified-self/.codex-plugin/plugin.json
+/plugins/quantified-self/assets/quantified-self.png
 
 PR_DESCRIPTION.md
 

@@ -2319,9 +2319,8 @@ describe('AppUserService', () => {
 
                 await service.getCurrentUserServiceTokenAndRedirectURI(serviceName);
 
-                // Check for substrings since full URL depends on encoded spaces
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIAuthRequestTokenRedirectURI', {
-                    redirectUri: expect.stringMatching(/COROS%20API/)
+                    redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
                 });
             });
 
@@ -2330,7 +2329,7 @@ describe('AppUserService', () => {
                 await service.getCurrentUserServiceTokenAndRedirectURI(serviceName);
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
-                    redirectUri: expect.stringMatching(/Suunto%20app/)
+                    redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
                 });
             });
 
@@ -2339,7 +2338,7 @@ describe('AppUserService', () => {
                 await service.getCurrentUserServiceTokenAndRedirectURI(serviceName);
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminAPIAuthRequestTokenRedirectURI', {
-                    redirectUri: expect.stringMatching(/Garmin%20API/)
+                    redirectUri: 'http://localhost/services?serviceName=Garmin%20API&connect=1',
                 });
             });
 
@@ -2347,7 +2346,7 @@ describe('AppUserService', () => {
                 await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.WahooAPI);
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
-                    redirectUri: expect.stringMatching(/Wahoo%20API/),
+                    redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
                 });
             });
         });
@@ -2359,7 +2358,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetWahooAPIAccessToken', {
                     state: 'state',
                     code: 'code',
-                    redirectUri: expect.stringMatching(/Wahoo%20API/),
+                    redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
                 });
             });
         });
@@ -2371,7 +2370,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetCOROSAPIAccessToken', {
                     state: 'state',
                     code: 'code',
-                    redirectUri: expect.stringMatching(/COROS%20API/)
+                    redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
                 });
             });
         });
@@ -2383,7 +2382,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetSuuntoAPIAccessToken', {
                     state: 'state',
                     code: 'code',
-                    redirectUri: expect.stringMatching(/Suunto%20app/)
+                    redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
                 });
             });
         });
@@ -2395,7 +2394,7 @@ describe('AppUserService', () => {
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetGarminAPIAccessToken', {
                     state: 'state',
                     code: 'code',
-                    redirectUri: expect.stringMatching(/Garmin%20API/)
+                    redirectUri: 'http://localhost/services?serviceName=Garmin%20API&connect=1',
                 });
             });
         });

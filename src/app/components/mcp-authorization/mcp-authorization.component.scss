@@ -140,6 +140,20 @@ mat-card-content {
   color: var(--mat-sys-error);
 }
 
+mat-card-actions.mcp-authorization__actions {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px 16px;
+
+  button {
+    margin: 0;
+    min-height: 52px;
+    width: 100%;
+  }
+}
+
 .mcp-authorization__button-content {
   align-items: center;
   display: inline-flex;

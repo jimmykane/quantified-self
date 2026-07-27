@@ -2,7 +2,9 @@ import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 
 export const SPORTS_LIB_REPARSE_TARGET_VERSION = SPORTS_LIB_VERSION;
 export const SPORTS_LIB_REPARSE_HEAVY_DURATION_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-export const SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS = 72 * 60 * 60 * 1000;
+// Duration-heavy jobs are bounded by the heavy worker's runtime budget, not by
+// the event's recorded duration.
+export const SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS: number | null = null;
 export const SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES = 30 * 1024 * 1024;
 export const SPORTS_LIB_REPARSE_MAX_RAW_SOURCE_BYTES_LABEL = '30MB';
 export const SPORTS_LIB_REPARSE_NORMAL_SAFE_RUNTIME_BUDGET_MS = 25 * 60 * 1000;

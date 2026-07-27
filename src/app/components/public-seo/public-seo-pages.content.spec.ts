@@ -62,11 +62,13 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.mcpServer.h1).toBe('Connect ChatGPT to your training data with a read-only MCP server');
     expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('compatible MCP clients');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('body-weight history');
     expect(PUBLIC_SEO_PAGES.mcpServer.intro).toContain('approve only the read-only data categories');
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.title === 'Ask about metrics, individual activities, sleep, and routes')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.copy.includes('disconnected from Connections'))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('identity-free body-weight history')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
-    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('exact start, end, jump, route, or waypoint coordinates'))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.aiInsights.h1).toBe('AI insights for endurance training data');
     expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('chart-backed AI insights');

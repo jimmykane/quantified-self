@@ -136,6 +136,13 @@
           }
         },
         {
+          "source": "/oauth/revoke",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
           "source": "/login",
           "destination": "/index.csr.html"
         },
@@ -386,6 +393,13 @@
         },
         {
           "source": "/oauth/token",
+          "function": {
+            "functionId": "mcpApi",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/oauth/revoke",
           "function": {
             "functionId": "mcpApi",
             "region": "europe-west2"

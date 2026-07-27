@@ -341,7 +341,35 @@ describe('SideNavComponent', () => {
             'utf8',
         );
         expect(template).toContain(
-            "[queryParams]=\"hasPaidAccess ? null : { serviceName: 'mcp' }\"",
+            "[queryParams]=\"isProUser ? null : { serviceName: 'mcp' }\"",
+        );
+    });
+
+    it('links Basic users to the free MCP tab because provider connections require Pro', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'user-2',
+            displayName: 'Basic User',
+            email: 'basic@example.com',
+            stripeRole: 'basic',
+        });
+        mockUserService.hasPaidAccessSignal = vi.fn().mockReturnValue(true);
+        mockUserService.isProSignal = vi.fn().mockReturnValue(false);
+        mockUserService.isBasicSignal = vi.fn().mockReturnValue(true);
+
+        fixture.detectChanges();
+
+        const connectivityItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Connectivity'));
+
+        expect(connectivityItem).toBeTruthy();
+        expect(component.isProUser).toBe(false);
+        const template = readFileSync(
+            resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'),
+            'utf8',
+        );
+        expect(template).toContain(
+            "[queryParams]=\"isProUser ? null : { serviceName: 'mcp' }\"",
         );
     });
 

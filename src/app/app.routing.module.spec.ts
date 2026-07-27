@@ -3,8 +3,11 @@ import { routes as appRoutes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
+import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.content';
+import { PublicPricingComponent } from './components/public-pricing/public-pricing.component';
+import { PricingComponent } from './components/pricing/pricing.component';
 
 const publicLayoutRoute = appRoutes.find(route => route.path === '' && Array.isArray(route.children));
 const routes = [
@@ -44,12 +47,17 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Read-only MCP client access');
   });
 
-  it('should define a public pricing route with membership JSON-LD', () => {
+  it('should define a public pricing route with membership JSON-LD', async () => {
     const pricingRoute = routes.find(route => route.path === 'pricing');
+    const subscriptionsRoute = routes.find(route => route.path === 'subscriptions');
     const jsonLd = pricingRoute?.data?.['jsonLd'] as Record<string, unknown> | undefined;
 
     expect(pricingRoute).toBeTruthy();
     expect(pricingRoute?.loadComponent).toBeTypeOf('function');
+    expect(pricingRoute?.canMatch).toEqual([pricingRedirectGuard]);
+    expect(subscriptionsRoute?.canMatch).toEqual([authGuard]);
+    expect(await pricingRoute?.loadComponent?.()).toBe(PublicPricingComponent);
+    expect(await subscriptionsRoute?.loadComponent?.()).toBe(PricingComponent);
     expect(pricingRoute?.data?.['title']).toBe('Membership');
     expect(pricingRoute?.data?.['description']).toContain('Support the development of Quantified Self');
     expect(pricingRoute?.data?.['keywords']).toBeUndefined();

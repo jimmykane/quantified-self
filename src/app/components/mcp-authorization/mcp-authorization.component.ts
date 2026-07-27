@@ -12,9 +12,22 @@ import { LoggerService } from '../../services/logger.service';
 
 type McpScope =
   | 'metrics:read'
+  | 'measurements:read'
   | 'sleep:read'
   | 'activity-details:read'
-  | 'routes:read';
+  | 'activity-location:read'
+  | 'routes:read'
+  | 'route-location:read';
+
+const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
+  'activity-location:read': 'activity-details:read',
+  'route-location:read': 'routes:read',
+};
+
+const MCP_SCOPE_CHILDREN: Partial<Record<McpScope, McpScope>> = {
+  'activity-details:read': 'activity-location:read',
+  'routes:read': 'route-location:read',
+};
 
 const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
@@ -24,17 +37,29 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
     title: 'Activity and Training metrics',
     description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
   },
+  'measurements:read': {
+    title: 'Body measurements',
+    description: 'Read bounded identity-free body-measurement history such as weight. Values are grouped by day, week, or month; exact source timestamps, event or activity identity, provider, device, and source details are excluded.',
+  },
   'sleep:read': {
     title: 'Sleep summaries',
     description: 'Read redacted sleep sessions and aggregated sleep summaries.',
   },
   'activity-details:read': {
     title: 'Individual activity details',
-    description: 'Read activity summaries with exact start and end coordinates when available, search starts or ends near a location, read laps, swim lengths, MTB jumps with exact coordinates, and open signed-in links containing stable account/event paths. When metric access is also granted, the client can request selected canonical numeric metrics for one activity. Place-name searches send the location text to Mapbox.',
+    description: 'Read non-location activity summaries, laps, swim lengths, MTB jump measurements, selected activity metrics, and bounded on-demand chart series from existing original files. Exact locations and breadcrumb traces require the separate activity-location permission.',
+  },
+  'activity-location:read': {
+    title: 'Activity locations',
+    description: 'Read exact activity start, end, MTB jump, and bounded breadcrumb coordinates, and search activity starts or ends near a place. Place-name searches send the location text to Mapbox.',
   },
   'routes:read': {
-    title: 'Saved routes and waypoints',
-    description: 'Read saved-route names, metrics, exact bounds, preview geometry with segment endpoints, search previews near a location, read waypoint coordinates, and open signed-in links containing stable account/route paths. Place-name searches send the location text to Mapbox.',
+    title: 'Saved-route summaries',
+    description: 'Read route names, activity types, metric summaries, route, waypoint, and point counts, import/update times, and signed-in application links. Exact route locations require the separate saved-route location permission.',
+  },
+  'route-location:read': {
+    title: 'Saved-route locations and geometry',
+    description: 'Read exact route bounds, preview geometry and segment endpoints, waypoint coordinates, altitude and distance, and search routes near a place. Place-name searches send the location text to Mapbox.',
   },
 };
 
@@ -82,6 +107,8 @@ export class McpAuthorizationComponent implements OnInit {
     return (this.request()?.scopes || []).map(scope => ({
       scope,
       selected: selected.has(scope),
+      disabled: this.deciding() !== null
+        || Boolean(MCP_SCOPE_PARENTS[scope] && !selected.has(MCP_SCOPE_PARENTS[scope]!)),
       ...MCP_SCOPE_CONTENT[scope],
     }));
   });
@@ -110,9 +137,16 @@ export class McpAuthorizationComponent implements OnInit {
   }
 
   toggleScope(scope: McpScope, event: MatCheckboxChange): void {
-    this.selectedScopes.update(scopes => event.checked
-      ? [...new Set([...scopes, scope])]
-      : scopes.filter(current => current !== scope));
+    this.selectedScopes.update((scopes) => {
+      if (event.checked) {
+        const parent = MCP_SCOPE_PARENTS[scope];
+        return parent && !scopes.includes(parent)
+          ? scopes
+          : [...new Set([...scopes, scope])];
+      }
+      const child = MCP_SCOPE_CHILDREN[scope];
+      return scopes.filter(current => current !== scope && current !== child);
+    });
   }
 
   approve(): Promise<void> {

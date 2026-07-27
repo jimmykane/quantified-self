@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -16,14 +18,20 @@ describe('McpConnectionsComponent', () => {
     redirectHost: 'client.example',
     scopes: [
       'metrics:read',
+      'measurements:read',
       'sleep:read',
       'activity-details:read',
+      'activity-location:read',
       'routes:read',
+      'route-location:read',
     ] as Array<
       | 'metrics:read'
+      | 'measurements:read'
       | 'sleep:read'
       | 'activity-details:read'
+      | 'activity-location:read'
       | 'routes:read'
+      | 'route-location:read'
     >,
     createdAtMs: 1_700_000_000_000,
     lastUsedAtMs: 1_700_001_000_000,
@@ -64,9 +72,13 @@ describe('McpConnectionsComponent', () => {
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Training Copilot');
     expect(content).toContain('Activity and Training metrics');
+    expect(content).toContain('Body measurements');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
-    expect(content).toContain('Saved routes and waypoints');
+    expect(content).toContain('Activity locations');
+    expect(content).toContain('Saved-route summaries');
+    expect(content).toContain('Saved-route locations and geometry');
+    expect(content).toContain('Disconnect here remains authoritative');
   });
 
   it('uses a standard glass-card stack matching the connection workspace', async () => {
@@ -109,33 +121,38 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('ChatGPT setup');
     expect(content).toContain('https://quantified-self.io/mcp');
     expect(content).toContain('Copy endpoint');
-    expect(content).toContain('exact start, end, and jump coordinates');
-    expect(content).toContain('reveal sensitive locations');
+    expect(content).toContain('Exact starts, ends, jump positions, and breadcrumb traces');
+    expect(content).toContain('location permissions are independent');
     expect(content).toContain('ChatGPT app icon');
-    expect(content).toContain('Download 96 px · 3.3 KB');
-    expect(content).toContain('Download 192 px · 9.9 KB');
-    expect(content).toContain('client from the MCP connections card at any time');
-    expect(content).toContain('only after it finishes authorization');
-    expect(content).toContain('abandoned attempts expire automatically');
+    expect(content).toContain('recommended size');
+    expect(content).toContain('under its 10 KB limit');
+    expect(content).toContain('Download recommended icon · 256 px · 9.4 KB');
+    expect(content).toContain('review or disconnect a client at any time');
+    expect(content).toContain('Existing clients must reconnect');
     expect(content).toContain('Authorizing on Android');
     expect(content).toContain('Desktop setup is the most reliable option');
     expect(content).toContain('Open supported links');
     expect(content).toContain('no active connection is created');
     expect(content).toContain('Authorization and data access');
     expect(content).toContain('any combination of these access categories');
+    expect(content).toContain('metrics, body measurements');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',
     );
-    expect(iconDownloads).toHaveLength(2);
+    expect(iconDownloads).toHaveLength(1);
     expect(iconDownloads[0].getAttribute('href'))
-      .toBe('/assets/favicons/android-chrome-96x96.png');
+      .toBe('/assets/favicons/quantified-self-chatgpt-icon-256x256.png');
     expect(iconDownloads[0].getAttribute('download'))
-      .toBe('quantified-self-chatgpt-icon-96.png');
-    expect(iconDownloads[1].getAttribute('href'))
-      .toBe('/assets/favicons/android-chrome-192x192.png');
-    expect(iconDownloads[1].getAttribute('download'))
-      .toBe('quantified-self-chatgpt-icon-192.png');
+      .toBe('quantified-self-chatgpt-icon-256x256.png');
+
+    const iconAsset = readFileSync(resolve(
+      process.cwd(),
+      'src/assets/favicons/quantified-self-chatgpt-icon-256x256.png',
+    ));
+    expect(iconAsset.readUInt32BE(16)).toBe(256);
+    expect(iconAsset.readUInt32BE(20)).toBe(256);
+    expect(iconAsset.byteLength).toBeLessThanOrEqual(10_000);
 
     fixture.componentInstance.copyEndpoint();
 

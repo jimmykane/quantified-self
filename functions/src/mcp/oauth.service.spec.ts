@@ -10,6 +10,7 @@ import {
   createMcpOAuthService,
   createPkceChallenge,
   fetchClientMetadataDocument,
+  hasValidMcpScopeDependencies,
   hashOpaqueValue,
   isPrivateAddress,
   McpConnection,
@@ -43,6 +44,9 @@ function createMemoryStore(): McpOAuthStore & {
     refreshTokens,
     connections,
     async consumeAuthorizationStartRateLimit() {
+      return;
+    },
+    async consumeRevocationRateLimit() {
       return;
     },
     async saveAuthorizationRequest(record) {
@@ -219,30 +223,44 @@ function createMemoryStore(): McpOAuthStore & {
         .filter(([key]) => key.startsWith(`${uid}:`))
         .map(([, connection]) => connection);
     },
-    async revokeConnection(uid, connectionId, nowMs) {
+    async revokeConnection(target, nowMs) {
+      let uid: string;
+      let connectionId: string;
+      let expectedClientId: string | null = null;
+      if (target.kind === 'token') {
+        const accessToken = accessTokens.get(target.tokenHash);
+        const refreshToken = refreshTokens.get(target.tokenHash);
+        const candidates = target.tokenTypeHint === 'refresh_token'
+          ? [refreshToken, accessToken]
+          : [accessToken, refreshToken];
+        const token = candidates.find(candidate => (
+          candidate
+          && candidate.clientId === target.clientId
+          && candidate.expiresAtMs > nowMs
+        ));
+        if (!token) {
+          return;
+        }
+        uid = token.uid;
+        connectionId = token.connectionId;
+        expectedClientId = target.clientId;
+      } else {
+        uid = target.uid;
+        connectionId = target.connectionId;
+      }
       const key = connectionKey(uid, connectionId);
       const connection = connections.get(key);
-      if (connection) {
+      if (
+        connection
+        && connection.revokedAtMs === null
+        && connection.status !== 'revoked'
+        && (expectedClientId === null || connection.clientId === expectedClientId)
+      ) {
         connections.set(key, {
           ...connection,
           status: 'revoked',
           revokedAtMs: nowMs,
         });
-      }
-      for (const [hash, token] of accessTokens) {
-        if (token.uid === uid && token.connectionId === connectionId) {
-          accessTokens.delete(hash);
-        }
-      }
-      for (const [hash, token] of refreshTokens) {
-        if (token.uid === uid && token.connectionId === connectionId) {
-          refreshTokens.delete(hash);
-        }
-      }
-      for (const [hash, code] of codes) {
-        if (code.uid === uid && code.connectionId === connectionId) {
-          codes.delete(hash);
-        }
       }
     },
   };
@@ -273,16 +291,47 @@ function authorizationParams(verifier: string) {
 }
 
 describe('MCP OAuth service', () => {
-  it('accepts the separate activity-detail and saved-route read scopes', () => {
+  it('enforces the complete parent and location scope dependency matrix', () => {
+    const states = [false, true];
+    for (const activityDetails of states) {
+      for (const activityLocation of states) {
+        for (const routes of states) {
+          for (const routeLocation of states) {
+            const scopes = [
+              ...(activityDetails ? [MCP_OAUTH_SCOPES.ActivityDetailsRead] : []),
+              ...(activityLocation ? [MCP_OAUTH_SCOPES.ActivityLocationRead] : []),
+              ...(routes ? [MCP_OAUTH_SCOPES.RoutesRead] : []),
+              ...(routeLocation ? [MCP_OAUTH_SCOPES.RouteLocationRead] : []),
+            ];
+            expect(hasValidMcpScopeDependencies(scopes)).toBe(
+              (!activityLocation || activityDetails)
+              && (!routeLocation || routes),
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it('accepts each independent read scope', () => {
     expect(normalizeOAuthScopes(
-      'metrics:read activity-details:read routes:read sleep:read',
+      'metrics:read measurements:read activity-details:read activity-location:read routes:read route-location:read sleep:read',
     )).toEqual([
       MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.MeasurementsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
       MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
       MCP_OAUTH_SCOPES.SleepRead,
     ]);
     expect(() => normalizeOAuthScopes('activity-details:write')).toThrow(
+      expect.objectContaining({ code: 'invalid_scope' }),
+    );
+    expect(() => normalizeOAuthScopes('activity-location:read')).toThrow(
+      expect.objectContaining({ code: 'invalid_scope' }),
+    );
+    expect(() => normalizeOAuthScopes('route-location:read')).toThrow(
       expect.objectContaining({ code: 'invalid_scope' }),
     );
   });
@@ -803,6 +852,354 @@ describe('MCP OAuth service', () => {
       'access-token',
       'https://quantified-self.io/mcp',
     )).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it('revokes the complete token family through RFC 7009 without affecting another connection', async () => {
+    const store = createMemoryStore();
+    const consumeRevocationRateLimit = vi.spyOn(store, 'consumeRevocationRateLimit');
+    const revokeConnection = vi.spyOn(store, 'revokeConnection');
+    const fetchClientMetadata = vi.fn();
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata,
+      now: () => 5_000,
+      randomToken: () => 'unused-next-token',
+    });
+    const clientId = metadata().client_id;
+    const baseConnection: McpConnection = {
+      connectionId: 'connection-1',
+      clientId,
+      clientName: metadata().client_name,
+      redirectHost: 'client.example',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      createdAtMs: 1,
+      lastUsedAtMs: 1,
+      revokedAtMs: null,
+      status: 'active',
+    };
+    store.connections.set('user-1:connection-1', baseConnection);
+    store.connections.set('user-1:connection-2', {
+      ...baseConnection,
+      connectionId: 'connection-2',
+    });
+    store.accessTokens.set(hashOpaqueValue('access-token-1'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 1,
+      expiresAtMs: 10_000,
+    });
+    store.refreshTokens.set(hashOpaqueValue('refresh-token-1'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      familyId: 'family-1',
+      createdAtMs: 1,
+      expiresAtMs: 10_000,
+      active: true,
+    });
+    store.accessTokens.set(hashOpaqueValue('access-token-2'), {
+      uid: 'user-1',
+      connectionId: 'connection-2',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 1,
+      expiresAtMs: 10_000,
+    });
+
+    await expect(service.authenticateBearer(
+      'access-token-1',
+      'https://quantified-self.io/mcp',
+    )).resolves.toMatchObject({ connectionId: 'connection-1' });
+
+    await service.revokeToken({
+      token: 'access-token-1',
+      token_type_hint: 'refresh_token',
+      client_id: clientId,
+    }, {
+      requesterKey: '203.0.113.10',
+    });
+
+    expect(consumeRevocationRateLimit).toHaveBeenCalledWith({
+      clientId,
+      requesterKey: '203.0.113.10',
+      nowMs: 5_000,
+    });
+    expect(revokeConnection).toHaveBeenCalledWith({
+      kind: 'token',
+      tokenHash: hashOpaqueValue('access-token-1'),
+      tokenTypeHint: 'refresh_token',
+      clientId,
+    }, 5_000);
+    expect(JSON.stringify(revokeConnection.mock.calls)).not.toContain('access-token-1');
+    expect(fetchClientMetadata).not.toHaveBeenCalled();
+    expect(store.connections.get('user-1:connection-1')).toEqual(
+      expect.objectContaining({
+        status: 'revoked',
+        revokedAtMs: 5_000,
+      }),
+    );
+    expect(store.accessTokens.has(hashOpaqueValue('access-token-1'))).toBe(true);
+    expect(store.refreshTokens.has(hashOpaqueValue('refresh-token-1'))).toBe(true);
+    await expect(service.authenticateBearer(
+      'access-token-1',
+      'https://quantified-self.io/mcp',
+    )).rejects.toMatchObject({ statusCode: 401 });
+    await expect(service.exchangeRefreshToken({
+      grant_type: 'refresh_token',
+      refresh_token: 'refresh-token-1',
+      client_id: clientId,
+      resource: 'https://quantified-self.io/mcp',
+    }, 'https://quantified-self.io')).rejects.toMatchObject({
+      code: 'invalid_grant',
+    });
+    await expect(service.authenticateBearer(
+      'access-token-2',
+      'https://quantified-self.io/mcp',
+    )).resolves.toMatchObject({ connectionId: 'connection-2' });
+  });
+
+  it('keeps RFC 7009 responses private, idempotent, and bound to the public client', async () => {
+    const store = createMemoryStore();
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 5_000,
+      randomToken: () => 'unused',
+    });
+    const clientId = metadata().client_id;
+    const otherClientId = 'https://other-client.example/mcp.json';
+    store.connections.set('user-1:connection-1', {
+      connectionId: 'connection-1',
+      clientId,
+      clientName: metadata().client_name,
+      redirectHost: 'client.example',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      createdAtMs: 1,
+      lastUsedAtMs: 1,
+      revokedAtMs: null,
+      status: 'active',
+    });
+    store.accessTokens.set(hashOpaqueValue('access-token'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 1,
+      expiresAtMs: 10_000,
+    });
+    store.accessTokens.set(hashOpaqueValue('expired-token'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 1,
+      expiresAtMs: 4_000,
+    });
+
+    await expect(service.revokeToken({
+      token: 'unknown-token',
+      client_id: clientId,
+    })).resolves.toBeUndefined();
+    await expect(service.revokeToken({
+      token: 'expired-token',
+      client_id: clientId,
+    })).resolves.toBeUndefined();
+    await expect(service.revokeToken({
+      token: 'access-token',
+      client_id: otherClientId,
+    })).resolves.toBeUndefined();
+    expect(store.connections.get('user-1:connection-1')?.status).toBe('active');
+
+    await expect(service.revokeToken({
+      token: 'access-token',
+      token_type_hint: 'an-unregistered-hint',
+      client_id: clientId,
+    })).resolves.toBeUndefined();
+    const terminalState = store.connections.get('user-1:connection-1');
+    await expect(service.revokeToken({
+      token: 'access-token',
+      token_type_hint: 'access_token',
+      client_id: clientId,
+    })).resolves.toBeUndefined();
+    expect(store.connections.get('user-1:connection-1')).toEqual(terminalState);
+  });
+
+  it('revokes descendants when a submitted refresh token was concurrently rotated', async () => {
+    const store = createMemoryStore();
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 5_000,
+      randomToken: () => 'unused',
+    });
+    const clientId = metadata().client_id;
+    store.connections.set('user-1:connection-1', {
+      connectionId: 'connection-1',
+      clientId,
+      clientName: metadata().client_name,
+      redirectHost: 'client.example',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      createdAtMs: 1,
+      lastUsedAtMs: 1,
+      revokedAtMs: null,
+      status: 'active',
+    });
+    store.refreshTokens.set(hashOpaqueValue('rotated-refresh-token'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      familyId: 'family-1',
+      createdAtMs: 1,
+      expiresAtMs: 10_000,
+      active: false,
+    });
+    store.accessTokens.set(hashOpaqueValue('descendant-access-token'), {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      createdAtMs: 2,
+      expiresAtMs: 10_000,
+    });
+
+    await expect(service.authenticateBearer(
+      'descendant-access-token',
+      'https://quantified-self.io/mcp',
+    )).resolves.toMatchObject({ connectionId: 'connection-1' });
+    await service.revokeToken({
+      token: 'rotated-refresh-token',
+      token_type_hint: 'refresh_token',
+      client_id: clientId,
+    });
+    await expect(service.authenticateBearer(
+      'descendant-access-token',
+      'https://quantified-self.io/mcp',
+    )).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it('rate-limits token revocation before hashed-token state lookup', async () => {
+    const store = createMemoryStore();
+    vi.spyOn(store, 'consumeRevocationRateLimit').mockRejectedValueOnce(
+      new McpOAuthError(
+        'temporarily_unavailable',
+        'revocation rate limit exceeded',
+        429,
+      ),
+    );
+    const revokeConnection = vi.spyOn(store, 'revokeConnection');
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 5_000,
+      randomToken: () => 'unused',
+    });
+
+    await expect(service.revokeToken({
+      token: 'raw-secret-token',
+      client_id: metadata().client_id,
+    }, {
+      requesterKey: '203.0.113.10',
+    })).rejects.toMatchObject({
+      code: 'temporarily_unavailable',
+      statusCode: 429,
+    });
+    expect(revokeConnection).not.toHaveBeenCalled();
+  });
+
+  it('requires an HTTPS public CIMD client identity before revocation state access', async () => {
+    const store = createMemoryStore();
+    const consumeRevocationRateLimit = vi.spyOn(store, 'consumeRevocationRateLimit');
+    const revokeConnection = vi.spyOn(store, 'revokeConnection');
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 5_000,
+      randomToken: () => 'unused',
+    });
+
+    for (const clientId of [
+      '',
+      'client-id',
+      'http://client.example/mcp.json',
+      'https://client.example',
+      'https://127.0.0.1/mcp.json',
+    ]) {
+      await expect(service.revokeToken({
+        token: 'opaque-token',
+        client_id: clientId,
+      })).rejects.toBeInstanceOf(McpOAuthError);
+    }
+
+    expect(consumeRevocationRateLimit).not.toHaveBeenCalled();
+    expect(revokeConnection).not.toHaveBeenCalled();
+  });
+
+  it('uses the same terminal state for dashboard and token revocation', async () => {
+    const store = createMemoryStore();
+    const service = createMcpOAuthService({
+      store,
+      fetchClientMetadata: vi.fn(),
+      now: () => 5_000,
+      randomToken: () => 'unused',
+    });
+    const connection: McpConnection = {
+      connectionId: 'dashboard-connection',
+      clientId: metadata().client_id,
+      clientName: metadata().client_name,
+      redirectHost: 'client.example',
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      createdAtMs: 1,
+      lastUsedAtMs: 1,
+      revokedAtMs: null,
+      status: 'active',
+    };
+    store.connections.set('user-1:dashboard-connection', connection);
+    store.connections.set('user-1:client-connection', {
+      ...connection,
+      connectionId: 'client-connection',
+    });
+    store.refreshTokens.set(hashOpaqueValue('refresh-token'), {
+      uid: 'user-1',
+      connectionId: 'client-connection',
+      clientId: metadata().client_id,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      audience: 'https://quantified-self.io/mcp',
+      familyId: 'family-1',
+      createdAtMs: 1,
+      expiresAtMs: 10_000,
+      active: true,
+    });
+
+    await service.revokeConnection('user-1', 'dashboard-connection');
+    await service.revokeToken({
+      token: 'refresh-token',
+      token_type_hint: 'refresh_token',
+      client_id: metadata().client_id,
+    });
+
+    expect(store.connections.get('user-1:dashboard-connection')).toEqual(
+      expect.objectContaining({
+        status: 'revoked',
+        revokedAtMs: 5_000,
+      }),
+    );
+    expect(store.connections.get('user-1:client-connection')).toEqual(
+      expect.objectContaining({
+        status: 'revoked',
+        revokedAtMs: 5_000,
+      }),
+    );
   });
 
   it('does not exchange an authorization code after its connection is revoked', async () => {

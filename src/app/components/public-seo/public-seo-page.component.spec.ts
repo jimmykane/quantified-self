@@ -87,9 +87,12 @@ describe('PublicSeoPageComponent', () => {
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
     expect(text).toContain('Connect ChatGPT to your training data with a read-only MCP server');
-    expect(text).toContain('Activity and Training metrics');
+    expect(text).toContain('Activity, body measurement, and Training analysis');
+    expect(text).toContain('body measurements, individual activity details');
+    expect(text).toContain('identity-free body-weight history');
     expect(text).toContain('Sleep sessions and summaries');
-    expect(text).toContain('Saved routes and nearby search');
+    expect(text).toContain('Saved-route summaries and optional locations');
+    expect(text).toContain('Individual activity details and charts');
     expect(text).toContain('No settings or data writes');
     expect(text).toContain('ChatGPT is an external client with its own privacy and retention practices');
     expect(mcpFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(8);

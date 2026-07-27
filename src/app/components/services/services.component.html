@@ -3,7 +3,7 @@
     <main class="settings-content services-content">
         <header class="services-page-header">
           <h1>Connections</h1>
-          <p>Connect activity providers and manage authorized MCP clients.</p>
+          <p>MCP access is free. Provider connections, imports, and sync are available with Pro.</p>
         </header>
 
         <mat-expansion-panel
@@ -22,7 +22,23 @@
             </mat-panel-title>
           </mat-expansion-panel-header>
           <div class="service-data-flow__content" aria-labelledby="service-data-flow-title">
-            @if (dataFlowSummary.connectedServiceCount === 0) {
+            @if (!hasProAccess) {
+            <div class="service-data-flow__empty">
+              <mat-icon aria-hidden="true">workspace_premium</mat-icon>
+              <div>
+                <h2>Unlock provider data flow with Pro</h2>
+                <p>Connect activity providers and manage automatic activity or route delivery through Quantified Self.</p>
+                <button
+                  mat-flat-button
+                  type="button"
+                  class="qs-mat-primary service-data-flow__upgrade"
+                  (click)="openActiveProviderDataFlowPlans()">
+                  <mat-icon>workspace_premium</mat-icon>
+                  View Pro plans
+                </button>
+              </div>
+            </div>
+            } @else if (dataFlowSummary.connectedServiceCount === 0) {
             <div class="service-data-flow__empty">
               <mat-icon aria-hidden="true">hub</mat-icon>
               <div>
@@ -179,7 +195,9 @@
           aria-label="Connection categories"
           (change)="selectService($event.value)">
           @for (section of serviceSectionOptions; track section.id) {
-          <mat-button-toggle [value]="section.id" [attr.aria-label]="section.label">
+          <mat-button-toggle
+            [value]="section.id"
+            [aria-label]="section.label + (!hasProAccess ? (section.requiresPro ? ', Pro feature' : ', Free') : '')">
             <span class="provider-selector__option">
               @if (section.serviceName; as serviceName) {
                 <app-service-source-icon
@@ -195,6 +213,13 @@
                 </span>
               }
               <span class="provider-selector__name">{{ section.label }}</span>
+              @if (!hasProAccess) {
+              <mat-chip-set class="provider-selector__entitlement" aria-hidden="true">
+                <mat-chip disableRipple [highlighted]="section.requiresPro">
+                  {{ section.requiresPro ? 'PRO' : 'FREE' }}
+                </mat-chip>
+              </mat-chip-set>
+              }
               @if (section.providerId; as providerId) {
                 @if (serviceConnectionState[providerId]) {
                   <span class="provider-selector__connection-state">
@@ -217,8 +242,17 @@
           @for (section of serviceSectionOptions; track section.id) {
           <mat-button-toggle
             [value]="section.id"
-            [attr.aria-label]="section.label">
-            <span class="provider-selector__mobile-option">{{ section.label }}</span>
+            [aria-label]="section.label + (!hasProAccess ? (section.requiresPro ? ', Pro feature' : ', Free') : '')">
+            <span class="provider-selector__mobile-option">
+              <span>{{ section.label }}</span>
+              @if (!hasProAccess) {
+              <mat-chip-set class="provider-selector__entitlement" aria-hidden="true">
+                <mat-chip disableRipple [highlighted]="section.requiresPro">
+                  {{ section.requiresPro ? 'PRO' : 'FREE' }}
+                </mat-chip>
+              </mat-chip-set>
+              }
+            </span>
           </mat-button-toggle>
           }
         </mat-button-toggle-group>
@@ -312,9 +346,15 @@
         <ng-template #automaticSyncSummary let-section>
           <mat-card appearance="outlined" class="service-sync-summary qs-card-plain" [attr.aria-label]="serviceLabelBySection[section] + ' automatic sync'">
             <mat-card-header>
-              <mat-icon mat-card-avatar>published_with_changes</mat-icon>
-              <mat-card-title>Enabled automatic sync</mat-card-title>
-              <mat-card-subtitle>Activity and route delivery involving {{ serviceLabelBySection[section] }}</mat-card-subtitle>
+              <mat-icon mat-card-avatar>{{ hasProAccess ? 'published_with_changes' : 'pause_circle' }}</mat-icon>
+              <mat-card-title>{{ hasProAccess ? 'Enabled automatic sync' : 'Automatic sync' }}</mat-card-title>
+              <mat-card-subtitle>
+                {{ hasProAccess
+                  ? 'Activity and route delivery involving ' + serviceLabelBySection[section]
+                  : automaticSyncSummaryBySection[section].activities.length || automaticSyncSummaryBySection[section].routes.length
+                    ? 'Configured provider delivery is paused without Pro access'
+                    : 'Provider delivery is available with Pro' }}
+              </mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
               @if (automaticSyncSummaryBySection[section].activities.length || automaticSyncSummaryBySection[section].routes.length) {
@@ -365,11 +405,12 @@
                 <button
                   mat-stroked-button
                   class="service-overview-card__action"
+                  [class.qs-mat-primary]="!hasProAccess"
                   type="button"
-                  [attr.aria-label]="card.actionLabel + ' for ' + serviceLabelBySection[section]"
+                  [attr.aria-label]="(hasProAccess ? card.actionLabel : 'Unlock with Pro') + ' for ' + serviceLabelBySection[section]"
                   (click)="openServiceTools(section, card)">
-                  <span>Manage</span>
-                  <mat-icon>arrow_forward</mat-icon>
+                  <span>{{ hasProAccess ? 'Manage' : 'Unlock with Pro' }}</span>
+                  <mat-icon>{{ hasProAccess ? 'arrow_forward' : 'workspace_premium' }}</mat-icon>
                 </button>
               </article>
             }

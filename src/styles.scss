@@ -841,6 +841,10 @@ tr.mat-row:focus,
   max-width: min(380px, calc(100vw - 24px)) !important;
 }
 
+.mat-mdc-menu-panel.lap-column-menu-panel {
+  min-width: min(280px, calc(100vw - 24px)) !important;
+}
+
 /* Tile menu uses compact row/column selectors and does not need the wider config width. */
 .mat-mdc-menu-panel.qs-tile-actions-menu {
   min-width: 228px !important;

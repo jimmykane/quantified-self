@@ -11,6 +11,15 @@ import {
   McpDataError,
 } from './data.service';
 import {
+  MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS,
+  MCP_ACTIVITY_CHART_DEFAULT_POINTS,
+  MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS,
+  MCP_ACTIVITY_CHART_MAX_POINTS,
+} from './activity-chart.service';
+import {
+  MCP_MEASUREMENT_TYPE_IDS,
+} from './measurement-catalog';
+import {
   createMcpOAuthService,
   McpOAuthAuthorizationRedirectError,
   McpOAuthError,
@@ -18,8 +27,13 @@ import {
   MCP_OAUTH_SCOPES,
   rejectRepeatedOAuthParameters,
 } from './oauth.service';
+import {
+  createMcpOutputSchemaRegistry,
+  McpOutputSchemaRegistry,
+  PublicMcpToolName,
+} from './tool-output-schemas';
 
-const dataService = createMcpDataService();
+const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
 const SUPPORTED_PUBLIC_HOSTS = new Set([
   'quantified-self.io',
@@ -65,6 +79,7 @@ const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
   SLEEP_PROVIDERS.SuuntoApp,
   SLEEP_PROVIDERS.COROSAPI,
 ]);
+const MCP_MEASUREMENT_TYPE_SCHEMA = z.enum(MCP_MEASUREMENT_TYPE_IDS);
 
 interface AuthenticatedMcpRequest {
   uid: string;
@@ -192,6 +207,62 @@ function parseFormBody(request: Request): Record<string, unknown> {
   return parseMcpFormEncodedBody(raw);
 }
 
+export function buildMcpAuthorizationServerMetadata(baseUrl: string) {
+  return {
+    issuer: baseUrl,
+    authorization_endpoint: `${baseUrl}/oauth/authorize`,
+    token_endpoint: `${baseUrl}/oauth/token`,
+    revocation_endpoint: `${baseUrl}/oauth/revoke`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'refresh_token'],
+    token_endpoint_auth_methods_supported: ['none'],
+    revocation_endpoint_auth_methods_supported: ['none'],
+    code_challenge_methods_supported: ['S256'],
+    scopes_supported: Object.values(MCP_OAUTH_SCOPES),
+    client_id_metadata_document_supported: true,
+    resource_indicators_supported: true,
+  };
+}
+
+interface McpRevocationHttpResponse {
+  set(name: string, value: string): unknown;
+  status(statusCode: number): {
+    json(body: unknown): unknown;
+    send(body?: unknown): unknown;
+  };
+}
+
+export async function handleMcpRevocationRequest(
+  request: Request,
+  response: McpRevocationHttpResponse,
+  service: Pick<ReturnType<typeof createMcpOAuthService>, 'revokeToken'> = getOAuthService(),
+): Promise<void> {
+  noStore(response);
+  if (!isMcpFormUrlEncodedContentType(request.get('content-type'))) {
+    response.status(400).json({
+      error: 'invalid_request',
+      error_description: 'The revocation request must use application/x-www-form-urlencoded.',
+    });
+    return;
+  }
+  if (!isMcpRequestBodyWithinLimit(request.body, request.get('content-length'))) {
+    response.status(413).json({
+      error: 'invalid_request',
+      error_description: 'The revocation request body is too large.',
+    });
+    return;
+  }
+  try {
+    const params = parseFormBody(request);
+    await service.revokeToken(params, {
+      requesterKey: resolveMcpAuthorizationRequesterKey(request),
+    });
+    response.status(200).send('');
+  } catch (error) {
+    sendOAuthError(response, error);
+  }
+}
+
 export function parseMcpDateTime(value: string, field: string): number {
   if (!MCP_ISO_DATE_TIME_SCHEMA.safeParse(value).success) {
     throw new McpDataError(
@@ -209,13 +280,15 @@ export function parseMcpDateTime(value: string, field: string): number {
   return parsed;
 }
 
-function toolResult(value: unknown) {
+function toolResult(value: Record<string, unknown>) {
+  const serialized = JSON.stringify(value);
+  const structuredContent = JSON.parse(serialized) as Record<string, unknown>;
   return {
     content: [{
       type: 'text' as const,
-      text: JSON.stringify(value),
+      text: serialized,
     }],
-    structuredContent: value as Record<string, unknown>,
+    structuredContent,
   };
 }
 
@@ -245,49 +318,138 @@ const READ_ONLY_LOCATION_TOOL_ANNOTATIONS = {
   openWorldHint: true,
 } as const;
 
-async function runReadOnlyTool(
-  name: string,
-  operation: () => Promise<unknown>,
-) {
-  try {
-    return toolResult(await operation());
-  } catch (error) {
-    if (!(error instanceof McpDataError)) {
-      logger.error('[MCP] Tool execution failed', {
-        toolName: name,
-        errorName: error instanceof Error ? error.name : 'unknown',
-      });
+function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
+  return async (
+    name: PublicMcpToolName,
+    operation: () => Promise<unknown>,
+  ) => {
+    try {
+      const projected = await operation();
+      const validated = await outputSchemas[name].parseAsync(projected);
+      return toolResult(validated as Record<string, unknown>);
+    } catch (error) {
+      if (!(error instanceof McpDataError)) {
+        logger.error('[MCP] Tool execution failed', {
+          toolName: name,
+          errorName: error instanceof Error ? error.name : 'unknown',
+        });
+      }
+      return formatMcpToolError(error);
     }
-    return formatMcpToolError(error);
+  };
+}
+
+function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
+  const instructions = [
+    'Use only the read-only tools exposed for the permissions this connection was granted.',
+  ];
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
+    instructions.push(
+      'Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment.',
+    );
   }
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
+    instructions.push(
+      'Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics.',
+    );
+  }
+  return instructions.join(' ');
 }
 
 export function createMcpServer(
   auth: AuthenticatedMcpRequest,
   publicBaseUrl: string,
+  dataService: ReturnType<typeof createMcpDataService> = defaultDataService,
 ): McpServer {
+  const measurementToolsAvailable = auth.scopes.includes(
+    MCP_OAUTH_SCOPES.MeasurementsRead,
+  );
+  const activityLocationAvailable = auth.scopes.includes(
+    MCP_OAUTH_SCOPES.ActivityLocationRead,
+  );
+  const routeLocationAvailable = auth.scopes.includes(
+    MCP_OAUTH_SCOPES.RouteLocationRead,
+  );
+  const outputSchemas = createMcpOutputSchemaRegistry({
+    activityLocation: activityLocationAvailable,
+    routeLocation: routeLocationAvailable,
+  });
+  const runReadOnlyTool = createReadOnlyToolRunner(outputSchemas);
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
-    version: '1.0.0',
-    description: 'Read-only metrics, Training snapshots, and sleep-session summaries.',
+    version: '1.1.0',
+    description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
     websiteUrl: publicBaseUrl,
     icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
       src: `${publicBaseUrl}${icon.path}`,
       mimeType: 'image/png',
       sizes: [...icon.sizes],
     })),
+  }, {
+    instructions: buildMcpServerInstructions(auth),
   });
+
+  if (measurementToolsAvailable) {
+    server.registerTool('list_measurement_types', {
+      title: 'List body measurement types',
+      description: 'List first-class personal measurement capabilities such as body weight, including units, supported trend aggregations, date intervals, range limits, and the optional current Training snapshot.',
+      inputSchema: {},
+      outputSchema: outputSchemas.list_measurement_types,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, () => runReadOnlyTool(
+      'list_measurement_types',
+      () => dataService.listMeasurementTypes(),
+    ));
+
+    server.registerTool('query_measurements', {
+      title: 'Query body measurement history',
+      description: 'Query recorded body measurements such as weight or body mass over a bounded date range. Returns an identity-free day, week, or month time series and change summary; provider, device, source, event, and activity identity are excluded. Recorded values are not a medical or health assessment.',
+      inputSchema: {
+        measurementType: MCP_MEASUREMENT_TYPE_SCHEMA,
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
+        aggregation: z.enum([
+          'median',
+          'average',
+          'minimum',
+          'maximum',
+          'latest',
+        ]).default('median'),
+        interval: z.enum(['day', 'week', 'month']).default('day'),
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Required IANA time zone used for day, week, and month boundaries.'),
+      },
+      outputSchema: outputSchemas.query_measurements,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'query_measurements',
+      () => dataService.queryMeasurements({
+        uid: auth.uid,
+        measurementType: input.measurementType,
+        startTimeMs: parseMcpDateTime(input.start, 'start'),
+        endTimeMs: parseMcpDateTime(input.end, 'end'),
+        aggregation: input.aggregation,
+        interval: input.interval,
+        timeZone: input.timeZone,
+      }),
+    ));
+  }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
     server.registerTool('list_metrics', {
-      title: 'List available metrics',
-      description: 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities.',
+      title: 'List available activity and Training metrics',
+      description: measurementToolsAvailable
+        ? 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities. For body weight or other personal measurements, use list_measurement_types.'
+        : 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities.',
       inputSchema: {
         search: z.string().max(120).optional(),
         cursor: z.string().max(256).optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_metrics', () => dataService.listMetrics({
       uid: auth.uid,
@@ -297,8 +459,10 @@ export function createMcpServer(
     })));
 
     server.registerTool('query_metric', {
-      title: 'Query an event metric',
-      description: 'Aggregate one persisted numeric Sports Lib event metric over a bounded date range.',
+      title: 'Query an activity or event metric',
+      description: measurementToolsAvailable
+        ? 'Aggregate one persisted numeric Sports Lib activity or event metric over a bounded date range. For body weight, body mass, weigh-ins, or measurement trends, use query_measurements.'
+        : 'Aggregate one persisted numeric Sports Lib activity or event metric over a bounded date range.',
       inputSchema: {
         metric: z.string().min(1).max(160),
         start: MCP_ISO_DATE_TIME_SCHEMA,
@@ -319,6 +483,7 @@ export function createMcpServer(
         timeZone: z.string().min(1).max(80),
         activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
       },
+      outputSchema: outputSchemas.query_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_metric', () => dataService.queryMetric({
       uid: auth.uid,
@@ -334,10 +499,13 @@ export function createMcpServer(
 
     server.registerTool('get_training_metric', {
       title: 'Get a Training metric',
-      description: 'Read one ready Training-derived snapshot without event or activity identifiers and labels.',
+      description: measurementToolsAvailable
+        ? 'Read one ready Training-derived snapshot without event or activity identifiers and labels. The body_weight_trend kind is a current 28-day Training snapshot; use query_measurements for explicit body-weight history.'
+        : 'Read one ready Training-derived snapshot without event or activity identifiers and labels. The body_weight_trend kind is a current 28-day Training snapshot.',
       inputSchema: {
         metricKind: z.string().min(1).max(120),
       },
+      outputSchema: outputSchemas.get_training_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'get_training_metric',
@@ -357,6 +525,7 @@ export function createMcpServer(
         cursor: z.string().max(512).optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
+      outputSchema: outputSchemas.list_sleep_sessions,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_sleep_sessions', () => dataService.listSleepSessions({
       uid: auth.uid,
@@ -380,6 +549,7 @@ export function createMcpServer(
         groupBy: z.enum(['day', 'week', 'month']).default('day'),
         timeZone: z.string().min(1).max(80),
       },
+      outputSchema: outputSchemas.query_sleep_summary,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_sleep_summary', () => dataService.querySleepSummary({
       uid: auth.uid,
@@ -395,13 +565,16 @@ export function createMcpServer(
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
     server.registerTool('list_activities', {
       title: 'List activities',
-      description: 'List bounded activity summaries, including exact start and end coordinates when present, with opaque references and direct authenticated app links.',
+      description: activityLocationAvailable
+        ? 'List bounded activity summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
+        : 'List bounded non-location activity summaries with opaque references and direct authenticated app links. Location fields are redacted.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
+      outputSchema: outputSchemas.list_activities,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activities', () => dataService.listActivities({
       uid: auth.uid,
@@ -409,42 +582,46 @@ export function createMcpServer(
       appBaseUrl: publicBaseUrl,
       startTimeMs: parseMcpDateTime(input.start, 'start'),
       endTimeMs: parseMcpDateTime(input.end, 'end'),
+      includeLocation: activityLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
     })));
 
-    server.registerTool('find_activities_near_location', {
-      title: 'Find activities near a location',
-      description: 'Find activities whose exact start or end coordinate is within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Dates are optional, and results are returned newest first in bounded scan pages.',
-      inputSchema: {
-        location: MCP_NEARBY_LOCATION_SCHEMA,
-        radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
-        start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
-        end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
-        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
-        cursor: MCP_CURSOR_SCHEMA.optional(),
-        limit: z.number().int().min(1).max(25).default(10),
-      },
-      annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool(
-      'find_activities_near_location',
-      () => dataService.findActivitiesNearLocation({
-        uid: auth.uid,
-        connectionId: auth.connectionId,
-        appBaseUrl: publicBaseUrl,
-        location: input.location,
-        radiusMeters: input.radiusMeters,
-        startTimeMs: input.start
-          ? parseMcpDateTime(input.start, 'start')
-          : undefined,
-        endTimeMs: input.end
-          ? parseMcpDateTime(input.end, 'end')
-          : undefined,
-        activityTypes: input.activityTypes,
-        cursor: input.cursor,
-        limit: input.limit,
-      }),
-    ));
+    if (activityLocationAvailable) {
+      server.registerTool('find_activities_near_location', {
+        title: 'Find activities near a location',
+        description: 'Find activities whose exact start or end coordinate is within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Dates are optional, and results are returned newest first in bounded scan pages.',
+        inputSchema: {
+          location: MCP_NEARBY_LOCATION_SCHEMA,
+          radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+          start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+          end: MCP_ISO_DATE_TIME_SCHEMA.optional(),
+          activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+          cursor: MCP_CURSOR_SCHEMA.optional(),
+          limit: z.number().int().min(1).max(25).default(10),
+        },
+        outputSchema: outputSchemas.find_activities_near_location,
+        annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool(
+        'find_activities_near_location',
+        () => dataService.findActivitiesNearLocation({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          appBaseUrl: publicBaseUrl,
+          location: input.location,
+          radiusMeters: input.radiusMeters,
+          startTimeMs: input.start
+            ? parseMcpDateTime(input.start, 'start')
+            : undefined,
+          endTimeMs: input.end
+            ? parseMcpDateTime(input.end, 'end')
+            : undefined,
+          activityTypes: input.activityTypes,
+          cursor: input.cursor,
+          limit: input.limit,
+        }),
+      ));
+    }
 
     server.registerTool('list_activity_laps', {
       title: 'List activity laps',
@@ -454,6 +631,7 @@ export function createMcpServer(
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_activity_laps,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activity_laps', () => dataService.listActivityLaps({
       uid: auth.uid,
@@ -465,17 +643,21 @@ export function createMcpServer(
 
     server.registerTool('list_activity_jumps', {
       title: 'List activity jumps',
-      description: 'List MTB jump measurements for one activity, including exact coordinates when present.',
+      description: activityLocationAvailable
+        ? 'List MTB jump measurements for one activity, including exact coordinates when present.'
+        : 'List MTB jump measurements for one activity with coordinates redacted.',
       inputSchema: {
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_activity_jumps,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activity_jumps', () => dataService.listActivityJumps({
       uid: auth.uid,
       connectionId: auth.connectionId,
       activityRef: input.activityRef,
+      includeLocation: activityLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
     })));
@@ -488,6 +670,7 @@ export function createMcpServer(
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_activity_swim_lengths,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'list_activity_swim_lengths',
@@ -498,6 +681,57 @@ export function createMcpServer(
         cursor: input.cursor,
         limit: input.limit,
       }),
+    ));
+
+    server.registerTool('list_activity_chart_metrics', {
+      title: 'List activity chart metrics',
+      description: 'List the static chart-stream catalog, canonical units, axes, and point limits. This does not read an activity or original source file.',
+      inputSchema: {
+        activityType: z.string().min(1).max(120).optional(),
+      },
+      outputSchema: outputSchemas.list_activity_chart_metrics,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'list_activity_chart_metrics',
+      async () => dataService.listActivityChartMetrics(input.activityType),
+    ));
+
+    server.registerTool('get_activity_chart_data', {
+      title: 'Get activity chart data',
+      description: 'Parse the existing original source on demand and return bounded, whole-activity chart series. Original files, full-resolution recordings, absolute sample timestamps, and unrequested streams are never returned. Breadcrumb coordinates require activity-location access.',
+      inputSchema: {
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        metrics: z.array(z.string().min(1).max(120)).min(1).max(4),
+        xAxis: z.enum(['elapsed_time', 'distance']).default('elapsed_time'),
+        maxPoints: z.number().int().min(2).max(MCP_ACTIVITY_CHART_MAX_POINTS)
+          .default(MCP_ACTIVITY_CHART_DEFAULT_POINTS),
+        includeLocation: z.boolean().default(false),
+        maxLocationPoints: z.number().int().min(2)
+          .max(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS)
+          .default(MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS),
+      },
+      outputSchema: outputSchemas.get_activity_chart_data,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_activity_chart_data',
+      () => {
+        if (input.includeLocation && !activityLocationAvailable) {
+          throw new McpDataError(
+            'invalid_request',
+            'Activity breadcrumb coordinates require activity-location:read.',
+          );
+        }
+        return dataService.getActivityChartData({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          activityRef: input.activityRef,
+          metrics: input.metrics,
+          xAxis: input.xAxis,
+          maxPoints: input.maxPoints,
+          includeLocation: input.includeLocation,
+          maxLocationPoints: input.maxLocationPoints,
+        });
+      },
     ));
   }
 
@@ -514,6 +748,7 @@ export function createMcpServer(
           .min(1)
           .max(MAX_ACTIVITY_METRICS_PER_REQUEST),
       },
+      outputSchema: outputSchemas.get_activity_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'get_activity_metrics',
@@ -529,70 +764,79 @@ export function createMcpServer(
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
     server.registerTool('list_routes', {
       title: 'List saved routes',
-      description: 'List bounded saved-route summaries, exact bounds, opaque references, and direct authenticated app links.',
+      description: routeLocationAvailable
+        ? 'List bounded saved-route summaries, exact bounds, opaque references, and direct authenticated app links.'
+        : 'List bounded non-location saved-route summaries, opaque references, and direct authenticated app links. Bounds are redacted.',
       inputSchema: {
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
+      outputSchema: outputSchemas.list_routes,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_routes', () => dataService.listRoutes({
       uid: auth.uid,
       connectionId: auth.connectionId,
       appBaseUrl: publicBaseUrl,
+      includeLocation: routeLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
     })));
 
-    server.registerTool('find_routes_near_location', {
-      title: 'Find saved routes near a location',
-      description: 'Find saved routes whose persisted preview passes within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
-      inputSchema: {
-        location: MCP_NEARBY_LOCATION_SCHEMA,
-        radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
-        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
-        cursor: MCP_CURSOR_SCHEMA.optional(),
-        limit: z.number().int().min(1).max(10).default(10),
-      },
-      annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool(
-      'find_routes_near_location',
-      () => dataService.findRoutesNearLocation({
+    if (routeLocationAvailable) {
+      server.registerTool('find_routes_near_location', {
+        title: 'Find saved routes near a location',
+        description: 'Find saved routes whose persisted preview passes within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
+        inputSchema: {
+          location: MCP_NEARBY_LOCATION_SCHEMA,
+          radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+          activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+          cursor: MCP_CURSOR_SCHEMA.optional(),
+          limit: z.number().int().min(1).max(10).default(10),
+        },
+        outputSchema: outputSchemas.find_routes_near_location,
+        annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool(
+        'find_routes_near_location',
+        () => dataService.findRoutesNearLocation({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          appBaseUrl: publicBaseUrl,
+          location: input.location,
+          radiusMeters: input.radiusMeters,
+          activityTypes: input.activityTypes,
+          cursor: input.cursor,
+          limit: input.limit,
+        }),
+      ));
+
+      server.registerTool('get_route_geometry', {
+        title: 'Get saved-route geometry',
+        description: 'Get the bounded polyline5 preview geometry, exact bounds, and explicit start and end coordinates for each segment of one saved route.',
+        inputSchema: {
+          routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        },
+        outputSchema: outputSchemas.get_route_geometry,
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool('get_route_geometry', () => dataService.getRouteGeometry({
         uid: auth.uid,
         connectionId: auth.connectionId,
-        appBaseUrl: publicBaseUrl,
-        location: input.location,
-        radiusMeters: input.radiusMeters,
-        activityTypes: input.activityTypes,
-        cursor: input.cursor,
-        limit: input.limit,
-      }),
-    ));
+        routeRef: input.routeRef,
+      })));
 
-    server.registerTool('get_route_geometry', {
-      title: 'Get saved-route geometry',
-      description: 'Get the bounded polyline5 preview geometry, exact bounds, and explicit start and end coordinates for each segment of one saved route.',
-      inputSchema: {
-        routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-      },
-      annotations: READ_ONLY_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool('get_route_geometry', () => dataService.getRouteGeometry({
-      uid: auth.uid,
-      connectionId: auth.connectionId,
-      routeRef: input.routeRef,
-    })));
-
-    server.registerTool('list_route_waypoints', {
-      title: 'List saved-route waypoints',
-      description: 'List bounded, allowlisted waypoint coordinates parsed from one saved FIT or GPX route source.',
-      inputSchema: {
-        routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-      },
-      annotations: READ_ONLY_TOOL_ANNOTATIONS,
-    }, input => runReadOnlyTool('list_route_waypoints', () => dataService.listRouteWaypoints({
-      uid: auth.uid,
-      connectionId: auth.connectionId,
-      routeRef: input.routeRef,
-    })));
+      server.registerTool('list_route_waypoints', {
+        title: 'List saved-route waypoints',
+        description: 'List bounded, allowlisted waypoint coordinates parsed from one saved FIT or GPX route source.',
+        inputSchema: {
+          routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        },
+        outputSchema: outputSchemas.list_route_waypoints,
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool('list_route_waypoints', () => dataService.listRouteWaypoints({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        routeRef: input.routeRef,
+      })));
+    }
   }
 
   return server;
@@ -610,6 +854,11 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   const toolName = params && typeof params === 'object'
     ? `${(params as Record<string, unknown>).name || ''}`
     : '';
+  const toolArguments = params && typeof params === 'object'
+    && (params as Record<string, unknown>).arguments
+    && typeof (params as Record<string, unknown>).arguments === 'object'
+    ? (params as Record<string, unknown>).arguments as Record<string, unknown>
+    : {};
   if (toolName === 'get_activity_metrics') {
     return [
       MCP_OAUTH_SCOPES.MetricsRead,
@@ -620,23 +869,56 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     return [MCP_OAUTH_SCOPES.SleepRead];
   }
   if ([
-    'list_activities',
     'find_activities_near_location',
+  ].includes(toolName)) {
+    return [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ];
+  }
+  if (
+    toolName === 'get_activity_chart_data'
+    && toolArguments.includeLocation === true
+  ) {
+    return [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.ActivityLocationRead,
+    ];
+  }
+  if ([
+    'list_activities',
     'list_activity_laps',
     'list_activity_jumps',
     'list_activity_swim_lengths',
+    'list_activity_chart_metrics',
+    'get_activity_chart_data',
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.ActivityDetailsRead];
   }
   if ([
-    'list_routes',
     'find_routes_near_location',
     'get_route_geometry',
     'list_route_waypoints',
   ].includes(toolName)) {
+    return [
+      MCP_OAUTH_SCOPES.RoutesRead,
+      MCP_OAUTH_SCOPES.RouteLocationRead,
+    ];
+  }
+  if (toolName === 'list_routes') {
     return [MCP_OAUTH_SCOPES.RoutesRead];
   }
-  if (['list_metrics', 'query_metric', 'get_training_metric'].includes(toolName)) {
+  if ([
+    'list_measurement_types',
+    'query_measurements',
+  ].includes(toolName)) {
+    return [MCP_OAUTH_SCOPES.MeasurementsRead];
+  }
+  if ([
+    'list_metrics',
+    'query_metric',
+    'get_training_metric',
+  ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.MetricsRead];
   }
   return [];
@@ -751,18 +1033,7 @@ export const mcpApi = onRequest({
 
   if (request.method === 'GET' && path === '/.well-known/oauth-authorization-server') {
     response.set('Cache-Control', 'public, max-age=300');
-    response.json({
-      issuer: baseUrl,
-      authorization_endpoint: `${baseUrl}/oauth/authorize`,
-      token_endpoint: `${baseUrl}/oauth/token`,
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: ['none'],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: Object.values(MCP_OAUTH_SCOPES),
-      client_id_metadata_document_supported: true,
-      resource_indicators_supported: true,
-    });
+    response.json(buildMcpAuthorizationServerMetadata(baseUrl));
     return;
   }
 
@@ -784,6 +1055,11 @@ export const mcpApi = onRequest({
       }
       sendOAuthError(response, error);
     }
+    return;
+  }
+
+  if (request.method === 'POST' && path === '/oauth/revoke') {
+    await handleMcpRevocationRequest(request, response);
     return;
   }
 

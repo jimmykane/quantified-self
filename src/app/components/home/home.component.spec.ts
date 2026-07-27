@@ -200,7 +200,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('Map');
         expect(text).toContain('clustered heatmaps');
         expect(text).toContain('Read-only MCP Server');
-        expect(text).toContain('activity metrics, sleep summaries, activity details, and saved routes you approve');
+        expect(text).toContain('activity details and charts, route summaries, and separate location access you approve');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/mcp-server"], a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
     });
 

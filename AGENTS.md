@@ -19,9 +19,17 @@ Always-on rules:
 - Before changing the Training workspace, Training settings, Training-derived metrics, or sports-lib durability integration,
   read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the
   single detailed Training source of truth instead of creating a competing Training architecture document.
-- Before adding or changing a Sports Lib event metric, Training-derived metric kind, or normalized sleep field, read
-  `.agent/skills/mcp-metric-surface/SKILL.md` and `docs/mcp-server.md`. Keep the MCP discovery, safe projection,
-  documentation, and focused contract tests current in the same change.
+- Before adding or changing an MCP tool or response field, a Sports Lib event metric, an activity/route projection, a
+  Training-derived metric kind or payload, or a normalized sleep field, read
+  `.agent/skills/mcp-metric-surface/SKILL.md` and `docs/mcp-server.md`. Update the exhaustive strict output-schema
+  registry in the same change, preserve validated `structuredContent` plus equivalent JSON text, add or update negative
+  leakage fixtures, run the MCP output contract suite, and keep the MCP documentation current.
+- When MCP tools, schemas, scopes, instructions, plugin metadata, starter prompts, branding, or the bundled
+  `analyze-quantified-self` skill change, follow the local-plugin update matrix in `docs/mcp-server.md`, run
+  `npm run plugin:tools`, `npm --prefix tools/quantified-self-plugin test`, and `npm run plugin:validate` with a fixture
+  app ID, and state whether the registered ChatGPT app needs a rescan or the local plugin needs `npm run plugin:sync`.
+  Never commit the generated `.app.json`, generated cache-busted manifest, local app ID configuration, or installed
+  plugin cache.
 - When adding a new provider/service integration, add or update a focused public `/integrations/<provider>` page when it has a clear product or search purpose. Keep integration routes intentional, and update route metadata, sitemap/robots, internal links, help content, and tests alongside the page.
 - When adding or materially changing a provider/service integration, update `docs/provider-integration-guide.md` in the same change. Keep its provider matrix, implementation checklist, lifecycle guidance, operational coverage, and pitfalls accurate.
 - For read-only Sentry queries in this repository, source `$HOME/.config/sentry/personal.env` only for the Sentry API command. Infer the organization and project from the `sentry:upload-sourcemaps` script in `package.json`; never print the token or profile contents.

@@ -1,0 +1,16 @@
+:host {
+  display: block;
+}
+
+.catalog-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 640px;
+  margin: 0 0 24px;
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    flex: 0 0 auto;
+  }
+}

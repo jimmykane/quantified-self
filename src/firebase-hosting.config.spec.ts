@@ -83,6 +83,7 @@ const expectedMcpFunctionRewriteSources = [
   '/.well-known/oauth-authorization-server',
   '/oauth/authorize',
   '/oauth/token',
+  '/oauth/revoke',
 ];
 const siteOrigin = 'https://quantified-self.io';
 const betaNoIndexHeader = {
@@ -254,18 +255,19 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
-  it('marks MCP and Wahoo discovery surfaces as recently updated in sitemap', () => {
+  it('marks recently updated public discovery surfaces in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-07-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-07-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-07-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-27');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-07-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-07-18');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-07-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-07-27');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-07-27');
   });
 
   it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {

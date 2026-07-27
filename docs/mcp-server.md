@@ -3,9 +3,9 @@
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
-authenticated user's persisted numeric activity metrics, ready Training-derived snapshots, normalized sleep summaries,
-explicitly authorized individual activity details, and saved-route previews without granting browser or Firestore
-access.
+authenticated user's persisted numeric activity metrics, first-class body-measurement history, ready Training-derived
+snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
+without granting browser or Firestore access.
 
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
 stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
@@ -29,6 +29,7 @@ Hosting routes these paths to `mcpApi`:
 | `/.well-known/oauth-authorization-server` | OAuth authorization-server metadata |
 | `/oauth/authorize` | Starts an authorization-code request |
 | `/oauth/token` | Exchanges or refreshes an OAuth token |
+| `/oauth/revoke` | Revokes an access or refresh token and its connection grant |
 | `/mcp` | Read-only MCP Streamable HTTP endpoint |
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
@@ -49,19 +50,97 @@ the same change.
 
 ## Server presentation metadata
 
-The MCP initialize response identifies the server as **Quantified Self** and advertises two public PNG icon variants:
+The MCP initialize response identifies the server as **Quantified Self** and advertises three public PNG icon variants:
 
 | Asset | Dimensions | File size | Purpose |
 | --- | --- | --- | --- |
-| `/assets/favicons/android-chrome-96x96.png` | 96 x 96 | 3.3 KB | Compact ChatGPT upload and MCP client metadata |
-| `/assets/favicons/android-chrome-192x192.png` | 192 x 192 | 9.9 KB | Higher-density ChatGPT upload and MCP client metadata |
+| `/assets/favicons/android-chrome-96x96.png` | 96 x 96 | 3.3 KB | Compact MCP client metadata |
+| `/assets/favicons/android-chrome-192x192.png` | 192 x 192 | 9.9 KB | Higher-density MCP client metadata |
 | `/assets/favicons/android-chrome-512x512.png` | 512 x 512 | 47.8 KB | High-density MCP client metadata only |
+| `/assets/favicons/quantified-self-chatgpt-icon-256x256.png` | 256 x 256 | 9.4 KB | Recommended manual ChatGPT upload |
 
-All three files must remain public, square transparent PNGs. The 96px and 192px assets stay below ChatGPT's current 10 KB
-icon-upload limit; the 512px asset is intentionally advertised only in MCP metadata. MCP clients may render the metadata
-automatically, but rendering is optional; the Connections MCP tab and Help page therefore also offer direct downloads
-for ChatGPT's manual icon upload. Keep the metadata, both download links, and the focused MCP/frontend tests aligned
-whenever any asset changes.
+All four files must remain public, square transparent PNGs. The dedicated 256px asset meets ChatGPT's preferred minimum
+dimensions and stays below its current 10 KB icon-upload limit. The 512px asset is intentionally advertised only in MCP
+metadata. MCP clients may render metadata icons automatically, but rendering is optional; the Connections MCP tab and
+Help page therefore offer the dedicated 256px download for ChatGPT's manual icon upload. Keep the metadata, manual
+download, and focused MCP/frontend tests aligned whenever any asset changes.
+
+## Repository-local plugin
+
+The repository includes a local marketplace package that combines the registered Quantified Self MCP app, branding,
+starter prompts, and the bundled `analyze-quantified-self` skill. This is a development and local-installation surface,
+not a public marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the
+plugin does not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it
+is not a mobile installation path and does not publish anything to the universal plugin directory.
+
+Committed source lives under `plugins/quantified-self/`, with the marketplace at
+`.agents/plugins/marketplace.json`. `plugin.template.json`, the skill, and marketplace metadata are reusable. An
+explicit build generates three ignored files: the cache-busted `.codex-plugin/plugin.json`, the account-bound
+`.app.json`, and a copy of the existing public 256px icon. The ChatGPT technical app ID is machine/account-specific. It
+must come from `QS_CHATGPT_APP_ID` or the ignored `.local/quantified-self-plugin.json`; it is never committed, placed in
+the manifest template, or printed by the tooling. OAuth tokens and client secrets are not accepted or stored.
+
+The tooling is a private package under `tools/quantified-self-plugin/`. It pins the official `@openai/codex` CLI in its
+own lockfile, keeping the binary out of normal Angular installs. Dependabot proposes isolated CLI upgrades. The
+generator uses Node built-ins, while validation uses a pinned YAML parser for the bundled skill metadata and the
+official CLI ingestion path—not a community manifest-types package—as the installation compatibility authority.
+
+### Initial local setup
+
+1. Register `https://quantified-self.io/mcp` once in ChatGPT developer mode and copy the resulting technical app ID.
+2. Export it for the configuration command, then store it locally:
+
+   ```bash
+   export QS_CHATGPT_APP_ID='<technical-app-id>'
+   npm run plugin:configure
+   unset QS_CHATGPT_APP_ID
+   ```
+
+   The command deliberately does not accept the app ID as an argument because npm echoes script arguments. To avoid
+   persisting it, leave `QS_CHATGPT_APP_ID` set for later plugin commands instead of running `plugin:configure`.
+3. Build, validate in a temporary Codex profile, register the repository marketplace, and install:
+
+   ```bash
+   npm run plugin:setup
+   ```
+
+4. Restart the ChatGPT desktop app if it is open, complete the normal Quantified Self OAuth flow, and test in a new
+   ChatGPT or Codex conversation so the installed skill and app are loaded.
+
+The generated local config is written with owner-only permissions where the platform supports them. Setup detects a
+marketplace name or repository-root collision and fails instead of rewriting another configured source. It uses normal
+`codex plugin marketplace` and `codex plugin add` commands and never edits `~/.codex/plugins/cache` directly.
+
+### Build, validation, and refresh
+
+| Command | Behavior |
+| --- | --- |
+| `npm run plugin:tools` | Installs the isolated pinned CLI package |
+| `npm run plugin:build` | Generates the account-bound local bundle with one fresh `+codex.local-<UTC timestamp>` suffix |
+| `npm run plugin:validate` | Installs the pinned CLI, then rebuilds, discovers, installs, and inspects the plugin using a temporary `CODEX_HOME` |
+| `npm run plugin:sync` | Installs the pinned CLI, then explicitly rebuilds, validates, and reinstalls the configured local plugin |
+
+Ordinary Angular and Functions builds do not run any of these commands and never change a developer's installed
+plugins. After `plugin:sync`, restart the ChatGPT desktop app if it is open and test in a new conversation. CI supplies
+a non-production fixture app ID and deterministic cachebuster, runs the generator tests, and performs the same isolated
+marketplace discovery/install check. It never reads or writes a contributor's Codex profile.
+
+### Update matrix
+
+| Change | Required follow-up |
+| --- | --- |
+| Server implementation or bug fix that preserves public tools, schemas, scopes, and instructions | Deploy through the separately approved release workflow; no local plugin rebuild |
+| Tool name, description, input/output schema, scope, or server instruction | Run MCP contract tests, deploy separately, rescan the registered ChatGPT developer app, and test in a new conversation |
+| Plugin-only metadata, starter prompt, marketplace entry, or bundled skill | Run the plugin unit suite and `plugin:validate`, then run `plugin:sync` locally |
+| Shared MCP/plugin icon or branding | Run the focused MCP/frontend and plugin tests, validate and sync the local plugin, and update the registered ChatGPT developer app's uploaded icon separately; local tooling cannot change that registration |
+| Replacement registered ChatGPT technical app ID | Set the new ID in `QS_CHATGPT_APP_ID`, rerun `plugin:configure`, then run `plugin:sync`; never hand-edit or commit `.app.json` |
+| External Codex CLI dependency | Review the isolated dependency-update PR and pass the full plugin validation workflow |
+
+The skill intentionally does not copy the complete MCP tool or metric catalog. It instructs the client to use the live
+discovery tools, distinguish absent data from missing permission or source availability, prefer summary queries before
+on-demand source parsing, preserve returned units/timezones/pagination, request location only when needed, and avoid
+medical diagnosis. When a public MCP contract changes, review whether that workflow guidance or the three starter
+prompts also need adjustment.
 
 ## OAuth and authorization
 
@@ -81,18 +160,22 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 
 - `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
   `activity-details:read` is also granted;
+- `measurements:read` for bounded identity-free first-class body-measurement history;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
-- `activity-details:read` for bounded activity summaries with optional exact start/end coordinates, start/end proximity
-  searches, laps, swim lengths, and MTB jumps; and
-- `routes:read` for saved-route summaries, preview geometry, preview proximity searches, and waypoints.
+- `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
+  selected metrics, and on-demand chart series;
+- `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
+  nearby activity search, and chart breadcrumbs;
+- `routes:read` for non-location saved-route summaries; and
+- `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
+  endpoints, and waypoints.
 
-The scopes remain independent grants. Existing metric or sleep connections do not acquire activity-detail or route
-access automatically; the client must start a new authorization request and the user must approve the requested scope.
-Activity-detail consent
-states that activity starts, ends, and individual jumps can include exact coordinates that may reveal a home, workplace,
-frequent trailhead, or other sensitive location. Saved-route consent states that route bounds, simplified geometry, and
-waypoint coordinates can expose exact locations. Consent also states that place-name proximity searches send only the
-supplied location text to Mapbox for forward geocoding, while direct-coordinate searches do not call Mapbox.
+The location scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
+selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
+validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location
+remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
+scope to regain coordinate-bearing tools. Consent explains that coordinates may reveal sensitive places and that
+place-name searches send only supplied location text to Mapbox; direct-coordinate searches do not call Mapbox.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -103,6 +186,22 @@ Authorization codes are single-use and expire after five minutes. A valueless OA
 omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoed exactly.
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
 parameters.
+
+The authorization-server metadata advertises the RFC 7009 revocation endpoint and
+`revocation_endpoint_auth_methods_supported: ["none"]`. Quantified Self supports public CIMD clients only: a revocation
+request is a server-to-server `POST` with an `application/x-www-form-urlencoded` body containing `token`, optional
+`token_type_hint`, and the exact HTTPS Client ID Metadata Document URL in `client_id`. There is no client secret, HTTP
+Basic client authentication, browser redirect, or revocation callback. Unknown token-type hints are ignored and the
+lookup expands across both supported token types.
+
+Revocation consumes fixed-window limits before credential lookup, hashes the submitted token immediately, and performs
+the same two primary-key Firestore reads at the access-token and refresh-token hash document IDs. The stored token must
+be unexpired and bound to the submitted `client_id`; the connection record must carry the same client ID. Rotated
+refresh-token records remain bound to their family until TTL so a concurrent rotation cannot escape a revocation retry.
+The endpoint validates the CIMD URL structurally but does not fetch it; the exact stored token and connection bindings
+are authoritative, so a revocation request cannot trigger client-controlled DNS or HTTPS work.
+Unknown, expired, already-rotated, already-revoked, and wrong-client tokens all receive the same empty HTTP 200 response
+and do not reveal whether a token existed.
 
 Public clients are described by HTTPS Client ID Metadata Documents. Metadata loading rejects redirects, oversized
 responses, private or loopback metadata hosts, unsupported grant types, and redirect URIs that were not registered.
@@ -129,14 +228,21 @@ treated as active, and the next authorized request or refresh removes its stale 
 descendant collections by design.
 
 Browser Firestore access to every MCP collection is denied; authenticated, App Check-protected callables mediate
-consent, listing, and revocation. Revocation transactionally rechecks account-deletion state before changing the
-connection to revoked, then deletes active tokens and codes. Bearer authentication requires an active connection and
-performs the same account-deletion check before recording usage or running a tool, while account deletion recursively
-removes connection and OAuth state. OAuth cleanup reads at most 51 documents per page, deletes at most 10 document roots
-concurrently, and caps one trigger attempt at 250 deletions. The Auth deletion trigger continues mail,
-provider-identifier, and queue cleanup if that bounded pass fails or has more work, then fails retryably so Firebase
-durably invokes the idempotent cleanup again. All short-lived MCP records use `expireAt` TTL configuration in
-`firestore.indexes.json`.
+consent, listing, and dashboard revocation. Both Dashboard Disconnect and `/oauth/revoke` use the same idempotent
+transactional connection transition. It rechecks account-deletion state, changes exactly one connection to `revoked`,
+and preserves the first terminal state under concurrent requests. Bearer authentication, authorization-code exchange,
+and every refresh-token rotation require that connection to remain active, so changing this single record immediately
+invalidates every access token and every refresh token in the family without an unbounded query or deletion fan-out.
+The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation never
+deletes or changes the CIMD client.
+
+Connections > MCP remains the authoritative user control because an external client may not call the revocation
+endpoint when the user removes or uninstalls it. Bearer authentication performs the same account-deletion check before
+recording usage or running a tool, while account deletion recursively removes connection and OAuth state. OAuth cleanup
+reads at most 51 documents per page, deletes at most 10 document roots concurrently, and caps one trigger attempt at
+250 deletions. The Auth deletion trigger continues mail, provider-identifier, and queue cleanup if that bounded pass
+fails or has more work, then fails retryably so Firebase durably invokes the idempotent cleanup again. All short-lived
+MCP records use `expireAt` TTL configuration in `firestore.indexes.json`.
 
 ## Consent-page browser policy
 
@@ -206,26 +312,84 @@ The analytics and map entries follow the
 
 | Tool | Scope | Result |
 | --- | --- | --- |
+| `list_measurement_types` | `measurements:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
+| `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `list_activities` | `activity-details:read` | Paginated safe activity summaries with optional exact start/end coordinates, opaque references, and signed-in app links |
-| `find_activities_near_location` | `activity-details:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Paginated safe activity summaries, opaque references, signed-in app links, and optional exact start/end coordinates |
+| `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
-| `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements, including exact coordinates when present |
+| `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
-| `list_routes` | `routes:read` | Paginated saved-route summaries, exact bounds, opaque references, and signed-in app links |
-| `find_routes_near_location` | `routes:read` | Bounded newest-first scan measuring a location against persisted route previews |
-| `get_route_geometry` | `routes:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
-| `list_route_waypoints` | `routes:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
+| `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
+| `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
+| `list_routes` | `routes:read` | Paginated non-location saved-route summaries, opaque references, and signed-in app links; exact bounds require `route-location:read` |
+| `find_routes_near_location` | `routes:read` + `route-location:read` | Bounded newest-first scan measuring a location against persisted route previews |
+| `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
+| `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
 Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
 tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
 before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` is registered only
 when both of its scopes are present.
+
+### Strict structured output
+
+Every public tool has one recursively strict Zod output contract in
+`functions/src/mcp/tool-output-schemas.ts`. `PUBLIC_MCP_TOOL_NAMES` and the schema registry are compile-time exhaustive:
+adding or renaming a public tool without a schema fails the Functions build. The registration wrapper uses the same
+schema three times:
+
+1. `tools/list` advertises it as JSON Schema;
+2. the wrapper validates the allowlisted projection before serialization; and
+3. the pinned MCP SDK validates `structuredContent` again.
+
+A successful call serializes the validated object once. That exact JSON is parsed back into canonical
+`structuredContent`, and the text content carries the same JSON for clients that still consume the compatibility
+fallback. This prevents optional properties with JavaScript `undefined` values from making the two representations
+diverge. Undeclared fields fail closed as a generic `internal_error`; the rejected value is never returned or logged.
+Expected `McpDataError` results remain text-only `isError` responses with no `structuredContent`.
+
+Reusable schemas cover coordinates, bounds, opaque references, URLs, timestamps, pagination, metric descriptors and
+units, activity stats/details, sleep values, chart series, routes, and waypoints. Objects are strict at every nested
+level. The only dynamic maps are named wire concepts with constrained values, such as aggregation series and dated
+Power Curve buckets. Optional means the key may be absent; nullable means the key is present but no value is available.
+Historical domain timestamps are signed safe integers so valid dates before 1970 remain representable; operational
+timestamps such as a Training snapshot's `updatedAtMs` remain nonnegative.
+Activity and route schemas are generated for the granted scopes: parent-only variants cannot validate location fields,
+and granting one location domain never widens the other.
+
+`functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
+`DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 19-tool `tools/list`
+response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
+parser implementation, so a metric and canonical unit cannot drift independently.
+
+`functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
+inspects all advertised schemas, calls all 19 tools, and validates successful `structuredContent` with direct Ajv 8 and
+`ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
+continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
+expected errors, output-contract failures, and identity/provenance leakage canaries.
+
+### Changing or adding a tool
+
+1. Add or change the allowlisted data-service projection; never derive a public schema from an internal Firestore,
+   Sports Lib, parser, provider, or Storage object.
+2. Add the tool name to `PUBLIC_MCP_TOOL_NAMES` and define its exact strict registry entry. Reuse the named coordinate,
+   reference, pagination, unit, date, activity, sleep, route, or waypoint concept when it is genuinely identical.
+3. Model scope variants explicitly. A schema must omit fields unavailable to the granted scope rather than accepting
+   them as optional, and an explicit coordinate request must still fail before source work when permission is missing.
+4. Return the projected value through the shared registration wrapper. Preserve validated `structuredContent` and
+   equivalent JSON text; keep errors text-only.
+5. Update the in-memory successful fixture, Ajv assertion, empty/nullable/pagination cases, and negative leakage
+   canaries. A new Training kind also needs an exact entry in `MCP_DERIVED_PAYLOAD_SCHEMAS` and its exhaustive fixture.
+6. Run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts src/mcp/server.spec.ts`, the focused
+   data-service tests, `npm --prefix functions run build`, and `git diff --check`. Update this document whenever the
+   public contract moves.
 
 ## Sports Lib metric discovery
 
@@ -250,6 +414,40 @@ Firestore access, and each stored value is reconstructed through its Sports Lib 
 by that class are returned; missing or invalid selected values are reported as unavailable. This keeps new eligible
 Sports Lib numeric metrics on the same automatic surface instead of introducing a per-activity registry.
 
+## First-class body measurements
+
+`measurement-catalog.ts` is a deliberately narrow semantic projection layered on the automatic numeric Sports Lib
+catalog. It does not decide whether a Sports Lib metric exists or is numerically valid: each entry must resolve through
+`metric-catalog.ts`. It decides only which canonical metrics are safe and meaningful as personal body measurements.
+Adding a numeric Sports Lib class still does not silently expose it as a body measurement.
+
+The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` values in persisted event stats.
+`list_measurement_types` describes its kilogram storage unit, median default, supported median/average/minimum/maximum/
+latest aggregations, day/week/month intervals, 366-day range limit, and the optional ready
+`body_weight_trend` Training snapshot, including that snapshot's separate `metrics:read` requirement and UTC day
+boundary.
+
+`query_measurements` reads the same bounded event pages as `query_metric`, excludes benchmark merges, resolves the
+requested persisted value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
+records in an explicit IANA timezone. It returns only the semantic type, canonical metric metadata, query parameters,
+bucket start, aggregate value, bucket count, and first/latest change summary. It never returns the Firestore document
+ID, exact source measurement timestamp, activity type, event/activity identity, name, label, provider/device metadata,
+or source provenance. Multiple same-bucket values default to a median; `latest` means the chronologically latest value
+inside that bucket. The capability describes these as recorded values, not a medical or health assessment.
+
+The generic metric discovery, `query_metric`, and per-activity metric paths exclude canonical first-class measurement
+types, so `metrics:read` cannot bypass the separate `measurements:read` grant. Existing clients must complete
+authorization for the new scope before the measurement tools are registered. The existing `body_weight_trend` snapshot
+remains the fast 28-day Training view under the pre-existing Training metric permission, not the historical measurement
+API. No new Firestore collection, composite index, persistence format, reparse, or backfill is required.
+
+To add another first-class measurement, add one explicit semantic definition backed by an already eligible canonical
+Sports Lib numeric type, define its value-validity rule, supported aggregations and intervals, and user-facing meaning,
+then update the tool-schema enum from the same exported ID tuple. Add positive catalog/query coverage, a negative
+sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day event-read
+and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
+payload, or arbitrary persisted stat key.
+
 When a Sports Lib metric is added or changed:
 
 1. follow `.agent/skills/mcp-metric-surface/SKILL.md` and
@@ -265,26 +463,28 @@ events, privacy filtering, query bounds, and the MCP transport.
 
 ## Individual activity-detail projection
 
-`activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. List queries select
-only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a signed-in app link,
-the latitude/longitude leaves of the persisted `Start Position` and `End Position` stats, and a fixed set of numeric
-summary stats. Detail calls select exactly one persisted array: `laps`, `events` for jumps, or `swimLengths`.
+`activity-details:read` reads flat `users/{uid}/activities` documents through Firestore field masks. Non-location list
+queries select only timestamps, activity type, power/trainer flags, the parent event reference needed to construct a
+signed-in app link, and a fixed set of numeric summary stats. The four persisted `Start Position`/`End Position`
+coordinate leaves enter the query only when `activity-location:read` is present. Detail calls select exactly one
+persisted array: `laps`, `events` for jumps, or `swimLengths`.
 Per-activity metric calls select only `eventID` plus the requested canonical `stats.<type>` leaves. They never hydrate a
 whole activity document or position map.
 
 The response is a new allowlisted object. Summary and lap stats are limited to duration, distance, ascent/descent,
 average/maximum speed, heart rate, power, cadence, and energy. Swim lengths expose only their normalized timing,
 distance, pool, stroke, SWOLF, energy, speed, cadence, and heart-rate fields. Jump records expose timestamp, distance,
-height, hang time, speed, rotations, score, and latitude/longitude. Activity summaries expose optional `startPosition`
-and `endPosition` objects containing only validated `latitudeDegrees` and `longitudeDegrees`; missing, partial,
-non-finite, or out-of-range pairs become `null`. Per-activity metric requests expose only selected finite numeric values
+height, hang time, speed, rotations, and score. With `activity-location:read`, they may also expose latitude/longitude,
+and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
+coordinate fields are omitted and `locationRedacted` is true. Per-activity metric requests expose only selected finite numeric values
 from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and
 unrequested stats, internal ID fields, device/provider creator data, source keys, original files, nested position
 metadata, and parser extensions are excluded.
 
 Sports Lib already derives these positions from the first and last available activity position when an importer does not
 provide them, and the normal activity writer persists both stats. Historical activities that do not contain a complete
-stored pair return `null`; no reparse or backfill is required. Selecting the four coordinate leaves does not change the
+stored pair return `null` when location access is granted; no reparse or backfill is required. Selecting the four
+coordinate leaves does not change the
 activity query filters or ordering, so it adds no composite index.
 
 `list_activities` returns an encrypted `activityRef`, not the activity or event document ID. References and detail
@@ -292,7 +492,8 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
-`find_activities_near_location` reuses the same field mask and safe summary projection. It matches only the persisted
+`find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
+scope, it reuses the location field mask and safe summary projection. It matches only the persisted
 start and end positions, not the raw activity track: the response reports the nearest matching coordinate, whether it
 was the start or end, and the great-circle distance. An optional paired start/end date filter retains the 366-day bound.
 If dates are omitted, the scan starts with the newest activity and continues through encrypted, query-bound cursors.
@@ -300,13 +501,40 @@ Each call examines at most 100 activity documents, processes at most 512 KiB of 
 25 matches and 256 KiB, and reports whether the history scan is complete. Results preserve newest-first scan order; they
 are not globally sorted by distance.
 
+## On-demand activity chart projection
+
+`list_activity_chart_metrics(activityType?)` is a static catalog. `get_activity_chart_data` accepts one to four metrics,
+an `elapsed_time` or `distance` axis, at most 400 points per metric, and an optional breadcrumb of at most 1,000 points.
+The catalog covers heart rate, power, cadence, altitude, grade, distance, speed, running pace, swim pace, and trail
+grade-adjusted pace/speed with canonical units.
+
+The service decrypts the connection-bound `activityRef`, reads only the target event source metadata and its bounded
+activity identity set, and validates every object path under `users/{uid}/events/{eventId}/` in an approved project
+bucket. It streams at most four FIT, GPX, TCX, Suunto JSON/SML, or gzip source files. Sports Lib receives only requested
+streams plus derivation and axis dependencies. Multi-file events reuse `EventUtilities.mergeEvents`. The pure shared
+identity matcher tries source key and then progressively narrower unique identity signatures; ambiguity fails closed.
+
+This path never calls reparse persistence, metadata auto-healing, ID assignment, regeneration, event/activity writers,
+or source writes. Parsed objects are discarded after projection. Scalar streams preserve endpoints and per-bucket
+minima/maxima across the complete activity. Breadcrumb selection preserves path endpoints and aligned elapsed-time or
+distance values. An explicit location request is rejected before coordinate fields, Storage, parser, or Mapbox work
+unless `activity-location:read` is present.
+
+Responses contain parallel chart arrays, canonical units, and source/returned/missing sample counts. They exclude
+original files, internal IDs, source keys, provider/device metadata, parser extensions, absolute sample timestamps,
+unrequested streams, and full-resolution recordings. Historical availability depends on the original source remaining
+available and within budgets; no backfill or persistent cache is created.
+
 ## Saved-route projection
 
 `routes:read` lists `users/{uid}/routes` through a field mask containing the route name, timestamps, activity types,
-counts, bounds, and the same fixed summary-stat allowlist. It excludes source/delivery provenance, provider IDs, Storage
+counts, and the same fixed summary-stat allowlist. Bounds enter the field mask only with `route-location:read`; otherwise
+they are omitted and `locationRedacted` is true. It excludes source/delivery provenance, provider IDs, Storage
 metadata, creator data, route comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and
 cursors use the same UID-and-connection-bound authenticated-encryption design as activity references.
 
+`get_route_geometry`, `find_routes_near_location`, and `list_route_waypoints` are not registered without
+`route-location:read`, and missing permission is rejected before preview, Storage, parser, or Mapbox work.
 `get_route_geometry` reads only the persisted Sports Lib route preview. The response fixes the contract to preview
 version 1, `polyline5`, precision 5, exact bounds, at most 20 segments and 5,000 decoded preview points. Segment IDs and
 names are excluded. Each segment includes explicit `startPosition` and `endPosition` values derived from the first and
@@ -356,13 +584,14 @@ MCP reads only `status: "ready"` documents with the exact current schema from
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
 exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels,
 identity-derived source fingerprints, and imported device/provider provenance (`sourceKey` and `previousSourceKey`) from
-the payload. For example, `body_weight_trend` is discoverable through `list_metrics` and readable through
+the payload. It then validates the result against the exact schema for that `metricKind`; undeclared fields fail closed
+instead of being serialized. For example, `body_weight_trend` is discoverable through `list_metrics` and readable through
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
-[`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline and schema work plus
-an MCP redaction-contract test.
+[`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
+payload schema, structured-output fixture, and positive and negative redaction-contract tests.
 
 ## Sleep projection
 
@@ -381,6 +610,8 @@ deliberately.
 ## Bounds and operational controls
 
 - Event and sleep date ranges are at most 366 days.
+- Body-measurement ranges are at most 366 days and return only day/week/month buckets. They share the event query's
+  2,000-document, 4 MiB stats, and 20,000 stat-entry limits, then apply a separate 128 KiB response limit.
 - An event metric query reads at most 25 events per Firestore page and rejects matches above 2,000 events, more than
   4 MiB of cumulative serialized event stats, or more than 20,000 cumulative top-level stat entries.
 - Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the
@@ -398,18 +629,30 @@ deliberately.
   most 100 entries and 256 KiB per page.
 - Per-activity metric calls accept at most 25 requested types, process at most 64 KiB of selected document data, and
   return at most 32 KiB.
+- On-demand activity charts accept one to four metrics, default to 300 and allow at most 400 points per metric, and
+  default to 500 and allow at most 1,000 breadcrumb points. One parse may read at most four files, 12 MiB cumulative
+  raw/compressed bytes, 64 MiB cumulative decompressed bytes, and 250,000 selected samples, with a 20-second internal
+  runtime and 256 KiB response limit. Larger valid streams are downsampled over the complete domain; hard point,
+  source, sample, runtime, decompression, and response overruns fail the whole request.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
   decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was
   truncated.
 - Each MCP connection is limited to 120 authorized MCP HTTP requests per minute through a distributed Firestore counter.
+- On-demand source parsing is additionally limited to six requests per connection and twelve per user per minute using
+  opaque documents in the existing TTL-managed `mcpOAuthRateLimits` collection.
 - Place-name geocoding is additionally limited to 30 requests per MCP connection per minute; coordinate input bypasses
   Mapbox and this provider-specific counter. The geocoding counter transaction rechecks account-deletion state before
   writing, preventing an in-flight lookup from recreating MCP state after user cleanup.
 - Public authorization starts are limited before client-metadata retrieval to 10 per client ID and 30 per requester
   address per minute.
+- Public token revocations are limited before hashed-token lookup to 30 per client ID and 60 per requester address per
+  minute. Rate-limit document IDs hash both raw keys. Each accepted endpoint request performs exactly two hash-document
+  lookups and, only for a matching token, the bounded account-guard and single-connection reads in that same
+  transaction.
 - Requests require valid IANA timezones where local date bucketing is relevant.
-- Logs must not contain bearer tokens, authorization codes, client payloads, event data, sleep data, or user IDs.
+- Logs must not contain access or refresh tokens, authorization codes, client payloads, event data, sleep data, or user
+  IDs.
 
 ## Local verification and release
 

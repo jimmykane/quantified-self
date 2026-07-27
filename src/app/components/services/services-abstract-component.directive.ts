@@ -171,7 +171,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   protected get canDisconnectWithoutProAccess(): boolean {
-    return false;
+    return true;
   }
 
   get canConnectServiceWithCurrentAccess(): boolean {
@@ -184,7 +184,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   async connectWithService(event) {
     if (!this.canConnectServiceWithCurrentAccess) {
-      this.triggerUpsell();
+      this.triggerUpsell('connection_card', 'connection');
       return;
     }
     this.isConnecting = true;
@@ -260,14 +260,13 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       : `Used by ${activeRouteCount} automatic sync connections`;
   }
 
-  triggerUpsell() {
-    this.analyticsService.logEvent('upsell_triggered', { serviceName: this.serviceName, source: 'locked_card' });
-    const snackBarRef = this.snackBar.open('This feature is available for Pro users.', 'UPGRADE', {
-      duration: 5000,
+  triggerUpsell(source = 'locked_tool', feature = this.activeProviderTool) {
+    this.analyticsService.logEvent('upsell_triggered', {
+      service_name: this.serviceName,
+      source,
+      feature,
     });
-    snackBarRef.onAction().subscribe(() => {
-      this.router.navigate(['/settings']);
-    });
+    void this.router.navigate(['/subscriptions']);
   }
 
   protected getPartnerDisplayName(): string {

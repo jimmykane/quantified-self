@@ -470,6 +470,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Manual activity uploads (\`.fit\`, \`.gpx\`, \`.tcx\`, \`.json\`, \`.sml\`)
 - Manual route uploads (\`.fit\`, \`.gpx\`)
 - Core dashboard and event analysis tools
+- Free read-only MCP connections
 
 ### Basic
 
@@ -493,6 +494,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - **Dashboard / event analysis:** Starter, Basic, Pro
 - **My Tracks (Beta):** Basic, Pro
+- **Connections page and read-only MCP:** Starter, Basic, Pro
 - **Service connections and sync actions:** Pro (or active Pro grace period)
 - **History imports:** Pro (or active Pro grace period)
 
@@ -501,8 +503,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Paid plans renew automatically until you cancel.
 - You can manage billing from the subscription area.
 - Cancellation takes effect at the end of the current billing period.
-- When a paid plan has a trial configured, the pricing card shows the exact trial length in days.
-- Trial offers are only shown for accounts without prior paid subscription history.
+- When a paid plan has a trial configured, the public pricing page shows the exact trial length as an offer for eligible new members.
+- Trial eligibility is confirmed after sign-in. Accounts with prior paid subscription history may not be eligible.
 - Yearly paid plans appear automatically when active yearly Stripe prices are available.
 - Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
 - If you start monthly, you can switch to yearly later from the billing portal.
@@ -513,7 +515,8 @@ If you downgrade from a paid plan, the app keeps your access through the current
 
 After the grace period:
 
-- Pro-only sync connections can be disconnected.
+- Provider imports and automatic delivery stop, and an automated subscription check disconnects expired Pro connections.
+- Any provider connection that is still shown can always be disconnected manually without upgrading.
 - Existing activities and routes are retained. New uploads follow your current plan limits.
 
 ## When to contact support
@@ -602,9 +605,11 @@ From an activity action menu you can also:
 
 Garmin, Suunto, COROS, and Wahoo connections are part of **Pro**.
 
-Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card to open that provider tool in a dialog. Close the dialog to return to the unchanged overview.
+The **Connections** page is available to every signed-in account. Starter and Basic accounts open on the free **MCP** tab by default and can select every provider tab to review its capabilities. Provider tabs are marked **PRO**, while MCP is marked **FREE**. Connecting a provider, importing history, uploading to a provider, and automatic sync still require Pro.
 
-At the top of Connections, **Your data flow** explains that connected providers import new activities into Quantified Self. Once two or more services are connected, it shows a provider-to-provider matrix of compatible automatic activity and saved-route delivery paths through Quantified Self. On phones, the same routes are grouped by source and destination instead of using a wide table. Enabled routes show **On**, available routes remain opt-in, and a configured route that cannot run because a provider is disconnected or needs reconnection is marked **Needs connection**. With no services connected, it prompts you to connect your first provider.
+Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card. For non-Pro accounts, the action opens the Pro subscription page. For Pro accounts, it opens the provider tool in a dialog; close the dialog to return to the unchanged overview. A connected provider can always be disconnected after Pro access ends. Once any grace period expires, an automated subscription check disconnects remaining expired Pro provider connections.
+
+At the top of Connections, **Your data flow** explains that connected providers import new activities into Quantified Self. Non-Pro accounts see a Pro upgrade explanation instead of an unusable connection prompt. Once two or more services are connected with Pro access, it shows a provider-to-provider matrix of compatible automatic activity and saved-route delivery paths through Quantified Self. On phones, the same routes are grouped by source and destination instead of using a wide table. Enabled routes show **On**, available routes remain opt-in, and a configured route that cannot run because a provider is disconnected or needs reconnection is marked **Needs connection**. With no services connected, it prompts a Pro account to connect its first provider.
 
 ## Integration pages overview
 
@@ -807,13 +812,17 @@ Review and revoke authorized MCP clients under [**Connections -> MCP**](/service
 
 ## MCP client access
 
-- An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics**, **Individual activity details**, **Sleep summaries**, and **Saved routes and waypoints** are separate, optional read-only permissions.
-- Activity access covers persisted numeric activity metrics and ready Training-derived snapshots. When individual activity detail access is also granted, a client can request up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Precise latitude/longitude metrics are excluded, and Training event/activity IDs, names, labels, source fingerprints, and imported device/provider source keys are removed.
-- Individual activity detail access covers bounded activity summaries with exact start/end latitude/longitude coordinates when available, nearby searches that match an activity's start or end, laps, swim lengths, MTB jumps, and signed-in app links containing stable account/event paths. Together with Activity and Training metric access, it also permits explicitly selected canonical numeric metrics for one activity. Jump records can also include exact latitude/longitude coordinates. Exact activity and jump coordinates can reveal your home, workplace, frequent trailhead, or other sensitive locations. Raw streams, activity names and notes, original files, device/provider provenance, precise-position metrics, nonnumeric stats, and unrequested stored stats are excluded.
+- An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics**, **Body measurements**, **Individual activity details**, **Activity locations**, **Sleep summaries**, **Saved-route summaries**, and **Saved-route locations and geometry** are separate, optional read-only permissions. Activity locations require activity details; saved-route locations require saved-route summaries. Removing a parent permission also removes its location permission.
+- Metric access covers persisted numeric activity metrics and ready Training-derived snapshots. When individual activity detail access is also granted, a client can request up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Precise latitude/longitude and first-class body-measurement metrics are excluded, and Training event/activity IDs, names, labels, source fingerprints, and imported device/provider source keys are removed.
+- Body-measurement access covers first-class body-measurement history. Body-weight history is available for bounded ranges up to 366 days as identity-free day, week, or month values using median, average, minimum, maximum, or latest aggregation. It contains recorded measurements only and is not a medical or health assessment. It excludes exact source measurement timestamps, event/activity identity, names, provider/device metadata, and source provenance.
+- Individual activity detail access covers non-location summaries, laps, swim lengths, MTB jump measurements, signed-in app links, selected persisted numeric metrics, and bounded chart-ready heart-rate, power, cadence, altitude, grade, distance, speed, and activity-appropriate pace streams. Chart streams are parsed temporarily from an existing FIT, GPX, TCX, Suunto JSON/SML, or gzip original file, downsampled over the complete activity, and discarded without a reparse, backfill, cache, or additional activity storage. Historical chart access therefore depends on the original file still being available and within the documented limits.
+- Activity location access separately covers exact activity start/end coordinates, nearby activity searches, MTB jump coordinates, and bounded breadcrumb traces returned with a chart. Without it, summaries and jump measurements remain available with coordinates omitted. Exact activity locations can reveal your home, workplace, frequent trailhead, or other sensitive places.
 - Sleep access covers normalized session summaries and day/week/month aggregates. It excludes provider user/session IDs, provider payloads, raw sleep-stage intervals, score components, and raw HRV, SpO2, or respiration samples.
-- Saved-route access covers route names, bounded metrics and counts, exact bounds, simplified polyline previews with segment start/end coordinates, nearby searches that measure against the persisted preview, waypoint coordinates, and signed-in app links containing stable account/route paths. It excludes original route files, raw track points and streams, waypoint names/comments, Storage paths, provider provenance, and delivery metadata.
+- Saved-route summary access covers route names, activity types, bounded metrics and route/waypoint/point counts, import/update times, and signed-in app links. It omits exact bounds and reports that location was redacted.
+- Saved-route location access separately covers exact bounds, simplified preview geometry and segment endpoints, nearby route searches, and waypoint coordinates, altitude, and distance. Existing clients retain non-location route summaries but must reconnect and approve the new location permission to regain coordinate-bearing route tools.
+- Original files, full-resolution recordings, absolute per-sample timestamps, raw unrequested streams, internal IDs, source keys, provider/device provenance, parser extensions, and Storage paths are never returned. Activity and saved-route location grants are independent: granting one never exposes the other.
 - Nearby MCP searches accept either direct latitude/longitude or a place name such as a city. Direct coordinates are processed inside Quantified Self. For place names, Quantified Self sends only the location text to Mapbox for forward geocoding; it does not send activity, route, account, or prompt data to Mapbox for this lookup.
-- Only clients that finish authorization appear in [**Connections -> MCP**](/services?serviceName=mcp). Failed or abandoned authorization attempts are not active connections and expire automatically. Disconnecting a listed client blocks future access, but the external client may retain data it already received under its own policy.
+- Only clients that finish authorization appear in [**Connections -> MCP**](/services?serviceName=mcp). Failed or abandoned authorization attempts are not active connections and expire automatically. Some clients can notify Quantified Self through standard server-to-server token revocation, but they may not do so when removed or uninstalled. **Disconnect** in Connections remains the authoritative control: it immediately invalidates that connection's access and refresh credentials without affecting your other clients. The external client may retain data it already received under its own policy.
 - See the [Read-only MCP Server feature page](/features/mcp-server) for a public overview of the available data categories and access boundaries.
 - See [Policies -> MCP Client Access](/policies#mcp-clients) for the complete disclosure.
 
@@ -822,8 +831,8 @@ Review and revoke authorized MCP clients under [**Connections -> MCP**](/service
 1. In ChatGPT on the web, turn on Developer mode and create a custom app.
 2. Use the Quantified Self MCP endpoint: **https://quantified-self.io/mcp**.
 3. Let ChatGPT scan the available tools, then sign in to Quantified Self and approve the read-only permissions you want to grant.
-4. Start a new chat, select the Quantified Self app, and ask about your metrics, activity details, sleep summaries, saved routes, activities that started or ended near a place, or routes that pass near a place.
-5. If ChatGPT asks for an app icon, download either [96 x 96 PNG (3.3 KB)](/assets/favicons/android-chrome-96x96.png) or [192 x 192 PNG (9.9 KB)](/assets/favicons/android-chrome-192x192.png). Both stay under its current 10 KB upload limit. MCP clients that render server metadata can discover these icons automatically.
+4. Start a new chat, select the Quantified Self app, and ask about activity metrics, body-weight history or trends, activity charts, sleep summaries, saved routes, or—if you granted the matching location permission—activities that started or ended near a place and routes that pass near a place.
+5. If ChatGPT asks for an app icon, download the recommended [256 x 256 PNG (9.4 KB)](/assets/favicons/quantified-self-chatgpt-icon-256x256.png). It meets ChatGPT's preferred minimum dimensions and stays under its current 10 KB upload limit. MCP clients that render server metadata can discover an icon automatically.
 
 ### Android authorization handoff
 

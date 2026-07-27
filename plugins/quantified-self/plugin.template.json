@@ -1,0 +1,44 @@
+{
+  "name": "quantified-self",
+  "version": "0.1.0",
+  "description": "Analyze your authorized Quantified Self activity, measurement, training, sleep, and route data.",
+  "author": {
+    "name": "Dimitrios Kanellopoulos",
+    "email": "privacy@quantified-self.io",
+    "url": "https://quantified-self.io/"
+  },
+  "homepage": "https://quantified-self.io/features/mcp-server",
+  "repository": "https://github.com/jimmykane/quantified-self",
+  "license": "AGPL-3.0",
+  "keywords": [
+    "fitness",
+    "health",
+    "training",
+    "sleep",
+    "activities",
+    "routes"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Quantified Self",
+    "shortDescription": "Analyze your fitness, health, sleep, and routes.",
+    "longDescription": "Connect your authorized Quantified Self data for read-only analysis of activities, body measurements, training, sleep, charts, and saved routes.",
+    "developerName": "Quantified Self",
+    "category": "Lifestyle",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://quantified-self.io/",
+    "privacyPolicyURL": "https://quantified-self.io/policies#privacy",
+    "termsOfServiceURL": "https://quantified-self.io/policies#tos",
+    "defaultPrompt": [
+      "How has my training load and recovery changed over the last four weeks?",
+      "Show my body-weight trend and explain the change without making medical claims.",
+      "Plot pace and heart rate for my latest run and summarize the key sections."
+    ],
+    "brandColor": "#2196F3",
+    "composerIcon": "./assets/quantified-self.png",
+    "logo": "./assets/quantified-self.png"
+  },
+  "apps": "./.app.json"
+}

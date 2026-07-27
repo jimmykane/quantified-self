@@ -36,6 +36,9 @@ import {
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import {
+  OriginalFileMetaData,
+} from '../../../shared/app-event.interface';
+import {
   OriginalRouteFileMetaData,
   RouteBounds,
   RouteWaypointJSONInterface,
@@ -66,6 +69,15 @@ import {
   resolveSportsLibNumericMetric,
 } from './metric-catalog';
 import {
+  getMcpMeasurementCatalog,
+  isFirstClassMcpMeasurementMetric,
+  isMcpMeasurementValueAllowed,
+  McpMeasurementAggregation,
+  McpMeasurementDescriptor,
+  McpMeasurementInterval,
+  resolveMcpMeasurementDefinition,
+} from './measurement-catalog';
+import {
   maybeDecompressPayloadForParsing,
   parseRoutePayload,
   resolveRouteSourceExtension,
@@ -82,6 +94,20 @@ import {
   McpGeocodingRateLimitError,
 } from './geocoding-rate-limit';
 import {
+  ActivityChartDataInput,
+  ActivityChartServiceDependencies,
+  ActivityChartSourceContext,
+  getActivityChartDataFromSources,
+  getUnsupportedActivityChartMetrics,
+  listActivityChartMetrics,
+  MCP_ACTIVITY_CHART_MAX_SOURCE_FILES,
+} from './activity-chart.service';
+import {
+  consumeActivityChartRateLimit,
+  McpActivityChartRateLimitError,
+} from './activity-chart-rate-limit';
+import { ActivityIdentityLike } from '../shared/activity-identity-matcher';
+import {
   boundsMayBeWithinRadius,
   findNearestPointOnPolyline,
   haversineDistanceMeters,
@@ -95,6 +121,7 @@ const EVENT_QUERY_PAGE_SIZE = 25;
 const MAX_EVENT_QUERY_STATS_BYTES = 4 * 1024 * 1024;
 const MAX_EVENT_QUERY_STAT_ENTRIES = 20_000;
 const METRIC_DISCOVERY_EVENT_LIMIT = 500;
+const MAX_MEASUREMENT_RESPONSE_BYTES = 128 * 1024;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
 const SLEEP_CURSOR_VERSION = 1;
@@ -146,6 +173,8 @@ const SAFE_SUMMARY_STAT_FIELDS = [
 const SAFE_ACTIVITY_SUMMARY_FIELDS = [
   ...SAFE_SUMMARY_STAT_FIELDS,
   new FieldPath('stats', 'Jump Count'),
+] as const;
+export const SAFE_ACTIVITY_LOCATION_FIELDS = [
   new FieldPath('stats', DataStartPosition.type, 'latitudeDegrees'),
   new FieldPath('stats', DataStartPosition.type, 'longitudeDegrees'),
   new FieldPath('stats', DataEndPosition.type, 'latitudeDegrees'),
@@ -253,6 +282,49 @@ export function resolveMcpRouteSourcePath(
   return path;
 }
 
+export function resolveMcpActivitySourcePath(
+  uid: string,
+  eventId: string,
+  sourceFile: OriginalFileMetaData,
+  approvedBucketNames: readonly string[],
+): string {
+  const path = `${sourceFile.path || ''}`.trim();
+  const expectedPrefix = `users/${uid}/events/${eventId}/`;
+  const suffix = path.slice(expectedPrefix.length);
+  const metadataBucket = `${sourceFile.bucket || ''}`.trim();
+  if (
+    !path.startsWith(expectedPrefix)
+    || !suffix
+    || suffix.split('/').some(segment => (
+      !segment
+      || segment === '.'
+      || segment === '..'
+      || /%(?:2e|2f|5c)/i.test(segment)
+      || segment.includes('\\')
+      || [...segment].some((character) => {
+        const code = character.charCodeAt(0);
+        return code <= 31 || code === 127;
+      })
+    ))
+    || Buffer.byteLength(path, 'utf8') > 1_024
+    || (
+      metadataBucket
+      && !approvedBucketNames.includes(metadataBucket)
+    )
+  ) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The original activity source is unavailable.',
+    );
+  }
+  return path;
+}
+
+interface ActivityChartContextDocuments {
+  event: RawDocument;
+  activities: RawDocument[];
+}
+
 export interface McpDataServiceDependencies {
   fetchMetricDiscoveryDocuments: (
     uid: string,
@@ -282,6 +354,7 @@ export interface McpDataServiceDependencies {
     endTimeMs: number,
     limit: number,
     cursor?: OrderedDocumentCursor,
+    includeLocation?: boolean,
   ) => Promise<RawDocument[]>;
   fetchNearbyActivityDocuments: (
     uid: string,
@@ -294,16 +367,37 @@ export interface McpDataServiceDependencies {
     uid: string,
     activityId: string,
     detailKind: ActivityDetailKind,
+    includeLocation?: boolean,
   ) => Promise<RawDocument | null>;
   fetchActivityMetricDocument: (
     uid: string,
     activityId: string,
     metricTypes: readonly string[],
   ) => Promise<RawDocument | null>;
+  fetchActivityChartContext: (
+    uid: string,
+    eventId: string,
+  ) => Promise<ActivityChartContextDocuments | null>;
+  downloadActivityChartSource: (
+    uid: string,
+    eventId: string,
+    sourceFile: OriginalFileMetaData,
+    maxBytes: number,
+  ) => Promise<Buffer>;
+  consumeActivityChartRateLimit: (
+    uid: string,
+    connectionId: string,
+  ) => Promise<void>;
+  buildActivityChartData: (
+    context: ActivityChartSourceContext,
+    input: ActivityChartDataInput,
+    dependencies: ActivityChartServiceDependencies,
+  ) => ReturnType<typeof getActivityChartDataFromSources>;
   fetchRouteDocuments: (
     uid: string,
     limit: number,
     cursor?: OrderedDocumentCursor,
+    includeLocation?: boolean,
   ) => Promise<RawDocument[]>;
   fetchRouteDocument: (
     uid: string,
@@ -328,6 +422,51 @@ export interface McpDataServiceDependencies {
     connectionId: string,
   ) => Promise<void>;
   importEvent: (data: EventJSONInterface, id: string) => EventInterface;
+}
+
+async function readStorageFileWithinLimit(
+  bucketName: string,
+  path: string,
+  maximumBytes: number,
+  generation?: string,
+): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let byteLength = 0;
+    let settled = false;
+    const stream = admin.storage().bucket(bucketName).file(path, {
+      ...(generation ? { generation } : {}),
+    }).createReadStream();
+    const fail = (error: unknown) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    };
+    stream.on('data', (chunk: Buffer | Uint8Array) => {
+      if (settled) {
+        return;
+      }
+      const buffer = Buffer.from(chunk);
+      byteLength += buffer.byteLength;
+      if (byteLength > maximumBytes) {
+        stream.destroy();
+        fail(new McpDataError(
+          'query_too_large',
+          'The original activity sources exceed the raw size limit.',
+        ));
+        return;
+      }
+      chunks.push(buffer);
+    });
+    stream.once('error', fail);
+    stream.once('end', () => {
+      if (!settled) {
+        settled = true;
+        resolve(Buffer.concat(chunks, byteLength));
+      }
+    });
+  });
 }
 
 const defaultDependencies: McpDataServiceDependencies = {
@@ -407,7 +546,14 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
-  fetchActivityDocuments: async (uid, startTimeMs, endTimeMs, limit, cursor) => {
+  fetchActivityDocuments: async (
+    uid,
+    startTimeMs,
+    endTimeMs,
+    limit,
+    cursor,
+    includeLocation,
+  ) => {
     let query = admin.firestore()
       .collection('users')
       .doc(uid)
@@ -426,6 +572,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'powerMeter',
         'trainer',
         ...SAFE_ACTIVITY_SUMMARY_FIELDS,
+        ...(includeLocation ? SAFE_ACTIVITY_LOCATION_FIELDS : []),
       );
     if (cursor) {
       query = query.startAfter(new Date(cursor.timeMs), cursor.id);
@@ -465,6 +612,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'powerMeter',
         'trainer',
         ...SAFE_ACTIVITY_SUMMARY_FIELDS,
+        ...SAFE_ACTIVITY_LOCATION_FIELDS,
       );
     if (cursor) {
       query = query.startAfter(new Date(cursor.timeMs), cursor.id);
@@ -513,7 +661,77 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     } : null;
   },
-  fetchRouteDocuments: async (uid, limit, cursor) => {
+  fetchActivityChartContext: async (uid, eventId) => {
+    const db = admin.firestore();
+    const [eventQuerySnapshot, activitiesSnapshot] = await Promise.all([
+      db.collection('users')
+        .doc(uid)
+        .collection('events')
+        .where(FieldPath.documentId(), '==', eventId)
+        .limit(1)
+        .select('originalFile', 'originalFiles')
+        .get(),
+      db.collection('users')
+        .doc(uid)
+        .collection('activities')
+        .where('eventID', '==', eventId)
+        .limit(101)
+        .select(
+          'eventID',
+          'startDate',
+          'endDate',
+          'type',
+          'sourceActivityKey',
+          new FieldPath('stats', DataDuration.type),
+          new FieldPath('stats', DataDistance.type),
+        )
+        .get(),
+    ]);
+    const eventSnapshot = eventQuerySnapshot.docs[0];
+    if (!eventSnapshot || activitiesSnapshot.empty) {
+      return null;
+    }
+    return {
+      event: {
+        id: eventSnapshot.id,
+        data: eventSnapshot.data() as Record<string, unknown>,
+      },
+      activities: activitiesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        data: doc.data() as Record<string, unknown>,
+      })),
+    };
+  },
+  downloadActivityChartSource: async (
+    uid,
+    eventId,
+    sourceFile,
+    maxBytes,
+  ) => {
+    const defaultBucketName = admin.storage().bucket().name;
+    const projectId = `${process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ''}`
+      .trim();
+    const approvedBuckets = [
+      defaultBucketName,
+      ...(projectId ? [projectId, `${projectId}.appspot.com`] : []),
+    ];
+    const path = resolveMcpActivitySourcePath(
+      uid,
+      eventId,
+      sourceFile,
+      approvedBuckets,
+    );
+    const bucketName = `${sourceFile.bucket || ''}`.trim() || defaultBucketName;
+    return readStorageFileWithinLimit(
+      bucketName,
+      path,
+      maxBytes,
+      sourceFile.generation,
+    );
+  },
+  consumeActivityChartRateLimit,
+  buildActivityChartData: getActivityChartDataFromSources,
+  fetchRouteDocuments: async (uid, limit, cursor, includeLocation) => {
     let query = admin.firestore()
       .collection('users')
       .doc(uid)
@@ -525,11 +743,12 @@ const defaultDependencies: McpDataServiceDependencies = {
         'name',
         'createdAt',
         'importedAt',
+        'updatedAt',
         'activityTypes',
         'routeCount',
         'waypointCount',
         'pointCount',
-        'bounds',
+        ...(includeLocation ? ['bounds'] : []),
         ...SAFE_SUMMARY_STAT_FIELDS,
       );
     if (cursor) {
@@ -1223,7 +1442,7 @@ function projectLap(value: unknown, index: number) {
   };
 }
 
-function projectJump(value: unknown, index: number) {
+function projectJump(value: unknown, index: number, includeLocation: boolean) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
@@ -1252,8 +1471,11 @@ function projectJump(value: unknown, index: number) {
     speedMetersPerSecond: asNonNegativeNumber(rawJump.speed),
     rotations: asNonNegativeNumber(rawJump.rotations),
     score,
-    latitudeDegrees: asLatitude(rawJump.position_lat),
-    longitudeDegrees: asLongitude(rawJump.position_long),
+    ...(includeLocation ? {
+      latitudeDegrees: asLatitude(rawJump.position_lat),
+      longitudeDegrees: asLongitude(rawJump.position_long),
+    } : {}),
+    locationRedacted: !includeLocation,
   };
 }
 
@@ -1575,6 +1797,84 @@ function resolveTimeInterval(interval: string): TimeIntervals {
   return resolved;
 }
 
+function resolveMeasurementTimeInterval(
+  interval: McpMeasurementInterval,
+): TimeIntervals {
+  switch (interval) {
+    case 'day':
+      return TimeIntervals.Daily;
+    case 'week':
+      return TimeIntervals.Weekly;
+    case 'month':
+      return TimeIntervals.Monthly;
+    default:
+      throw new McpDataError('invalid_request', 'Unsupported measurement interval.');
+  }
+}
+
+function aggregateMeasurementBucket(
+  measurements: readonly { recordedAtMs: number; value: number }[],
+  aggregation: McpMeasurementAggregation,
+): number {
+  const values = measurements.map(measurement => measurement.value);
+  switch (aggregation) {
+    case 'median': {
+      const sorted = [...values].sort((left, right) => left - right);
+      const middle = Math.floor(sorted.length / 2);
+      if (sorted.length % 2 !== 0) {
+        return sorted[middle];
+      }
+      const lower = sorted[middle - 1];
+      const upper = sorted[middle];
+      return lower < 0 && upper > 0
+        ? (lower + upper) / 2
+        : lower + ((upper - lower) / 2);
+    }
+    case 'average':
+      return values.reduce((average, value, index) => (
+        average + ((value - average) / (index + 1))
+      ), 0);
+    case 'minimum':
+      return Math.min(...values);
+    case 'maximum':
+      return Math.max(...values);
+    case 'latest':
+      return measurements.reduce((latest, measurement) => (
+        measurement.recordedAtMs >= latest.recordedAtMs ? measurement : latest
+      )).value;
+    default:
+      throw new McpDataError('invalid_request', 'Unsupported measurement aggregation.');
+  }
+}
+
+function buildMeasurementPoints(
+  measurements: readonly { recordedAtMs: number; value: number }[],
+  interval: McpMeasurementInterval,
+  aggregation: McpMeasurementAggregation,
+  timeZone: string,
+): McpMeasurementPoint[] {
+  const timeInterval = resolveMeasurementTimeInterval(interval);
+  const buckets = new Map<number, Array<{ recordedAtMs: number; value: number }>>();
+  measurements.forEach((measurement) => {
+    const bucketStartTimeMs = resolveDateAggregationBucketStart(
+      new Date(measurement.recordedAtMs),
+      timeInterval,
+      timeZone,
+    );
+    const bucket = buckets.get(bucketStartTimeMs) || [];
+    bucket.push(measurement);
+    buckets.set(bucketStartTimeMs, bucket);
+  });
+
+  return [...buckets.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([bucketStartTimeMs, bucketMeasurements]) => ({
+      bucketStartTimeMs,
+      value: aggregateMeasurementBucket(bucketMeasurements, aggregation),
+      measurementCount: bucketMeasurements.length,
+    }));
+}
+
 function resolveActivityTypes(activityTypes: readonly string[] | undefined): ActivityTypes[] {
   return (activityTypes || []).map((activityType) => {
     const resolved = ActivityTypesHelper.resolveActivityType(activityType);
@@ -1743,6 +2043,42 @@ export interface QueryMetricInput {
   interval: 'auto' | 'hourly' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semesterly' | 'yearly';
   timeZone: string;
   activityTypes?: readonly string[];
+}
+
+export interface ListMeasurementTypesResult {
+  measurementTypes: McpMeasurementDescriptor[];
+}
+
+export interface QueryMeasurementsInput {
+  uid: string;
+  measurementType: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  aggregation: McpMeasurementAggregation;
+  interval: McpMeasurementInterval;
+  timeZone: string;
+}
+
+export interface McpMeasurementPoint {
+  bucketStartTimeMs: number;
+  value: number;
+  measurementCount: number;
+}
+
+export interface QueryMeasurementsResult {
+  measurementType: McpMeasurementDescriptor;
+  startTimeMs: number;
+  endTimeMs: number;
+  timeZone: string;
+  aggregation: McpMeasurementAggregation;
+  interval: McpMeasurementInterval;
+  measurementCount: number;
+  points: McpMeasurementPoint[];
+  summary: {
+    firstPoint: McpMeasurementPoint;
+    latestPoint: McpMeasurementPoint;
+    absoluteChange: number;
+  } | null;
 }
 
 function redactDerivedPayload(
@@ -1914,6 +2250,7 @@ export interface ListActivitiesInput {
   appBaseUrl: string;
   startTimeMs: number;
   endTimeMs: number;
+  includeLocation?: boolean;
   cursor?: string;
   limit?: number;
 }
@@ -1946,6 +2283,7 @@ export interface ListActivityDetailsInput {
   uid: string;
   connectionId: string;
   activityRef: string;
+  includeLocation?: boolean;
   cursor?: string;
   limit?: number;
 }
@@ -1957,10 +2295,17 @@ export interface GetActivityMetricsInput {
   metrics: readonly string[];
 }
 
+export interface GetActivityChartDataInput extends ActivityChartDataInput {
+  uid: string;
+  connectionId: string;
+  activityRef: string;
+}
+
 export interface ListRoutesInput {
   uid: string;
   connectionId: string;
   appBaseUrl: string;
+  includeLocation?: boolean;
   cursor?: string;
   limit?: number;
 }
@@ -1997,8 +2342,9 @@ interface SafeActivityListEntry {
     powerMeter: boolean;
     trainer: boolean;
     jumpCount: number | null;
-    startPosition: SafePosition | null;
-    endPosition: SafePosition | null;
+    startPosition?: SafePosition | null;
+    endPosition?: SafePosition | null;
+    locationRedacted: boolean;
     supportedDetailKinds: readonly ActivityDetailKind[];
     stats: SafeActivityStats;
   };
@@ -2013,11 +2359,13 @@ interface SafeRouteListEntry {
     name: string;
     createdAtMs: number | null;
     importedAtMs: number;
+    updatedAtMs: number | null;
     activityTypes: string[];
     routeCount: number | null;
     waypointCount: number | null;
     pointCount: number | null;
-    bounds: RouteBounds | null;
+    bounds?: RouteBounds | null;
+    locationRedacted: boolean;
     stats: SafeActivityStats;
   };
 }
@@ -2180,7 +2528,10 @@ function routeActivityTypesMatch(
 
 function projectActivityListEntry(
   document: RawDocument,
-  input: Pick<ListActivitiesInput, 'uid' | 'connectionId' | 'appBaseUrl'>,
+  input: Pick<
+    ListActivitiesInput,
+    'uid' | 'connectionId' | 'appBaseUrl' | 'includeLocation'
+  >,
 ): SafeActivityListEntry | null {
   const eventId = document.data.eventID;
   const sortTimeMs = asTimestampMs(document.data.eventStartDate);
@@ -2220,8 +2571,11 @@ function projectActivityListEntry(
       powerMeter: document.data.powerMeter === true,
       trainer: document.data.trainer === true,
       jumpCount: asSafeInteger(rawStats['Jump Count']),
-      startPosition: projectPosition(rawStats[DataStartPosition.type]),
-      endPosition: projectPosition(rawStats[DataEndPosition.type]),
+      ...(input.includeLocation ? {
+        startPosition: projectPosition(rawStats[DataStartPosition.type]),
+        endPosition: projectPosition(rawStats[DataEndPosition.type]),
+      } : {}),
+      locationRedacted: !input.includeLocation,
       supportedDetailKinds: ['laps', 'jumps', 'swim_lengths'],
       stats: {
         ...stats,
@@ -2233,7 +2587,10 @@ function projectActivityListEntry(
 
 function projectRouteListEntry(
   document: RawDocument,
-  input: Pick<ListRoutesInput, 'uid' | 'connectionId' | 'appBaseUrl'>,
+  input: Pick<
+    ListRoutesInput,
+    'uid' | 'connectionId' | 'appBaseUrl' | 'includeLocation'
+  >,
 ): SafeRouteListEntry | null {
   const importedAtMs = asTimestampMs(document.data.importedAt);
   const name = asBoundedString(document.data.name, 120);
@@ -2258,11 +2615,15 @@ function projectRouteListEntry(
       name,
       createdAtMs: asTimestampMs(document.data.createdAt),
       importedAtMs,
+      updatedAtMs: asTimestampMs(document.data.updatedAt),
       activityTypes: normalizeActivityTypes(document.data.activityTypes),
       routeCount: asSafeInteger(document.data.routeCount),
       waypointCount: asSafeInteger(document.data.waypointCount),
       pointCount: asSafeInteger(document.data.pointCount),
-      bounds: projectBounds(document.data.bounds),
+      ...(input.includeLocation ? {
+        bounds: projectBounds(document.data.bounds),
+      } : {}),
+      locationRedacted: !input.includeLocation,
       stats: projectActivityStats(document.data.stats),
     },
   };
@@ -2289,6 +2650,7 @@ async function listActivityDetail(
     input.uid,
     reference.activityId,
     detailKind,
+    input.includeLocation,
   );
   if (
     !document
@@ -2328,7 +2690,7 @@ async function listActivityDetail(
     const item = detailKind === 'laps'
       ? projectLap(candidate, index)
       : detailKind === 'jumps'
-        ? projectJump(candidate, index)
+        ? projectJump(candidate, index, input.includeLocation === true)
         : projectSwimLength(candidate, index);
     return item ? [item] : [];
   });
@@ -2387,7 +2749,7 @@ async function getActivityMetrics(
       );
     }
     const metric = resolveSportsLibNumericMetric(requestedType);
-    if (!metric) {
+    if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
       throw new McpDataError(
         'invalid_metric',
         'Each activity metric must be a supported numeric Sports Lib type.',
@@ -2459,10 +2821,174 @@ async function getActivityMetrics(
   return result;
 }
 
+function extractActivityChartSourceFiles(
+  eventData: Record<string, unknown>,
+): OriginalFileMetaData[] {
+  const values = Array.isArray(eventData.originalFiles)
+    && eventData.originalFiles.length > 0
+    ? eventData.originalFiles
+    : eventData.originalFile
+      ? [eventData.originalFile]
+      : [];
+  return values.flatMap((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return [];
+    }
+    const source = value as Record<string, unknown>;
+    const path = asBoundedString(source.path, 1_024);
+    const bucket = source.bucket === undefined
+      ? undefined
+      : asBoundedString(source.bucket, 200, /^[A-Za-z0-9._-]+$/);
+    if (!path || (source.bucket !== undefined && !bucket)) {
+      return [];
+    }
+    return [{
+      path,
+      ...(bucket ? { bucket } : {}),
+      ...(asBoundedString(source.generation, 40, /^\d+$/)
+        ? { generation: `${source.generation}` }
+        : {}),
+      startDate: new Date(0),
+      ...(asBoundedString(source.originalFilename, 255)
+        ? { originalFilename: `${source.originalFilename}` }
+        : {}),
+    }];
+  });
+}
+
+function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
+  const stats = document.data.stats
+    && typeof document.data.stats === 'object'
+    && !Array.isArray(document.data.stats)
+    ? document.data.stats as Record<string, unknown>
+    : {};
+  return {
+    startDate: document.data.startDate,
+    endDate: document.data.endDate,
+    type: document.data.type,
+    sourceActivityKey: asBoundedString(
+      document.data.sourceActivityKey,
+      256,
+      /^[A-Za-z0-9:_-]+$/,
+    ) || undefined,
+    getStat: (type: string) => {
+      const value = asFiniteNumber(stats[type]);
+      return value === null ? null : { getValue: () => value };
+    },
+  };
+}
+
+async function getActivityChartData(
+  dependencies: McpDataServiceDependencies,
+  input: GetActivityChartDataInput,
+) {
+  const reference = decodeActivityReference(
+    input.activityRef,
+    input.uid,
+    input.connectionId,
+  );
+  const context = await dependencies.fetchActivityChartContext(
+    input.uid,
+    reference.eventId,
+  );
+  if (
+    !context
+    || context.event.id !== reference.eventId
+    || context.activities.length === 0
+    || context.activities.length > 100
+  ) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The original activity source is not available for charting.',
+    );
+  }
+  const targetExistingIndex = context.activities.findIndex(document => (
+    document.id === reference.activityId
+    && document.data.eventID === reference.eventId
+  ));
+  if (targetExistingIndex < 0) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The referenced activity is not available for charting.',
+    );
+  }
+  const targetActivityType = normalizeActivityType(
+    context.activities[targetExistingIndex].data.type,
+  );
+  if (!targetActivityType) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The referenced activity type is not available for charting.',
+    );
+  }
+  if (
+    getUnsupportedActivityChartMetrics(input.metrics, targetActivityType)
+      .length > 0
+  ) {
+    throw new McpDataError(
+      'invalid_metric',
+      'One or more chart metrics are not supported for this activity type.',
+    );
+  }
+  const sourceFiles = extractActivityChartSourceFiles(context.event.data);
+  if (
+    sourceFiles.length === 0
+    || sourceFiles.length > MCP_ACTIVITY_CHART_MAX_SOURCE_FILES
+  ) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The activity does not have an available bounded original source.',
+    );
+  }
+
+  try {
+    await dependencies.consumeActivityChartRateLimit(
+      input.uid,
+      input.connectionId,
+    );
+    return await dependencies.buildActivityChartData({
+      sourceFiles,
+      existingActivities: context.activities.map(toActivityChartIdentity),
+      targetExistingIndex,
+    }, input, {
+      loadSource: (sourceFile, maximumBytes) => dependencies.downloadActivityChartSource(
+        input.uid,
+        reference.eventId,
+        sourceFile,
+        maximumBytes,
+      ),
+    });
+  } catch (error) {
+    if (error instanceof McpDataError) {
+      throw error;
+    }
+    if (error instanceof McpActivityChartRateLimitError) {
+      throw new McpDataError(
+        'temporarily_unavailable',
+        'Activity chart parsing is temporarily rate limited. Retry later.',
+      );
+    }
+    const message = error instanceof Error ? error.message : '';
+    if (/limit|exceed|bounded/i.test(message)) {
+      throw new McpDataError(
+        'query_too_large',
+        'The activity chart request exceeds a processing limit.',
+      );
+    }
+    throw new McpDataError(
+      'detail_not_available',
+      'The original activity could not be charted.',
+    );
+  }
+}
+
 export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
   return {
+    listActivityChartMetrics(activityType?: string) {
+      return listActivityChartMetrics(activityType);
+    },
     async listMetrics(input: ListMetricsInput): Promise<ListMetricsResult> {
       const rawLimit = Math.floor(input.limit || 50);
       const limit = Math.min(100, Math.max(1, rawLimit));
@@ -2476,7 +3002,7 @@ export function createMcpDataService(
         scannedDocs
           .filter(doc => !isBenchmarkEventForTrainingMetrics(doc.data))
           .map(doc => doc.data.stats as Record<string, unknown> | undefined),
-      );
+      ).filter(metric => !isFirstClassMcpMeasurementMetric(metric.type));
       const search = `${input.search || ''}`.trim().toLowerCase();
       const filtered = available.filter(metric => (
         (!search || `${metric.type} ${metric.displayType} ${metric.unit}`.toLowerCase().includes(search))
@@ -2502,7 +3028,7 @@ export function createMcpDataService(
       validateBoundedRange(input.startTimeMs, input.endTimeMs);
       const timeZone = requireTimeZone(input.timeZone);
       const metric = resolveSportsLibNumericMetric(input.metric);
-      if (!metric) {
+      if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
         throw new McpDataError('invalid_metric', 'The metric is not a supported numeric Sports Lib type.');
       }
       const activityTypes = resolveActivityTypes(input.activityTypes);
@@ -2536,6 +3062,109 @@ export function createMcpDataService(
         matchedEventCount: events.length,
         aggregation,
       };
+    },
+
+    async listMeasurementTypes(): Promise<ListMeasurementTypesResult> {
+      return {
+        measurementTypes: getMcpMeasurementCatalog(),
+      };
+    },
+
+    async queryMeasurements(
+      input: QueryMeasurementsInput,
+    ): Promise<QueryMeasurementsResult> {
+      validateBoundedRange(input.startTimeMs, input.endTimeMs);
+      const timeZone = requireTimeZone(input.timeZone);
+      const definition = resolveMcpMeasurementDefinition(input.measurementType);
+      if (!definition) {
+        throw new McpDataError(
+          'invalid_metric',
+          'The measurement type is not supported.',
+        );
+      }
+      if (!definition.supportedAggregations.includes(input.aggregation)) {
+        throw new McpDataError(
+          'invalid_request',
+          'The aggregation is not supported for this measurement type.',
+        );
+      }
+      if (!definition.supportedIntervals.includes(input.interval)) {
+        throw new McpDataError(
+          'invalid_request',
+          'The interval is not supported for this measurement type.',
+        );
+      }
+
+      const measurementType = getMcpMeasurementCatalog()
+        .find(candidate => candidate.id === definition.id);
+      if (!measurementType) {
+        throw new McpDataError(
+          'invalid_metric',
+          'The measurement type is not available in the current Sports Lib version.',
+        );
+      }
+
+      const documents = await fetchBoundedEventDocuments(dependencies, input);
+      const measurements = documents.flatMap((document) => {
+        if (isBenchmarkEventForTrainingMetrics(document.data)) {
+          return [];
+        }
+        const recordedAtMs = asTimestampMs(document.data.startDate);
+        const stats = document.data.stats;
+        if (
+          recordedAtMs === null
+          || !stats
+          || typeof stats !== 'object'
+          || Array.isArray(stats)
+        ) {
+          return [];
+        }
+        const value = projectSportsLibNumericMetricValue(
+          definition.canonicalMetricType,
+          (stats as Record<string, unknown>)[definition.canonicalMetricType],
+        );
+        if (
+          value === null
+          || !isMcpMeasurementValueAllowed(definition, value)
+        ) {
+          return [];
+        }
+        return [{
+          recordedAtMs,
+          value,
+        }];
+      });
+      const points = buildMeasurementPoints(
+        measurements,
+        input.interval,
+        input.aggregation,
+        timeZone,
+      );
+      const firstPoint = points[0];
+      const latestPoint = points[points.length - 1];
+      const result: QueryMeasurementsResult = {
+        measurementType,
+        startTimeMs: input.startTimeMs,
+        endTimeMs: input.endTimeMs,
+        timeZone,
+        aggregation: input.aggregation,
+        interval: input.interval,
+        measurementCount: measurements.length,
+        points,
+        summary: firstPoint && latestPoint
+          ? {
+            firstPoint,
+            latestPoint,
+            absoluteChange: latestPoint.value - firstPoint.value,
+          }
+          : null,
+      };
+      requireJsonBudget(
+        result,
+        MAX_MEASUREMENT_RESPONSE_BYTES,
+        'The measurement query exceeds the MCP response limit.',
+      );
+      return result;
     },
 
     async getTrainingMetric(uid: string, metricKind: string) {
@@ -2577,6 +3206,7 @@ export function createMcpDataService(
         input.endTimeMs,
         scanLimit + 1,
         cursor,
+        input.includeLocation,
       );
       if (documents.length > scanLimit + 1) {
         throw new McpDataError(
@@ -2684,7 +3314,10 @@ export function createMcpDataService(
         }
         processedDocumentCount += 1;
         lastProcessedDocument = document;
-        const entry = projectActivityListEntry(document, input);
+        const entry = projectActivityListEntry(document, {
+          ...input,
+          includeLocation: true,
+        });
         if (
           !entry
           || !activityTypeMatches(entry.summary.activityType, activityTypes)
@@ -2794,6 +3427,10 @@ export function createMcpDataService(
       return getActivityMetrics(dependencies, input);
     },
 
+    async getActivityChartData(input: GetActivityChartDataInput) {
+      return getActivityChartData(dependencies, input);
+    },
+
     async listRoutes(input: ListRoutesInput) {
       const limit = Math.min(
         MAX_ROUTE_PAGE_SIZE,
@@ -2810,6 +3447,7 @@ export function createMcpDataService(
         input.uid,
         scanLimit + 1,
         cursor,
+        input.includeLocation,
       );
       if (documents.length > scanLimit + 1) {
         throw new McpDataError(
@@ -2876,6 +3514,7 @@ export function createMcpDataService(
         input.uid,
         MAX_NEARBY_ROUTE_SCAN_DOCUMENTS + 1,
         cursor,
+        true,
       );
       if (documents.length > MAX_NEARBY_ROUTE_SCAN_DOCUMENTS + 1) {
         throw new McpDataError(
@@ -2905,7 +3544,10 @@ export function createMcpDataService(
             'The nearby route query exceeds the MCP summary processing limit.',
           );
         }
-        const entry = projectRouteListEntry(document, input);
+        const entry = projectRouteListEntry(document, {
+          ...input,
+          includeLocation: true,
+        });
         if (
           !entry
           || !routeActivityTypesMatch(entry.summary.activityTypes, activityTypes)

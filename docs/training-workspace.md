@@ -1340,7 +1340,10 @@ skiing, and multisport aggregates need different fatigue models rather than this
 6. Register snapshot status/context parsing in `DashboardDerivedMetricsService`.
 7. Add explicit loading, failed, empty, and ready UI states.
 8. Bump `DERIVED_METRIC_SCHEMA_VERSION` only when existing snapshots must be invalidated.
-9. Update this document and user help.
+9. Add the exact redacted payload contract to the exhaustive
+   `functions/src/mcp/derived-output-schemas.ts` map. Update the positive fixture and identity/provenance leakage
+   canaries in `functions/src/mcp/tool-output-schemas.spec.ts`; a new kind without both must fail build or tests.
+10. Update this document and user help.
 
 Do not read settings or sleep unconditionally in the worker. Source requirements are part of the performance contract.
 
@@ -1352,16 +1355,20 @@ The read-only MCP server does not recalculate Training metrics and does not scan
 and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being
 interpreted as zero.
 
-There is deliberately no separate MCP-derived-kind registry. A newly registered kind is discoverable, but its payload must
-still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts`. The server recursively removes event/activity
-IDs, names, and labels, including identities nested under event- or activity-named parents. It also removes source
-fingerprints and imported device/provider provenance (`sourceKey` and `previousSourceKey`). If a new payload introduces
-another identity- or provenance-bearing field, extend the redaction contract before release rather than relying on client
+There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
+must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map
+in `functions/src/mcp/derived-output-schemas.ts`. The server recursively removes event/activity IDs, names, and labels,
+including identities nested under event- or activity-named parents. It also removes source fingerprints and imported
+device/provider provenance (`sourceKey` and `previousSourceKey`). The strict schema then rejects any undeclared field
+before serialization. If a new payload introduces another identity- or provenance-bearing field, extend the redaction,
+exact schema, positive contract fixture, and negative leakage canary before release rather than relying on client
 behavior.
 
-Use `.agent/skills/mcp-metric-surface/SKILL.md` for every derived-kind change. Add a focused MCP test that covers ready-state
-handling, schema metadata, and the payload's positive and negative disclosure contract. The transport, scopes, query
-bounds, sleep projection, and Sports Lib event-stat discovery are documented in `docs/mcp-server.md`.
+Use `.agent/skills/mcp-metric-surface/SKILL.md` for every derived-kind change. The MCP contract suite must prove that
+`Object.values(DERIVED_METRIC_KINDS)` exactly matches the safe schema and fixture maps, that the advertised
+`get_training_metric` conditional selects the matching payload, and that `structuredContent` validates for every kind.
+The transport, scopes, query bounds, sleep projection, and Sports Lib event-stat discovery are documented in
+`docs/mcp-server.md`.
 
 ## Testing and Verification
 
@@ -1529,7 +1536,8 @@ Before merging a Training change, confirm:
 - [ ] Settings writes are authenticated, App-Check protected, deletion guarded, normalized, and branch-scoped.
 - [ ] Source dependencies are fetched only for metric kinds that need them.
 - [ ] Snapshot schema and frontend normalizers agree.
-- [ ] New or changed derived kinds have an MCP ready-state, identity-redaction, and device/provider-provenance contract test.
+- [ ] New or changed derived kinds have an exact MCP payload schema plus ready-state, structured-output,
+      identity-redaction, and device/provider-provenance contract tests.
 - [ ] Loading, failed, empty, updating, invalid, and ready states are readable.
 - [ ] Metric delta colors follow metric semantics.
 - [ ] Help content and this document are current.

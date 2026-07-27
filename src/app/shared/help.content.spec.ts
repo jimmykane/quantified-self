@@ -52,8 +52,10 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Use with ChatGPT');
     expect(dataAndPrivacySection?.content).toContain('Developer mode');
     expect(dataAndPrivacySection?.content).toContain('https://quantified-self.io/mcp');
-    expect(dataAndPrivacySection?.content).toContain('96 x 96 PNG (3.3 KB)');
-    expect(dataAndPrivacySection?.content).toContain('/assets/favicons/android-chrome-192x192.png');
+    expect(dataAndPrivacySection?.content).toContain('recommended [256 x 256 PNG (9.4 KB)]');
+    expect(dataAndPrivacySection?.content)
+      .toContain('/assets/favicons/quantified-self-chatgpt-icon-256x256.png');
+    expect(dataAndPrivacySection?.content).toContain('preferred minimum dimensions');
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
@@ -441,6 +443,11 @@ describe('help.content', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
 
     expect(serviceConnectionsSection?.content).toContain('sending saved routes to Garmin Connect');
+    expect(serviceConnectionsSection?.content).toContain('available to every signed-in account');
+    expect(serviceConnectionsSection?.content).toContain('marked **PRO**');
+    expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
+    expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
+    expect(serviceConnectionsSection?.content).toContain('an automated subscription check disconnects');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
     expect(serviceConnectionsSection?.content).toContain('Choose an action');
     expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');
@@ -491,6 +498,8 @@ describe('help.content', () => {
     expect(plansSection?.content).toContain(`Up to **${USAGE_LIMITS.basic.toLocaleString('en-US')} activities**`);
     expect(plansSection?.content).toContain(`Up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
     expect(plansSection?.content).toContain('**Unlimited saved routes**');
+    expect(plansSection?.content).toContain('public pricing page shows the exact trial length as an offer for eligible new members');
+    expect(plansSection?.content).toContain('Trial eligibility is confirmed after sign-in');
     expect(plansSection?.content).toContain('Existing activities and routes are retained. New uploads follow your current plan limits.');
     expect(uploadsSection?.content).toContain(`**Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
     expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
@@ -783,31 +792,46 @@ describe('help.content', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 
     expect(dataAndPrivacySection?.content).toContain('**Activity and Training metrics**');
+    expect(dataAndPrivacySection?.content).toContain('**Body measurements**');
     expect(dataAndPrivacySection?.content).toContain('**Individual activity details**');
+    expect(dataAndPrivacySection?.content).toContain('**Activity locations**');
     expect(dataAndPrivacySection?.content).toContain('**Sleep summaries**');
-    expect(dataAndPrivacySection?.content).toContain('**Saved routes and waypoints**');
-    expect(dataAndPrivacySection?.content).toContain('Precise latitude/longitude metrics are excluded');
+    expect(dataAndPrivacySection?.content).toContain('**Saved-route summaries**');
+    expect(dataAndPrivacySection?.content).toContain('**Saved-route locations and geometry**');
+    expect(dataAndPrivacySection?.content).toContain(
+      'Precise latitude/longitude and first-class body-measurement metrics are excluded',
+    );
     expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
-    expect(dataAndPrivacySection?.content).toContain('Together with Activity and Training metric access');
-    expect(dataAndPrivacySection?.content).toContain('unrequested stored stats are excluded');
+    expect(dataAndPrivacySection?.content).toContain('first-class body-measurement history');
+    expect(dataAndPrivacySection?.content).toContain('Removing a parent permission');
+    expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
+    expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
+    expect(dataAndPrivacySection?.content).toContain('not a medical or health assessment');
+    expect(dataAndPrivacySection?.content).toContain('exact source measurement timestamps');
+    expect(dataAndPrivacySection?.content).toContain('provider/device metadata');
+    expect(dataAndPrivacySection?.content).toContain('bounded chart-ready heart-rate');
+    expect(dataAndPrivacySection?.content).toContain('without a reparse, backfill, cache');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
-    expect(dataAndPrivacySection?.content).toContain('exact start/end latitude/longitude coordinates when available');
-    expect(dataAndPrivacySection?.content).toContain("match an activity's start or end");
-    expect(dataAndPrivacySection?.content).toContain('Jump records can also include exact latitude/longitude coordinates');
+    expect(dataAndPrivacySection?.content).toContain('exact activity start/end coordinates');
+    expect(dataAndPrivacySection?.content).toContain('nearby activity searches');
+    expect(dataAndPrivacySection?.content).toContain('MTB jump coordinates');
     expect(dataAndPrivacySection?.content).toContain('home, workplace, frequent trailhead');
-    expect(dataAndPrivacySection?.content).toContain('stable account/event paths');
-    expect(dataAndPrivacySection?.content).toContain('stable account/route paths');
-    expect(dataAndPrivacySection?.content).toContain('simplified polyline previews');
-    expect(dataAndPrivacySection?.content).toContain('segment start/end coordinates');
-    expect(dataAndPrivacySection?.content).toContain('measure against the persisted preview');
+    expect(dataAndPrivacySection?.content).toContain('Saved-route summary access');
+    expect(dataAndPrivacySection?.content).toContain('Saved-route location access');
+    expect(dataAndPrivacySection?.content).toContain('simplified preview geometry');
+    expect(dataAndPrivacySection?.content).toContain('segment endpoints');
     expect(dataAndPrivacySection?.content).toContain('waypoint coordinates');
     expect(dataAndPrivacySection?.content).toContain('location text to Mapbox for forward geocoding');
     expect(dataAndPrivacySection?.content).toContain('does not send activity, route, account, or prompt data');
-    expect(dataAndPrivacySection?.content).toContain('original route files');
+    expect(dataAndPrivacySection?.content).toContain('Original files');
+    expect(dataAndPrivacySection?.content).toContain('full-resolution recordings');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');
     expect(dataAndPrivacySection?.content).toContain('Failed or abandoned authorization attempts');
+    expect(dataAndPrivacySection?.content).toContain('standard server-to-server token revocation');
+    expect(dataAndPrivacySection?.content).toContain('Disconnect** in Connections remains the authoritative control');
+    expect(dataAndPrivacySection?.content).toContain('without affecting your other clients');
   });
 
   it('directs account deletion to the Account settings section', () => {

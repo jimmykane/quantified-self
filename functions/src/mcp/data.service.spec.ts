@@ -14,6 +14,7 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataStartPosition,
+  DataWeight,
   encodeRoutePolyline5,
   EventImporterJSON,
   EventInterface,
@@ -29,8 +30,11 @@ import {
   createMcpDataService,
   McpDataError,
   McpDataServiceDependencies,
+  resolveMcpActivitySourcePath,
   resolveMcpRouteSourcePath,
+  SAFE_ACTIVITY_LOCATION_FIELDS,
 } from './data.service';
+import { McpActivityChartRateLimitError } from './activity-chart-rate-limit';
 
 function makeEvent(
   startDate: string,
@@ -139,6 +143,7 @@ function routeDocument(overrides: Record<string, unknown> = {}) {
       name: 'Ridge loop',
       createdAt: new Date('2026-06-30T10:00:00.000Z'),
       importedAt: new Date('2026-07-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-07-02T10:00:00.000Z'),
       activityTypes: [ActivityTypes.Cycling],
       routeCount: 1,
       waypointCount: 2,
@@ -174,6 +179,15 @@ describe('MCP data service', () => {
       fetchNearbyActivityDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDetailDocument: vi.fn().mockResolvedValue(null),
       fetchActivityMetricDocument: vi.fn().mockResolvedValue(null),
+      fetchActivityChartContext: vi.fn().mockResolvedValue(null),
+      downloadActivityChartSource: vi.fn().mockResolvedValue(Buffer.from('activity')),
+      consumeActivityChartRateLimit: vi.fn().mockResolvedValue(undefined),
+      buildActivityChartData: vi.fn().mockResolvedValue({
+        activityType: ActivityTypes.Cycling,
+        xAxis: 'elapsed_time',
+        xAxisUnit: 'seconds',
+        series: [],
+      }),
       fetchRouteDocuments: vi.fn().mockResolvedValue([]),
       fetchRouteDocument: vi.fn().mockResolvedValue(null),
       downloadRouteSource: vi.fn().mockResolvedValue(Buffer.from('route')),
@@ -221,6 +235,44 @@ describe('MCP data service', () => {
     )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
   });
 
+  it('restricts activity source reads to the owning event path and approved buckets', () => {
+    const source = {
+      path: 'users/user-1/events/event-1/uploads/attempt/original.fit',
+      bucket: 'project.appspot.com',
+      startDate: new Date(),
+    };
+    expect(resolveMcpActivitySourcePath(
+      'user-1',
+      'event-1',
+      source,
+      ['project.appspot.com'],
+    )).toBe(source.path);
+    expect(() => resolveMcpActivitySourcePath(
+      'user-1',
+      'event-1',
+      { ...source, path: 'users/user-2/events/event-1/original.fit' },
+      ['project.appspot.com'],
+    )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
+    expect(() => resolveMcpActivitySourcePath(
+      'user-1',
+      'event-1',
+      { ...source, path: 'users/user-1/events/event-1/../event-2/original.fit' },
+      ['project.appspot.com'],
+    )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
+    expect(() => resolveMcpActivitySourcePath(
+      'user-1',
+      'event-1',
+      { ...source, path: 'users/user-1/events/event-1/%2e%2e/original.fit' },
+      ['project.appspot.com'],
+    )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
+    expect(() => resolveMcpActivitySourcePath(
+      'user-1',
+      'event-1',
+      { ...source, bucket: 'other.appspot.com' },
+      ['project.appspot.com'],
+    )).toThrow(expect.objectContaining({ code: 'detail_not_available' }));
+  });
+
   it('projects exact activity and MTB jump coordinates without leaking raw activity data', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
@@ -232,6 +284,7 @@ describe('MCP data service', () => {
       appBaseUrl: 'https://quantified-self.io',
       startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
       endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+      includeLocation: true,
     });
 
     expect(activities.activities).toEqual([{
@@ -251,6 +304,7 @@ describe('MCP data service', () => {
         latitudeDegrees: 39.6722,
         longitudeDegrees: 20.8428,
       },
+      locationRedacted: false,
       supportedDetailKinds: ['laps', 'jumps', 'swim_lengths'],
       stats: expect.objectContaining({
         durationSeconds: 3600,
@@ -305,6 +359,7 @@ describe('MCP data service', () => {
       uid: 'user-1',
       connectionId: 'connection-1',
       activityRef,
+      includeLocation: true,
     });
 
     expect(jumps).toEqual({
@@ -319,6 +374,7 @@ describe('MCP data service', () => {
         score: 62.44,
         latitudeDegrees: 39.6679,
         longitudeDegrees: 20.8382,
+        locationRedacted: false,
       }],
       nextCursor: null,
     });
@@ -327,7 +383,293 @@ describe('MCP data service', () => {
       'user-1',
       'activity-1',
       'jumps',
+      true,
     );
+  });
+
+  it('includes both start and end coordinate leaves in nearby-activity reads', () => {
+    expect(SAFE_ACTIVITY_LOCATION_FIELDS.map(field => String(field))).toEqual([
+      'stats.`Start Position`.latitudeDegrees',
+      'stats.`Start Position`.longitudeDegrees',
+      'stats.`End Position`.latitudeDegrees',
+      'stats.`End Position`.longitudeDegrees',
+    ]);
+  });
+
+  it('redacts activity and route coordinates while preserving non-location summaries', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      routeDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    const routes = await service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    });
+    expect(activities.activities[0]).toMatchObject({
+      activityType: ActivityTypes.Cycling,
+      jumpCount: 2,
+      locationRedacted: true,
+    });
+    expect(activities.activities[0]).not.toHaveProperty('startPosition');
+    expect(activities.activities[0]).not.toHaveProperty('endPosition');
+    expect(routes.routes[0]).toMatchObject({
+      name: 'Ridge loop',
+      pointCount: 200,
+      locationRedacted: true,
+    });
+    expect(routes.routes[0]).not.toHaveProperty('bounds');
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2026-07-01T00:00:00.000Z'),
+      Date.parse('2026-07-02T00:00:00.000Z'),
+      26,
+      undefined,
+      undefined,
+    );
+    expect(dependencies.fetchRouteDocuments).toHaveBeenCalledWith(
+      'user-1',
+      26,
+      undefined,
+      undefined,
+    );
+
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        events: [{
+          [DataJumpEvent.type]: {
+            timestamp: Date.parse('2026-07-01T08:30:00.000Z'),
+            jumpData: {
+              distance: 2,
+              score: 60,
+              position_lat: 39.6679,
+              position_long: 20.8382,
+            },
+          },
+        }],
+      },
+    });
+    const jumps = await service.listActivityJumps({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    });
+    expect(jumps.items[0]).toMatchObject({
+      distanceMeters: 2,
+      score: 60,
+      locationRedacted: true,
+    });
+    expect(jumps.items[0]).not.toHaveProperty('latitudeDegrees');
+    expect(jumps.items[0]).not.toHaveProperty('longitudeDegrees');
+  });
+
+  it('resolves chart sources from the connection-bound activity and rate-limits before reading', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      event: {
+        id: 'event-1',
+        data: {
+          originalFiles: [{
+            path: 'users/user-1/events/event-1/original.fit',
+            bucket: 'project.appspot.com',
+            generation: '123',
+          }],
+        },
+      },
+      activities: [{
+        id: 'activity-1',
+        data: {
+          eventID: 'event-1',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+          type: ActivityTypes.Cycling,
+          stats: {
+            [DataDuration.type]: 3_600,
+            [DataDistance.type]: 30_000,
+          },
+        },
+      }],
+    });
+    vi.mocked(dependencies.buildActivityChartData).mockImplementation(
+      async (context, _input, chartDependencies) => {
+        expect(dependencies.consumeActivityChartRateLimit).toHaveBeenCalledWith(
+          'user-1',
+          'connection-1',
+        );
+        expect(context.sourceFiles[0]).toMatchObject({
+          path: 'users/user-1/events/event-1/original.fit',
+          bucket: 'project.appspot.com',
+          generation: '123',
+        });
+        await chartDependencies.loadSource(context.sourceFiles[0], 1024);
+        return {
+          activityType: ActivityTypes.Cycling,
+          xAxis: 'elapsed_time' as const,
+          xAxisUnit: 'seconds',
+          series: [],
+        };
+      },
+    );
+
+    const result = await service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    });
+    expect(result).toMatchObject({
+      activityType: ActivityTypes.Cycling,
+      xAxis: 'elapsed_time',
+    });
+    expect(dependencies.downloadActivityChartSource).toHaveBeenCalledWith(
+      'user-1',
+      'event-1',
+      expect.objectContaining({ generation: '123' }),
+      1024,
+    );
+  });
+
+  it('rejects incompatible chart metrics before rate limits or source access', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      event: {
+        id: 'event-1',
+        data: {
+          originalFiles: [{
+            path: 'users/user-1/events/event-1/original.fit',
+          }],
+        },
+      },
+      activities: [{
+        id: 'activity-1',
+        data: {
+          eventID: 'event-1',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+          type: ActivityTypes.Cycling,
+        },
+      }],
+    });
+
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['swim_pace'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.consumeActivityChartRateLimit).not.toHaveBeenCalled();
+    expect(dependencies.downloadActivityChartSource).not.toHaveBeenCalled();
+    expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+  });
+
+  it('does not expose parser, merge, storage, or rate-limit error details', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      event: {
+        id: 'event-1',
+        data: {
+          originalFiles: [{
+            path: 'users/user-1/events/event-1/original.fit',
+          }],
+        },
+      },
+      activities: [{
+        id: 'activity-1',
+        data: {
+          eventID: 'event-1',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+          type: ActivityTypes.Cycling,
+        },
+      }],
+    });
+
+    vi.mocked(dependencies.consumeActivityChartRateLimit)
+      .mockRejectedValueOnce(new McpActivityChartRateLimitError());
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject({
+      code: 'temporarily_unavailable',
+      message: 'Activity chart parsing is temporarily rate limited. Retry later.',
+    });
+
+    vi.mocked(dependencies.consumeActivityChartRateLimit)
+      .mockResolvedValue(undefined);
+    vi.mocked(dependencies.buildActivityChartData)
+      .mockRejectedValueOnce(new Error('parser leaked /private/storage/path.fit'));
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject({
+      code: 'detail_not_available',
+      message: 'The original activity could not be charted.',
+    });
+
+    vi.mocked(dependencies.buildActivityChartData)
+      .mockRejectedValueOnce(new Error('merge exceeded owner-secret limit'));
+    await expect(service.getActivityChartData({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+      metrics: ['heart_rate'],
+      xAxis: 'elapsed_time',
+    })).rejects.toMatchObject({
+      code: 'query_too_large',
+      message: 'The activity chart request exceeds a processing limit.',
+    });
   });
 
   it('returns only explicitly selected canonical numeric metrics for a referenced activity', async () => {
@@ -401,6 +743,16 @@ describe('MCP data service', () => {
       connectionId: 'connection-1',
       activityRef,
       metrics: [DataLatitudeDegrees.type],
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.fetchActivityMetricDocument).not.toHaveBeenCalled();
+
+    await expect(service.getActivityMetrics({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef,
+      metrics: [DataWeight.type],
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_metric',
     });
@@ -711,6 +1063,7 @@ describe('MCP data service', () => {
       appBaseUrl: 'https://quantified-self.io',
       startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
       endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+      includeLocation: true,
     });
 
     expect(result.activities.map(activity => ({
@@ -859,6 +1212,7 @@ describe('MCP data service', () => {
         timeMs: Date.parse('2026-07-01T08:00:00.000Z'),
         id: 'activity-1',
       },
+      undefined,
     );
   });
 
@@ -981,6 +1335,7 @@ describe('MCP data service', () => {
       uid: 'user-1',
       connectionId: 'connection-1',
       appBaseUrl: 'https://quantified-self.io',
+      includeLocation: true,
     });
 
     expect(routes.routes).toEqual([{
@@ -989,6 +1344,7 @@ describe('MCP data service', () => {
       name: 'Ridge loop',
       createdAtMs: Date.parse('2026-06-30T10:00:00.000Z'),
       importedAtMs: Date.parse('2026-07-01T10:00:00.000Z'),
+      updatedAtMs: Date.parse('2026-07-02T10:00:00.000Z'),
       activityTypes: [ActivityTypes.Cycling],
       routeCount: 1,
       waypointCount: 2,
@@ -999,6 +1355,7 @@ describe('MCP data service', () => {
         minLongitudeDegrees: 20.7,
         maxLongitudeDegrees: 20.9,
       },
+      locationRedacted: false,
       stats: expect.objectContaining({
         distanceMeters: 30_000,
         ascentMeters: 900,
@@ -1010,6 +1367,7 @@ describe('MCP data service', () => {
       'user-1',
       26,
       undefined,
+      true,
     );
     const routeRef = routes.routes[0].routeRef;
     expect(Buffer.from(routeRef, 'base64url').toString('utf8')).not.toContain('route-1');
@@ -1733,6 +2091,280 @@ describe('MCP data service', () => {
       }),
     ]);
     expect(dependencies.importEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists first-class body-measurement capabilities', async () => {
+    const result = await createMcpDataService(dependencies).listMeasurementTypes();
+
+    expect(result.measurementTypes).toEqual([
+      expect.objectContaining({
+        id: 'body_weight',
+        canonicalMetric: expect.objectContaining({
+          type: DataWeight.type,
+          unit: 'kg',
+        }),
+        defaultAggregation: 'median',
+        defaultInterval: 'day',
+        maximumRangeDays: 366,
+      }),
+    ]);
+  });
+
+  it('keeps first-class measurements out of generic metric discovery and queries', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([{
+      id: 'weight-1',
+      data: {
+        startDate: Date.parse('2026-07-26T08:00:00.000Z'),
+        stats: {
+          [DataWeight.type]: 71.2,
+          [DataDistance.type]: 5_000,
+        },
+      },
+    }]);
+    const service = createMcpDataService(dependencies);
+
+    const catalog = await service.listMetrics({
+      uid: 'user-1',
+    });
+    expect(catalog.eventMetrics.map(metric => metric.type)).toContain(
+      DataDistance.type,
+    );
+    expect(catalog.eventMetrics.map(metric => metric.type)).not.toContain(
+      DataWeight.type,
+    );
+
+    await expect(service.queryMetric({
+      uid: 'user-1',
+      metric: DataWeight.type,
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'average',
+      groupBy: 'date',
+      interval: 'daily',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+  });
+
+  it('returns identity-free daily median body-weight measurements in an IANA timezone', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
+      {
+        id: 'weight-1',
+        data: {
+          startDate: Date.parse('2024-03-31T00:30:00.000Z'),
+          stats: { [DataWeight.type]: 70 },
+          name: 'Private morning weigh-in',
+          sourceKey: 'private-source-key',
+          creator: { name: 'Private scale' },
+        },
+      },
+      {
+        id: 'weight-2',
+        data: {
+          startDate: Date.parse('2024-03-31T01:30:00.000Z'),
+          stats: { [DataWeight.type]: 72 },
+          previousSourceKey: 'private-previous-source',
+        },
+      },
+      {
+        id: 'benchmark-1',
+        data: {
+          startDate: Date.parse('2024-03-31T02:30:00.000Z'),
+          isMerge: true,
+          stats: { [DataWeight.type]: 200 },
+        },
+      },
+      {
+        id: 'weight-3',
+        data: {
+          startDate: Date.parse('2024-04-01T04:00:00.000Z'),
+          stats: { [DataWeight.type]: 73 },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2024-03-30T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-02T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result).toMatchObject({
+      measurementType: {
+        id: 'body_weight',
+        canonicalMetric: {
+          type: DataWeight.type,
+          unit: 'kg',
+        },
+      },
+      timeZone: 'Europe/Helsinki',
+      aggregation: 'median',
+      interval: 'day',
+      measurementCount: 3,
+      points: [{
+        bucketStartTimeMs: Date.parse('2024-03-30T22:00:00.000Z'),
+        value: 71,
+        measurementCount: 2,
+      }, {
+        bucketStartTimeMs: Date.parse('2024-03-31T21:00:00.000Z'),
+        value: 73,
+        measurementCount: 1,
+      }],
+      summary: {
+        absoluteChange: 2,
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('weight-1');
+    expect(serialized).not.toContain('Private morning weigh-in');
+    expect(serialized).not.toContain('private-source-key');
+    expect(serialized).not.toContain('private-previous-source');
+    expect(serialized).not.toContain('Private scale');
+  });
+
+  it('keeps even-count medians finite when all persisted values are finite', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
+      {
+        id: 'weight-extreme-1',
+        data: {
+          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
+          stats: { [DataWeight.type]: Number.MAX_VALUE },
+        },
+      },
+      {
+        id: 'weight-extreme-2',
+        data: {
+          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
+          stats: { [DataWeight.type]: Number.MAX_VALUE },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(result.points).toEqual([{
+      bucketStartTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      value: Number.MAX_VALUE,
+      measurementCount: 2,
+    }]);
+    expect(Number.isFinite(result.points[0].value)).toBe(true);
+  });
+
+  it('supports natural body-weight aliases and latest-within-bucket aggregation', async () => {
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
+      {
+        id: 'weight-newer',
+        data: {
+          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
+          stats: { [DataWeight.type]: 70.5 },
+        },
+      },
+      {
+        id: 'weight-older',
+        data: {
+          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
+          stats: { [DataWeight.type]: 71 },
+        },
+      },
+      {
+        id: 'weight-invalid',
+        data: {
+          startDate: Date.parse('2026-07-26T09:00:00.000Z'),
+          stats: { [DataWeight.type]: 0 },
+        },
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body mass',
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'latest',
+      interval: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(result.measurementCount).toBe(2);
+    expect(result.points).toEqual([{
+      bucketStartTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      value: 70.5,
+      measurementCount: 2,
+    }]);
+  });
+
+  it('rejects unknown measurement types before reading events', async () => {
+    await expect(createMcpDataService(dependencies).queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'latitude',
+      startTimeMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_metric',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+  });
+
+  it('keeps measurement ranges bounded and represents missing history explicitly', async () => {
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2025-01-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-01-03T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'month',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+
+    await expect(service.queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'day',
+      timeZone: 'Not/A_Timezone',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_timezone',
+    });
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+
+    const empty = await service.queryMeasurements({
+      uid: 'user-1',
+      measurementType: 'body_weight',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T00:00:00.000Z'),
+      aggregation: 'median',
+      interval: 'month',
+      timeZone: 'UTC',
+    });
+    expect(empty).toMatchObject({
+      measurementCount: 0,
+      points: [],
+      summary: null,
+    });
   });
 
   it('ignores unrelated legacy event fields that Sports Lib cannot import', async () => {

@@ -856,3 +856,335 @@
     }
   }
 }
+
+// Selected pricing presentation shared by /pricing, /subscriptions, and onboarding.
+.pricing-container {
+  .pricing-intro {
+    max-width: 640px;
+    margin: -16px 0 24px;
+    text-align: center;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    max-width: 1120px;
+    gap: 20px;
+  }
+
+  .product-card-shell {
+    position: relative;
+    display: flex;
+    min-width: 0;
+  }
+
+  .plan-badge {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    z-index: 3;
+    display: inline-flex;
+    transform: translate(-50%, -50%);
+    padding: 3px 10px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 999px;
+    background: var(--mat-sys-surface-container-lowest);
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-small);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .products-grid .product-card {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 16px;
+    background: var(--mat-sys-surface);
+    box-shadow: none;
+    transform: none;
+    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+
+    &:hover {
+      z-index: 2;
+      border-color: var(--mat-sys-outline);
+      box-shadow: none;
+      transform: translateY(-2px);
+    }
+
+    &.pro-card {
+      border: 2px solid var(--mat-sys-primary);
+      background: color-mix(in srgb, var(--mat-sys-primary-container) 15%, var(--mat-sys-surface));
+
+      &:hover {
+        box-shadow: none;
+        transform: translateY(-2px);
+      }
+    }
+
+    &.current-plan-highlight:not(.pro-card) {
+      border: 2px solid var(--mat-sys-outline);
+    }
+
+    mat-card-header {
+      padding: 22px 20px 12px;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+
+      mat-card-title {
+        margin-bottom: 6px;
+        font-size: 1.5rem;
+        font-weight: 400;
+        letter-spacing: -0.5px;
+      }
+
+      mat-card-subtitle {
+        max-width: 88%;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        opacity: 0.7;
+      }
+    }
+
+    .plan-title {
+      margin: 0;
+      font: inherit;
+      letter-spacing: inherit;
+    }
+
+    mat-card-content {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: minmax(0, 1fr) 16.625rem;
+      align-items: stretch;
+      gap: 12px 0;
+      min-width: 0;
+      padding: 0 20px 20px;
+    }
+
+    .features-list {
+      grid-column: 1 / -1;
+      width: 100%;
+      min-width: 0;
+      margin: 16px 0;
+      text-align: left;
+    }
+
+    .card-spacer {
+      display: none;
+    }
+
+    .plan-price-section {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      height: 16.625rem;
+      margin: 0;
+      padding: 14px 16px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      text-align: center;
+
+      .price {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        margin: 0;
+        font-size: 1.65rem;
+        font-weight: 400;
+        letter-spacing: -1px;
+        white-space: nowrap;
+
+        .interval {
+          margin-left: 4px;
+          font-size: 0.8rem;
+          font-weight: 400;
+          opacity: 0.6;
+          white-space: nowrap;
+        }
+      }
+
+      .yearly-savings-label,
+      .trial-cta-note {
+        margin: 0;
+      }
+
+      .yearly-savings-label {
+        justify-self: center;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        color: var(--mat-sys-primary);
+        font: var(--mat-sys-label-medium);
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      .trial-offer-copy {
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        font-size: 0.78rem;
+        font-weight: 500;
+        line-height: 1.3;
+        opacity: 0.82;
+      }
+
+      .trial-cta-note {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        font-size: 0.76rem;
+        line-height: 1.28;
+        opacity: 0.72;
+      }
+
+      button {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 0;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 400;
+        line-height: 1.1;
+      }
+
+      .subscribe-btn {
+        border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 82%, var(--mat-sys-on-surface));
+      }
+    }
+
+    &.single-price-card .plan-price-section,
+    &.free-card .plan-price-section {
+      grid-column: 1 / -1;
+    }
+
+    &.free-card .plan-price-section {
+      display: flex;
+      flex-direction: column;
+
+      button {
+        margin-top: auto;
+      }
+    }
+
+    &.basic-card .plan-price-section,
+    &.pro-card .plan-price-section {
+      display: grid;
+      grid-template-rows: auto 40px minmax(50px, auto) 44px;
+      align-items: start;
+      gap: 10px;
+
+      .price {
+        grid-row: 1;
+      }
+
+      .yearly-savings-label,
+      .trial-cta-note {
+        grid-row: 2;
+        align-self: center;
+      }
+
+      .trial-offer-copy {
+        grid-row: 3;
+        align-self: start;
+      }
+
+      button {
+        grid-row: 4;
+        align-self: end;
+        margin-top: 0;
+      }
+    }
+
+    .plan-price-section + .plan-price-section {
+      margin: 0;
+      padding-top: 14px;
+      border-top: 0;
+      border-left: 1px solid var(--mat-sys-outline-variant);
+    }
+  }
+
+  .free-feature-icon {
+    color: var(--mat-sys-outline);
+  }
+}
+
+@include bp.handset-or-tablet-portrait {
+  .pricing-container {
+    .products-grid {
+      grid-template-columns: minmax(0, 560px);
+      max-width: 560px;
+      gap: 16px;
+    }
+
+    .products-grid .product-card,
+    .products-grid .product-card.pro-card {
+      margin-top: 0;
+      transform: none;
+
+      &:hover {
+        transform: none;
+      }
+    }
+  }
+}
+
+@include bp.xsmall {
+  .pricing-container {
+    .products-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .products-grid .product-card {
+      border-radius: 14px;
+
+      mat-card-header {
+        padding: 18px 16px 10px;
+
+        mat-card-title {
+          font-size: 1.35rem;
+        }
+
+        mat-card-subtitle {
+          font-size: 0.85rem;
+        }
+      }
+
+      mat-card-content {
+        display: flex;
+        padding: 0 16px 16px;
+      }
+
+      .features-list li {
+        font-size: 0.88rem;
+      }
+
+      .plan-price-section {
+        width: 100%;
+        height: auto;
+
+        .price {
+          font-size: 1.9rem;
+        }
+      }
+
+      .plan-price-section + .plan-price-section {
+        border-top: 1px solid var(--mat-sys-outline-variant);
+        border-left: 0;
+      }
+    }
+  }
+}
