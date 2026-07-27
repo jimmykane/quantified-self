@@ -235,6 +235,60 @@ tools, which are marked open-world because a place-name input can call Mapbox. T
 before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` is registered only
 when both of its scopes are present.
 
+### Strict structured output
+
+Every public tool has one recursively strict Zod output contract in
+`functions/src/mcp/tool-output-schemas.ts`. `PUBLIC_MCP_TOOL_NAMES` and the schema registry are compile-time exhaustive:
+adding or renaming a public tool without a schema fails the Functions build. The registration wrapper uses the same
+schema three times:
+
+1. `tools/list` advertises it as JSON Schema;
+2. the wrapper validates the allowlisted projection before serialization; and
+3. the pinned MCP SDK validates `structuredContent` again.
+
+A successful call serializes the validated object once. That exact JSON is parsed back into canonical
+`structuredContent`, and the text content carries the same JSON for clients that still consume the compatibility
+fallback. This prevents optional properties with JavaScript `undefined` values from making the two representations
+diverge. Undeclared fields fail closed as a generic `internal_error`; the rejected value is never returned or logged.
+Expected `McpDataError` results remain text-only `isError` responses with no `structuredContent`.
+
+Reusable schemas cover coordinates, bounds, opaque references, URLs, timestamps, pagination, metric descriptors and
+units, activity stats/details, sleep values, chart series, routes, and waypoints. Objects are strict at every nested
+level. The only dynamic maps are named wire concepts with constrained values, such as aggregation series and dated
+Power Curve buckets. Optional means the key may be absent; nullable means the key is present but no value is available.
+Historical domain timestamps are signed safe integers so valid dates before 1970 remain representable; operational
+timestamps such as a Training snapshot's `updatedAtMs` remain nonnegative.
+Activity and route schemas are generated for the granted scopes: parent-only variants cannot validate location fields,
+and granting one location domain never widens the other.
+
+`functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
+`DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 19-tool `tools/list`
+response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
+parser implementation, so a metric and canonical unit cannot drift independently.
+
+`functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
+inspects all advertised schemas, calls all 19 tools, and validates successful `structuredContent` with direct Ajv 8 and
+`ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
+continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
+expected errors, output-contract failures, and identity/provenance leakage canaries.
+
+### Changing or adding a tool
+
+1. Add or change the allowlisted data-service projection; never derive a public schema from an internal Firestore,
+   Sports Lib, parser, provider, or Storage object.
+2. Add the tool name to `PUBLIC_MCP_TOOL_NAMES` and define its exact strict registry entry. Reuse the named coordinate,
+   reference, pagination, unit, date, activity, sleep, route, or waypoint concept when it is genuinely identical.
+3. Model scope variants explicitly. A schema must omit fields unavailable to the granted scope rather than accepting
+   them as optional, and an explicit coordinate request must still fail before source work when permission is missing.
+4. Return the projected value through the shared registration wrapper. Preserve validated `structuredContent` and
+   equivalent JSON text; keep errors text-only.
+5. Update the in-memory successful fixture, Ajv assertion, empty/nullable/pagination cases, and negative leakage
+   canaries. A new Training kind also needs an exact entry in `MCP_DERIVED_PAYLOAD_SCHEMAS` and its exhaustive fixture.
+6. Run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts src/mcp/server.spec.ts`, the focused
+   data-service tests, `npm --prefix functions run build`, and `git diff --check`. Update this document whenever the
+   public contract moves.
+
 ## Sports Lib metric discovery
 
 `metric-catalog.ts` enumerates public Sports Lib `DataStore` classes. A metric is eligible only when:
@@ -428,13 +482,14 @@ MCP reads only `status: "ready"` documents with the exact current schema from
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
 exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels,
 identity-derived source fingerprints, and imported device/provider provenance (`sourceKey` and `previousSourceKey`) from
-the payload. For example, `body_weight_trend` is discoverable through `list_metrics` and readable through
+the payload. It then validates the result against the exact schema for that `metricKind`; undeclared fields fail closed
+instead of being serialized. For example, `body_weight_trend` is discoverable through `list_metrics` and readable through
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
-[`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline and schema work plus
-an MCP redaction-contract test.
+[`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
+payload schema, structured-output fixture, and positive and negative redaction-contract tests.
 
 ## Sleep projection
 

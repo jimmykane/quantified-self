@@ -27,8 +27,13 @@ import {
   MCP_OAUTH_SCOPES,
   rejectRepeatedOAuthParameters,
 } from './oauth.service';
+import {
+  createMcpOutputSchemaRegistry,
+  McpOutputSchemaRegistry,
+  PublicMcpToolName,
+} from './tool-output-schemas';
 
-const dataService = createMcpDataService();
+const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
 const SUPPORTED_PUBLIC_HOSTS = new Set([
   'quantified-self.io',
@@ -219,13 +224,15 @@ export function parseMcpDateTime(value: string, field: string): number {
   return parsed;
 }
 
-function toolResult(value: unknown) {
+function toolResult(value: Record<string, unknown>) {
+  const serialized = JSON.stringify(value);
+  const structuredContent = JSON.parse(serialized) as Record<string, unknown>;
   return {
     content: [{
       type: 'text' as const,
-      text: JSON.stringify(value),
+      text: serialized,
     }],
-    structuredContent: value as Record<string, unknown>,
+    structuredContent,
   };
 }
 
@@ -255,21 +262,25 @@ const READ_ONLY_LOCATION_TOOL_ANNOTATIONS = {
   openWorldHint: true,
 } as const;
 
-async function runReadOnlyTool(
-  name: string,
-  operation: () => Promise<unknown>,
-) {
-  try {
-    return toolResult(await operation());
-  } catch (error) {
-    if (!(error instanceof McpDataError)) {
-      logger.error('[MCP] Tool execution failed', {
-        toolName: name,
-        errorName: error instanceof Error ? error.name : 'unknown',
-      });
+function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
+  return async (
+    name: PublicMcpToolName,
+    operation: () => Promise<unknown>,
+  ) => {
+    try {
+      const projected = await operation();
+      const validated = await outputSchemas[name].parseAsync(projected);
+      return toolResult(validated as Record<string, unknown>);
+    } catch (error) {
+      if (!(error instanceof McpDataError)) {
+        logger.error('[MCP] Tool execution failed', {
+          toolName: name,
+          errorName: error instanceof Error ? error.name : 'unknown',
+        });
+      }
+      return formatMcpToolError(error);
     }
-    return formatMcpToolError(error);
-  }
+  };
 }
 
 function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
@@ -292,10 +303,22 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
 export function createMcpServer(
   auth: AuthenticatedMcpRequest,
   publicBaseUrl: string,
+  dataService: ReturnType<typeof createMcpDataService> = defaultDataService,
 ): McpServer {
   const measurementToolsAvailable = auth.scopes.includes(
     MCP_OAUTH_SCOPES.MeasurementsRead,
   );
+  const activityLocationAvailable = auth.scopes.includes(
+    MCP_OAUTH_SCOPES.ActivityLocationRead,
+  );
+  const routeLocationAvailable = auth.scopes.includes(
+    MCP_OAUTH_SCOPES.RouteLocationRead,
+  );
+  const outputSchemas = createMcpOutputSchemaRegistry({
+    activityLocation: activityLocationAvailable,
+    routeLocation: routeLocationAvailable,
+  });
+  const runReadOnlyTool = createReadOnlyToolRunner(outputSchemas);
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
@@ -316,6 +339,7 @@ export function createMcpServer(
       title: 'List body measurement types',
       description: 'List first-class personal measurement capabilities such as body weight, including units, supported trend aggregations, date intervals, range limits, and the optional current Training snapshot.',
       inputSchema: {},
+      outputSchema: outputSchemas.list_measurement_types,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, () => runReadOnlyTool(
       'list_measurement_types',
@@ -342,6 +366,7 @@ export function createMcpServer(
           .max(80)
           .describe('Required IANA time zone used for day, week, and month boundaries.'),
       },
+      outputSchema: outputSchemas.query_measurements,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'query_measurements',
@@ -368,6 +393,7 @@ export function createMcpServer(
         cursor: z.string().max(256).optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_metrics', () => dataService.listMetrics({
       uid: auth.uid,
@@ -401,6 +427,7 @@ export function createMcpServer(
         timeZone: z.string().min(1).max(80),
         activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
       },
+      outputSchema: outputSchemas.query_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_metric', () => dataService.queryMetric({
       uid: auth.uid,
@@ -422,6 +449,7 @@ export function createMcpServer(
       inputSchema: {
         metricKind: z.string().min(1).max(120),
       },
+      outputSchema: outputSchemas.get_training_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'get_training_metric',
@@ -441,6 +469,7 @@ export function createMcpServer(
         cursor: z.string().max(512).optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
+      outputSchema: outputSchemas.list_sleep_sessions,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_sleep_sessions', () => dataService.listSleepSessions({
       uid: auth.uid,
@@ -464,6 +493,7 @@ export function createMcpServer(
         groupBy: z.enum(['day', 'week', 'month']).default('day'),
         timeZone: z.string().min(1).max(80),
       },
+      outputSchema: outputSchemas.query_sleep_summary,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_sleep_summary', () => dataService.querySleepSummary({
       uid: auth.uid,
@@ -477,9 +507,6 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
-    const activityLocationAvailable = auth.scopes.includes(
-      MCP_OAUTH_SCOPES.ActivityLocationRead,
-    );
     server.registerTool('list_activities', {
       title: 'List activities',
       description: activityLocationAvailable
@@ -491,6 +518,7 @@ export function createMcpServer(
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
+      outputSchema: outputSchemas.list_activities,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activities', () => dataService.listActivities({
       uid: auth.uid,
@@ -516,6 +544,7 @@ export function createMcpServer(
           cursor: MCP_CURSOR_SCHEMA.optional(),
           limit: z.number().int().min(1).max(25).default(10),
         },
+        outputSchema: outputSchemas.find_activities_near_location,
         annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool(
         'find_activities_near_location',
@@ -546,6 +575,7 @@ export function createMcpServer(
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_activity_laps,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activity_laps', () => dataService.listActivityLaps({
       uid: auth.uid,
@@ -565,6 +595,7 @@ export function createMcpServer(
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_activity_jumps,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activity_jumps', () => dataService.listActivityJumps({
       uid: auth.uid,
@@ -583,6 +614,7 @@ export function createMcpServer(
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
       },
+      outputSchema: outputSchemas.list_activity_swim_lengths,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'list_activity_swim_lengths',
@@ -601,6 +633,7 @@ export function createMcpServer(
       inputSchema: {
         activityType: z.string().min(1).max(120).optional(),
       },
+      outputSchema: outputSchemas.list_activity_chart_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'list_activity_chart_metrics',
@@ -621,6 +654,7 @@ export function createMcpServer(
           .max(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS)
           .default(MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS),
       },
+      outputSchema: outputSchemas.get_activity_chart_data,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'get_activity_chart_data',
@@ -658,6 +692,7 @@ export function createMcpServer(
           .min(1)
           .max(MAX_ACTIVITY_METRICS_PER_REQUEST),
       },
+      outputSchema: outputSchemas.get_activity_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
       'get_activity_metrics',
@@ -671,9 +706,6 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
-    const routeLocationAvailable = auth.scopes.includes(
-      MCP_OAUTH_SCOPES.RouteLocationRead,
-    );
     server.registerTool('list_routes', {
       title: 'List saved routes',
       description: routeLocationAvailable
@@ -683,6 +715,7 @@ export function createMcpServer(
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
+      outputSchema: outputSchemas.list_routes,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_routes', () => dataService.listRoutes({
       uid: auth.uid,
@@ -704,6 +737,7 @@ export function createMcpServer(
           cursor: MCP_CURSOR_SCHEMA.optional(),
           limit: z.number().int().min(1).max(10).default(10),
         },
+        outputSchema: outputSchemas.find_routes_near_location,
         annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool(
         'find_routes_near_location',
@@ -725,6 +759,7 @@ export function createMcpServer(
         inputSchema: {
           routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         },
+        outputSchema: outputSchemas.get_route_geometry,
         annotations: READ_ONLY_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool('get_route_geometry', () => dataService.getRouteGeometry({
         uid: auth.uid,
@@ -738,6 +773,7 @@ export function createMcpServer(
         inputSchema: {
           routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         },
+        outputSchema: outputSchemas.list_route_waypoints,
         annotations: READ_ONLY_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool('list_route_waypoints', () => dataService.listRouteWaypoints({
         uid: auth.uid,

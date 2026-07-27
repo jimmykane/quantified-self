@@ -24,7 +24,8 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   provider/device metadata, or source provenance. Update consent, Help, Policies, the public MCP page, and focused
   catalog/query tests in the same change.
 - **Training-derived kind:** register it in `shared/derived-metrics.ts`, preserve the normal snapshot build lifecycle, and
-  expose only a ready server-side snapshot.
+  expose only a ready server-side snapshot. Add its exact identity-free payload schema to
+  `functions/src/mcp/derived-output-schemas.ts`; the exhaustive map must fail compilation until the new kind is covered.
 - **Sleep field or provider:** update the normalized contract in `shared/sleep.ts`, then deliberately decide whether it
   belongs in the MCP safe projection. Never forward provider user/session identifiers, provider payloads, raw stage
   intervals, or raw HRV, SpO2, or respiration samples.
@@ -64,6 +65,17 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 6. For every new Sports Lib detail or route field, update the named MCP allowlist, add a negative leakage test for nearby
    sensitive fields, confirm historical persistence/reparse expectations, review the Firestore query/index shape, and
    document units and operational limits. A Sports Lib export alone never authorizes MCP exposure.
+7. For every new or changed MCP tool or output field, update the matching entry in
+   `functions/src/mcp/tool-output-schemas.ts`. Use recursively strict objects. Model optional fields only when the key can
+   be absent; use nullable fields when the key is present with no value. Keep canonical units, opaque references,
+   timestamps/date ranges, pagination cursors, counts, and result arrays explicit. Parent-only activity and route schemas
+   must omit their location fields entirely. Do not widen a public schema from an internal object, and do not use
+   `any`, `unknown`, a catch-all object, or an unconstrained dynamic map as a shortcut.
+8. Keep one schema in charge of advertisement and enforcement: the registration wrapper must advertise it, validate the
+   projected value before serialization, return the validated value as `structuredContent`, and emit equivalent JSON
+   text for compatibility. Expected errors remain text-only `isError` results. Update the in-memory contract fixture for
+   every affected tool, every derived kind, optional/nullable and pagination states, and add a negative leakage canary
+   for each sensitive neighboring field.
 
 ## Verify
 
@@ -74,6 +86,8 @@ Add or update focused tests for:
   range/work/response limits, missing history, and explicit identity/provenance exclusion;
 - persistence availability and any reparse expectation;
 - Training ready-state handling and identity redaction;
+- exhaustive tool/output-schema registration, Ajv validation of every successful `structuredContent` result, JSON-text
+  equivalence, exact Training payload-kind pairing, and generic text-only contract-mismatch errors;
 - sleep safe projection and explicit raw/provider-field exclusion;
 - activity-detail and route allowlists, parent/location authorization matrices, exact-coordinate redaction,
   opaque-reference binding, selective on-demand parsing, identity ambiguity, complete-domain downsampling, and every
@@ -81,6 +95,7 @@ Add or update focused tests for:
 - IANA timezone/DST bucketing;
 - scope denial and query limits.
 
-Then run the focused Functions tests, `npm --prefix functions run build`, the affected frontend tests, the Firestore rules
-suite when access changes, and `git diff --check`. Do not deploy, publish Sports Lib, start a production reparse, or mutate
-cloud configuration as part of this workflow.
+Then run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts` plus the focused Functions tests,
+`npm --prefix functions run build`, the affected frontend tests, the Firestore rules suite when access changes, and
+`git diff --check`. Do not deploy, publish Sports Lib, start a production reparse, or mutate cloud configuration as part
+of this workflow.
