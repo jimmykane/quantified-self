@@ -532,11 +532,14 @@ the user's normal application sign-in; it contains no MCP credential or authoriz
 
 Activity discovery metadata explicitly maps workout, exercise-session, today, last, latest, and most-recent requests to
 `list_activities`. The list is always newest first. `start` and `end` are an optional pair: when omitted, the query starts
-at the newest persisted activity across the user's history, so a latest-workout request is one bounded call with
-`limit: 1`; when present, the existing 366-day range limit applies. Aggregate event metrics and Training snapshots are
-not evidence that an individual activity is unavailable, and scope-aware server instructions direct clients to check
-the activity list before making that conclusion. Activity-list cursors bind both to the connection and to either the
-exact requested range or the explicit unbounded mode.
+at the newest persisted activity across the user's history, so an unfiltered latest-workout request starts with a
+bounded `limit: 1` call. A typed request such as “latest run” instead inspects newest-first pages until the first matching
+activity type; a newer activity of another type is not a match. When dates are present, the existing 366-day range limit
+applies. Clients follow `nextCursor` before concluding that no matching activity exists, including when an unusable
+stored document was safely skipped. Aggregate event metrics and Training snapshots are not evidence that an individual
+activity is unavailable, and scope-aware server instructions direct clients to check the activity list before making
+that conclusion. Activity-list cursors bind both to the connection and to either the exact requested range or the
+explicit unbounded mode.
 
 `find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
 scope, it reuses the location field mask and safe summary projection. It matches only the persisted

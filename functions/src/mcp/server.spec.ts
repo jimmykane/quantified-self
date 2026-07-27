@@ -500,8 +500,10 @@ describe('MCP HTTP scope enforcement', () => {
       await client.connect(clientTransport);
       const instructions = client.getInstructions() || '';
       const activityInstructionIndex = instructions.indexOf(
-        'For a specific workout, activity, or exercise session',
+        'For a specific workout or activity',
       );
+      const cursorInstruction = 'follow nextCursor before concluding no match';
+      const cursorInstructionIndex = instructions.indexOf(cursorInstruction);
       const listActivities = (await client.listTools()).tools
         .find(tool => tool.name === 'list_activities');
       const inputSchema = listActivities?.inputSchema as {
@@ -511,19 +513,31 @@ describe('MCP HTTP scope enforcement', () => {
 
       expect(activityInstructionIndex).toBeGreaterThanOrEqual(0);
       expect(activityInstructionIndex).toBeLessThan(512);
+      expect(cursorInstructionIndex).toBeGreaterThan(activityInstructionIndex);
+      expect(cursorInstructionIndex + cursorInstruction.length)
+        .toBeLessThanOrEqual(512);
       expect(instructions).toContain(
-        'aggregate metrics and Training snapshots do not contain individual activity records',
+        'aggregate metrics and Training snapshots do not contain individual records',
+      );
+      expect(instructions).toContain(
+        'use limit 1 only for an unfiltered latest activity',
+      );
+      expect(instructions).toContain(
+        'For a named type, scan newest-first pages to the first match',
       );
       expect(listActivities?.description).toContain('today’s');
       expect(listActivities?.description).toContain('latest');
       expect(listActivities?.description).toContain('Results are newest first');
+      expect(listActivities?.description).toContain(
+        'for a named activity type, inspect pages until the first match',
+      );
       expect(inputSchema?.required || []).not.toContain('start');
       expect(inputSchema?.required || []).not.toContain('end');
       expect(inputSchema?.properties?.start?.description).toContain(
         'Provide start and end together',
       );
       expect(inputSchema?.properties?.limit?.description).toContain(
-        'latest or last workout',
+        'only for an unfiltered latest or last workout',
       );
 
       const partialRange = await client.callTool({

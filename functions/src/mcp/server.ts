@@ -345,7 +345,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   ];
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
     instructions.push(
-      'For a specific workout, activity, or exercise session—including today’s, yesterday’s, latest, last, or most recent—call list_activities before concluding it is unavailable; aggregate metrics and Training snapshots do not contain individual activity records. Omit dates and use limit 1 for the latest activity; use explicit local-day bounds for a calendar date.',
+      'For a specific workout or activity—including today’s, latest, last, or most recent—call list_activities before reporting it unavailable; aggregate metrics and Training snapshots do not contain individual records. Omit dates and use limit 1 only for an unfiltered latest activity. For a named type, scan newest-first pages to the first match. Use local-day bounds for a date and follow nextCursor before concluding no match.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
@@ -571,8 +571,8 @@ export function createMcpServer(
     server.registerTool('list_activities', {
       title: 'List activities',
       description: activityLocationAvailable
-        ? 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first; omit both dates and use limit 1 for the latest activity, or provide both dates for a bounded period. Returns safe summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
-        : 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first; omit both dates and use limit 1 for the latest activity, or provide both dates for a bounded period. Returns safe non-location summaries with opaque references and direct authenticated app links; location fields are redacted.',
+        ? 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first. Omit both dates and use limit 1 only for an unfiltered latest activity; for a named activity type, inspect pages until the first match. Provide both dates for a bounded period, and follow nextCursor before concluding no activity matched. Returns safe summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
+        : 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first. Omit both dates and use limit 1 only for an unfiltered latest activity; for a named activity type, inspect pages until the first match. Provide both dates for a bounded period, and follow nextCursor before concluding no activity matched. Returns safe non-location summaries with opaque references and direct authenticated app links; location fields are redacted.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA
           .describe('Optional inclusive period start. Provide start and end together; omit both for newest-first activity history.')
@@ -586,7 +586,7 @@ export function createMcpServer(
           .min(1)
           .max(100)
           .default(25)
-          .describe('Maximum activities to return. Use 1 when the user asks for the latest or last workout.'),
+          .describe('Maximum activities to return. Use 1 only for an unfiltered latest or last workout; use newest-first pages when matching a named activity type.'),
       },
       outputSchema: outputSchemas.list_activities,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,

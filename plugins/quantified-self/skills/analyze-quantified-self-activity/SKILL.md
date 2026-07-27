@@ -9,10 +9,13 @@ Resolve activities through opaque public references and request only the detail 
 
 ## Workflow
 
-1. Find the target activity and retain its opaque activity reference. For “latest,” omit the date bounds and request one
-   newest-first result. For “today” or another calendar date, use explicit bounds for the user's local day. Never infer
-   that an individual workout is unavailable from aggregate metrics or a Training snapshot. When a family term such as
-   run could include trail, treadmill, indoor, or virtual variants, clarify only when that distinction can change the
+1. Find the target activity and retain its opaque activity reference. For an unfiltered “latest activity” or “last
+   workout,” omit the date bounds and request one newest-first result. If the user names an activity type, such as their
+   latest run, omit the date bounds but inspect newest-first pages until the first matching type; do not mistake a newer
+   different activity for the requested one. For “today” or another calendar date, use explicit bounds for the user's
+   local day. Follow a returned cursor before concluding that no suitable activity exists. Never infer that an
+   individual workout is unavailable from aggregate metrics or a Training snapshot. When a family term such as run
+   could include trail, treadmill, indoor, or virtual variants, clarify only when that distinction can change the
    answer.
 2. Use the activity summary first. Request selected canonical metrics, laps, jumps, or swim lengths only when relevant
    to the activity type and question.
