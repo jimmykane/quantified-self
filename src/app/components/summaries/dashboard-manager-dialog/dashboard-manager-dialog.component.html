@@ -7,7 +7,7 @@
   <section class="dashboard-manager-section">
     <div class="dashboard-manager-section-title">Bulk actions</div>
     <div class="dashboard-manager-bulk-actions">
-      <button mat-flat-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-reset-default-button" (click)="resetToDefault()" [disabled]="isResetToDefaultDisabled" [attr.aria-busy]="isResetToDefaultSaving">
+      <button mat-flat-button type="button" class="qs-mat-primary" data-testid="dashboard-manager-reset-default-button" aria-describedby="dashboard-manager-reset-warning" (click)="resetToDefault()" [disabled]="isResetToDefaultDisabled" [attr.aria-busy]="isResetToDefaultSaving">
         <span class="dashboard-manager-button-content">
           @if (isResetToDefaultSaving) {
           <mat-spinner class="qs-spinner-primary" diameter="18"></mat-spinner>
@@ -38,7 +38,7 @@
         </span>
       </button>
     </div>
-    <p class="dashboard-manager-reset-warning" role="note">
+    <p id="dashboard-manager-reset-warning" class="dashboard-manager-reset-warning" role="note">
       Reset to default replaces all current dashboard tiles with the data-aware recommended set.
     </p>
     <p class="dashboard-manager-hint">
@@ -389,7 +389,7 @@
   }
 
   @if (saveError) {
-  <p class="dashboard-manager-error">{{ saveError }}</p>
+  <p class="dashboard-manager-error" role="alert">{{ saveError }}</p>
   }
   </div>
 </mat-dialog-content>

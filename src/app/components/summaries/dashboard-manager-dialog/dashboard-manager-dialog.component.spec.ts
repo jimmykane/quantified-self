@@ -2,7 +2,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, of, throwError } from 'rxjs';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -995,6 +995,11 @@ describe('DashboardManagerDialogComponent', () => {
     expect(styles).toMatch(
       /:host ::ng-deep \.dashboard-manager-bulk-actions \.mdc-button__label\s*{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;/,
     );
+
+    const resetButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-reset-default-button"]');
+    const resetWarning: HTMLElement = fixture.nativeElement.querySelector('#dashboard-manager-reset-warning');
+    expect(resetButton.getAttribute('aria-describedby')).toBe(resetWarning.id);
+    expect(template).toContain('class="dashboard-manager-error" role="alert"');
   });
 
   it('starts a new dashboard clean rather than adding default training tiles', () => {
@@ -1201,6 +1206,44 @@ describe('DashboardManagerDialogComponent', () => {
       dismissedAt: 1_777_000_000_000,
       source: 'default-kpi',
     });
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores absent auto-tile metadata when resetting a legacy dashboard fails', async () => {
+    const dashboardSettings = dialogData.user.settings.dashboardSettings;
+    const recoveryTile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY,
+      order: 0,
+      size: getExpectedPresetDefaultSize(
+        getDashboardManagerPresetDefinitions()
+          .find(definition => definition.id === DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY)!,
+      ),
+    });
+    dashboardSettings.tiles = [recoveryTile];
+    delete dashboardSettings.autoTiles;
+    delete dashboardSettings.dismissedCuratedRecoveryNowTile;
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.resetToDefault();
+
+    expect(dashboardSettings.tiles).toStrictEqual([recoveryTile]);
+    expect(dashboardSettings).not.toHaveProperty('autoTiles');
+    expect(dashboardSettings).not.toHaveProperty('dismissedCuratedRecoveryNowTile');
+  });
+
+  it('keeps the current dashboard when recommendation evidence cannot be loaded', async () => {
+    const originalTiles = dialogData.user.settings.dashboardSettings.tiles.map((tile: any) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    }));
+    eventServiceMock.getEventsBy.mockReturnValueOnce(throwError(() => new Error('events unavailable')));
+
+    await component.resetToDefault();
+
+    expect(component.saveError).toBe('Could not load recommended dashboard tiles. Please try again.');
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
     expect(hapticsMock.error).toHaveBeenCalledTimes(1);
     expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });

@@ -198,7 +198,7 @@ interface DashboardManagerSettingsSnapshot {
   tiles: TileSettingsInterface[];
   showTodaySummary?: boolean;
   dismissedCuratedRecoveryNowTile?: boolean;
-  autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
+  autoTiles?: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
 type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'resetToDefault' | 'addAll' | 'removeAll' | null;
@@ -1028,6 +1028,15 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
     try {
       await this.refreshRecommendedEligibility();
+    } catch (error) {
+      this.saveError = 'Could not load recommended dashboard tiles. Please try again.';
+      this.hapticsService.error();
+      console.error('[DashboardManagerDialogComponent] Failed to load recommended dashboard tiles', error);
+      this.stopSaving();
+      return;
+    }
+
+    try {
       const recommendedTiles = this.getAllDashboardManagerPresetTiles(
         getDashboardManagerRecommendedPresetDefinitions(this.recommendedEligibility),
       );
@@ -1192,7 +1201,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       tiles: this.cloneTiles(dashboardSettings.tiles || []),
       showTodaySummary: dashboardSettings.showTodaySummary,
       dismissedCuratedRecoveryNowTile: dashboardSettings.dismissedCuratedRecoveryNowTile,
-      autoTiles: this.cloneAutoTiles(dashboardSettings.autoTiles || {}),
+      autoTiles: dashboardSettings.autoTiles === undefined
+        ? undefined
+        : this.cloneAutoTiles(dashboardSettings.autoTiles),
     };
   }
 
@@ -1208,8 +1219,16 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     }
     this.showTodaySummary = previousSettings.showTodaySummary !== false;
     this.data.previewTodaySummaryVisibility?.(this.showTodaySummary);
-    dashboardSettings.dismissedCuratedRecoveryNowTile = previousSettings.dismissedCuratedRecoveryNowTile;
-    dashboardSettings.autoTiles = previousSettings.autoTiles as AppDashboardSettingsInterface['autoTiles'];
+    if (previousSettings.dismissedCuratedRecoveryNowTile === undefined) {
+      delete dashboardSettings.dismissedCuratedRecoveryNowTile;
+    } else {
+      dashboardSettings.dismissedCuratedRecoveryNowTile = previousSettings.dismissedCuratedRecoveryNowTile;
+    }
+    if (previousSettings.autoTiles === undefined) {
+      delete dashboardSettings.autoTiles;
+    } else {
+      dashboardSettings.autoTiles = previousSettings.autoTiles as AppDashboardSettingsInterface['autoTiles'];
+    }
   }
 
   private handleDashboardSettingsSaveError(error: unknown): void {
@@ -1699,17 +1718,16 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   private async refreshRecommendedEligibility(): Promise<void> {
     const uid = `${this.data?.user?.uid || ''}`.trim();
     if (!uid) {
-      this.resetRecommendedEligibility();
-      return;
+      throw new Error('Dashboard recommendations require a user id.');
     }
 
     const [events, sleepSessions, hasRoutes, derivedState] = await Promise.all([
-      firstValueFrom(this.watchRecommendedActivityEvents().pipe(take(1))).catch(() => []),
-      firstValueFrom(this.watchRecommendedSleepSessions(uid).pipe(take(1))).catch(() => []),
-      firstValueFrom(this.routeService.watchHasAnyRoutePreview(uid).pipe(take(1))).catch(() => false),
+      firstValueFrom(this.watchRecommendedActivityEvents().pipe(take(1))),
+      firstValueFrom(this.watchRecommendedSleepSessions(uid).pipe(take(1))),
+      firstValueFrom(this.routeService.watchHasAnyRoutePreview(uid).pipe(take(1))),
       firstValueFrom(this.derivedMetricsService.watch(this.data.user, {
         metricKinds: this.getBulkEligibilityMetricKinds(),
-      }).pipe(take(1))).catch(() => createDashboardDerivedMetricsMissingState()),
+      }).pipe(take(1))),
     ]);
 
     this.updateActivityEligibility(events.length > 0);
