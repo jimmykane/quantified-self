@@ -411,7 +411,10 @@ Training state and Readiness are fixed inside the optional Today summary:
   retired pre-release raw value `KpiReadinessConfidence` has a narrow cleanup predicate for local preview settings; it
   is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
   sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
-  cannot select different latest evidence because query order changed.
+  cannot select different latest evidence because query order changed. MCP's additive `get_today_readiness` tool applies
+  this same live formula, current Form/ramp preference, bounded 30-day sleep source, and same-provider baselines. It
+  exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
+  states; the compact daily briefing remains unchanged.
 - **Body-weight trend** reads only positive persisted Sports-lib `Weight` values, in canonical kilograms. Multiple values
   on the same UTC day reduce to a daily median; the snapshot retains the latest 28 UTC days with missing days as null
   points, the latest recorded value, and current 7- and 28-day medians. Its change values compare each current window
@@ -1360,6 +1363,14 @@ The read-only MCP server does not recalculate Training metrics and does not scan
 `users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready`, current-schema payload plus schema, update,
 and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being
 interpreted as zero.
+
+The explicitly named live `get_today_readiness` tool is not a derived-snapshot projection. It requires both
+Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
+rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
+exists because the persisted 14-day `training_readiness` point can lag newly imported sleep and because the registered
+daily-briefing schema is frozen. Keep its load model aligned through `shared/training-load.ts`, keep scoring and evidence
+selection in `shared/readiness.ts`, and never replace its allowlisted driver response with raw snapshot, provider, or
+sleep-session documents.
 
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map

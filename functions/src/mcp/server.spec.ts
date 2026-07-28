@@ -241,7 +241,14 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
 
-  it('requires both metrics and sleep scopes for the daily briefing', () => {
+  it('requires both metrics and sleep scopes for current readiness and the daily briefing', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_today_readiness' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'get_daily_briefing' },
@@ -251,7 +258,7 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
   });
 
-  it('advertises the compact Training Summary in daily-briefing metadata', async () => {
+  it('advertises live readiness drivers and the compact Training Summary', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({
       uid: 'user-1',
@@ -270,12 +277,22 @@ describe('MCP HTTP scope enforcement', () => {
     try {
       await server.connect(serverTransport);
       await client.connect(clientTransport);
-      const dailyBriefing = (await client.listTools()).tools
+      const tools = (await client.listTools()).tools;
+      const dailyBriefing = tools
         .find(tool => tool.name === 'get_daily_briefing');
+      const todayReadiness = tools
+        .find(tool => tool.name === 'get_today_readiness');
 
       expect(client.getInstructions()).toContain(
         'current-versus-usual equivalent 28-day Training totals and sport mix',
       );
+      expect(client.getInstructions()).toContain(
+        'current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence',
+      );
+      expect(todayReadiness?.description).toContain(
+        'same live recovery-aware readiness shown by Dashboard Today',
+      );
+      expect(todayReadiness?.description).toContain('same-provider baseline medians');
       expect(dailyBriefing?.description).toContain(
         'current-versus-usual equivalent 28-day Training totals',
       );
@@ -397,6 +414,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'get_daily_briefing',
       'get_sleep_trend',
+      'get_today_readiness',
       'get_training_metric',
       'list_activity_types',
       'list_metrics',

@@ -75,7 +75,10 @@ describe('MCP client access policy', () => {
     expect(content).toContain('compact morning briefing');
     expect(content).toContain('latest completed non-nap sleep');
     expect(content).toContain('current-versus-usual equivalent 28-day Training totals');
-    expect(content).toContain('current UTC-day Training readiness status');
+    expect(content).toContain('same live UTC-day Readiness used by Dashboard Today');
+    expect(content).toContain('same-provider baseline medians');
+    expect(content).toContain('missing or insufficient-baseline states');
+    expect(content).toContain('does not change the UTC scoring boundary');
     expect(content).toContain('workout plans, and medical advice');
     expect(content).toContain('stored server-side only as hashes');
     expect(content).toContain('becomes active and appears in Connections only after');

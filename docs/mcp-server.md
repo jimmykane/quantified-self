@@ -390,6 +390,7 @@ The analytics and map entries follow the
 | `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
+| `get_today_readiness` | `metrics:read` + `sleep:read` | Live Dashboard Today-equivalent readiness with Load, Sleep, HRV, and Overnight HR evidence |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
@@ -406,8 +407,8 @@ The analytics and map entries follow the
 
 Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
 tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
-before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` and
-`get_daily_briefing` are registered only when both of their scopes are present.
+before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics`,
+`get_today_readiness`, and `get_daily_briefing` are registered only when all of their respective scopes are present.
 
 ### Strict structured output
 
@@ -437,12 +438,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 23-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 24-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 23 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 24 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -762,8 +763,9 @@ payload schema, structured-output fixture, and positive and negative redaction-c
 ## Sleep projection
 
 MCP reads normalized `users/{uid}/sleepSessions` documents through a Firestore field mask and creates a new allowlisted
-response. The read projection includes only the provider name and fields eligible for that response; raw samples,
-provider identifiers, and score components do not enter the MCP process. Session output may include provider, sleep
+response. The read projection includes only the provider name, normalized timezone offset needed for Suunto readiness
+date grouping, and fields eligible for the response; raw samples, provider identifiers, provider-specific timestamps,
+and score components do not enter the MCP process. Session output may include provider, sleep
 date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized score value/qualifier,
 and aggregate vitals. Missing optional numeric measurements remain unavailable and do not contribute zeroes to summary
 averages. The lower-level `list_sleep_vitals` reports only the safe vital types that have at least one recorded session in the
@@ -779,7 +781,39 @@ stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or 
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
 deliberately.
 
-## Daily briefing projection
+## Current readiness and daily briefing projections
+
+### Live today readiness
+
+`get_today_readiness` is the one-call source for the current recovery-aware score and requires both `metrics:read` and
+`sleep:read`. It deliberately does not widen the frozen daily-briefing output. The caller supplies an IANA timezone for
+local-day context, while the score retains the Dashboard and Training UTC-day boundary.
+
+The tool reads exactly the ready `form`, `form_now`, and `ramp_rate` snapshot documents plus one bounded 30-day sleep
+projection. It rebuilds the current zero-load decay series from Form's persisted daily loads and prefers its current
+Form and seven-day CTL ramp, using the current-day compact snapshots only for a value the series cannot supply. This is
+the same source-selection contract as Dashboard Today. The load calculation shares the canonical CTL/ATL constants and
+daily-load builder with the dashboard, while scoring and sleep-evidence selection call the environment-neutral
+`shared/readiness.ts` evaluator.
+
+The response returns the score, label, confidence, total/available driver count, available original weight before
+missing-driver renormalization, aggregate baseline-evidence count, and four explicit driver groups:
+
+- Load (40%): current Form, seven-day ramp, UTC day, and the oldest selected snapshot update time.
+- Sleep (25%): the eligible latest main-sleep date, end time, duration, resulting score, and whether that score was recorded
+  or derived from duration.
+- HRV (20%): latest safe aggregate milliseconds, same-provider baseline median, matching-night count, and ratio.
+- Overnight HR (15%): the combined ratio plus separate average and minimum sleep-HR latest values, baseline medians,
+  matching-night counts, and ratios.
+
+HRV and heart-rate states distinguish `not_recorded` from `insufficient_baseline`; a ratio requires at least three prior
+same-provider values. The tool aggregates duplicate same-provider/date sessions with the same readiness grouping rules,
+accepts average HRV before the normalized overnight-HRV fallback, excludes naps and evidence older than 48 hours for the
+current score, and never returns provider, session/document identity, source fields, raw samples, score components, or
+provider payloads. It is contextual and cannot diagnose illness, prescribe a workout, or establish a multi-day trend;
+use `get_sleep_trend` for trend questions.
+
+### Compact briefing
 
 `get_daily_briefing` is a compact convenience read that requires both `metrics:read` and `sleep:read`; neither scope
 alone registers it. The caller supplies an IANA timezone. The response records the resulting local-day bounds and
@@ -811,6 +845,9 @@ requires no new Firestore composite index.
   allowlisted type metadata and per-type session counts.
 - One-call sleep trends use that same at-most-1,000-session bounded read, return only fixed coverage metadata and strict
   summary buckets, and do not perform a separate discovery read.
+- Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 30-day bound, reads
+  exactly the three ready load snapshots in parallel, and returns at most 16 KiB. Its score uses only the latest
+  eligible main sleep plus up to 14 same-provider baseline nights after deterministic same-date aggregation.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
 - A daily briefing reads at most 33 recent sleep documents from a fixed 14-day lookback, keeps at most 32 completed

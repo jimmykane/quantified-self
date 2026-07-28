@@ -65,7 +65,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.h1).toBe('Connect ChatGPT to your training data with a read-only MCP server');
     expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('compatible MCP clients');
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
-      section.items?.some(item => item.title === 'Sleep summaries and a compact morning briefing')
+      section.items?.some(item => item.title === 'Sleep trends, live readiness, and a morning briefing')
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.copy.includes('current-versus-usual 28-day Training totals'))

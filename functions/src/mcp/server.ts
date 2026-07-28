@@ -390,7 +390,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
     instructions.push(
-      'For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and a current UTC-day Training readiness signal; it is not a workout plan or medical advice.',
+      'For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For a broader compact morning readout, use get_daily_briefing; it combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and the compact stored readiness status. Neither tool is a workout plan or medical advice.',
     );
   }
   return instructions.join(' ');
@@ -659,6 +659,25 @@ export function createMcpServer(
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
+    server.registerTool('get_today_readiness', {
+      title: 'Get today readiness',
+      description: 'Calculate the same live recovery-aware readiness shown by Dashboard Today from current UTC-day Form/ramp and a bounded 30-day sleep query. Returns the score plus explicit Load, Sleep, HRV, and Overnight HR drivers, including latest safe aggregate values, same-provider baseline medians, evidence counts, ratios, and freshness. Provider identity, raw samples, activities, locations, workout plans, diagnosis, and medical advice are excluded.',
+      inputSchema: {
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Required IANA time zone used only for local-day context; readiness itself uses the documented UTC day boundary.'),
+      },
+      outputSchema: outputSchemas.get_today_readiness,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_today_readiness',
+      () => dataService.getTodayReadiness({
+        uid: auth.uid,
+        timeZone: input.timeZone,
+      }),
+    ));
+
     server.registerTool('get_daily_briefing', {
       title: 'Get daily briefing',
       description: 'Return a compact morning readout for an explicit IANA time zone. It includes only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and Running/Cycling/Swimming mix, and a current UTC-day Training readiness signal. It never returns provider identity, physiology, locations, activity records, body measurements, a workout plan, or medical advice.',
@@ -1023,7 +1042,10 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.SleepRead];
   }
-  if (toolName === 'get_daily_briefing') {
+  if ([
+    'get_today_readiness',
+    'get_daily_briefing',
+  ].includes(toolName)) {
     return [
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.SleepRead,

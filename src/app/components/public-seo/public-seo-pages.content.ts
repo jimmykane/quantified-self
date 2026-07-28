@@ -363,8 +363,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'bedtime',
-            title: 'Sleep summaries and a compact morning briefing',
-            copy: 'Ask for one bounded sleep trend that combines recorded-vital coverage with duration, score, stages, HRV, heart rate, blood oxygen, and respiration across daily, weekly, or monthly buckets. With both sleep and Training-metrics permission, ask for a compact IANA-timezone morning briefing with your latest completed sleep, current-versus-usual 28-day Training totals and sport mix, and current readiness status—never provider identity, raw physiological samples, a workout plan, diagnosis, or medical advice.',
+            title: 'Sleep trends, live readiness, and a morning briefing',
+            copy: 'Ask for one bounded sleep trend that combines recorded-vital coverage with duration, score, stages, HRV, heart rate, blood oxygen, and respiration across daily, weekly, or monthly buckets. With both sleep and Training-metrics permission, ask for Dashboard Today’s live UTC-day Readiness with Load, Sleep, HRV, and Overnight HR values, same-provider baselines, ratios, evidence states, and local-day context—or request the compact morning briefing with your latest completed sleep, current-versus-usual 28-day Training totals and sport mix. Neither projection returns provider identity, raw physiological samples, a workout plan, diagnosis, or medical advice.',
           },
           {
             icon: 'route',

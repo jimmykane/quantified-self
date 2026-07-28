@@ -89,7 +89,7 @@
         }
       },
       "all-parent-scopes": {
-        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice. For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and a current UTC-day Training readiness signal; it is not a workout plan or medical advice.",
+        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice. For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For a broader compact morning readout, use get_daily_briefing; it combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and the compact stored readiness status. Neither tool is a workout plan or medical advice.",
         "scopes": [
           "activity-details:read",
           "measurements:read",
@@ -102,6 +102,7 @@
           "get_activity_metrics": "dea5d1a51e3660782f3037b05c22eeb92ba7980ef8b9d07c759b978ab182eab3",
           "get_daily_briefing": "3411fe7be0ea17ba506f49a25fcd1fe98eef7bb78122032bbb83c8ec9b224a52",
           "get_sleep_trend": "0a12cc2ac2d8f9f811f2922b876d2bcb3fd5c51b327287977d5bebfc85b8dba2",
+          "get_today_readiness": "a26bf0664c58a70be50e0bb851113c3dc6a4a8d88e449826637c5ed7cea532d9",
           "get_training_metric": "cdc6068afc49769c181212316999f0ef1a84a1b2997b1fafcd67e32e3074c7af",
           "list_activities": "788c5eb6875b0268b48879950794354227a315406ac1f7bfc6a4059a3f42d856",
           "list_activity_chart_metrics": "74ea47854774e54295347084dff13413aef02016027fd0234872e3c6aceeb661",
@@ -120,7 +121,7 @@
         }
       },
       "all-scopes": {
-        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice. For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and a current UTC-day Training readiness signal; it is not a workout plan or medical advice.",
+        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice. For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For a broader compact morning readout, use get_daily_briefing; it combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and the compact stored readiness status. Neither tool is a workout plan or medical advice.",
         "scopes": [
           "activity-details:read",
           "activity-location:read",
@@ -138,6 +139,7 @@
           "get_daily_briefing": "3411fe7be0ea17ba506f49a25fcd1fe98eef7bb78122032bbb83c8ec9b224a52",
           "get_route_geometry": "84f63a17ddd0423c95214071ae7b575426970511cff04e82b42c7152bb0cc3a3",
           "get_sleep_trend": "0a12cc2ac2d8f9f811f2922b876d2bcb3fd5c51b327287977d5bebfc85b8dba2",
+          "get_today_readiness": "a26bf0664c58a70be50e0bb851113c3dc6a4a8d88e449826637c5ed7cea532d9",
           "get_training_metric": "cdc6068afc49769c181212316999f0ef1a84a1b2997b1fafcd67e32e3074c7af",
           "list_activities": "83df0be6b26362a414d30d73edda1e1b9b6fcd136e676fef2a4fd8dc5f2ff18c",
           "list_activity_chart_metrics": "74ea47854774e54295347084dff13413aef02016027fd0234872e3c6aceeb661",
@@ -6543,6 +6545,565 @@
           "type": "object"
         },
         "title": "List saved-route waypoints"
+      },
+      "a26bf0664c58a70be50e0bb851113c3dc6a4a8d88e449826637c5ed7cea532d9": {
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        },
+        "description": "Calculate the same live recovery-aware readiness shown by Dashboard Today from current UTC-day Form/ramp and a bounded 30-day sleep query. Returns the score plus explicit Load, Sleep, HRV, and Overnight HR drivers, including latest safe aggregate values, same-provider baseline medians, evidence counts, ratios, and freshness. Provider identity, raw samples, activities, locations, workout plans, diagnosis, and medical advice are excluded.",
+        "execution": {
+          "taskSupport": "forbidden"
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "timeZone": {
+              "description": "Required IANA time zone used only for local-day context; readiness itself uses the documented UTC day boundary.",
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "timeZone"
+          ],
+          "type": "object"
+        },
+        "name": "get_today_readiness",
+        "outputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "asOfDayMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "asOfTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "availableSignalCount": {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "availableWeightPercent": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "baselineEvidenceCount": {
+              "maximum": 14,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "confidence": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "low",
+                    "medium"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dayBoundary": {
+              "const": "UTC",
+              "type": "string"
+            },
+            "drivers": {
+              "additionalProperties": false,
+              "properties": {
+                "hrv": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "baselineMedianMs": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "baselineNightCount": {
+                      "maximum": 14,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "latestMs": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ratio": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "insufficient_baseline",
+                        "not_recorded"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 20,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "baselineMedianMs",
+                    "baselineNightCount",
+                    "latestMs",
+                    "ratio",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessHrvDriver",
+                  "type": "object"
+                },
+                "load": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "asOfDayMs": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "form": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "rampRate": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "sourceUpdatedAtMs": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "not_ready"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 40,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "asOfDayMs",
+                    "form",
+                    "rampRate",
+                    "sourceUpdatedAtMs",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessLoadDriver",
+                  "type": "object"
+                },
+                "overnightHeartRate": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "average": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "baselineMedianBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "baselineNightCount": {
+                          "maximum": 14,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "latestBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "ratio": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "enum": [
+                            "available",
+                            "insufficient_baseline",
+                            "not_recorded"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "baselineMedianBpm",
+                        "baselineNightCount",
+                        "latestBpm",
+                        "ratio",
+                        "status"
+                      ],
+                      "title": "McpTodayReadinessHeartRateDriver",
+                      "type": "object"
+                    },
+                    "combinedRatio": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "minimum": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "baselineMedianBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "baselineNightCount": {
+                          "maximum": 14,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "latestBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "ratio": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "enum": [
+                            "available",
+                            "insufficient_baseline",
+                            "not_recorded"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "baselineMedianBpm",
+                        "baselineNightCount",
+                        "latestBpm",
+                        "ratio",
+                        "status"
+                      ],
+                      "title": "McpTodayReadinessHeartRateDriver",
+                      "type": "object"
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "insufficient_baseline",
+                        "not_recorded"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 15,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "average",
+                    "combinedRatio",
+                    "minimum",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessOvernightHeartRateDriver",
+                  "type": "object"
+                },
+                "sleep": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "durationSeconds": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "latestSleepAtMs": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recordedScore": {
+                      "anyOf": [
+                        {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "score": {
+                      "anyOf": [
+                        {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "scoreSource": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "duration",
+                            "recorded"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sleepDate": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "no_recent_session"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 25,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "durationSeconds",
+                    "latestSleepAtMs",
+                    "recordedScore",
+                    "score",
+                    "scoreSource",
+                    "sleepDate",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessSleepDriver",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "hrv",
+                "load",
+                "overnightHeartRate",
+                "sleep"
+              ],
+              "type": "object"
+            },
+            "formulaVersion": {
+              "const": 3,
+              "type": "number"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Mixed",
+                    "Ready",
+                    "Recover"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "localDayEndTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "localDayStartTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "score": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "enum": [
+                "available",
+                "no_signal"
+              ],
+              "type": "string"
+            },
+            "timeZone": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            "totalSignalCount": {
+              "const": 4,
+              "type": "number"
+            }
+          },
+          "required": [
+            "asOfDayMs",
+            "asOfTimeMs",
+            "availableSignalCount",
+            "availableWeightPercent",
+            "baselineEvidenceCount",
+            "confidence",
+            "dayBoundary",
+            "drivers",
+            "formulaVersion",
+            "label",
+            "localDayEndTimeMs",
+            "localDayStartTimeMs",
+            "score",
+            "status",
+            "timeZone",
+            "totalSignalCount"
+          ],
+          "type": "object"
+        },
+        "title": "Get today readiness"
       },
       "ac9def788e1ffec436271c830e541e68691f6448ee2faa916610b3c3da69bdde": {
         "annotations": {
@@ -28417,7 +28978,7 @@
       }
     }
   },
-  "contractSha256": "4c72ab0c0adb9190c4d060cd83cc88f13b1303fdaaec467cdfc5e19b46759e87",
+  "contractSha256": "e1f30bc57d3963bde5c51585c29a2d75a0421560c8e2f75a6d509cb923a407b0",
   "lifecycle": "developer",
   "registryVersion": 1
 }

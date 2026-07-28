@@ -46,7 +46,10 @@ import {
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DerivedFormMetricPayload,
+  DerivedFormNowMetricPayload,
   DerivedMetricKind,
+  DerivedRampRateMetricPayload,
   DerivedTrainingReadinessMetricPayload,
   DerivedTrainingSummaryMetricPayload,
   isDerivedMetricKind,
@@ -63,6 +66,18 @@ import {
   SleepProvider,
   SleepStage,
 } from '../../../shared/sleep';
+import {
+  buildReadinessEvaluation,
+  READINESS_FORMULA_VERSION,
+  READINESS_SLEEP_LOOKBACK_MS,
+  READINESS_TOTAL_SIGNAL_COUNT,
+  ReadinessEvaluation,
+  ReadinessRatioEvidence,
+  ReadinessSleepEvidencePoint,
+} from '../../../shared/readiness';
+import {
+  buildTrainingLoadPoints,
+} from '../../../shared/training-load';
 import {
   MCP_SLEEP_VITAL_DESCRIPTORS,
   MCP_SLEEP_VITAL_TYPES,
@@ -140,6 +155,8 @@ const MAX_DAILY_BRIEFING_SLEEP_SESSIONS = 32;
 const MAX_DAILY_BRIEFING_BASELINE_NIGHTS = 7;
 const MIN_DAILY_BRIEFING_BASELINE_NIGHTS = 3;
 const MAX_DAILY_BRIEFING_RESPONSE_BYTES = 16 * 1024;
+const MAX_TODAY_READINESS_SLEEP_DOCUMENTS = 256;
+const MAX_TODAY_READINESS_RESPONSE_BYTES = 16 * 1024;
 const SLEEP_CURSOR_VERSION = 1;
 const SLEEP_CURSOR_NONCE_BYTES = 12;
 const SLEEP_CURSOR_AUTH_TAG_BYTES = 16;
@@ -563,6 +580,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'endTimeMs',
         'durationSeconds',
         'inBedDurationSeconds',
+        'timezoneOffsetSeconds',
         'isNap',
         ...Object.values(SLEEP_STAGES)
           .map(stage => new FieldPath('stageDurationsSeconds', stage)),
@@ -2603,6 +2621,86 @@ export interface GetDailyBriefingInput {
   timeZone: string;
 }
 
+export interface GetTodayReadinessInput {
+  uid: string;
+  timeZone: string;
+}
+
+type TodayReadinessAvailability = 'available' | 'no_signal';
+type TodayReadinessMetricStatus =
+  | 'available'
+  | 'insufficient_baseline'
+  | 'not_recorded';
+
+interface TodayReadinessLoadDriver {
+  status: 'available' | 'not_ready';
+  weightPercent: 40;
+  form: number | null;
+  rampRate: number | null;
+  asOfDayMs: number | null;
+  sourceUpdatedAtMs: number | null;
+}
+
+interface TodayReadinessSleepDriver {
+  status: 'available' | 'no_recent_session';
+  weightPercent: 25;
+  score: number | null;
+  scoreSource: 'recorded' | 'duration' | null;
+  latestSleepAtMs: number | null;
+  sleepDate: string | null;
+  durationSeconds: number | null;
+  recordedScore: number | null;
+}
+
+interface TodayReadinessHrvDriver {
+  status: TodayReadinessMetricStatus;
+  weightPercent: 20;
+  latestMs: number | null;
+  baselineMedianMs: number | null;
+  baselineNightCount: number;
+  ratio: number | null;
+}
+
+interface TodayReadinessHeartRateDriver {
+  status: TodayReadinessMetricStatus;
+  latestBpm: number | null;
+  baselineMedianBpm: number | null;
+  baselineNightCount: number;
+  ratio: number | null;
+}
+
+interface TodayReadinessOvernightHeartRateDriver {
+  status: TodayReadinessMetricStatus;
+  weightPercent: 15;
+  combinedRatio: number | null;
+  average: TodayReadinessHeartRateDriver;
+  minimum: TodayReadinessHeartRateDriver;
+}
+
+export interface GetTodayReadinessResult {
+  asOfTimeMs: number;
+  timeZone: string;
+  localDayStartTimeMs: number;
+  localDayEndTimeMs: number;
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  formulaVersion: typeof READINESS_FORMULA_VERSION;
+  status: TodayReadinessAvailability;
+  score: number | null;
+  label: 'Ready' | 'Mixed' | 'Recover' | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+  availableSignalCount: number;
+  availableWeightPercent: number;
+  baselineEvidenceCount: number;
+  totalSignalCount: typeof READINESS_TOTAL_SIGNAL_COUNT;
+  drivers: {
+    load: TodayReadinessLoadDriver;
+    sleep: TodayReadinessSleepDriver;
+    hrv: TodayReadinessHrvDriver;
+    overnightHeartRate: TodayReadinessOvernightHeartRateDriver;
+  };
+}
+
 interface DailyBriefingSleepSession {
   sleepDate: string;
   startTimeMs: number;
@@ -2872,6 +2970,323 @@ function projectDailyBriefingTrainingSummary(
     usual28d: total('usual28d'),
     disciplines,
   };
+}
+
+interface TodayReadinessLoadContext {
+  form: number | null;
+  rampRate: number | null;
+  asOfDayMs: number | null;
+  sourceUpdatedAtMs: number | null;
+}
+
+function resolveTodayReadinessLoadContext(
+  formSnapshot: Record<string, unknown> | null,
+  formNowSnapshot: Record<string, unknown> | null,
+  rampRateSnapshot: Record<string, unknown> | null,
+  nowTimeMs: number,
+): TodayReadinessLoadContext {
+  const asOfDayMs = resolveUtcDayStartTimeMs(nowTimeMs);
+  const readyForm = parseReadyDerivedPayload<DerivedFormMetricPayload>(
+    formSnapshot,
+    DERIVED_METRIC_KINDS.Form,
+  );
+  const readyFormNow = parseReadyDerivedPayload<DerivedFormNowMetricPayload>(
+    formNowSnapshot,
+    DERIVED_METRIC_KINDS.FormNow,
+  );
+  const readyRampRate = parseReadyDerivedPayload<DerivedRampRateMetricPayload>(
+    rampRateSnapshot,
+    DERIVED_METRIC_KINDS.RampRate,
+  );
+  const loadPoints = buildTrainingLoadPoints(
+    (readyForm?.payload.dailyLoads || []).filter(load => load.dayMs <= asOfDayMs),
+    asOfDayMs,
+  );
+  const currentPoint = loadPoints[loadPoints.length - 1] || null;
+  const priorPoint = currentPoint
+    ? loadPoints.find(point => point.dayMs === currentPoint.dayMs - (7 * 24 * 60 * 60 * 1000)) || null
+    : null;
+  const formFromSeries = currentPoint
+    ? roundMetricValue(currentPoint.formSameDay)
+    : null;
+  const rampRateFromSeries = currentPoint && priorPoint
+    ? roundMetricValue(currentPoint.ctl - priorPoint.ctl)
+    : null;
+  const fallbackForm = readyFormNow?.payload.asOfDayMs === asOfDayMs
+    && readyFormNow.payload.latestDayMs === asOfDayMs
+    ? asFiniteNumber(readyFormNow.payload.value)
+    : null;
+  const fallbackRampRate = readyRampRate?.payload.asOfDayMs === asOfDayMs
+    && readyRampRate.payload.latestDayMs === asOfDayMs
+    ? asFiniteNumber(readyRampRate.payload.rampRate)
+    : null;
+  const form = formFromSeries ?? fallbackForm;
+  const rampRate = rampRateFromSeries ?? fallbackRampRate;
+  const selectedSourceUpdatedAtMs = [
+    formFromSeries !== null ? readyForm?.updatedAtMs : readyFormNow?.updatedAtMs,
+    rampRateFromSeries !== null ? readyForm?.updatedAtMs : readyRampRate?.updatedAtMs,
+  ].filter((value): value is number => value !== null && value !== undefined);
+
+  return {
+    form,
+    rampRate,
+    asOfDayMs: form !== null || rampRate !== null ? asOfDayMs : null,
+    sourceUpdatedAtMs: selectedSourceUpdatedAtMs.length
+      ? Math.min(...selectedSourceUpdatedAtMs)
+      : null,
+  };
+}
+
+function parseReadyDerivedPayload<T>(
+  snapshot: Record<string, unknown> | null,
+  metricKind: DerivedMetricKind,
+): { payload: T; updatedAtMs: number | null } | null {
+  if (
+    !snapshot
+    || snapshot.status !== 'ready'
+    || snapshot.payload == null
+    || asFiniteNumber(snapshot.schemaVersion) !== DERIVED_METRIC_SCHEMA_VERSION
+  ) {
+    return null;
+  }
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(snapshot.payload);
+  return parsed.success
+    ? {
+        payload: parsed.data as T,
+        updatedAtMs: asSafeOperationalTimestampMs(snapshot.updatedAtMs),
+      }
+    : null;
+}
+
+function buildTodayReadinessSleepEvidence(
+  documents: readonly RawDocument[],
+): ReadinessSleepEvidencePoint[] {
+  const grouped = new Map<string, ReadinessSleepEvidencePoint[]>();
+  for (const document of documents) {
+    const session = toSafeSleepSession(document.data);
+    if (!session || session.isNap) {
+      continue;
+    }
+    const point: ReadinessSleepEvidencePoint = {
+      id: document.id,
+      sleepDate: resolveTodayReadinessSleepDate(document.data, session),
+      provider: session.provider,
+      startTimeMs: session.startTimeMs,
+      endTimeMs: session.endTimeMs,
+      totalSeconds: session.durationSeconds,
+      score: session.score?.value ?? null,
+      averageHrvMs: session.vitals?.averageHrvMs
+        ?? session.vitals?.overnightHrvMs
+        ?? null,
+      averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
+      minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
+    };
+    const key = `${point.sleepDate}:${point.provider}`;
+    grouped.set(key, [...(grouped.get(key) || []), point]);
+  }
+
+  return [...grouped.values()].map((points) => {
+    const sorted = [...points].sort((left, right) => (
+      (left.endTimeMs || 0) - (right.endTimeMs || 0)
+      || (left.startTimeMs || 0) - (right.startTimeMs || 0)
+      || left.id.localeCompare(right.id)
+    ));
+    const latest = sorted[sorted.length - 1];
+    const averageHrvValues = positiveValues(points.map(point => point.averageHrvMs));
+    const averageHeartRateValues = positiveValues(
+      points.map(point => point.averageHeartRateBpm),
+    );
+    const minimumHeartRateValues = positiveValues(
+      points.map(point => point.minimumHeartRateBpm),
+    );
+    return {
+      ...latest,
+      id: sorted.map(point => point.id).join('|'),
+      startTimeMs: Math.min(...points.map(point => point.startTimeMs as number)),
+      endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
+      totalSeconds: points.reduce(
+        (total, point) => total + Math.max(0, point.totalSeconds || 0),
+        0,
+      ),
+      averageHrvMs: average(averageHrvValues),
+      averageHeartRateBpm: average(averageHeartRateValues),
+      minimumHeartRateBpm: minimumHeartRateValues.length
+        ? Math.min(...minimumHeartRateValues)
+        : null,
+    };
+  });
+}
+
+function resolveTodayReadinessSleepDate(
+  data: Record<string, unknown>,
+  session: SafeSleepSession,
+): string {
+  if (session.provider !== SLEEP_PROVIDERS.SuuntoApp) {
+    return session.sleepDate;
+  }
+  const offsetSeconds = asFiniteNumber(data.timezoneOffsetSeconds);
+  const safeOffsetSeconds = offsetSeconds !== null
+    && Math.abs(offsetSeconds) <= 18 * 60 * 60
+    ? offsetSeconds
+    : 0;
+  const localEndDate = new Date(
+    session.endTimeMs + (safeOffsetSeconds * 1000),
+  ).toISOString().slice(0, 10);
+  return normalizeCalendarDate(localEndDate) || session.sleepDate;
+}
+
+function projectTodayReadinessMetric(
+  evidence: ReadinessRatioEvidence,
+  unit: 'hrv' | 'heart_rate',
+): TodayReadinessHrvDriver | TodayReadinessHeartRateDriver {
+  const status: TodayReadinessMetricStatus = evidence.latestValue === null
+    ? 'not_recorded'
+    : evidence.ratio === null
+      ? 'insufficient_baseline'
+      : 'available';
+  if (unit === 'hrv') {
+    return {
+      status,
+      weightPercent: 20,
+      latestMs: evidence.latestValue,
+      baselineMedianMs: evidence.baselineMedian,
+      baselineNightCount: evidence.baselineValueCount,
+      ratio: evidence.ratio,
+    };
+  }
+  return {
+    status,
+    latestBpm: evidence.latestValue,
+    baselineMedianBpm: evidence.baselineMedian,
+    baselineNightCount: evidence.baselineValueCount,
+    ratio: evidence.ratio,
+  };
+}
+
+function projectTodayReadiness(
+  input: {
+    nowTimeMs: number;
+    timeZone: string;
+    localDayStartTimeMs: number;
+    localDayEndTimeMs: number;
+    load: TodayReadinessLoadContext;
+    evaluation: ReadinessEvaluation | null;
+  },
+): GetTodayReadinessResult {
+  const signals = input.evaluation?.signals ?? null;
+  const latestSleep = input.evaluation?.latestSleep ?? null;
+  const hrv = input.evaluation?.hrv ?? emptyReadinessRatioEvidence();
+  const averageHeartRate = input.evaluation?.averageHeartRate
+    ?? emptyReadinessRatioEvidence();
+  const minimumHeartRate = input.evaluation?.minimumHeartRate
+    ?? emptyReadinessRatioEvidence();
+  const averageHeartRateDriver = projectTodayReadinessMetric(
+    averageHeartRate,
+    'heart_rate',
+  ) as TodayReadinessHeartRateDriver;
+  const minimumHeartRateDriver = projectTodayReadinessMetric(
+    minimumHeartRate,
+    'heart_rate',
+  ) as TodayReadinessHeartRateDriver;
+  const combinedHeartRateStatus: TodayReadinessMetricStatus =
+    signals?.overnightHeartRateRatio !== null
+    && signals?.overnightHeartRateRatio !== undefined
+      ? 'available'
+      : averageHeartRate.latestValue !== null || minimumHeartRate.latestValue !== null
+        ? 'insufficient_baseline'
+        : 'not_recorded';
+  const recordedScore = latestSleep
+    ? asFiniteNumber(latestSleep.score)
+    : null;
+  const availableWeightPercent = (
+    input.load.form !== null || input.load.rampRate !== null ? 40 : 0
+  ) + (latestSleep ? 25 : 0)
+    + (hrv.ratio !== null ? 20 : 0)
+    + (signals?.overnightHeartRateRatio !== null
+      && signals?.overnightHeartRateRatio !== undefined ? 15 : 0);
+
+  return {
+    asOfTimeMs: input.nowTimeMs,
+    timeZone: input.timeZone,
+    localDayStartTimeMs: input.localDayStartTimeMs,
+    localDayEndTimeMs: input.localDayEndTimeMs,
+    dayBoundary: 'UTC',
+    asOfDayMs: resolveUtcDayStartTimeMs(input.nowTimeMs),
+    formulaVersion: READINESS_FORMULA_VERSION,
+    status: signals ? 'available' : 'no_signal',
+    score: signals?.score ?? null,
+    label: signals?.label ?? null,
+    confidence: signals?.confidence ?? null,
+    availableSignalCount: signals?.availableSignalCount ?? 0,
+    availableWeightPercent,
+    baselineEvidenceCount: signals?.baselineEvidenceCount ?? 0,
+    totalSignalCount: READINESS_TOTAL_SIGNAL_COUNT,
+    drivers: {
+      load: {
+        status: input.load.form !== null || input.load.rampRate !== null
+          ? 'available'
+          : 'not_ready',
+        weightPercent: 40,
+        form: input.load.form,
+        rampRate: input.load.rampRate,
+        asOfDayMs: input.load.asOfDayMs,
+        sourceUpdatedAtMs: input.load.sourceUpdatedAtMs,
+      },
+      sleep: {
+        status: latestSleep ? 'available' : 'no_recent_session',
+        weightPercent: 25,
+        score: signals?.sleepScore ?? null,
+        scoreSource: latestSleep
+          ? recordedScore !== null ? 'recorded' : 'duration'
+          : null,
+        latestSleepAtMs: signals?.latestSleepAtMs ?? null,
+        sleepDate: latestSleep?.sleepDate ?? null,
+        durationSeconds: latestSleep?.totalSeconds ?? null,
+        recordedScore,
+      },
+      hrv: projectTodayReadinessMetric(
+        hrv,
+        'hrv',
+      ) as TodayReadinessHrvDriver,
+      overnightHeartRate: {
+        status: combinedHeartRateStatus,
+        weightPercent: 15,
+        combinedRatio: signals?.overnightHeartRateRatio ?? null,
+        average: averageHeartRateDriver,
+        minimum: minimumHeartRateDriver,
+      },
+    },
+  };
+}
+
+function emptyReadinessRatioEvidence(): ReadinessRatioEvidence {
+  return {
+    latestValue: null,
+    baselineMedian: null,
+    baselineValueCount: 0,
+    ratio: null,
+  };
+}
+
+function resolveUtcDayStartTimeMs(timeMs: number): number {
+  const date = new Date(timeMs);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function roundMetricValue(value: number): number {
+  return Math.round(value * 10_000) / 10_000;
+}
+
+function positiveValues(values: readonly (number | null)[]): number[] {
+  return values.filter(
+    (value): value is number => value !== null && Number.isFinite(value) && value > 0,
+  );
+}
+
+function average(values: readonly number[]): number | null {
+  return values.length
+    ? values.reduce((total, value) => total + value, 0) / values.length
+    : null;
 }
 
 export interface ListActivitiesInput {
@@ -3984,6 +4399,75 @@ export function createMcpDataService(
         sourceEventCount: asNonNegativeNumber(snapshot.sourceEventCount),
         payload: redactDerivedPayload(snapshot.payload),
       };
+    },
+
+    async getTodayReadiness(
+      input: GetTodayReadinessInput,
+    ): Promise<GetTodayReadinessResult> {
+      const timeZone = requireTimeZone(input.timeZone);
+      const nowTimeMs = dependencies.now();
+      const localDay = resolveRelativeActivityRange(
+        'today',
+        timeZone,
+        nowTimeMs,
+      );
+      const [
+        sleepDocuments,
+        formSnapshot,
+        formNowSnapshot,
+        rampRateSnapshot,
+      ] = await Promise.all([
+        dependencies.fetchSleepDocuments(
+          input.uid,
+          nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+          nowTimeMs,
+          MAX_TODAY_READINESS_SLEEP_DOCUMENTS + 1,
+        ),
+        dependencies.fetchDerivedSnapshot(
+          input.uid,
+          DERIVED_METRIC_KINDS.Form,
+        ),
+        dependencies.fetchDerivedSnapshot(
+          input.uid,
+          DERIVED_METRIC_KINDS.FormNow,
+        ),
+        dependencies.fetchDerivedSnapshot(
+          input.uid,
+          DERIVED_METRIC_KINDS.RampRate,
+        ),
+      ]);
+      if (sleepDocuments.length > MAX_TODAY_READINESS_SLEEP_DOCUMENTS) {
+        throw new McpDataError(
+          'query_too_large',
+          `The readiness query matches more than ${MAX_TODAY_READINESS_SLEEP_DOCUMENTS} sleep sessions.`,
+        );
+      }
+      const load = resolveTodayReadinessLoadContext(
+        formSnapshot,
+        formNowSnapshot,
+        rampRateSnapshot,
+        nowTimeMs,
+      );
+      const evaluation = buildReadinessEvaluation({
+        form: load.form,
+        rampRate: load.rampRate,
+        sleepPoints: buildTodayReadinessSleepEvidence(sleepDocuments),
+        nowMs: nowTimeMs,
+      });
+      const result = projectTodayReadiness({
+        nowTimeMs,
+        timeZone,
+        localDayStartTimeMs: localDay.startTimeMs,
+        localDayEndTimeMs: localDay.endTimeMs,
+        load,
+        evaluation,
+      });
+      requireJsonBudget(
+        result,
+        MAX_TODAY_READINESS_RESPONSE_BYTES,
+        'The current readiness response exceeds the MCP response limit.',
+      );
+      return result;
     },
 
     async getDailyBriefing(input: GetDailyBriefingInput) {

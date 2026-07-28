@@ -14,6 +14,10 @@ import {
   SLEEP_STAGES,
 } from '../../../shared/sleep';
 import {
+  READINESS_FORMULA_VERSION,
+  READINESS_TOTAL_SIGNAL_COUNT,
+} from '../../../shared/readiness';
+import {
   MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS,
   MCP_ACTIVITY_CHART_DEFAULT_POINTS,
   MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS,
@@ -37,6 +41,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_sleep_sessions',
   'query_sleep_summary',
   'get_sleep_trend',
+  'get_today_readiness',
   'get_daily_briefing',
   'list_activity_types',
   'list_activities',
@@ -64,6 +69,9 @@ const number = z.number();
 const nullableNumber = number.nullable();
 const nonNegativeNumber = number.nonnegative();
 const nullableNonNegativeNumber = nonNegativeNumber.nullable();
+const positiveNumber = number.positive();
+const nullablePositiveNumber = positiveNumber.nullable();
+const readinessScore = number.min(0).max(100);
 const count = z.number().int().nonnegative();
 const timestampMs = z.number()
   .int()
@@ -372,6 +380,161 @@ const dailyBriefingSleepSession = z.strictObject({
     qualifier: z.string().max(120).nullable(),
   }).nullable(),
 }).meta({ title: 'McpDailyBriefingSleepSession' });
+
+const todayReadinessMetricStatus = z.enum([
+  'available',
+  'insufficient_baseline',
+  'not_recorded',
+]);
+const todayReadinessLoadDriver = z.strictObject({
+  status: z.enum(['available', 'not_ready']),
+  weightPercent: z.literal(40),
+  form: nullableNumber,
+  rampRate: nullableNumber,
+  asOfDayMs: nullableTimestampMs,
+  sourceUpdatedAtMs: nullableNonNegativeTimestampMs,
+}).superRefine((value, context) => {
+  const hasLoad = value.form !== null || value.rampRate !== null;
+  if (
+    (value.status === 'available' && (!hasLoad || value.asOfDayMs === null))
+    || (
+      value.status === 'not_ready'
+      && (
+        hasLoad
+        || value.asOfDayMs !== null
+        || value.sourceUpdatedAtMs !== null
+      )
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Load availability must match its current values and timestamps.',
+    });
+  }
+}).meta({ title: 'McpTodayReadinessLoadDriver' });
+const todayReadinessSleepDriver = z.strictObject({
+  status: z.enum(['available', 'no_recent_session']),
+  weightPercent: z.literal(25),
+  score: readinessScore.nullable(),
+  scoreSource: z.enum(['recorded', 'duration']).nullable(),
+  latestSleepAtMs: nullableTimestampMs,
+  sleepDate: z.iso.date().nullable(),
+  durationSeconds: nullablePositiveNumber,
+  recordedScore: nullableNonNegativeNumber,
+}).superRefine((value, context) => {
+  const required = [
+    value.score,
+    value.scoreSource,
+    value.latestSleepAtMs,
+    value.sleepDate,
+    value.durationSeconds,
+  ];
+  if (
+    (value.status === 'available' && required.some(field => field === null))
+    || (
+      value.status === 'no_recent_session'
+      && (
+        required.some(field => field !== null)
+        || value.recordedScore !== null
+      )
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Sleep availability must match its selected recent session.',
+    });
+  }
+}).meta({ title: 'McpTodayReadinessSleepDriver' });
+const todayReadinessHrvDriver = z.strictObject({
+  status: todayReadinessMetricStatus,
+  weightPercent: z.literal(20),
+  latestMs: nullablePositiveNumber,
+  baselineMedianMs: nullablePositiveNumber,
+  baselineNightCount: count.max(14),
+  ratio: nullablePositiveNumber,
+}).superRefine((value, context) => {
+  if (
+    (value.status === 'available' && (
+      value.latestMs === null
+      || value.baselineMedianMs === null
+      || value.baselineNightCount < 3
+      || value.ratio === null
+    ))
+    || (value.status === 'insufficient_baseline' && (
+      value.latestMs === null
+      || value.baselineNightCount >= 3
+      || value.ratio !== null
+    ))
+    || (value.status === 'not_recorded' && (
+      value.latestMs !== null
+      || value.ratio !== null
+    ))
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'HRV status must match the latest value and baseline evidence.',
+    });
+  }
+}).meta({ title: 'McpTodayReadinessHrvDriver' });
+const todayReadinessHeartRateDriver = z.strictObject({
+  status: todayReadinessMetricStatus,
+  latestBpm: nullablePositiveNumber,
+  baselineMedianBpm: nullablePositiveNumber,
+  baselineNightCount: count.max(14),
+  ratio: nullablePositiveNumber,
+}).superRefine((value, context) => {
+  if (
+    (value.status === 'available' && (
+      value.latestBpm === null
+      || value.baselineMedianBpm === null
+      || value.baselineNightCount < 3
+      || value.ratio === null
+    ))
+    || (value.status === 'insufficient_baseline' && (
+      value.latestBpm === null
+      || value.baselineNightCount >= 3
+      || value.ratio !== null
+    ))
+    || (value.status === 'not_recorded' && (
+      value.latestBpm !== null
+      || value.ratio !== null
+    ))
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Heart-rate status must match the latest value and baseline evidence.',
+    });
+  }
+}).meta({ title: 'McpTodayReadinessHeartRateDriver' });
+const todayReadinessOvernightHeartRateDriver = z.strictObject({
+  status: todayReadinessMetricStatus,
+  weightPercent: z.literal(15),
+  combinedRatio: nullablePositiveNumber,
+  average: todayReadinessHeartRateDriver,
+  minimum: todayReadinessHeartRateDriver,
+}).superRefine((value, context) => {
+  if (
+    (value.status === 'available' && value.combinedRatio === null)
+    || (value.status !== 'available' && value.combinedRatio !== null)
+    || (
+      value.status === 'available'
+      && value.average.status !== 'available'
+      && value.minimum.status !== 'available'
+    )
+    || (
+      value.status === 'not_recorded'
+      && (
+        value.average.latestBpm !== null
+        || value.minimum.latestBpm !== null
+      )
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Combined overnight-heart-rate status must match its evidence.',
+    });
+  }
+}).meta({ title: 'McpTodayReadinessOvernightHeartRateDriver' });
 
 const dailyBriefingReadiness = z.strictObject({
   status: z.enum(['available', 'no_signal', 'not_ready', 'stale']),
@@ -958,6 +1121,85 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       matchedSessionCount: count,
       availableVitals: z.array(sleepVitalAvailability),
       buckets: z.array(sleepSummaryBucket),
+    }),
+    get_today_readiness: z.strictObject({
+      asOfTimeMs: timestampMs,
+      timeZone: z.string().min(1).max(80),
+      localDayStartTimeMs: timestampMs,
+      localDayEndTimeMs: timestampMs,
+      dayBoundary: z.literal('UTC'),
+      asOfDayMs: timestampMs,
+      formulaVersion: z.literal(READINESS_FORMULA_VERSION),
+      status: z.enum(['available', 'no_signal']),
+      score: readinessScore.nullable(),
+      label: z.enum(['Ready', 'Mixed', 'Recover']).nullable(),
+      confidence: z.enum(['high', 'medium', 'low']).nullable(),
+      availableSignalCount: count.max(READINESS_TOTAL_SIGNAL_COUNT),
+      availableWeightPercent: count.max(100),
+      baselineEvidenceCount: count.max(14),
+      totalSignalCount: z.literal(READINESS_TOTAL_SIGNAL_COUNT),
+      drivers: z.strictObject({
+        load: todayReadinessLoadDriver,
+        sleep: todayReadinessSleepDriver,
+        hrv: todayReadinessHrvDriver,
+        overnightHeartRate: todayReadinessOvernightHeartRateDriver,
+      }),
+    }).superRefine((value, context) => {
+      const signalFields = [
+        value.score,
+        value.label,
+        value.confidence,
+      ];
+      const projectedSignalCount = [
+        value.drivers.load.status === 'available',
+        value.drivers.sleep.status === 'available',
+        value.drivers.hrv.status === 'available',
+        value.drivers.overnightHeartRate.status === 'available',
+      ].filter(Boolean).length;
+      const projectedAvailableWeightPercent = (
+        value.drivers.load.status === 'available'
+          ? value.drivers.load.weightPercent
+          : 0
+      ) + (
+        value.drivers.sleep.status === 'available'
+          ? value.drivers.sleep.weightPercent
+          : 0
+      ) + (
+        value.drivers.hrv.status === 'available'
+          ? value.drivers.hrv.weightPercent
+          : 0
+      ) + (
+        value.drivers.overnightHeartRate.status === 'available'
+          ? value.drivers.overnightHeartRate.weightPercent
+          : 0
+      );
+      const maximumPerMetricBaselineCount = Math.max(
+        value.drivers.hrv.baselineNightCount,
+        value.drivers.overnightHeartRate.average.baselineNightCount,
+        value.drivers.overnightHeartRate.minimum.baselineNightCount,
+      );
+      if (
+        (value.status === 'available' && (
+          signalFields.some(field => field === null)
+          || value.availableSignalCount < 1
+        ))
+        || (
+          value.status === 'no_signal'
+          && (
+            signalFields.some(field => field !== null)
+            || value.availableSignalCount !== 0
+            || value.baselineEvidenceCount !== 0
+          )
+        )
+        || value.availableSignalCount !== projectedSignalCount
+        || value.availableWeightPercent !== projectedAvailableWeightPercent
+        || value.baselineEvidenceCount < maximumPerMetricBaselineCount
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Readiness availability must match its score and evidence counts.',
+        });
+      }
     }),
     get_daily_briefing: z.strictObject({
       asOfTimeMs: timestampMs,

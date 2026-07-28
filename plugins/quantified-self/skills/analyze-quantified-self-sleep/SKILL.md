@@ -22,12 +22,15 @@ returned.
 5. For a compact same-day morning readout, use the server's advertised daily-briefing tool only when both sleep and
    Training-metrics access are available. Supply the user's explicit IANA timezone. It is a current-context shortcut,
    not a historical sleep trend or a medical assessment.
+6. If the user asks specifically how today's Training readiness incorporates sleep or HRV, use the advertised
+   live-readiness capability when both permissions are present. Keep its latest safe aggregate HRV/heart-rate values,
+   same-provider baseline medians, ratios, and evidence states distinct from the longer sleep trend.
 
 ## Limits
 
 - If `sleep:read` is missing, explain that Sleep summaries access must be granted through reconnection.
-- The daily-briefing tool additionally needs `metrics:read`; without both grants, use the ordinary sleep tools and do
-  not infer Training readiness.
+- The live-readiness and daily-briefing tools additionally need `metrics:read`; without both grants, use the ordinary
+  sleep tools and do not infer Training readiness.
 - Treat a missing permission, no recorded sessions, filtered-out naps, and unavailable stage values as different
   outcomes.
 - Treat unavailable aggregate vital types as missing source data for that period; do not infer them from Training

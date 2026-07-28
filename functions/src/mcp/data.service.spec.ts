@@ -25,7 +25,13 @@ import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
 } from '../../../shared/derived-metrics';
+import {
+  buildReadinessSignals,
+} from '../../../shared/readiness';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
+import {
+  buildTrainingLoadPoints,
+} from '../../../shared/training-load';
 import {
   createMcpDataService,
   McpDataError,
@@ -3383,6 +3389,341 @@ describe('MCP data service', () => {
       DERIVED_METRIC_KINDS.TrainingReadiness,
     )).rejects.toMatchObject<McpDataError>({
       code: 'metric_not_ready',
+    });
+  });
+
+  it('calculates current readiness with Dashboard-parity load, HRV, and overnight-HR evidence', async () => {
+    const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
+    const asOfDayMs = Date.parse('2026-07-27T00:00:00.000Z');
+    const dailyLoads = [
+      { dayMs: Date.parse('2026-07-18T00:00:00.000Z'), load: 100 },
+      { dayMs: Date.parse('2026-07-20T00:00:00.000Z'), load: 40 },
+      { dayMs: Date.parse('2026-07-25T00:00:00.000Z'), load: 80 },
+    ];
+    const loadPoints = buildTrainingLoadPoints(dailyLoads, asOfDayMs);
+    const latestLoad = loadPoints[loadPoints.length - 1];
+    const priorLoad = loadPoints.find(
+      point => point.dayMs === asOfDayMs - (7 * 24 * 60 * 60 * 1000),
+    );
+    const form = Math.round(latestLoad.formSameDay * 10_000) / 10_000;
+    const rampRate = Math.round(
+      (latestLoad.ctl - (priorLoad?.ctl || 0)) * 10_000,
+    ) / 10_000;
+    const sleepInputs = [{
+      id: 'baseline-private-1',
+      sleepDate: '2026-07-23',
+      endTimeMs: Date.parse('2026-07-23T06:00:00.000Z'),
+      hrv: 40,
+      averageHeartRate: 50,
+      minimumHeartRate: 42,
+    }, {
+      id: 'baseline-private-2',
+      sleepDate: '2026-07-24',
+      endTimeMs: Date.parse('2026-07-24T06:00:00.000Z'),
+      hrv: 50,
+      averageHeartRate: 52,
+      minimumHeartRate: 44,
+    }, {
+      id: 'baseline-private-3',
+      sleepDate: '2026-07-25',
+      endTimeMs: Date.parse('2026-07-25T06:00:00.000Z'),
+      hrv: 60,
+      averageHeartRate: 54,
+      minimumHeartRate: 46,
+    }, {
+      id: 'latest-private',
+      sleepDate: '2026-07-27',
+      endTimeMs: Date.parse('2026-07-27T06:00:00.000Z'),
+      hrv: 55,
+      averageHeartRate: 49,
+      minimumHeartRate: 40,
+    }];
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
+      sleepInputs.map((input, index) => ({
+        ...sleepDocument({
+          sleepDate: input.sleepDate,
+          startTimeMs: input.endTimeMs - (8 * 60 * 60 * 1000),
+          endTimeMs: input.endTimeMs,
+          durationSeconds: 8 * 60 * 60,
+          score: index === sleepInputs.length - 1
+            ? {
+                value: 84,
+                qualifier: 'good',
+                components: { private: true },
+              }
+            : null,
+          vitals: {
+            averageHrvMs: input.hrv,
+            overnightHrvMs: 999,
+            averageHeartRateBpm: input.averageHeartRate,
+            minimumHeartRateBpm: input.minimumHeartRate,
+            rawSamples: [{ private: true }],
+          },
+        }),
+        id: input.id,
+      })),
+    );
+    const formSnapshot = {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: Date.parse('2026-07-27T08:00:00.000Z'),
+      sourceEventCount: 3,
+      payload: {
+        dayBoundary: 'UTC',
+        rangeStartDayMs: dailyLoads[0].dayMs,
+        rangeEndDayMs: dailyLoads[dailyLoads.length - 1].dayMs,
+        dailyLoads,
+        excludesMergedEvents: true,
+      },
+    };
+    const formNowSnapshot = {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: Date.parse('2026-07-27T09:00:00.000Z'),
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs,
+        latestDayMs: asOfDayMs,
+        value: 999,
+        trend8Weeks: [],
+      },
+    };
+    const rampRateSnapshot = {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: Date.parse('2026-07-27T10:00:00.000Z'),
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs,
+        latestDayMs: asOfDayMs,
+        ctlToday: 999,
+        ctl7DaysAgo: 0,
+        rampRate: 999,
+        trend8Weeks: [],
+      },
+    };
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => ({
+        [DERIVED_METRIC_KINDS.Form]: formSnapshot,
+        [DERIVED_METRIC_KINDS.FormNow]: formNowSnapshot,
+        [DERIVED_METRIC_KINDS.RampRate]: rampRateSnapshot,
+      })[metricKind] || null,
+    );
+
+    const result = await createMcpDataService(dependencies).getTodayReadiness({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+    const expectedSignals = buildReadinessSignals({
+      form,
+      rampRate,
+      nowMs: nowTimeMs,
+      sleepPoints: sleepInputs.map((input, index) => ({
+        id: input.id,
+        sleepDate: input.sleepDate,
+        provider: SLEEP_PROVIDERS.GarminAPI,
+        startTimeMs: input.endTimeMs - (8 * 60 * 60 * 1000),
+        endTimeMs: input.endTimeMs,
+        totalSeconds: 8 * 60 * 60,
+        score: index === sleepInputs.length - 1 ? 84 : null,
+        averageHrvMs: input.hrv,
+        averageHeartRateBpm: input.averageHeartRate,
+        minimumHeartRateBpm: input.minimumHeartRate,
+      })),
+    });
+
+    expect(result).toMatchObject({
+      asOfTimeMs: nowTimeMs,
+      timeZone: 'Europe/Helsinki',
+      dayBoundary: 'UTC',
+      asOfDayMs,
+      formulaVersion: 3,
+      status: 'available',
+      score: expectedSignals?.score,
+      label: expectedSignals?.label,
+      confidence: expectedSignals?.confidence,
+      availableSignalCount: 4,
+      availableWeightPercent: 100,
+      baselineEvidenceCount: 3,
+      totalSignalCount: 4,
+      drivers: {
+        load: {
+          status: 'available',
+          weightPercent: 40,
+          form,
+          rampRate,
+          asOfDayMs,
+          sourceUpdatedAtMs: formSnapshot.updatedAtMs,
+        },
+        sleep: {
+          status: 'available',
+          weightPercent: 25,
+          score: 84,
+          scoreSource: 'recorded',
+          latestSleepAtMs: sleepInputs[3].endTimeMs,
+          sleepDate: '2026-07-27',
+          durationSeconds: 28_800,
+          recordedScore: 84,
+        },
+        hrv: {
+          status: 'available',
+          weightPercent: 20,
+          latestMs: 55,
+          baselineMedianMs: 50,
+          baselineNightCount: 3,
+          ratio: 1.1,
+        },
+        overnightHeartRate: {
+          status: 'available',
+          weightPercent: 15,
+          combinedRatio: expectedSignals?.overnightHeartRateRatio,
+          average: {
+            latestBpm: 49,
+            baselineMedianBpm: 52,
+            baselineNightCount: 3,
+            ratio: 49 / 52,
+          },
+          minimum: {
+            latestBpm: 40,
+            baselineMedianBpm: 44,
+            baselineNightCount: 3,
+            ratio: 40 / 44,
+          },
+        },
+      },
+    });
+    expect(dependencies.fetchSleepDocuments).toHaveBeenCalledWith(
+      'user-1',
+      nowTimeMs - 30 * 24 * 60 * 60 * 1000,
+      nowTimeMs,
+      257,
+    );
+    expect(dependencies.fetchDerivedSnapshot).toHaveBeenCalledTimes(3);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('GarminAPI');
+    expect(serialized).not.toContain('private-');
+    expect(serialized).not.toContain('components');
+    expect(serialized).not.toContain('rawSamples');
+    expect(serialized).not.toContain('providerUserId');
+  });
+
+  it('uses current compact load fallbacks and keeps missing recovery evidence explicit', async () => {
+    const asOfDayMs = Date.parse('2026-07-27T00:00:00.000Z');
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => {
+        if (metricKind === DERIVED_METRIC_KINDS.Form) {
+          return null;
+        }
+        if (metricKind === DERIVED_METRIC_KINDS.FormNow) {
+          return {
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            updatedAtMs: Date.parse('2026-07-27T09:00:00.000Z'),
+            payload: {
+              dayBoundary: 'UTC',
+              asOfDayMs,
+              latestDayMs: asOfDayMs,
+              value: 8,
+              trend8Weeks: [],
+            },
+          };
+        }
+        return {
+          status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+          updatedAtMs: Date.parse('2026-07-27T08:00:00.000Z'),
+          payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            latestDayMs: asOfDayMs,
+            ctlToday: 42,
+            ctl7DaysAgo: 40,
+            rampRate: 2,
+            trend8Weeks: [],
+          },
+        };
+      },
+    );
+
+    const result = await createMcpDataService(dependencies).getTodayReadiness({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result).toMatchObject({
+      status: 'available',
+      availableSignalCount: 1,
+      availableWeightPercent: 40,
+      baselineEvidenceCount: 0,
+      drivers: {
+        load: {
+          status: 'available',
+          form: 8,
+          rampRate: 2,
+          sourceUpdatedAtMs: Date.parse('2026-07-27T08:00:00.000Z'),
+        },
+        sleep: {
+          status: 'no_recent_session',
+        },
+        hrv: {
+          status: 'not_recorded',
+        },
+        overnightHeartRate: {
+          status: 'not_recorded',
+        },
+      },
+    });
+  });
+
+  it('uses the normalized Suunto offset for live-readiness sleep-date grouping', async () => {
+    const endTimeMs = Date.parse('2026-07-26T23:30:00.000Z');
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([{
+      ...sleepDocument({
+        source: {
+          provider: SLEEP_PROVIDERS.SuuntoApp,
+          sourceSessionKey: 'private-suunto-session',
+        },
+        sleepDate: '2026-07-26',
+        startTimeMs: endTimeMs - (8 * 60 * 60 * 1000),
+        endTimeMs,
+        timezoneOffsetSeconds: 2 * 60 * 60,
+      }),
+      id: 'private-suunto-document',
+    }]);
+
+    const result = await createMcpDataService(dependencies).getTodayReadiness({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result.drivers.sleep).toMatchObject({
+      status: 'available',
+      sleepDate: '2026-07-27',
+    });
+    expect(JSON.stringify(result)).not.toContain('SuuntoApp');
+    expect(JSON.stringify(result)).not.toContain('private-suunto');
+  });
+
+  it('rejects oversized or invalid current-readiness queries before projection', async () => {
+    await expect(createMcpDataService(dependencies).getTodayReadiness({
+      uid: 'user-1',
+      timeZone: 'Not/A_Timezone',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_timezone',
+    });
+    expect(dependencies.fetchSleepDocuments).not.toHaveBeenCalled();
+
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
+      Array.from({ length: 257 }, (_, index) => ({
+        ...sleepDocument(),
+        id: `sleep-${index}`,
+      })),
+    );
+    await expect(createMcpDataService(dependencies).getTodayReadiness({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
     });
   });
 

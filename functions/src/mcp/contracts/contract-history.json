@@ -20,6 +20,16 @@
       "previousLifecycle": "developer",
       "rescanRequired": true,
       "summary": "Add a one-call sleep and HRV trend tool and prefer it for recent sleep questions."
+    },
+    {
+      "candidateLifecycle": "developer",
+      "candidateSha256": "e1f30bc57d3963bde5c51585c29a2d75a0421560c8e2f75a6d509cb923a407b0",
+      "formatVersion": 1,
+      "lifecycleAction": "developer-refresh",
+      "previousContractSha256": "4c72ab0c0adb9190c4d060cd83cc88f13b1303fdaaec467cdfc5e19b46759e87",
+      "previousLifecycle": "developer",
+      "rescanRequired": true,
+      "summary": "Add a live current-readiness tool with strict Load, Sleep, HRV, and Overnight HR evidence."
     }
   ]
 }
