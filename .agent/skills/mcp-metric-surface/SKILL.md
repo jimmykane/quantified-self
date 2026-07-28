@@ -86,7 +86,8 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    authorization-profile availability, annotations, security schemes, and input/output schemas are frozen after
    registration; use an additive tool for a new shape. Run `npm --prefix functions run mcp:contract:check` for every
    public MCP change. Compatible new tools or metadata require the digest-bound pending change record and the documented
-   developer refresh or published-version lifecycle; a pending record never overrides a breaking finding.
+   developer refresh or published-version lifecycle; a pending record never overrides a breaking finding. Never edit
+   the registered baseline or append-only transition history directly; use the verified promotion command.
 10. Classify local-plugin follow-up explicitly. Tool names, descriptions, schemas, scopes, or server instructions require
    a deployed-server update and a rescan of the registered ChatGPT app. Plugin manifest, starter-prompt, icon, or bundled
    skill changes require `npm run plugin:sync` after validation. Server implementation changes that preserve the public

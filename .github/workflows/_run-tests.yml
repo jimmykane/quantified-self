@@ -36,7 +36,20 @@ jobs:
           npm run plugin:validate
           git diff --exit-code
 
+      - name: Fetch MCP contract comparison revision
+        env:
+          MCP_CONTRACT_PREVIOUS_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          revision="${MCP_CONTRACT_PREVIOUS_REVISION}"
+          if [[ "${revision}" =~ ^[0-9a-fA-F]{7,64}$ ]] \
+            && ! [[ "${revision}" =~ ^0+$ ]] \
+            && ! git cat-file -e "${revision}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "${revision}"
+          fi
+
       - name: Install and test functions
+        env:
+          MCP_CONTRACT_PREVIOUS_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           cd functions
           npm ci

@@ -4,14 +4,21 @@ import path from 'node:path';
 import {
   captureMcpContract,
   compareMcpContracts,
+  createEmptyMcpContractHistory,
+  createRegisteredMcpContract,
   digestMcpContract,
+  evaluateMcpContractBaselineTransition,
   evaluateMcpContractGate,
+  isCompletedMcpContractPromotion,
   JsonObject,
   JsonValue,
   McpContractChangeRecord,
+  McpContractHistory,
   McpContractSnapshot,
   parseMcpContractChangeRecord,
+  parseMcpContractHistory,
   parseRegisteredMcpContract,
+  prepareMcpContractPromotionHistory,
   RegisteredMcpContract,
   stableMcpContractJson,
 } from './contract-compatibility';
@@ -69,6 +76,26 @@ function matchingPending(
   };
 }
 
+function historyForTransition(
+  previous: RegisteredMcpContract,
+  candidate: RegisteredMcpContract,
+  pending: McpContractChangeRecord,
+): McpContractHistory {
+  return parseMcpContractHistory({
+    registryVersion: 1,
+    transitions: [{
+      formatVersion: 1,
+      previousContractSha256: previous.contractSha256,
+      previousLifecycle: previous.lifecycle,
+      candidateSha256: candidate.contractSha256,
+      candidateLifecycle: candidate.lifecycle,
+      lifecycleAction: pending.lifecycleAction,
+      summary: pending.summary,
+      rescanRequired: true,
+    }],
+  });
+}
+
 beforeAll(async () => {
   registered = parseRegisteredMcpContract(JSON.parse(
     await readFile(REGISTERED_CONTRACT_PATH, 'utf8'),
@@ -93,28 +120,135 @@ describe('MCP registered-contract compatibility', () => {
 
   it('normalizes semantically unordered schema arrays and object keys', () => {
     const left = {
-      required: ['beta', 'alpha', 'alpha'],
-      properties: {
-        beta: { type: 'number' },
-        alpha: { type: 'string' },
+      inputSchema: {
+        required: ['beta', 'alpha'],
+        properties: {
+          beta: { type: 'number' },
+          alpha: { type: 'string' },
+        },
       },
     };
     const right = {
-      properties: {
-        alpha: { type: 'string' },
-        beta: { type: 'number' },
+      inputSchema: {
+        properties: {
+          alpha: { type: 'string' },
+          beta: { type: 'number' },
+        },
+        required: ['alpha', 'beta'],
       },
-      required: ['alpha', 'beta'],
     };
 
     expect(stableMcpContractJson(left)).toBe(
       stableMcpContractJson(right),
     );
+    expect(stableMcpContractJson({
+      inputSchema: {
+        enum: ['ä', 'z'],
+      },
+    })).toContain('"enum":["ä","z"]');
+    const equivalentUnicode = JSON.parse(stableMcpContractJson({
+      inputSchema: {
+        enum: ['ä', 'a\u0308'],
+      },
+    })) as {
+      inputSchema: {
+        enum: string[];
+      };
+    };
+    expect(equivalentUnicode.inputSchema.enum).toEqual([
+      'a\u0308',
+      'ä',
+    ]);
+    expect(stableMcpContractJson({
+      profiles: {
+        test: {
+          scopes: ['sleep:read', 'metrics:read'],
+        },
+      },
+    })).toBe(stableMcpContractJson({
+      profiles: {
+        test: {
+          scopes: ['metrics:read', 'sleep:read'],
+        },
+      },
+    }));
+    expect(stableMcpContractJson({
+      example: {
+        scopes: ['first', 'second'],
+        required: ['first', 'second'],
+      },
+    })).not.toBe(stableMcpContractJson({
+      example: {
+        scopes: ['second', 'first'],
+        required: ['second', 'first'],
+      },
+    }));
+    expect(stableMcpContractJson({
+      metadata: {
+        inputSchema: {
+          required: ['first', 'second'],
+        },
+      },
+    })).not.toBe(stableMcpContractJson({
+      metadata: {
+        inputSchema: {
+          required: ['second', 'first'],
+        },
+      },
+    }));
+    expect(stableMcpContractJson({
+      inputSchema: {
+        default: {
+          inputSchema: {
+            required: ['first', 'second'],
+          },
+        },
+      },
+    })).not.toBe(stableMcpContractJson({
+      inputSchema: {
+        default: {
+          inputSchema: {
+            required: ['second', 'first'],
+          },
+        },
+      },
+    }));
+    expect(stableMcpContractJson({
+      inputSchema: {
+        required: ['alpha', 'alpha', 'beta'],
+      },
+    })).not.toBe(stableMcpContractJson({
+      inputSchema: {
+        required: ['alpha', 'beta'],
+      },
+    }));
+    expect(stableMcpContractJson({
+      inputSchema: {
+        properties: {
+          default: {
+            required: ['beta', 'alpha'],
+          },
+        },
+      },
+    })).toBe(stableMcpContractJson({
+      inputSchema: {
+        properties: {
+          default: {
+            required: ['alpha', 'beta'],
+          },
+        },
+      },
+    }));
   });
 
   it('rejects tool removals and scope-profile regressions', () => {
     const candidate = cloneRegisteredContract();
+    candidate.profiles['leaky-profile'] = {
+      ...structuredClone(candidate.profiles.metrics),
+      scopes: [],
+    };
     delete candidate.profiles.metrics.tools.list_metrics;
+    candidate.profiles.metrics.scopes.push('sleep:read');
     candidate.profiles.metrics.tools.list_sleep_sessions =
       candidate.profiles.sleep.tools.list_sleep_sessions;
 
@@ -129,6 +263,43 @@ describe('MCP registered-contract compatibility', () => {
       }),
       expect.objectContaining({
         path: 'profiles.metrics.tools.list_sleep_sessions',
+      }),
+      expect.objectContaining({
+        path: 'profiles.metrics.scopes',
+      }),
+      expect.objectContaining({
+        path: 'profiles.leaky-profile.tools.query_metric',
+      }),
+    ]));
+  });
+
+  it('rejects changed existing-tool variants in new profiles', () => {
+    const candidate = cloneRegisteredContract();
+    candidate.profiles['metrics-combination'] = {
+      ...structuredClone(candidate.profiles.metrics),
+      scopes: ['future:read', 'metrics:read', 'metrics:read'],
+    };
+    replaceToolVariant(
+      candidate,
+      'metrics-combination',
+      'query_metric',
+      (tool) => {
+        const schema = tool.outputSchema as JsonObject;
+        schema.description = 'Changed only in the new profile.';
+      },
+    );
+
+    const comparison = compareMcpContracts(
+      registered.contract,
+      candidate,
+    );
+
+    expect(comparison.breaking).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: 'profiles.metrics-combination.tools.query_metric',
+      }),
+      expect.objectContaining({
+        path: 'profiles.metrics-combination.scopes',
       }),
     ]));
   });
@@ -243,6 +414,8 @@ describe('MCP registered-contract compatibility', () => {
 
   it('classifies additive OAuth, capability, and profile metadata as release-required', () => {
     const before = cloneRegisteredContract();
+    delete before.authorizationServer
+      .revocation_endpoint_auth_methods_supported;
     const previousToolCapabilities =
       before.server.capabilities.tools as JsonObject;
     previousToolCapabilities.listChanged = false;
@@ -267,7 +440,7 @@ describe('MCP registered-contract compatibility', () => {
     };
     candidate.profiles['future-scope'] = {
       ...structuredClone(candidate.profiles.metrics),
-      scopes: ['future:read'],
+      scopes: ['future:read', 'metrics:read'],
     };
 
     const comparison = compareMcpContracts(
@@ -287,6 +460,9 @@ describe('MCP registered-contract compatibility', () => {
         path: 'authorizationServer.token_endpoint_auth_methods_supported',
       }),
       expect.objectContaining({
+        path: 'authorizationServer.revocation_endpoint_auth_methods_supported',
+      }),
+      expect.objectContaining({
         path: 'server.capabilities.resources',
       }),
       expect.objectContaining({
@@ -294,6 +470,62 @@ describe('MCP registered-contract compatibility', () => {
       }),
       expect.objectContaining({
         path: 'profiles.future-scope',
+      }),
+    ]));
+  });
+
+  it('allows additive scopes only on aggregate coverage profiles', () => {
+    const candidate = cloneRegisteredContract();
+    candidate.profiles['all-parent-scopes'].scopes.push('future:read');
+    candidate.profiles['all-scopes'].scopes.push('future:read');
+
+    const comparison = compareMcpContracts(
+      registered.contract,
+      candidate,
+    );
+
+    expect(comparison.breaking).toEqual([]);
+    expect(comparison.releaseRequired).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: 'profiles.all-parent-scopes.scopes',
+      }),
+      expect.objectContaining({
+        path: 'profiles.all-scopes.scopes',
+      }),
+    ]));
+  });
+
+  it('rejects duplicate metadata values even beside a compatible change', () => {
+    const before = cloneRegisteredContract();
+    delete before.authorizationServer
+      .revocation_endpoint_auth_methods_supported;
+    const candidate = cloneRegisteredContract();
+    const scopes = candidate.authorizationServer
+      .scopes_supported as JsonValue[];
+    candidate.authorizationServer.scopes_supported = [
+      ...scopes,
+      scopes[0],
+    ];
+    candidate.authorizationServer
+      .revocation_endpoint_auth_methods_supported = ['none', 'none'];
+    candidate.server.identity.title = 'Quantified Self Data';
+
+    const comparison = compareMcpContracts(
+      before,
+      candidate,
+    );
+
+    expect(comparison.breaking).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: 'authorizationServer.scopes_supported',
+      }),
+      expect.objectContaining({
+        path: 'authorizationServer.revocation_endpoint_auth_methods_supported',
+      }),
+    ]));
+    expect(comparison.releaseRequired).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: 'server.identity.title',
       }),
     ]));
   });
@@ -405,5 +637,165 @@ describe('MCP registered-contract compatibility', () => {
     expect(evaluation.errors).toContain(
       'Lifecycle action developer-refresh is invalid for published metadata.',
     );
+  });
+
+  it('supports publishing unchanged developer metadata explicitly', () => {
+    const pending = matchingPending(registered.contract);
+    pending.lifecycleAction = 'published-version';
+    const promoted = createRegisteredMcpContract(
+      registered.contract,
+      'published',
+    );
+    const history = historyForTransition(
+      registered,
+      promoted,
+      pending,
+    );
+
+    const evaluation = evaluateMcpContractGate(
+      registered,
+      registered.contract,
+      pending,
+    );
+
+    expect(evaluation.errors).toEqual([]);
+    expect(evaluation.pendingActionRequired).toBe(true);
+    expect(evaluation.comparison).toEqual({
+      breaking: [],
+      releaseRequired: [],
+    });
+    expect(evaluateMcpContractBaselineTransition(
+      registered,
+      promoted,
+      createEmptyMcpContractHistory(),
+      history,
+    ).errors).toEqual([]);
+  });
+
+  it('requires append-only history for compatible baseline transitions', () => {
+    const candidate = cloneRegisteredContract();
+    candidate.server.identity.title = 'Quantified Self Data';
+    const promoted = createRegisteredMcpContract(candidate, 'developer');
+    const pending = matchingPending(candidate);
+    const history = historyForTransition(registered, promoted, pending);
+
+    expect(evaluateMcpContractBaselineTransition(
+      registered,
+      promoted,
+      createEmptyMcpContractHistory(),
+      history,
+    ).errors).toEqual([]);
+    expect(evaluateMcpContractBaselineTransition(
+      registered,
+      promoted,
+      createEmptyMcpContractHistory(),
+      createEmptyMcpContractHistory(),
+    ).errors).toContain(
+      'A changed MCP baseline requires an appended transition record.',
+    );
+
+    const rewritten = structuredClone(history);
+    rewritten.transitions[0].summary = 'Rewritten transition history.';
+    expect(evaluateMcpContractBaselineTransition(
+      promoted,
+      promoted,
+      history,
+      rewritten,
+    ).errors).toContain(
+      'MCP contract transition history entry 0 was rewritten.',
+    );
+    expect(evaluateMcpContractBaselineTransition(
+      promoted,
+      promoted,
+      history,
+      createEmptyMcpContractHistory(),
+    ).errors).toContain(
+      'The MCP contract transition history was truncated.',
+    );
+  });
+
+  it('prepares promotion history idempotently across interrupted writes', () => {
+    const candidate = cloneRegisteredContract();
+    candidate.server.identity.title = 'Quantified Self Data';
+    const promoted = createRegisteredMcpContract(candidate, 'developer');
+    const pending = matchingPending(candidate);
+    const firstPlan = prepareMcpContractPromotionHistory(
+      registered,
+      promoted,
+      createEmptyMcpContractHistory(),
+      pending,
+    );
+
+    expect(firstPlan.historyAlreadyRecorded).toBe(false);
+    expect(firstPlan.nextHistory.transitions).toHaveLength(1);
+
+    const retryPlan = prepareMcpContractPromotionHistory(
+      registered,
+      promoted,
+      firstPlan.nextHistory,
+      pending,
+    );
+
+    expect(retryPlan.historyAlreadyRecorded).toBe(true);
+    expect(retryPlan.nextHistory).toEqual(firstPlan.nextHistory);
+    expect(isCompletedMcpContractPromotion(
+      promoted,
+      retryPlan.nextHistory,
+      pending,
+      promoted.contractSha256,
+      pending.lifecycleAction,
+    )).toBe(true);
+    expect(isCompletedMcpContractPromotion(
+      promoted,
+      retryPlan.nextHistory,
+      pending,
+      registered.contractSha256,
+      pending.lifecycleAction,
+    )).toBe(false);
+  });
+
+  it('rejects breaking or invalidly chained baseline history', () => {
+    const candidate = cloneRegisteredContract();
+    replaceToolVariant(
+      candidate,
+      'metrics',
+      'query_metric',
+      (tool) => {
+        const schema = tool.outputSchema as JsonObject;
+        schema.description = 'Breaking registered output.';
+      },
+    );
+    const promoted = createRegisteredMcpContract(candidate, 'developer');
+    const pending = matchingPending(candidate);
+    const history = historyForTransition(registered, promoted, pending);
+
+    expect(evaluateMcpContractBaselineTransition(
+      registered,
+      promoted,
+      createEmptyMcpContractHistory(),
+      history,
+    ).errors).toContain(
+      'The registered MCP baseline contains a breaking transition.',
+    );
+    expect(() => parseMcpContractHistory({
+      registryVersion: 1,
+      transitions: [
+        ...history.transitions,
+        {
+          ...history.transitions[0],
+          previousContractSha256: registered.contractSha256,
+        },
+      ],
+    })).toThrow(/does not continue the history chain/);
+  });
+
+  it('pins registered baselines to the production MCP origin', () => {
+    const candidate = cloneRegisteredContract();
+    candidate.origin = 'https://example.com';
+
+    expect(() => createRegisteredMcpContract(
+      candidate,
+      'developer',
+    )).toThrow(/origin must be https:\/\/quantified-self\.io/);
   });
 });

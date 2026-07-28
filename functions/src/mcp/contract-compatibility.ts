@@ -15,6 +15,7 @@ import {
 export const MCP_CONTRACT_ORIGIN = 'https://quantified-self.io';
 export const MCP_CONTRACT_FORMAT_VERSION = 1 as const;
 export const MCP_CONTRACT_REGISTRY_VERSION = 1 as const;
+export const MCP_CONTRACT_HISTORY_REGISTRY_VERSION = 1 as const;
 
 const MCP_CONTRACT_PROFILE_DEFINITIONS: ReadonlyArray<{
   id: string;
@@ -79,6 +80,12 @@ export type JsonObject = { [key: string]: JsonValue };
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const sha256Schema = z.string().regex(SHA256_PATTERN);
 const jsonObjectSchema = z.record(z.string(), z.json());
+const contractLifecycleSchema = z.enum(['developer', 'published']);
+const lifecycleActionSchema = z.enum([
+  'developer-refresh',
+  'published-version',
+]);
+const changeSummarySchema = z.string().trim().min(1).max(500);
 const contractProfileSchema = z.object({
   scopes: z.array(z.string()),
   instructions: z.string().nullable(),
@@ -105,7 +112,7 @@ export type McpContractSnapshot = z.infer<
 
 export const REGISTERED_MCP_CONTRACT_SCHEMA = z.object({
   registryVersion: z.literal(MCP_CONTRACT_REGISTRY_VERSION),
-  lifecycle: z.enum(['developer', 'published']),
+  lifecycle: contractLifecycleSchema,
   contractSha256: sha256Schema,
   contract: MCP_CONTRACT_SNAPSHOT_SCHEMA,
 }).strict();
@@ -117,8 +124,8 @@ export type RegisteredMcpContract = z.infer<
 export const MCP_CONTRACT_CHANGE_RECORD_SCHEMA = z.object({
   formatVersion: z.literal(MCP_CONTRACT_FORMAT_VERSION),
   candidateSha256: sha256Schema,
-  lifecycleAction: z.enum(['developer-refresh', 'published-version']),
-  summary: z.string().trim().min(1).max(500),
+  lifecycleAction: lifecycleActionSchema,
+  summary: changeSummarySchema,
   rescanRequired: z.literal(true),
 }).strict();
 
@@ -126,23 +133,168 @@ export type McpContractChangeRecord = z.infer<
   typeof MCP_CONTRACT_CHANGE_RECORD_SCHEMA
 >;
 
-const UNORDERED_ARRAY_KEYS = new Set([
+export const MCP_CONTRACT_TRANSITION_RECORD_SCHEMA = z.object({
+  formatVersion: z.literal(MCP_CONTRACT_FORMAT_VERSION),
+  previousContractSha256: sha256Schema,
+  previousLifecycle: contractLifecycleSchema,
+  candidateSha256: sha256Schema,
+  candidateLifecycle: contractLifecycleSchema,
+  lifecycleAction: lifecycleActionSchema,
+  summary: changeSummarySchema,
+  rescanRequired: z.literal(true),
+}).strict();
+
+export type McpContractTransitionRecord = z.infer<
+  typeof MCP_CONTRACT_TRANSITION_RECORD_SCHEMA
+>;
+
+export const MCP_CONTRACT_HISTORY_SCHEMA = z.object({
+  registryVersion: z.literal(MCP_CONTRACT_HISTORY_REGISTRY_VERSION),
+  transitions: z.array(MCP_CONTRACT_TRANSITION_RECORD_SCHEMA),
+}).strict();
+
+export type McpContractHistory = z.infer<
+  typeof MCP_CONTRACT_HISTORY_SCHEMA
+>;
+
+const UNORDERED_SCHEMA_ARRAY_KEYS = new Set([
   'allOf',
   'anyOf',
-  'authorization_servers',
-  'bearer_methods_supported',
-  'code_challenge_methods_supported',
   'enum',
-  'grant_types_supported',
   'oneOf',
   'required',
-  'response_types_supported',
-  'revocation_endpoint_auth_methods_supported',
-  'scopes',
-  'scopes_supported',
-  'token_endpoint_auth_methods_supported',
   'type',
 ]);
+
+const SCHEMA_DATA_CONTAINER_KEYS = new Set([
+  'const',
+  'default',
+  'enum',
+  'example',
+  'examples',
+]);
+
+const SCHEMA_MAP_CONTAINER_KEYS = new Set([
+  '$defs',
+  'definitions',
+  'dependencies',
+  'dependentSchemas',
+  'patternProperties',
+  'properties',
+]);
+
+const UNORDERED_METADATA_ARRAY_KEYS = new Map([
+  ['authorizationServer', new Set([
+    'code_challenge_methods_supported',
+    'grant_types_supported',
+    'response_types_supported',
+    'revocation_endpoint_auth_methods_supported',
+    'scopes_supported',
+    'token_endpoint_auth_methods_supported',
+  ])],
+  ['protectedResource', new Set([
+    'authorization_servers',
+    'bearer_methods_supported',
+    'scopes_supported',
+  ])],
+]);
+
+const MCP_CONTRACT_COLLATOR = new Intl.Collator('en-US', {
+  caseFirst: 'false',
+  ignorePunctuation: false,
+  numeric: false,
+  sensitivity: 'variant',
+  usage: 'sort',
+});
+
+function compareCanonicalText(left: string, right: string): number {
+  const collated = MCP_CONTRACT_COLLATOR.compare(left, right);
+  if (collated !== 0) {
+    return collated;
+  }
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
+
+function toolSchemaRootIndex(path: string[]): number {
+  if (path[0] === 'inputSchema' || path[0] === 'outputSchema') {
+    return 0;
+  }
+  if (
+    path[0] === 'toolVariants'
+    && (path[2] === 'inputSchema' || path[2] === 'outputSchema')
+  ) {
+    return 2;
+  }
+  if (
+    path[0] === 'contract'
+    && path[1] === 'toolVariants'
+    && (path[3] === 'inputSchema' || path[3] === 'outputSchema')
+  ) {
+    return 3;
+  }
+  return -1;
+}
+
+function isUnorderedContractArray(path: string[]): boolean {
+  const key = path[path.length - 1];
+  if (!key) {
+    return false;
+  }
+  const schemaRootIndex = toolSchemaRootIndex(path);
+  let isInsideSchemaData = false;
+  for (
+    let index = schemaRootIndex + 1;
+    index < path.length - 1;
+    index += 1
+  ) {
+    if (
+      SCHEMA_DATA_CONTAINER_KEYS.has(path[index])
+      && !SCHEMA_MAP_CONTAINER_KEYS.has(path[index - 1])
+    ) {
+      isInsideSchemaData = true;
+      break;
+    }
+  }
+  if (
+    schemaRootIndex >= 0
+    && !isInsideSchemaData
+    && UNORDERED_SCHEMA_ARRAY_KEYS.has(key)
+  ) {
+    return true;
+  }
+
+  const directContainer = path.length === 2 ? path[0] : null;
+  const wrappedContainer = path.length === 3 && path[0] === 'contract'
+    ? path[1]
+    : null;
+  const metadataContainer = directContainer ?? wrappedContainer;
+  if (
+    metadataContainer
+    && UNORDERED_METADATA_ARRAY_KEYS.get(metadataContainer)?.has(key)
+  ) {
+    return true;
+  }
+
+  return (
+    (
+      path.length === 3
+      && path[0] === 'profiles'
+      && path[2] === 'scopes'
+    )
+    || (
+      path.length === 4
+      && path[0] === 'contract'
+      && path[1] === 'profiles'
+      && path[3] === 'scopes'
+    )
+  );
+}
 
 function toJsonValue(value: unknown): JsonValue {
   const serialized = JSON.stringify(value);
@@ -154,16 +306,16 @@ function toJsonValue(value: unknown): JsonValue {
 
 function normalizeJsonValue(
   value: JsonValue,
-  parentKey?: string,
+  path: string[] = [],
 ): JsonValue {
   if (Array.isArray(value)) {
-    let normalized = value.map(child => normalizeJsonValue(child));
-    if (parentKey && UNORDERED_ARRAY_KEYS.has(parentKey)) {
-      normalized = [...new Map(
-        normalized.map(child => [JSON.stringify(child), child]),
-      ).values()];
+    const normalized = value.map(child => normalizeJsonValue(child, path));
+    if (isUnorderedContractArray(path)) {
       normalized.sort((left, right) => (
-        JSON.stringify(left).localeCompare(JSON.stringify(right))
+        compareCanonicalText(
+          JSON.stringify(left),
+          JSON.stringify(right),
+        )
       ));
     }
     return normalized;
@@ -172,7 +324,10 @@ function normalizeJsonValue(
     return Object.fromEntries(
       Object.keys(value)
         .sort()
-        .map(key => [key, normalizeJsonValue(value[key], key)]),
+        .map(key => [
+          key,
+          normalizeJsonValue(value[key], [...path, key]),
+        ]),
     );
   }
   return value;
@@ -293,7 +448,7 @@ async function captureProfile(
       instructions: client.getInstructions() || null,
       protocolVersion,
       tools: [...tools.values()].sort((left, right) => (
-        `${left.name}`.localeCompare(`${right.name}`)
+        compareCanonicalText(`${left.name}`, `${right.name}`)
       )),
     };
   } finally {
@@ -405,6 +560,11 @@ export function createRegisteredMcpContract(
   lifecycle: RegisteredMcpContract['lifecycle'],
 ): RegisteredMcpContract {
   const normalized = normalizeAndValidateSnapshot(contract);
+  if (normalized.origin !== MCP_CONTRACT_ORIGIN) {
+    throw new Error(
+      `The registered MCP contract origin must be ${MCP_CONTRACT_ORIGIN}.`,
+    );
+  }
   return {
     registryVersion: MCP_CONTRACT_REGISTRY_VERSION,
     lifecycle,
@@ -437,6 +597,64 @@ export function parseMcpContractChangeRecord(
   return MCP_CONTRACT_CHANGE_RECORD_SCHEMA.parse(
     normalizeMcpContractJson(value),
   );
+}
+
+export function parseMcpContractHistory(
+  value: unknown,
+): McpContractHistory {
+  const history = MCP_CONTRACT_HISTORY_SCHEMA.parse(
+    normalizeMcpContractJson(value),
+  );
+  validateMcpContractHistoryIntegrity(history);
+  return history;
+}
+
+export function createEmptyMcpContractHistory(): McpContractHistory {
+  return {
+    registryVersion: MCP_CONTRACT_HISTORY_REGISTRY_VERSION,
+    transitions: [],
+  };
+}
+
+function validateMcpContractHistoryIntegrity(
+  history: McpContractHistory,
+): void {
+  for (const [index, transition] of history.transitions.entries()) {
+    if (transition.lifecycleAction === 'developer-refresh') {
+      if (
+        transition.previousLifecycle !== 'developer'
+        || transition.candidateLifecycle !== 'developer'
+        || transition.previousContractSha256 === transition.candidateSha256
+      ) {
+        throw new Error(
+          `MCP contract transition ${index} is not a valid developer refresh.`,
+        );
+      }
+    } else if (
+      transition.candidateLifecycle !== 'published'
+      || (
+        transition.previousContractSha256 === transition.candidateSha256
+        && transition.previousLifecycle === transition.candidateLifecycle
+      )
+    ) {
+      throw new Error(
+        `MCP contract transition ${index} is not a valid published version.`,
+      );
+    }
+
+    const previous = history.transitions[index - 1];
+    if (
+      previous
+      && (
+        transition.previousContractSha256 !== previous.candidateSha256
+        || transition.previousLifecycle !== previous.candidateLifecycle
+      )
+    ) {
+      throw new Error(
+        `MCP contract transition ${index} does not continue the history chain.`,
+      );
+    }
+  }
 }
 
 function validateMcpContractIntegrity(contract: McpContractSnapshot): void {
@@ -499,7 +717,8 @@ class FindingCollector {
 
   result(): McpContractComparison {
     const findings = [...this.findings.values()].sort((left, right) => (
-      `${left.kind}:${left.path}:${left.message}`.localeCompare(
+      compareCanonicalText(
+        `${left.kind}:${left.path}:${left.message}`,
         `${right.kind}:${right.path}:${right.message}`,
       )
     ));
@@ -536,6 +755,15 @@ function compareReleaseMetadata(
   }
 }
 
+function isStringList(
+  value: JsonValue | undefined,
+): value is string[] {
+  return (
+    Array.isArray(value)
+    && value.every(entry => typeof entry === 'string')
+  );
+}
+
 function compareAdditiveStringList(
   registered: JsonValue | undefined,
   candidate: JsonValue | undefined,
@@ -543,10 +771,27 @@ function compareAdditiveStringList(
   collector: FindingCollector,
 ): void {
   if (
-    !Array.isArray(registered)
-    || registered.some(value => typeof value !== 'string')
-    || !Array.isArray(candidate)
-    || candidate.some(value => typeof value !== 'string')
+    isStringList(candidate)
+    && new Set(candidate).size !== candidate.length
+  ) {
+    collector.add(
+      'breaking',
+      path,
+      'Metadata lists cannot contain duplicate values.',
+    );
+    return;
+  }
+  if (registered === undefined && isStringList(candidate)) {
+    collector.add(
+      'release-required',
+      path,
+      'A new metadata list requires refreshed metadata.',
+    );
+    return;
+  }
+  if (
+    !isStringList(registered)
+    || !isStringList(candidate)
   ) {
     compareExact(
       registered,
@@ -554,6 +799,18 @@ function compareAdditiveStringList(
       path,
       collector,
       'The existing metadata list must remain compatible.',
+    );
+    return;
+  }
+  if (
+    new Set(registered).size !== registered.length
+  ) {
+    compareExact(
+      registered,
+      candidate,
+      path,
+      collector,
+      'Metadata lists cannot gain or lose duplicate values.',
     );
     return;
   }
@@ -943,6 +1200,10 @@ function compareProfiles(
   candidate: McpContractSnapshot,
   collector: FindingCollector,
 ): void {
+  const additiveScopeProfileIds = new Set([
+    'all-parent-scopes',
+    'all-scopes',
+  ]);
   const registeredToolNames = new Set(
     Object.values(registered.profiles).flatMap(
       profile => Object.keys(profile.tools),
@@ -962,6 +1223,55 @@ function compareProfiles(
         path,
         'A new contract profile requires reviewed metadata.',
       );
+      const candidateScopes = new Set(after.scopes);
+      if (candidateScopes.size !== after.scopes.length) {
+        collector.add(
+          'breaking',
+          `${path}.scopes`,
+          'Authorization profiles cannot contain duplicate scopes.',
+        );
+      }
+      for (const toolName of Object.keys(after.tools)) {
+        if (!registeredToolNames.has(toolName)) {
+          continue;
+        }
+        const knownSufficientProfiles = Object.entries(
+          registered.profiles,
+        ).filter(([, profile]) => (
+          toolName in profile.tools
+          && profile.scopes.every(scope => candidateScopes.has(scope))
+        ));
+        if (knownSufficientProfiles.length === 0) {
+          collector.add(
+            'breaking',
+            `${path}.tools.${toolName}`,
+            'A new profile exposes an existing tool without a previously sufficient scope set.',
+          );
+          continue;
+        }
+        const candidateTool = toolForProfile(
+          candidate,
+          profileId,
+          toolName,
+        );
+        const matchesRegisteredVariant = knownSufficientProfiles.some(
+          ([knownProfileId]) => jsonEqual(
+            toolForProfile(
+              registered,
+              knownProfileId,
+              toolName,
+            ),
+            candidateTool,
+          ),
+        );
+        if (!matchesRegisteredVariant) {
+          collector.add(
+            'breaking',
+            `${path}.tools.${toolName}`,
+            'A new profile changed the registered contract of an existing tool.',
+          );
+        }
+      }
       continue;
     }
     if (!after) {
@@ -972,12 +1282,22 @@ function compareProfiles(
       );
       continue;
     }
-    compareAdditiveStringList(
-      before.scopes,
-      after.scopes,
-      `${path}.scopes`,
-      collector,
-    );
+    if (additiveScopeProfileIds.has(profileId)) {
+      compareAdditiveStringList(
+        before.scopes,
+        after.scopes,
+        `${path}.scopes`,
+        collector,
+      );
+    } else {
+      compareExact(
+        before.scopes,
+        after.scopes,
+        `${path}.scopes`,
+        collector,
+        'An existing authorization profile scope set is frozen.',
+      );
+    }
     compareReleaseMetadata(
       before.instructions,
       after.instructions,
@@ -1077,6 +1397,18 @@ export function compareMcpContracts(
     collector,
   );
   compareProfiles(registered, candidate, collector);
+  const result = collector.result();
+  if (
+    digestMcpContract(registered) !== digestMcpContract(candidate)
+    && result.breaking.length === 0
+    && result.releaseRequired.length === 0
+  ) {
+    collector.add(
+      'breaking',
+      'contract',
+      'The contract changed without a classified compatibility result; failing closed.',
+    );
+  }
   return collector.result();
 }
 
@@ -1084,6 +1416,7 @@ export interface McpContractGateEvaluation {
   candidateSha256: string;
   comparison: McpContractComparison;
   errors: string[];
+  pendingActionRequired: boolean;
 }
 
 export function evaluateMcpContractGate(
@@ -1095,13 +1428,22 @@ export function evaluateMcpContractGate(
   const candidateSha256 = digestMcpContract(candidate);
   const comparison = compareMcpContracts(registered.contract, candidate);
   const errors: string[] = [];
+  const lifecycleOnlyPublication = (
+    comparison.releaseRequired.length === 0
+    && registered.lifecycle === 'developer'
+    && pending?.lifecycleAction === 'published-version'
+  );
+  const pendingActionRequired = (
+    comparison.releaseRequired.length > 0
+    || lifecycleOnlyPublication
+  );
 
   if (comparison.breaking.length > 0) {
     errors.push(
       'The candidate contains breaking MCP contract changes.',
     );
   }
-  if (comparison.releaseRequired.length === 0) {
+  if (!pendingActionRequired) {
     if (pending) {
       errors.push(
         'The pending MCP contract change record is stale because no metadata refresh is required.',
@@ -1131,5 +1473,239 @@ export function evaluateMcpContractGate(
     candidateSha256,
     comparison,
     errors,
+    pendingActionRequired,
   };
+}
+
+export interface McpContractBaselineTransitionEvaluation {
+  changed: boolean;
+  comparison: McpContractComparison | null;
+  errors: string[];
+}
+
+export function evaluateMcpContractBaselineTransition(
+  previousRegisteredValue: RegisteredMcpContract | null,
+  currentRegisteredValue: RegisteredMcpContract,
+  previousHistoryValue: McpContractHistory | null,
+  currentHistoryValue: McpContractHistory,
+): McpContractBaselineTransitionEvaluation {
+  const previousRegistered = previousRegisteredValue
+    ? parseRegisteredMcpContract(previousRegisteredValue)
+    : null;
+  const currentRegistered = parseRegisteredMcpContract(
+    currentRegisteredValue,
+  );
+  const previousHistory = previousHistoryValue
+    ? parseMcpContractHistory(previousHistoryValue)
+    : createEmptyMcpContractHistory();
+  const currentHistory = parseMcpContractHistory(currentHistoryValue);
+  const errors: string[] = [];
+
+  if (currentHistory.transitions.length < previousHistory.transitions.length) {
+    errors.push('The MCP contract transition history was truncated.');
+  } else {
+    for (
+      let index = 0;
+      index < previousHistory.transitions.length;
+      index += 1
+    ) {
+      if (!jsonEqual(
+        previousHistory.transitions[index],
+        currentHistory.transitions[index],
+      )) {
+        errors.push(
+          `MCP contract transition history entry ${index} was rewritten.`,
+        );
+      }
+    }
+  }
+
+  if (!previousRegistered) {
+    if (currentRegistered.lifecycle !== 'developer') {
+      errors.push(
+        'The initial MCP contract baseline must use the developer lifecycle.',
+      );
+    }
+    if (currentHistory.transitions.length > 0) {
+      errors.push(
+        'The initial MCP contract baseline must start with empty transition history.',
+      );
+    }
+    return {
+      changed: true,
+      comparison: null,
+      errors,
+    };
+  }
+
+  const changed = (
+    previousRegistered.contractSha256
+      !== currentRegistered.contractSha256
+    || previousRegistered.lifecycle !== currentRegistered.lifecycle
+  );
+  const comparison = compareMcpContracts(
+    previousRegistered.contract,
+    currentRegistered.contract,
+  );
+  const appendedTransitions = currentHistory.transitions.slice(
+    previousHistory.transitions.length,
+  );
+
+  if (!changed) {
+    if (appendedTransitions.length > 0) {
+      errors.push(
+        'Transition history was appended without changing the registered baseline.',
+      );
+    }
+    return {
+      changed,
+      comparison,
+      errors,
+    };
+  }
+
+  if (comparison.breaking.length > 0) {
+    errors.push(
+      'The registered MCP baseline contains a breaking transition.',
+    );
+  }
+  const lifecycleOnlyPublication = (
+    previousRegistered.contractSha256 === currentRegistered.contractSha256
+    && previousRegistered.lifecycle === 'developer'
+    && currentRegistered.lifecycle === 'published'
+  );
+  if (
+    comparison.releaseRequired.length === 0
+    && !lifecycleOnlyPublication
+  ) {
+    errors.push(
+      'The registered MCP baseline changed without a classified compatible transition.',
+    );
+  }
+  if (appendedTransitions.length === 0) {
+    errors.push(
+      'A changed MCP baseline requires an appended transition record.',
+    );
+  } else {
+    const first = appendedTransitions[0];
+    const last = appendedTransitions[appendedTransitions.length - 1];
+    if (
+      first.previousContractSha256
+        !== previousRegistered.contractSha256
+      || first.previousLifecycle !== previousRegistered.lifecycle
+    ) {
+      errors.push(
+        'The appended MCP transition chain does not start at the previous baseline.',
+      );
+    }
+    if (
+      last.candidateSha256 !== currentRegistered.contractSha256
+      || last.candidateLifecycle !== currentRegistered.lifecycle
+    ) {
+      errors.push(
+        'The appended MCP transition chain does not end at the current baseline.',
+      );
+    }
+  }
+
+  return {
+    changed,
+    comparison,
+    errors,
+  };
+}
+
+export interface McpContractPromotionHistoryPlan {
+  historyAlreadyRecorded: boolean;
+  nextHistory: McpContractHistory;
+}
+
+export function prepareMcpContractPromotionHistory(
+  registeredValue: RegisteredMcpContract,
+  promotedValue: RegisteredMcpContract,
+  historyValue: McpContractHistory,
+  pendingValue: McpContractChangeRecord,
+): McpContractPromotionHistoryPlan {
+  const registered = parseRegisteredMcpContract(registeredValue);
+  const promoted = parseRegisteredMcpContract(promotedValue);
+  const history = parseMcpContractHistory(historyValue);
+  const pending = parseMcpContractChangeRecord(pendingValue);
+  if (pending.candidateSha256 !== promoted.contractSha256) {
+    throw new Error(
+      'The pending MCP contract digest does not match the promoted baseline.',
+    );
+  }
+
+  const transition = MCP_CONTRACT_TRANSITION_RECORD_SCHEMA.parse({
+    formatVersion: pending.formatVersion,
+    previousContractSha256: registered.contractSha256,
+    previousLifecycle: registered.lifecycle,
+    candidateSha256: promoted.contractSha256,
+    candidateLifecycle: promoted.lifecycle,
+    lifecycleAction: pending.lifecycleAction,
+    summary: pending.summary,
+    rescanRequired: pending.rescanRequired,
+  });
+  const latestTransition = history.transitions[
+    history.transitions.length - 1
+  ];
+  const historyAlreadyRecorded = Boolean(
+    latestTransition && jsonEqual(latestTransition, transition),
+  );
+  const previousHistory = historyAlreadyRecorded
+    ? parseMcpContractHistory({
+      registryVersion: history.registryVersion,
+      transitions: history.transitions.slice(0, -1),
+    })
+    : history;
+  const nextHistory = historyAlreadyRecorded
+    ? history
+    : parseMcpContractHistory({
+      registryVersion: history.registryVersion,
+      transitions: [
+        ...history.transitions,
+        transition,
+      ],
+    });
+  const evaluation = evaluateMcpContractBaselineTransition(
+    registered,
+    promoted,
+    previousHistory,
+    nextHistory,
+  );
+  if (evaluation.errors.length > 0) {
+    throw new Error(evaluation.errors.join(' '));
+  }
+
+  return {
+    historyAlreadyRecorded,
+    nextHistory,
+  };
+}
+
+export function isCompletedMcpContractPromotion(
+  registeredValue: RegisteredMcpContract,
+  historyValue: McpContractHistory,
+  pendingValue: McpContractChangeRecord,
+  suppliedDigest: string,
+  suppliedAction: McpContractChangeRecord['lifecycleAction'],
+): boolean {
+  const registered = parseRegisteredMcpContract(registeredValue);
+  const history = parseMcpContractHistory(historyValue);
+  const pending = parseMcpContractChangeRecord(pendingValue);
+  const latestTransition = history.transitions[
+    history.transitions.length - 1
+  ];
+  return Boolean(
+    latestTransition
+    && suppliedDigest === registered.contractSha256
+    && suppliedAction === pending.lifecycleAction
+    && registered.contractSha256 === pending.candidateSha256
+    && registered.contractSha256 === latestTransition.candidateSha256
+    && registered.lifecycle === latestTransition.candidateLifecycle
+    && pending.formatVersion === latestTransition.formatVersion
+    && pending.lifecycleAction === latestTransition.lifecycleAction
+    && pending.summary === latestTransition.summary
+    && pending.rescanRequired === latestTransition.rescanRequired
+  );
 }

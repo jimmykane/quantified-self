@@ -472,23 +472,36 @@ and additive OAuth capabilities require `functions/src/mcp/contracts/pending-cha
 ```
 
 The record is valid only for that exact candidate digest. Use `published-version` instead of `developer-refresh` for a
-published baseline. The normal workflow is:
+published baseline or when moving unchanged developer metadata into its first published version. The append-only
+`functions/src/mcp/contracts/contract-history.json` records every consumed transition with its previous/current digest,
+previous/current lifecycle, action, and summary. CI compares the baseline and history with the pull-request base or
+previous pushed revision; rewriting history, replacing the baseline directly, or appending a record that does not join
+the exact digest chain fails.
+
+The normal workflow is:
 
 1. Run `npm --prefix functions run mcp:contract:check`. Breaking differences always fail; compatible metadata
    differences print their candidate digest and require the matching pending record.
-2. Optionally write a review copy with
+2. Create or update `pending-change.json` with that exact digest, the intended lifecycle action, and a concrete summary,
+   then rerun `mcp:contract:check` and require it to pass.
+3. Optionally write a review copy with
    `npm --prefix functions run mcp:contract:capture -- --output /tmp/quantified-self-mcp-contract.json`. Capture refuses
-   to overwrite the registered or pending files.
-3. Deploy only through the separately approved release workflow. For developer metadata, refresh the registered app and
+   to overwrite the registered baseline, transition history, or pending record.
+4. Deploy only through the separately approved release workflow. For developer metadata, refresh the registered app and
    test a new conversation. For published metadata, complete scan, review, approval, and publication.
-4. Promote the exact tested candidate with
+5. Promote the exact tested candidate with
    `npm --prefix functions run mcp:contract:promote -- --digest <sha256> --action developer-refresh`, using
    `published-version` when applicable. Promotion verifies compatibility and the pending record, replaces the baseline,
-   and removes the consumed record.
+   appends the durable transition record, and removes the consumed pending record. This command also supports the
+   lifecycle-only `developer -> published` transition when the advertised metadata itself is unchanged. Promotion writes
+   history before the baseline; rerunning the same digest-bound command safely completes either interrupted write stage
+   after confirming that the live MCP contract still matches.
 
 `mcp:contract:bootstrap` exists only to create a missing first developer baseline and refuses to replace one. CI builds
-Functions and runs the compiled compatibility check before accepting the change. A server-only implementation or result
-fix needs no pending record when the advertised contract remains byte-for-byte equivalent after canonicalization.
+Functions, fetches the comparison revision, and runs the compiled compatibility and append-only history checks before
+accepting the change. A server-only implementation or result fix needs no pending record when the advertised contract
+remains byte-for-byte equivalent after canonicalization.
+Never edit the registered baseline or transition history directly; only the verified promotion command may update them.
 
 ### Changing or adding a tool
 
