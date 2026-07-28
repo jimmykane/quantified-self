@@ -425,7 +425,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
 
-    const selectedEvents = this.selection.selected
+    const selectedRows = [...this.selection.selected] as StatRowElement[];
+    const selectedEvents = selectedRows
       .map((selected) => selected?.Event as EventInterface | undefined)
       .filter((selectedEvent): selectedEvent is EventInterface => !!selectedEvent);
 
@@ -448,23 +449,19 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     dialogRef.componentInstance.isMerging = true;
     const mergeType = mergeSelection as MergeType;
 
-    // Show loading
     this.loading();
-    // Remove all subscriptions
-    this.unsubscribeFromAll();
 
-    const eventIDs = this.selection.selected
+    const eventIDs = selectedRows
       .map((selected) => selected?.Event?.getID?.())
       .filter((eventID): eventID is string => !!eventID);
 
-    // Now we can clear the selection
-    this.selection.clear();
-
     if (eventIDs.length < 2) {
+      this.restoreEventSelection(selectedRows);
       this.loaded();
       this.snackBar.open('Not enough events to merge', undefined, { duration: 3000 });
       dialogRef.disableClose = false;
       dialogRef.componentInstance.isMerging = false;
+      dialogRef.close(null);
       return;
     }
 
@@ -472,9 +469,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       result = await this.eventMergeService.mergeEvents(eventIDs, mergeType);
     } catch (error) {
+      this.restoreEventSelection(selectedRows);
       this.logger.captureException(error, {
         extra: {
-          eventIDs,
+          sourceEventsCount: eventIDs.length,
           mergeType,
         }
       });
@@ -484,8 +482,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       });
       dialogRef.disableClose = false;
       dialogRef.componentInstance.isMerging = false;
+      dialogRef.close(null);
       return;
     }
+
+    this.selection.clear();
 
     try {
       this.analyticsService.logEvent('merge_events');
@@ -506,7 +507,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     } catch (error) {
       this.logger.captureException(error, {
         extra: {
-          eventIDs,
+          sourceEventsCount: eventIDs.length,
           mergeType,
           mergedEventID: result.eventId,
           stage: 'open_merged_event',
@@ -943,6 +944,22 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       delete loadedEvent.benchmarkReviewTags;
     }
     this.invalidateRowCacheForEvent(loadedEvent || fallbackEvent);
+  }
+
+  private restoreEventSelection(selectedRows: StatRowElement[]): void {
+    const currentRowsByEventID = new Map<string, StatRowElement>();
+    (this.data.data as StatRowElement[]).forEach((row) => {
+      const eventID = row?.Event?.getID?.();
+      if (eventID) {
+        currentRowsByEventID.set(eventID, row);
+      }
+    });
+
+    this.selection.clear();
+    selectedRows.forEach((fallbackRow) => {
+      const eventID = fallbackRow?.Event?.getID?.();
+      this.selection.select((eventID && currentRowsByEventID.get(eventID)) || fallbackRow);
+    });
   }
 
   onSearchInput(event: Event) {

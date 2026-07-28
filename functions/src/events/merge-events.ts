@@ -31,8 +31,16 @@ import {
 } from '../../../shared/firestore-write-sanitizer';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
-
-type MergeType = 'benchmark' | 'multi';
+import {
+  buildMergeRequestFingerprint,
+  claimMergeOperation,
+  completeMergeOperation,
+  isSafeMergeDocumentId,
+  markMergeOperationRetryable,
+  MergeEventResponse,
+  MergeOperationClaim,
+  MergeType,
+} from './merge-operation';
 
 interface MergeEventRequest {
   eventIds: string[];
@@ -87,9 +95,14 @@ function normalizeEventIds(value: unknown): string[] {
     throw new HttpsError('invalid-argument', 'eventIds must be an array of event IDs.');
   }
 
-  const normalized = value
-    .map(id => `${id || ''}`.trim())
-    .filter(Boolean);
+  if (value.some(id => typeof id !== 'string')) {
+    throw new HttpsError('invalid-argument', 'eventIds must contain only event ID strings.');
+  }
+
+  const normalized = (value as string[]).map(id => id.trim());
+  if (normalized.some(id => !isSafeMergeDocumentId(id))) {
+    throw new HttpsError('invalid-argument', 'eventIds contains an invalid event ID.');
+  }
 
   if (normalized.length < 2) {
     throw new HttpsError('invalid-argument', 'At least 2 event IDs are required to merge.');
@@ -566,15 +579,37 @@ export const mergeEvents = onCall({
   const payload = request.data as MergeEventRequest | undefined;
   const eventIDs = normalizeEventIds(payload?.eventIds);
   const mergeType = normalizeMergeType(payload?.mergeType);
+  const requestFingerprint = buildMergeRequestFingerprint(eventIDs, mergeType);
+  let executionClaim: Extract<MergeOperationClaim, { kind: 'execute' }> | null = null;
 
   try {
     await assertEventWriteUserActive(userID, 'merge_event_start');
+    const operationClaim = await claimMergeOperation({
+      userID,
+      eventIDs,
+      mergeType,
+      requestFingerprint,
+    });
+    if (operationClaim.kind === 'completed') {
+      return operationClaim.response;
+    }
+    if (operationClaim.kind === 'in-progress') {
+      throw new HttpsError('aborted', 'This merge is already in progress. Retry the same selection shortly.');
+    }
+    executionClaim = operationClaim;
+
+    const resultEventSnapshot = await admin.firestore()
+      .doc(`users/${userID}/events/${executionClaim.resultEventId}`)
+      .get();
     const currentCount = await getEventCountForUser(userID);
+    const currentCountWithoutClaimedResult = resultEventSnapshot.exists
+      ? Math.max(0, currentCount - 1)
+      : currentCount;
     const uploadLimit = await resolveUploadLimitForUser(userID);
-    if (uploadLimit !== null && currentCount >= uploadLimit) {
+    if (uploadLimit !== null && currentCountWithoutClaimedResult >= uploadLimit) {
       throw new HttpsError(
         'resource-exhausted',
-        `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`,
+        `Upload limit reached for your tier. You have ${currentCountWithoutClaimedResult} events. Limit is ${uploadLimit}.`,
       );
     }
 
@@ -589,7 +624,7 @@ export const mergeEvents = onCall({
     const originalFiles = await downloadOriginalFilesForMerge(sourceFiles);
 
     const mergedEvent = EventUtilities.mergeEvents(sourceEvents);
-    const mergedEventID = admin.firestore().collection('users').doc().id;
+    const mergedEventID = executionClaim.resultEventId;
     mergedEvent.setID(mergedEventID);
     (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).isMerge = mergeType === 'benchmark';
     (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).mergeType = mergeType;
@@ -599,23 +634,48 @@ export const mergeEvents = onCall({
     await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
     await finalizeMergedEventMetadata(userID, mergedEventID, mergeType);
 
-    return {
+    const response: MergeEventResponse = {
       eventId: mergedEventID,
       mergeType,
       sourceEventsCount: eventIDs.length,
       sourceFilesCount: originalFiles.length,
       activitiesCount: mergedEvent.getActivities().length,
       uploadLimit,
-      uploadCountAfterWrite: currentCount + 1,
+      uploadCountAfterWrite: currentCountWithoutClaimedResult + 1,
     };
+    await completeMergeOperation({
+      userID,
+      claim: executionClaim,
+      response,
+    });
+    return response;
   } catch (error) {
+    if (executionClaim) {
+      try {
+        await markMergeOperationRetryable({
+          userID,
+          claim: executionClaim,
+          mergeType,
+          sourceEventsCount: eventIDs.length,
+          error,
+        });
+      } catch (operationError) {
+        logger.error('[mergeEvents] Failed to mark merge operation retryable', {
+          userID,
+          requestFingerprint,
+          error: serializeError(operationError),
+        });
+      }
+    }
+
     if (error instanceof HttpsError) {
       throw error;
     }
 
     logger.error('[mergeEvents] Failed to merge events', {
       userID,
-      eventIDs,
+      requestFingerprint,
+      sourceEventsCount: eventIDs.length,
       mergeType,
       error: serializeError(error),
     });

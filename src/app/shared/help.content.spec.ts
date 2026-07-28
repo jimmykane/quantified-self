@@ -147,6 +147,17 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
   });
 
+  it('should document safe event merge retry and recovery behavior', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const troubleshootingSection = HELP_SECTIONS.find(section => section.id === 'troubleshooting');
+
+    expect(gettingStartedSection?.content)
+      .toContain('reuses the same merged result instead of creating a duplicate');
+    expect(troubleshootingSection?.content).toContain('merge may still be finishing');
+    expect(troubleshootingSection?.content).toContain('selected rows remain selected');
+    expect(troubleshootingSection?.content).toContain('safely reuses any existing result');
+  });
+
   it('should provide a dedicated Training analysis guide with evidence and missing-data rules', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 

@@ -31,6 +31,7 @@ describe('AppEventMergeService', () => {
     });
 
     service = TestBed.inject(AppEventMergeService);
+    vi.spyOn(service as any, 'waitBeforeRetry').mockResolvedValue(undefined);
   });
 
   it('should call mergeEvents callable with eventIds and mergeType', async () => {
@@ -52,6 +53,7 @@ describe('AppEventMergeService', () => {
     await expect(service.mergeEvents(['e1', 'e2'], 'benchmark')).rejects.toMatchObject({
       code: 'LIMIT_REACHED',
     });
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
   });
 
   it('should map not-found to EVENT_NOT_FOUND error', async () => {
@@ -98,16 +100,54 @@ describe('AppEventMergeService', () => {
     });
   });
 
-  it('should map unknown function errors to INTERNAL error', async () => {
+  it('should reconcile a transient timeout by retrying the identical request', async () => {
     functionsServiceMock.call.mockRejectedValueOnce({
+      code: 'functions/deadline-exceeded',
+      message: '504 Gateway Timeout',
+    });
+
+    await expect(service.mergeEvents(['e1', 'e2'], 'benchmark')).resolves.toMatchObject({
+      eventId: 'merged-event-id',
+    });
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(2);
+    expect(functionsServiceMock.call).toHaveBeenNthCalledWith(2, 'mergeEvents', {
+      eventIds: ['e1', 'e2'],
+      mergeType: 'benchmark',
+    });
+  });
+
+  it('should reconcile an in-progress response by retrying the identical request', async () => {
+    functionsServiceMock.call.mockRejectedValueOnce({
+      code: 'functions/aborted',
+      message: 'Merge is already in progress',
+    });
+
+    await expect(service.mergeEvents(['e1', 'e2'], 'benchmark')).resolves.toMatchObject({
+      eventId: 'merged-event-id',
+    });
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(2);
+  });
+
+  it('should report an unknown outcome after bounded ambiguous retries', async () => {
+    functionsServiceMock.call.mockRejectedValue({
       code: 'functions/internal',
       message: 'internal crash',
     });
 
     await expect(service.mergeEvents(['e1', 'e2'], 'benchmark')).rejects.toMatchObject({
-      code: 'INTERNAL',
-      message: 'internal crash',
+      code: 'OUTCOME_UNKNOWN',
     });
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(3);
+  });
+
+  it('should map non-callable failures to INTERNAL without retrying', async () => {
+    functionsServiceMock.call.mockRejectedValueOnce(new Error('local crash'));
+
+    await expect(service.mergeEvents(['e1', 'e2'], 'benchmark')).rejects.toMatchObject({
+      code: 'INTERNAL',
+      message: 'local crash',
+    });
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(1);
   });
 
   it('should return friendly error messages', () => {
@@ -116,6 +156,7 @@ describe('AppEventMergeService', () => {
     expect(service.getMergeErrorMessage(new EventMergeError('EVENT_NOT_FOUND', 'x'))).toContain('not found');
     expect(service.getMergeErrorMessage(new EventMergeError('MISSING_SOURCE_FILE', 'x'))).toContain('missing original files');
     expect(service.getMergeErrorMessage(new EventMergeError('DUPLICATE_SOURCE_FILE', 'x'))).toContain('identical source files');
+    expect(service.getMergeErrorMessage(new EventMergeError('OUTCOME_UNKNOWN', 'x'))).toContain('existing result will be reused');
     expect(service.getMergeErrorMessage(new EventMergeError('INTERNAL', 'x'))).toBe('Could not merge events.');
     expect(service.getMergeErrorMessage(new Error('boom'))).toBe('boom');
     expect(service.getMergeErrorMessage(null)).toBe('Could not merge events.');

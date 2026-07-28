@@ -125,6 +125,11 @@ service cloud.firestore {
          allow write: if false;
       }
 
+      // Event merge operations contain server-owned idempotency and lease state.
+      match /eventMergeOperations/{operationID} {
+         allow read, write: if false;
+      }
+
       // System Status (Admin Only)
       match /system/status {
          allow read: if request.auth.uid == userID;
