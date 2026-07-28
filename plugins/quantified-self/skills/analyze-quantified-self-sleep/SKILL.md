@@ -17,9 +17,10 @@ returned.
    read. Use capability discovery only for availability questions, and request individual sessions only when nightly
    timing or variation matters. When naps are requested, keep the main-sleep headline separate and report naps and any
    nap-inclusive total explicitly unless the user asks for a combined headline.
-3. Preserve the exact returned statistic and unit for every vital. In particular, label maximum blood-oxygen saturation
-   as a maximum and average respiration as an average; do not silently reinterpret either as an overnight mean,
-   minimum, desaturation event, or diagnosis.
+3. Preserve the exact returned statistic and unit for every vital. An individual-session blood-oxygen value is that
+   session's maximum; a grouped trend value averages the contributing sessions' maxima. Likewise, grouped respiration
+   averages the contributing sessions' average respiration. Do not reinterpret either as an overnight mean or minimum
+   reading, a desaturation or respiratory event, or a diagnosis.
 4. Preserve local-day boundaries, units, session counts, stage coverage, vital coverage, missing values, and pagination
    state.
 5. Compare like periods and state when sparse sessions, excluded naps, or incomplete stage or vital data limit the

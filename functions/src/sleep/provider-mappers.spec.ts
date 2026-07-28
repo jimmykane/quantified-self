@@ -24,7 +24,12 @@ describe('sleep provider mappers', () => {
                 deep: [{ startTimeInSeconds: 1777330800, endTimeInSeconds: 1777334400 }],
                 rem: [{ startTimeInSeconds: 1777340000, endTimeInSeconds: 1777341800 }],
             },
-            timeOffsetSleepRespiration: { '60': 14.5, '120': 15.5 },
+            timeOffsetSleepRespiration: {
+                '60': 14.5,
+                '120': 15.5,
+                '180': 0,
+                '240': -1,
+            },
             timeOffsetSleepSpo2: {
                 '60': 95,
                 '120': 0.97,
@@ -60,9 +65,11 @@ describe('sleep provider mappers', () => {
             startTimeInSeconds: 1777330800,
             startTimeOffsetInSeconds: null,
             durationInSeconds: 28800,
+            timeOffsetSleepRespiration: { '60': 0, '120': -1 },
         }, 'garmin-user-1', 1000);
 
         expect(result?.session.timezoneOffsetSeconds).toBeNull();
+        expect(result?.session.vitals?.averageRespirationBrpm).toBeNull();
     });
 
     it('maps Suunto 247 sleep samples and treats one-based SpO2 as percent', () => {

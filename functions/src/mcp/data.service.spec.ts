@@ -4346,6 +4346,61 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('providerRecoveryScore');
   });
 
+  it('averages session-level SpO2 maxima and respiration averages in trend buckets', async () => {
+    const secondSession = sleepDocument({
+      startTimeMs: Date.parse('2024-03-31T21:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-01T03:00:00.000Z'),
+      durationSeconds: 6 * 60 * 60,
+      vitals: {
+        maxSpo2Percent: 96,
+        averageRespirationBrpm: 14,
+      },
+    });
+    secondSession.id = 'sleep-2';
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({
+        vitals: {
+          maxSpo2Percent: 98,
+          averageRespirationBrpm: 12,
+        },
+      }),
+      secondSession,
+    ]);
+
+    const result = await createMcpDataService(dependencies).getSleepTrend({
+      uid: 'user-1',
+      startTimeMs: Date.parse('2024-04-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-02T00:00:00.000Z'),
+      groupBy: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(result.availableVitals).toEqual([
+      {
+        type: 'maxSpo2Percent',
+        label: 'Maximum blood oxygen saturation',
+        unit: 'percent',
+        sessionCount: 2,
+      },
+      {
+        type: 'averageRespirationBrpm',
+        label: 'Average respiration',
+        unit: 'breaths_per_minute',
+        sessionCount: 2,
+      },
+    ]);
+    expect(result.buckets).toEqual([
+      expect.objectContaining({
+        bucketStartMs: Date.parse('2024-04-01T00:00:00.000Z'),
+        sessionCount: 2,
+        averageVitals: {
+          maxSpo2Percent: 97,
+          averageRespirationBrpm: 13,
+        },
+      }),
+    ]);
+  });
+
   it('rejects a sleep trend that exceeds the shared session budget', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
       Array.from({ length: 1_001 }, (_, index) => ({

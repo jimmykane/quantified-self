@@ -767,8 +767,9 @@ response. The read projection includes only the provider name, normalized timezo
 date grouping, and fields eligible for the response; raw samples, provider identifiers, provider-specific timestamps,
 and score components do not enter the MCP process. The fixed aggregate-vital allowlist covers average, minimum, and
 resting sleep heart rate; average and overnight HRV plus HRV sample count; maximum SpO₂; and average respiration.
-Garmin's maximum SpO₂ is normalized from its finite recorded sleep samples during ingestion so MCP can return the safe
-aggregate without loading or exposing the source series. Session output may include provider, sleep
+Garmin's maximum SpO₂ is normalized from its valid recorded sleep samples during ingestion so MCP can return the safe
+aggregate without loading or exposing the source series. Non-positive Garmin respiration samples do not contribute to
+its normalized average. Session output may include provider, sleep
 date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized score value/qualifier,
 and aggregate vitals. Missing optional numeric measurements remain unavailable and do not contribute zeroes to summary
 averages. The lower-level `list_sleep_vitals` reports only the safe vital types that have at least one recorded session in the
@@ -777,7 +778,9 @@ grouped values without returning readings, raw samples, provider identity, or so
 `get_sleep_trend` is the preferred one-call path for recent sleep or recovery-oriented questions. It returns the exact
 requested range, IANA timezone, grouping, recorded-vital coverage, and the same safe duration, score, stage, and
 aggregate-vital buckets as the lower-level summary path. The implementation performs one bounded projected read and
-cannot diagnose illness or infer missing physiology.
+cannot diagnose illness or infer missing physiology. An individual session's SpO₂ aggregate is its maximum; a grouped
+bucket's value is the average of the contributing session maxima. Grouped respiration likewise averages the
+contributing session-level averages.
 
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep

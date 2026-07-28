@@ -242,12 +242,16 @@ function sampleMapToPoints(value: unknown): SleepSamplePoint[] {
         .sort((left, right) => (left.offsetSeconds || 0) - (right.offsetSeconds || 0));
 }
 
-function averageSampleValue(samples: readonly SleepSamplePoint[]): number | null {
-    if (!samples.length) {
-        return null;
+function averagePositiveSampleValue(samples: readonly SleepSamplePoint[]): number | null {
+    let total = 0;
+    let count = 0;
+    for (const sample of samples) {
+        if (sample.value > 0) {
+            total += sample.value;
+            count += 1;
+        }
     }
-    const total = samples.reduce((sum, sample) => sum + sample.value, 0);
-    return Math.round((total / samples.length) * 10) / 10;
+    return count ? Math.round((total / count) * 10) / 10 : null;
 }
 
 function normalizeSpo2Percent(value: number | null): number | null {
@@ -371,7 +375,7 @@ export function mapGarminSleepSummary(
                 components: Object.keys(sleepScores).length ? sleepScores as Record<string, unknown> : null,
             },
             vitals: {
-                averageRespirationBrpm: averageSampleValue(respirationSamples),
+                averageRespirationBrpm: averagePositiveSampleValue(respirationSamples),
                 maxSpo2Percent: maximumSpo2SamplePercent(spo2Samples),
             },
             respirationSamples,

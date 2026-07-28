@@ -71,12 +71,12 @@ the next poll. Garmin sleep data relies on Garmin Health API webhook delivery in
    push signature in the local docs; the worker only persists Garmin sleep data after pulling
    it from a Garmin-owned callback URL with the user's stored token.
 
-Garmin sleep ingestion stores average respiration and derives the normalized maximum SpO₂
-aggregate from valid recorded samples. MCP and other aggregate consumers can use that value
-without reading the raw sample series. Existing Garmin sessions gain the aggregate only when
-Garmin redelivers the session or the user runs the normal **Import Sleep History** flow after
-the updated worker is deployed; deploying or rescanning an MCP client does not rewrite sleep
-documents.
+Garmin sleep ingestion stores average respiration from positive samples and derives the
+normalized maximum SpO₂ aggregate from valid recorded samples. MCP and other aggregate
+consumers can use those values without reading the raw sample series. Existing Garmin sessions
+gain the SpO₂ aggregate only when Garmin redelivers the session or the user runs the normal
+**Import Sleep History** flow after the updated worker is deployed; deploying or rescanning an
+MCP client does not rewrite sleep documents.
 
 ## One-Off COROS Backfill
 
