@@ -182,6 +182,7 @@ describe('MCP data service', () => {
       fetchEventDocuments: vi.fn().mockResolvedValue([]),
       fetchDerivedSnapshot: vi.fn().mockResolvedValue(null),
       fetchSleepDocuments: vi.fn().mockResolvedValue([]),
+      fetchReadinessSleepDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDocuments: vi.fn().mockResolvedValue([]),
       fetchNearbyActivityDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDetailDocument: vi.fn().mockResolvedValue(null),
@@ -3438,7 +3439,7 @@ describe('MCP data service', () => {
       averageHeartRate: 49,
       minimumHeartRate: 40,
     }];
-    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(
       sleepInputs.map((input, index) => ({
         ...sleepDocument({
           sleepDate: input.sleepDate,
@@ -3592,7 +3593,7 @@ describe('MCP data service', () => {
         },
       },
     });
-    expect(dependencies.fetchSleepDocuments).toHaveBeenCalledWith(
+    expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenCalledWith(
       'user-1',
       nowTimeMs - 30 * 24 * 60 * 60 * 1000,
       nowTimeMs,
@@ -3677,7 +3678,7 @@ describe('MCP data service', () => {
 
   it('uses the normalized Suunto offset for live-readiness sleep-date grouping', async () => {
     const endTimeMs = Date.parse('2026-07-26T23:30:00.000Z');
-    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([{
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([{
       ...sleepDocument({
         source: {
           provider: SLEEP_PROVIDERS.SuuntoApp,
@@ -3711,9 +3712,9 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_timezone',
     });
-    expect(dependencies.fetchSleepDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchReadinessSleepDocuments).not.toHaveBeenCalled();
 
-    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(
       Array.from({ length: 257 }, (_, index) => ({
         ...sleepDocument(),
         id: `sleep-${index}`,

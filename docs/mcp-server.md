@@ -789,11 +789,14 @@ deliberately.
 `sleep:read`. It deliberately does not widen the frozen daily-briefing output. The caller supplies an IANA timezone for
 local-day context, while the score retains the Dashboard and Training UTC-day boundary.
 
-The tool reads exactly the ready `form`, `form_now`, and `ramp_rate` snapshot documents plus one bounded 30-day sleep
-projection. It rebuilds the current zero-load decay series from Form's persisted daily loads and prefers its current
-Form and seven-day CTL ramp, using the current-day compact snapshots only for a value the series cannot supply. This is
-the same source-selection contract as Dashboard Today. The load calculation shares the canonical CTL/ATL constants and
-daily-load builder with the dashboard, while scoring and sleep-evidence selection call the environment-neutral
+The tool reads exactly the ready `form`, `form_now`, and `ramp_rate` snapshot documents plus one bounded 30-day,
+readiness-only sleep projection. That dedicated Firestore field mask reads only provider grouping, sleep date,
+start/end/duration, normalized timezone offset, nap state, score value, aggregate average/overnight HRV, and aggregate
+average/minimum sleep HR; it does not materialize stages, score qualifiers, SpO₂, respiration, or other sleep fields.
+The tool rebuilds the current zero-load decay series from Form's persisted daily loads and prefers its current Form and
+seven-day CTL ramp, using the current-day compact snapshots only for a value the series cannot supply. This is the same
+source-selection contract as Dashboard Today. The load calculation shares the canonical CTL/ATL constants and daily-load
+builder with the dashboard, while scoring and sleep-evidence selection call the environment-neutral
 `shared/readiness.ts` evaluator.
 
 The response returns the score, label, confidence, total/available driver count, available original weight before

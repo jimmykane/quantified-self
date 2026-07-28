@@ -1441,6 +1441,45 @@ describe('MCP public output contracts', () => {
     }).success).toBe(false);
   });
 
+  it('rejects impossible live-readiness baseline and combined-heart-rate states', async () => {
+    const registry = createMcpOutputSchemaRegistry({
+      activityLocation: true,
+      routeLocation: true,
+    });
+    const fixture = await createFixtureDataService().getTodayReadiness({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(registry.get_today_readiness.safeParse({
+      ...fixture,
+      drivers: {
+        ...fixture.drivers,
+        hrv: {
+          ...fixture.drivers.hrv,
+          status: 'insufficient_baseline',
+          baselineMedianMs: 50,
+          baselineNightCount: 0,
+          ratio: null,
+        },
+      },
+    }).success).toBe(false);
+
+    expect(registry.get_today_readiness.safeParse({
+      ...fixture,
+      availableSignalCount: 3,
+      availableWeightPercent: 85,
+      drivers: {
+        ...fixture.drivers,
+        overnightHeartRate: {
+          ...fixture.drivers.overnightHeartRate,
+          status: 'insufficient_baseline',
+          combinedRatio: null,
+        },
+      },
+    }).success).toBe(false);
+  });
+
   it('advertises strict schemas and validates every successful tool call', async () => {
     const dataService = createFixtureDataService();
     const connection = await connectFixtureServer(dataService);

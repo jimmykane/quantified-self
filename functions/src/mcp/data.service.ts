@@ -397,6 +397,12 @@ export interface McpDataServiceDependencies {
     limit: number,
     cursor?: SleepCursor,
   ) => Promise<RawDocument[]>;
+  fetchReadinessSleepDocuments: (
+    uid: string,
+    startTimeMs: number,
+    endTimeMs: number,
+    limit: number,
+  ) => Promise<RawDocument[]>;
   fetchActivityDocuments: (
     uid: string,
     startTimeMs: number | undefined,
@@ -592,6 +598,41 @@ const defaultDependencies: McpDataServiceDependencies = {
       query = query.startAfter(cursor.endTimeMs, cursor.id);
     }
     const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    }));
+  },
+  fetchReadinessSleepDocuments: async (
+    uid,
+    startTimeMs,
+    endTimeMs,
+    limit,
+  ) => {
+    const snapshot = await admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection('sleepSessions')
+      .where('endTimeMs', '>=', startTimeMs)
+      .where('endTimeMs', '<=', endTimeMs)
+      .orderBy('endTimeMs', 'desc')
+      .orderBy(FieldPath.documentId(), 'desc')
+      .limit(limit)
+      .select(
+        new FieldPath('source', 'provider'),
+        'sleepDate',
+        'startTimeMs',
+        'endTimeMs',
+        'durationSeconds',
+        'timezoneOffsetSeconds',
+        'isNap',
+        new FieldPath('score', 'value'),
+        new FieldPath('vitals', 'averageHrvMs'),
+        new FieldPath('vitals', 'overnightHrvMs'),
+        new FieldPath('vitals', 'averageHeartRateBpm'),
+        new FieldPath('vitals', 'minimumHeartRateBpm'),
+      )
+      .get();
     return snapshot.docs.map(doc => ({
       id: doc.id,
       data: doc.data() as Record<string, unknown>,
@@ -4417,7 +4458,7 @@ export function createMcpDataService(
         formNowSnapshot,
         rampRateSnapshot,
       ] = await Promise.all([
-        dependencies.fetchSleepDocuments(
+        dependencies.fetchReadinessSleepDocuments(
           input.uid,
           nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
           nowTimeMs,

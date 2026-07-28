@@ -453,8 +453,14 @@ const todayReadinessHrvDriver = z.strictObject({
   baselineNightCount: count.max(14),
   ratio: nullablePositiveNumber,
 }).superRefine((value, context) => {
+  const hasConsistentBaseline = (
+    value.baselineNightCount === 0
+      ? value.baselineMedianMs === null
+      : value.baselineMedianMs !== null
+  );
   if (
-    (value.status === 'available' && (
+    !hasConsistentBaseline
+    || (value.status === 'available' && (
       value.latestMs === null
       || value.baselineMedianMs === null
       || value.baselineNightCount < 3
@@ -483,8 +489,14 @@ const todayReadinessHeartRateDriver = z.strictObject({
   baselineNightCount: count.max(14),
   ratio: nullablePositiveNumber,
 }).superRefine((value, context) => {
+  const hasConsistentBaseline = (
+    value.baselineNightCount === 0
+      ? value.baselineMedianBpm === null
+      : value.baselineMedianBpm !== null
+  );
   if (
-    (value.status === 'available' && (
+    !hasConsistentBaseline
+    || (value.status === 'available' && (
       value.latestBpm === null
       || value.baselineMedianBpm === null
       || value.baselineNightCount < 3
@@ -513,21 +525,25 @@ const todayReadinessOvernightHeartRateDriver = z.strictObject({
   average: todayReadinessHeartRateDriver,
   minimum: todayReadinessHeartRateDriver,
 }).superRefine((value, context) => {
+  const hasAvailableComponent = value.average.status === 'available'
+    || value.minimum.status === 'available';
+  const hasLatestValue = value.average.latestBpm !== null
+    || value.minimum.latestBpm !== null;
   if (
-    (value.status === 'available' && value.combinedRatio === null)
-    || (value.status !== 'available' && value.combinedRatio !== null)
-    || (
-      value.status === 'available'
-      && value.average.status !== 'available'
-      && value.minimum.status !== 'available'
-    )
-    || (
-      value.status === 'not_recorded'
-      && (
-        value.average.latestBpm !== null
-        || value.minimum.latestBpm !== null
-      )
-    )
+    (value.status === 'available' && (
+      value.combinedRatio === null
+      || !hasAvailableComponent
+    ))
+    || (value.status === 'insufficient_baseline' && (
+      value.combinedRatio !== null
+      || hasAvailableComponent
+      || !hasLatestValue
+    ))
+    || (value.status === 'not_recorded' && (
+      value.combinedRatio !== null
+      || hasAvailableComponent
+      || hasLatestValue
+    ))
   ) {
     context.addIssue({
       code: 'custom',

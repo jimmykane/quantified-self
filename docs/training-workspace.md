@@ -1368,9 +1368,10 @@ The explicitly named live `get_today_readiness` tool is not a derived-snapshot p
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
 exists because the persisted 14-day `training_readiness` point can lag newly imported sleep and because the registered
-daily-briefing schema is frozen. Keep its load model aligned through `shared/training-load.ts`, keep scoring and evidence
-selection in `shared/readiness.ts`, and never replace its allowlisted driver response with raw snapshot, provider, or
-sleep-session documents.
+daily-briefing schema is frozen. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants
+used by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and
+evidence selection. Never replace the MCP's allowlisted driver response with raw snapshot, provider, or sleep-session
+documents.
 
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map
