@@ -159,8 +159,8 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-Training is available to signed-in users from the sidenav and is marked **New**. The route header includes a
-Feedback action that opens the configured support email with a Training-specific subject. Dashboard offers one
+Training is available to signed-in users from the sidenav. The route header includes a Feedback action that opens the
+configured support email with a Training-specific subject. Dashboard offers one
 **Open Training** route action, but does not add curated Training snapshots as default Dashboard dependencies or
 configurable tiles.
 
@@ -805,7 +805,9 @@ The four driver cards use one balanced row on wide screens, a two-by-two tablet 
 Within each card, the card heading, plain-language outcome, supporting explanation, and coverage note use distinct type
 levels. The outcome uses language such as `Above usual load` or `Same rhythm`; exact TSS and workout counts stay in the
 supporting sentence rather than competing with the conclusion. Contributor events render as separate list items so an
-event label and its load share do not split into an ambiguous separator-delimited sentence.
+event label and its load share do not split into an ambiguous separator-delimited sentence. Running, Cycling, and
+Swimming load and rhythm headings reuse the shared activity-type component so their icon comes from the sports-lib
+activity-group family; overall load, contributor, Other, and Unclassified cards remain text-only.
 
 The section-level conclusion and evidence-quality line appear before the cards. They make TSS coverage explicit without
 turning missing data into a negative or positive training judgment.

@@ -427,7 +427,17 @@
           </div>
           @for (card of explanation.cards; track card.key) {
             <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
-              <h3 class="training-insight-title">{{ card.title }}</h3>
+              <h3 class="training-insight-title">
+                @if (card.iconActivityType) {
+                  <app-activity-type-icon
+                    class="training-activity-family-icon"
+                    [activityType]="card.iconActivityType"
+                    size="20px"
+                    aria-hidden="true">
+                  </app-activity-type-icon>
+                }
+                <span>{{ card.title }}</span>
+              </h3>
               <strong><app-training-metric-text [text]="card.valueText"></app-training-metric-text></strong>
               @if (card.descriptionItems?.length) {
                 <ul class="training-insight-list">

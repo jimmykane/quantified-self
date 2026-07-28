@@ -128,7 +128,8 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-explanation-section .training-section-heading p,
 .training-explanation-section .training-section-note { font-size: var(--training-inter-micro-font-size); }
 .training-insight-panel { min-width: 0; padding: 20px; }
-.training-insight-title { color: var(--mat-sys-on-surface-variant); font-size: var(--training-card-title-font-size); font-weight: 650; }
+.training-insight-title { display: flex; align-items: center; gap: 7px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-card-title-font-size); font-weight: 650; }
+.training-activity-family-icon { flex: 0 0 auto; }
 .training-insight-panel > strong { display: block; margin-top: 10px; font-size: 24px; line-height: 1.05; overflow-wrap: anywhere; }
 .training-insight-panel > p, .training-insight-list { margin: 10px 0 0; font-size: var(--training-inter-body-font-size); line-height: 1.5; overflow-wrap: anywhere; }
 .training-insight-list { display: grid; gap: 5px; padding: 0; list-style: none; }
