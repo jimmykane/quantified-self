@@ -23,7 +23,9 @@ Always-on rules:
   Training-derived metric kind or payload, or a normalized sleep field, read
   `.agent/skills/mcp-metric-surface/SKILL.md` and `docs/mcp-server.md`. Update the exhaustive strict output-schema
   registry in the same change, preserve validated `structuredContent` plus equivalent JSON text, add or update negative
-  leakage fixtures, run the MCP output contract suite, and keep the MCP documentation current.
+  leakage fixtures, run the MCP output contract suite and `npm --prefix functions run mcp:contract:check`, and keep the
+  MCP documentation current. Existing registered tool schemas are frozen; follow the documented digest-bound
+  refresh/publication lifecycle for compatible additive metadata.
 - When MCP tools, schemas, scopes, instructions, plugin metadata, starter prompts, branding, or any bundled Quantified
   Self plugin skill change, follow the local-plugin update matrix in `docs/mcp-server.md`. Review every affected focused
   skill and the cross-domain skill, and keep the exhaustive bundled-skill registry, fixtures, per-skill starter prompts,

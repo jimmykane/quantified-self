@@ -231,6 +231,16 @@ export function buildMcpAuthorizationServerMetadata(baseUrl: string) {
   };
 }
 
+export function buildMcpProtectedResourceMetadata(baseUrl: string) {
+  return {
+    resource: `${baseUrl}/mcp`,
+    resource_name: 'Quantified Self MCP',
+    authorization_servers: [baseUrl],
+    scopes_supported: Object.values(MCP_OAUTH_SCOPES),
+    bearer_methods_supported: ['header'],
+  };
+}
+
 interface McpRevocationHttpResponse {
   set(name: string, value: string): unknown;
   status(statusCode: number): {
@@ -1120,13 +1130,7 @@ export const mcpApi = onRequest({
     )
   ) {
     response.set('Cache-Control', 'public, max-age=300');
-    response.json({
-      resource,
-      resource_name: 'Quantified Self MCP',
-      authorization_servers: [baseUrl],
-      scopes_supported: Object.values(MCP_OAUTH_SCOPES),
-      bearer_methods_supported: ['header'],
-    });
+    response.json(buildMcpProtectedResourceMetadata(baseUrl));
     return;
   }
 

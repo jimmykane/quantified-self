@@ -12,6 +12,7 @@ import {
 } from './oauth.service';
 import {
   buildMcpAuthorizationServerMetadata,
+  buildMcpProtectedResourceMetadata,
   classifyMcpBearerFailure,
   createMcpServer,
   formatMcpToolError,
@@ -84,6 +85,17 @@ describe('MCP HTTP scope enforcement', () => {
         token_endpoint_auth_methods_supported: ['none'],
         revocation_endpoint_auth_methods_supported: ['none'],
       }));
+  });
+
+  it('builds protected-resource metadata from the same public origin', () => {
+    expect(buildMcpProtectedResourceMetadata('https://quantified-self.io'))
+      .toEqual({
+        resource: 'https://quantified-self.io/mcp',
+        resource_name: 'Quantified Self MCP',
+        authorization_servers: ['https://quantified-self.io'],
+        scopes_supported: Object.values(MCP_OAUTH_SCOPES),
+        bearer_methods_supported: ['header'],
+      });
   });
 
   it('accepts a form-encoded server-to-server revocation request with an empty 200 response', async () => {

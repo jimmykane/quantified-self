@@ -445,6 +445,51 @@ inspects all advertised schemas, calls all 21 tools, and validates successful `s
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
 
+### Registered-contract compatibility gate
+
+`functions/src/mcp/contracts/registered-contract.json` is the canonical contract last loaded into the registered
+ChatGPT app. It is generated from real in-memory `initialize` and complete `tools/list` responses, including the
+negotiated MCP protocol version, plus the protected-resource and authorization-server metadata builders. The capture
+covers no-data, single-domain, dependent-location, combined activity-metric, all-parent, and all-scope grants. Identical
+tool variants are content-addressed by SHA-256 so scope-specific tool visibility and instructions remain exhaustive
+without copying the same large schema repeatedly. Object keys and semantically unordered schema arrays are canonicalized
+before hashing.
+
+The current baseline has lifecycle `developer`. After public publication, promote it with lifecycle `published`.
+Existing tool names, authorization-profile availability, annotations, security schemes, and input/output schemas are
+frozen. A pending record cannot override a breaking change. Introduce a new additive tool for a new shape, or use an
+optional field that was already present in the registered schema. Additive tools, presentation metadata, instructions,
+and additive OAuth capabilities require `functions/src/mcp/contracts/pending-change.json`:
+
+```json
+{
+  "formatVersion": 1,
+  "candidateSha256": "<candidate contract SHA-256>",
+  "lifecycleAction": "developer-refresh",
+  "summary": "Describe the additive metadata change.",
+  "rescanRequired": true
+}
+```
+
+The record is valid only for that exact candidate digest. Use `published-version` instead of `developer-refresh` for a
+published baseline. The normal workflow is:
+
+1. Run `npm --prefix functions run mcp:contract:check`. Breaking differences always fail; compatible metadata
+   differences print their candidate digest and require the matching pending record.
+2. Optionally write a review copy with
+   `npm --prefix functions run mcp:contract:capture -- --output /tmp/quantified-self-mcp-contract.json`. Capture refuses
+   to overwrite the registered or pending files.
+3. Deploy only through the separately approved release workflow. For developer metadata, refresh the registered app and
+   test a new conversation. For published metadata, complete scan, review, approval, and publication.
+4. Promote the exact tested candidate with
+   `npm --prefix functions run mcp:contract:promote -- --digest <sha256> --action developer-refresh`, using
+   `published-version` when applicable. Promotion verifies compatibility and the pending record, replaces the baseline,
+   and removes the consumed record.
+
+`mcp:contract:bootstrap` exists only to create a missing first developer baseline and refuses to replace one. CI builds
+Functions and runs the compiled compatibility check before accepting the change. A server-only implementation or result
+fix needs no pending record when the advertised contract remains byte-for-byte equivalent after canonicalization.
+
 ### Changing or adding a tool
 
 1. Add or change the allowlisted data-service projection; never derive a public schema from an internal Firestore,
@@ -458,8 +503,9 @@ expected errors, output-contract failures, and identity/provenance leakage canar
 5. Update the in-memory successful fixture, Ajv assertion, empty/nullable/pagination cases, and negative leakage
    canaries. A new Training kind also needs an exact entry in `MCP_DERIVED_PAYLOAD_SCHEMAS` and its exhaustive fixture.
 6. Run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts src/mcp/server.spec.ts`, the focused
-   data-service tests, `npm --prefix functions run build`, and `git diff --check`. Update this document whenever the
-   public contract moves.
+   data-service tests, `npm --prefix functions run mcp:contract:check`, and `git diff --check`. Add the digest-bound
+   pending record for a compatible metadata change; a breaking finding requires redesigning the change. Update this
+   document whenever the public contract moves.
 
 ## Sports Lib metric discovery
 
@@ -783,6 +829,7 @@ Use the Functions emulator and local Angular app for the OAuth/consent flow. At 
 ```bash
 npm --prefix functions test -- src/mcp
 npm --prefix functions run build
+npm --prefix functions run mcp:contract:check:compiled
 npx vitest run src/app/components/mcp-authorization/mcp-authorization.component.spec.ts \
   src/app/components/mcp-connections/mcp-connections.component.spec.ts
 npm run test:rules
