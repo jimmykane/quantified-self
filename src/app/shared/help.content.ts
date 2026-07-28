@@ -201,7 +201,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
 - Default manager sizes are chart-aware: Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
-- Dashboard manager bulk actions include **Add recommended**, which selects a useful set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, and the prepared 1-year Power Curve snapshots), plus route, capacity, and durability evidence; **Add everything**, which inserts every available preset including overlapping metrics; and **Remove all**, which hides the Today summary, clears every dashboard chart/map tile, and keeps automatic suggestions dismissed. Add recommended and Add everything restore the Today summary.
+- Dashboard manager bulk actions include **Reset to default**, which replaces the current dashboard tiles with a useful recommended set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, and the prepared 1-year Power Curve snapshots), plus route, capacity, and durability evidence; **Add everything**, which inserts every available preset including overlapping metrics; and **Remove all**, which hides the Today summary, clears every dashboard chart/map tile, and keeps automatic suggestions dismissed. Reset to default and Add everything restore the Today summary.
 
 ### Reorder dashboard tiles
 

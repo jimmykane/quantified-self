@@ -104,6 +104,14 @@
   margin: 0;
 }
 
+.dashboard-manager-reset-warning {
+  color: var(--mat-sys-error);
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0 0 0.35rem;
+}
+
 .dashboard-manager-tip-hint {
   align-items: center;
   background: color-mix(in srgb, var(--mat-sys-secondary-container) 24%, transparent);

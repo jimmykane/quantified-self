@@ -135,7 +135,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('does not automatically add sleep, KPI, curated training, or power-curve tiles');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
-    expect(gettingStartedSection?.content).toContain('**Add recommended**');
+    expect(gettingStartedSection?.content).toContain('**Reset to default**');
+    expect(gettingStartedSection?.content).toContain('replaces the current dashboard tiles');
     expect(gettingStartedSection?.content).toContain('**Add everything**');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('**Training** remains the fixed analytical workspace');

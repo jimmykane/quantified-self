@@ -201,7 +201,7 @@ interface DashboardManagerSettingsSnapshot {
   autoTiles: Partial<Record<string, AppDashboardAutoTileState>>;
 }
 
-type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'addRecommended' | 'addAll' | 'removeAll' | null;
+type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'resetToDefault' | 'addAll' | 'removeAll' | null;
 
 @Component({
   selector: 'app-dashboard-manager-dialog',
@@ -590,8 +590,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return false;
   }
 
-  get isAddRecommendedDisabled(): boolean {
-    return this.isSaving || (this.showTodaySummary && this.getMissingRecommendedDashboardTiles().length === 0);
+  get isResetToDefaultDisabled(): boolean {
+    return this.isSaving;
   }
 
   get isAddAllDisabled(): boolean {
@@ -610,8 +610,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return this.savingAction === 'addAll';
   }
 
-  get isAddRecommendedSaving(): boolean {
-    return this.savingAction === 'addRecommended';
+  get isResetToDefaultSaving(): boolean {
+    return this.savingAction === 'resetToDefault';
   }
 
   get isRemoveAllSaving(): boolean {
@@ -1015,37 +1015,25 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     }
   }
 
-  async addRecommendedTiles(): Promise<void> {
+  async resetToDefault(): Promise<void> {
     if (this.isSaving) {
       return;
     }
 
     this.hapticsService.selection();
-    this.startSaving('addRecommended');
+    this.startSaving('resetToDefault');
     this.saveError = '';
     const dashboardSettings = this.data.user.settings.dashboardSettings;
     const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
 
     try {
       await this.refreshRecommendedEligibility();
-      const clonedTiles = this.cloneTiles(dashboardSettings.tiles || []);
-      const missingTiles = this.getMissingRecommendedDashboardTiles(clonedTiles);
-      if (!missingTiles.length && this.showTodaySummary) {
-        this.saveError = 'All recommended dashboard tiles for your available data are already present.';
-        this.stopSaving();
-        return;
-      }
-
-      const bulkAppendError = this.appendBulkTiles(clonedTiles, missingTiles);
-      if (bulkAppendError) {
-        this.saveError = bulkAppendError;
-        this.stopSaving();
-        return;
-      }
-
-      dashboardSettings.tiles = clonedTiles;
+      const recommendedTiles = this.getAllDashboardManagerPresetTiles(
+        getDashboardManagerRecommendedPresetDefinitions(this.recommendedEligibility),
+      );
+      dashboardSettings.tiles = recommendedTiles;
       this.setTodaySummaryVisibility(dashboardSettings, true);
-      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, clonedTiles);
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, recommendedTiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
       this.hapticsService.success();
@@ -1594,17 +1582,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   ): TileSettingsInterface[] {
     const allTiles = this.getAllDashboardManagerPresetTiles();
     return allTiles.filter(candidateTile => !tiles.some(tile => this.isTileForBulkDashboardTile(tile, candidateTile)));
-  }
-
-  private getMissingRecommendedDashboardTiles(
-    tiles: TileSettingsInterface[] = this.dashboardTiles,
-  ): TileSettingsInterface[] {
-    const recommendedTiles = this.getAllDashboardManagerPresetTiles(
-      getDashboardManagerRecommendedPresetDefinitions(this.recommendedEligibility),
-    );
-    return recommendedTiles.filter(candidateTile => (
-      !tiles.some(tile => this.isTileForBulkDashboardTile(tile, candidateTile))
-    ));
   }
 
   private getAllDashboardManagerPresetTiles(
