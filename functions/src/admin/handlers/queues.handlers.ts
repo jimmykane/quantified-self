@@ -142,7 +142,7 @@ async function getAdminCloudTaskQueueStats(queueId: string): Promise<CloudTaskQu
  */
 export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsResponse>({
     region: FUNCTIONS_MANIFEST.getQueueStats.region,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async (request) => {
     const includeAnalysis = request.data?.includeAnalysis ?? false;
     const PROVIDER_QUEUES: Record<string, string[]> = {
