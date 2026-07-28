@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, type Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { createHash, randomUUID } from 'node:crypto';
 
@@ -31,7 +31,7 @@ interface MergeOperationRecord {
   leaseExpiresAtMs: number;
   response: MergeEventResponse | null;
   lastErrorCode: string | null;
-  expireAt: admin.firestore.Timestamp;
+  expireAt: Timestamp;
   createdAt: unknown;
   updatedAt: unknown;
   completedAt?: unknown;
@@ -76,7 +76,7 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-function isValidFirestoreTimestamp(value: unknown): value is admin.firestore.Timestamp {
+function isValidFirestoreTimestamp(value: unknown): value is Timestamp {
   const toMillis = (value as { toMillis?: unknown } | null)?.toMillis;
   if (typeof toMillis !== 'function') {
     return false;
