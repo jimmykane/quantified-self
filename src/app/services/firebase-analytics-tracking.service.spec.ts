@@ -2,11 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { NavigationEnd, Router } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
-import { Analytics } from 'app/firebase/analytics';
 import { Auth } from 'app/firebase/auth';
 import { logEvent, setUserId } from 'firebase/analytics';
 import { LoggerService } from './logger.service';
 import { FirebaseAnalyticsTrackingService } from './firebase-analytics-tracking.service';
+import { DeferredFirebaseAnalyticsService } from './deferred-firebase-analytics.service';
 
 const hoisted = vi.hoisted(() => ({
   mockUserObservableFactory: vi.fn(),
@@ -33,6 +33,7 @@ describe('FirebaseAnalyticsTrackingService', () => {
   let authUser$: BehaviorSubject<{ uid: string } | null>;
   let routerEvents$: Subject<unknown>;
   let logger: Pick<LoggerService, 'warn' | 'error' | 'log'>;
+  let deferredAnalytics: { run: ReturnType<typeof vi.fn> };
 
   class DashboardPageComponent { }
 
@@ -46,6 +47,12 @@ describe('FirebaseAnalyticsTrackingService', () => {
       error: vi.fn(),
       log: vi.fn(),
     };
+    deferredAnalytics = {
+      run: vi.fn((task: (analytics: object) => void) => {
+        task({});
+        return true;
+      }),
+    };
   });
 
   afterEach(() => {
@@ -57,7 +64,7 @@ describe('FirebaseAnalyticsTrackingService', () => {
     TestBed.configureTestingModule({
       providers: [
         FirebaseAnalyticsTrackingService,
-        { provide: Analytics, useValue: {} },
+        { provide: DeferredFirebaseAnalyticsService, useValue: deferredAnalytics },
         { provide: Auth, useValue: {} },
         {
           provide: Router,
@@ -98,7 +105,7 @@ describe('FirebaseAnalyticsTrackingService', () => {
     TestBed.configureTestingModule({
       providers: [
         FirebaseAnalyticsTrackingService,
-        { provide: Analytics, useValue: {} },
+        { provide: DeferredFirebaseAnalyticsService, useValue: deferredAnalytics },
         { provide: Auth, useValue: {} },
         {
           provide: Router,
@@ -131,10 +138,16 @@ describe('FirebaseAnalyticsTrackingService', () => {
     });
   });
 
-  it('does nothing when analytics is not provided', () => {
+  it('queues tracking without invoking Firebase before deferred Analytics is ready', () => {
+    const queuedTasks: Array<(analytics: object) => void> = [];
+    deferredAnalytics.run.mockImplementation((task: (analytics: object) => void) => {
+      queuedTasks.push(task);
+      return true;
+    });
     TestBed.configureTestingModule({
       providers: [
         FirebaseAnalyticsTrackingService,
+        { provide: DeferredFirebaseAnalyticsService, useValue: deferredAnalytics },
         { provide: Auth, useValue: {} },
         {
           provide: Router,
@@ -154,6 +167,6 @@ describe('FirebaseAnalyticsTrackingService', () => {
 
     expect(logEvent).not.toHaveBeenCalled();
     expect(setUserId).not.toHaveBeenCalled();
-    expect(hoisted.mockUserObservableFactory).not.toHaveBeenCalled();
+    expect(queuedTasks.length).toBeGreaterThanOrEqual(2);
   });
 });

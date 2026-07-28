@@ -1,11 +1,11 @@
 import { Injectable, inject } from '@angular/core';
-import { Analytics } from 'app/firebase/analytics';
 import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { APP_STORAGE } from './storage/app.storage.token';
+import { DeferredFirebaseAnalyticsService } from './deferred-firebase-analytics.service';
 
 import { environment } from '../../environments/environment';
 
@@ -159,7 +159,7 @@ export interface SavedRouteActionAnalytics {
 
 @Injectable({ providedIn: 'root' })
 export class AppAnalyticsService {
-    private analytics = inject(Analytics, { optional: true });
+    private deferredAnalytics = inject(DeferredFirebaseAnalyticsService);
     private authService = inject(AppAuthService);
     private logger = inject(LoggerService);
     private storage = inject(APP_STORAGE);
@@ -182,28 +182,31 @@ export class AppAnalyticsService {
     }
 
     private setCollectionEnabled(enabled: boolean) {
-        if (this.analytics) {
+        this.deferredAnalytics.run(analytics => {
             try {
-                setAnalyticsCollectionEnabled(this.analytics, enabled);
+                setAnalyticsCollectionEnabled(analytics, enabled);
             } catch (error) {
                 this.logger.warn('Analytics error:', error);
             }
-        }
+        });
     }
 
     logEvent(eventName: string, params?: Record<string, any>): boolean {
-        if (!this.hasConsent || !this.analytics) {
+        if (!this.hasConsent) {
             return false;
         }
 
-        try {
-            // Defer to the Firebase SDK
-            logEvent(this.analytics, eventName, params);
-            return true;
-        } catch (error) {
-            this.logger.warn('Analytics logEvent error:', error);
-            return false;
-        }
+        return this.deferredAnalytics.run(analytics => {
+            if (!this.hasConsent) {
+                return;
+            }
+
+            try {
+                logEvent(analytics, eventName, params);
+            } catch (error) {
+                this.logger.warn('Analytics logEvent error:', error);
+            }
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
