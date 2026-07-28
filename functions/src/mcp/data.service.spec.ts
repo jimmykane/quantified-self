@@ -3874,6 +3874,7 @@ describe('MCP data service', () => {
       nowTimeMs - 30 * 24 * 60 * 60 * 1000,
       nowTimeMs,
       257,
+      true,
     );
     expect(dependencies.fetchSleepDocuments).not.toHaveBeenCalled();
     expect(dependencies.fetchDerivedSnapshot).toHaveBeenCalledTimes(4);
@@ -4050,6 +4051,43 @@ describe('MCP data service', () => {
         latestBpm: 40,
         baselineMedianBpm: 44,
       },
+    });
+  });
+
+  it('does not understate grouped in-bed duration when a sleep fragment is missing it', async () => {
+    const firstEndTimeMs = Date.parse('2026-07-27T02:00:00.000Z');
+    const secondEndTimeMs = Date.parse('2026-07-27T06:00:00.000Z');
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([
+      {
+        ...sleepDocument({
+          sleepDate: '2026-07-27',
+          startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
+          endTimeMs: firstEndTimeMs,
+          durationSeconds: 14_400,
+          inBedDurationSeconds: 14_400,
+        }),
+        id: 'latest-a',
+      },
+      {
+        ...sleepDocument({
+          sleepDate: '2026-07-27',
+          startTimeMs: firstEndTimeMs,
+          endTimeMs: secondEndTimeMs,
+          durationSeconds: 14_400,
+          inBedDurationSeconds: null,
+        }),
+        id: 'latest-b',
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result.sleep.latestSession).toMatchObject({
+      durationSeconds: 28_800,
+      inBedDurationSeconds: null,
     });
   });
 

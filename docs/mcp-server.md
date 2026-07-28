@@ -839,9 +839,10 @@ identity is used only for internal grouping and never enters the response.
 
 The latest completed main-sleep projection returns the safe session timing, duration, in-bed duration, score, and an
 explicit four-field aggregate-vital allowlist: average and overnight HRV in milliseconds plus average and minimum sleep
-heart rate in beats per minute. Each missing value is `null`; raw samples, SpO₂, respiration, provider identity, source
-metadata, and score components are absent. The duration comparison uses up to 14 earlier same-provider nights and
-requires at least three before returning an average or delta.
+heart rate in beats per minute. Each missing value is `null`; a grouped sleep returns in-bed duration only when every
+fragment recorded it, preventing a partial sum from looking complete. Raw samples, SpO₂, respiration, provider identity,
+source metadata, and score components are absent. The duration comparison uses up to 14 earlier same-provider nights
+and requires at least three before returning an average or delta.
 
 The nested readiness object is the exact strict `get_today_readiness` result, including safe driver values, baselines,
 ratios, evidence states, and freshness. The Training summary reuses the frozen briefing's strict current-versus-usual

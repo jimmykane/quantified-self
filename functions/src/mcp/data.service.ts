@@ -405,6 +405,7 @@ export interface McpDataServiceDependencies {
     startTimeMs: number,
     endTimeMs: number,
     limit: number,
+    includeDailyReportFields?: boolean,
   ) => Promise<RawDocument[]>;
   fetchActivityDocuments: (
     uid: string,
@@ -611,6 +612,7 @@ const defaultDependencies: McpDataServiceDependencies = {
     startTimeMs,
     endTimeMs,
     limit,
+    includeDailyReportFields = false,
   ) => {
     const snapshot = await admin.firestore()
       .collection('users')
@@ -627,15 +629,19 @@ const defaultDependencies: McpDataServiceDependencies = {
         'startTimeMs',
         'endTimeMs',
         'durationSeconds',
-        'inBedDurationSeconds',
         'timezoneOffsetSeconds',
         'isNap',
         new FieldPath('score', 'value'),
-        new FieldPath('score', 'qualifier'),
         new FieldPath('vitals', 'averageHrvMs'),
         new FieldPath('vitals', 'overnightHrvMs'),
         new FieldPath('vitals', 'averageHeartRateBpm'),
         new FieldPath('vitals', 'minimumHeartRateBpm'),
+        ...(includeDailyReportFields
+          ? [
+              'inBedDurationSeconds',
+              new FieldPath('score', 'qualifier'),
+            ]
+          : []),
       )
       .get();
     return snapshot.docs.map(doc => ({
@@ -3228,7 +3234,7 @@ function buildTodayReadinessSleepNights(
         startTimeMs,
         endTimeMs,
         durationSeconds,
-        inBedDurationSeconds: inBedDurationValues.length
+        inBedDurationSeconds: inBedDurationValues.length === entries.length
           ? inBedDurationValues.reduce((total, value) => total + value, 0)
           : null,
         score: latest.session.score,
@@ -3402,6 +3408,9 @@ interface LoadedTodayReadiness {
 async function loadTodayReadiness(
   dependencies: McpDataServiceDependencies,
   input: GetTodayReadinessInput,
+  options: {
+    includeDailyReportFields?: boolean;
+  } = {},
 ): Promise<LoadedTodayReadiness> {
   const timeZone = requireTimeZone(input.timeZone);
   const nowTimeMs = dependencies.now();
@@ -3410,18 +3419,27 @@ async function loadTodayReadiness(
     timeZone,
     nowTimeMs,
   );
+  const sleepDocumentsPromise = options.includeDailyReportFields
+    ? dependencies.fetchReadinessSleepDocuments(
+        input.uid,
+        nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+        nowTimeMs,
+        MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
+        true,
+      )
+    : dependencies.fetchReadinessSleepDocuments(
+        input.uid,
+        nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+        nowTimeMs,
+        MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
+      );
   const [
     sleepDocuments,
     formSnapshot,
     formNowSnapshot,
     rampRateSnapshot,
   ] = await Promise.all([
-    dependencies.fetchReadinessSleepDocuments(
-      input.uid,
-      nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
-      nowTimeMs,
-      MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
-    ),
+    sleepDocumentsPromise,
     dependencies.fetchDerivedSnapshot(
       input.uid,
       DERIVED_METRIC_KINDS.Form,
@@ -4658,6 +4676,8 @@ export function createMcpDataService(
         loadTodayReadiness(dependencies, {
           ...input,
           timeZone,
+        }, {
+          includeDailyReportFields: true,
         }),
         dependencies.fetchDerivedSnapshot(
           input.uid,
