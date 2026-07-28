@@ -1,5 +1,6 @@
 
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
@@ -120,7 +121,7 @@ export async function migrateUserToken(userID: string, oauth1Token: any) {
                 tokenType: 'Bearer',
                 dateCreated: currentDate.getTime(),
                 dateRefreshed: currentDate.getTime(),
-                migratedAt: admin.firestore.FieldValue.serverTimestamp()
+                migratedAt: FieldValue.serverTimestamp()
             });
 
         logger.info(`Successfully migrated tokens for user ${userID}`);
@@ -133,4 +134,3 @@ export async function migrateUserToken(userID: string, oauth1Token: any) {
 }
 
 // HTTP Trigger
-

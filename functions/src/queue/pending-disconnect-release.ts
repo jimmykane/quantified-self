@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SLEEP_PROVIDERS, type SleepProvider } from '../../../shared/sleep';
@@ -33,7 +34,7 @@ function asNonEmptyString(value: unknown): string | null {
 }
 
 function buildDeferredQueueReleaseUpdate(): Record<string, unknown> {
-    const deleteField = admin.firestore.FieldValue.delete();
+    const deleteField = FieldValue.delete();
     return {
         processed: false,
         processedAt: deleteField,

@@ -93,7 +93,7 @@ vi.mock('firebase-admin', () => {
   mockRoutesStartAfter.mockReturnValue(routesQuery);
   mockRoutesLimit.mockReturnValue(routesQuery);
 
-  const firestoreFn = Object.assign(() => ({
+  const firestoreFn = () => ({
     collection: vi.fn((name: string) => {
       if (name !== 'users') {
         throw new Error(`Unexpected top collection: ${name}`);
@@ -109,14 +109,16 @@ vi.mock('firebase-admin', () => {
         })),
       };
     }),
-  }), {
-    FieldPath: { documentId: mockDocumentId },
   });
 
   return {
     firestore: firestoreFn,
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldPath: { documentId: mockDocumentId },
+}));
 
 import { backfillRouteDeliverySyncRoute } from './backfill';
 

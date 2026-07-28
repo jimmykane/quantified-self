@@ -5,7 +5,7 @@ import { BlockList, isIP, LookupFunction } from 'node:net';
 import { Agent } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import fetch from 'node-fetch';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import {
   getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
@@ -300,8 +300,8 @@ export interface McpOAuthStore {
   revokeConnection(target: McpConnectionRevocationTarget, nowMs: number): Promise<void>;
 }
 
-function timestamp(ms: number): admin.firestore.Timestamp {
-  return admin.firestore.Timestamp.fromMillis(ms);
+function timestamp(ms: number): Timestamp {
+  return Timestamp.fromMillis(ms);
 }
 
 function documentData<T>(snapshot: admin.firestore.DocumentSnapshot): T | null {

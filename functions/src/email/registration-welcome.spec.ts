@@ -25,14 +25,16 @@ vi.mock('firebase-functions/v2/firestore', () => ({
 
 vi.mock('firebase-admin', () => ({
     auth: hoisted.auth,
-    firestore: Object.assign(hoisted.firestore, {
-        FieldValue: {
-            serverTimestamp: () => 'SERVER_TIMESTAMP',
-        },
-        Timestamp: {
-            fromDate: (date: Date) => ({ toDate: () => date }),
-        },
-    }),
+    firestore: hoisted.firestore,
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: () => 'SERVER_TIMESTAMP',
+    },
+    Timestamp: {
+        fromDate: (date: Date) => ({ toDate: () => date }),
+    },
 }));
 
 vi.mock('../shared/user-deletion-guard', () => ({

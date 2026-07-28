@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 
 import { isCorsAllowed } from '../utils';
@@ -67,7 +68,7 @@ export const deleteSelf = functions
 
             try {
                 await deletionMarkerRef.set({
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    createdAt: FieldValue.serverTimestamp(),
                     source: 'deleteSelf',
                     expireAt: getExpireAtTimestamp(USER_DELETION_TOMBSTONE_RETENTION_IN_DAYS),
                 }, { merge: true });

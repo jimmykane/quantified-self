@@ -1,6 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import {
     buildEmailPlanDetails,
@@ -33,8 +34,8 @@ export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 h
     const snapshot = await db.collectionGroup('subscriptions')
         .where('status', 'in', ['active', 'trialing'])
         .where('cancel_at_period_end', '==', true)
-        .where('current_period_end', '>=', admin.firestore.Timestamp.fromDate(threeDaysFromNow))
-        .where('current_period_end', '<', admin.firestore.Timestamp.fromDate(fourDaysFromNow))
+        .where('current_period_end', '>=', Timestamp.fromDate(threeDaysFromNow))
+        .where('current_period_end', '<', Timestamp.fromDate(fourDaysFromNow))
         .get();
 
     logger.info(`Found ${snapshot.size} subscriptions expiring between ${threeDaysFromNow.toISOString()} and ${fourDaysFromNow.toISOString()}`);

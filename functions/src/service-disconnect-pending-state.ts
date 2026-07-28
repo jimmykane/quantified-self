@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { SERVICE_CONNECTION_STATES } from '../../shared/service-connection';
 import type { ServiceDisconnectPendingMetaInput } from './service-connection-meta';
 
@@ -18,9 +18,9 @@ export interface PendingServiceDisconnectRootData {
   disconnectState?: string | null;
   disconnectReason?: string | null;
   disconnectAttemptCount?: number | null;
-  disconnectNextAttemptAt?: admin.firestore.Timestamp | null;
-  disconnectLastAttemptAt?: admin.firestore.Timestamp | null;
-  disconnectRetryExpiresAt?: admin.firestore.Timestamp | null;
+  disconnectNextAttemptAt?: Timestamp | null;
+  disconnectLastAttemptAt?: Timestamp | null;
+  disconnectRetryExpiresAt?: Timestamp | null;
   disconnectLastStatusCode?: number | null;
   disconnectLastErrorMessage?: string | null;
   disconnectManualReviewRequired?: boolean | null;
@@ -28,9 +28,9 @@ export interface PendingServiceDisconnectRootData {
 
 export interface PendingDisconnectMarkState {
   rootData: PendingServiceDisconnectRootData;
-  initialNextAttemptAt: admin.firestore.Timestamp;
-  initialRetryExpiresAt: admin.firestore.Timestamp;
-  nowTimestamp: admin.firestore.Timestamp;
+  initialNextAttemptAt: Timestamp;
+  initialRetryExpiresAt: Timestamp;
+  nowTimestamp: Timestamp;
 }
 
 export interface PendingDisconnectRetryFailureTransition {
@@ -50,17 +50,17 @@ const PENDING_SERVICE_DISCONNECT_BACKOFF_MS = [
   24 * 60 * 60 * 1000,
 ];
 
-function asTimestamp(value: admin.firestore.Timestamp | null | undefined, fallbackMs: number): admin.firestore.Timestamp {
-  return value || admin.firestore.Timestamp.fromMillis(fallbackMs);
+function asTimestamp(value: Timestamp | null | undefined, fallbackMs: number): Timestamp {
+  return value || Timestamp.fromMillis(fallbackMs);
 }
 
-export function buildRetryWindowExpiresAt(nowMs: number): admin.firestore.Timestamp {
-  return admin.firestore.Timestamp.fromMillis(
+export function buildRetryWindowExpiresAt(nowMs: number): Timestamp {
+  return Timestamp.fromMillis(
     nowMs + PENDING_SERVICE_DISCONNECT_RETRY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   );
 }
 
-export function timestampToISOString(value: admin.firestore.Timestamp | null | undefined): string | undefined {
+export function timestampToISOString(value: Timestamp | null | undefined): string | undefined {
   return typeof value?.toDate === 'function'
     ? value.toDate().toISOString()
     : undefined;
@@ -79,12 +79,12 @@ export function isRetryableSubscriptionEnforcementDisconnectStatus(statusCode: n
     || (statusCode >= 500 && statusCode <= 599);
 }
 
-export function buildPendingServiceDisconnectNextAttemptAt(attemptCount: number, nowMs = Date.now()): admin.firestore.Timestamp {
+export function buildPendingServiceDisconnectNextAttemptAt(attemptCount: number, nowMs = Date.now()): Timestamp {
   const backoffIndex = Math.min(
     Math.max(0, attemptCount),
     PENDING_SERVICE_DISCONNECT_BACKOFF_MS.length - 1,
   );
-  return admin.firestore.Timestamp.fromMillis(nowMs + PENDING_SERVICE_DISCONNECT_BACKOFF_MS[backoffIndex]);
+  return Timestamp.fromMillis(nowMs + PENDING_SERVICE_DISCONNECT_BACKOFF_MS[backoffIndex]);
 }
 
 export function sanitizePendingServiceDisconnectErrorMessage(value: string): string {
@@ -145,7 +145,7 @@ export function buildPendingDisconnectMarkState(
   reason: ServiceDisconnectPendingReason = SERVICE_DISCONNECT_PENDING_REASON.SubscriptionEnforcement,
   nowMs = Date.now(),
 ): PendingDisconnectMarkState {
-  const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
+  const nowTimestamp = Timestamp.fromMillis(nowMs);
   const initialNextAttemptAt = buildPendingServiceDisconnectNextAttemptAt(0, nowMs);
   const initialRetryExpiresAt = buildRetryWindowExpiresAt(nowMs);
   const alreadyPending = isServiceDisconnectPendingData(existing);
@@ -182,7 +182,7 @@ export function buildPendingDisconnectRecoveryRetryData(
   failure: PendingServiceDisconnectFailure,
   nowMs = Date.now(),
 ): PendingServiceDisconnectRootData {
-  const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
+  const nowTimestamp = Timestamp.fromMillis(nowMs);
   const attemptCount = 0;
 
   return {
@@ -203,7 +203,7 @@ export function buildPendingDisconnectRetryFailureTransition(
   failure: PendingServiceDisconnectFailure,
   nowMs = Date.now(),
 ): PendingDisconnectRetryFailureTransition {
-  const nowTimestamp = admin.firestore.Timestamp.fromMillis(nowMs);
+  const nowTimestamp = Timestamp.fromMillis(nowMs);
   const previousAttemptCount = typeof existing.disconnectAttemptCount === 'number'
     ? existing.disconnectAttemptCount
     : 0;

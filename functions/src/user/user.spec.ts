@@ -62,16 +62,9 @@ const testEnv = firebaseFunctionsTest();
 
 // Mock admin
 vi.mock('firebase-admin', () => {
-    const firestoreMock = Object.assign(vi.fn(() => ({
+    const firestoreMock = vi.fn(() => ({
         collection: firestoreCollectionMock
-    })), {
-        Timestamp: {
-            fromDate: vi.fn((date: Date) => ({ seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 }))
-        },
-        FieldValue: {
-            serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP')
-        }
-    });
+    }));
 
     return {
         auth: () => ({
@@ -82,6 +75,15 @@ vi.mock('firebase-admin', () => {
         initializeApp: vi.fn(),
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP')
+    },
+    Timestamp: {
+        fromDate: vi.fn((date: Date) => ({ seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 }))
+    }
+}));
 
 // Mock firebase-functions
 vi.mock('firebase-functions/v1', () => {

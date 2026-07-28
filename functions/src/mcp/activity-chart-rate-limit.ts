@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { MCP_OAUTH_COLLECTIONS } from './oauth.service';
@@ -67,7 +68,7 @@ const defaultDependencies: ActivityChartRateLimitDependencies = {
       },
     }));
   },
-  timestampFromMillis: value => admin.firestore.Timestamp.fromMillis(value),
+  timestampFromMillis: value => Timestamp.fromMillis(value),
 };
 
 export function buildActivityChartRateLimitBucketId(

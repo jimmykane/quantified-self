@@ -1470,6 +1470,10 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 Start with the repository workflows in `.agent/workflows/serve-local.md` and
 `.agent/workflows/start-emulators.md`. Build Functions before starting the emulators.
 
+Functions runtime code must import `FieldValue`, `Timestamp`, and `FieldPath` from `firebase-admin/firestore`. Do not
+access those statics through `admin.firestore`: the Functions emulator replaces that namespace with a callable proxy
+that does not retain the Admin SDK's legacy static exports.
+
 The localhost frontend normally calls emulated Functions; `local-prod-functions` explicitly targets production Functions.
 Backend code can still reach real services depending on environment variables and credentials, so verify the active
 project and never assume `localhost` means isolated data.

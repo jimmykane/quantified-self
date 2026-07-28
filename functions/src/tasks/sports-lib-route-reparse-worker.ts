@@ -1,5 +1,6 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -65,13 +66,13 @@ async function markJobFailed(
     const isTerminalFailure = options?.terminalFailure === true;
     await jobRef.set({
         status: 'failed',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        processedAt: FieldValue.serverTimestamp(),
         lastError: errorMessage,
-        terminalFailure: isTerminalFailure ? true : admin.firestore.FieldValue.delete(),
+        terminalFailure: isTerminalFailure ? true : FieldValue.delete(),
         terminalFailureAt: isTerminalFailure
-            ? admin.firestore.FieldValue.serverTimestamp()
-            : admin.firestore.FieldValue.delete(),
+            ? FieldValue.serverTimestamp()
+            : FieldValue.delete(),
     }, { merge: true });
 }
 
@@ -199,9 +200,9 @@ async function processSportsLibRouteReparseTaskRequest(
     await jobRef.set({
         status: 'processing',
         attemptCount: nextAttemptCount,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        terminalFailure: admin.firestore.FieldValue.delete(),
-        terminalFailureAt: admin.firestore.FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+        terminalFailure: FieldValue.delete(),
+        terminalFailureAt: FieldValue.delete(),
     }, { merge: true });
 
     try {
@@ -218,9 +219,9 @@ async function processSportsLibRouteReparseTaskRequest(
                 status: 'skipped',
                 reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                 targetSportsLibVersion,
-                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                terminalFailure: admin.firestore.FieldValue.delete(),
-                terminalFailureAt: admin.firestore.FieldValue.delete(),
+                checkedAt: FieldValue.serverTimestamp(),
+                terminalFailure: FieldValue.delete(),
+                terminalFailureAt: FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('status_write_skipped');
@@ -229,21 +230,21 @@ async function processSportsLibRouteReparseTaskRequest(
 
             await jobRef.set({
                 status: 'skipped',
-                processedAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                lastError: admin.firestore.FieldValue.delete(),
-                terminalFailure: admin.firestore.FieldValue.delete(),
-                terminalFailureAt: admin.firestore.FieldValue.delete(),
+                processedAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+                lastError: FieldValue.delete(),
+                terminalFailure: FieldValue.delete(),
+                terminalFailureAt: FieldValue.delete(),
             }, { merge: true });
         } else {
             const statusWritten = await writeWorkerRouteReparseStatus(job, jobId, {
                 status: 'completed',
                 targetSportsLibVersion,
-                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                processedAt: admin.firestore.FieldValue.serverTimestamp(),
+                checkedAt: FieldValue.serverTimestamp(),
+                processedAt: FieldValue.serverTimestamp(),
                 lastError: '',
-                terminalFailure: admin.firestore.FieldValue.delete(),
-                terminalFailureAt: admin.firestore.FieldValue.delete(),
+                terminalFailure: FieldValue.delete(),
+                terminalFailureAt: FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('status_write_skipped');
@@ -252,11 +253,11 @@ async function processSportsLibRouteReparseTaskRequest(
 
             await jobRef.set({
                 status: 'completed',
-                processedAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                lastError: admin.firestore.FieldValue.delete(),
-                terminalFailure: admin.firestore.FieldValue.delete(),
-                terminalFailureAt: admin.firestore.FieldValue.delete(),
+                processedAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+                lastError: FieldValue.delete(),
+                terminalFailure: FieldValue.delete(),
+                terminalFailureAt: FieldValue.delete(),
             }, { merge: true });
         }
 
@@ -300,12 +301,12 @@ async function processSportsLibRouteReparseTaskRequest(
                 status: 'failed',
                 reason: 'REPARSE_FAILED',
                 targetSportsLibVersion,
-                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                checkedAt: FieldValue.serverTimestamp(),
                 lastError: errorMessage,
-                terminalFailure: terminalFailure ? true : admin.firestore.FieldValue.delete(),
+                terminalFailure: terminalFailure ? true : FieldValue.delete(),
                 terminalFailureAt: terminalFailure
-                    ? admin.firestore.FieldValue.serverTimestamp()
-                    : admin.firestore.FieldValue.delete(),
+                    ? FieldValue.serverTimestamp()
+                    : FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('failure_status_write_skipped');

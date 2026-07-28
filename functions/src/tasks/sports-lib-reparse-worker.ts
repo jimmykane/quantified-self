@@ -1,5 +1,6 @@
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
@@ -80,15 +81,15 @@ async function markJobFailed(
     const isTerminalFailure = options?.terminalFailure === true;
     await jobRef.set({
         status: 'failed',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        processedAt: FieldValue.serverTimestamp(),
         lastError: errorMessage,
-        failureReason: options?.failureReason || admin.firestore.FieldValue.delete(),
-        terminalFailure: isTerminalFailure ? true : admin.firestore.FieldValue.delete(),
+        failureReason: options?.failureReason || FieldValue.delete(),
+        terminalFailure: isTerminalFailure ? true : FieldValue.delete(),
         terminalFailureAt: isTerminalFailure
-            ? admin.firestore.FieldValue.serverTimestamp()
-            : admin.firestore.FieldValue.delete(),
-        ...(options?.clearEnqueuedAt ? { enqueuedAt: admin.firestore.FieldValue.delete() } : {}),
+            ? FieldValue.serverTimestamp()
+            : FieldValue.delete(),
+        ...(options?.clearEnqueuedAt ? { enqueuedAt: FieldValue.delete() } : {}),
     }, { merge: true });
 }
 
@@ -98,14 +99,14 @@ async function markJobSuperseded(
 ): Promise<void> {
     await jobRef.set({
         status: 'superseded',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        processedAt: admin.firestore.FieldValue.serverTimestamp(),
-        supersededAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        processedAt: FieldValue.serverTimestamp(),
+        supersededAt: FieldValue.serverTimestamp(),
         supersededBySportsLibVersion: runtimeSportsLibVersion,
-        lastError: admin.firestore.FieldValue.delete(),
-        failureReason: admin.firestore.FieldValue.delete(),
-        terminalFailure: admin.firestore.FieldValue.delete(),
-        terminalFailureAt: admin.firestore.FieldValue.delete(),
+        lastError: FieldValue.delete(),
+        failureReason: FieldValue.delete(),
+        terminalFailure: FieldValue.delete(),
+        terminalFailureAt: FieldValue.delete(),
     }, { merge: true });
 }
 
@@ -243,13 +244,13 @@ async function requeueHeavyFromNormalWorker(
         processingTier: SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy,
         heavyReason: SPORTS_LIB_REPARSE_HEAVY_REASONS.Duration,
         eventDurationMs,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
-        processedAt: admin.firestore.FieldValue.delete(),
-        lastError: admin.firestore.FieldValue.delete(),
-        failureReason: admin.firestore.FieldValue.delete(),
-        terminalFailure: admin.firestore.FieldValue.delete(),
-        terminalFailureAt: admin.firestore.FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+        enqueuedAt: FieldValue.serverTimestamp(),
+        processedAt: FieldValue.delete(),
+        lastError: FieldValue.delete(),
+        failureReason: FieldValue.delete(),
+        terminalFailure: FieldValue.delete(),
+        terminalFailureAt: FieldValue.delete(),
     }, { merge: true });
 
     let taskCreated = false;
@@ -311,10 +312,10 @@ async function markJobTooHeavyForAutomaticReparse(
         status: 'failed',
         reason: failureReason,
         targetSportsLibVersion,
-        checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+        checkedAt: FieldValue.serverTimestamp(),
         lastError: errorMessage,
         terminalFailure: true,
-        terminalFailureAt: admin.firestore.FieldValue.serverTimestamp(),
+        terminalFailureAt: FieldValue.serverTimestamp(),
     });
     if (!statusWritten) {
         await deleteJobForUserDeletion(jobRef, jobId, job, 'too_heavy_status_write_skipped');
@@ -491,10 +492,10 @@ async function processSportsLibReparseTaskRequest(
             ? SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy
             : (job.processingTier || SPORTS_LIB_REPARSE_PROCESSING_TIERS.Normal),
         attemptCount: nextAttemptCount,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        failureReason: admin.firestore.FieldValue.delete(),
-        terminalFailure: admin.firestore.FieldValue.delete(),
-        terminalFailureAt: admin.firestore.FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+        failureReason: FieldValue.delete(),
+        terminalFailure: FieldValue.delete(),
+        terminalFailureAt: FieldValue.delete(),
     }, { merge: true });
 
     logger.info('[sports-lib-reparse-worker] Job started.', {
@@ -527,9 +528,9 @@ async function processSportsLibReparseTaskRequest(
                 status: 'skipped',
                 reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                 targetSportsLibVersion,
-                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                terminalFailure: admin.firestore.FieldValue.delete(),
-                terminalFailureAt: admin.firestore.FieldValue.delete(),
+                checkedAt: FieldValue.serverTimestamp(),
+                terminalFailure: FieldValue.delete(),
+                terminalFailureAt: FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('status_write_skipped');
@@ -539,11 +540,11 @@ async function processSportsLibReparseTaskRequest(
             const statusWritten = await writeWorkerReparseStatus(job, jobId, {
                 status: 'completed',
                 targetSportsLibVersion,
-                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                processedAt: admin.firestore.FieldValue.serverTimestamp(),
+                checkedAt: FieldValue.serverTimestamp(),
+                processedAt: FieldValue.serverTimestamp(),
                 lastError: '',
-                terminalFailure: admin.firestore.FieldValue.delete(),
-                terminalFailureAt: admin.firestore.FieldValue.delete(),
+                terminalFailure: FieldValue.delete(),
+                terminalFailureAt: FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('status_write_skipped');
@@ -553,12 +554,12 @@ async function processSportsLibReparseTaskRequest(
 
         await jobRef.set({
             status: 'completed',
-            processedAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastError: admin.firestore.FieldValue.delete(),
-            failureReason: admin.firestore.FieldValue.delete(),
-            terminalFailure: admin.firestore.FieldValue.delete(),
-            terminalFailureAt: admin.firestore.FieldValue.delete(),
+            processedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+            lastError: FieldValue.delete(),
+            failureReason: FieldValue.delete(),
+            terminalFailure: FieldValue.delete(),
+            terminalFailureAt: FieldValue.delete(),
         }, { merge: true });
 
         logger.info('[sports-lib-reparse-worker] Job completed.', {
@@ -604,12 +605,12 @@ async function processSportsLibReparseTaskRequest(
                 status: 'failed',
                 reason: failureReason,
                 targetSportsLibVersion,
-                checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                checkedAt: FieldValue.serverTimestamp(),
                 lastError: errorMessage,
-                terminalFailure: terminalFailure ? true : admin.firestore.FieldValue.delete(),
+                terminalFailure: terminalFailure ? true : FieldValue.delete(),
                 terminalFailureAt: terminalFailure
-                    ? admin.firestore.FieldValue.serverTimestamp()
-                    : admin.firestore.FieldValue.delete(),
+                    ? FieldValue.serverTimestamp()
+                    : FieldValue.delete(),
             });
             if (!statusWritten) {
                 await deleteForUserDeletion('failure_status_write_skipped');

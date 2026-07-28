@@ -298,18 +298,19 @@ vi.mock('firebase-admin', () => {
         doc: hoisted.firestoreDoc,
         recursiveDelete: hoisted.recursiveDelete,
     }));
-    Object.assign(firestoreFn, {
-        FieldValue: {
-            serverTimestamp: hoisted.serverTimestamp,
-            delete: hoisted.deleteField,
-        },
-        FieldPath: {
-            documentId: () => '__name__',
-        },
-    });
 
     return { firestore: firestoreFn };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldPath: {
+        documentId: () => '__name__',
+    },
+    FieldValue: {
+        serverTimestamp: hoisted.serverTimestamp,
+        delete: hoisted.deleteField,
+    },
+}));
 
 import { scheduleSportsLibReparseScan } from './sports-lib-reparse';
 

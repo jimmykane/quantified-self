@@ -28,6 +28,9 @@ const hoisted = vi.hoisted(() => {
   const mockGenerateMergeEventID = vi.fn(() => 'merged-event-id');
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
+  const mockTimestampFromDate = vi.fn((date: Date) => ({
+    toMillis: () => date.getTime(),
+  }));
   const mockStorageSave = vi.fn();
   const mockStorageGetMetadata = vi.fn();
 
@@ -104,6 +107,7 @@ const hoisted = vi.hoisted(() => {
       mockGenerateMergeEventID,
       mockSportsLibVersionToCode,
       mockServerTimestamp,
+      mockTimestampFromDate,
       mockStorageSave,
       mockStorageGetMetadata,
       mockEventImporterJSON,
@@ -189,12 +193,6 @@ vi.mock('firebase-admin', () => {
     }),
   }));
 
-  Object.assign(firestoreFn, {
-    FieldValue: {
-      serverTimestamp: hoisted.mockServerTimestamp,
-    },
-  });
-
   return {
     firestore: firestoreFn,
     storage: () => ({
@@ -232,6 +230,15 @@ vi.mock('firebase-admin', () => {
     }),
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    serverTimestamp: hoisted.mockServerTimestamp,
+  },
+  Timestamp: {
+    fromDate: hoisted.mockTimestampFromDate,
+  },
+}));
 
 vi.mock('@sports-alliance/sports-lib', () => ({
   EventImporterJSON: hoisted.mockEventImporterJSON,

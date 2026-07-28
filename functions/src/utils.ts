@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { EventInterface } from '@sports-alliance/sports-lib';
@@ -462,7 +463,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       processingEntity: EVENT_PROCESSING_ENTITY,
       sportsLibVersion: SPORTS_LIB_VERSION,
       sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
-      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      processedAt: FieldValue.serverTimestamp(),
     };
 
     const processingMetaRef = admin.firestore()

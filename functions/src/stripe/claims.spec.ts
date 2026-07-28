@@ -85,14 +85,17 @@ const mockFirestore = {
 vi.mock('firebase-admin', () => {
     const firestoreFn = () => mockFirestore;
 
-    firestoreFn.FieldValue = {
-        serverTimestamp: vi.fn().mockReturnValue('SERVER_TIMESTAMP')
-    };
     return {
         auth: () => mockAuth,
         firestore: firestoreFn,
     };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: vi.fn().mockReturnValue('SERVER_TIMESTAMP')
+    }
+}));
 
 // Update mock to return the handler
 vi.mock('firebase-functions/v2/https', () => ({

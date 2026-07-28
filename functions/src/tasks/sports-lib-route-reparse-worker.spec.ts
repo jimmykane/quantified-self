@@ -43,12 +43,15 @@ vi.mock('firebase-admin', () => {
         }),
         recursiveDelete: hoisted.mockRecursiveDelete,
     });
-    (firestore as any).FieldValue = {
-        serverTimestamp: hoisted.mockServerTimestamp,
-        delete: hoisted.mockDelete,
-    };
     return { firestore };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: hoisted.mockServerTimestamp,
+        delete: hoisted.mockDelete,
+    },
+}));
 
 vi.mock('../../../shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: {

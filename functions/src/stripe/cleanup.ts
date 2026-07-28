@@ -19,6 +19,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { getStripe } from './client';
@@ -119,8 +120,8 @@ export const cleanupStripeCustomer = onCall({
         // 4. Cleanup if deleted
         if (customerDeleted) {
             await userRef.update({
-                stripeId: admin.firestore.FieldValue.delete(),
-                stripeLink: admin.firestore.FieldValue.delete()
+                stripeId: FieldValue.delete(),
+                stripeLink: FieldValue.delete()
             });
             logger.info(`Successfully cleaned up stale Stripe ID for user ${uid}.`);
             return { success: true, cleaned: true };

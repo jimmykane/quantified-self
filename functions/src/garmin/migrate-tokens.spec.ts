@@ -62,12 +62,13 @@ mockWhere.mockReturnValue(queryObj);
 mockGet.mockResolvedValue(querySnapshotEmpty);
 
 vi.mock('firebase-admin', () => ({
-    firestore: Object.assign(vi.fn(() => ({
+    firestore: vi.fn(() => ({
         collection: mockCollectionTop,
-    })), {
-        Timestamp: { fromDate: (d: any) => d },
-        FieldValue: { serverTimestamp: () => 'SERVER_TIMESTAMP' }
-    })
+    }))
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: { serverTimestamp: () => 'SERVER_TIMESTAMP' }
 }));
 
 vi.mock('../request-helper', () => ({

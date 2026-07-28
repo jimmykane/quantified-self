@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
@@ -15,7 +16,7 @@ export interface QueueItemInterface {
   dispatchRecoveryGeneration?: number,
   errors?: QueueItemError[],
   processedAt?: number,
-  expireAt?: admin.firestore.Timestamp | Date,
+  expireAt?: Timestamp | Date,
   dispatchedToCloudTask: number | null,
   firebaseUserID?: string,
   resultStatus?: 'success' | 'skipped' | 'deferred',

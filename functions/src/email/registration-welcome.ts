@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { DocumentData } from 'firebase-admin/firestore';
+import { DocumentData, FieldValue } from 'firebase-admin/firestore';
 import {
     getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
@@ -80,7 +80,7 @@ export async function queueRegistrationWelcomeEmail(
         }
 
         transaction.create(lifecycleRef, {
-            registrationWelcomeQueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+            registrationWelcomeQueuedAt: FieldValue.serverTimestamp(),
         });
 
         if (mailDoc.exists) {

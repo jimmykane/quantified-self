@@ -11,16 +11,15 @@ const {
 }));
 
 vi.mock('firebase-admin', () => ({
-  firestore: Object.assign(firestoreMock, {
-    Timestamp: {
-      fromMillis: timestampFromMillisMock,
-    },
-  }),
+  firestore: firestoreMock,
 }));
 
 vi.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     delete: fieldValueDeleteMock,
+  },
+  Timestamp: {
+    fromMillis: timestampFromMillisMock,
   },
 }));
 

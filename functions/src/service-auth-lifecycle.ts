@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
   Auth2ServiceTokenInterface,
@@ -248,8 +249,8 @@ function getSnapshotDataForOperationalCleanup(snapshot: DocumentSnapshot | Query
 }
 
 function areFirestoreTimestampsEqual(
-  left: admin.firestore.Timestamp | null | undefined,
-  right: admin.firestore.Timestamp | null | undefined,
+  left: Timestamp | null | undefined,
+  right: Timestamp | null | undefined,
 ): boolean {
   if (!left || !right) {
     return left === right;

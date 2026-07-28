@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 
@@ -31,7 +32,7 @@ export async function markQueueItemDeletedForUserCleanup(
                 originalCollection: collectionName,
                 queueItemId,
                 reason,
-                deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+                deletedAt: FieldValue.serverTimestamp(),
                 expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
             }, { merge: true });
         return true;
