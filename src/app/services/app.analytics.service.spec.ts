@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppAnalyticsService } from './app.analytics.service';
+import { Analytics } from 'app/firebase/analytics';
 import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { BehaviorSubject } from 'rxjs';
@@ -7,7 +8,6 @@ import { User } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LoggerService } from './logger.service';
 import { APP_STORAGE } from './storage/app.storage.token';
-import { DeferredFirebaseAnalyticsService } from './deferred-firebase-analytics.service';
 
 // Mock firebase/analytics (not app/firebase/analytics)
 vi.mock('firebase/analytics', async (importOriginal) => {
@@ -35,7 +35,6 @@ describe('AppAnalyticsService', () => {
     let mockLogger: any;
     let mockStorage: Storage;
     let storageValues: Map<string, string>;
-    let deferredAnalytics: { run: ReturnType<typeof vi.fn> };
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -47,12 +46,6 @@ describe('AppAnalyticsService', () => {
             warn: vi.fn(),
             error: vi.fn(),
             log: vi.fn()
-        };
-        deferredAnalytics = {
-            run: vi.fn((task: (analytics: object) => void) => {
-                task({});
-                return true;
-            }),
         };
         storageValues = new Map<string, string>();
         mockStorage = {
@@ -69,7 +62,7 @@ describe('AppAnalyticsService', () => {
         TestBed.configureTestingModule({
             providers: [
                 AppAnalyticsService,
-                { provide: DeferredFirebaseAnalyticsService, useValue: deferredAnalytics },
+                { provide: Analytics, useValue: {} },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: APP_STORAGE, useValue: mockStorage },
@@ -127,7 +120,7 @@ describe('AppAnalyticsService', () => {
         TestBed.configureTestingModule({
             providers: [
                 AppAnalyticsService,
-                { provide: DeferredFirebaseAnalyticsService, useValue: deferredAnalytics },
+                { provide: Analytics, useValue: {} },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: APP_STORAGE, useValue: mockStorage },
@@ -142,24 +135,6 @@ describe('AppAnalyticsService', () => {
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'test_event', { param: 1 });
         expect(setAnalyticsCollectionEnabled).toHaveBeenCalledWith(expect.anything(), true);
-    });
-
-    it('queues consented events until deferred Analytics becomes ready', () => {
-        const queuedTasks: Array<(analytics: object) => void> = [];
-        deferredAnalytics.run.mockImplementation((task: (analytics: object) => void) => {
-            queuedTasks.push(task);
-            return true;
-        });
-        userSubject.next({ acceptedTrackingPolicy: true } as User);
-
-        expect(service.logEvent('deferred_event', { source: 'test' })).toBe(true);
-        expect(logEvent).not.toHaveBeenCalled();
-
-        queuedTasks.forEach(task => task({}));
-
-        expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'deferred_event', {
-            source: 'test',
-        });
     });
 
     it('should log route metadata when toggling an activity sync route', () => {

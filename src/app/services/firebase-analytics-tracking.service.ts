@@ -2,26 +2,30 @@ import { DestroyRef, Injectable, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { Analytics } from 'app/firebase/analytics';
 import { Auth, user } from 'app/firebase/auth';
 import { logEvent, setUserId } from 'firebase/analytics';
 import { LoggerService } from './logger.service';
-import { DeferredFirebaseAnalyticsService } from './deferred-firebase-analytics.service';
 
 @Injectable({ providedIn: 'root' })
 export class FirebaseAnalyticsTrackingService {
-  private deferredAnalytics = inject(DeferredFirebaseAnalyticsService);
+  private analytics = inject(Analytics, { optional: true });
   private auth = inject(Auth, { optional: true });
   private router = inject(Router, { optional: true });
   private logger = inject(LoggerService);
   private destroyRef = inject(DestroyRef);
 
   constructor() {
+    if (!this.analytics) {
+      return;
+    }
+
     this.initializeScreenTracking();
     this.initializeUserTracking();
   }
 
   private initializeScreenTracking(): void {
-    if (!this.router) {
+    if (!this.router || !this.analytics) {
       return;
     }
 
@@ -31,18 +35,16 @@ export class FirebaseAnalyticsTrackingService {
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe((event) => {
-        const screenClass = this.resolveScreenClassName();
-        const screenPath = this.sanitizeScreenPath(event.urlAfterRedirects);
-        this.deferredAnalytics.run(analytics => {
-          try {
-            logEvent(analytics, 'screen_view', {
-              firebase_screen: screenPath,
-              firebase_screen_class: screenClass,
-            });
-          } catch (error) {
-            this.logger.warn('[FirebaseAnalyticsTrackingService] Failed to track screen view', error);
-          }
-        });
+        try {
+          const screenClass = this.resolveScreenClassName();
+          const screenPath = this.sanitizeScreenPath(event.urlAfterRedirects);
+          logEvent(this.analytics!, 'screen_view', {
+            firebase_screen: screenPath,
+            firebase_screen_class: screenClass,
+          });
+        } catch (error) {
+          this.logger.warn('[FirebaseAnalyticsTrackingService] Failed to track screen view', error);
+        }
       });
   }
 
@@ -94,21 +96,18 @@ export class FirebaseAnalyticsTrackingService {
   }
 
   private initializeUserTracking(): void {
-    if (!this.auth) {
+    if (!this.auth || !this.analytics) {
       return;
     }
 
     user(this.auth)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((firebaseUser) => {
-        const userId = firebaseUser?.uid ?? null;
-        this.deferredAnalytics.run(analytics => {
-          try {
-            setUserId(analytics, userId);
-          } catch (error) {
-            this.logger.warn('[FirebaseAnalyticsTrackingService] Failed to set analytics user id', error);
-          }
-        });
+        try {
+          setUserId(this.analytics!, firebaseUser?.uid ?? null);
+        } catch (error) {
+          this.logger.warn('[FirebaseAnalyticsTrackingService] Failed to set analytics user id', error);
+        }
       });
   }
 }
