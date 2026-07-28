@@ -62,7 +62,6 @@ import {
   SLEEP_STAGES,
   SleepProvider,
   SleepStage,
-  SleepVitals,
 } from '../../../shared/sleep';
 import {
   MCP_SLEEP_VITAL_DESCRIPTORS,
@@ -2434,7 +2433,9 @@ function normalizeSleepProvider(value: unknown): SleepProvider | null {
     : null;
 }
 
-function normalizeSleepVitals(value: unknown): Partial<SleepVitals> | null {
+type McpSafeSleepVitals = Partial<Record<McpSleepVitalType, number>>;
+
+function normalizeSleepVitals(value: unknown): McpSafeSleepVitals | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
@@ -2452,7 +2453,7 @@ function normalizeSleepVitals(value: unknown): Partial<SleepVitals> | null {
       entries.push([key, numeric]);
     }
   });
-  const normalized = Object.fromEntries(entries) as Partial<SleepVitals>;
+  const normalized = Object.fromEntries(entries) as McpSafeSleepVitals;
   return Object.keys(normalized).length ? normalized : null;
 }
 
@@ -2479,7 +2480,7 @@ export interface SafeSleepSession {
     value: number | null;
     qualifier: string | null;
   } | null;
-  vitals: Partial<SleepVitals> | null;
+  vitals: McpSafeSleepVitals | null;
 }
 
 function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | null {
@@ -2579,7 +2580,7 @@ export interface McpSleepSummaryBucket {
   averageInBedDurationSeconds: number | null;
   averageScore: number | null;
   stageDurationsSeconds: Partial<Record<SleepStage, number>>;
-  averageVitals: Partial<SleepVitals>;
+  averageVitals: McpSafeSleepVitals;
 }
 
 export interface QuerySleepSummaryResult {
@@ -2959,9 +2960,9 @@ interface SleepSummaryAccumulator {
   inBedCount: number;
   score: number;
   scoreCount: number;
-  stageDurationsSeconds: Record<string, number>;
-  vitalSums: Record<string, number>;
-  vitalCounts: Record<string, number>;
+  stageDurationsSeconds: Partial<Record<SleepStage, number>>;
+  vitalSums: McpSafeSleepVitals;
+  vitalCounts: McpSafeSleepVitals;
 }
 
 function buildSleepVitalAvailability(
@@ -3025,15 +3026,20 @@ function buildSleepSummaryResult(
       accumulator.score += session.score.value;
       accumulator.scoreCount += 1;
     }
-    Object.entries(session.stageDurationsSeconds).forEach(([stage, duration]) => {
-      accumulator.stageDurationsSeconds[stage] =
-        (accumulator.stageDurationsSeconds[stage] || 0) + Number(duration);
+    Object.values(SLEEP_STAGES).forEach((stage) => {
+      const duration = session.stageDurationsSeconds[stage];
+      if (duration !== undefined) {
+        accumulator.stageDurationsSeconds[stage] =
+          (accumulator.stageDurationsSeconds[stage] || 0) + duration;
+      }
     });
-    Object.entries(session.vitals || {}).forEach(([key, value]) => {
-      const numeric = asNonNegativeNumber(value);
+    MCP_SLEEP_VITAL_TYPES.forEach((type) => {
+      const numeric = asNonNegativeNumber(session.vitals?.[type]);
       if (numeric !== null) {
-        accumulator.vitalSums[key] = (accumulator.vitalSums[key] || 0) + numeric;
-        accumulator.vitalCounts[key] = (accumulator.vitalCounts[key] || 0) + 1;
+        accumulator.vitalSums[type] =
+          (accumulator.vitalSums[type] || 0) + numeric;
+        accumulator.vitalCounts[type] =
+          (accumulator.vitalCounts[type] || 0) + 1;
       }
     });
     buckets.set(bucketStartMs, accumulator);
@@ -3057,11 +3063,14 @@ function buildSleepSummaryResult(
         averageScore: bucket.scoreCount ? bucket.score / bucket.scoreCount : null,
         stageDurationsSeconds: bucket.stageDurationsSeconds,
         averageVitals: Object.fromEntries(
-          Object.entries(bucket.vitalSums).map(([key, sum]) => [
-            key,
-            sum / bucket.vitalCounts[key],
-          ]),
-        ),
+          MCP_SLEEP_VITAL_TYPES.flatMap((type) => {
+            const sum = bucket.vitalSums[type];
+            const observations = bucket.vitalCounts[type];
+            return sum !== undefined && observations
+              ? [[type, sum / observations]]
+              : [];
+          }),
+        ) as McpSafeSleepVitals,
       })),
   };
 }

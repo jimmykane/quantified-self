@@ -1841,6 +1841,33 @@ describe('MCP public output contracts', () => {
         hrvSamples: [{ value: 55 }],
       }],
     }).success).toBe(false);
+    expect(registry.get_sleep_trend.safeParse({
+      rangeStartTimeMs: DAY_MS,
+      rangeEndTimeMs: NEXT_DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      groupBy: 'day',
+      matchedSessionCount: 1,
+      availableVitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+      buckets: [{
+        bucketStartMs: DAY_MS,
+        sessionCount: 1,
+        providers: ['GarminAPI'],
+        totalDurationSeconds: 28_800,
+        averageDurationSeconds: 28_800,
+        averageInBedDurationSeconds: null,
+        averageScore: 80,
+        stageDurationsSeconds: {},
+        averageVitals: {
+          overnightHrvMs: 55,
+          providerRecoveryScore: 99,
+        },
+      }],
+    }).success).toBe(false);
     expect(registry.list_route_waypoints.safeParse({
       waypoints: [{
         index: 0,

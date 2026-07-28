@@ -3934,6 +3934,7 @@ describe('MCP data service', () => {
         score: { value: 72, qualifier: 'fair' },
         vitals: {
           averageHrvMs: 41,
+          providerRecoveryScore: 99,
         },
         hrvSamples: [{ value: 41, timestampMs: 1_712_030_400_000 }],
         providerFields: { garmin: { private: true } },
@@ -4000,6 +4001,7 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('providerUserId');
     expect(JSON.stringify(result)).not.toContain('hrvSamples');
     expect(JSON.stringify(result)).not.toContain('providerFields');
+    expect(JSON.stringify(result)).not.toContain('providerRecoveryScore');
   });
 
   it('rejects a sleep trend that exceeds the shared session budget', async () => {
