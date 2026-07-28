@@ -56,7 +56,11 @@ vi.mock('@shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: {
         'aiInsights': { name: 'aiInsights', region: 'europe-west2' },
         'getAiInsightsQuotaStatus': { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
-        'defaultRegionFunc': { name: 'func1', region: 'europe-west2' },
+        'defaultRegionFunc': {
+            name: 'func1',
+            region: 'europe-west2',
+            clientTimeoutMs: 3_660_000,
+        },
         'otherRegionFunc': { name: 'func2', region: 'europe-west3' }
     }
 }));
@@ -111,7 +115,22 @@ describe('AppFunctionsService', () => {
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
         expect(getFunctions).toHaveBeenCalledTimes(2);
         expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(4);
+        expect(httpsCallable).toHaveBeenCalledWith(
+            expect.anything(),
+            'func1',
+            { timeout: 3_660_000 },
+        );
         expect(connectFunctionsEmulator).not.toHaveBeenCalled();
+    });
+
+    it('should keep the production merge callable deadline beyond the server runtime budget', async () => {
+        const actualManifest = await vi.importActual<typeof import('@shared/functions-manifest')>(
+            '@shared/functions-manifest',
+        );
+
+        expect(actualManifest.FUNCTIONS_MANIFEST.mergeEvents.clientTimeoutMs)
+            .toBe(actualManifest.MERGE_EVENTS_CLIENT_TIMEOUT_MS);
+        expect(actualManifest.MERGE_EVENTS_CLIENT_TIMEOUT_MS).toBeGreaterThan(60 * 60 * 1000);
     });
 
     it('should call the pre-initialized callable', async () => {
@@ -221,7 +240,11 @@ describe('AppFunctionsService', () => {
         expect(connectFunctionsEmulator).toHaveBeenCalledWith(europeWest3Functions, '127.0.0.1', 5001);
         expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'aiInsights');
         expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'getAiInsightsQuotaStatus');
-        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'func1');
+        expect(httpsCallable).toHaveBeenCalledWith(
+            expect.anything(),
+            'func1',
+            { timeout: 3_660_000 },
+        );
         expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'func2');
         expect(localService).toBeTruthy();
     });

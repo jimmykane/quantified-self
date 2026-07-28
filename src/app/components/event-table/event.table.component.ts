@@ -154,7 +154,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
-      this.processChanges('on_changes_events');
+      this.processChanges('on_changes_events', true);
     }
     if (this.user && simpleChanges.user) {
       this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
@@ -190,7 +190,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.isHandset = nextIsHandset;
         this.updateDisplayedColumns();
         if (this.events && this.data.paginator && this.data.sort) {
-          this.processChanges('breakpoint_change');
+          this.processChanges('breakpoint_change', true);
         }
         this.changeDetector.markForCheck();
       });
@@ -947,8 +947,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private restoreEventSelection(selectedRows: StatRowElement[]): void {
+    const currentRows = this.data.data as StatRowElement[];
     const currentRowsByEventID = new Map<string, StatRowElement>();
-    (this.data.data as StatRowElement[]).forEach((row) => {
+    currentRows.forEach((row) => {
       const eventID = row?.Event?.getID?.();
       if (eventID) {
         currentRowsByEventID.set(eventID, row);
@@ -958,7 +959,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.selection.clear();
     selectedRows.forEach((fallbackRow) => {
       const eventID = fallbackRow?.Event?.getID?.();
-      this.selection.select((eventID && currentRowsByEventID.get(eventID)) || fallbackRow);
+      const currentRow = eventID ? currentRowsByEventID.get(eventID) : undefined;
+      if (currentRow) {
+        this.selection.select(currentRow);
+      } else if (eventID && currentRows.length === 0) {
+        this.selection.select(fallbackRow);
+      }
     });
   }
 
@@ -1024,7 +1030,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return false
   }
 
-  private processChanges(trigger: string = 'unknown') {
+  private processChanges(trigger: string = 'unknown', preserveSelection: boolean = false) {
     if (!this.events || !this.user) {
       return;
     }
@@ -1043,8 +1049,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     let cacheReferenceMismatches = 0;
     let cacheContextMismatches = 0;
     let cacheContentMismatches = 0;
+    const selectedEventIDs = preserveSelection
+      ? new Set(
+        this.selection.selected
+          .map(row => this.getEventID(row?.Event))
+          .filter((eventID): eventID is string => !!eventID),
+      )
+      : new Set<string>();
 
-    this.selection.clear();
     for (const event of this.events) {
       if (!event) {
         continue;
@@ -1100,6 +1112,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     this.rowCache = nextRowCache;
     this.data.data = rows;
+    this.selection.clear();
+    if (selectedEventIDs.size > 0) {
+      rows.forEach((row) => {
+        const eventID = this.getEventID(row?.Event);
+        if (eventID && selectedEventIDs.has(eventID)) {
+          this.selection.select(row);
+        }
+      });
+    }
     this.tagFilterOptions = normalizeEventTagSuggestions(
       rows.flatMap(row => row['Tag Values'] || []),
     ).sort((first, second) => first.localeCompare(second));

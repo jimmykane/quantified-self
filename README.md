@@ -203,6 +203,7 @@ These policies are infrastructure configuration; starting local emulators does n
 - [Email lifecycle](docs/email-lifecycle.md)
 - [Firebase Auth link-domain routing](docs/firebase-auth-link-domain-routing.md)
 - [Connected-provider attribution audit](docs/connected-provider-attribution-audit.md)
+- [Event merge idempotency and recovery](docs/event-merge-idempotency.md)
 - [Pricing and usage limits](docs/PRICING_AND_LIMITS.md)
 - [User deletion workflow](docs/user-deletion-workflow.html)
 

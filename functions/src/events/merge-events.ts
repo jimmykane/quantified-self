@@ -59,6 +59,8 @@ interface SourceEventLoadResult {
   sourceFiles: SourceFileMeta[];
 }
 
+type SourceEventDocumentData = FirestoreEventJSON | Record<string, unknown>;
+
 const MAX_SOURCE_EVENTS = 10;
 const GENERATED_MERGE_DESCRIPTION_PREFIX = 'a merge of 2 or more activit';
 const PRIMARY_BUCKET = 'quantified-self-io';
@@ -474,13 +476,31 @@ async function getEventCountForUser(userID: string): Promise<number> {
   return countSnapshot.data().count;
 }
 
-async function loadSourceEvent(userID: string, eventID: string): Promise<SourceEventLoadResult> {
-  const eventSnapshot = await admin.firestore().doc(`users/${userID}/events/${eventID}`).get();
-  if (!eventSnapshot.exists) {
-    throw new HttpsError('not-found', `Event ${eventID} was not found for this user.`);
-  }
+async function loadSourceEventDocuments(
+  userID: string,
+  eventIDs: string[],
+): Promise<Map<string, SourceEventDocumentData>> {
+  const eventSnapshots = await Promise.all(eventIDs.map(eventID => (
+    admin.firestore().doc(`users/${userID}/events/${eventID}`).get()
+  )));
+  const eventDocuments = new Map<string, SourceEventDocumentData>();
 
-  const eventData = eventSnapshot.data() as FirestoreEventJSON | Record<string, unknown>;
+  eventSnapshots.forEach((eventSnapshot, index) => {
+    const eventID = eventIDs[index];
+    if (!eventSnapshot.exists) {
+      throw new HttpsError('not-found', `Event ${eventID} was not found for this user.`);
+    }
+    eventDocuments.set(eventID, eventSnapshot.data() as SourceEventDocumentData);
+  });
+
+  return eventDocuments;
+}
+
+async function loadSourceEvent(
+  userID: string,
+  eventID: string,
+  eventData: SourceEventDocumentData,
+): Promise<SourceEventLoadResult> {
   const activitiesSnapshot = await admin.firestore()
     .collection(`users/${userID}/activities`)
     .where('eventID', '==', eventID)
@@ -581,6 +601,9 @@ export const mergeEvents = onCall({
   const mergeType = normalizeMergeType(payload?.mergeType);
   const requestFingerprint = buildMergeRequestFingerprint(eventIDs, mergeType);
   let executionClaim: Extract<MergeOperationClaim, { kind: 'execute' }> | null = null;
+  const sourceEventPreparation: {
+    documents: Map<string, SourceEventDocumentData> | null;
+  } = { documents: null };
 
   try {
     await assertEventWriteUserActive(userID, 'merge_event_start');
@@ -589,6 +612,9 @@ export const mergeEvents = onCall({
       eventIDs,
       mergeType,
       requestFingerprint,
+      prepareForExecution: async () => {
+        sourceEventPreparation.documents = await loadSourceEventDocuments(userID, eventIDs);
+      },
     });
     if (operationClaim.kind === 'completed') {
       return operationClaim.response;
@@ -613,9 +639,18 @@ export const mergeEvents = onCall({
       );
     }
 
+    const sourceEventDocuments = sourceEventPreparation.documents;
+    if (!sourceEventDocuments) {
+      throw new HttpsError('internal', 'Source events were not prepared for merge execution.');
+    }
+
     const sourceLoadResults: SourceEventLoadResult[] = [];
     for (const eventID of eventIDs) {
-      sourceLoadResults.push(await loadSourceEvent(userID, eventID));
+      const eventData = sourceEventDocuments.get(eventID);
+      if (!eventData) {
+        throw new HttpsError('internal', `Prepared source event ${eventID} is unavailable.`);
+      }
+      sourceLoadResults.push(await loadSourceEvent(userID, eventID, eventData));
     }
 
     const sourceEvents = sourceLoadResults.map(result => result.event);
@@ -643,12 +678,11 @@ export const mergeEvents = onCall({
       uploadLimit,
       uploadCountAfterWrite: currentCountWithoutClaimedResult + 1,
     };
-    await completeMergeOperation({
+    return await completeMergeOperation({
       userID,
       claim: executionClaim,
       response,
     });
-    return response;
   } catch (error) {
     if (executionClaim) {
       try {

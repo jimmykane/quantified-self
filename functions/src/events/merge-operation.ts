@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { createHash, randomUUID } from 'node:crypto';
 
+import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
 import { setEventDocumentIfUserActive } from '../utils';
 
 export type MergeType = 'benchmark' | 'multi';
@@ -50,8 +51,17 @@ export type MergeOperationClaim =
 
 const MERGE_OPERATION_SCHEMA_VERSION = 1;
 const MERGE_OPERATION_COLLECTION = 'eventMergeOperations';
-const MERGE_OPERATION_LEASE_MS = 2 * 60 * 1000;
+const MERGE_OPERATION_LEASE_GRACE_MS = 60 * 1000;
+const MERGE_OPERATION_LEASE_MS = (
+  ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS.timeoutSeconds * 1000
+) + MERGE_OPERATION_LEASE_GRACE_MS;
 const SAFE_DOCUMENT_ID_MAX_LENGTH = 128;
+
+interface MergeOperationRequestIdentity {
+  requestFingerprint: string;
+  mergeType: MergeType;
+  sourceEventsCount: number;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -59,6 +69,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function hasValidOperationStatusState(value: Record<string, unknown>): boolean {
+  const hasOwnerToken = typeof value.ownerToken === 'string'
+    && value.ownerToken.length > 0
+    && value.ownerToken.length <= 128;
+  const hasNoOwnerToken = value.ownerToken === null;
+  const hasLease = isNonNegativeInteger(value.leaseExpiresAtMs)
+    && value.leaseExpiresAtMs > 0;
+  const hasNoLease = value.leaseExpiresAtMs === 0;
+
+  if (value.status === 'processing') {
+    return hasOwnerToken
+      && hasLease
+      && value.response === null
+      && value.lastErrorCode === null;
+  }
+  if (value.status === 'completed') {
+    return hasNoOwnerToken
+      && hasNoLease
+      && value.response !== null
+      && value.lastErrorCode === null;
+  }
+  if (value.status === 'retryable') {
+    return hasNoOwnerToken
+      && hasNoLease
+      && value.response === null
+      && typeof value.lastErrorCode === 'string'
+      && value.lastErrorCode.length > 0
+      && value.lastErrorCode.length <= 64;
+  }
+  return false;
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -122,13 +164,41 @@ function asOperationRecord(value: unknown): MergeOperationRecord | null {
     || !isNonNegativeInteger(value.sourceEventsCount)
     || !isSafeMergeDocumentId(value.resultEventId)
     || !isNonNegativeInteger(value.attemptCount)
-    || (value.ownerToken !== null && typeof value.ownerToken !== 'string')
-    || typeof value.leaseExpiresAtMs !== 'number'
+    || value.attemptCount === 0
+    || !hasValidOperationStatusState(value)
   ) {
     return null;
   }
 
   return value as unknown as MergeOperationRecord;
+}
+
+function assertOperationMatchesRequest(
+  operation: MergeOperationRecord,
+  request: MergeOperationRequestIdentity,
+): void {
+  if (
+    operation.requestFingerprint !== request.requestFingerprint
+    || operation.mergeType !== request.mergeType
+    || operation.sourceEventsCount !== request.sourceEventsCount
+  ) {
+    throw new HttpsError('internal', 'Stored merge operation does not match the request.');
+  }
+}
+
+function asConsistentCompletedResponse(
+  operation: MergeOperationRecord,
+): MergeEventResponse | null {
+  const response = asMergeEventResponse(operation.response);
+  if (
+    !response
+    || response.eventId !== operation.resultEventId
+    || response.mergeType !== operation.mergeType
+    || response.sourceEventsCount !== operation.sourceEventsCount
+  ) {
+    return null;
+  }
+  return response;
 }
 
 function operationDocumentPath(userID: string, requestFingerprint: string): string {
@@ -188,28 +258,48 @@ export async function claimMergeOperation(input: {
   eventIDs: string[];
   mergeType: MergeType;
   requestFingerprint: string;
+  prepareForExecution: () => Promise<void>;
 }): Promise<MergeOperationClaim> {
   const db = admin.firestore();
   const operationRef = db.doc(operationDocumentPath(input.userID, input.requestFingerprint));
   const preflightSnapshot = await operationRef.get();
   const preflightRecord = asOperationRecord(preflightSnapshot.data());
+  const requestIdentity: MergeOperationRequestIdentity = {
+    requestFingerprint: input.requestFingerprint,
+    mergeType: input.mergeType,
+    sourceEventsCount: input.eventIDs.length,
+  };
+
+  if (preflightSnapshot.exists && !preflightRecord) {
+    throw new HttpsError('internal', 'Stored merge operation state is invalid.');
+  }
+  if (preflightRecord) {
+    assertOperationMatchesRequest(preflightRecord, requestIdentity);
+  }
 
   let missingCompletedResultEventId: string | null = null;
-  if (
-    preflightRecord?.status === 'completed'
-    && preflightRecord.requestFingerprint === input.requestFingerprint
-  ) {
-    const completedResponse = asMergeEventResponse(preflightRecord.response);
-    if (completedResponse) {
-      const resultSnapshot = await db
-        .doc(resultEventDocumentPath(input.userID, completedResponse.eventId))
-        .get();
-      if (resultSnapshot.exists) {
-        return { kind: 'completed', response: completedResponse };
-      }
-      missingCompletedResultEventId = completedResponse.eventId;
+  if (preflightRecord?.status === 'completed') {
+    const completedResponse = asConsistentCompletedResponse(preflightRecord);
+    if (!completedResponse) {
+      throw new HttpsError('internal', 'Stored completed merge response is invalid.');
     }
+    const resultSnapshot = await db
+      .doc(resultEventDocumentPath(input.userID, completedResponse.eventId))
+      .get();
+    if (resultSnapshot.exists) {
+      return { kind: 'completed', response: completedResponse };
+    }
+    missingCompletedResultEventId = completedResponse.eventId;
   }
+
+  if (
+    preflightRecord?.status === 'processing'
+    && preflightRecord.leaseExpiresAtMs > Date.now()
+  ) {
+    return { kind: 'in-progress' };
+  }
+
+  await input.prepareForExecution();
 
   const nowMs = Date.now();
   const ownerToken = randomUUID();
@@ -227,12 +317,15 @@ export async function claimMergeOperation(input: {
       if (existingData && !existing) {
         throw new HttpsError('internal', 'Stored merge operation state is invalid.');
       }
-      if (existing && existing.requestFingerprint !== input.requestFingerprint) {
-        throw new HttpsError('internal', 'Stored merge operation fingerprint does not match.');
+      if (existing) {
+        assertOperationMatchesRequest(existing, requestIdentity);
       }
 
       if (existing?.status === 'completed') {
-        const completedResponse = asMergeEventResponse(existing.response);
+        const completedResponse = asConsistentCompletedResponse(existing);
+        if (!completedResponse) {
+          throw new HttpsError('internal', 'Stored completed merge response is invalid.');
+        }
         const completedResultIsMissing = completedResponse
           && missingCompletedResultEventId === completedResponse.eventId
           && existing.attemptCount === preflightRecord?.attemptCount;
@@ -278,13 +371,14 @@ export async function completeMergeOperation(input: {
   userID: string;
   claim: Extract<MergeOperationClaim, { kind: 'execute' }>;
   response: MergeEventResponse;
-}): Promise<void> {
+}): Promise<MergeEventResponse> {
   if (input.response.eventId !== input.claim.resultEventId) {
     throw new HttpsError('internal', 'Merge result does not match the claimed operation.');
   }
 
   const operationRef = admin.firestore()
     .doc(operationDocumentPath(input.userID, input.claim.requestFingerprint));
+  let resolvedResponse: MergeEventResponse | null = null;
 
   await setEventDocumentIfUserActive(
     input.userID,
@@ -294,12 +388,21 @@ export async function completeMergeOperation(input: {
     undefined,
     (_incomingData, existingData) => {
       const existing = asOperationRecord(existingData);
-      if (!existing || existing.requestFingerprint !== input.claim.requestFingerprint) {
+      if (!existing) {
         throw new HttpsError('internal', 'Merge operation disappeared before completion.');
       }
+      assertOperationMatchesRequest(existing, {
+        requestFingerprint: input.claim.requestFingerprint,
+        mergeType: input.response.mergeType,
+        sourceEventsCount: input.response.sourceEventsCount,
+      });
 
-      const completedResponse = asMergeEventResponse(existing.response);
-      if (existing.status === 'completed' && completedResponse) {
+      if (existing.status === 'completed') {
+        const completedResponse = asConsistentCompletedResponse(existing);
+        if (!completedResponse) {
+          throw new HttpsError('internal', 'Stored completed merge response is invalid.');
+        }
+        resolvedResponse = completedResponse;
         return existing;
       }
       if (
@@ -310,6 +413,7 @@ export async function completeMergeOperation(input: {
       }
 
       const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
+      resolvedResponse = input.response;
       return {
         ...existing,
         status: 'completed',
@@ -322,6 +426,11 @@ export async function completeMergeOperation(input: {
       } satisfies MergeOperationRecord;
     },
   );
+
+  if (!resolvedResponse) {
+    throw new HttpsError('internal', 'Could not resolve the completed merge response.');
+  }
+  return resolvedResponse;
 }
 
 export async function markMergeOperationRetryable(input: {
@@ -342,7 +451,20 @@ export async function markMergeOperationRetryable(input: {
     undefined,
     (_incomingData, existingData) => {
       const existing = asOperationRecord(existingData);
+      if (existingData && !existing) {
+        throw new HttpsError('internal', 'Stored merge operation state is invalid.');
+      }
+      if (existing) {
+        assertOperationMatchesRequest(existing, {
+          requestFingerprint: input.claim.requestFingerprint,
+          mergeType: input.mergeType,
+          sourceEventsCount: input.sourceEventsCount,
+        });
+      }
       if (existing?.status === 'completed') {
+        if (!asConsistentCompletedResponse(existing)) {
+          throw new HttpsError('internal', 'Stored completed merge response is invalid.');
+        }
         return existing;
       }
       if (existing && existing.ownerToken !== input.claim.ownerToken) {

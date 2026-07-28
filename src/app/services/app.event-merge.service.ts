@@ -109,7 +109,8 @@ export class AppEventMergeService {
     }
 
     const message = `${(error as { message?: unknown } | null)?.message || ''}`;
-    return /\b504\b|gateway timeout|timed? out|failed to fetch|network request failed/iu.test(message);
+    return /\b50[234]\b|bad gateway|service unavailable|gateway timeout|timed? out|failed to fetch|network(?: request)? failed|network ?error|load failed|connection (?:reset|closed)/iu
+      .test(message);
   }
 
   private async waitBeforeRetry(delayMs: number): Promise<void> {

@@ -116,6 +116,15 @@ describe('AppEventMergeService', () => {
     });
   });
 
+  it('should reconcile a raw gateway failure without a callable error code', async () => {
+    functionsServiceMock.call.mockRejectedValueOnce(new Error('502 Bad Gateway'));
+
+    await expect(service.mergeEvents(['e1', 'e2'], 'benchmark')).resolves.toMatchObject({
+      eventId: 'merged-event-id',
+    });
+    expect(functionsServiceMock.call).toHaveBeenCalledTimes(2);
+  });
+
   it('should reconcile an in-progress response by retrying the identical request', async () => {
     functionsServiceMock.call.mockRejectedValueOnce({
       code: 'functions/aborted',
