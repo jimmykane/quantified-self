@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONNECTED_SERVICES_POLICY_SECTION,
+  POLICY_CONTENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
   POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
+import { REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES } from './policy-consent-fields';
+
+describe('Policy consent fields', () => {
+  it('keeps the lightweight required-consent registry aligned with visible policy controls', () => {
+    const requiredPolicyControls = POLICY_CONTENT
+      .filter(policy => !!policy.checkboxLabel && !policy.isOptional)
+      .map(policy => policy.formControlName);
+
+    expect(requiredPolicyControls).toEqual([...REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES]);
+  });
+});
 
 describe('Wahoo connected-service policy', () => {
   it('documents collection, server-only credentials, disconnect retention, and explicit Wahoo delivery flows', () => {

@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
 import { ProviderPresentation } from '@shared/provider-presentation';
 import { Subscription } from 'rxjs';
@@ -11,7 +13,8 @@ import { AppEventService } from '../../../services/app.event.service';
     templateUrl: './service-source-icon.component.html',
     styleUrls: ['./service-source-icon.component.css'],
     changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+    standalone: true,
+    imports: [MatIconModule, MatTooltipModule],
 })
 export class ServiceSourceIconComponent implements OnChanges, OnDestroy {
     @Input() event!: EventInterface;

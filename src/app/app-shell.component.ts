@@ -29,7 +29,6 @@ import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
-import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog.component';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from './services/app.haptics.service';
 import { AppUserInterface } from './models/app-user.interface';
@@ -644,12 +643,20 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return isAuthSensitivePublicStartupDocument(this.documentRef);
   }
 
-  public openWhatsNew() {
-    this.dialog.open(WhatsNewDialogComponent, {
-      width: '860px',
-      maxWidth: '96vw',
-      autoFocus: false
-    });
+  public async openWhatsNew(): Promise<void> {
+    try {
+      this.whatsNewService.ensureChangelogsLoaded();
+      const { WhatsNewDialogComponent } = await import(
+        './components/whats-new/whats-new-dialog.component'
+      );
+      this.dialog.open(WhatsNewDialogComponent, {
+        width: '860px',
+        maxWidth: '96vw',
+        autoFocus: false
+      });
+    } catch (error) {
+      this.logger.error("[AppShellComponent] Failed to open What's New dialog", error);
+    }
   }
 
   get unreadWhatsNewCount() {

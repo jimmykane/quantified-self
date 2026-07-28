@@ -115,6 +115,10 @@ class ServerWhatsNewService {
     return undefined;
   }
 
+  ensureChangelogsLoaded(): void {
+    return undefined;
+  }
+
   setAdminMode(): void {
     return undefined;
   }

@@ -1,9 +1,8 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, EnvironmentInjector, inject, Injectable, signal } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserInterface } from '../models/app-user.interface';
-import { AdminService } from './admin.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppWindowService } from './app.window.service';
@@ -34,7 +33,7 @@ export function resolveImpersonatedAccountLabel(
 })
 export class AppImpersonationService {
     private userService = inject(AppUserService);
-    private adminService = inject(AdminService);
+    private environmentInjector = inject(EnvironmentInjector);
     private authService = inject(AppAuthService);
     private functionsService = inject(AppFunctionsService);
     private windowService = inject(AppWindowService);
@@ -61,7 +60,9 @@ export class AppImpersonationService {
 
     async startImpersonation(target: ImpersonationTarget): Promise<void> {
         try {
-            const result = await firstValueFrom(this.adminService.impersonateUser(target.uid));
+            const { AdminService } = await import('./admin.service');
+            const adminService = this.environmentInjector.get(AdminService);
+            const result = await firstValueFrom(adminService.impersonateUser(target.uid));
             await this.authService.loginWithCustomToken(result.token);
             this.redirectTo('/dashboard');
         } catch (error: unknown) {

@@ -1,10 +1,11 @@
 import { inject } from '@angular/core';
 import { ResolveFn } from '@angular/router';
 import { AppWhatsNewService, ChangelogPost } from '../services/app.whats-new.service';
-import { take, filter } from 'rxjs/operators';
+import { take } from 'rxjs/operators';
 
 export const releasesResolver: ResolveFn<ChangelogPost[]> = () => {
     const whatsNewService = inject(AppWhatsNewService);
+    whatsNewService.ensureChangelogsLoaded();
     return whatsNewService.changelogs$.pipe(
         // Filter out initial empty value if we are waiting for data
         // However, if there are actually no logs, this might hang.

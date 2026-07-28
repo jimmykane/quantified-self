@@ -1,4 +1,9 @@
+import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
@@ -17,7 +22,8 @@ const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
   selector: 'app-upload-activities',
   templateUrl: './upload-activities.component.html',
   styleUrls: ['../upload-abstract.css', './upload-activities.component.css'],
-  standalone: false
+  standalone: true,
+  imports: [CommonModule, RouterLink, MatButtonModule, MatIconModule, MatTooltipModule],
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective implements OnInit {
   @Input() isHandset: boolean = false;

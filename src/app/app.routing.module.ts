@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
-import { RouterModule, Routes } from '@angular/router';
+import { RouterModule } from '@angular/router';
+import type { ResolveData, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
@@ -8,13 +9,62 @@ import { adminGuard } from './authentication/admin.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
-import { INTEGRATIONS_HUB_ROUTE_DATA, PROVIDER_INTEGRATION_ROUTE_DATA } from './components/integrations/integration-pages.content';
-import { WORKOUT_DATA_COMPARISON_ROUTE_DATA } from './components/features/workout-data-comparison-page.content';
-import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS, PUBLIC_SEO_ROUTE_DATA } from './components/public-seo/public-seo-pages.content';
-import { routeResolver } from './resolvers/route.resolver';
+import { WORKOUT_DATA_COMPARISON_PATH } from './components/features/workout-data-comparison-page.paths';
+import {
+  PUBLIC_FEATURE_PATHS,
+  PUBLIC_GUIDE_PATHS,
+} from './components/public-seo/public-seo-pages.paths';
+import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.paths';
+import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
 const HOME_SEO_DESCRIPTION = 'Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.';
+const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
+const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
+
+type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
+
+function lazyRouteData<T extends object>(
+  loadData: () => Promise<T>,
+  keys: readonly (keyof T)[],
+): ResolveData {
+  return Object.fromEntries(keys.map(key => [
+    String(key),
+    () => loadData().then(data => data[key]),
+  ])) as ResolveData;
+}
+
+function integrationHubRouteData(): ResolveData {
+  return lazyRouteData(
+    () => import('./components/integrations/integration-pages.content')
+      .then(module => module.INTEGRATIONS_HUB_ROUTE_DATA),
+    SEO_RESOLVED_KEYS,
+  );
+}
+
+function providerIntegrationRouteData(provider: IntegrationProviderKey): ResolveData {
+  return lazyRouteData(
+    () => import('./components/integrations/integration-pages.content')
+      .then(module => module.PROVIDER_INTEGRATION_ROUTE_DATA[provider]),
+    SEO_RESOLVED_KEYS,
+  );
+}
+
+function workoutDataComparisonRouteData(): ResolveData {
+  return lazyRouteData(
+    () => import('./components/features/workout-data-comparison-page.content')
+      .then(module => module.WORKOUT_DATA_COMPARISON_ROUTE_DATA),
+    SEO_RESOLVED_KEYS,
+  );
+}
+
+function publicSeoRouteData(page: PublicSeoPageKey): ResolveData {
+  return lazyRouteData(
+    () => import('./components/public-seo/public-seo-pages.content')
+      .then(module => module.PUBLIC_SEO_ROUTE_DATA[page]),
+    PUBLIC_SEO_RESOLVED_KEYS,
+  );
+}
 
 const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   '',
@@ -32,7 +82,8 @@ const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   'integrations/garmin',
   'integrations/suunto',
   'integrations/coros',
-  'features/workout-data-comparison',
+  'integrations/wahoo',
+  WORKOUT_DATA_COMPARISON_PATH,
   ...Object.values(PUBLIC_FEATURE_PATHS),
   ...Object.values(PUBLIC_GUIDE_PATHS),
   'share/event/:userID/:eventID',
@@ -170,39 +221,51 @@ const topLevelRoutes: Routes = [
   {
     path: 'integrations',
     loadComponent: () => import('./components/integrations/integrations-hub-page.component').then(m => m.IntegrationsHubPageComponent),
-    data: INTEGRATIONS_HUB_ROUTE_DATA
+    resolve: integrationHubRouteData(),
+    data: {
+      preload: true,
+      animation: 'Integrations',
+    },
   },
   {
     path: 'integrations/garmin',
     loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    resolve: providerIntegrationRouteData('garmin'),
     data: {
-      ...PROVIDER_INTEGRATION_ROUTE_DATA.garmin,
-      integrationProvider: 'garmin'
-    }
+      preload: true,
+      animation: 'Integrations',
+      integrationProvider: 'garmin',
+    },
   },
   {
     path: 'integrations/suunto',
     loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    resolve: providerIntegrationRouteData('suunto'),
     data: {
-      ...PROVIDER_INTEGRATION_ROUTE_DATA.suunto,
-      integrationProvider: 'suunto'
-    }
+      preload: true,
+      animation: 'Integrations',
+      integrationProvider: 'suunto',
+    },
   },
   {
     path: 'integrations/coros',
     loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    resolve: providerIntegrationRouteData('coros'),
     data: {
-      ...PROVIDER_INTEGRATION_ROUTE_DATA.coros,
-      integrationProvider: 'coros'
-    }
+      preload: true,
+      animation: 'Integrations',
+      integrationProvider: 'coros',
+    },
   },
   {
     path: 'integrations/wahoo',
     loadComponent: () => import('./components/integrations/provider-integration-page.component').then(m => m.ProviderIntegrationPageComponent),
+    resolve: providerIntegrationRouteData('wahoo'),
     data: {
-      ...PROVIDER_INTEGRATION_ROUTE_DATA.wahoo,
-      integrationProvider: 'wahoo'
-    }
+      preload: true,
+      animation: 'Integrations',
+      integrationProvider: 'wahoo',
+    },
   },
   {
     path: 'tools',
@@ -272,91 +335,159 @@ const topLevelRoutes: Routes = [
     },
   },
   {
-    path: 'features/workout-data-comparison',
+    path: WORKOUT_DATA_COMPARISON_PATH,
     loadComponent: () => import('./components/features/workout-data-comparison-page.component').then(m => m.WorkoutDataComparisonPageComponent),
-    data: WORKOUT_DATA_COMPARISON_ROUTE_DATA
+    resolve: workoutDataComparisonRouteData(),
+    data: {
+      preload: true,
+      animation: 'Features',
+    },
   },
   {
     path: PUBLIC_FEATURE_PATHS.hub,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.featuresHub,
+    resolve: publicSeoRouteData('featuresHub'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
     pathMatch: 'full'
   },
   {
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.trainingAnalysis
+    resolve: publicSeoRouteData('trainingAnalysis'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.mcpServer
+    resolve: publicSeoRouteData('mcpServer'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_FEATURE_PATHS.aiInsights,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.aiInsights
+    resolve: publicSeoRouteData('aiInsights'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_FEATURE_PATHS.workoutFileComparison,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.workoutFileComparison
+    resolve: publicSeoRouteData('workoutFileComparison'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.fitGpxTcxFileAnalyzer
+    resolve: publicSeoRouteData('fitGpxTcxFileAnalyzer'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.routeFiles
+    resolve: publicSeoRouteData('routeFiles'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.sportsWatchBenchmark
+    resolve: publicSeoRouteData('sportsWatchBenchmark'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_GUIDE_PATHS.hub,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.guidesHub,
+    resolve: publicSeoRouteData('guidesHub'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
     pathMatch: 'full'
   },
   {
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.syncGarminToSuunto
+    resolve: publicSeoRouteData('syncGarminToSuunto'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.syncCorosToSuunto
+    resolve: publicSeoRouteData('syncCorosToSuunto'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.syncWahooToSuunto
+    resolve: publicSeoRouteData('syncWahooToSuunto'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.importActivitiesToSuunto
+    resolve: publicSeoRouteData('importActivitiesToSuunto'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_GUIDE_PATHS.importActivitiesToWahoo,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.importActivitiesToWahoo
+    resolve: publicSeoRouteData('importActivitiesToWahoo'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.syncSuuntoRoutesToGarmin
+    resolve: publicSeoRouteData('syncSuuntoRoutesToGarmin'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    data: PUBLIC_SEO_ROUTE_DATA.centralizeWorkoutData
+    resolve: publicSeoRouteData('centralizeWorkoutData'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
   },
   {
     path: 'ai-insights',
@@ -485,7 +616,7 @@ const topLevelRoutes: Routes = [
   {
     path: 'user/:userID/route/:routeID',
     loadComponent: () => import('./components/routes/route-detail/route-detail.component').then(module => module.RouteDetailComponent),
-    resolve: { route: routeResolver },
+    resolve: { route: lazyRouteResolver },
     data: { title: 'Route Details', animation: 'Route' },
     canMatch: [authGuard, onboardingGuard]
   },
@@ -538,7 +669,7 @@ const topLevelRoutes: Routes = [
   },
   {
     path: '',
-    loadChildren: () => import('./modules/home.module').then(module => module.HomeModule),
+    loadComponent: () => import('./components/home/home.component').then(component => component.HomeComponent),
     data: {
       animation: 'Home',
       description: HOME_SEO_DESCRIPTION,

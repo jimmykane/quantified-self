@@ -1,20 +1,33 @@
 import { Component, AfterViewInit, OnDestroy, OnInit, ElementRef, DestroyRef, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router, RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { Router } from '@angular/router';
-import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
+import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
 
 @Component({
   selector: 'app-home',
   templateUrl: './home.component.html',
   styleUrls: ['./home.component.scss'],
-  standalone: false
+  standalone: true,
+  imports: [
+    RouterLink,
+    MatButtonModule,
+    MatCardModule,
+    MatDividerModule,
+    MatIconModule,
+    MatTooltipModule,
+    TypedPromptRotatorComponent,
+  ],
 })
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  public serviceNames = ServiceNames;
   private observer: IntersectionObserver | undefined;
   public readonly aiPromptExamples: readonly string[] = getAiInsightsHeroPrompts();
   private readonly destroyRef = inject(DestroyRef);
@@ -42,28 +55,34 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    if (typeof IntersectionObserver !== 'undefined') {
-      this.observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible');
-          } else {
-            // Remove class when out of view to reset animation
-            entry.target.classList.remove('is-visible');
-          }
-        });
-      }, {
-        threshold: 0.1,
-        // rootMargin: '0px 0px -50px 0px' 
-        // Adjusting rootMargin might be needed if they "pop" out too quickly, 
-        // but default intersection logic is safer for replay.
-        rootMargin: '0px 0px -50px 0px'
-      });
-
-      const elements = this.elementRef.nativeElement.querySelectorAll('.animate-on-scroll');
-      elements.forEach((el: Element) => this.observer?.observe(el));
+    if (!this.isBrowser) {
+      return;
     }
 
+    const elements = this.elementRef.nativeElement.querySelectorAll('.animate-on-scroll');
+    if (typeof IntersectionObserver === 'undefined') {
+      elements.forEach((el: Element) => el.classList.add('is-visible'));
+      return;
+    }
+
+    this.observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+        } else {
+          // Remove class when out of view to reset animation
+          entry.target.classList.remove('is-visible');
+        }
+      });
+    }, {
+      threshold: 0.1,
+      // rootMargin: '0px 0px -50px 0px'
+      // Adjusting rootMargin might be needed if they "pop" out too quickly,
+      // but default intersection logic is safer for replay.
+      rootMargin: '0px 0px -50px 0px'
+    });
+
+    elements.forEach((el: Element) => this.observer?.observe(el));
   }
 
   ngOnDestroy() {

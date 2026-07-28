@@ -22,6 +22,8 @@ vi.mock('mapbox-gl/dist/esm/mapbox-gl.js', () => ({
     default: mapboxEsmMock.runtime
 }));
 
+vi.mock('mapbox-gl/dist/mapbox-gl.css', () => ({}));
+
 describe('MapboxLoaderService', () => {
     let service: MapboxLoaderService;
     let zone: NgZone;
@@ -75,6 +77,22 @@ describe('MapboxLoaderService', () => {
             expect(result).toBe(mapboxEsmMock.runtime);
             expect(result.workerUrl).toBe(resolveMapboxEsmWorkerUrl(document.baseURI));
             expect(result.accessToken).toBe(environment.mapboxAccessToken);
+        });
+
+        it('should allow a retry after lazy stylesheet loading fails', async () => {
+            const loadError = new Error('stylesheet chunk unavailable');
+            vi.spyOn(console, 'error').mockImplementation(() => undefined);
+            const stylesSpy = vi.spyOn(service as any, 'loadMapboxStyles')
+                .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+                    queueMicrotask(() => reject(loadError));
+                }))
+                .mockResolvedValueOnce(undefined);
+
+            await expect(service.loadMapbox()).rejects.toBe(loadError);
+            expect((service as any).apiLoadingPromise).toBeNull();
+
+            await expect(service.loadMapbox()).resolves.toBe(mapboxEsmMock.runtime);
+            expect(stylesSpy).toHaveBeenCalledTimes(2);
         });
     });
 

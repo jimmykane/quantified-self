@@ -3,6 +3,7 @@ import { Firestore, collection, collectionData, query, orderBy, where, Timestamp
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { of } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from './logger.service';
@@ -69,13 +70,20 @@ export class AppWhatsNewService {
     private injector = inject(Injector);
 
     private readonly changelogsCollection = collection(this.firestore, 'changelogs');
+    private readonly user = toSignal(this.authService.user$, { initialValue: null });
+    private readonly hasAuthenticatedUser = computed(() => !!this.user());
 
     private _isAdminMode = signal(false);
     private _adminModeRequestCount = signal(0);
+    private _changelogsRequested = signal(false);
     public readonly isAdminMode = computed(() => this._isAdminMode() || this._adminModeRequestCount() > 0);
 
     // Derived query that changes based on admin mode.
     private changelogsQuery = computed(() => {
+        if (!this.hasAuthenticatedUser() && !this.isAdminMode() && !this._changelogsRequested()) {
+            return null;
+        }
+
         if (this.isAdminMode()) {
             // Admin mode: Show all, ordered by date
             return query(this.changelogsCollection, orderBy('date', 'desc'));
@@ -87,14 +95,20 @@ export class AppWhatsNewService {
 
     // Re-create observable stream based on the computed query
     public changelogs$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
-        switchMap(q => collectionData(q, { idField: 'id' })),
+        switchMap(q => q
+            ? collectionData(q, { idField: 'id' })
+            : of<ChangelogPost[]>([])
+        ),
         map(changelogs => changelogs as ChangelogPost[]),
-        shareReplay(1)
+        shareReplay({ bufferSize: 1, refCount: true })
     );
 
     public readonly changelogs = toSignal(this.changelogs$, { initialValue: [] });
-    private readonly user = toSignal(this.authService.user$, { initialValue: null });
     private _localStorageTrigger = signal(0);
+
+    public ensureChangelogsLoaded(): void {
+        this._changelogsRequested.set(true);
+    }
 
     // Get the current user's last seen date from appSettings
     // defaulting to account creation for first-time users
