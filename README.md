@@ -147,6 +147,8 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
+| Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
+| MCP pre-push checks | `npm run hooks:mcp:pre-push` | Runs the registered-contract gate and focused MCP output/server tests |
 | Local plugin tooling | `npm run plugin:tools` | Installs the isolated pinned Codex CLI dependency |
 | Local plugin setup | `npm run plugin:setup` | Explicitly builds, validates, registers, and installs the configured plugin |
 | Local plugin validation | `npm run plugin:validate` | Uses an isolated temporary Codex profile |

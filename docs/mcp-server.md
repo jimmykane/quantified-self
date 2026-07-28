@@ -503,6 +503,13 @@ accepting the change. A server-only implementation or result fix needs no pendin
 remains byte-for-byte equivalent after canonicalization.
 Never edit the registered baseline or transition history directly; only the verified promotion command may update them.
 
+The repository-managed Lefthook pre-push hook runs `npm run hooks:mcp:pre-push` only when the pushed commits touch MCP
+Functions code, the contract command, or the Functions dependency manifests. The focused command runs the contract gate
+and the MCP output/server tests without running the full Functions suite. The npm-installed Lefthook package normally
+installs configured hooks automatically; run `npm run hooks:install` to reinstall them explicitly. This hook is an early
+local check only: CI remains authoritative, and deployment, registered-app refresh/rescan, contract promotion, and local
+plugin sync remain explicit lifecycle actions.
+
 ### Changing or adding a tool
 
 1. Add or change the allowlisted data-service projection; never derive a public schema from an internal Firestore,

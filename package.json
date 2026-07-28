@@ -17,6 +17,8 @@
     "build-and-deploy-beta": "npm run clean && npm run build-beta && npm run firebase-hosting-beta",
     "build-prod-and-deploy-beta": "npm run clean && npm run build-production && npm run firebase-hosting-beta",
     "build-and-deploy-prod": "npm run clean && npm run build-production && firebase deploy --only hosting:production,storage",
+    "hooks:install": "lefthook install",
+    "hooks:mcp:pre-push": "npm --prefix functions run mcp:contract:check && npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts src/mcp/server.spec.ts",
     "test": "vitest",
     "test:rules": "npx firebase emulators:exec --project demo-test --only firestore,storage 'npx vitest run --config vitest.rules.config.ts'",
     "test-coverage": "vitest run --coverage",
