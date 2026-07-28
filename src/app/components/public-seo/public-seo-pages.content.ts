@@ -355,17 +355,17 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'directions_run',
             title: 'Individual activity details and charts',
-            copy: 'Inspect non-location summaries, laps, swim lengths, MTB jumps, app links, selected numeric metrics, and bounded chart-ready heart-rate, power, cadence, altitude, grade, speed, distance, or pace data parsed temporarily from an existing original file.',
+            copy: 'Discover canonical Sports Lib activity types, filter bounded newest-first scans for requests such as your latest run, resolve today or yesterday in an explicit IANA timezone, and inspect summaries, laps, swim lengths, MTB jumps, app links, selected numeric metrics, or bounded chart-ready data.',
           },
           {
             icon: 'bedtime',
-            title: 'Sleep sessions and summaries',
-            copy: 'Review normalized sleep sessions plus daily, weekly, or monthly aggregates without exposing provider payloads, raw stage intervals, or raw physiological samples.',
+            title: 'Sleep summaries and a compact morning briefing',
+            copy: 'Review normalized sleep sessions plus daily, weekly, or monthly aggregates. With both sleep and Training-metrics permission, ask for a compact IANA-timezone morning briefing with your latest completed sleep, current-versus-usual 28-day Training totals and sport mix, and current readiness status—never provider identity, raw physiological samples, a workout plan, or medical advice.',
           },
           {
             icon: 'route',
             title: 'Saved-route summaries and optional locations',
-            copy: 'Read names, activity types, metrics, counts, and timestamps with the summary permission. A separate saved-route location permission enables exact bounds, simplified geometry, nearby search, segment endpoints, and waypoints.',
+            copy: 'Filter bounded newest-first route scans by canonical activity type or route-name text, then read names, metrics, counts, and timestamps. A separate saved-route location permission enables exact bounds, simplified geometry, nearby search, segment endpoints, and waypoints.',
           },
         ],
       },

@@ -46,6 +46,7 @@ import {
   buildDashboardReadinessSignalsContext,
   resolveDashboardReadinessSleepRefreshAtMs,
 } from '../../helpers/dashboard-training-insights.helper';
+import { formatDashboardRelativeDay } from '../../helpers/dashboard-relative-date.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
 import { AppUserService } from '../../services/app.user.service';
 import {
@@ -186,6 +187,7 @@ interface DashboardTodayReadinessViewModel {
   evidenceText: string;
   loadText: string;
   sleepText: string;
+  sleepContextText: string;
   hrvText: string;
   hrvTone: DashboardTodayReadinessTone;
   overnightHeartRateText: string;
@@ -206,6 +208,7 @@ function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessV
     evidenceText: '0/4 signals',
     loadText: '-- / --',
     sleepText: '--',
+    sleepContextText: 'No eligible night',
     hrvText: '--',
     hrvTone: 'neutral',
     overnightHeartRateText: '--',
@@ -1656,6 +1659,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       evidenceText: `${context.availableSignalCount}/${context.totalSignalCount} signals`,
       loadText: `${this.formatDashboardTodayMetric(context.form, true)} / ${this.formatDashboardTodayMetric(context.rampRate, true)}`,
       sleepText: context.sleepScore === null ? '--' : `${this.formatDashboardTodayMetric(context.sleepScore)}/100`,
+      sleepContextText: formatDashboardRelativeDay(context.latestSleepAtMs, { nowMs, locale: this.locale }),
       hrvText: this.formatDashboardTodayRatio(context.hrvRatio),
       hrvTone: this.resolveDashboardTodayRatioTone(context.hrvRatio, false),
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),

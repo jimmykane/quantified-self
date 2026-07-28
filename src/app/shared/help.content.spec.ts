@@ -57,6 +57,11 @@ describe('help.content', () => {
       .toContain('/assets/favicons/quantified-self-chatgpt-icon-256x256.png');
     expect(dataAndPrivacySection?.content).toContain('preferred minimum dimensions');
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
+    expect(dataAndPrivacySection?.content).toContain('compact morning briefing');
+    expect(dataAndPrivacySection?.content).toContain('latest completed non-nap sleep');
+    expect(dataAndPrivacySection?.content).toContain('current-versus-usual equivalent 28-day Training totals');
+    expect(dataAndPrivacySection?.content).toContain('current UTC-day Training readiness status');
+    expect(dataAndPrivacySection?.content).toContain('morning briefing for your IANA timezone');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
@@ -141,6 +146,17 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
+  });
+
+  it('should document safe event merge retry and recovery behavior', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const troubleshootingSection = HELP_SECTIONS.find(section => section.id === 'troubleshooting');
+
+    expect(gettingStartedSection?.content)
+      .toContain('reuses the same merged result instead of creating a duplicate');
+    expect(troubleshootingSection?.content).toContain('merge may still be finishing');
+    expect(troubleshootingSection?.content).toContain('selected rows remain selected');
+    expect(troubleshootingSection?.content).toContain('safely reuses any existing result');
   });
 
   it('should provide a dedicated Training analysis guide with evidence and missing-data rules', () => {
@@ -810,6 +826,14 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('exact source measurement timestamps');
     expect(dataAndPrivacySection?.content).toContain('provider/device metadata');
     expect(dataAndPrivacySection?.content).toContain('bounded chart-ready heart-rate');
+    expect(dataAndPrivacySection?.content).toContain('canonical Sports Lib activity types');
+    expect(dataAndPrivacySection?.content).toContain('filter newest-first activity scans');
+    expect(dataAndPrivacySection?.content).toContain('explicit IANA timezone');
+    expect(dataAndPrivacySection?.content).toContain('complete no-match result');
+    expect(dataAndPrivacySection?.content).toContain('your latest run');
+    expect(dataAndPrivacySection?.content).toContain('today’s or yesterday’s workouts');
+    expect(dataAndPrivacySection?.content).toContain('case-insensitive part of the route name');
+    expect(dataAndPrivacySection?.content).toContain('older history');
     expect(dataAndPrivacySection?.content).toContain('without a reparse, backfill, cache');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
     expect(dataAndPrivacySection?.content).toContain('exact activity start/end coordinates');
@@ -828,10 +852,14 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');
+    expect(dataAndPrivacySection?.content).toContain('keeps its current grant usable');
+    expect(dataAndPrivacySection?.content).toContain('instead of creating another logical connection');
     expect(dataAndPrivacySection?.content).toContain('Failed or abandoned authorization attempts');
+    expect(dataAndPrivacySection?.content).toContain('do not replace an existing grant');
     expect(dataAndPrivacySection?.content).toContain('standard server-to-server token revocation');
     expect(dataAndPrivacySection?.content).toContain('Disconnect** in Connections remains the authoritative control');
-    expect(dataAndPrivacySection?.content).toContain('without affecting your other clients');
+    expect(dataAndPrivacySection?.content).toContain('any older duplicate records');
+    expect(dataAndPrivacySection?.content).toContain('without affecting your other MCP clients');
   });
 
   it('directs account deletion to the Account settings section', () => {

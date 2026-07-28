@@ -45,7 +45,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('firebase-admin', () => ({
-  firestore: Object.assign(() => ({
+  firestore: () => ({
     collection: (name: string) => {
       if (name === 'users') {
         return {
@@ -77,9 +77,11 @@ vi.mock('firebase-admin', () => ({
     },
     runTransaction: mocks.runTransaction,
     recursiveDelete: mocks.recursiveDelete,
-  }), {
-    FieldValue: { delete: () => 'delete-sentinel' },
   }),
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: { delete: () => 'delete-sentinel' },
 }));
 
 vi.mock('../shared/cloud-tasks', () => ({

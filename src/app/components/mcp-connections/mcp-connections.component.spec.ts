@@ -79,6 +79,7 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Saved-route summaries');
     expect(content).toContain('Saved-route locations and geometry');
     expect(content).toContain('Disconnect here remains authoritative');
+    expect(content).toContain('Reauthorizing the same verified client');
   });
 
   it('uses a standard glass-card stack matching the connection workspace', async () => {
@@ -164,17 +165,31 @@ describe('McpConnectionsComponent', () => {
     );
   });
 
-  it('revokes a connection and removes it from the list', async () => {
+  it('revokes a logical client and removes any duplicate rows for that client', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+    const otherConnection = {
+      ...connection,
+      connectionId: 'other-connection',
+      clientId: 'https://other.example/metadata.json',
+      clientName: 'Other Client',
+    };
+    fixture.componentInstance.connections.set([
+      connection,
+      {
+        ...connection,
+        connectionId: 'legacy-duplicate',
+      },
+      otherConnection,
+    ]);
 
     await fixture.componentInstance.revoke(connection);
 
     expect(functions.call).toHaveBeenCalledWith('revokeMcpConnection', {
       connectionId: 'connection-1',
     });
-    expect(fixture.componentInstance.connections()).toEqual([]);
+    expect(fixture.componentInstance.connections()).toEqual([otherConnection]);
     expect(snackBar.open).toHaveBeenCalledWith(
       'Training Copilot was disconnected.',
       undefined,

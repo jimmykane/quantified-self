@@ -8,3 +8,15 @@ pre-commit:
     lint-angular:
       glob: "{src/*.{ts,html},src/**/*.{ts,html}}"
       run: ESLINT_USE_FLAT_CONFIG=false npx eslint {staged_files} --fix && git add {staged_files}
+
+pre-push:
+  commands:
+    mcp-contract:
+      glob:
+        - "functions/src/mcp/*"
+        - "functions/src/mcp/**/*"
+        - "functions/src/scripts/mcp-contract.ts"
+        - "functions/package.json"
+        - "functions/package-lock.json"
+      run: npm run hooks:mcp:pre-push
+      fail_text: "MCP pre-push checks failed. Run `npm run hooks:mcp:pre-push` for details."

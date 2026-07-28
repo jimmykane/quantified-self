@@ -68,22 +68,45 @@ download, and focused MCP/frontend tests aligned whenever any asset changes.
 ## Repository-local plugin
 
 The repository includes a local marketplace package that combines the registered Quantified Self MCP app, branding,
-starter prompts, and the bundled `analyze-quantified-self` skill. This is a development and local-installation surface,
-not a public marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the
-plugin does not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it
-is not a mobile installation path and does not publish anything to the universal plugin directory.
+starter prompts, and six bundled workflow skills. This is a development and local-installation surface, not a public
+marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the plugin does
+not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it is not a
+mobile installation path and does not publish anything to the universal plugin directory.
 
 Committed source lives under `plugins/quantified-self/`, with the marketplace at
-`.agents/plugins/marketplace.json`. `plugin.template.json`, the skill, and marketplace metadata are reusable. An
+`.agents/plugins/marketplace.json`. `plugin.template.json`, the skills, and marketplace metadata are reusable. An
 explicit build generates three ignored files: the cache-busted `.codex-plugin/plugin.json`, the account-bound
 `.app.json`, and a copy of the existing public 256px icon. The ChatGPT technical app ID is machine/account-specific. It
 must come from `QS_CHATGPT_APP_ID` or the ignored `.local/quantified-self-plugin.json`; it is never committed, placed in
 the manifest template, or printed by the tooling. OAuth tokens and client secrets are not accepted or stored.
 
+The bundled skills divide ownership deliberately:
+
+| Skill | Responsibility | Primary permission |
+| --- | --- | --- |
+| `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
+| `analyze-quantified-self-training` | Training load, volume, performance trends, and Training-derived metrics | `metrics:read` |
+| `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, naps, and sleep-oriented trends | `sleep:read` |
+| `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
+| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
+| `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
+
+All six skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
+descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
+skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
+is intentionally bounded. Skills discover the authenticated server's live tools and catalogs rather than copying tool
+names or metric IDs, so OAuth remains the authority for which tools are visible.
+
 The tooling is a private package under `tools/quantified-self-plugin/`. It pins the official `@openai/codex` CLI in its
-own lockfile, keeping the binary out of normal Angular installs. Dependabot proposes isolated CLI upgrades. The
-generator uses Node built-ins, while validation uses a pinned YAML parser for the bundled skill metadata and the
-official CLI ingestion path—not a community manifest-types package—as the installation compatibility authority.
+own lockfile, keeping the binary out of normal Angular installs. Dependabot proposes isolated CLI upgrades. Explicit
+plugin commands bootstrap that isolated package; source validation uses its pinned YAML parser for bundled skill
+metadata, while the official CLI ingestion path—not a community manifest-types package—is the installation
+compatibility authority.
+
+`BUNDLED_SKILL_NAMES` is the exhaustive source registry. Before generating account-bound files, validation requires the
+source skill directory to contain exactly those six real directories and validates every frontmatter identity, UI
+label, prompt reference, MCP dependency, and invocation policy. Isolated installation then compares every file in the
+installed and source skill trees recursively; missing, modified, unexpected, or symlinked content fails closed.
 
 ### Initial local setup
 
@@ -131,16 +154,31 @@ marketplace discovery/install check. It never reads or writes a contributor's Co
 | --- | --- |
 | Server implementation or bug fix that preserves public tools, schemas, scopes, and instructions | Deploy through the separately approved release workflow; no local plugin rebuild |
 | Tool name, description, input/output schema, scope, or server instruction | Run MCP contract tests, deploy separately, rescan the registered ChatGPT developer app, and test in a new conversation |
-| Plugin-only metadata, starter prompt, marketplace entry, or bundled skill | Run the plugin unit suite and `plugin:validate`, then run `plugin:sync` locally |
+| Plugin-only metadata, starter prompt, marketplace entry, or bundled skill | Review affected focused and cross-domain skills, update registry/fixtures when membership changes, run the official skill validators, plugin unit suite, and `plugin:validate`, then run `plugin:sync` locally |
 | Shared MCP/plugin icon or branding | Run the focused MCP/frontend and plugin tests, validate and sync the local plugin, and update the registered ChatGPT developer app's uploaded icon separately; local tooling cannot change that registration |
 | Replacement registered ChatGPT technical app ID | Set the new ID in `QS_CHATGPT_APP_ID`, rerun `plugin:configure`, then run `plugin:sync`; never hand-edit or commit `.app.json` |
 | External Codex CLI dependency | Review the isolated dependency-update PR and pass the full plugin validation workflow |
 
-The skill intentionally does not copy the complete MCP tool or metric catalog. It instructs the client to use the live
-discovery tools, distinguish absent data from missing permission or source availability, prefer summary queries before
-on-demand source parsing, preserve returned units/timezones/pagination, request location only when needed, and avoid
-medical diagnosis. When a public MCP contract changes, review whether that workflow guidance or the three starter
-prompts also need adjustment.
+The skills intentionally do not copy the complete MCP tool or metric catalog. They instruct the client to discover the
+live authorized surface, distinguish absent data from missing permission or source availability, prefer summaries
+before on-demand source parsing, preserve returned units/timezones/pagination, request location only when needed, and
+avoid medical diagnosis. When a public MCP contract changes, review every affected focused skill, the cross-domain
+skill when another domain may consume the result, all affected skill-level prompts, and the three manifest-level
+prompts.
+
+When adding or changing a bundled workflow:
+
+1. Generate a new folder with the official skill scaffolder; keep only `SKILL.md` and `agents/openai.yaml` unless the
+   workflow genuinely needs another resource.
+2. Make its trigger metadata narrow and non-overlapping, declare exactly one hosted Quantified Self MCP dependency, and
+   keep implicit invocation enabled.
+3. Update `BUNDLED_SKILL_NAMES`, fixtures, integrity tests, README, and this table in the same change. The source
+   directory must contain exactly the registered set.
+4. Run the official validator for every skill, the plugin unit suite, dependency audit, fixture-ID
+   `npm run plugin:validate`, isolated marketplace installation, forward prompts for affected and ambiguous workflows,
+   and `git diff --check`.
+5. Keep generated app mappings, cache-busted manifests, copied assets, local IDs, and installed plugin caches out of
+   Git. Install into a real profile only through a later explicit `npm run plugin:sync`.
 
 ## OAuth and authorization
 
@@ -181,7 +219,8 @@ The `resource` value and token audience must exactly match the public `/mcp` URL
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
 SHA-256 hashes, expire after one hour, and are audience-bound. Refresh tokens expire after 30 days and rotate on use.
 When a refresh request narrows the connection grant, previously issued access tokens with broader scopes stop working.
-Reuse of an already-rotated refresh token revokes the connection and makes active descendant tokens unusable.
+Reuse of an already-rotated refresh token revokes its current grant and makes active descendant tokens unusable. A replay
+from an older grant generation cannot revoke a replacement grant or cancel a separately approved reauthorization.
 Authorization codes are single-use and expire after five minutes. A valueless OAuth `state` parameter is treated as
 omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoed exactly.
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
@@ -219,22 +258,51 @@ Firestore holds short-lived OAuth records in:
 - `mcpOAuthRateLimits`.
 
 Connection metadata lives at `users/{uid}/mcpConnections/{connectionId}` and follows `pending -> active -> revoked`.
-Approval creates a pending record whose `expireAt` matches the five-minute authorization-code expiry. The successful
-code-exchange transaction creates the credentials, changes the connection to active, stamps `lastUsedAtMs`, and removes
-`expireAt` atomically. Connections lists active records only. For compatibility, pre-lifecycle records with a non-null
-`lastUsedAtMs` remain active, while old unexchanged records with no usage are hidden. Firestore TTL removes new abandoned
-pending records. A mixed-version rollout is also recoverable: a pending record with completed-exchange usage evidence is
-treated as active, and the next authorized request or refresh removes its stale TTL. Connection documents have no
-descendant collections by design.
+For current records, `connectionId` is a SHA-256-derived document-safe identifier over the exact verified CIMD
+`client_id`. The user subcollection supplies the account boundary, giving one logical connection per account and exact
+client identity without storing the client ID in a document path. Do not normalize or derive identity from the client
+name, redirect host, or user agent.
+
+The first approval creates a pending record whose `expireAt` matches the five-minute authorization-code expiry. Approval
+for an existing logical connection records only the latest pending code hash and expiry; it does not change the current
+status, scopes, client display metadata, grant generation, or TTL. The successful code-exchange transaction must match
+that latest unexpired marker. It creates credentials, assigns a new refresh-family-backed `grantId`, replaces the
+connection scopes and display metadata, changes the connection to active, stamps `lastUsedAtMs`, and removes pending
+markers and `expireAt` atomically. Until that exchange commits, an existing active grant remains usable and an existing
+revocation remains authoritative. Therefore failed or abandoned reauthorization cannot replace a live grant, while a
+successful reauthorization invalidates the previous generation without creating a second visible connection.
+
+Connections lists active records only. A canonical active or revoked record with `supersedesLegacy` hides and
+transactionally invalidates older random-ID records for the same exact client. A canonical pending record does not
+suppress a completed legacy connection, which keeps mixed-version rollouts usable until cutover succeeds. Pre-lifecycle
+records with a non-null `lastUsedAtMs` remain active while no canonical suppressor exists; old unexchanged records with no
+usage are hidden. Canonical active records fail closed if their `grantId` is missing, while legacy random-ID records
+without a generation retain their compatibility path until superseded. Firestore TTL removes first-time abandoned
+pending records and authorization-code documents; an expired marker on a live connection is inert and can be replaced
+by a later approval. Connection documents have no descendant collections by design. Grant-generation, pending-marker,
+suppressor, and connection-audience fields are read only through document-ID lookups and are exempt from automatic
+single-field indexing; the existing `createdAtMs` ordering remains the only connection-list query requirement.
 
 Browser Firestore access to every MCP collection is denied; authenticated, App Check-protected callables mediate
-consent, listing, and dashboard revocation. Both Dashboard Disconnect and `/oauth/revoke` use the same idempotent
-transactional connection transition. It rechecks account-deletion state, changes exactly one connection to `revoked`,
-and preserves the first terminal state under concurrent requests. Bearer authentication, authorization-code exchange,
-and every refresh-token rotation require that connection to remain active, so changing this single record immediately
-invalidates every access token and every refresh token in the family without an unbounded query or deletion fan-out.
-The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation never
-deletes or changes the CIMD client.
+consent, listing, and dashboard revocation. The list callable returns an explicit display allowlist and never exposes
+`grantId`, pending-code hashes, suppressor flags, audience, status, or revocation internals. Dashboard Disconnect is an
+owner-authoritative logical-client operation: it rechecks account-deletion state, clears any pending authorization
+marker, preserves an existing terminal timestamp, and creates or updates the canonical revoked suppressor even when the
+selected legacy row was already revoked. This makes all older duplicate records for that exact client unusable and
+hidden without affecting a different CIMD client.
+
+`/oauth/revoke` is intentionally grant-scoped. It revokes only when the submitted token belongs to the connection's
+current `grantId`; an old-generation token receives the normal private HTTP 200 response but cannot revoke a replacement.
+Grant-scoped token revocation and current-family refresh replay preserve a separately approved pending authorization.
+The Firestore transaction conflict rules make both race orders safe: if old-grant revocation commits first, the pending
+code can still activate its replacement; if code exchange commits first, the stale revocation retries against the new
+generation and becomes a no-op. Owner Disconnect instead cancels both the current grant and pending replacement.
+
+Bearer authentication and refresh rotation validate the active connection, exact client binding, canonical legacy
+suppressor, scopes, and grant generation both before and inside the transactional usage write. Changing the canonical
+record therefore invalidates the superseded access and refresh credentials without an unbounded query or deletion
+fan-out. The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation
+never deletes or changes the CIMD client.
 
 Connections > MCP remains the authoritative user control because an external client may not call the revocation
 endpoint when the user removes or uninstalls it. Bearer authentication performs the same account-deletion check before
@@ -320,22 +388,24 @@ The analytics and map entries follow the
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Paginated safe activity summaries, opaque references, signed-in app links, and optional exact start/end coordinates |
+| `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
+| `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
 | `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
-| `list_routes` | `routes:read` | Paginated non-location saved-route summaries, opaque references, and signed-in app links; exact bounds require `route-location:read` |
+| `list_routes` | `routes:read` | Bounded newest-first scans with optional activity-type and case-insensitive name filters, opaque references, and signed-in app links; exact bounds require `route-location:read` |
 | `find_routes_near_location` | `routes:read` + `route-location:read` | Bounded newest-first scan measuring a location against persisted route previews |
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
 Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
 tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
-before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` is registered only
-when both of its scopes are present.
+before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` and
+`get_daily_briefing` are registered only when both of their scopes are present.
 
 ### Strict structured output
 
@@ -365,15 +435,80 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 19-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 21-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 19 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 21 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
+
+### Registered-contract compatibility gate
+
+`functions/src/mcp/contracts/registered-contract.json` is the canonical contract last loaded into the registered
+ChatGPT app. It is generated from real in-memory `initialize` and complete `tools/list` responses, including the
+negotiated MCP protocol version, plus the protected-resource and authorization-server metadata builders. The capture
+covers no-data, single-domain, dependent-location, combined activity-metric, all-parent, and all-scope grants. Identical
+tool variants are content-addressed by SHA-256 so scope-specific tool visibility and instructions remain exhaustive
+without copying the same large schema repeatedly. Object keys and semantically unordered schema arrays are canonicalized
+before hashing.
+
+The current baseline has lifecycle `developer`. After public publication, promote it with lifecycle `published`.
+Existing tool names, authorization-profile availability, annotations, security schemes, and input/output schemas are
+frozen. A pending record cannot override a breaking change. Introduce a new additive tool for a new shape, or use an
+optional field that was already present in the registered schema. Additive tools, presentation metadata, instructions,
+and additive OAuth capabilities require `functions/src/mcp/contracts/pending-change.json`:
+
+```json
+{
+  "formatVersion": 1,
+  "candidateSha256": "<candidate contract SHA-256>",
+  "lifecycleAction": "developer-refresh",
+  "summary": "Describe the additive metadata change.",
+  "rescanRequired": true
+}
+```
+
+The record is valid only for that exact candidate digest. Use `published-version` instead of `developer-refresh` for a
+published baseline or when moving unchanged developer metadata into its first published version. The append-only
+`functions/src/mcp/contracts/contract-history.json` records every consumed transition with its previous/current digest,
+previous/current lifecycle, action, and summary. CI compares the baseline and history with the pull-request base or
+previous pushed revision; rewriting history, replacing the baseline directly, or appending a record that does not join
+the exact digest chain fails.
+
+The normal workflow is:
+
+1. Run `npm --prefix functions run mcp:contract:check`. Breaking differences always fail; compatible metadata
+   differences print their candidate digest and require the matching pending record.
+2. Create or update `pending-change.json` with that exact digest, the intended lifecycle action, and a concrete summary,
+   then rerun `mcp:contract:check` and require it to pass.
+3. Optionally write a review copy with
+   `npm --prefix functions run mcp:contract:capture -- --output /tmp/quantified-self-mcp-contract.json`. Capture refuses
+   to overwrite the registered baseline, transition history, or pending record.
+4. Deploy only through the separately approved release workflow. For developer metadata, refresh the registered app and
+   test a new conversation. For published metadata, complete scan, review, approval, and publication.
+5. Promote the exact tested candidate with
+   `npm --prefix functions run mcp:contract:promote -- --digest <sha256> --action developer-refresh`, using
+   `published-version` when applicable. Promotion verifies compatibility and the pending record, replaces the baseline,
+   appends the durable transition record, and removes the consumed pending record. This command also supports the
+   lifecycle-only `developer -> published` transition when the advertised metadata itself is unchanged. Promotion writes
+   history before the baseline; rerunning the same digest-bound command safely completes either interrupted write stage
+   after confirming that the live MCP contract still matches.
+
+`mcp:contract:bootstrap` exists only to create a missing first developer baseline and refuses to replace one. CI builds
+Functions, fetches the comparison revision, and runs the compiled compatibility and append-only history checks before
+accepting the change. A server-only implementation or result fix needs no pending record when the advertised contract
+remains byte-for-byte equivalent after canonicalization.
+Never edit the registered baseline or transition history directly; only the verified promotion command may update them.
+
+The repository-managed Lefthook pre-push hook runs `npm run hooks:mcp:pre-push` only when the pushed commits touch MCP
+Functions code, the contract command, or the Functions dependency manifests. The focused command runs the contract gate
+and the MCP output/server tests without running the full Functions suite. The npm-installed Lefthook package normally
+installs configured hooks automatically; run `npm run hooks:install` to reinstall them explicitly. This hook is an early
+local check only: CI remains authoritative, and deployment, registered-app refresh/rescan, contract promotion, and local
+plugin sync remain explicit lifecycle actions.
 
 ### Changing or adding a tool
 
@@ -388,8 +523,9 @@ expected errors, output-contract failures, and identity/provenance leakage canar
 5. Update the in-memory successful fixture, Ajv assertion, empty/nullable/pagination cases, and negative leakage
    canaries. A new Training kind also needs an exact entry in `MCP_DERIVED_PAYLOAD_SCHEMAS` and its exhaustive fixture.
 6. Run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts src/mcp/server.spec.ts`, the focused
-   data-service tests, `npm --prefix functions run build`, and `git diff --check`. Update this document whenever the
-   public contract moves.
+   data-service tests, `npm --prefix functions run mcp:contract:check`, and `git diff --check`. Add the digest-bound
+   pending record for a compatible metadata change; a breaking finding requires redesigning the change. Update this
+   document whenever the public contract moves.
 
 ## Sports Lib metric discovery
 
@@ -492,6 +628,26 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
+Activity discovery metadata explicitly maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
+named-sport requests to `list_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
+plus their group and indoor hints; filters accept those values or aliases recognized by Sports Lib and canonicalize
+them before scanning. A request such as “latest run” therefore uses a server-side type filter with `limit: 1`, so a newer
+activity of another type is skipped instead of being mistaken for the requested workout.
+
+The list is always newest first. `start` and `end` remain an optional explicit pair with the existing 366-day limit.
+Alternatively, `relativePeriod: "today" | "yesterday"` requires an explicit IANA `timeZone` and resolves the exact local
+calendar-day boundaries, including DST-short and DST-long days. Date selectors are mutually exclusive. Omitting every
+date selector starts at the newest persisted activity across all history. A relative-period cursor retains the first
+page's resolved millisecond range, so crossing local midnight between pages cannot move the query window.
+
+One filtered call scans at most 100 selected activity documents and can return fewer matches than requested.
+`scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
+from a partial scan. Clients repeat the original activity types and date-selection inputs with `nextCursor` until a
+match is found or `scanComplete` is true. The encrypted cursor is bound to the connection, canonical activity-type set,
+relative-period/timezone mode, and resolved or explicit date range; the type set is represented by a fixed SHA-256
+digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
+snapshots are not evidence that an individual activity is unavailable.
+
 `find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
 scope, it reuses the location field mask and safe summary projection. It matches only the persisted
 start and end positions, not the raw activity track: the response reports the nearest matching coordinate, whether it
@@ -528,10 +684,15 @@ available and within budgets; no backfill or persistent cache is created.
 ## Saved-route projection
 
 `routes:read` lists `users/{uid}/routes` through a field mask containing the route name, timestamps, activity types,
-counts, and the same fixed summary-stat allowlist. Bounds enter the field mask only with `route-location:read`; otherwise
-they are omitted and `locationRedacted` is true. It excludes source/delivery provenance, provider IDs, Storage
-metadata, creator data, route comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and
-cursors use the same UID-and-connection-bound authenticated-encryption design as activity references.
+counts, and the same fixed summary-stat allowlist. `list_routes` can filter the bounded newest-first scan by canonical
+Sports Lib activity types and/or a normalized case-insensitive substring of the route name. Each call scans at most 100
+selected documents and reports scanned/skipped counts, `nextCursor`, and `scanComplete`. Clients repeat the original
+filters until a match is found or the scan completes. The encrypted cursor binds the canonical activity-type set and
+normalized search text to the connection through fixed SHA-256 digests, keeping the cursor within its length limit.
+Bounds enter the field mask only with `route-location:read`; otherwise they are omitted and `locationRedacted` is true.
+The projection excludes source/delivery provenance, provider IDs, Storage metadata, creator data, route
+comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and cursors use the same
+UID-and-connection-bound authenticated-encryption design as activity references.
 
 `get_route_geometry`, `find_routes_near_location`, and `list_route_waypoints` are not registered without
 `route-location:read`, and missing permission is rejected before preview, Storage, parser, or Mapbox work.
@@ -557,10 +718,13 @@ validated coordinates, altitude, distance, route/point indexes, and a short norm
 descriptions, links, extensions, raw source bytes, and track points are never returned. The direct route URL uses the
 existing `/user/{uid}/route/{routeId}` page and still requires normal sign-in.
 
-The activity list orders and ranges on `eventStartDate`; the route list orders on `importedAt`. In both cases the
-document name is only a deterministic pagination tie-breaker. These query shapes use Firestore's automatic single-field
-indexes, so the MCP surface adds no composite index or index configuration. All-history nearby activity scans use the
-same `eventStartDate` order without a range predicate; optional bounded dates use the existing range-and-order shape.
+The activity list orders on `eventStartDate` and applies an optional explicit or resolved relative range on the same
+field; activity-type matching happens inside the bounded MCP scan rather than through another Firestore predicate. The
+route list orders on `importedAt`; its activity-type and name matching also happen inside the bounded scan. In both
+cases the document name is only a deterministic pagination tie-breaker. These query shapes use Firestore's automatic
+single-field indexes, so the MCP surface adds no composite index or index configuration. All-history activity lists
+and nearby scans use the same `eventStartDate` order without a range predicate; optional bounded dates use the existing
+range-and-order shape.
 
 ## Nearby-location resolution
 
@@ -607,6 +771,24 @@ stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or 
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
 deliberately.
 
+## Daily briefing projection
+
+`get_daily_briefing` is a compact convenience read that requires both `metrics:read` and `sleep:read`; neither scope
+alone registers it. The caller supplies an IANA timezone. The response records the resulting local-day bounds and
+contains only the latest completed non-nap sleep session plus a duration comparison against up to seven earlier
+same-provider nights. It also projects the safe `training_summary` headline: equivalent current and usual 28-day
+workout counts, duration, easy/moderate/hard time totals, and the corresponding Running/Cycling/Swimming breakdown.
+The usual period is an equivalent 28-day comparison normalized from the snapshot's preceding 84-day source window, so
+its workout count may be fractional. Provider identity, raw vitals, stages, score components, sessions, locations,
+activities, body measurements, and source fields are absent from this projection.
+
+It also reads the current `training_readiness` snapshot through its exact strict payload schema, but returns only its
+freshness, score, label, confidence, and aggregate evidence counts. Readiness itself remains UTC-day based. A snapshot
+whose `asOfDayMs` is not the current UTC day is reported as `stale` with score and evidence fields withheld; missing or
+invalid snapshots use explicit `not_ready` or `no_signal` statuses. The tool provides context only: it does not create a
+workout plan, prescribe exercise, or provide medical advice. It uses the existing sleep-session query shape, so it
+requires no new Firestore composite index.
+
 ## Bounds and operational controls
 
 - Event and sleep date ranges are at most 366 days.
@@ -619,8 +801,14 @@ deliberately.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
-- Activity date ranges are at most 366 days. Activity and route list pages are at most 100 entries, read only one page
-  plus a continuation sentinel per call, and reject more than 512 KiB of cumulative selected data.
+- A daily briefing reads at most 33 recent sleep documents from a fixed 14-day lookback, keeps at most 32 completed
+  non-nap sessions, uses at most seven same-provider baseline nights, reads the ready `training_summary` and
+  `training_readiness` snapshots in parallel, and returns at most 16 KiB.
+- Explicit activity date ranges are at most 366 days; relative today/yesterday ranges require an IANA timezone. An
+  omitted activity range starts newest-first across history. Activity-list calls scan at most 100 documents, return at
+  most 100 matching entries, report scan counts/completion, and reject more than 512 KiB of cumulative selected data.
+  Route-list calls likewise scan at most 100 documents, return at most 100 matching entries, report scan
+  counts/completion, and reject more than 512 KiB of cumulative selected data.
 - Nearby activity calls scan at most 100 summaries, return at most 25 matches and 256 KiB, and can traverse all history
   only through encrypted query-bound pages.
 - Nearby route calls scan at most 50 summaries, load at most 12 persisted previews, process at most 1 MiB and 20,000
@@ -661,6 +849,7 @@ Use the Functions emulator and local Angular app for the OAuth/consent flow. At 
 ```bash
 npm --prefix functions test -- src/mcp
 npm --prefix functions run build
+npm --prefix functions run mcp:contract:check:compiled
 npx vitest run src/app/components/mcp-authorization/mcp-authorization.component.spec.ts \
   src/app/components/mcp-connections/mcp-connections.component.spec.ts
 npm run test:rules

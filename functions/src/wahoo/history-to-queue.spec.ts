@@ -22,9 +22,10 @@ const deletionGuardMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('firebase-admin', () => ({
-  firestore: Object.assign(() => firestoreMocks.firestore, {
-    FieldValue: { delete: () => 'delete-field' },
-  }),
+  firestore: () => firestoreMocks.firestore,
+}));
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: { delete: () => 'delete-field' },
 }));
 vi.mock('../history', () => ({ getNextAllowedHistoryImportDate: vi.fn() }));
 vi.mock('../service-disconnect-pending', () => ({ isServiceDisconnectPendingForUser: vi.fn() }));

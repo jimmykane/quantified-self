@@ -138,14 +138,15 @@ vi.mock('firebase-admin', () => {
         doc: hoisted.doc,
         recursiveDelete: hoisted.recursiveDelete,
     }));
-    Object.assign(firestoreFn, {
-        FieldValue: {
-            serverTimestamp: hoisted.serverTimestamp,
-            delete: hoisted.deleteField,
-        },
-    });
     return { firestore: firestoreFn };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        serverTimestamp: hoisted.serverTimestamp,
+        delete: hoisted.deleteField,
+    },
+}));
 
 import { processSportsLibReparseHeavyTask, processSportsLibReparseTask } from './sports-lib-reparse-worker';
 

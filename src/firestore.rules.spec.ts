@@ -308,6 +308,44 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Event Merge Operations (users/{uid}/eventMergeOperations/{operationId})', () => {
+            const operationId = 'request-fingerprint';
+
+            beforeEach(async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore()
+                        .doc(`users/${userId}/eventMergeOperations/${operationId}`)
+                        .set({
+                            status: 'processing',
+                            resultEventId: 'server-result-id',
+                        });
+                });
+            });
+
+            it('should deny all browser reads of server-owned merge operation state', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const otherDb = testEnv.authenticatedContext(otherId).firestore();
+                const unauthenticatedDb = testEnv.unauthenticatedContext().firestore();
+                const path = `users/${userId}/eventMergeOperations/${operationId}`;
+
+                await assertFails(ownerDb.doc(path).get());
+                await assertFails(otherDb.doc(path).get());
+                await assertFails(unauthenticatedDb.doc(path).get());
+            });
+
+            it('should deny all browser writes to server-owned merge operation state', async () => {
+                const ownerDb = testEnv.authenticatedContext(userId).firestore();
+                const path = `users/${userId}/eventMergeOperations/${operationId}`;
+
+                await assertFails(ownerDb.doc(path).set({ status: 'completed' }));
+                await assertFails(ownerDb.doc(path).update({ status: 'retryable' }));
+                await assertFails(ownerDb.doc(path).delete());
+                await assertFails(ownerDb
+                    .doc(`users/${userId}/eventMergeOperations/forged-operation`)
+                    .set({ status: 'completed' }));
+            });
+        });
+
         describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
             it('should allow user to read their own agreements', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();

@@ -40,6 +40,23 @@ vi.mock('../service-disconnect-pending', () => ({
 
 vi.mock('firebase-functions/logger', () => mockLogger);
 
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: {
+        delete: () => 'DELETE_SENTINEL',
+        serverTimestamp: () => 'SERVER_TIMESTAMP'
+    },
+    Timestamp: {
+        fromDate: (date: Date) => ({
+            toDate: () => date,
+            toMillis: () => date.getTime()
+        }),
+        now: () => ({
+            toDate: () => new Date(),
+            toMillis: () => Date.now()
+        })
+    }
+}));
+
 // Mock firebase-functions BEFORE imports
 vi.mock('firebase-functions/v2/firestore', () => ({
     onDocumentWritten: (options: unknown, handler: unknown) => {
@@ -213,14 +230,8 @@ describe('onSubscriptionUpdated', () => {
             runTransaction: runTransactionSpy,
         } as unknown as admin.firestore.Firestore);
 
-        (admin.firestore as unknown as Record<string, unknown>).Timestamp = {
-            fromDate: (date: Date) => ({ toDate: () => date }),
-            now: () => ({ toMillis: () => Date.now() })
-        };
-        (admin.firestore as unknown as Record<string, unknown>).FieldValue = {
-            delete: () => 'DELETE_SENTINEL',
-            serverTimestamp: () => 'SERVER_TIMESTAMP'
-        };
+        (admin.firestore as unknown as Record<string, unknown>).Timestamp = undefined;
+        (admin.firestore as unknown as Record<string, unknown>).FieldValue = undefined;
 
         authSpy = vi.spyOn(admin, 'auth').mockReturnValue({
             getUser: vi.fn().mockResolvedValue({ customClaims: {} }),

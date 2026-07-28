@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import { USAGE_LIMITS } from '../../../shared/limits';
+import { TTL_CONFIG } from '../shared/ttl-config';
 
 const hoisted = vi.hoisted(() => {
   let onCallOptions: unknown = null;
@@ -22,9 +23,14 @@ const hoisted = vi.hoisted(() => {
   const mockAssertEventWriteUserActive = vi.fn();
   const mockSetEventDocumentIfUserActive = vi.fn();
   const mockDocSet = vi.fn();
+  const mockOperationSet = vi.fn();
   const mockWriteAllEventData = vi.fn();
+  const mockGenerateMergeEventID = vi.fn(() => 'merged-event-id');
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
+  const mockTimestampFromDate = vi.fn((date: Date) => ({
+    toMillis: () => date.getTime(),
+  }));
   const mockStorageSave = vi.fn();
   const mockStorageGetMetadata = vi.fn();
 
@@ -96,9 +102,12 @@ const hoisted = vi.hoisted(() => {
       mockAssertEventWriteUserActive,
       mockSetEventDocumentIfUserActive,
       mockDocSet,
+      mockOperationSet,
       mockWriteAllEventData,
+      mockGenerateMergeEventID,
       mockSportsLibVersionToCode,
       mockServerTimestamp,
+      mockTimestampFromDate,
       mockStorageSave,
       mockStorageGetMetadata,
       mockEventImporterJSON,
@@ -145,7 +154,7 @@ vi.mock('firebase-admin', () => {
                 },
               };
             }
-            return { id: 'merged-event-id' };
+            return { id: hoisted.mockGenerateMergeEventID() };
           },
         };
       }
@@ -172,6 +181,7 @@ vi.mock('firebase-admin', () => {
       return { doc: () => ({}) };
     },
     doc: (path: string) => ({
+      path,
       get: async () => {
         const data = hoisted.state.eventDocs.get(path);
         if (!data) {
@@ -182,12 +192,6 @@ vi.mock('firebase-admin', () => {
       set: hoisted.mockDocSet,
     }),
   }));
-
-  Object.assign(firestoreFn, {
-    FieldValue: {
-      serverTimestamp: hoisted.mockServerTimestamp,
-    },
-  });
 
   return {
     firestore: firestoreFn,
@@ -226,6 +230,15 @@ vi.mock('firebase-admin', () => {
     }),
   };
 });
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    serverTimestamp: hoisted.mockServerTimestamp,
+  },
+  Timestamp: {
+    fromDate: hoisted.mockTimestampFromDate,
+  },
+}));
 
 vi.mock('@sports-alliance/sports-lib', () => ({
   EventImporterJSON: hoisted.mockEventImporterJSON,
@@ -365,12 +378,33 @@ describe('mergeEvents', () => {
     hoisted.mockHasBasicAccess.mockResolvedValue(false);
     hoisted.mockAssertEventWriteUserActive.mockResolvedValue(undefined);
     hoisted.mockDocSet.mockResolvedValue(undefined);
+    hoisted.mockOperationSet.mockResolvedValue(undefined);
+    hoisted.mockGenerateMergeEventID.mockReturnValue('merged-event-id');
     hoisted.mockSetEventDocumentIfUserActive.mockImplementation(
-      async (_userID: unknown, _phase: unknown, _docRef: unknown, data: unknown, options?: unknown) => (
-        hoisted.mockDocSet(data, options)
-      ),
+      async (
+        _userID: unknown,
+        _phase: unknown,
+        docRef: { path?: string },
+        data: unknown,
+        options?: unknown,
+        transformExistingData?: (incomingData: unknown, existingData: unknown) => unknown,
+      ) => {
+        if (docRef.path?.includes('/eventMergeOperations/')) {
+          const existingData = hoisted.state.eventDocs.get(docRef.path) || null;
+          const resolvedData = transformExistingData
+            ? transformExistingData(data, existingData)
+            : data;
+          hoisted.state.eventDocs.set(docRef.path, resolvedData as Record<string, unknown>);
+          return hoisted.mockOperationSet(resolvedData, options);
+        }
+        return hoisted.mockDocSet(data, options);
+      },
     );
-    hoisted.mockWriteAllEventData.mockResolvedValue(undefined);
+    hoisted.mockWriteAllEventData.mockImplementation(async (userID: string, event: { getID: () => string }) => {
+      hoisted.state.eventDocs.set(`users/${userID}/events/${event.getID()}`, {
+        id: event.getID(),
+      });
+    });
     hoisted.mockStorageSave.mockResolvedValue(undefined);
     hoisted.mockStorageGetMetadata.mockResolvedValue([{ generation: 'storage-generation-1' }]);
 
@@ -449,6 +483,30 @@ describe('mergeEvents', () => {
       app: { appId: 'app-id' },
       data: { eventIds: 'e1,e2', mergeType: 'benchmark' },
     } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1/activities/a1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'x'.repeat(129)], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2\nforged'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 2], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
   it('should enforce ownership by user-scoped event paths', async () => {
@@ -461,6 +519,10 @@ describe('mergeEvents', () => {
     } as any)).rejects.toMatchObject({ code: 'not-found' });
 
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+    expect(
+      [...hoisted.state.eventDocs.keys()].some(path => path.includes('/eventMergeOperations/')),
+    ).toBe(false);
   });
 
   it('should enforce free/basic upload limits and bypass for pro/grace', async () => {
@@ -584,6 +646,337 @@ describe('mergeEvents', () => {
       uploadLimit: USAGE_LIMITS.free,
       uploadCountAfterWrite: 1,
     });
+  });
+
+  it('should replay the completed response for the same semantic request', async () => {
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    const firstResult = await mergeEvents(request as any);
+    const replayedResult = await mergeEvents(request as any);
+
+    expect(replayedResult).toEqual(firstResult);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockMergeEvents).toHaveBeenCalledTimes(1);
+
+    const operationEntries = [...hoisted.state.eventDocs.entries()]
+      .filter(([path]) => path.includes('/eventMergeOperations/'));
+    expect(operationEntries).toHaveLength(1);
+    expect(operationEntries[0][1]).toMatchObject({
+      status: 'completed',
+      resultEventId: 'merged-event-id',
+      sourceEventsCount: 2,
+    });
+    expect(operationEntries[0][1]).not.toHaveProperty('eventIds');
+    expect(operationEntries[0][1]).not.toHaveProperty('eventIDs');
+  });
+
+  it('should expire completed operation state after seven days without extending on replay', async () => {
+    const nowMs = Date.parse('2026-07-28T08:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    try {
+      await mergeEvents(request as any);
+
+      const operationEntry = [...hoisted.state.eventDocs.entries()]
+        .find(([path]) => path.includes('/eventMergeOperations/'));
+      expect(operationEntry).toBeDefined();
+      expect(operationEntry![1]).toMatchObject({ status: 'completed' });
+      const originalExpireAtMs = (
+        operationEntry![1].expireAt as { toMillis: () => number }
+      ).toMillis();
+      expect(originalExpireAtMs).toBe(
+        nowMs + (TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS * 24 * 60 * 60 * 1000),
+      );
+
+      vi.setSystemTime(nowMs + (24 * 60 * 60 * 1000));
+      await mergeEvents(request as any);
+
+      const replayedOperation = hoisted.state.eventDocs.get(operationEntry![0]);
+      expect((replayedOperation?.expireAt as { toMillis: () => number }).toMillis())
+        .toBe(originalExpireAtMs);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should expire retryable operation state seven days after the failed attempt', async () => {
+    const nowMs = Date.parse('2026-07-28T08:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    hoisted.mockWriteAllEventData.mockRejectedValueOnce(new Error('ambiguous write failure'));
+
+    try {
+      await expect(mergeEvents({
+        auth: { uid: 'u1' },
+        app: { appId: 'app-id' },
+        data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+      } as any)).rejects.toMatchObject({ code: 'internal' });
+
+      const operationEntry = [...hoisted.state.eventDocs.entries()]
+        .find(([path]) => path.includes('/eventMergeOperations/'));
+      expect(operationEntry).toBeDefined();
+      expect(operationEntry![1]).toMatchObject({ status: 'retryable' });
+      expect((operationEntry![1].expireAt as { toMillis: () => number }).toMillis()).toBe(
+        nowMs + (TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS * 24 * 60 * 60 * 1000),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should return the canonical stored response when completion already won the race', async () => {
+    hoisted.mockWriteAllEventData.mockImplementationOnce(
+      async (userID: string, event: { getID: () => string }) => {
+        const eventID = event.getID();
+        hoisted.state.eventDocs.set(`users/${userID}/events/${eventID}`, { id: eventID });
+        const operationEntry = [...hoisted.state.eventDocs.entries()]
+          .find(([path]) => path.includes('/eventMergeOperations/'));
+        expect(operationEntry).toBeDefined();
+        hoisted.state.eventDocs.set(operationEntry![0], {
+          ...operationEntry![1],
+          status: 'completed',
+          ownerToken: null,
+          leaseExpiresAtMs: 0,
+          response: {
+            eventId: eventID,
+            mergeType: 'benchmark',
+            sourceEventsCount: 2,
+            sourceFilesCount: 7,
+            activitiesCount: 8,
+            uploadLimit: USAGE_LIMITS.free,
+            uploadCountAfterWrite: 9,
+          },
+          lastErrorCode: null,
+        });
+      },
+    );
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).resolves.toMatchObject({
+      eventId: 'merged-event-id',
+      sourceFilesCount: 7,
+      activitiesCount: 8,
+      uploadCountAfterWrite: 9,
+    });
+  });
+
+  it('should reconcile operation state when the completion write rejects', async () => {
+    hoisted.mockOperationSet
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('completion write failed'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'internal' });
+
+    expect(hoisted.mockOperationSet).toHaveBeenCalledTimes(3);
+  });
+
+  it('should replay a completed result even when a source event was later deleted', async () => {
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    const firstResult = await mergeEvents(request as any);
+    hoisted.state.eventDocs.delete('users/u1/events/e2');
+
+    await expect(mergeEvents(request as any)).resolves.toEqual(firstResult);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reject stored operation state that does not match the request', async () => {
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    await mergeEvents(request as any);
+    const operationEntry = [...hoisted.state.eventDocs.entries()]
+      .find(([path]) => path.includes('/eventMergeOperations/'));
+    expect(operationEntry).toBeDefined();
+    hoisted.state.eventDocs.set(operationEntry![0], {
+      ...operationEntry![1],
+      mergeType: 'multi',
+    });
+
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'internal' });
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reject stored operation state with an invalid lease value', async () => {
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    await mergeEvents(request as any);
+    const operationEntry = [...hoisted.state.eventDocs.entries()]
+      .find(([path]) => path.includes('/eventMergeOperations/'));
+    expect(operationEntry).toBeDefined();
+    hoisted.state.eventDocs.set(operationEntry![0], {
+      ...operationEntry![1],
+      leaseExpiresAtMs: Number.POSITIVE_INFINITY,
+    });
+
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'internal' });
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reject stored operation state with an invalid expiration timestamp', async () => {
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    await mergeEvents(request as any);
+    const operationEntry = [...hoisted.state.eventDocs.entries()]
+      .find(([path]) => path.includes('/eventMergeOperations/'));
+    expect(operationEntry).toBeDefined();
+    hoisted.state.eventDocs.set(operationEntry![0], {
+      ...operationEntry![1],
+      expireAt: 'never',
+    });
+
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'internal' });
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should treat a reversed source selection as the same merge request', async () => {
+    const firstResult = await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any);
+    const replayedResult = await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e2', 'e1'], mergeType: 'benchmark' },
+    } as any);
+
+    expect(replayedResult).toEqual(firstResult);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reject a concurrent duplicate while the first merge owns the lease', async () => {
+    let releaseWrite: (() => void) | undefined;
+    const blockedWrite = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    hoisted.mockWriteAllEventData.mockImplementationOnce(async () => blockedWrite);
+
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+    const firstMerge = mergeEvents(request as any);
+    await vi.waitFor(() => {
+      expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+    });
+
+    const processingOperation = [...hoisted.state.eventDocs.entries()]
+      .find(([path]) => path.includes('/eventMergeOperations/'))?.[1];
+    const retentionMs = TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS * 24 * 60 * 60 * 1000;
+    expect(processingOperation).toMatchObject({ status: 'processing' });
+    expect((processingOperation?.expireAt as { toMillis: () => number }).toMillis())
+      .toBeGreaterThan(Date.now() + retentionMs - 1000);
+
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'aborted' });
+
+    releaseWrite?.();
+    await expect(firstMerge).resolves.toMatchObject({ eventId: 'merged-event-id' });
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+  });
+
+  it('should keep the operation lease active for the callable runtime', async () => {
+    let releaseWrite: (() => void) | undefined;
+    const blockedWrite = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    hoisted.mockWriteAllEventData.mockImplementationOnce(async () => blockedWrite);
+
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+    const mergeStartedAtMs = Date.now();
+    const firstMerge = mergeEvents(request as any);
+    let nowSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+    try {
+      await vi.waitFor(() => {
+        expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+      });
+
+      nowSpy = vi.spyOn(Date, 'now').mockReturnValue(
+        mergeStartedAtMs + (3600 * 1000),
+      );
+      await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'aborted' });
+      expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+    } finally {
+      nowSpy?.mockRestore();
+      releaseWrite?.();
+      await firstMerge.catch(() => undefined);
+    }
+
+    await expect(firstMerge).resolves.toMatchObject({ eventId: 'merged-event-id' });
+  });
+
+  it('should reuse the claimed result ID after an ambiguous write failure', async () => {
+    hoisted.mockGenerateMergeEventID
+      .mockReturnValueOnce('merge-result-1')
+      .mockReturnValueOnce('merge-result-2');
+    hoisted.mockWriteAllEventData.mockRejectedValueOnce(new Error('connection reset after write started'));
+
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'internal' });
+    await expect(mergeEvents(request as any)).resolves.toMatchObject({ eventId: 'merge-result-1' });
+
+    expect(hoisted.mockGenerateMergeEventID).toHaveBeenCalledTimes(2);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(2);
+    const retriedEvent = hoisted.mockWriteAllEventData.mock.calls[1][1] as { getID: () => string };
+    expect(retriedEvent.getID()).toBe('merge-result-1');
+  });
+
+  it('should rebuild a deliberately deleted result without allocating a second result ID', async () => {
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+    await mergeEvents(request as any);
+    hoisted.state.eventDocs.delete('users/u1/events/merged-event-id');
+
+    await expect(mergeEvents(request as any)).resolves.toMatchObject({ eventId: 'merged-event-id' });
+
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(2);
+    expect(hoisted.mockGenerateMergeEventID).toHaveBeenCalledTimes(2);
   });
 
   it('should strip nested streams and inject stream-less parser defaults', async () => {

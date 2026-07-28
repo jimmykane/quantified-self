@@ -59,7 +59,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 vi.mock('firebase-admin', () => ({
-  firestore: Object.assign(() => ({
+  firestore: () => ({
     collection: () => ({
       doc: () => ({
         collection: () => ({
@@ -69,11 +69,13 @@ vi.mock('firebase-admin', () => ({
         }),
       }),
     }),
-  }), {
-    FieldValue: {
-      delete: () => deleteFieldSentinel,
-    },
   }),
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    delete: () => deleteFieldSentinel,
+  },
 }));
 
 import { addSuuntoAppRoutesToQueue, insertSuuntoAppRouteToQueue } from './route-sync';

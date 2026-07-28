@@ -9,6 +9,7 @@ import {
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
+import dayjs from 'dayjs';
 import type { EChartsType } from 'echarts/core';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
@@ -88,6 +89,7 @@ const GRID_BOTTOM_WITH_LEGEND = 58;
 const GRID_BOTTOM_COMPACT = 34;
 const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
 const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 72;
+const MIN_CURRENT_WEEK_AXIS_LABEL_WIDTH = 36;
 const FALLBACK_MAX_AXIS_LABELS = 8;
 const STACK_TOP_BORDER_RADIUS = [3, 3, 0, 0] as const;
 const STACK_BAR_EMPHASIS = { focus: 'none' as const };
@@ -246,6 +248,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       }
       : { show: false };
     const xAxisLabelInterval = this.buildXAxisLabelInterval(points, chartWidth);
+    const xAxisLabelFormatter = this.buildXAxisLabelFormatter(points);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
     const averageHeartRateData = points.map(point => this.toFiniteMetric(point.averageHeartRateBpm));
     const minimumHeartRateData = points.map(point => this.toFiniteMetric(point.minimumHeartRateBpm));
@@ -407,6 +410,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           fontSize: style.axisFontSize,
           lineHeight: 14,
           interval: xAxisLabelInterval,
+          formatter: xAxisLabelFormatter,
           hideOverlap: true,
         },
       },
@@ -725,30 +729,68 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     }
 
     const hasProviderLine = points.some(point => point.categoryLabel.includes('\n'));
-    const minimumLabelWidth = hasProviderLine ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
+    const currentWeekIndexes = this.getCurrentWeekPointIndexes(points);
+    const minimumLabelWidth = currentWeekIndexes.size
+      ? MIN_CURRENT_WEEK_AXIS_LABEL_WIDTH
+      : hasProviderLine ? MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH : MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH;
     const availableWidth = Math.max(0, chartWidth - 68);
-    const maxLabels = availableWidth > 0
+    const maxLabels = Math.max(currentWeekIndexes.size, availableWidth > 0
       ? Math.max(2, Math.floor(availableWidth / minimumLabelWidth))
-      : FALLBACK_MAX_AXIS_LABELS;
+      : FALLBACK_MAX_AXIS_LABELS);
 
     if (points.length <= maxLabels) {
       return 0;
     }
 
     const lastIndex = points.length - 1;
-    const step = Math.max(1, Math.ceil(points.length / maxLabels));
     const visibleIndexes = new Set<number>();
-    for (let index = 0; index < points.length; index += step) {
+    const nonCurrentWeekIndexes = points
+      .map((_point, index) => index)
+      .filter(index => !currentWeekIndexes.has(index));
+    const remainingLabelSlots = maxLabels - currentWeekIndexes.size;
+    if (remainingLabelSlots > 0) {
+      const step = Math.max(1, Math.ceil(nonCurrentWeekIndexes.length / remainingLabelSlots));
+      for (let position = 0; position < nonCurrentWeekIndexes.length; position += step) {
+        visibleIndexes.add(nonCurrentWeekIndexes[position]);
+      }
+
+      if (!currentWeekIndexes.has(lastIndex) && !visibleIndexes.has(lastIndex)) {
+        if (visibleIndexes.size >= remainingLabelSlots) {
+          const lastVisibleIndex = Math.max(...visibleIndexes);
+          visibleIndexes.delete(lastVisibleIndex);
+        }
+        visibleIndexes.add(lastIndex);
+      }
+    }
+    for (const index of currentWeekIndexes) {
       visibleIndexes.add(index);
     }
 
-    const previousVisibleIndex = Math.max(...Array.from(visibleIndexes).filter(index => index < lastIndex));
-    if (Number.isFinite(previousVisibleIndex) && previousVisibleIndex > 0 && lastIndex - previousVisibleIndex < Math.ceil(step / 2)) {
-      visibleIndexes.delete(previousVisibleIndex);
-    }
-    visibleIndexes.add(lastIndex);
-
     return (index: number) => visibleIndexes.has(index);
+  }
+
+  private buildXAxisLabelFormatter(points: DashboardSleepTrendPoint[]): (value: string, index: number) => string {
+    const currentWeekIndexes = this.getCurrentWeekPointIndexes(points);
+    const weekdayFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+    return (value: string, index: number): string => {
+      const point = points[index];
+      if (!point || !currentWeekIndexes.has(index)) {
+        return value;
+      }
+      const weekday = weekdayFormatter.format(new Date(`${point.sleepDate}T12:00:00`));
+      return point.categoryLabel.includes('\n') ? `${weekday}\n${point.providerLabel}` : weekday;
+    };
+  }
+
+  private getCurrentWeekPointIndexes(points: DashboardSleepTrendPoint[]): Set<number> {
+    const now = dayjs();
+    const weekStart = now.startOf('day').subtract((now.day() + 6) % 7, 'day');
+    return new Set(points.flatMap((point, index) => {
+      const sleepDate = dayjs(point.sleepDate);
+      return sleepDate.isValid() && !sleepDate.isBefore(weekStart, 'day') && !sleepDate.isAfter(now, 'day')
+        ? [index]
+        : [];
+    }));
   }
 
   private formatDateTime(timestampMs: number): string {

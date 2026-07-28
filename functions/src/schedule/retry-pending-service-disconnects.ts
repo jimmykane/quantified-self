@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
@@ -56,7 +57,7 @@ const PENDING_DISCONNECT_COLLECTIONS: ReadonlyArray<PendingDisconnectCollectionC
 async function isGracePeriodActive(uid: string): Promise<boolean> {
   const systemDoc = await admin.firestore().doc(`users/${uid}/system/status`).get();
   const gracePeriodUntil = systemDoc.data()?.gracePeriodUntil as FirebaseFirestore.Timestamp | undefined;
-  return !!gracePeriodUntil && gracePeriodUntil.toMillis() > admin.firestore.Timestamp.now().toMillis();
+  return !!gracePeriodUntil && gracePeriodUntil.toMillis() > Timestamp.now().toMillis();
 }
 
 async function hasActiveProSubscription(uid: string): Promise<boolean> {
@@ -144,7 +145,7 @@ async function updatePendingDisconnectScanCursor(
 
 async function getDuePendingDisconnectRoots(
   config: PendingDisconnectCollectionConfig,
-  now: admin.firestore.Timestamp,
+  now: Timestamp,
 ): Promise<admin.firestore.QueryDocumentSnapshot[]> {
   const scanType: PendingDisconnectScanType = 'due_retry';
   const cursor = await getPendingDisconnectScanCursor(config, scanType);
@@ -156,7 +157,7 @@ async function getDuePendingDisconnectRoots(
       .where('disconnectManualReviewRequired', '==', false)
       .where('disconnectNextAttemptAt', '<=', now)
       .orderBy('disconnectNextAttemptAt')
-      .orderBy(admin.firestore.FieldPath.documentId())
+      .orderBy(FieldPath.documentId())
       .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT);
 
     if (pageCursor?.documentId && pageCursor.disconnectNextAttemptAt) {
@@ -186,7 +187,7 @@ async function getPendingDisconnectRootsForEntitlementCheck(
     let query = admin.firestore()
       .collection(config.collectionName)
       .where('disconnectState', '==', 'disconnect_pending')
-      .orderBy(admin.firestore.FieldPath.documentId())
+      .orderBy(FieldPath.documentId())
       .limit(PENDING_SERVICE_DISCONNECT_BATCH_LIMIT);
 
     if (pageCursor?.documentId) {
@@ -339,7 +340,7 @@ export const retryPendingServiceDisconnects = onSchedule({
   timeoutSeconds: 300,
   memory: '512MiB',
 }, async () => {
-  const now = admin.firestore.Timestamp.now();
+  const now = Timestamp.now();
 
   for (const config of PENDING_DISCONNECT_COLLECTIONS) {
     const restoredEntitlementClearedCount = await clearPendingDisconnectsForRestoredEntitlements(config);

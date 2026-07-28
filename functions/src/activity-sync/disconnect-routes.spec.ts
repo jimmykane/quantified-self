@@ -81,17 +81,16 @@ vi.mock('firebase-functions/v2/firestore', () => ({
 }));
 
 vi.mock('firebase-admin', () => ({
-  firestore: Object.assign(
-    () => ({
-      collection: mockCollection,
-      runTransaction: mockRunTransaction,
-    }),
-    {
-      FieldValue: {
-        delete: mockFieldValueDelete,
-      },
-    },
-  ),
+  firestore: () => ({
+    collection: mockCollection,
+    runTransaction: mockRunTransaction,
+  }),
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    delete: mockFieldValueDelete,
+  },
 }));
 
 vi.mock('../shared/user-deletion-guard', () => ({

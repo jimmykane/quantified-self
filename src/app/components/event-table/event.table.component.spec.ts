@@ -658,6 +658,26 @@ describe('EventTableComponent', () => {
         expect((component.data.data[1] as any).Name).toBe('Updated Event 2');
     });
 
+    it('should preserve selected event IDs across live row refreshes and drop removed rows', () => {
+        const previousEvents = [...component.events];
+        const selectedRows = component.data.data.slice(0, 2) as any[];
+        const refreshedEvent = new MockEvent('event1') as any;
+        component.selection.select(...selectedRows);
+        component.events = [
+            refreshedEvent,
+            new MockEvent('event3') as any,
+        ];
+
+        component.ngOnChanges({
+            events: new SimpleChange(previousEvents, component.events, false),
+        });
+
+        expect(component.selection.selected).toHaveLength(1);
+        expect(component.selection.selected[0]).not.toBe(selectedRows[0]);
+        expect(component.selection.selected[0].Event).toBe(refreshedEvent);
+        expect(component.selection.selected[0].Event.getID()).toBe('event1');
+    });
+
     it('should rebuild a cached row when the same event instance is mutated in place', () => {
         const initialRows = [...component.data.data];
         const getStatsRowElementSpy = vi.spyOn(component, 'getStatsRowElement');
@@ -978,6 +998,7 @@ describe('EventTableComponent', () => {
 
         expect(mockEventMergeService.mergeEvents).toHaveBeenCalledWith(['event1', 'event2'], 'benchmark');
         expect(mockRouter.navigate).toHaveBeenCalled();
+        expect(component.selection.selected).toHaveLength(0);
     });
 
     it('should show snackbar when trying to merge fewer than two events', async () => {
@@ -1033,6 +1054,7 @@ describe('EventTableComponent', () => {
 
         expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
         expect(mockSnackBar.open).toHaveBeenCalledWith('Not enough events to merge', undefined, { duration: 3000 });
+        expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledWith(null);
     });
 
     it('should pass multi merge mode to backend service', async () => {
@@ -1057,12 +1079,23 @@ describe('EventTableComponent', () => {
         const e2 = new MockEvent('event2');
         component.selection.select({ 'Event': e1 } as any);
         component.selection.select({ 'Event': e2 } as any);
-        mockEventMergeService.mergeEvents.mockRejectedValueOnce(new Error('boom'));
+        const refreshedRows = [
+            { Event: new MockEvent('event1') },
+            { Event: new MockEvent('event2') },
+        ] as any[];
+        component.data.data = refreshedRows;
+        mockEventMergeService.mergeEvents.mockImplementationOnce(async () => {
+            component.selection.clear();
+            throw new Error('boom');
+        });
         mockEventMergeService.getMergeErrorMessage.mockReturnValueOnce('Mapped merge error');
 
         await component.mergeSelection(new Event('click'));
 
         expect(mockSnackBar.open).toHaveBeenCalledWith('Mapped merge error', undefined, { duration: 5000 });
+        expect(component.selection.selected).toHaveLength(2);
+        expect(component.selection.selected).toEqual(refreshedRows);
+        expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledWith(null);
     });
 
     it('should not report merge failure when opening the merged event fails after a successful merge', async () => {
@@ -1084,7 +1117,7 @@ describe('EventTableComponent', () => {
         );
         expect(mockLogger.captureException).toHaveBeenCalledWith(navigationError, {
             extra: {
-                eventIDs: ['event1', 'event2'],
+                sourceEventsCount: 2,
                 mergeType: 'benchmark',
                 mergedEventID: 'merged-event',
                 stage: 'open_merged_event',

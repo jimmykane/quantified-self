@@ -1,5 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
@@ -240,7 +241,7 @@ export const backfillRouteDeliverySyncRoute = onCall({
             .collection('users')
             .doc(userID)
             .collection('routes')
-            .orderBy(admin.firestore.FieldPath.documentId())
+            .orderBy(FieldPath.documentId())
             .limit(BACKFILL_PAGE_SIZE);
 
         if (pageCursor) {

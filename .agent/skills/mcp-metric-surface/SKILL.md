@@ -44,10 +44,12 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   projection. Never forward original files, raw points/streams, Storage paths, source/delivery provenance, waypoint text,
   links, or extensions. Exact route bounds, preview geometry, nearby search, and waypoint coordinates require dependent
   `route-location:read` in addition to `routes:read`.
-- **Local plugin or bundled analysis skill:** keep `plugins/quantified-self/plugin.template.json`, the repo-local
-  marketplace, starter prompts, branding, and `analyze-quantified-self` guidance aligned with the public MCP surface.
-  Do not duplicate the complete tool or metric catalog in the skill; make it discover the authoritative runtime
-  catalogs. Keep the ChatGPT technical app ID and generated cache-busted bundle files out of Git.
+- **Local plugin or bundled workflow skill:** keep `plugins/quantified-self/plugin.template.json`, the repo-local
+  marketplace, branding, the three manifest-level starter prompts, and all six focused/cross-domain workflow skills
+  aligned with the public MCP surface. Review the affected single-domain skill and the cross-domain skill whenever a
+  domain changes. Do not duplicate complete tool names or metric IDs in a skill; make it discover authoritative runtime
+  tools and catalogs. Keep each skill's `agents/openai.yaml` prompt, one hosted MCP dependency, and implicit-invocation
+  policy aligned. Keep the ChatGPT technical app ID and generated cache-busted bundle files out of Git.
 
 ## Implementation Contract
 
@@ -80,10 +82,20 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
    text for compatibility. Expected errors remain text-only `isError` results. Update the in-memory contract fixture for
    every affected tool, every derived kind, optional/nullable and pagination states, and add a negative leakage canary
    for each sensitive neighboring field.
-9. Classify local-plugin follow-up explicitly. Tool names, descriptions, schemas, scopes, or server instructions require
+9. Preserve the registered MCP contract in `functions/src/mcp/contracts/registered-contract.json`. Existing tool names,
+   authorization-profile availability, annotations, security schemes, and input/output schemas are frozen after
+   registration; use an additive tool for a new shape. Run `npm --prefix functions run mcp:contract:check` for every
+   public MCP change. Compatible new tools or metadata require the digest-bound pending change record and the documented
+   developer refresh or published-version lifecycle; a pending record never overrides a breaking finding. Never edit
+   the registered baseline or append-only transition history directly; use the verified promotion command.
+10. Classify local-plugin follow-up explicitly. Tool names, descriptions, schemas, scopes, or server instructions require
    a deployed-server update and a rescan of the registered ChatGPT app. Plugin manifest, starter-prompt, icon, or bundled
    skill changes require `npm run plugin:sync` after validation. Server implementation changes that preserve the public
    contract do not require a plugin rebuild.
+11. Treat the exported bundled-skill registry in `tools/quantified-self-plugin/plugin-tool.mjs` as exhaustive. Add a new
+    skill with the official skill scaffolder, then update that registry, source and installed-tree fixtures, per-skill
+    starter prompt, MCP dependency, README, and `docs/mcp-server.md` together. The source directory must contain exactly
+    the registered skills, and installed validation must compare every regular file recursively and reject symlinks.
 
 ## Verify
 
@@ -104,7 +116,9 @@ Add or update focused tests for:
 - scope denial and query limits.
 
 Then run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts` plus the focused Functions tests,
-`npm --prefix functions run build`, the affected frontend tests, the Firestore rules suite when access changes,
-`npm run plugin:tools`, `npm --prefix tools/quantified-self-plugin test`, a fixture-ID `npm run plugin:validate` when the
-local package or public tool contract is affected, and `git diff --check`. Do not deploy, publish Sports Lib, start a
-production reparse, install the plugin into a real profile, or mutate cloud configuration as part of this workflow.
+`npm --prefix functions run mcp:contract:check`, the affected frontend tests, the Firestore rules suite when access changes,
+`npm run plugin:tools`, the official skill validator for every bundled skill,
+`npm --prefix tools/quantified-self-plugin test`, a fixture-ID `npm run plugin:validate` when the local package or public
+tool contract is affected, and `git diff --check`. Forward-test representative prompts for every affected workflow,
+missing-permission handling, and ambiguous single-domain/cross-domain routing. Do not deploy, publish Sports Lib, start
+a production reparse, install the plugin into a real profile, or mutate cloud configuration as part of this workflow.

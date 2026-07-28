@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -14,6 +15,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, test } from 'node:test';
 import {
+  BUNDLED_SKILL_NAMES,
   DEFAULT_REPO_ROOT,
   assertSafeChild,
   assertInstalledPluginResult,
@@ -25,23 +27,43 @@ import {
   pathsAreEquivalent,
   resolveAppId,
   validateAppId,
+  validateInstalledPluginBundle,
   validatePluginSource,
 } from './plugin-tool.mjs';
 
 const temporaryRoots = [];
 const pluginToolPath = fileURLToPath(new URL('./plugin-tool.mjs', import.meta.url));
 
+function fixtureAgentYaml(skillName, index, {
+  displayName = `Quantified Self Test ${index + 1}`,
+  shortDescription = 'Analyze fitness and health test trends',
+  defaultPrompt = `Use $${skillName} to analyze my test data.`,
+  dependencyValue = 'quantified-self',
+  allowImplicitInvocation = true,
+} = {}) {
+  return [
+    'interface:',
+    `  display_name: "${displayName}"`,
+    `  short_description: "${shortDescription}"`,
+    `  default_prompt: "${defaultPrompt}"`,
+    'dependencies:',
+    '  tools:',
+    '    - type: "mcp"',
+    `      value: "${dependencyValue}"`,
+    '      description: "Read-only Quantified Self data"',
+    '      transport: "streamable_http"',
+    '      url: "https://quantified-self.io/mcp"',
+    'policy:',
+    `  allow_implicit_invocation: ${allowImplicitInvocation}`,
+    '',
+  ].join('\n');
+}
+
 async function makeRepositoryFixture() {
   const root = await mkdtemp(join(tmpdir(), 'quantified-self-plugin-test-'));
   temporaryRoots.push(root);
   const pluginRoot = join(root, 'plugins', 'quantified-self');
-  const skillRoot = join(
-    pluginRoot,
-    'skills',
-    'analyze-quantified-self',
-  );
   await mkdir(join(pluginRoot, '.codex-plugin'), { recursive: true });
-  await mkdir(join(skillRoot, 'agents'), { recursive: true });
   await mkdir(join(root, 'src', 'assets', 'favicons'), { recursive: true });
   await writeFile(
     join(pluginRoot, 'plugin.template.json'),
@@ -59,7 +81,11 @@ async function makeRepositoryFixture() {
         developerName: 'Test',
         category: 'Lifestyle',
         capabilities: ['Read'],
-        defaultPrompt: ['Test'],
+        defaultPrompt: [
+          'Test activity analysis.',
+          'Test measurement analysis.',
+          'Test cross-domain analysis.',
+        ],
       },
     })}\n`,
   );
@@ -67,37 +93,26 @@ async function makeRepositoryFixture() {
     join(root, 'src', 'assets', 'favicons', 'quantified-self-chatgpt-icon-256x256.png'),
     Buffer.from([0x89, 0x50, 0x4e, 0x47]),
   );
-  await writeFile(
-    join(skillRoot, 'SKILL.md'),
-    [
-      '---',
-      'name: analyze-quantified-self',
-      'description: Analyze Quantified Self test data.',
-      '---',
-      '',
-      '# Analyze Quantified Self',
-      '',
-    ].join('\n'),
-  );
-  await writeFile(
-    join(skillRoot, 'agents', 'openai.yaml'),
-    [
-      'interface:',
-      '  display_name: "Analyze Quantified Self"',
-      '  short_description: "Analyze fitness and health trends"',
-      '  default_prompt: "Use $analyze-quantified-self to analyze my data."',
-      'dependencies:',
-      '  tools:',
-      '    - type: "mcp"',
-      '      value: "quantified-self"',
-      '      description: "Read-only Quantified Self data"',
-      '      transport: "streamable_http"',
-      '      url: "https://quantified-self.io/mcp"',
-      'policy:',
-      '  allow_implicit_invocation: true',
-      '',
-    ].join('\n'),
-  );
+  await Promise.all(BUNDLED_SKILL_NAMES.map(async (skillName, index) => {
+    const skillRoot = join(pluginRoot, 'skills', skillName);
+    await mkdir(join(skillRoot, 'agents'), { recursive: true });
+    await writeFile(
+      join(skillRoot, 'SKILL.md'),
+      [
+        '---',
+        `name: ${skillName}`,
+        `description: Analyze ${skillName} test data.`,
+        '---',
+        '',
+        `# Test Skill ${index + 1}`,
+        '',
+      ].join('\n'),
+    );
+    await writeFile(
+      join(skillRoot, 'agents', 'openai.yaml'),
+      fixtureAgentYaml(skillName, index),
+    );
+  }));
   return root;
 }
 
@@ -333,6 +348,42 @@ test('rejects malformed and wrong-identity templates before generating account-b
   );
 });
 
+test('requires exactly three distinct bounded starter prompts before build output', async () => {
+  const root = await makeRepositoryFixture();
+  const templatePath = join(root, 'plugins', 'quantified-self', 'plugin.template.json');
+  const template = JSON.parse(await readFile(templatePath, 'utf8'));
+
+  for (const defaultPrompt of [
+    ['First prompt.', 'Second prompt.'],
+    ['Repeated prompt.', 'Repeated prompt.', 'Third prompt.'],
+    ['First prompt.', 'Second prompt.', 'x'.repeat(129)],
+  ]) {
+    await writeFile(
+      templatePath,
+      `${JSON.stringify({
+        ...template,
+        interface: {
+          ...template.interface,
+          defaultPrompt,
+        },
+      })}\n`,
+    );
+    await assert.rejects(
+      buildPlugin({
+        repoRoot: root,
+        appId: 'plugin_asdk_app_local',
+        cachebuster: 'ci-invalid-prompts',
+        environment: {},
+      }),
+      /exactly three distinct starter prompts/,
+    );
+    await assert.rejects(
+      readFile(join(root, 'plugins', 'quantified-self', '.app.json')),
+      { code: 'ENOENT' },
+    );
+  }
+});
+
 test('rejects a missing icon before generating account-bound files', async () => {
   const root = await makeRepositoryFixture();
   await rm(
@@ -378,7 +429,7 @@ test('rejects missing bundled skill files before generating account-bound files'
       cachebuster: 'ci-test',
       environment: {},
     }),
-    { code: 'ENOENT' },
+    /agent configuration does not exist/,
   );
   await assert.rejects(
     readFile(join(root, 'plugins', 'quantified-self', '.codex-plugin', 'plugin.json')),
@@ -387,6 +438,51 @@ test('rejects missing bundled skill files before generating account-bound files'
   await assert.rejects(readFile(join(root, 'plugins', 'quantified-self', '.app.json')), {
     code: 'ENOENT',
   });
+});
+
+test('requires exactly the registered six bundled skill directories', async () => {
+  const missingRoot = await makeRepositoryFixture();
+  await rm(
+    join(
+      missingRoot,
+      'plugins',
+      'quantified-self',
+      'skills',
+      'explore-quantified-self-routes',
+    ),
+    { recursive: true },
+  );
+  await assert.rejects(
+    buildPlugin({
+      repoRoot: missingRoot,
+      appId: 'plugin_asdk_app_local',
+      cachebuster: 'ci-test',
+      environment: {},
+    }),
+    /skill set is incomplete or unexpected/,
+  );
+  await assert.rejects(
+    readFile(join(missingRoot, 'plugins', 'quantified-self', '.app.json')),
+    { code: 'ENOENT' },
+  );
+
+  const extraRoot = await makeRepositoryFixture();
+  await mkdir(
+    join(extraRoot, 'plugins', 'quantified-self', 'skills', 'unexpected-skill'),
+  );
+  await assert.rejects(
+    buildPlugin({
+      repoRoot: extraRoot,
+      appId: 'plugin_asdk_app_local',
+      cachebuster: 'ci-test',
+      environment: {},
+    }),
+    /skill set is incomplete or unexpected/,
+  );
+  await assert.rejects(
+    readFile(join(extraRoot, 'plugins', 'quantified-self', '.app.json')),
+    { code: 'ENOENT' },
+  );
 });
 
 test('strictly validates bundled skill and agent YAML before installation', async () => {
@@ -437,6 +533,21 @@ test('strictly validates bundled skill and agent YAML before installation', asyn
     join(skillRoot, 'SKILL.md'),
     [
       '---',
+      'name: [',
+      'description: Malformed frontmatter.',
+      '---',
+      '',
+    ].join('\n'),
+  );
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /frontmatter is not valid YAML/,
+  );
+
+  await writeFile(
+    join(skillRoot, 'SKILL.md'),
+    [
+      '---',
       'name: wrong-skill',
       'description: Wrong identity.',
       '---',
@@ -465,6 +576,230 @@ test('strictly validates bundled skill and agent YAML before installation', asyn
   await assert.rejects(
     validatePluginSource({ repoRoot: root }),
     /identity is invalid/,
+  );
+
+  await writeFile(
+    join(skillRoot, 'SKILL.md'),
+    [
+      '---',
+      'name: analyze-quantified-self',
+      'description: Analyze <unsafe> test data.',
+      '---',
+      '',
+    ].join('\n'),
+  );
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /identity is invalid/,
+  );
+});
+
+test('validates each skill prompt, dependency, policy, and UI metadata', async () => {
+  const root = await makeRepositoryFixture();
+  const skillName = 'analyze-quantified-self-sleep';
+  const skillIndex = BUNDLED_SKILL_NAMES.indexOf(skillName);
+  const agentPath = join(
+    root,
+    'plugins',
+    'quantified-self',
+    'skills',
+    skillName,
+    'agents',
+    'openai.yaml',
+  );
+
+  await writeFile(agentPath, fixtureAgentYaml(skillName, skillIndex, {
+    defaultPrompt: 'Use $analyze-quantified-self-training for this request.',
+  }));
+  await assert.rejects(
+    buildPlugin({
+      repoRoot: root,
+      appId: 'plugin_asdk_app_local',
+      cachebuster: 'ci-invalid-prompt',
+      environment: {},
+    }),
+    /default prompt must name the skill/,
+  );
+  await assert.rejects(
+    readFile(join(root, 'plugins', 'quantified-self', '.app.json')),
+    { code: 'ENOENT' },
+  );
+
+  await writeFile(agentPath, fixtureAgentYaml(skillName, skillIndex, {
+    dependencyValue: 'other-app',
+  }));
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /MCP dependency is invalid/,
+  );
+
+  await writeFile(agentPath, fixtureAgentYaml(skillName, skillIndex, {
+    allowImplicitInvocation: false,
+  }));
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /must allow implicit invocation/,
+  );
+
+  await writeFile(agentPath, fixtureAgentYaml(skillName, skillIndex, {
+    shortDescription: 'Too short',
+  }));
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /short description must contain 25-64 characters/,
+  );
+
+  await writeFile(agentPath, fixtureAgentYaml(skillName, skillIndex, {
+    displayName: 'Quantified Self Test 1',
+  }));
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /display names must be unique/,
+  );
+
+  const umbrellaName = 'analyze-quantified-self';
+  const umbrellaAgentPath = join(
+    root,
+    'plugins',
+    'quantified-self',
+    'skills',
+    umbrellaName,
+    'agents',
+    'openai.yaml',
+  );
+  await writeFile(
+    umbrellaAgentPath,
+    fixtureAgentYaml(umbrellaName, 0, {
+      defaultPrompt:
+        'Use $analyze-quantified-self-training for this request.',
+    }),
+  );
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /default prompt must name the skill/,
+  );
+});
+
+test('rejects symbolic links anywhere in the bundled skill tree', async (context) => {
+  if (process.platform === 'win32') {
+    context.skip('File symlink creation requires elevated privileges on some Windows hosts.');
+    return;
+  }
+  const root = await makeRepositoryFixture();
+  const skillRoot = join(
+    root,
+    'plugins',
+    'quantified-self',
+    'skills',
+    'explore-quantified-self-routes',
+  );
+  await symlink('SKILL.md', join(skillRoot, 'linked-skill.md'));
+  await assert.rejects(
+    validatePluginSource({ repoRoot: root }),
+    /must not contain symbolic links/,
+  );
+});
+
+test('compares every installed bundled skill file with its source', async () => {
+  const root = await makeRepositoryFixture();
+  const built = await buildPlugin({
+    repoRoot: root,
+    appId: 'plugin_asdk_app_local',
+    cachebuster: 'ci-installed-tree',
+    environment: {},
+  });
+  const installedParent = await mkdtemp(join(tmpdir(), 'quantified-self-installed-test-'));
+  temporaryRoots.push(installedParent);
+  const installedPath = join(installedParent, 'quantified-self');
+  await cp(built.pluginRoot, installedPath, { recursive: true });
+
+  await assert.doesNotReject(validateInstalledPluginBundle({
+    repoRoot: root,
+    installedPath,
+    expectedVersion: built.version,
+    appId: 'plugin_asdk_app_local',
+  }));
+
+  const activitySkillPath = join(
+    installedPath,
+    'skills',
+    'analyze-quantified-self-activity',
+    'SKILL.md',
+  );
+  const originalActivitySkill = await readFile(activitySkillPath);
+  await writeFile(activitySkillPath, 'tampered');
+  await assert.rejects(
+    validateInstalledPluginBundle({
+      repoRoot: root,
+      installedPath,
+      expectedVersion: built.version,
+      appId: 'plugin_asdk_app_local',
+    }),
+    /incomplete or inconsistent/,
+  );
+
+  await writeFile(activitySkillPath, originalActivitySkill);
+  const installedRouteConfigPath = join(
+    installedPath,
+    'skills',
+    'explore-quantified-self-routes',
+    'agents',
+    'openai.yaml',
+  );
+  await rm(installedRouteConfigPath);
+  await assert.rejects(
+    validateInstalledPluginBundle({
+      repoRoot: root,
+      installedPath,
+      expectedVersion: built.version,
+      appId: 'plugin_asdk_app_local',
+    }),
+    /incomplete or inconsistent/,
+  );
+
+  await writeFile(
+    installedRouteConfigPath,
+    await readFile(join(
+      root,
+      'plugins',
+      'quantified-self',
+      'skills',
+      'explore-quantified-self-routes',
+      'agents',
+      'openai.yaml',
+    )),
+  );
+  await writeFile(
+    join(installedPath, 'skills', 'unexpected-file.md'),
+    'unexpected',
+  );
+  await assert.rejects(
+    validateInstalledPluginBundle({
+      repoRoot: root,
+      installedPath,
+      expectedVersion: built.version,
+      appId: 'plugin_asdk_app_local',
+    }),
+    /incomplete or inconsistent/,
+  );
+
+  await rm(join(installedPath, 'skills', 'unexpected-file.md'));
+  await mkdir(
+    join(
+      installedPath,
+      'skills',
+      'analyze-quantified-self',
+      'unexpected-empty-directory',
+    ),
+  );
+  await assert.rejects(
+    validateInstalledPluginBundle({
+      repoRoot: root,
+      installedPath,
+      expectedVersion: built.version,
+      appId: 'plugin_asdk_app_local',
+    }),
+    /incomplete or inconsistent/,
   );
 });
 
@@ -666,24 +1001,40 @@ test('CLI rejects app IDs passed as npm-visible command-line arguments', async (
   assert.match(ignoredOptionResult.stderr, /Unknown argument: --cachebuster/);
 });
 
-test('bundled skill stays discoverable without duplicating a static metric catalog', async () => {
-  const skill = await readFile(
-    join(
-      DEFAULT_REPO_ROOT,
-      'plugins',
-      'quantified-self',
-      'skills',
-      'analyze-quantified-self',
-      'SKILL.md',
-    ),
-    'utf8',
+test('bundled skills cover focused workflows without copying the live tool catalog', async () => {
+  const expectedMarkers = new Map([
+    ['analyze-quantified-self', /Cross-Domain Workflow/],
+    ['analyze-quantified-self-activity', /whole-activity downsampling/],
+    ['analyze-quantified-self-measurements', /first-class recorded measurements/],
+    ['analyze-quantified-self-sleep', /normalized sleep summaries/],
+    ['analyze-quantified-self-training', /live metric catalog/],
+    ['explore-quantified-self-routes', /saved-route summaries/],
+  ]);
+  assert.deepEqual(
+    [...expectedMarkers.keys()].sort(),
+    [...BUNDLED_SKILL_NAMES].sort(),
   );
-  assert.match(skill, /body measurements such as weight/);
-  assert.match(skill, /workout charts/);
-  assert.match(skill, /sleep/);
-  assert.match(skill, /routes/);
-  assert.match(skill, /Inspect the relevant catalog/);
-  assert.doesNotMatch(skill, /\[TODO|TODO:/);
+
+  for (const [skillName, expectedMarker] of expectedMarkers) {
+    const skill = await readFile(
+      join(
+        DEFAULT_REPO_ROOT,
+        'plugins',
+        'quantified-self',
+        'skills',
+        skillName,
+        'SKILL.md',
+      ),
+      'utf8',
+    );
+    assert.match(skill, expectedMarker, skillName);
+    assert.doesNotMatch(skill, /\[TODO|TODO:/, skillName);
+    assert.doesNotMatch(
+      skill,
+      /\b(?:list|query|get|find)_[a-z0-9_]+\b/,
+      skillName,
+    );
+  }
 });
 
 test('every CLI-dependent root command bootstraps the pinned plugin tooling', async () => {
@@ -691,11 +1042,11 @@ test('every CLI-dependent root command bootstraps the pinned plugin tooling', as
     await readFile(join(DEFAULT_REPO_ROOT, 'package.json'), 'utf8'),
   );
   for (const command of [
+    'plugin:build',
     'plugin:validate',
     'plugin:setup',
     'plugin:sync',
   ]) {
     assert.match(rootPackage.scripts[command], /^npm run plugin:tools && /);
   }
-  assert.doesNotMatch(rootPackage.scripts['plugin:build'], /plugin:tools/);
 });

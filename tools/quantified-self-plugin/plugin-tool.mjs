@@ -1,9 +1,11 @@
 import {
   chmod,
   copyFile,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rename,
   rm,
   writeFile,
@@ -18,7 +20,14 @@ import { isDeepStrictEqual } from 'node:util';
 
 export const PLUGIN_NAME = 'quantified-self';
 export const MARKETPLACE_NAME = 'quantified-self-local';
-const ANALYSIS_SKILL_NAME = 'analyze-quantified-self';
+export const BUNDLED_SKILL_NAMES = Object.freeze([
+  'analyze-quantified-self',
+  'analyze-quantified-self-activity',
+  'analyze-quantified-self-measurements',
+  'analyze-quantified-self-sleep',
+  'analyze-quantified-self-training',
+  'explore-quantified-self-routes',
+]);
 
 const TOOL_ROOT = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_REPO_ROOT = resolve(TOOL_ROOT, '..', '..');
@@ -34,6 +43,7 @@ function pathsFor(repoRoot) {
   return {
     repoRoot: normalizedRoot,
     pluginRoot,
+    skillsRoot: join(pluginRoot, 'skills'),
     templatePath: join(pluginRoot, 'plugin.template.json'),
     manifestPath: join(pluginRoot, '.codex-plugin', 'plugin.json'),
     appPath: join(pluginRoot, '.app.json'),
@@ -59,9 +69,10 @@ function pathsFor(repoRoot) {
   };
 }
 
-function analysisSkillPaths(paths) {
-  const skillRoot = join(paths.pluginRoot, 'skills', ANALYSIS_SKILL_NAME);
+function skillPathsFor(paths, skillName) {
+  const skillRoot = join(paths.skillsRoot, skillName);
   return {
+    skillName,
     skillRoot,
     skillPath: join(skillRoot, 'SKILL.md'),
     agentPath: join(skillRoot, 'agents', 'openai.yaml'),
@@ -226,7 +237,6 @@ export async function buildPlugin({
   now = new Date(),
 } = {}) {
   const paths = pathsFor(repoRoot);
-  const skillPaths = analysisSkillPaths(paths);
   assertSafeChild(paths.repoRoot, paths.pluginRoot, 'Plugin root');
   assertSafeChild(
     paths.repoRoot,
@@ -234,17 +244,7 @@ export async function buildPlugin({
     'Local plugin configuration',
   );
   assertSafeChild(paths.repoRoot, paths.sourceIconPath, 'Plugin source icon');
-  assertSafeChild(paths.pluginRoot, skillPaths.skillRoot, 'Bundled analysis skill');
-  assertSafeChild(
-    skillPaths.skillRoot,
-    skillPaths.skillPath,
-    'Bundled analysis skill instructions',
-  );
-  assertSafeChild(
-    skillPaths.skillRoot,
-    skillPaths.agentPath,
-    'Bundled analysis skill agent configuration',
-  );
+  assertSafeChild(paths.pluginRoot, paths.skillsRoot, 'Bundled skills');
   for (const [label, path] of [
     ['Plugin manifest template', paths.templatePath],
     ['Plugin manifest', paths.manifestPath],
@@ -253,6 +253,7 @@ export async function buildPlugin({
   ]) {
     assertSafeChild(paths.pluginRoot, path, label);
   }
+  await validatePluginSourceAtPaths(paths);
 
   const resolvedAppId = await resolveAppId({
     explicitAppId: appId,
@@ -272,6 +273,24 @@ export async function buildPlugin({
   const resolvedCachebuster =
     cachebuster ?? environment.QS_PLUGIN_CACHEBUSTER ?? defaultCachebuster(now);
   const version = createPluginVersion(template.version, resolvedCachebuster);
+  const starterPrompts = template.interface?.defaultPrompt;
+  if (
+    !Array.isArray(starterPrompts)
+    || starterPrompts.length !== 3
+    || new Set(starterPrompts).size !== 3
+    || starterPrompts.some(
+      prompt =>
+        typeof prompt !== 'string'
+        || prompt !== prompt.trim()
+        || prompt.length === 0
+        || prompt.length > 128,
+    )
+  ) {
+    throw new Error(
+      'Plugin manifest template must declare exactly three distinct starter prompts of at most 128 characters.',
+    );
+  }
+
   const manifest = { ...template, version };
   const appManifest = {
     apps: {
@@ -281,11 +300,7 @@ export async function buildPlugin({
     },
   };
 
-  await Promise.all([
-    readFile(paths.sourceIconPath),
-    readFile(skillPaths.skillPath),
-    readFile(skillPaths.agentPath),
-  ]);
+  await readFile(paths.sourceIconPath);
   await writeJsonAtomic(paths.appPath, appManifest, 0o600);
   await copyFileAtomic(paths.sourceIconPath, paths.iconPath);
   await writeJsonAtomic(paths.manifestPath, manifest);
@@ -333,107 +348,210 @@ async function parseYamlObject(contents, label) {
   return assertObjectWithKeys(document.toJS(), undefined, label);
 }
 
-async function validatePluginSourceAtPaths(paths) {
-  const skillPaths = analysisSkillPaths(paths);
+async function requireDirectory(path, label) {
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      throw new Error(`${label} does not exist.`);
+    }
+    throw error;
+  }
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+    throw new Error(`${label} must be a real directory.`);
+  }
+}
+
+async function requireRegularFile(path, label) {
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      throw new Error(`${label} does not exist.`);
+    }
+    throw error;
+  }
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error(`${label} must be a regular file.`);
+  }
+}
+
+async function validateBundledSkillStructure(paths) {
   assertSafeChild(paths.repoRoot, paths.pluginRoot, 'Plugin root');
-  assertSafeChild(paths.pluginRoot, skillPaths.skillRoot, 'Bundled analysis skill');
-  assertSafeChild(
-    skillPaths.skillRoot,
-    skillPaths.skillPath,
-    'Bundled analysis skill instructions',
-  );
-  assertSafeChild(
-    skillPaths.skillRoot,
-    skillPaths.agentPath,
-    'Bundled analysis skill agent configuration',
-  );
-  const [skillContents, agentContents] = await Promise.all([
-    readFile(skillPaths.skillPath, 'utf8'),
-    readFile(skillPaths.agentPath, 'utf8'),
-  ]);
-  const frontmatterMatch =
-    /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(skillContents);
-  if (!frontmatterMatch) {
-    throw new Error('Bundled analysis skill frontmatter is missing or malformed.');
+  assertSafeChild(paths.pluginRoot, paths.skillsRoot, 'Bundled skills');
+  await requireDirectory(paths.skillsRoot, 'Bundled skills');
+  const entries = await readdir(paths.skillsRoot, { withFileTypes: true });
+  if (entries.some(entry => !entry.isDirectory() || entry.isSymbolicLink())) {
+    throw new Error('Bundled skills must contain only real skill directories.');
   }
-  const frontmatter = assertObjectWithKeys(
-    await parseYamlObject(
-      frontmatterMatch[1],
-      'Bundled analysis skill frontmatter',
-    ),
-    ['name', 'description'],
-    'Bundled analysis skill frontmatter',
+  const actualNames = entries.map(entry => entry.name).sort();
+  const expectedNames = [...BUNDLED_SKILL_NAMES].sort();
+  if (!isDeepStrictEqual(actualNames, expectedNames)) {
+    throw new Error('Bundled skill set is incomplete or unexpected.');
+  }
+
+  const skillPaths = BUNDLED_SKILL_NAMES.map(
+    skillName => skillPathsFor(paths, skillName),
   );
-  if (
-    frontmatter.name !== ANALYSIS_SKILL_NAME
-    || !assertNonEmptyString(
+  for (const skill of skillPaths) {
+    const label = `Bundled skill ${skill.skillName}`;
+    assertSafeChild(paths.skillsRoot, skill.skillRoot, label);
+    assertSafeChild(skill.skillRoot, skill.skillPath, `${label} instructions`);
+    assertSafeChild(
+      skill.skillRoot,
+      skill.agentPath,
+      `${label} agent configuration`,
+    );
+    await Promise.all([
+      requireDirectory(skill.skillRoot, label),
+      requireRegularFile(skill.skillPath, `${label} instructions`),
+      requireRegularFile(skill.agentPath, `${label} agent configuration`),
+    ]);
+  }
+  return skillPaths;
+}
+
+async function snapshotRegularTree(root, label) {
+  await requireDirectory(root, label);
+  const snapshot = {
+    directories: [],
+    files: new Map(),
+  };
+
+  async function visit(directory, relativeDirectory = '') {
+    const entries = await readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const relativePath = join(relativeDirectory, entry.name);
+      const absolutePath = join(directory, entry.name);
+      if (entry.isSymbolicLink()) {
+        throw new Error(`${label} must not contain symbolic links.`);
+      }
+      if (entry.isDirectory()) {
+        snapshot.directories.push(relativePath);
+        await visit(absolutePath, relativePath);
+      } else if (entry.isFile()) {
+        snapshot.files.set(relativePath, await readFile(absolutePath));
+      } else {
+        throw new Error(`${label} must contain only regular files and directories.`);
+      }
+    }
+  }
+
+  await visit(root);
+  return snapshot;
+}
+
+async function validatePluginSourceAtPaths(paths) {
+  const bundledSkills = await validateBundledSkillStructure(paths);
+  await snapshotRegularTree(paths.skillsRoot, 'Source bundled skills');
+  const displayNames = new Set();
+  for (const skillPaths of bundledSkills) {
+    const label = `Bundled skill ${skillPaths.skillName}`;
+    const [skillContents, agentContents] = await Promise.all([
+      readFile(skillPaths.skillPath, 'utf8'),
+      readFile(skillPaths.agentPath, 'utf8'),
+    ]);
+    const frontmatterMatch =
+      /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(skillContents);
+    if (!frontmatterMatch) {
+      throw new Error(`${label} frontmatter is missing or malformed.`);
+    }
+    const frontmatter = assertObjectWithKeys(
+      await parseYamlObject(
+        frontmatterMatch[1],
+        `${label} frontmatter`,
+      ),
+      ['name', 'description'],
+      `${label} frontmatter`,
+    );
+    const description = assertNonEmptyString(
       frontmatter.description,
-      'Bundled analysis skill description',
-    )
-  ) {
-    throw new Error('Bundled analysis skill identity is invalid.');
-  }
+      `${label} description`,
+    );
+    if (
+      frontmatter.name !== skillPaths.skillName
+      || description.length > 1024
+      || description.includes('<')
+      || description.includes('>')
+    ) {
+      throw new Error(`${label} identity is invalid.`);
+    }
 
-  const agent = assertObjectWithKeys(
-    await parseYamlObject(agentContents, 'Bundled analysis skill agent configuration'),
-    ['interface', 'dependencies', 'policy'],
-    'Bundled analysis skill agent configuration',
-  );
-  const interfaceConfig = assertObjectWithKeys(
-    agent.interface,
-    ['display_name', 'short_description', 'default_prompt'],
-    'Bundled analysis skill interface',
-  );
-  assertNonEmptyString(
-    interfaceConfig.display_name,
-    'Bundled analysis skill display name',
-  );
-  assertNonEmptyString(
-    interfaceConfig.short_description,
-    'Bundled analysis skill short description',
-  );
-  const defaultPrompt = assertNonEmptyString(
-    interfaceConfig.default_prompt,
-    'Bundled analysis skill default prompt',
-  );
-  if (!defaultPrompt.includes(`$${ANALYSIS_SKILL_NAME}`)) {
-    throw new Error('Bundled analysis skill default prompt must name the skill.');
-  }
+    const agent = assertObjectWithKeys(
+      await parseYamlObject(agentContents, `${label} agent configuration`),
+      ['interface', 'dependencies', 'policy'],
+      `${label} agent configuration`,
+    );
+    const interfaceConfig = assertObjectWithKeys(
+      agent.interface,
+      ['display_name', 'short_description', 'default_prompt'],
+      `${label} interface`,
+    );
+    const displayName = assertNonEmptyString(
+      interfaceConfig.display_name,
+      `${label} display name`,
+    );
+    if (displayNames.has(displayName)) {
+      throw new Error('Bundled skill display names must be unique.');
+    }
+    displayNames.add(displayName);
+    const shortDescription = assertNonEmptyString(
+      interfaceConfig.short_description,
+      `${label} short description`,
+    );
+    if (shortDescription.length < 25 || shortDescription.length > 64) {
+      throw new Error(`${label} short description must contain 25-64 characters.`);
+    }
+    const defaultPrompt = assertNonEmptyString(
+      interfaceConfig.default_prompt,
+      `${label} default prompt`,
+    );
+    const referencedSkills = defaultPrompt.match(/\$[a-z0-9-]+/g) ?? [];
+    if (
+      referencedSkills.length !== 1
+      || referencedSkills[0] !== `$${skillPaths.skillName}`
+    ) {
+      throw new Error(`${label} default prompt must name the skill.`);
+    }
 
-  const dependencies = assertObjectWithKeys(
-    agent.dependencies,
-    ['tools'],
-    'Bundled analysis skill dependencies',
-  );
-  if (!Array.isArray(dependencies.tools) || dependencies.tools.length !== 1) {
-    throw new Error('Bundled analysis skill must declare exactly one MCP dependency.');
-  }
-  const [tool] = dependencies.tools;
-  assertObjectWithKeys(
-    tool,
-    ['type', 'value', 'description', 'transport', 'url'],
-    'Bundled analysis skill MCP dependency',
-  );
-  assertNonEmptyString(
-    tool.description,
-    'Bundled analysis skill MCP dependency description',
-  );
-  if (
-    tool.type !== 'mcp'
-    || tool.value !== PLUGIN_NAME
-    || tool.transport !== 'streamable_http'
-    || tool.url !== 'https://quantified-self.io/mcp'
-  ) {
-    throw new Error('Bundled analysis skill MCP dependency is invalid.');
-  }
+    const dependencies = assertObjectWithKeys(
+      agent.dependencies,
+      ['tools'],
+      `${label} dependencies`,
+    );
+    if (!Array.isArray(dependencies.tools) || dependencies.tools.length !== 1) {
+      throw new Error(`${label} must declare exactly one MCP dependency.`);
+    }
+    const [tool] = dependencies.tools;
+    assertObjectWithKeys(
+      tool,
+      ['type', 'value', 'description', 'transport', 'url'],
+      `${label} MCP dependency`,
+    );
+    assertNonEmptyString(
+      tool.description,
+      `${label} MCP dependency description`,
+    );
+    if (
+      tool.type !== 'mcp'
+      || tool.value !== PLUGIN_NAME
+      || tool.transport !== 'streamable_http'
+      || tool.url !== 'https://quantified-self.io/mcp'
+    ) {
+      throw new Error(`${label} MCP dependency is invalid.`);
+    }
 
-  const policy = assertObjectWithKeys(
-    agent.policy,
-    ['allow_implicit_invocation'],
-    'Bundled analysis skill policy',
-  );
-  if (policy.allow_implicit_invocation !== true) {
-    throw new Error('Bundled analysis skill must allow implicit invocation.');
+    const policy = assertObjectWithKeys(
+      agent.policy,
+      ['allow_implicit_invocation'],
+      `${label} policy`,
+    );
+    if (policy.allow_implicit_invocation !== true) {
+      throw new Error(`${label} must allow implicit invocation.`);
+    }
   }
 }
 
@@ -586,22 +704,20 @@ export function assertInstalledPluginResult(installed, expectedVersion) {
   return installed;
 }
 
-async function validateInstalledPluginBundle({
-  paths,
+export async function validateInstalledPluginBundle({
+  repoRoot = DEFAULT_REPO_ROOT,
   installedPath,
   expectedVersion,
   appId,
 }) {
-  const skillPath = join('skills', 'analyze-quantified-self');
+  const paths = pathsFor(repoRoot);
   const [
     installedManifest,
     sourceManifest,
     installedApp,
     sourceApp,
-    installedSkill,
-    sourceSkill,
-    installedSkillConfig,
-    sourceSkillConfig,
+    installedSkills,
+    sourceSkills,
     installedIcon,
     sourceIcon,
   ] = await Promise.all([
@@ -612,10 +728,11 @@ async function validateInstalledPluginBundle({
     readJson(paths.manifestPath, 'Generated plugin manifest'),
     readJson(join(installedPath, '.app.json'), 'Installed app manifest'),
     readJson(paths.appPath, 'Generated app manifest'),
-    readFile(join(installedPath, skillPath, 'SKILL.md')),
-    readFile(join(paths.pluginRoot, skillPath, 'SKILL.md')),
-    readFile(join(installedPath, skillPath, 'agents', 'openai.yaml')),
-    readFile(join(paths.pluginRoot, skillPath, 'agents', 'openai.yaml')),
+    snapshotRegularTree(
+      join(installedPath, 'skills'),
+      'Installed bundled skills',
+    ),
+    snapshotRegularTree(paths.skillsRoot, 'Source bundled skills'),
     readFile(join(installedPath, 'assets', 'quantified-self.png')),
     readFile(paths.sourceIconPath),
   ]);
@@ -627,8 +744,7 @@ async function validateInstalledPluginBundle({
     || installedManifest.apps !== './.app.json'
     || installedManifest.skills !== './skills/'
     || installedApp.apps?.[PLUGIN_NAME]?.id !== appId
-    || !installedSkill.equals(sourceSkill)
-    || !installedSkillConfig.equals(sourceSkillConfig)
+    || !isDeepStrictEqual(installedSkills, sourceSkills)
     || !installedIcon.equals(sourceIcon)
   ) {
     throw new Error('The installed plugin bundle is incomplete or inconsistent.');
@@ -685,7 +801,7 @@ export async function validateWithCodex({
     );
     assertSafeChild(isolatedHome, installed.installedPath, 'Installed plugin');
     await validateInstalledPluginBundle({
-      paths,
+      repoRoot: paths.repoRoot,
       installedPath: installed.installedPath,
       expectedVersion,
       appId,
@@ -738,7 +854,7 @@ async function installLocally(paths, appId, expectedVersion) {
     expectedVersion,
   );
   await validateInstalledPluginBundle({
-    paths,
+    repoRoot: paths.repoRoot,
     installedPath: installed.installedPath,
     expectedVersion,
     appId,
@@ -787,9 +903,6 @@ async function runCommand(argv) {
   }
 
   const paths = pathsFor(options.repoRoot ?? DEFAULT_REPO_ROOT);
-  if (command !== 'build') {
-    await validatePluginSourceAtPaths(paths);
-  }
   const resolvedAppId = await resolveAppId({
     explicitAppId: options.appId,
     environment: process.env,

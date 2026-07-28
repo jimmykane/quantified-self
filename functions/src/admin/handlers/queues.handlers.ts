@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import { onAdminCall } from '../../shared/auth';
 import { getCloudTaskQueueStatsForQueue } from '../../utils';
@@ -142,7 +143,7 @@ async function getAdminCloudTaskQueueStats(queueId: string): Promise<CloudTaskQu
  */
 export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsResponse>({
     region: FUNCTIONS_MANIFEST.getQueueStats.region,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async (request) => {
     const includeAnalysis = request.data?.includeAnalysis ?? false;
     const PROVIDER_QUEUES: Record<string, string[]> = {
@@ -1275,13 +1276,13 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
             status: 'pending',
             processingTier: SPORTS_LIB_REPARSE_PROCESSING_TIERS.Heavy,
             heavyReason: SPORTS_LIB_REPARSE_HEAVY_REASONS.ManualAdmin,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
-            processedAt: admin.firestore.FieldValue.delete(),
-            lastError: admin.firestore.FieldValue.delete(),
-            failureReason: admin.firestore.FieldValue.delete(),
-            terminalFailure: admin.firestore.FieldValue.delete(),
-            terminalFailureAt: admin.firestore.FieldValue.delete(),
+            updatedAt: FieldValue.serverTimestamp(),
+            enqueuedAt: FieldValue.serverTimestamp(),
+            processedAt: FieldValue.delete(),
+            lastError: FieldValue.delete(),
+            failureReason: FieldValue.delete(),
+            terminalFailure: FieldValue.delete(),
+            terminalFailureAt: FieldValue.delete(),
         }, { merge: true });
 
         return {
@@ -1296,14 +1297,14 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
     const restoreFailedRetryClaim = async (errorMessage: string): Promise<void> => {
         await jobRef.set({
             status: 'failed',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
             lastError: errorMessage,
-            enqueuedAt: admin.firestore.FieldValue.delete(),
-            failureReason: claimedRetry.failureReason || admin.firestore.FieldValue.delete(),
-            terminalFailure: claimedRetry.terminalFailure ? true : admin.firestore.FieldValue.delete(),
+            enqueuedAt: FieldValue.delete(),
+            failureReason: claimedRetry.failureReason || FieldValue.delete(),
+            terminalFailure: claimedRetry.terminalFailure ? true : FieldValue.delete(),
             terminalFailureAt: claimedRetry.terminalFailure
-                ? (claimedRetry.terminalFailureAt || admin.firestore.FieldValue.serverTimestamp())
-                : admin.firestore.FieldValue.delete(),
+                ? (claimedRetry.terminalFailureAt || FieldValue.serverTimestamp())
+                : FieldValue.delete(),
         }, { merge: true });
     };
 

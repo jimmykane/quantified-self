@@ -171,6 +171,7 @@ describe('MCP data service', () => {
 
   beforeEach(() => {
     dependencies = {
+      now: vi.fn().mockReturnValue(Date.parse('2026-07-27T12:00:00.000Z')),
       fetchMetricDiscoveryDocuments: vi.fn().mockResolvedValue([]),
       fetchEventDocuments: vi.fn().mockResolvedValue([]),
       fetchDerivedSnapshot: vi.fn().mockResolvedValue(null),
@@ -1216,6 +1217,381 @@ describe('MCP data service', () => {
     );
   });
 
+  it('discovers unique canonical Sports Lib activity types with grouping hints', () => {
+    const result = createMcpDataService(dependencies).listActivityTypes();
+    const names = result.activityTypes.map(entry => entry.activityType);
+
+    expect(result.activityTypeCount).toBe(result.activityTypes.length);
+    expect(result.activityTypeCount).toBeGreaterThan(20);
+    expect(names).toEqual([...names].sort());
+    expect(new Set(names).size).toBe(names.length);
+    expect(result.activityTypes).toContainEqual({
+      activityType: ActivityTypes.Running,
+      activityGroup: 'running_group',
+      indoor: false,
+    });
+    expect(result.activityTypes).toContainEqual({
+      activityType: 'Indoor Running',
+      activityGroup: 'running_group',
+      indoor: true,
+    });
+  });
+
+  it('filters activity lists during a bounded scan and binds canonical types into cursors', async () => {
+    const runningActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+      type: ActivityTypes.Running,
+    });
+    runningActivity.id = 'activity-2';
+    const olderRunningActivity = activityDocument({
+      eventID: 'event-3',
+      eventStartDate: new Date('2026-07-01T06:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T06:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      type: ActivityTypes.Running,
+    });
+    olderRunningActivity.id = 'activity-3';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      runningActivity,
+      olderRunningActivity,
+    ]);
+    const service = createMcpDataService(dependencies);
+    const input = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      activityTypes: ['run'],
+      limit: 1,
+    };
+    const firstPage = await service.listActivities(input);
+
+    expect(firstPage).toMatchObject({
+      scannedActivityCount: 2,
+      skippedActivityCount: 1,
+      activities: [
+        expect.objectContaining({
+          activityType: ActivityTypes.Running,
+        }),
+      ],
+      nextCursor: expect.any(String),
+      scanComplete: false,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      101,
+      undefined,
+      undefined,
+    );
+
+    await expect(service.listActivities({
+      ...input,
+      activityTypes: [ActivityTypes.Cycling],
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(1);
+
+    await service.listActivities({
+      ...input,
+      activityTypes: ['running'],
+      cursor: firstPage.nextCursor!,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenLastCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      101,
+      {
+        timeMs: Date.parse('2026-07-01T07:00:00.000Z'),
+        id: 'activity-2',
+      },
+      undefined,
+    );
+  });
+
+  it('keeps activity-list cursors bounded with the maximum type-filter count', async () => {
+    const service = createMcpDataService(dependencies);
+    const activityTypes = service.listActivityTypes().activityTypes
+      .slice(0, 20)
+      .map(entry => entry.activityType);
+    const latestActivity = activityDocument({
+      type: activityTypes[0],
+    });
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+      type: activityTypes[0],
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      latestActivity,
+      secondActivity,
+    ]);
+
+    const result = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      activityTypes,
+      limit: 1,
+    });
+
+    expect(activityTypes).toHaveLength(20);
+    expect(result.nextCursor).toEqual(expect.any(String));
+    expect(result.nextCursor!.length).toBeLessThanOrEqual(512);
+  });
+
+  it('resolves DST-aware relative activity days and preserves their range in cursors', async () => {
+    const latestActivity = activityDocument({
+      eventStartDate: new Date('2026-03-29T10:00:00.000Z'),
+      startDate: Date.parse('2026-03-29T10:00:00.000Z'),
+      endDate: Date.parse('2026-03-29T11:00:00.000Z'),
+    });
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-03-29T09:00:00.000Z'),
+      startDate: Date.parse('2026-03-29T09:00:00.000Z'),
+      endDate: Date.parse('2026-03-29T10:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.now).mockReturnValue(
+      Date.parse('2026-03-29T12:00:00.000Z'),
+    );
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      latestActivity,
+      secondActivity,
+    ]);
+    const service = createMcpDataService(dependencies);
+    const input = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      relativePeriod: 'today' as const,
+      timeZone: ' Europe/Helsinki ',
+      limit: 1,
+    };
+    const firstPage = await service.listActivities(input);
+    const expectedStartTimeMs = Date.parse('2026-03-28T22:00:00.000Z');
+    const expectedEndTimeMs = Date.parse('2026-03-29T20:59:59.999Z');
+
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      expectedStartTimeMs,
+      expectedEndTimeMs,
+      2,
+      undefined,
+      undefined,
+    );
+
+    vi.mocked(dependencies.now).mockReturnValue(
+      Date.parse('2026-03-30T12:00:00.000Z'),
+    );
+    await service.listActivities({
+      ...input,
+      cursor: firstPage.nextCursor!,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenLastCalledWith(
+      'user-1',
+      expectedStartTimeMs,
+      expectedEndTimeMs,
+      2,
+      {
+        timeMs: Date.parse('2026-03-29T10:00:00.000Z'),
+        id: 'activity-1',
+      },
+      undefined,
+    );
+  });
+
+  it('resolves yesterday across a DST-long local calendar day', async () => {
+    vi.mocked(dependencies.now).mockReturnValue(
+      Date.parse('2026-10-26T12:00:00.000Z'),
+    );
+    const service = createMcpDataService(dependencies);
+
+    await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      relativePeriod: 'yesterday',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2026-10-24T21:00:00.000Z'),
+      Date.parse('2026-10-25T21:59:59.999Z'),
+      26,
+      undefined,
+      undefined,
+    );
+  });
+
+  it('validates relative activity period inputs before reading Firestore', async () => {
+    const service = createMcpDataService(dependencies);
+    const baseInput = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    };
+
+    await expect(service.listActivities({
+      ...baseInput,
+      relativePeriod: 'today',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_timezone',
+    });
+    await expect(service.listActivities({
+      ...baseInput,
+      timeZone: 'Europe/Helsinki',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    await expect(service.listActivities({
+      ...baseInput,
+      relativePeriod: 'yesterday',
+      timeZone: 'Europe/Helsinki',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    await expect(service.listActivities({
+      ...baseInput,
+      activityTypes: ['not-a-sport'],
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    await expect(service.listActivities({
+      ...baseInput,
+      activityTypes: Array.from({ length: 21 }, () => ActivityTypes.Running),
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityDocuments).not.toHaveBeenCalled();
+  });
+
+  it('does not report scan completion when a page boundary cannot be resumed safely', async () => {
+    const unsafeActivity = activityDocument();
+    unsafeActivity.id = '__unsafe__';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      unsafeActivity,
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'temporarily_unavailable',
+    });
+
+    const unsafeRoute = routeDocument();
+    unsafeRoute.id = '__unsafe__';
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      unsafeRoute,
+      routeDocument(),
+    ]);
+    await expect(service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it('lists the latest activity without date bounds and binds unbounded cursors', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    const service = createMcpDataService(dependencies);
+    const unboundedInput = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    };
+    const firstPage = await service.listActivities(unboundedInput);
+
+    expect(firstPage.activities).toEqual([
+      expect.objectContaining({
+        startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+      }),
+    ]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      2,
+      undefined,
+      undefined,
+    );
+
+    await expect(service.listActivities({
+      ...unboundedInput,
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(1);
+
+    await service.listActivities({
+      ...unboundedInput,
+      cursor: firstPage.nextCursor!,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenLastCalledWith(
+      'user-1',
+      undefined,
+      undefined,
+      2,
+      {
+        timeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        id: 'activity-1',
+      },
+      undefined,
+    );
+  });
+
+  it('rejects a partially bounded activity list before reading Firestore', async () => {
+    const service = createMcpDataService(dependencies);
+
+    await expect(service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+      message: 'start and end must either both be provided or both be omitted.',
+    });
+    expect(dependencies.fetchActivityDocuments).not.toHaveBeenCalled();
+  });
+
   it('projects swim lengths through an explicit field allowlist', async () => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument(),
@@ -1324,6 +1700,138 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
+  });
+
+  it('filters saved routes during a bounded scan and binds type and name filters into cursors', async () => {
+    const runningRoute = routeDocument({
+      name: 'River route',
+      importedAt: new Date('2026-07-01T09:00:00.000Z'),
+      activityTypes: [ActivityTypes.Running],
+    });
+    runningRoute.id = 'route-2';
+    const matchingRoute = routeDocument({
+      name: 'Ridge run',
+      importedAt: new Date('2026-07-01T08:00:00.000Z'),
+      activityTypes: [ActivityTypes.Running],
+    });
+    matchingRoute.id = 'route-3';
+    const olderMatchingRoute = routeDocument({
+      name: 'Ridge trail',
+      importedAt: new Date('2026-07-01T07:00:00.000Z'),
+      activityTypes: [ActivityTypes.Running],
+    });
+    olderMatchingRoute.id = 'route-4';
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      routeDocument(),
+      runningRoute,
+      matchingRoute,
+      olderMatchingRoute,
+    ]);
+    const service = createMcpDataService(dependencies);
+    const input = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      activityTypes: ['run'],
+      search: 'ridge',
+      limit: 1,
+    };
+    const firstPage = await service.listRoutes(input);
+
+    expect(firstPage).toMatchObject({
+      scannedRouteCount: 3,
+      skippedRouteCount: 2,
+      routes: [expect.objectContaining({
+        name: 'Ridge run',
+        activityTypes: [ActivityTypes.Running],
+      })],
+      nextCursor: expect.any(String),
+      scanComplete: false,
+    });
+    expect(dependencies.fetchRouteDocuments).toHaveBeenCalledWith(
+      'user-1',
+      101,
+      undefined,
+      undefined,
+    );
+
+    await expect(service.listRoutes({
+      ...input,
+      search: 'river',
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    await expect(service.listRoutes({
+      ...input,
+      activityTypes: [ActivityTypes.Cycling],
+      cursor: firstPage.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchRouteDocuments).toHaveBeenCalledTimes(1);
+
+    await service.listRoutes({
+      ...input,
+      activityTypes: ['running'],
+      search: ' RIDGE ',
+      cursor: firstPage.nextCursor!,
+    });
+    expect(dependencies.fetchRouteDocuments).toHaveBeenLastCalledWith(
+      'user-1',
+      101,
+      {
+        timeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        id: 'route-3',
+      },
+      undefined,
+    );
+  });
+
+  it('keeps maximum saved-route filters in a bounded cursor', async () => {
+    const service = createMcpDataService(dependencies);
+    const activityTypes = service.listActivityTypes().activityTypes
+      .slice(0, 20)
+      .map(entry => entry.activityType);
+    const search = '😀'.repeat(60);
+    const matchingRoute = routeDocument({
+      name: search,
+      activityTypes: [activityTypes[0]],
+    });
+    const olderRoute = routeDocument({
+      name: search,
+      importedAt: new Date('2026-07-01T09:00:00.000Z'),
+      activityTypes: [activityTypes[0]],
+    });
+    olderRoute.id = 'route-2';
+    vi.mocked(dependencies.fetchRouteDocuments).mockResolvedValue([
+      matchingRoute,
+      olderRoute,
+    ]);
+
+    const result = await service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      activityTypes,
+      search,
+      limit: 1,
+    });
+
+    expect(activityTypes).toHaveLength(20);
+    expect(search).toHaveLength(120);
+    expect(result.nextCursor).toEqual(expect.any(String));
+    expect(result.nextCursor!.length).toBeLessThanOrEqual(512);
+
+    await expect(service.listRoutes({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      search: 'x'.repeat(121),
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_request',
+    });
+    expect(dependencies.fetchRouteDocuments).toHaveBeenCalledTimes(1);
   });
 
   it('projects saved-route summaries and polyline geometry without route provenance', async () => {
@@ -2875,6 +3383,429 @@ describe('MCP data service', () => {
       DERIVED_METRIC_KINDS.TrainingReadiness,
     )).rejects.toMatchObject<McpDataError>({
       code: 'metric_not_ready',
+    });
+  });
+
+  it('returns a bounded, identity-free daily briefing from completed sleep and current readiness only', async () => {
+    const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
+    vi.mocked(dependencies.now).mockReturnValue(nowTimeMs);
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-27T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
+        sleepDate: '2026-07-27',
+        durationSeconds: 28_800,
+      }),
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-26T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-25T22:30:00.000Z'),
+        sleepDate: '2026-07-26',
+        durationSeconds: 27_000,
+      }),
+      sleepDocument({
+        id: 'duplicate-prior-night',
+        endTimeMs: Date.parse('2026-07-26T05:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-26T01:00:00.000Z'),
+        sleepDate: '2026-07-26',
+        durationSeconds: 14_400,
+      }),
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-25T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-24T22:15:00.000Z'),
+        sleepDate: '2026-07-25',
+        durationSeconds: 27_900,
+      }),
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-24T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-23T22:00:00.000Z'),
+        sleepDate: '2026-07-24',
+        durationSeconds: 28_200,
+      }),
+      sleepDocument({
+        id: 'nap-private',
+        isNap: true,
+        endTimeMs: Date.parse('2026-07-27T10:00:00.000Z'),
+      }),
+    ]);
+    const readinessSnapshot = {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: nowTimeMs,
+      payload: {
+        formulaVersion: 3,
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+        generatedAtMs: nowTimeMs,
+        historyDays: 14,
+        points: [{
+          dayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+          score: 76,
+          label: 'Ready',
+          confidence: 'high',
+          availableSignalCount: 4,
+          baselineEvidenceCount: 14,
+          totalSignalCount: 4,
+          form: 12,
+          rampRate: 3,
+          sleepScore: 82,
+          latestSleepAtMs: Date.parse('2026-07-27T06:00:00.000Z'),
+          hrvRatio: 1.04,
+          averageHeartRateRatio: 0.98,
+          minimumHeartRateRatio: 0.97,
+          overnightHeartRateRatio: 0.98,
+        }],
+      },
+    };
+    const trainingSummarySnapshot = {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: nowTimeMs,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        excludesMergedEvents: true,
+        disciplines: [{
+          discipline: 'running',
+          current28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-06-30T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            activityCount: 6,
+            durationSeconds: 14_400,
+            easySeconds: 9_000,
+            moderateSeconds: 3_600,
+            hardSeconds: 1_800,
+          },
+          baseline28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-04-07T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-06-29T00:00:00.000Z'),
+            activityCount: 4.67,
+            durationSeconds: 11_200,
+            easySeconds: 7_000,
+            moderateSeconds: 2_800,
+            hardSeconds: 1_400,
+          },
+        }, {
+          discipline: 'cycling',
+          current28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-06-30T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            activityCount: 3,
+            durationSeconds: 10_800,
+            easySeconds: 7_200,
+            moderateSeconds: 2_400,
+            hardSeconds: 1_200,
+          },
+          baseline28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-04-07T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-06-29T00:00:00.000Z'),
+            activityCount: 2,
+            durationSeconds: 7_200,
+            easySeconds: 4_800,
+            moderateSeconds: 1_600,
+            hardSeconds: 800,
+          },
+        }, {
+          discipline: 'swimming',
+          current28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-06-30T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            activityCount: 2,
+            durationSeconds: 3_600,
+            easySeconds: 2_400,
+            moderateSeconds: 900,
+            hardSeconds: 300,
+          },
+          baseline28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-04-07T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-06-29T00:00:00.000Z'),
+            activityCount: 1.33,
+            durationSeconds: 2_800,
+            easySeconds: 1_800,
+            moderateSeconds: 700,
+            hardSeconds: 300,
+          },
+        }],
+      },
+    };
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => (
+        metricKind === DERIVED_METRIC_KINDS.TrainingSummary
+          ? trainingSummarySnapshot
+          : readinessSnapshot
+      ),
+    );
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result).toMatchObject({
+      asOfTimeMs: nowTimeMs,
+      timeZone: 'Europe/Helsinki',
+      sleep: {
+        status: 'available',
+        latestSession: {
+          sleepDate: '2026-07-27',
+          durationSeconds: 28_800,
+        },
+        comparison: {
+          sameProviderNightCount: 3,
+          averageDurationSeconds: 27_700,
+          durationDeltaSeconds: 1_100,
+        },
+      },
+      trainingReadiness: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        score: 76,
+        label: 'Ready',
+        confidence: 'high',
+        availableSignalCount: 4,
+        baselineEvidenceCount: 14,
+      },
+      trainingSummary: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        baselineSourceWindowDays: 84,
+        current28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 11,
+          durationSeconds: 28_800,
+          intensitySeconds: {
+            easy: 18_600,
+            moderate: 6_900,
+            hard: 3_300,
+          },
+        },
+        usual28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 8,
+          durationSeconds: 21_200,
+          intensitySeconds: {
+            easy: 13_600,
+            moderate: 5_100,
+            hard: 2_500,
+          },
+        },
+        disciplines: [{
+          discipline: 'running',
+          current28d: expect.objectContaining({ activityCount: 6 }),
+          usual28d: expect.objectContaining({ activityCount: 4.67 }),
+        }, {
+          discipline: 'cycling',
+          current28d: expect.objectContaining({ activityCount: 3 }),
+          usual28d: expect.objectContaining({ activityCount: 2 }),
+        }, {
+          discipline: 'swimming',
+          current28d: expect.objectContaining({ activityCount: 2 }),
+          usual28d: expect.objectContaining({ activityCount: 1.33 }),
+        }],
+      },
+    });
+    expect(dependencies.fetchSleepDocuments).toHaveBeenCalledWith(
+      'user-1',
+      nowTimeMs - 14 * 24 * 60 * 60 * 1000,
+      nowTimeMs,
+      33,
+    );
+    expect(dependencies.fetchDerivedSnapshot).toHaveBeenCalledWith(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingReadiness,
+    );
+    expect(dependencies.fetchDerivedSnapshot).toHaveBeenCalledWith(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingSummary,
+    );
+    trainingSummarySnapshot.payload.excludesMergedEvents = false;
+    const summaryIncludingMergedEvents = await createMcpDataService(dependencies)
+      .getDailyBriefing({
+        uid: 'user-1',
+        timeZone: 'Europe/Helsinki',
+      });
+    expect(summaryIncludingMergedEvents.trainingSummary).toMatchObject({
+      status: 'not_ready',
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('GarminAPI');
+    expect(serialized).not.toContain('private-source-key');
+    expect(serialized).not.toContain('averageHeartRateBpm');
+    expect(serialized).not.toContain('overnightHeartRateRatio');
+    expect(serialized).not.toContain('latestSleepAtMs');
+    expect(serialized).not.toContain('windowStartDayMs');
+    expect(serialized).not.toContain('windowEndDayMs');
+  });
+
+  it('makes unavailable daily-briefing inputs explicit without returning a stale readiness score', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue(null);
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result.sleep).toEqual({
+      status: 'no_completed_session',
+      latestSession: null,
+      comparison: {
+        sameProviderNightCount: 0,
+        averageDurationSeconds: null,
+        durationDeltaSeconds: null,
+      },
+    });
+    expect(result.trainingReadiness).toEqual({
+      status: 'not_ready',
+      dayBoundary: 'UTC',
+      asOfDayMs: null,
+      generatedAtMs: null,
+      updatedAtMs: null,
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: null,
+      baselineEvidenceCount: null,
+    });
+    expect(result.trainingSummary).toEqual({
+      status: 'not_ready',
+      dayBoundary: 'UTC',
+      asOfDayMs: null,
+      updatedAtMs: null,
+      baselineSourceWindowDays: null,
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
+    });
+  });
+
+  it('withholds a stale daily-readiness score even when the stored snapshot is ready', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+      payload: {
+        formulaVersion: 3,
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+        generatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+        historyDays: 14,
+        points: [{
+          dayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+          score: 64,
+          label: 'Mixed',
+          confidence: 'medium',
+          availableSignalCount: 3,
+          baselineEvidenceCount: 8,
+          totalSignalCount: 4,
+          form: 2,
+          rampRate: 1,
+          sleepScore: 80,
+          latestSleepAtMs: null,
+          hrvRatio: null,
+          averageHeartRateRatio: null,
+          minimumHeartRateRatio: null,
+          overnightHeartRateRatio: null,
+        }],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result.trainingReadiness).toMatchObject({
+      status: 'stale',
+      asOfDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: null,
+      baselineEvidenceCount: null,
+    });
+  });
+
+  it('withholds stale or partial Training Summary snapshots from the daily briefing', async () => {
+    const staleSummaryDayMs = Date.parse('2026-07-26T00:00:00.000Z');
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => {
+        if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
+          return null;
+        }
+        return {
+          status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+          updatedAtMs: -1,
+          payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs: staleSummaryDayMs,
+            currentWindowDays: 28,
+            baselineWindowDays: 84,
+            excludesMergedEvents: true,
+            disciplines: [],
+          },
+        };
+      },
+    );
+
+    const stale = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+    expect(stale.trainingSummary).toEqual({
+      status: 'stale',
+      dayBoundary: 'UTC',
+      asOfDayMs: staleSummaryDayMs,
+      updatedAtMs: null,
+      baselineSourceWindowDays: null,
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
+    });
+
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => {
+        if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
+          return null;
+        }
+        return {
+          status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+          updatedAtMs: Date.parse('2026-07-27T12:00:00.000Z'),
+          payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            currentWindowDays: 28,
+            baselineWindowDays: 84,
+            excludesMergedEvents: true,
+            disciplines: [],
+          },
+        };
+      },
+    );
+    const partial = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+    expect(partial.trainingSummary).toEqual({
+      status: 'not_ready',
+      dayBoundary: 'UTC',
+      asOfDayMs: null,
+      updatedAtMs: null,
+      baselineSourceWindowDays: null,
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
     });
   });
 

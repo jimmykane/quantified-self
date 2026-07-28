@@ -1,5 +1,6 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ACTIVITY_SYNC_ROUTES, ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
 import {
@@ -253,14 +254,14 @@ export async function restoreActivitySyncRoutesForPendingDisconnectClear(
         } else {
           routeDeliveryUpdates[route.id as RouteDeliverySyncRouteId] = { enabled: true };
         }
-        restoreMarkerUpdates[route.id] = admin.firestore.FieldValue.delete();
+        restoreMarkerUpdates[route.id] = FieldValue.delete();
       } else if (serviceRestoreSettings[route.id] === true && restoreSettings[route.id] !== true) {
         restoreMarkerUpdates[route.id] = true;
       }
     }
 
     if (Object.keys(serviceRestoreSettings).length > 0) {
-      restoreMarkerUpdates[serviceRestoreKey] = admin.firestore.FieldValue.delete();
+      restoreMarkerUpdates[serviceRestoreKey] = FieldValue.delete();
     }
 
     if (

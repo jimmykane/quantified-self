@@ -5,7 +5,7 @@ import { BlockList, isIP, LookupFunction } from 'node:net';
 import { Agent } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import fetch from 'node-fetch';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import {
   getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
@@ -161,7 +161,9 @@ export interface AuthorizationCodeRecord {
   uid: string;
   connectionId: string;
   clientId: string;
+  clientName?: string;
   redirectUri: string;
+  redirectHost?: string;
   codeChallenge: string;
   scopes: McpOAuthScope[];
   audience: string;
@@ -184,6 +186,7 @@ export interface AccessTokenRecord {
   uid: string;
   connectionId: string;
   clientId: string;
+  grantId?: string;
   scopes: McpOAuthScope[];
   audience: string;
   createdAtMs: number;
@@ -200,7 +203,24 @@ export interface McpConnection {
   lastUsedAtMs: number | null;
   revokedAtMs: number | null;
   status?: 'pending' | 'active' | 'revoked';
+  audience?: string;
+  grantId?: string;
+  supersedesLegacy?: boolean;
+  pendingAuthorizationCodeHash?: string;
+  pendingAuthorizationApprovedAtMs?: number;
+  pendingAuthorizationExpiresAtMs?: number;
 }
+
+export type McpConnectionSummary = Pick<
+  McpConnection,
+  | 'connectionId'
+  | 'clientId'
+  | 'clientName'
+  | 'redirectHost'
+  | 'scopes'
+  | 'createdAtMs'
+  | 'lastUsedAtMs'
+>;
 
 interface AuthorizationApprovalInput {
   uid: string;
@@ -280,8 +300,8 @@ export interface McpOAuthStore {
   revokeConnection(target: McpConnectionRevocationTarget, nowMs: number): Promise<void>;
 }
 
-function timestamp(ms: number): admin.firestore.Timestamp {
-  return admin.firestore.Timestamp.fromMillis(ms);
+function timestamp(ms: number): Timestamp {
+  return Timestamp.fromMillis(ms);
 }
 
 function documentData<T>(snapshot: admin.firestore.DocumentSnapshot): T | null {
@@ -307,6 +327,41 @@ function isPendingMcpConnection(connection: McpConnection | null): connection is
     && (connection.status === 'pending' || connection.status === undefined);
 }
 
+function isCurrentMcpGrant(
+  connectionId: string,
+  connection: McpConnection,
+  grantId: string | undefined,
+): boolean {
+  const isLogicalConnection = connectionId
+    === buildMcpLogicalConnectionId(connection.clientId);
+  if (isLogicalConnection || connection.supersedesLegacy === true) {
+    return typeof connection.grantId === 'string'
+      && connection.grantId.length > 0
+      && connection.grantId === grantId;
+  }
+  return connection.grantId === undefined || connection.grantId === grantId;
+}
+
+function isSupersededLegacyConnection(
+  connectionId: string,
+  logicalConnection: McpConnection | null,
+): boolean {
+  return logicalConnection?.supersedesLegacy === true
+    && logicalConnection.connectionId !== connectionId;
+}
+
+function toMcpConnectionSummary(connection: McpConnection): McpConnectionSummary {
+  return {
+    connectionId: connection.connectionId,
+    clientId: connection.clientId,
+    clientName: connection.clientName,
+    redirectHost: connection.redirectHost,
+    scopes: connection.scopes,
+    createdAtMs: connection.createdAtMs,
+    lastUsedAtMs: connection.lastUsedAtMs,
+  };
+}
+
 export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
   const db = admin.firestore();
   const collection = (name: string) => db.collection(name);
@@ -319,11 +374,24 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
     transaction: admin.firestore.Transaction,
     ref: admin.firestore.DocumentReference,
     nowMs: number,
+    options: {
+      clearPendingAuthorization: boolean;
+      revokedAtMs?: number | null;
+      supersedesLegacy?: boolean;
+    },
   ): void => {
     transaction.set(ref, {
       status: 'revoked',
-      revokedAtMs: nowMs,
+      revokedAtMs: options.revokedAtMs ?? nowMs,
       expireAt: FieldValue.delete(),
+      ...(options.supersedesLegacy === true ? { supersedesLegacy: true } : {}),
+      ...(options.clearPendingAuthorization
+        ? {
+          pendingAuthorizationCodeHash: FieldValue.delete(),
+          pendingAuthorizationApprovedAtMs: FieldValue.delete(),
+          pendingAuthorizationExpiresAtMs: FieldValue.delete(),
+        }
+        : {}),
     }, { merge: true });
   };
 
@@ -450,6 +518,10 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
     async approveAuthorization(input) {
       const requestRef = collection(MCP_OAUTH_COLLECTIONS.authorizationRequests).doc(input.requestId);
       const codeRef = collection(MCP_OAUTH_COLLECTIONS.authorizationCodes).doc(input.codeHash);
+      const pendingConnectionRef = connectionRef(
+        input.uid,
+        input.connection.connectionId,
+      );
       return db.runTransaction(async (transaction) => {
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, input.uid, input.nowMs);
         if (guard.shouldSkip) {
@@ -458,6 +530,18 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const request = documentData<AuthorizationRequestRecord>(await transaction.get(requestRef));
         if (!request || request.status !== 'pending' || request.expiresAtMs <= input.nowMs) {
           throw new McpOAuthError('invalid_request', 'The authorization request is no longer valid.');
+        }
+        const existingConnection = documentData<McpConnection>(
+          await transaction.get(pendingConnectionRef),
+        );
+        if (
+          existingConnection
+          && existingConnection.clientId !== input.connection.clientId
+        ) {
+          throw new McpOAuthError(
+            'invalid_request',
+            'The MCP connection identity is no longer valid.',
+          );
         }
         transaction.update(requestRef, {
           status: 'approved',
@@ -469,11 +553,31 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           ...input.codeRecord,
           expireAt: timestamp(input.codeRecord.expiresAtMs),
         });
-        transaction.create(connectionRef(input.uid, input.connection.connectionId), {
-          ...input.connection,
-          status: 'pending',
-          expireAt: timestamp(input.codeRecord.expiresAtMs),
-        });
+        if (!existingConnection || isPendingMcpConnection(existingConnection)) {
+          const pendingConnection = {
+            ...input.connection,
+            status: 'pending',
+            pendingAuthorizationCodeHash: input.codeHash,
+            pendingAuthorizationApprovedAtMs: input.nowMs,
+            pendingAuthorizationExpiresAtMs: input.codeRecord.expiresAtMs,
+            expireAt: timestamp(input.codeRecord.expiresAtMs),
+          };
+          if (existingConnection) {
+            transaction.set(pendingConnectionRef, pendingConnection);
+          } else {
+            transaction.create(pendingConnectionRef, pendingConnection);
+          }
+        } else {
+          // Keep an existing active grant usable, or an existing revocation
+          // authoritative, until this newly approved code is actually
+          // exchanged. Owner-authoritative disconnect clears this marker;
+          // revoking only the current grant intentionally preserves it.
+          transaction.set(pendingConnectionRef, {
+            pendingAuthorizationCodeHash: input.codeHash,
+            pendingAuthorizationApprovedAtMs: input.nowMs,
+            pendingAuthorizationExpiresAtMs: input.codeRecord.expiresAtMs,
+          }, { merge: true });
+        }
         return request;
       });
     },
@@ -515,9 +619,27 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
         );
-        if (!isPendingMcpConnection(connection)) {
+        const logicalConnectionId = buildMcpLogicalConnectionId(code.clientId);
+        const isLogicalConnection = code.connectionId === logicalConnectionId;
+        const validConnectionState = isLogicalConnection
+          ? (
+            connection?.pendingAuthorizationCodeHash === input.codeHash
+            && Number(connection.pendingAuthorizationExpiresAtMs || 0) > input.nowMs
+          )
+          : isPendingMcpConnection(connection);
+        if (
+          !connection
+          || connection.clientId !== code.clientId
+          || !validConnectionState
+        ) {
           throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer available.');
         }
+        const clientName = code.clientName || connection.clientName;
+        const redirectHost = code.redirectHost || connection.redirectHost;
+        if (!clientName || !redirectHost) {
+          throw new McpOAuthError('invalid_grant', 'The MCP connection metadata is incomplete.');
+        }
+        const grantId = input.refreshTokenRecord.familyId;
         transaction.delete(codeRef);
         transaction.create(
           collection(MCP_OAUTH_COLLECTIONS.accessTokens).doc(input.accessTokenHash),
@@ -525,6 +647,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             ...input.accessTokenRecord,
             uid: code.uid,
             connectionId: code.connectionId,
+            grantId,
             scopes: code.scopes,
             expireAt: timestamp(input.accessTokenRecord.expiresAtMs),
           },
@@ -540,11 +663,24 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             expireAt: timestamp(input.refreshTokenRecord.expiresAtMs),
           },
         );
-        transaction.update(activeConnectionRef, {
+        transaction.set(activeConnectionRef, {
+          connectionId: code.connectionId,
+          clientId: code.clientId,
+          clientName,
+          redirectHost,
+          scopes: code.scopes,
+          audience: code.audience,
+          grantId,
+          supersedesLegacy: isLogicalConnection || connection.supersedesLegacy === true,
+          createdAtMs: input.nowMs,
           status: 'active',
           lastUsedAtMs: input.nowMs,
+          revokedAtMs: null,
           expireAt: FieldValue.delete(),
-        });
+          pendingAuthorizationCodeHash: FieldValue.delete(),
+          pendingAuthorizationApprovedAtMs: FieldValue.delete(),
+          pendingAuthorizationExpiresAtMs: FieldValue.delete(),
+        }, { merge: true });
         return code;
       });
     },
@@ -570,11 +706,35 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
         );
+        const logicalConnectionId = buildMcpLogicalConnectionId(refresh.clientId);
+        const logicalConnection = refresh.connectionId === logicalConnectionId
+          ? connection
+          : documentData<McpConnection>(
+            await transaction.get(connectionRef(refresh.uid, logicalConnectionId)),
+          );
+        if (
+          connection?.clientId !== refresh.clientId
+          || (
+            logicalConnection
+            && logicalConnection.clientId !== refresh.clientId
+          )
+        ) {
+          throw new McpOAuthError('invalid_grant', 'The MCP client binding is invalid.');
+        }
+        if (isSupersededLegacyConnection(refresh.connectionId, logicalConnection)) {
+          throw new McpOAuthError('invalid_grant', 'The authorization grant was superseded.');
+        }
         if (!isActiveMcpConnection(connection)) {
           throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.');
         }
+        if (!isCurrentMcpGrant(refresh.connectionId, connection, refresh.familyId)) {
+          throw new McpOAuthError('invalid_grant', 'The authorization grant was superseded.');
+        }
         if (refresh.active !== true) {
-          markConnectionRevoked(transaction, activeConnectionRef, input.nowMs);
+          markConnectionRevoked(transaction, activeConnectionRef, input.nowMs, {
+            clearPendingAuthorization: false,
+            revokedAtMs: connection.revokedAtMs,
+          });
           return { refresh, replayed: true as const };
         }
         if (
@@ -606,6 +766,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             ...input.nextAccessTokenRecord,
             uid: refresh.uid,
             connectionId: refresh.connectionId,
+            grantId: refresh.familyId,
             scopes: nextScopes,
             expireAt: timestamp(input.nextAccessTokenRecord.expiresAtMs),
           },
@@ -672,8 +833,41 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         const connection = documentData<McpConnection>(
           await transaction.get(activeConnectionRef),
         );
+        const logicalConnectionId = buildMcpLogicalConnectionId(token.clientId);
+        const logicalConnection = token.connectionId === logicalConnectionId
+          ? connection
+          : documentData<McpConnection>(
+            await transaction.get(connectionRef(token.uid, logicalConnectionId)),
+          );
+        if (
+          connection?.clientId !== token.clientId
+          || (
+            logicalConnection
+            && logicalConnection.clientId !== token.clientId
+          )
+        ) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP client binding is invalid.',
+            401,
+          );
+        }
+        if (isSupersededLegacyConnection(token.connectionId, logicalConnection)) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP connection was superseded.',
+            401,
+          );
+        }
         if (!isActiveMcpConnection(connection)) {
           throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.', 401);
+        }
+        if (!isCurrentMcpGrant(token.connectionId, connection, token.grantId)) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP authorization grant was superseded.',
+            401,
+          );
         }
         if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
           throw new McpOAuthError(
@@ -718,6 +912,7 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         let uid: string;
         let connectionId: string;
         let expectedClientId: string | null = null;
+        let matchedToken: AccessTokenRecord | RefreshTokenRecord | null = null;
 
         if (target.kind === 'token') {
           // OAuth credential documents are keyed by SHA-256 token hashes. Keep
@@ -732,8 +927,6 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
               MCP_OAUTH_COLLECTIONS.accessTokens,
               MCP_OAUTH_COLLECTIONS.refreshTokens,
             ];
-          let matchedToken: AccessTokenRecord | RefreshTokenRecord | null = null;
-
           for (const collectionName of collectionOrder) {
             const candidate = documentData<AccessTokenRecord | RefreshTokenRecord>(
               await transaction.get(
@@ -776,15 +969,75 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           return;
         }
         const current = documentData<McpConnection>(connection);
-        if (
-          !current
-          || (expectedClientId !== null && current.clientId !== expectedClientId)
-          || current.status === 'revoked'
-          || current.revokedAtMs !== null
-        ) {
+        if (!current || (expectedClientId !== null && current.clientId !== expectedClientId)) {
           return;
         }
-        markConnectionRevoked(transaction, ref, nowMs);
+        if (target.kind === 'token') {
+          if (current.status === 'revoked' || current.revokedAtMs !== null) {
+            return;
+          }
+          const tokenGrantId = matchedToken && 'familyId' in matchedToken
+            ? matchedToken.familyId
+            : matchedToken?.grantId;
+          if (!isCurrentMcpGrant(connectionId, current, tokenGrantId)) {
+            return;
+          }
+          markConnectionRevoked(transaction, ref, nowMs, {
+            clearPendingAuthorization: false,
+            revokedAtMs: current.revokedAtMs,
+          });
+          return;
+        }
+
+        const logicalConnectionId = buildMcpLogicalConnectionId(current.clientId);
+        if (connectionId === logicalConnectionId) {
+          markConnectionRevoked(transaction, ref, nowMs, {
+            clearPendingAuthorization: true,
+            revokedAtMs: current.revokedAtMs,
+            supersedesLegacy: true,
+          });
+          return;
+        }
+
+        const logicalRef = connectionRef(uid, logicalConnectionId);
+        const logicalConnection = documentData<McpConnection>(
+          await transaction.get(logicalRef),
+        );
+        if (
+          logicalConnection
+          && logicalConnection.clientId !== current.clientId
+        ) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP connection identity is no longer valid.',
+          );
+        }
+        markConnectionRevoked(transaction, ref, nowMs, {
+          clearPendingAuthorization: true,
+          revokedAtMs: current.revokedAtMs,
+        });
+        transaction.set(logicalRef, {
+          connectionId: logicalConnectionId,
+          clientId: current.clientId,
+          clientName: logicalConnection?.clientName || current.clientName,
+          redirectHost: logicalConnection?.redirectHost || current.redirectHost,
+          scopes: logicalConnection?.scopes || current.scopes,
+          createdAtMs: logicalConnection?.createdAtMs || current.createdAtMs,
+          lastUsedAtMs: logicalConnection?.lastUsedAtMs ?? current.lastUsedAtMs,
+          revokedAtMs: logicalConnection?.revokedAtMs ?? nowMs,
+          status: 'revoked',
+          supersedesLegacy: true,
+          expireAt: FieldValue.delete(),
+          pendingAuthorizationCodeHash: FieldValue.delete(),
+          pendingAuthorizationApprovedAtMs: FieldValue.delete(),
+          pendingAuthorizationExpiresAtMs: FieldValue.delete(),
+          ...(logicalConnection?.audience || current.audience
+            ? { audience: logicalConnection?.audience || current.audience }
+            : {}),
+          ...(logicalConnection?.grantId || current.grantId
+            ? { grantId: logicalConnection?.grantId || current.grantId }
+            : {}),
+        }, { merge: true });
       });
     },
   };
@@ -796,6 +1049,10 @@ function randomOpaqueValue(byteLength = 32): string {
 
 export function hashOpaqueValue(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('base64url');
+}
+
+export function buildMcpLogicalConnectionId(clientId: string): string {
+  return hashOpaqueValue(`mcp-logical-connection-v1:${clientId}`);
 }
 
 export function buildMcpRateLimitBucketId(
@@ -1281,12 +1538,14 @@ export function createMcpOAuthService(
         throw new McpOAuthError('invalid_scope', 'A scope was not included in the original request.');
       }
       const rawCode = resolvedDependencies.randomToken();
-      const connectionId = resolvedDependencies.randomToken(18);
+      const connectionId = buildMcpLogicalConnectionId(request.clientId);
       const codeRecord: AuthorizationCodeRecord = {
         uid: input.uid,
         connectionId,
         clientId: request.clientId,
+        clientName: request.clientName,
         redirectUri: request.redirectUri,
+        redirectHost: request.redirectHost,
         codeChallenge: request.codeChallenge,
         scopes: grantedScopes,
         audience: request.audience,
@@ -1305,6 +1564,7 @@ export function createMcpOAuthService(
           clientName: request.clientName,
           redirectHost: request.redirectHost,
           scopes: grantedScopes,
+          audience: request.audience,
           createdAtMs: nowMs,
           lastUsedAtMs: null,
           revokedAtMs: null,
@@ -1349,6 +1609,7 @@ export function createMcpOAuthService(
           uid: '',
           connectionId: '',
           clientId,
+          grantId: familyId,
           scopes: placeholderScopes,
           audience,
           createdAtMs: nowMs,
@@ -1468,8 +1729,39 @@ export function createMcpOAuthService(
         );
       }
       const connection = await store.getConnection(token.uid, token.connectionId);
-      if (!isActiveMcpConnection(connection)) {
+      if (!isActiveMcpConnection(connection) || connection.clientId !== token.clientId) {
         throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.', 401);
+      }
+      const logicalConnectionId = buildMcpLogicalConnectionId(token.clientId);
+      if (token.connectionId !== logicalConnectionId) {
+        const logicalConnection = await store.getConnection(
+          token.uid,
+          logicalConnectionId,
+        );
+        if (
+          logicalConnection
+          && logicalConnection.clientId !== token.clientId
+        ) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP client binding is invalid.',
+            401,
+          );
+        }
+        if (isSupersededLegacyConnection(token.connectionId, logicalConnection)) {
+          throw new McpOAuthError(
+            'invalid_grant',
+            'The MCP connection was superseded.',
+            401,
+          );
+        }
+      }
+      if (!isCurrentMcpGrant(token.connectionId, connection, token.grantId)) {
+        throw new McpOAuthError(
+          'invalid_grant',
+          'The MCP authorization grant was superseded.',
+          401,
+        );
       }
       if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
         throw new McpOAuthError(
@@ -1488,7 +1780,22 @@ export function createMcpOAuthService(
     },
 
     async listConnections(uid: string) {
-      return (await store.listConnections(uid)).filter(isActiveMcpConnection);
+      const connections = await store.listConnections(uid);
+      const supersedingClientIds = new Set(
+        connections
+          .filter(connection => (
+            connection.supersedesLegacy === true
+            && connection.connectionId === buildMcpLogicalConnectionId(connection.clientId)
+          ))
+          .map(connection => connection.clientId),
+      );
+      return connections.filter(connection => (
+        isActiveMcpConnection(connection)
+        && (
+          !supersedingClientIds.has(connection.clientId)
+          || connection.connectionId === buildMcpLogicalConnectionId(connection.clientId)
+        )
+      )).map(toMcpConnectionSummary);
     },
 
     revokeConnection(uid: string, connectionId: string) {

@@ -1397,6 +1397,18 @@
       "indexes": []
     },
     {
+      "collectionGroup": "mcpOAuthAuthorizationCodes",
+      "fieldPath": "clientName",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpOAuthAuthorizationCodes",
+      "fieldPath": "redirectHost",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "mcpOAuthAccessTokens",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -1427,6 +1439,48 @@
       "indexes": []
     },
     {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "audience",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "grantId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "supersedesLegacy",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "pendingAuthorizationCodeHash",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "pendingAuthorizationApprovedAtMs",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpConnections",
+      "fieldPath": "pendingAuthorizationExpiresAtMs",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mcpOAuthAccessTokens",
+      "fieldPath": "grantId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "aiInsightsPromptRepairs",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -1434,6 +1488,12 @@
     },
     {
       "collectionGroup": "COROSAPIWorkoutQueue",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "eventMergeOperations",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": []

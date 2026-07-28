@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import {
@@ -174,7 +175,7 @@ export const setTrainingBuildBenchmark = onCall({
                 trainingSettings: {
                     buildBenchmarks: {
                         [discipline]: selection === null
-                            ? admin.firestore.FieldValue.delete()
+                            ? FieldValue.delete()
                             : selection,
                     },
                 },

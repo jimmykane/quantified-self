@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
@@ -31,8 +32,16 @@ import {
 } from '../../../shared/firestore-write-sanitizer';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
-
-type MergeType = 'benchmark' | 'multi';
+import {
+  buildMergeRequestFingerprint,
+  claimMergeOperation,
+  completeMergeOperation,
+  isSafeMergeDocumentId,
+  markMergeOperationRetryable,
+  MergeEventResponse,
+  MergeOperationClaim,
+  MergeType,
+} from './merge-operation';
 
 interface MergeEventRequest {
   eventIds: string[];
@@ -50,6 +59,8 @@ interface SourceEventLoadResult {
   event: EventInterface;
   sourceFiles: SourceFileMeta[];
 }
+
+type SourceEventDocumentData = FirestoreEventJSON | Record<string, unknown>;
 
 const MAX_SOURCE_EVENTS = 10;
 const GENERATED_MERGE_DESCRIPTION_PREFIX = 'a merge of 2 or more activit';
@@ -87,9 +98,14 @@ function normalizeEventIds(value: unknown): string[] {
     throw new HttpsError('invalid-argument', 'eventIds must be an array of event IDs.');
   }
 
-  const normalized = value
-    .map(id => `${id || ''}`.trim())
-    .filter(Boolean);
+  if (value.some(id => typeof id !== 'string')) {
+    throw new HttpsError('invalid-argument', 'eventIds must contain only event ID strings.');
+  }
+
+  const normalized = (value as string[]).map(id => id.trim());
+  if (normalized.some(id => !isSafeMergeDocumentId(id))) {
+    throw new HttpsError('invalid-argument', 'eventIds contains an invalid event ID.');
+  }
 
   if (normalized.length < 2) {
     throw new HttpsError('invalid-argument', 'At least 2 event IDs are required to merge.');
@@ -392,7 +408,7 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     processingEntity: EVENT_PROCESSING_ENTITY,
     sportsLibVersion: SPORTS_LIB_VERSION,
     sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
-    processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    processedAt: FieldValue.serverTimestamp(),
   };
 
   await setEventDocumentIfUserActive(
@@ -461,13 +477,31 @@ async function getEventCountForUser(userID: string): Promise<number> {
   return countSnapshot.data().count;
 }
 
-async function loadSourceEvent(userID: string, eventID: string): Promise<SourceEventLoadResult> {
-  const eventSnapshot = await admin.firestore().doc(`users/${userID}/events/${eventID}`).get();
-  if (!eventSnapshot.exists) {
-    throw new HttpsError('not-found', `Event ${eventID} was not found for this user.`);
-  }
+async function loadSourceEventDocuments(
+  userID: string,
+  eventIDs: string[],
+): Promise<Map<string, SourceEventDocumentData>> {
+  const eventSnapshots = await Promise.all(eventIDs.map(eventID => (
+    admin.firestore().doc(`users/${userID}/events/${eventID}`).get()
+  )));
+  const eventDocuments = new Map<string, SourceEventDocumentData>();
 
-  const eventData = eventSnapshot.data() as FirestoreEventJSON | Record<string, unknown>;
+  eventSnapshots.forEach((eventSnapshot, index) => {
+    const eventID = eventIDs[index];
+    if (!eventSnapshot.exists) {
+      throw new HttpsError('not-found', `Event ${eventID} was not found for this user.`);
+    }
+    eventDocuments.set(eventID, eventSnapshot.data() as SourceEventDocumentData);
+  });
+
+  return eventDocuments;
+}
+
+async function loadSourceEvent(
+  userID: string,
+  eventID: string,
+  eventData: SourceEventDocumentData,
+): Promise<SourceEventLoadResult> {
   const activitiesSnapshot = await admin.firestore()
     .collection(`users/${userID}/activities`)
     .where('eventID', '==', eventID)
@@ -566,21 +600,58 @@ export const mergeEvents = onCall({
   const payload = request.data as MergeEventRequest | undefined;
   const eventIDs = normalizeEventIds(payload?.eventIds);
   const mergeType = normalizeMergeType(payload?.mergeType);
+  const requestFingerprint = buildMergeRequestFingerprint(eventIDs, mergeType);
+  let executionClaim: Extract<MergeOperationClaim, { kind: 'execute' }> | null = null;
+  const sourceEventPreparation: {
+    documents: Map<string, SourceEventDocumentData> | null;
+  } = { documents: null };
 
   try {
     await assertEventWriteUserActive(userID, 'merge_event_start');
+    const operationClaim = await claimMergeOperation({
+      userID,
+      eventIDs,
+      mergeType,
+      requestFingerprint,
+      prepareForExecution: async () => {
+        sourceEventPreparation.documents = await loadSourceEventDocuments(userID, eventIDs);
+      },
+    });
+    if (operationClaim.kind === 'completed') {
+      return operationClaim.response;
+    }
+    if (operationClaim.kind === 'in-progress') {
+      throw new HttpsError('aborted', 'This merge is already in progress. Retry the same selection shortly.');
+    }
+    executionClaim = operationClaim;
+
+    const resultEventSnapshot = await admin.firestore()
+      .doc(`users/${userID}/events/${executionClaim.resultEventId}`)
+      .get();
     const currentCount = await getEventCountForUser(userID);
+    const currentCountWithoutClaimedResult = resultEventSnapshot.exists
+      ? Math.max(0, currentCount - 1)
+      : currentCount;
     const uploadLimit = await resolveUploadLimitForUser(userID);
-    if (uploadLimit !== null && currentCount >= uploadLimit) {
+    if (uploadLimit !== null && currentCountWithoutClaimedResult >= uploadLimit) {
       throw new HttpsError(
         'resource-exhausted',
-        `Upload limit reached for your tier. You have ${currentCount} events. Limit is ${uploadLimit}.`,
+        `Upload limit reached for your tier. You have ${currentCountWithoutClaimedResult} events. Limit is ${uploadLimit}.`,
       );
+    }
+
+    const sourceEventDocuments = sourceEventPreparation.documents;
+    if (!sourceEventDocuments) {
+      throw new HttpsError('internal', 'Source events were not prepared for merge execution.');
     }
 
     const sourceLoadResults: SourceEventLoadResult[] = [];
     for (const eventID of eventIDs) {
-      sourceLoadResults.push(await loadSourceEvent(userID, eventID));
+      const eventData = sourceEventDocuments.get(eventID);
+      if (!eventData) {
+        throw new HttpsError('internal', `Prepared source event ${eventID} is unavailable.`);
+      }
+      sourceLoadResults.push(await loadSourceEvent(userID, eventID, eventData));
     }
 
     const sourceEvents = sourceLoadResults.map(result => result.event);
@@ -589,7 +660,7 @@ export const mergeEvents = onCall({
     const originalFiles = await downloadOriginalFilesForMerge(sourceFiles);
 
     const mergedEvent = EventUtilities.mergeEvents(sourceEvents);
-    const mergedEventID = admin.firestore().collection('users').doc().id;
+    const mergedEventID = executionClaim.resultEventId;
     mergedEvent.setID(mergedEventID);
     (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).isMerge = mergeType === 'benchmark';
     (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).mergeType = mergeType;
@@ -599,23 +670,47 @@ export const mergeEvents = onCall({
     await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
     await finalizeMergedEventMetadata(userID, mergedEventID, mergeType);
 
-    return {
+    const response: MergeEventResponse = {
       eventId: mergedEventID,
       mergeType,
       sourceEventsCount: eventIDs.length,
       sourceFilesCount: originalFiles.length,
       activitiesCount: mergedEvent.getActivities().length,
       uploadLimit,
-      uploadCountAfterWrite: currentCount + 1,
+      uploadCountAfterWrite: currentCountWithoutClaimedResult + 1,
     };
+    return await completeMergeOperation({
+      userID,
+      claim: executionClaim,
+      response,
+    });
   } catch (error) {
+    if (executionClaim) {
+      try {
+        await markMergeOperationRetryable({
+          userID,
+          claim: executionClaim,
+          mergeType,
+          sourceEventsCount: eventIDs.length,
+          error,
+        });
+      } catch (operationError) {
+        logger.error('[mergeEvents] Failed to mark merge operation retryable', {
+          userID,
+          requestFingerprint,
+          error: serializeError(operationError),
+        });
+      }
+    }
+
     if (error instanceof HttpsError) {
       throw error;
     }
 
     logger.error('[mergeEvents] Failed to merge events', {
       userID,
-      eventIDs,
+      requestFingerprint,
+      sourceEventsCount: eventIDs.length,
       mergeType,
       error: serializeError(error),
     });

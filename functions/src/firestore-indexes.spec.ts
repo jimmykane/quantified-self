@@ -159,6 +159,17 @@ describe('firestore indexes', () => {
         }
     });
 
+    it('keeps event merge operation TTL deployable without an automatic index', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'eventMergeOperations',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+    });
+
     it('exempts every TTL-only expiration field from automatic indexing', () => {
         const config = loadFirestoreIndexes();
 
@@ -177,6 +188,30 @@ describe('firestore indexes', () => {
             ttl: false,
             indexes: [],
         });
+    });
+
+    it('does not index internal MCP grant-coordination fields that are read only by document ID', () => {
+        const config = loadFirestoreIndexes();
+        const unindexedFields = [
+            ['mcpOAuthAuthorizationCodes', 'clientName'],
+            ['mcpOAuthAuthorizationCodes', 'redirectHost'],
+            ['mcpConnections', 'audience'],
+            ['mcpConnections', 'grantId'],
+            ['mcpConnections', 'supersedesLegacy'],
+            ['mcpConnections', 'pendingAuthorizationCodeHash'],
+            ['mcpConnections', 'pendingAuthorizationApprovedAtMs'],
+            ['mcpConnections', 'pendingAuthorizationExpiresAtMs'],
+            ['mcpOAuthAccessTokens', 'grantId'],
+        ];
+
+        for (const [collectionGroup, fieldPath] of unindexedFields) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup,
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
     });
 
     it('keeps dashboard route preview recency query deployable', () => {

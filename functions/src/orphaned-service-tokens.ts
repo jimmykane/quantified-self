@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
@@ -24,7 +25,7 @@ export async function archiveOrphanedServiceToken(
             uid,
             originalTokenId,
             token: tokenData || {},
-            archivedAt: admin.firestore.Timestamp.now(),
+            archivedAt: Timestamp.now(),
             expireAt: getExpireAtTimestamp(TTL_CONFIG.ORPHANED_TOKEN_IN_DAYS),
             lastError: errorString,
         });

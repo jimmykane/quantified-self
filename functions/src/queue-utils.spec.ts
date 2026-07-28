@@ -20,11 +20,8 @@ const hoisted = vi.hoisted(() => {
         batch: vi.fn(() => batch),
         collection,
     });
-    // Attach Timestamp for getExpireAtTimestamp
-    (firestore as any).Timestamp = {
-        fromDate: vi.fn((date) => date),
-    };
-    return { batch, bulkWriter, collection, firestore };
+    const timestampFromDate = vi.fn((date) => date);
+    return { batch, bulkWriter, collection, firestore, timestampFromDate };
 });
 
 vi.mock('firebase-admin', () => ({
@@ -32,6 +29,12 @@ vi.mock('firebase-admin', () => ({
         firestore: hoisted.firestore,
     },
     firestore: hoisted.firestore,
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+    Timestamp: {
+        fromDate: hoisted.timestampFromDate,
+    },
 }));
 
 describe('queue-utils', () => {

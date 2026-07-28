@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -279,9 +280,9 @@ async function processRouteDocument(
             status: 'skipped',
             reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
             targetSportsLibVersion,
-            checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-            terminalFailure: admin.firestore.FieldValue.delete(),
-            terminalFailureAt: admin.firestore.FieldValue.delete(),
+            checkedAt: FieldValue.serverTimestamp(),
+            terminalFailure: FieldValue.delete(),
+            terminalFailureAt: FieldValue.delete(),
         }, 'no_source_files');
         return {
             enqueuedCount: options.enqueuedCount,
@@ -321,9 +322,9 @@ async function processRouteDocument(
         targetSportsLibVersion,
         status: 'pending',
         attemptCount: typeof existingJobData?.attemptCount === 'number' ? existingJobData.attemptCount : 0,
-        createdAt: existingJob.exists ? existingJobData?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: existingJob.exists ? existingJobData?.createdAt : FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        enqueuedAt: FieldValue.serverTimestamp(),
         expireAt: getExpireAtTimestamp(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS),
     };
 
@@ -336,10 +337,10 @@ async function processRouteDocument(
 
     await jobRef.set({
         ...basePayload,
-        lastError: admin.firestore.FieldValue.delete(),
-        terminalFailure: admin.firestore.FieldValue.delete(),
-        terminalFailureAt: admin.firestore.FieldValue.delete(),
-        processedAt: admin.firestore.FieldValue.delete(),
+        lastError: FieldValue.delete(),
+        terminalFailure: FieldValue.delete(),
+        terminalFailureAt: FieldValue.delete(),
+        processedAt: FieldValue.delete(),
     }, { merge: true });
 
     try {
@@ -378,9 +379,9 @@ async function processRouteDocument(
         }
         await jobRef.set({
             status: 'failed',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
             lastError: errorMessage,
-            enqueuedAt: admin.firestore.FieldValue.delete(),
+            enqueuedAt: FieldValue.delete(),
         }, { merge: true });
         logger.warn('[sports-lib-route-reparse] Marked job failed because task creation returned false.', {
             jobId,
@@ -403,9 +404,9 @@ async function processRouteDocument(
         }
         await jobRef.set({
             status: 'failed',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
             lastError: errorMessage,
-            enqueuedAt: admin.firestore.FieldValue.delete(),
+            enqueuedAt: FieldValue.delete(),
         }, { merge: true });
         throw error;
     }
@@ -437,8 +438,8 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
         : 'global';
 
     await checkpointRef.set({
-        lastPassStartedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastPassStartedAt: FieldValue.serverTimestamp(),
+        lastScanAt: FieldValue.serverTimestamp(),
         lastScanCount: 0,
         lastEnqueuedCount: 0,
         targetSportsLibVersion,
@@ -465,7 +466,7 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
             }
 
             let userQuery = db.collection(`users/${uid}/routes`)
-                .orderBy(admin.firestore.FieldPath.documentId())
+                .orderBy(FieldPath.documentId())
                 .limit(remainingScan);
 
             if (previousCursor) {
@@ -508,11 +509,11 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
         const completedAllUIDPasses = Object.values(nextCursorByUID).every(cursor => !cursor);
         await checkpointRef.set({
             overrideCursorByUid: nextCursorByUID,
-            lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastScanAt: FieldValue.serverTimestamp(),
             lastScanCount: scannedCount,
             lastEnqueuedCount: enqueuedCount,
             targetSportsLibVersion,
-            ...(completedAllUIDPasses ? { lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+            ...(completedAllUIDPasses ? { lastPassCompletedAt: FieldValue.serverTimestamp() } : {}),
         }, { merge: true });
 
         logger.info('[sports-lib-route-reparse] Override scan complete', {
@@ -530,7 +531,7 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
         .where('processingEntity', '==', 'route')
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
-        .orderBy(admin.firestore.FieldPath.documentId())
+        .orderBy(FieldPath.documentId())
         .limit(settings.scanLimit);
 
     if (cursorProcessingDocPath && cursorProcessingVersionCode !== null) {
@@ -542,8 +543,8 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
         await checkpointRef.set({
             cursorProcessingDocPath: null,
             cursorProcessingVersionCode: null,
-            lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastScanAt: FieldValue.serverTimestamp(),
+            lastPassCompletedAt: FieldValue.serverTimestamp(),
             lastScanCount: 0,
             lastEnqueuedCount: 0,
             targetSportsLibVersion,
@@ -639,11 +640,11 @@ export const scheduleSportsLibRouteReparseScan = onSchedule({
     await checkpointRef.set({
         cursorProcessingDocPath: canPersistCursor ? lastProcessingDocPath : null,
         cursorProcessingVersionCode: canPersistCursor ? lastProcessingVersionCode : null,
-        lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastScanAt: FieldValue.serverTimestamp(),
         lastScanCount: scannedCount,
         lastEnqueuedCount: enqueuedCount,
         targetSportsLibVersion,
-        ...(completedPass ? { lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+        ...(completedPass ? { lastPassCompletedAt: FieldValue.serverTimestamp() } : {}),
     }, { merge: true });
 
     logger.info('[sports-lib-route-reparse] Scan complete', {

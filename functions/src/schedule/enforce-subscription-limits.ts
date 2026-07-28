@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { deauthorizeServiceForSubscriptionEnforcement } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -45,7 +46,7 @@ export const enforceSubscriptionLimits = onSchedule({
         let query = admin.firestore()
             .collection('users')
             .select('hasSubscribedOnce')
-            .orderBy(admin.firestore.FieldPath.documentId())
+            .orderBy(FieldPath.documentId())
             .limit(USER_SCAN_PAGE_SIZE);
 
         if (cursor) {
@@ -154,7 +155,7 @@ function isGracePeriodActive(gracePeriodUntil?: FirebaseFirestore.Timestamp): bo
         return false;
     }
 
-    return gracePeriodUntil.toMillis() > admin.firestore.Timestamp.now().toMillis();
+    return gracePeriodUntil.toMillis() > Timestamp.now().toMillis();
 }
 
 function isAuthUserNotFoundError(error: unknown): boolean {
@@ -292,13 +293,13 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
             }
 
             // FAIL-SAFE: Trigger might have failed. Initialize grace period now.
-            const newGracePeriodUntil = admin.firestore.Timestamp.fromDate(
+            const newGracePeriodUntil = Timestamp.fromDate(
                 new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
             );
             logger.info(`FAIL-SAFE: No grace period found for non-pro user ${uid}. Initializing to ${newGracePeriodUntil.toDate().toISOString()}.`);
             await admin.firestore().doc(`users/${uid}/system/status`).set({
                 gracePeriodUntil: newGracePeriodUntil,
-                lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
+                lastDowngradedAt: FieldValue.serverTimestamp()
             }, { merge: true });
 
             // Ensure claims are synced so backend checks recognize the grace period
@@ -316,8 +317,8 @@ async function processUser(uid: string, hasConnectedServices: boolean, hasPaidHi
             // Clear stale grace period state and preserve unrelated claims such as admin.
             try {
                 await admin.firestore().doc(`users/${uid}/system/status`).set({
-                    gracePeriodUntil: admin.firestore.FieldValue.delete(),
-                    lastDowngradedAt: admin.firestore.FieldValue.delete()
+                    gracePeriodUntil: FieldValue.delete(),
+                    lastDowngradedAt: FieldValue.delete()
                 }, { merge: true });
             } catch (e) {
                 logger.error(`Error clearing grace period state for ${uid}`, e);

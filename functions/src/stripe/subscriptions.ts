@@ -39,6 +39,7 @@
 
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { reconcileClaims } from './claims';
@@ -215,7 +216,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
         .find(subscription => subscription?.cancel_at_period_end === true);
     const fallbackGracePeriodUntil = getGracePeriodUntilFromSubscriptionPeriodEnd(
         eventCancellationSubscription,
-    ) || admin.firestore.Timestamp.fromDate(
+    ) || Timestamp.fromDate(
         new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
     );
 
@@ -242,10 +243,10 @@ export const onSubscriptionUpdated = onDocumentWritten({
                 latestActiveSnapshot.docs,
             )?.scheduledGracePeriodUntil || null;
             transaction.set(systemStatusRef, {
-                gracePeriodUntil: admin.firestore.FieldValue.delete(),
+                gracePeriodUntil: FieldValue.delete(),
                 scheduledGracePeriodUntil: scheduledGracePeriodUntil
-                    || admin.firestore.FieldValue.delete(),
-                lastDowngradedAt: admin.firestore.FieldValue.delete(),
+                    || FieldValue.delete(),
+                lastDowngradedAt: FieldValue.delete(),
             }, { merge: true });
 
             return {
@@ -265,12 +266,12 @@ export const onSubscriptionUpdated = onDocumentWritten({
         const scheduledGracePeriodUntilMs = getTimestampMillis(systemDoc.data()?.scheduledGracePeriodUntil);
         const gracePeriodUntil = scheduledGracePeriodUntilMs === null
             ? fallbackGracePeriodUntil
-            : admin.firestore.Timestamp.fromDate(new Date(scheduledGracePeriodUntilMs));
+            : Timestamp.fromDate(new Date(scheduledGracePeriodUntilMs));
 
         transaction.set(systemStatusRef, {
             gracePeriodUntil,
-            scheduledGracePeriodUntil: admin.firestore.FieldValue.delete(),
-            lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
+            scheduledGracePeriodUntil: FieldValue.delete(),
+            lastDowngradedAt: FieldValue.serverTimestamp()
         }, { merge: true });
 
         return { status: 'set' as const, gracePeriodUntil };

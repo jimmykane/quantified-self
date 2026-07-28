@@ -209,21 +209,32 @@ const efficiencyTrendPayload = z.strictObject({
   latestValue: nullableNumber,
 }).meta({ title: 'McpDerivedEfficiencyTrendPayload' });
 
-const trainingSummaryWindow = z.strictObject({
+const trainingSummaryWindowFields = {
   periodDays: count,
   windowStartDayMs: timestampMs,
   windowEndDayMs: timestampMs,
-  activityCount: count,
   durationSeconds: nonNegativeNumber,
   easySeconds: nonNegativeNumber,
   moderateSeconds: nonNegativeNumber,
   hardSeconds: nonNegativeNumber,
-}).meta({ title: 'McpDerivedTrainingSummaryWindow' });
+};
+
+const trainingSummaryCurrentWindow = z.strictObject({
+  ...trainingSummaryWindowFields,
+  activityCount: count,
+}).meta({ title: 'McpDerivedTrainingSummaryCurrentWindow' });
+
+const trainingSummaryBaselineWindow = z.strictObject({
+  ...trainingSummaryWindowFields,
+  // The usual window is normalized from 84 days into a 28-day equivalent,
+  // so its activity count can be fractional (for example, 2 / 3).
+  activityCount: nonNegativeNumber,
+}).meta({ title: 'McpDerivedTrainingSummaryBaselineWindow' });
 
 const trainingDisciplineSummary = z.strictObject({
   discipline: trainingDiscipline,
-  current28d: trainingSummaryWindow,
-  baseline28d: trainingSummaryWindow,
+  current28d: trainingSummaryCurrentWindow,
+  baseline28d: trainingSummaryBaselineWindow,
 }).meta({ title: 'McpDerivedTrainingDisciplineSummary' });
 
 const trainingSummaryPayload = z.strictObject({

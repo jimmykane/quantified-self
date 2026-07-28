@@ -55,7 +55,7 @@
     </div>
     <dl>
       <div><dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd><small>Form / ramp</small></div>
-      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><small>Latest eligible night</small></div>
+      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
       <div><dt>HRV</dt><dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd><small>vs baseline</small></div>
       <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><small>vs baseline · lower supports</small></div>
     </dl>

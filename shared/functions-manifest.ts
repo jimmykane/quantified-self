@@ -1,5 +1,6 @@
 export const SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME = 'processSportsLibReparseHeavyTask';
 export const RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME = 'retrySportsLibReparseHeavyJob';
+export const MERGE_EVENTS_CLIENT_TIMEOUT_MS = 61 * 60 * 1000;
 
 export const FUNCTIONS_MANIFEST = {
     // Admin Functions (europe-west2)
@@ -85,7 +86,13 @@ export const FUNCTIONS_MANIFEST = {
     setEventSharing: { name: 'setEventSharing', region: 'europe-west2' },
     reprocessRoute: { name: 'reprocessRoute', region: 'europe-west2' },
     retrySportsLibReparseHeavyJob: { name: RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME, region: 'europe-west2' },
-    mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
+    // The Firebase callable SDK defaults to 70 seconds, while this function has
+    // a 60-minute server budget. Keep the client deadline just beyond it.
+    mergeEvents: {
+        name: 'mergeEvents',
+        region: 'europe-west2',
+        clientTimeoutMs: MERGE_EVENTS_CLIENT_TIMEOUT_MS,
+    },
     aiInsights: { name: 'aiInsights', region: 'europe-west2' },
     getAiInsightsQuotaStatus: { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },

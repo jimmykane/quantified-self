@@ -1,0 +1,13 @@
+interface:
+  display_name: "Explore Saved Routes"
+  short_description: "Find and inspect saved routes and waypoints"
+  default_prompt: "Use $explore-quantified-self-routes to find my saved running routes near Ioannina."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "quantified-self"
+      description: "Read-only Quantified Self saved routes and waypoints"
+      transport: "streamable_http"
+      url: "https://quantified-self.io/mcp"
+policy:
+  allow_implicit_invocation: true

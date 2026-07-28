@@ -690,6 +690,9 @@ describe('SummariesComponent', () => {
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+    const sleep = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
+      .find(element => element.querySelector('dt')?.textContent?.trim() === 'Sleep');
+    expect(sleep?.querySelector('small')?.textContent?.trim()).toBe('Today');
   });
 
   it('shows the same TSS-only training state as Training above Today readiness', () => {

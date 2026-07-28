@@ -1,0 +1,13 @@
+interface:
+  display_name: "Analyze Body Measurements"
+  short_description: "Review weight and body measurement trends"
+  default_prompt: "Use $analyze-quantified-self-measurements to explain my body-weight trend over the last 90 days."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "quantified-self"
+      description: "Read-only Quantified Self recorded body measurements"
+      transport: "streamable_http"
+      url: "https://quantified-self.io/mcp"
+policy:
+  allow_implicit_invocation: true

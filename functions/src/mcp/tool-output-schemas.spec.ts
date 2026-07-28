@@ -591,13 +591,159 @@ function createFixtureDataService(
         },
       }],
     }),
+    getDailyBriefing: vi.fn().mockResolvedValue({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'available',
+        latestSession: {
+          sleepDate: '2026-07-01',
+          startTimeMs: DAY_MS,
+          endTimeMs: NEXT_DAY_MS,
+          durationSeconds: 28_800,
+          inBedDurationSeconds: null,
+          score: {
+            value: 80,
+            qualifier: null,
+          },
+        },
+        comparison: {
+          sameProviderNightCount: 3,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: 1_200,
+        },
+      },
+      trainingReadiness: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        asOfDayMs: DAY_MS,
+        generatedAtMs: DAY_MS,
+        updatedAtMs: DAY_MS,
+        score: 76,
+        label: 'Ready',
+        confidence: 'high',
+        availableSignalCount: 4,
+        baselineEvidenceCount: 14,
+      },
+      trainingSummary: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        asOfDayMs: DAY_MS,
+        updatedAtMs: DAY_MS,
+        baselineSourceWindowDays: 84,
+        current28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 11,
+          durationSeconds: 28_800,
+          intensitySeconds: {
+            easy: 18_600,
+            moderate: 6_900,
+            hard: 3_300,
+          },
+        },
+        usual28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 8,
+          durationSeconds: 21_200,
+          intensitySeconds: {
+            easy: 13_600,
+            moderate: 5_100,
+            hard: 2_500,
+          },
+        },
+        disciplines: [{
+          discipline: 'running',
+          current28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 6,
+            durationSeconds: 14_400,
+            intensitySeconds: {
+              easy: 9_000,
+              moderate: 3_600,
+              hard: 1_800,
+            },
+          },
+          usual28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 4.67,
+            durationSeconds: 11_200,
+            intensitySeconds: {
+              easy: 7_000,
+              moderate: 2_800,
+              hard: 1_400,
+            },
+          },
+        }, {
+          discipline: 'cycling',
+          current28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 3,
+            durationSeconds: 10_800,
+            intensitySeconds: {
+              easy: 7_200,
+              moderate: 2_400,
+              hard: 1_200,
+            },
+          },
+          usual28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 2,
+            durationSeconds: 7_200,
+            intensitySeconds: {
+              easy: 4_800,
+              moderate: 1_600,
+              hard: 800,
+            },
+          },
+        }, {
+          discipline: 'swimming',
+          current28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 2,
+            durationSeconds: 3_600,
+            intensitySeconds: {
+              easy: 2_400,
+              moderate: 900,
+              hard: 300,
+            },
+          },
+          usual28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 1.33,
+            durationSeconds: 2_800,
+            intensitySeconds: {
+              easy: 1_800,
+              moderate: 700,
+              hard: 300,
+            },
+          },
+        }],
+      },
+    }),
+    listActivityTypes: vi.fn().mockReturnValue({
+      activityTypeCount: 2,
+      activityTypes: [{
+        activityType: 'Running',
+        activityGroup: 'running_group',
+        indoor: false,
+      }, {
+        activityType: 'Indoor Running',
+        activityGroup: 'running_group',
+        indoor: true,
+      }],
+    }),
     listActivities: vi.fn().mockResolvedValue({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [
         activityLocation
           ? activitySummaryWithLocation
           : activitySummaryRedacted,
       ],
       nextCursor: NEXT_CURSOR,
+      scanComplete: false,
     }),
     findActivitiesNearLocation: vi.fn().mockResolvedValue({
       location: {
@@ -708,10 +854,13 @@ function createFixtureDataService(
       }],
     }),
     listRoutes: vi.fn().mockResolvedValue({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [
         routeLocation ? routeSummaryWithLocation : routeSummaryRedacted,
       ],
       nextCursor: null,
+      scanComplete: true,
     }),
     findRoutesNearLocation: vi.fn().mockResolvedValue({
       location: {
@@ -807,9 +956,13 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  get_daily_briefing: {
+    timeZone: 'Europe/Helsinki',
+  },
+  list_activity_types: {},
   list_activities: {
-    start: '2026-07-01T00:00:00.000Z',
-    end: '2026-07-02T00:00:00.000Z',
+    activityTypes: ['Running'],
+    limit: 1,
   },
   find_activities_near_location: {
     location: coordinate,
@@ -834,7 +987,10 @@ const successfulToolArguments: Record<
     activityRef: ACTIVITY_REF,
     metrics: ['Distance'],
   },
-  list_routes: {},
+  list_routes: {
+    activityTypes: ['Running'],
+    search: 'ridge',
+  },
   find_routes_near_location: {
     location: { query: 'Ioannina, Greece' },
   },
@@ -942,6 +1098,58 @@ describe('MCP public output contracts', () => {
           .safeParse(payload).success,
       ).toBe(true);
     });
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS.training_summary.safeParse({
+      ...derivedPayloadFixtures.training_summary,
+      disciplines: [{
+        discipline: 'running',
+        current28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS,
+          windowEndDayMs: NEXT_DAY_MS,
+          activityCount: 2,
+          durationSeconds: 7_200,
+          easySeconds: 3_600,
+          moderateSeconds: 2_400,
+          hardSeconds: 1_200,
+        },
+        baseline28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS - (84 * 24 * 60 * 60 * 1000),
+          windowEndDayMs: DAY_MS - 1,
+          activityCount: 0.67,
+          durationSeconds: 2_400,
+          easySeconds: 1_200,
+          moderateSeconds: 800,
+          hardSeconds: 400,
+        },
+      }],
+    }).success).toBe(true);
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS.training_summary.safeParse({
+      ...derivedPayloadFixtures.training_summary,
+      disciplines: [{
+        discipline: 'running',
+        current28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS,
+          windowEndDayMs: NEXT_DAY_MS,
+          activityCount: 0.67,
+          durationSeconds: 2_400,
+          easySeconds: 1_200,
+          moderateSeconds: 800,
+          hardSeconds: 400,
+        },
+        baseline28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS - (84 * 24 * 60 * 60 * 1000),
+          windowEndDayMs: DAY_MS - 1,
+          activityCount: 1,
+          durationSeconds: 3_600,
+          easySeconds: 1_800,
+          moderateSeconds: 1_200,
+          hardSeconds: 600,
+        },
+      }],
+    }).success).toBe(false);
 
     expect(registry.get_training_metric.safeParse({
       metricKind: DERIVED_METRIC_KINDS.Form,
@@ -957,10 +1165,110 @@ describe('MCP public output contracts', () => {
       sourceEventCount: 0,
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.Form],
     }).success).toBe(false);
+    expect(registry.get_daily_briefing.safeParse({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'available',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 0,
+          averageDurationSeconds: null,
+          durationDeltaSeconds: null,
+        },
+      },
+      trainingReadiness: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        generatedAtMs: null,
+        updatedAtMs: null,
+        score: null,
+        label: null,
+        confidence: null,
+        availableSignalCount: null,
+        baselineEvidenceCount: null,
+      },
+      trainingSummary: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        updatedAtMs: null,
+        baselineSourceWindowDays: null,
+        current28d: null,
+        usual28d: null,
+        disciplines: [],
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_briefing.safeParse({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'no_completed_session',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 0,
+          averageDurationSeconds: null,
+          durationDeltaSeconds: null,
+        },
+      },
+      trainingReadiness: {
+        status: 'stale',
+        dayBoundary: 'UTC',
+        asOfDayMs: DAY_MS,
+        generatedAtMs: DAY_MS,
+        updatedAtMs: DAY_MS,
+        score: 76,
+        label: 'Ready',
+        confidence: 'high',
+        availableSignalCount: 4,
+        baselineEvidenceCount: 14,
+      },
+      trainingSummary: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        updatedAtMs: null,
+        baselineSourceWindowDays: null,
+        current28d: null,
+        usual28d: null,
+        disciplines: [],
+      },
+    }).success).toBe(false);
+  });
+
+  it('rejects daily-briefing Training totals that disagree with the discipline breakdown', async () => {
+    const registry = createMcpOutputSchemaRegistry({
+      activityLocation: true,
+      routeLocation: true,
+    });
+    const fixture = await createFixtureDataService().getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+    if (fixture.trainingSummary.current28d === null) {
+      throw new Error('The daily-briefing fixture must include a Training Summary.');
+    }
+
+    expect(registry.get_daily_briefing.safeParse({
+      ...fixture,
+      trainingSummary: {
+        ...fixture.trainingSummary,
+        current28d: {
+          ...fixture.trainingSummary.current28d,
+          durationSeconds: fixture.trainingSummary.current28d.durationSeconds + 1,
+        },
+      },
+    }).success).toBe(false);
   });
 
   it('advertises strict schemas and validates every successful tool call', async () => {
-    const connection = await connectFixtureServer(createFixtureDataService());
+    const dataService = createFixtureDataService();
+    const connection = await connectFixtureServer(dataService);
     connections.push(connection);
     const tools = (await connection.client.listTools()).tools;
     expect(tools.map(tool => tool.name).sort()).toEqual(
@@ -1030,6 +1338,37 @@ describe('MCP public output contracts', () => {
         expect(JSON.parse(text.text)).toEqual(result.structuredContent);
       }
     }
+    expect(dataService.listActivities).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startTimeMs: undefined,
+        endTimeMs: undefined,
+        activityTypes: ['Running'],
+        limit: 1,
+      }),
+    );
+    await connection.client.callTool({
+      name: 'list_activities',
+      arguments: {
+        relativePeriod: 'today',
+        timeZone: 'Europe/Helsinki',
+        limit: 1,
+      },
+    });
+    expect(dataService.listActivities).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        startTimeMs: undefined,
+        endTimeMs: undefined,
+        relativePeriod: 'today',
+        timeZone: 'Europe/Helsinki',
+        limit: 1,
+      }),
+    );
+    expect(dataService.listRoutes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityTypes: ['Running'],
+        search: 'ridge',
+      }),
+    );
 
     const distanceChart = await connection.client.callTool({
       name: 'get_activity_chart_data',
@@ -1112,9 +1451,19 @@ describe('MCP public output contracts', () => {
       items: [],
       nextCursor: null,
     }).success).toBe(true);
+    expect(registry.list_activities.safeParse({
+      scannedActivityCount: 0,
+      skippedActivityCount: 0,
+      activities: [],
+      nextCursor: null,
+      scanComplete: true,
+    }).success).toBe(true);
     expect(registry.list_routes.safeParse({
+      scannedRouteCount: 0,
+      skippedRouteCount: 0,
       routes: [],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(true);
   });
 
@@ -1212,8 +1561,11 @@ describe('MCP public output contracts', () => {
       routeLocation: false,
     });
     expect(parentRegistry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [activitySummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
     expect(parentRegistry.list_activity_jumps.safeParse({
       items: [{
@@ -1232,8 +1584,11 @@ describe('MCP public output contracts', () => {
       nextCursor: null,
     }).success).toBe(false);
     expect(parentRegistry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [routeSummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
     expect(parentRegistry.get_activity_chart_data.safeParse({
       activityType: 'Running',
@@ -1279,12 +1634,18 @@ describe('MCP public output contracts', () => {
       routeLocation: false,
     });
     expect(activityLocationOnlyRegistry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [activitySummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(true);
     expect(activityLocationOnlyRegistry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [routeSummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
 
     const routeLocationOnlyRegistry = createMcpOutputSchemaRegistry({
@@ -1292,12 +1653,18 @@ describe('MCP public output contracts', () => {
       routeLocation: true,
     });
     expect(routeLocationOnlyRegistry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [routeSummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(true);
     expect(routeLocationOnlyRegistry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [activitySummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
   });
 
@@ -1345,6 +1712,8 @@ describe('MCP public output contracts', () => {
       routeLocation: true,
     });
     expect(registry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [{
         ...activitySummaryWithLocation,
         eventID: 'private-event-id',
@@ -1354,13 +1723,26 @@ describe('MCP public output contracts', () => {
         },
       }],
       nextCursor: null,
+      scanComplete: true,
+    }).success).toBe(false);
+    expect(registry.list_activity_types.safeParse({
+      activityTypeCount: 1,
+      activityTypes: [{
+        activityType: 'Running',
+        activityGroup: 'running_group',
+        indoor: false,
+        sourceKey: 'private-source-key',
+      }],
     }).success).toBe(false);
     expect(registry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [{
         ...routeSummaryWithLocation,
         storagePath: 'users/private/routes/source.fit',
       }],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
     expect(registry.list_sleep_sessions.safeParse({
       sessions: [{
@@ -1528,6 +1910,45 @@ describe('MCP public output contracts', () => {
       nextCursor: null,
       providerUserId: 'sleep-secret',
     });
+    mismatchService.getDailyBriefing = vi.fn().mockResolvedValue({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'no_completed_session',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 0,
+          averageDurationSeconds: null,
+          durationDeltaSeconds: null,
+        },
+      },
+      trainingReadiness: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        generatedAtMs: null,
+        updatedAtMs: null,
+        score: null,
+        label: null,
+        confidence: null,
+        availableSignalCount: null,
+        baselineEvidenceCount: null,
+      },
+      trainingSummary: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        updatedAtMs: null,
+        baselineSourceWindowDays: null,
+        current28d: null,
+        usual28d: null,
+        disciplines: [],
+        sourceKey: 'training-summary-secret',
+      },
+      providerUserId: 'briefing-secret',
+    });
     mismatchService.listActivities = vi.fn().mockResolvedValue({
       activities: [],
       nextCursor: null,
@@ -1545,6 +1966,7 @@ describe('MCP public output contracts', () => {
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
+      'get_daily_briefing',
       'list_activities',
       'list_routes',
     ] as const) {
@@ -1576,6 +1998,9 @@ describe('MCP public output contracts', () => {
     errorService.listSleepSessions = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.getDailyBriefing = vi.fn().mockImplementation(async () => {
+      throw expectedError();
+    });
     errorService.listActivities = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
@@ -1589,6 +2014,7 @@ describe('MCP public output contracts', () => {
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
+      'get_daily_briefing',
       'list_activities',
       'list_routes',
     ] as const) {

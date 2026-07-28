@@ -8,6 +8,7 @@ import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
   createMcpDataService,
   MAX_ACTIVITY_METRICS_PER_REQUEST,
+  MCP_ACTIVITY_RELATIVE_PERIODS,
   McpDataError,
 } from './data.service';
 import {
@@ -59,7 +60,13 @@ const MCP_NEARBY_RADIUS_SCHEMA = z.number()
   .default(25_000);
 const MCP_ACTIVITY_TYPES_SCHEMA = z.array(
   z.string().min(1).max(120),
-).max(20).optional();
+)
+  .max(20)
+  .describe('Optional canonical Sports Lib activity types or recognized aliases. Use list_activity_types to discover canonical values.')
+  .optional();
+const MCP_ACTIVITY_RELATIVE_PERIOD_SCHEMA = z.enum(
+  MCP_ACTIVITY_RELATIVE_PERIODS,
+);
 const MCP_SERVER_ICON_VARIANTS = [
   {
     path: '/assets/favicons/android-chrome-96x96.png',
@@ -224,6 +231,16 @@ export function buildMcpAuthorizationServerMetadata(baseUrl: string) {
   };
 }
 
+export function buildMcpProtectedResourceMetadata(baseUrl: string) {
+  return {
+    resource: `${baseUrl}/mcp`,
+    resource_name: 'Quantified Self MCP',
+    authorization_servers: [baseUrl],
+    scopes_supported: Object.values(MCP_OAUTH_SCOPES),
+    bearer_methods_supported: ['header'],
+  };
+}
+
 interface McpRevocationHttpResponse {
   set(name: string, value: string): unknown;
   status(statusCode: number): {
@@ -343,6 +360,16 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const instructions = [
     'Use only the read-only tools exposed for the permissions this connection was granted.',
   ];
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
+    instructions.push(
+      'For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete.',
+    );
+  }
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
+    instructions.push(
+      'For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete.',
+    );
+  }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
     instructions.push(
       'Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment.',
@@ -351,6 +378,14 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
     instructions.push(
       'Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics.',
+    );
+  }
+  if (
+    auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
+    && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
+  ) {
+    instructions.push(
+      'For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and a current UTC-day Training readiness signal; it is not a workout plan or medical advice.',
     );
   }
   return instructions.join(' ');
@@ -378,7 +413,7 @@ export function createMcpServer(
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
-    version: '1.1.0',
+    version: '1.2.0',
     description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
     websiteUrl: publicBaseUrl,
     icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
@@ -389,6 +424,17 @@ export function createMcpServer(
   }, {
     instructions: buildMcpServerInstructions(auth),
   });
+
+  server.registerTool('list_activity_types', {
+    title: 'List activity types',
+    description: 'Discover the unique canonical Sports Lib activity types accepted by activity and route filters, with activity-group and indoor hints. Common aliases are normalized by filtered tools, but canonical values are preferred. This static catalog contains no account data.',
+    inputSchema: {},
+    outputSchema: outputSchemas.list_activity_types,
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+  }, () => runReadOnlyTool(
+    'list_activity_types',
+    async () => dataService.listActivityTypes(),
+  ));
 
   if (measurementToolsAvailable) {
     server.registerTool('list_measurement_types', {
@@ -562,17 +608,58 @@ export function createMcpServer(
     })));
   }
 
+  if (
+    auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
+    && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
+  ) {
+    server.registerTool('get_daily_briefing', {
+      title: 'Get daily briefing',
+      description: 'Return a compact morning readout for an explicit IANA time zone. It includes only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and Running/Cycling/Swimming mix, and a current UTC-day Training readiness signal. It never returns provider identity, physiology, locations, activity records, body measurements, a workout plan, or medical advice.',
+      inputSchema: {
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Required IANA time zone used for the local-day boundaries in this briefing.'),
+      },
+      outputSchema: outputSchemas.get_daily_briefing,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_daily_briefing', () => dataService.getDailyBriefing({
+      uid: auth.uid,
+      timeZone: input.timeZone,
+    })));
+  }
+
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
     server.registerTool('list_activities', {
       title: 'List activities',
       description: activityLocationAvailable
-        ? 'List bounded activity summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
-        : 'List bounded non-location activity summaries with opaque references and direct authenticated app links. Location fields are redacted.',
+        ? 'Find, list, or inspect individual workouts newest first. Filter server-side with activityTypes; use list_activity_types for canonical values. For today or yesterday, provide relativePeriod and an IANA timeZone. Otherwise provide start and end together for an explicit range, or omit all date selectors for all history/latest. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, safe summaries, exact start and end coordinates when present, opaque references, and authenticated app links.'
+        : 'Find, list, or inspect individual workouts newest first. Filter server-side with activityTypes; use list_activity_types for canonical values. For today or yesterday, provide relativePeriod and an IANA timeZone. Otherwise provide start and end together for an explicit range, or omit all date selectors for all history/latest. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, safe non-location summaries, opaque references, and authenticated app links; location fields are redacted.',
       inputSchema: {
-        start: MCP_ISO_DATE_TIME_SCHEMA,
-        end: MCP_ISO_DATE_TIME_SCHEMA,
-        cursor: MCP_CURSOR_SCHEMA.optional(),
-        limit: z.number().int().min(1).max(100).default(25),
+        start: MCP_ISO_DATE_TIME_SCHEMA
+          .describe('Optional inclusive period start. Provide start and end together; do not combine them with relativePeriod.')
+          .optional(),
+        end: MCP_ISO_DATE_TIME_SCHEMA
+          .describe('Optional inclusive period end. Provide start and end together; do not combine them with relativePeriod.')
+          .optional(),
+        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+        relativePeriod: MCP_ACTIVITY_RELATIVE_PERIOD_SCHEMA
+          .describe('Optional local calendar period. Requires timeZone and cannot be combined with start or end.')
+          .optional(),
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('IANA timezone required with relativePeriod; omit otherwise.')
+          .optional(),
+        cursor: MCP_CURSOR_SCHEMA
+          .describe('Continuation cursor. Repeat the original activityTypes and date-selection inputs when using it.')
+          .optional(),
+        limit: z.number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(25)
+          .describe('Maximum matching activities to return. Use 1 for a latest or last request, including a server-filtered named activity type.'),
       },
       outputSchema: outputSchemas.list_activities,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
@@ -580,8 +667,15 @@ export function createMcpServer(
       uid: auth.uid,
       connectionId: auth.connectionId,
       appBaseUrl: publicBaseUrl,
-      startTimeMs: parseMcpDateTime(input.start, 'start'),
-      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      startTimeMs: input.start
+        ? parseMcpDateTime(input.start, 'start')
+        : undefined,
+      endTimeMs: input.end
+        ? parseMcpDateTime(input.end, 'end')
+        : undefined,
+      activityTypes: input.activityTypes,
+      relativePeriod: input.relativePeriod,
+      timeZone: input.timeZone,
       includeLocation: activityLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
@@ -765,10 +859,17 @@ export function createMcpServer(
     server.registerTool('list_routes', {
       title: 'List saved routes',
       description: routeLocationAvailable
-        ? 'List bounded saved-route summaries, exact bounds, opaque references, and direct authenticated app links.'
-        : 'List bounded non-location saved-route summaries, opaque references, and direct authenticated app links. Bounds are redacted.',
+        ? 'List saved routes newest first. Filter server-side with activityTypes or a case-insensitive route-name search; use list_activity_types for canonical values. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, exact bounds, opaque references, and direct authenticated app links.'
+        : 'List saved routes newest first. Filter server-side with activityTypes or a case-insensitive route-name search; use list_activity_types for canonical values. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, non-location summaries, opaque references, and direct authenticated app links. Bounds are redacted.',
       inputSchema: {
-        cursor: MCP_CURSOR_SCHEMA.optional(),
+        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+        search: z.string()
+          .max(120)
+          .describe('Optional case-insensitive text contained in the saved route name.')
+          .optional(),
+        cursor: MCP_CURSOR_SCHEMA
+          .describe('Continuation cursor. Repeat the original activityTypes and search inputs when using it.')
+          .optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
       outputSchema: outputSchemas.list_routes,
@@ -777,6 +878,8 @@ export function createMcpServer(
       uid: auth.uid,
       connectionId: auth.connectionId,
       appBaseUrl: publicBaseUrl,
+      activityTypes: input.activityTypes,
+      search: input.search,
       includeLocation: routeLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
@@ -867,6 +970,12 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   }
   if (['list_sleep_sessions', 'query_sleep_summary'].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.SleepRead];
+  }
+  if (toolName === 'get_daily_briefing') {
+    return [
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ];
   }
   if ([
     'find_activities_near_location',
@@ -1021,13 +1130,7 @@ export const mcpApi = onRequest({
     )
   ) {
     response.set('Cache-Control', 'public, max-age=300');
-    response.json({
-      resource,
-      resource_name: 'Quantified Self MCP',
-      authorization_servers: [baseUrl],
-      scopes_supported: Object.values(MCP_OAUTH_SCOPES),
-      bearer_methods_supported: ['header'],
-    });
+    response.json(buildMcpProtectedResourceMetadata(baseUrl));
     return;
   }
 

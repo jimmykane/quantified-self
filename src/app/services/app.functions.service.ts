@@ -27,7 +27,9 @@ export class AppFunctionsService {
         // Initialize all functions immediately to bind them to the current injection context.
         Object.entries(FUNCTIONS_MANIFEST).forEach(([key, config]) => {
             const functionsInstance = this.getOrCreateFunctionsForRegion(config.region);
-            const callable = httpsCallable(functionsInstance, config.name);
+            const callable = 'clientTimeoutMs' in config
+                ? httpsCallable(functionsInstance, config.name, { timeout: config.clientTimeoutMs })
+                : httpsCallable(functionsInstance, config.name);
             this.callables.set(key as FunctionName, callable);
         });
     }

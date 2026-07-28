@@ -27,18 +27,17 @@ vi.mock('../shared/user-deletion-guard', () => ({
 
 vi.mock('firebase-admin', () => ({
     initializeApp: vi.fn(),
-    firestore: Object.assign(
-        vi.fn(() => mockFirestore),
-        {
-            Timestamp: {
-                fromDate: (date: Date) => ({
-                    toDate: () => date,
-                    toMillis: () => date.getTime(),
-                    toISOString: () => date.toISOString()
-                })
-            }
-        }
-    )
+    firestore: vi.fn(() => mockFirestore)
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+    Timestamp: {
+        fromDate: (date: Date) => ({
+            toDate: () => date,
+            toMillis: () => date.getTime(),
+            toISOString: () => date.toISOString()
+        })
+    }
 }));
 
 describe('checkSubscriptionNotifications', () => {

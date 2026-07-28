@@ -34,6 +34,8 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'get_training_metric',
   'list_sleep_sessions',
   'query_sleep_summary',
+  'get_daily_briefing',
+  'list_activity_types',
   'list_activities',
   'find_activities_near_location',
   'list_activity_laps',
@@ -330,6 +332,206 @@ const sleepSession = z.strictObject({
   }).nullable(),
   vitals: sleepVitals.nullable(),
 }).meta({ title: 'McpSleepSession' });
+
+const dailyBriefingSleepSession = z.strictObject({
+  sleepDate: z.iso.date(),
+  startTimeMs: timestampMs,
+  endTimeMs: timestampMs,
+  durationSeconds: nonNegativeNumber,
+  inBedDurationSeconds: nullableNonNegativeNumber,
+  score: z.strictObject({
+    value: nullableNonNegativeNumber,
+    qualifier: z.string().max(120).nullable(),
+  }).nullable(),
+}).meta({ title: 'McpDailyBriefingSleepSession' });
+
+const dailyBriefingReadiness = z.strictObject({
+  status: z.enum(['available', 'no_signal', 'not_ready', 'stale']),
+  dayBoundary: z.literal('UTC'),
+  asOfDayMs: nullableTimestampMs,
+  generatedAtMs: nullableTimestampMs,
+  updatedAtMs: nullableTimestampMs,
+  score: nullableNumber,
+  label: z.enum(['Ready', 'Mixed', 'Recover']).nullable(),
+  confidence: z.enum(['high', 'medium', 'low']).nullable(),
+  availableSignalCount: count.nullable(),
+  baselineEvidenceCount: count.nullable(),
+}).superRefine((value, context) => {
+  const signalFields = [
+    value.score,
+    value.label,
+    value.confidence,
+    value.availableSignalCount,
+    value.baselineEvidenceCount,
+  ];
+  if (value.status === 'available' && signalFields.some(field => field === null)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Available readiness must include all safe signal fields.',
+    });
+  }
+  if (value.status !== 'available' && signalFields.some(field => field !== null)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Unavailable readiness must withhold all signal fields.',
+    });
+  }
+  if (
+    value.status === 'not_ready'
+    && (
+      value.asOfDayMs !== null
+      || value.generatedAtMs !== null
+      || value.updatedAtMs !== null
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Not-ready readiness must not expose snapshot timestamps.',
+    });
+  }
+  if (
+    value.status !== 'not_ready'
+    && (value.asOfDayMs === null || value.generatedAtMs === null)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A validated readiness snapshot must expose its day and generation time.',
+    });
+  }
+}).meta({ title: 'McpDailyBriefingReadiness' });
+
+const dailyBriefingTrainingWindowFields = {
+  equivalentPeriodDays: z.literal(28),
+  durationSeconds: nonNegativeNumber,
+  intensitySeconds: z.strictObject({
+    easy: nonNegativeNumber,
+    moderate: nonNegativeNumber,
+    hard: nonNegativeNumber,
+  }),
+};
+
+const dailyBriefingCurrentTrainingWindow = z.strictObject({
+  ...dailyBriefingTrainingWindowFields,
+  activityCount: count,
+}).meta({ title: 'McpDailyBriefingCurrentTrainingWindow' });
+
+const dailyBriefingUsualTrainingWindow = z.strictObject({
+  ...dailyBriefingTrainingWindowFields,
+  activityCount: nonNegativeNumber,
+}).meta({ title: 'McpDailyBriefingUsualTrainingWindow' });
+
+const dailyBriefingTrainingDiscipline = z.strictObject({
+  discipline: z.enum(['running', 'cycling', 'swimming']),
+  current28d: dailyBriefingCurrentTrainingWindow,
+  usual28d: dailyBriefingUsualTrainingWindow,
+}).meta({ title: 'McpDailyBriefingTrainingDiscipline' });
+
+const dailyBriefingTrainingSummary = z.strictObject({
+  status: z.enum(['available', 'not_ready', 'stale']),
+  dayBoundary: z.literal('UTC'),
+  asOfDayMs: nullableTimestampMs,
+  updatedAtMs: nullableTimestampMs,
+  baselineSourceWindowDays: z.literal(84).nullable(),
+  current28d: dailyBriefingCurrentTrainingWindow.nullable(),
+  usual28d: dailyBriefingUsualTrainingWindow.nullable(),
+  disciplines: z.array(dailyBriefingTrainingDiscipline).max(3),
+}).superRefine((value, context) => {
+  const summaryFields = [
+    value.baselineSourceWindowDays,
+    value.current28d,
+    value.usual28d,
+  ];
+  const hasCompleteSummary = summaryFields.every(field => field !== null)
+    && value.disciplines.length === 3
+    && new Set(value.disciplines.map(discipline => discipline.discipline)).size === 3;
+  if (
+    value.status === 'available'
+    && (value.asOfDayMs === null || !hasCompleteSummary)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Available training summary must identify its day and include all three discipline summaries.',
+    });
+  }
+  if (
+    value.status !== 'available'
+    && (
+      summaryFields.some(field => field !== null)
+      || value.disciplines.length > 0
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Unavailable training summary must withhold summary values.',
+    });
+  }
+  if (
+    value.status === 'not_ready'
+    && (value.asOfDayMs !== null || value.updatedAtMs !== null)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Not-ready training summary must not expose snapshot timestamps.',
+    });
+  }
+  if (value.status === 'stale' && value.asOfDayMs === null) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A stale training summary must identify its snapshot day.',
+    });
+  }
+  if (value.status === 'available' && hasCompleteSummary) {
+    const approximatelyEqual = (left: number, right: number) => (
+      Math.abs(left - right)
+        <= 4 * Number.EPSILON * Math.max(1, Math.abs(left), Math.abs(right))
+    );
+    const totalMatchesDisciplines = (window: 'current28d' | 'usual28d') => {
+      const total = value[window];
+      if (total === null) {
+        return false;
+      }
+      const disciplineWindows = value.disciplines.map(discipline => discipline[window]);
+      return disciplineWindows.every(entry => (
+        entry.equivalentPeriodDays === total.equivalentPeriodDays
+      ))
+        && approximatelyEqual(
+          total.activityCount,
+          disciplineWindows.reduce((sum, entry) => sum + entry.activityCount, 0),
+        )
+        && approximatelyEqual(
+          total.durationSeconds,
+          disciplineWindows.reduce((sum, entry) => sum + entry.durationSeconds, 0),
+        )
+        && approximatelyEqual(
+          total.intensitySeconds.easy,
+          disciplineWindows.reduce((sum, entry) => sum + entry.intensitySeconds.easy, 0),
+        )
+        && approximatelyEqual(
+          total.intensitySeconds.moderate,
+          disciplineWindows.reduce((sum, entry) => sum + entry.intensitySeconds.moderate, 0),
+        )
+        && approximatelyEqual(
+          total.intensitySeconds.hard,
+          disciplineWindows.reduce((sum, entry) => sum + entry.intensitySeconds.hard, 0),
+        );
+    };
+    if (
+      !totalMatchesDisciplines('current28d')
+      || !totalMatchesDisciplines('usual28d')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Training summary totals must equal the corresponding discipline summaries.',
+      });
+    }
+  }
+}).meta({ title: 'McpDailyBriefingTrainingSummary' });
+
+const activityTypeDescriptor = z.strictObject({
+  activityType: z.string().min(1).max(120),
+  activityGroup: z.string().min(1).max(120),
+  indoor: z.boolean(),
+}).meta({ title: 'McpActivityTypeDescriptor' });
 
 const activitySummaryBaseShape = {
   activityRef: MCP_ACTIVITY_REFERENCE_OUTPUT_SCHEMA,
@@ -716,13 +918,58 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         }),
       })),
     }),
+    get_daily_briefing: z.strictObject({
+      asOfTimeMs: timestampMs,
+      timeZone: z.string().min(1).max(80),
+      localDayStartTimeMs: timestampMs,
+      localDayEndTimeMs: timestampMs,
+      sleep: z.strictObject({
+        status: z.enum(['available', 'no_completed_session']),
+        latestSession: dailyBriefingSleepSession.nullable(),
+        comparison: z.strictObject({
+          sameProviderNightCount: count.max(7),
+          averageDurationSeconds: nullableNonNegativeNumber,
+          durationDeltaSeconds: nullableNumber,
+        }),
+      }).superRefine((value, context) => {
+        if (
+          (value.status === 'available' && value.latestSession === null)
+          || (value.status === 'no_completed_session' && value.latestSession !== null)
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['latestSession'],
+            message: 'Sleep availability must match latestSession presence.',
+          });
+        }
+        if (
+          value.comparison.averageDurationSeconds === null
+          && value.comparison.durationDeltaSeconds !== null
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['comparison', 'durationDeltaSeconds'],
+            message: 'A duration delta requires a baseline duration.',
+          });
+        }
+      }),
+      trainingReadiness: dailyBriefingReadiness,
+      trainingSummary: dailyBriefingTrainingSummary,
+    }),
+    list_activity_types: z.strictObject({
+      activityTypeCount: count,
+      activityTypes: z.array(activityTypeDescriptor),
+    }),
     list_activities: z.strictObject({
+      scannedActivityCount: count,
+      skippedActivityCount: count,
       activities: z.array(
         scope.activityLocation
           ? activitySummaryWithLocation
           : activitySummaryWithoutLocation,
       ),
       ...MCP_PAGINATION_OUTPUT_SHAPE,
+      scanComplete: z.boolean(),
     }),
     find_activities_near_location: scope.activityLocation
       ? z.strictObject({
@@ -770,12 +1017,15 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       metrics: z.array(activityMetricValue),
     }),
     list_routes: z.strictObject({
+      scannedRouteCount: count,
+      skippedRouteCount: count,
       routes: z.array(
         scope.routeLocation
           ? routeSummaryWithLocation
           : routeSummaryWithoutLocation,
       ),
       ...MCP_PAGINATION_OUTPUT_SHAPE,
+      scanComplete: z.boolean(),
     }),
     find_routes_near_location: scope.routeLocation
       ? z.strictObject({

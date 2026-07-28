@@ -147,13 +147,16 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
+| Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
+| MCP pre-push checks | `npm run hooks:mcp:pre-push` | Runs the registered-contract gate and focused MCP output/server tests |
 | Local plugin tooling | `npm run plugin:tools` | Installs the isolated pinned Codex CLI dependency |
 | Local plugin setup | `npm run plugin:setup` | Explicitly builds, validates, registers, and installs the configured plugin |
 | Local plugin validation | `npm run plugin:validate` | Uses an isolated temporary Codex profile |
 | Local plugin refresh | `npm run plugin:sync` | Explicitly rebuilds and reinstalls; normal app builds never do this |
 
-The repository-local Quantified Self plugin bundles the registered read-only MCP app with an analysis skill. Configure
-its account-specific ChatGPT technical app ID once by setting `QS_CHATGPT_APP_ID` and running
+The repository-local Quantified Self plugin bundles the registered read-only MCP app with six discoverable workflows
+for cross-domain analysis, training, sleep, body measurements, activities, and saved routes. Configure its
+account-specific ChatGPT technical app ID once by setting `QS_CHATGPT_APP_ID` and running
 `npm run plugin:configure`, then run `npm run plugin:setup`. Generated app mappings and cache-busted manifests are
 ignored. Restart the ChatGPT desktop app after setup or sync, then test in a new conversation. See the
 [MCP server documentation](docs/mcp-server.md#repository-local-plugin) for the complete lifecycle and update matrix.
@@ -188,6 +191,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `mcpOAuthAccessTokens` / `mcpOAuthRefreshTokens` | 1 hour / 30 days | `expireAt` | Hashed MCP bearer and refresh credentials |
 | `mcpOAuthRateLimits` | About 5 minutes | `expireAt` | Distributed MCP request counters |
 | `users/*/mcpConnections` | 5 minutes while pending | `expireAt` | Abandoned MCP approvals; successful exchanges remove the TTL field |
+| `users/*/eventMergeOperations` | 7 days after the latest state transition | `expireAt` | Event-merge idempotency and reconciliation ledger |
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
@@ -202,6 +206,7 @@ These policies are infrastructure configuration; starting local emulators does n
 - [Email lifecycle](docs/email-lifecycle.md)
 - [Firebase Auth link-domain routing](docs/firebase-auth-link-domain-routing.md)
 - [Connected-provider attribution audit](docs/connected-provider-attribution-audit.md)
+- [Event merge idempotency and recovery](docs/event-merge-idempotency.md)
 - [Pricing and usage limits](docs/PRICING_AND_LIMITS.md)
 - [User deletion workflow](docs/user-deletion-workflow.html)
 

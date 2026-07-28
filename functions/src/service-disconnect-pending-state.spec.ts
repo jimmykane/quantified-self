@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildPendingDisconnectMarkState,
@@ -12,32 +12,26 @@ import {
   type PendingServiceDisconnectRootData,
 } from './service-disconnect-pending-state';
 
-vi.mock('firebase-admin', () => {
-  const firestore = Object.assign(() => ({}), {
-    Timestamp: {
-      fromMillis: (value: number) => ({
-        toMillis: () => value,
-        toDate: () => new Date(value),
-      }),
-    },
-  });
-
-  return {
-    default: { firestore },
-    firestore,
-  };
-});
+vi.mock('firebase-admin', () => ({ firestore: vi.fn() }));
+vi.mock('firebase-admin/firestore', () => ({
+  Timestamp: {
+    fromMillis: (value: number) => ({
+      toMillis: () => value,
+      toDate: () => new Date(value),
+    }),
+  },
+}));
 
 const NOW_MS = Date.UTC(2026, 0, 2, 3, 4, 5);
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
-function timestamp(value: number): admin.firestore.Timestamp {
-  return admin.firestore.Timestamp.fromMillis(value);
+function timestamp(value: number): Timestamp {
+  return Timestamp.fromMillis(value);
 }
 
-function toMillis(value: admin.firestore.Timestamp | null | undefined): number | null | undefined {
+function toMillis(value: Timestamp | null | undefined): number | null | undefined {
   return value?.toMillis();
 }
 

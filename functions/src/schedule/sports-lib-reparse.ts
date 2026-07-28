@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_CHECKPOINT_PATH,
@@ -250,8 +251,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
     const cursorProcessingVersionCode = getProcessingVersionCode(checkpointData?.cursorProcessingVersionCode);
 
     await checkpointRef.set({
-        lastPassStartedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastPassStartedAt: FieldValue.serverTimestamp(),
+        lastScanAt: FieldValue.serverTimestamp(),
         lastScanCount: 0,
         lastEnqueuedCount: 0,
         targetSportsLibVersion,
@@ -346,9 +347,9 @@ export const scheduleSportsLibReparseScan = onSchedule({
                     status: 'skipped',
                     reason: SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
                     targetSportsLibVersion,
-                    checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    terminalFailure: admin.firestore.FieldValue.delete(),
-                    terminalFailureAt: admin.firestore.FieldValue.delete(),
+                    checkedAt: FieldValue.serverTimestamp(),
+                    terminalFailure: FieldValue.delete(),
+                    terminalFailureAt: FieldValue.delete(),
                 }, 'no_source_files');
                 return;
             }
@@ -389,9 +390,9 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 ...(routingDecision.heavyReason ? { heavyReason: routingDecision.heavyReason } : {}),
                 ...(routingDecision.eventDurationMs !== null ? { eventDurationMs: routingDecision.eventDurationMs } : {}),
                 attemptCount: typeof existingJobData?.attemptCount === 'number' ? existingJobData.attemptCount : 0,
-                createdAt: existingJob.exists ? existingJobData?.createdAt : admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                enqueuedAt: admin.firestore.FieldValue.serverTimestamp(),
+                createdAt: existingJob.exists ? existingJobData?.createdAt : FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+                enqueuedAt: FieldValue.serverTimestamp(),
                 expireAt: getExpireAtTimestamp(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS),
             };
 
@@ -401,13 +402,13 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
             await jobRef.set({
                 ...basePayload,
-                ...(routingDecision.heavyReason ? {} : { heavyReason: admin.firestore.FieldValue.delete() }),
-                ...(routingDecision.eventDurationMs !== null ? {} : { eventDurationMs: admin.firestore.FieldValue.delete() }),
-                lastError: admin.firestore.FieldValue.delete(),
-                failureReason: admin.firestore.FieldValue.delete(),
-                terminalFailure: admin.firestore.FieldValue.delete(),
-                terminalFailureAt: admin.firestore.FieldValue.delete(),
-                processedAt: admin.firestore.FieldValue.delete(),
+                ...(routingDecision.heavyReason ? {} : { heavyReason: FieldValue.delete() }),
+                ...(routingDecision.eventDurationMs !== null ? {} : { eventDurationMs: FieldValue.delete() }),
+                lastError: FieldValue.delete(),
+                failureReason: FieldValue.delete(),
+                terminalFailure: FieldValue.delete(),
+                terminalFailureAt: FieldValue.delete(),
+                processedAt: FieldValue.delete(),
             }, { merge: true });
 
             try {
@@ -438,9 +439,9 @@ export const scheduleSportsLibReparseScan = onSchedule({
                     }
                     await jobRef.set({
                         status: 'failed',
-                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: FieldValue.serverTimestamp(),
                         lastError: errorMessage,
-                        enqueuedAt: admin.firestore.FieldValue.delete(),
+                        enqueuedAt: FieldValue.delete(),
                     }, { merge: true });
                     logger.warn('[sports-lib-reparse] Marked job failed because task creation returned false.', {
                         jobId,
@@ -458,9 +459,9 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 }
                 await jobRef.set({
                     status: 'failed',
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: FieldValue.serverTimestamp(),
                     lastError: errorMessage,
-                    enqueuedAt: admin.firestore.FieldValue.delete(),
+                    enqueuedAt: FieldValue.delete(),
                 }, { merge: true });
                 throw error;
             }
@@ -489,7 +490,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }
 
             let userQuery = db.collection(`users/${uid}/events`)
-                .orderBy(admin.firestore.FieldPath.documentId())
+                .orderBy(FieldPath.documentId())
                 .limit(remainingScan);
 
             if (previousCursor) {
@@ -524,11 +525,11 @@ export const scheduleSportsLibReparseScan = onSchedule({
         const completedAllUIDPasses = Object.values(nextCursorByUID).every(cursor => !cursor);
         await checkpointRef.set({
             overrideCursorByUid: nextCursorByUID,
-            lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastScanAt: FieldValue.serverTimestamp(),
             lastScanCount: scannedCount,
             lastEnqueuedCount: enqueuedCount,
             targetSportsLibVersion,
-            ...(completedAllUIDPasses ? { lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+            ...(completedAllUIDPasses ? { lastPassCompletedAt: FieldValue.serverTimestamp() } : {}),
         }, { merge: true });
 
         logger.info('[sports-lib-reparse] Override scan complete', {
@@ -546,7 +547,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
         .where('processingEntity', '==', EVENT_PROCESSING_ENTITY)
         .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
         .orderBy('sportsLibVersionCode', 'asc')
-        .orderBy(admin.firestore.FieldPath.documentId())
+        .orderBy(FieldPath.documentId())
         .limit(settings.scanLimit);
 
     if (cursorProcessingDocPath && cursorProcessingVersionCode !== null) {
@@ -558,8 +559,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
         await checkpointRef.set({
             cursorProcessingDocPath: null,
             cursorProcessingVersionCode: null,
-            lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastScanAt: FieldValue.serverTimestamp(),
+            lastPassCompletedAt: FieldValue.serverTimestamp(),
             lastScanCount: 0,
             lastEnqueuedCount: 0,
             targetSportsLibVersion,
@@ -713,11 +714,11 @@ export const scheduleSportsLibReparseScan = onSchedule({
         cursorProcessingDocPath: canPersistCursor ? lastProcessingDocPath : null,
         cursorProcessingVersionCode: canPersistCursor ? lastProcessingVersionCode : null,
         ...(passCompleted ? { cursorEventPath: null } : {}),
-        lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastScanAt: FieldValue.serverTimestamp(),
         lastScanCount: scannedCount,
         lastEnqueuedCount: enqueuedCount,
         targetSportsLibVersion,
-        ...(passCompleted ? { lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+        ...(passCompleted ? { lastPassCompletedAt: FieldValue.serverTimestamp() } : {}),
     }, { merge: true });
 
     logger.info('[sports-lib-reparse] Scan complete', {

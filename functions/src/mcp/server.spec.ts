@@ -12,6 +12,7 @@ import {
 } from './oauth.service';
 import {
   buildMcpAuthorizationServerMetadata,
+  buildMcpProtectedResourceMetadata,
   classifyMcpBearerFailure,
   createMcpServer,
   formatMcpToolError,
@@ -84,6 +85,17 @@ describe('MCP HTTP scope enforcement', () => {
         token_endpoint_auth_methods_supported: ['none'],
         revocation_endpoint_auth_methods_supported: ['none'],
       }));
+  });
+
+  it('builds protected-resource metadata from the same public origin', () => {
+    expect(buildMcpProtectedResourceMetadata('https://quantified-self.io'))
+      .toEqual({
+        resource: 'https://quantified-self.io/mcp',
+        resource_name: 'Quantified Self MCP',
+        authorization_servers: ['https://quantified-self.io'],
+        scopes_supported: Object.values(MCP_OAUTH_SCOPES),
+        bearer_methods_supported: ['header'],
+      });
   });
 
   it('accepts a form-encoded server-to-server revocation request with an empty 200 response', async () => {
@@ -221,6 +233,58 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
 
+  it('requires both metrics and sleep scopes for the daily briefing', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_daily_briefing' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ]);
+  });
+
+  it('advertises the compact Training Summary in daily-briefing metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [
+        MCP_OAUTH_SCOPES.MetricsRead,
+        MCP_OAUTH_SCOPES.SleepRead,
+      ],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'daily-briefing-metadata-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const dailyBriefing = (await client.listTools()).tools
+        .find(tool => tool.name === 'get_daily_briefing');
+
+      expect(client.getInstructions()).toContain(
+        'current-versus-usual equivalent 28-day Training totals and sport mix',
+      );
+      expect(dailyBriefing?.description).toContain(
+        'current-versus-usual equivalent 28-day Training totals',
+      );
+      expect(dailyBriefing?.description).toContain('Running/Cycling/Swimming mix');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('makes the static activity-type catalog available to every authorized client', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'list_activity_types' },
+    })).toEqual([]);
+  });
+
   it('requires separate activity-detail and route scopes for granular tools', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
@@ -296,19 +360,37 @@ describe('MCP HTTP scope enforcement', () => {
       }
     };
 
+    await expect(listToolNames([])).resolves.toEqual([
+      'list_activity_types',
+    ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.MetricsRead])).resolves.toEqual([
       'get_training_metric',
+      'list_activity_types',
       'list_metrics',
       'query_metric',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.MeasurementsRead,
     ])).resolves.toEqual([
+      'list_activity_types',
       'list_measurement_types',
       'query_measurements',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
+      'list_activity_types',
       'list_sleep_sessions',
+      'query_sleep_summary',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ])).resolves.toEqual([
+      'get_daily_briefing',
+      'get_training_metric',
+      'list_activity_types',
+      'list_metrics',
+      'list_sleep_sessions',
+      'query_metric',
       'query_sleep_summary',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
@@ -318,6 +400,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.MetricsRead,
@@ -331,10 +414,12 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
       'list_metrics',
       'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
+      'list_activity_types',
       'list_routes',
     ]);
     await expect(listToolNames([
@@ -343,6 +428,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'find_routes_near_location',
       'get_route_geometry',
+      'list_activity_types',
       'list_route_waypoints',
       'list_routes',
     ]);
@@ -357,6 +443,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
@@ -370,8 +457,60 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
       'list_routes',
     ]);
+  });
+
+  it('advertises bounded saved-route type and name filters', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.RoutesRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'route-filter-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const listRoutes = (await client.listTools()).tools
+        .find(tool => tool.name === 'list_routes');
+      const inputSchema = listRoutes?.inputSchema as {
+        properties?: Record<string, Record<string, unknown>>;
+        required?: string[];
+      } | undefined;
+
+      expect(client.getInstructions()).toContain(
+        'list_routes with activityTypes or search',
+      );
+      expect(client.getInstructions()).toContain(
+        'Repeat the filters with nextCursor until matched or scanComplete',
+      );
+      expect(listRoutes?.description).toContain('activityTypes');
+      expect(listRoutes?.description).toContain(
+        'case-insensitive route-name search',
+      );
+      expect(listRoutes?.description).toContain('scanComplete');
+      expect(inputSchema?.required || []).not.toContain('activityTypes');
+      expect(inputSchema?.required || []).not.toContain('search');
+      expect(inputSchema?.properties?.activityTypes?.description).toContain(
+        'list_activity_types',
+      );
+      expect(inputSchema?.properties?.search?.description).toContain(
+        'case-insensitive',
+      );
+      expect(inputSchema?.properties?.cursor?.description).toContain(
+        'Repeat the original activityTypes and search',
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('advertises first-class body-measurement routing and safe tool metadata', async () => {
@@ -470,7 +609,111 @@ describe('MCP HTTP scope enforcement', () => {
       );
       expect(client.getInstructions()).not.toContain('query_measurements');
       expect(client.getInstructions()).not.toContain('list_metrics');
+      expect(client.getInstructions()).not.toContain('list_activities');
       expect(client.getInstructions()).not.toContain('body weight');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('routes specific and latest-workout requests to newest-first activity discovery', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [
+        MCP_OAUTH_SCOPES.ActivityDetailsRead,
+        MCP_OAUTH_SCOPES.MetricsRead,
+        MCP_OAUTH_SCOPES.MeasurementsRead,
+      ],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'activity-routing-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      const activityInstructionIndex = instructions.indexOf(
+        'For a workout',
+      );
+      const cursorInstruction = 'Follow nextCursor until matched or scanComplete';
+      const cursorInstructionIndex = instructions.indexOf(cursorInstruction);
+      const tools = (await client.listTools()).tools;
+      const listActivities = tools
+        .find(tool => tool.name === 'list_activities');
+      const listActivityTypes = tools
+        .find(tool => tool.name === 'list_activity_types');
+      const inputSchema = listActivities?.inputSchema as {
+        properties?: Record<string, Record<string, unknown>>;
+        required?: string[];
+      } | undefined;
+
+      expect(activityInstructionIndex).toBeGreaterThanOrEqual(0);
+      expect(activityInstructionIndex).toBeLessThan(512);
+      expect(cursorInstructionIndex).toBeGreaterThan(activityInstructionIndex);
+      expect(cursorInstructionIndex + cursorInstruction.length)
+        .toBeLessThanOrEqual(512);
+      expect(instructions).toContain(
+        'aggregate metrics do not contain individual records',
+      );
+      expect(instructions).toContain(
+        'relativePeriod plus timeZone for today or yesterday',
+      );
+      expect(instructions).toContain(
+        'add activityTypes and limit 1 when named',
+      );
+      expect(listActivityTypes).toBeDefined();
+      expect(listActivities?.description).toContain('today or yesterday');
+      expect(listActivities?.description).toContain('all history/latest');
+      expect(listActivities?.description).toContain(
+        'Repeat the original filters with nextCursor',
+      );
+      expect(inputSchema?.required || []).not.toContain('start');
+      expect(inputSchema?.required || []).not.toContain('end');
+      expect(inputSchema?.required || []).not.toContain('relativePeriod');
+      expect(inputSchema?.required || []).not.toContain('timeZone');
+      expect(inputSchema?.properties?.start?.description).toContain(
+        'Provide start and end together',
+      );
+      expect(inputSchema?.properties?.activityTypes?.description).toContain(
+        'list_activity_types',
+      );
+      expect(inputSchema?.properties?.relativePeriod?.description).toContain(
+        'Requires timeZone',
+      );
+      expect(inputSchema?.properties?.timeZone?.description).toContain(
+        'IANA timezone',
+      );
+      expect(inputSchema?.properties?.limit?.description).toContain(
+        'server-filtered named activity type',
+      );
+
+      const partialRange = await client.callTool({
+        name: 'list_activities',
+        arguments: {
+          start: '2026-07-27T00:00:00.000+03:00',
+        },
+      });
+      expect(partialRange.isError).toBe(true);
+      expect(JSON.stringify(partialRange)).toContain(
+        'start and end must either both be provided or both be omitted',
+      );
+
+      const missingRelativeTimeZone = await client.callTool({
+        name: 'list_activities',
+        arguments: {
+          relativePeriod: 'today',
+        },
+      });
+      expect(missingRelativeTimeZone.isError).toBe(true);
+      expect(JSON.stringify(missingRelativeTimeZone)).toContain(
+        'A valid IANA timezone is required',
+      );
     } finally {
       await client.close();
       await server.close();
@@ -632,7 +875,7 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getServerVersion()).toEqual({
         name: 'quantified-self',
         title: 'Quantified Self',
-        version: '1.1.0',
+        version: '1.2.0',
         description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [

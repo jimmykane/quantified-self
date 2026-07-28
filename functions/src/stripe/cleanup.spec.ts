@@ -18,12 +18,8 @@ const { mockFirestore, mockCollection, mockDocRef, mockDocSnap, mockFieldValue }
     const mockVal = {
         delete: vi.fn().mockReturnValue('DELETE_SENTINEL')
     };
-    const firestore = Object.assign(firestoreFn, {
-        FieldValue: mockVal
-    });
-
     return {
-        mockFirestore: firestore,
+        mockFirestore: firestoreFn,
         mockCollection: mockCol,
         mockDocRef: mockRef,
         mockDocSnap: mockSnap,
@@ -34,6 +30,10 @@ const { mockFirestore, mockCollection, mockDocRef, mockDocSnap, mockFieldValue }
 vi.mock('firebase-admin', () => ({
     firestore: mockFirestore,
     auth: () => ({})
+}));
+
+vi.mock('firebase-admin/firestore', () => ({
+    FieldValue: mockFieldValue
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
