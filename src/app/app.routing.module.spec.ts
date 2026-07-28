@@ -356,6 +356,14 @@ describe('AppRoutingModule routes', () => {
         h1: 'How to sync Wahoo activities to Suunto automatically',
       },
       {
+        path: PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
+        h1: 'How to import activities to Suunto',
+      },
+      {
+        path: PUBLIC_GUIDE_PATHS.importActivitiesToWahoo,
+        h1: 'How to import activities to Wahoo',
+      },
+      {
         path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
         h1: 'How to send Suunto routes to Garmin courses',
       },

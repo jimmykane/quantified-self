@@ -73,6 +73,8 @@ describe('serverRoutes', () => {
       'guides/sync-garmin-to-suunto',
       'guides/sync-coros-to-suunto',
       'guides/sync-wahoo-to-suunto',
+      'guides/import-activities-to-suunto',
+      'guides/import-activities-to-wahoo',
       'guides/sync-suunto-routes-to-garmin-courses',
       'guides/centralize-garmin-suunto-coros-workout-data',
     ]);
@@ -112,6 +114,8 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('guides/sync-garmin-to-suunto')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-coros-to-suunto')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-wahoo-to-suunto')).toBe(true);
+    expect(prerenderedPaths.has('guides/import-activities-to-suunto')).toBe(true);
+    expect(prerenderedPaths.has('guides/import-activities-to-wahoo')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-suunto-routes-to-garmin-courses')).toBe(true);
     expect(prerenderedPaths.has('guides/centralize-garmin-suunto-coros-workout-data')).toBe(true);
   });

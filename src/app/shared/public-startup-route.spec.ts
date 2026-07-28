@@ -43,6 +43,8 @@ describe('public-startup-route', () => {
     expect(isPublicContentPath('/policies')).toBe(true);
     expect(isPublicContentPath('/releases?view=latest')).toBe(true);
     expect(isPublicContentPath('/features/mcp-server')).toBe(true);
+    expect(isPublicContentPath('/guides/import-activities-to-suunto')).toBe(true);
+    expect(isPublicContentPath('/guides/import-activities-to-wahoo')).toBe(true);
     expect(isPublicContentPath('/mcp/authorize')).toBe(false);
     expect(isPublicContentPath('/training')).toBe(false);
     expect(isPublicContentPath('/dashboard')).toBe(false);

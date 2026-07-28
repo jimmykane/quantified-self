@@ -337,6 +337,16 @@ const topLevelRoutes: Routes = [
     data: PUBLIC_SEO_ROUTE_DATA.syncWahooToSuunto
   },
   {
+    path: PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.importActivitiesToSuunto
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importActivitiesToWahoo,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    data: PUBLIC_SEO_ROUTE_DATA.importActivitiesToWahoo
+  },
+  {
     path: PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     data: PUBLIC_SEO_ROUTE_DATA.syncSuuntoRoutesToGarmin

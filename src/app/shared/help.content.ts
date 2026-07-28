@@ -618,7 +618,7 @@ The public [Integrations hub](/integrations) links to focused [Garmin Integratio
 
 Provider-specific privacy details live on [Policies -> Connected Services](/policies#connected-services-data), with separate sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 
-The public [Training Data Sync Guides](/guides) hub links to the [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
+The public [Training Data Sync Guides](/guides) hub links to the [import activities to Suunto guide](/guides/import-activities-to-suunto), [import activities to Wahoo guide](/guides/import-activities-to-wahoo), [Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto), [COROS to Suunto sync guide](/guides/sync-coros-to-suunto), [Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto), [Suunto routes to Garmin courses guide](/guides/sync-suunto-routes-to-garmin-courses), and [centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data) for step-by-step setup.
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, and TCX files.
 
@@ -764,6 +764,8 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
       { label: 'Compare Files Tool', icon: 'compare_arrows', kind: 'route', target: '/tools/compare' },
       { label: 'Workout File Analyzer', icon: 'analytics', kind: 'route', target: '/features/fit-gpx-tcx-file-analyzer' },
       { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
+      { label: 'Import Activities to Suunto', icon: 'upload_file', kind: 'route', target: '/guides/import-activities-to-suunto' },
+      { label: 'Import Activities to Wahoo', icon: 'upload_file', kind: 'route', target: '/guides/import-activities-to-wahoo' },
       { label: 'Garmin to Suunto Guide', icon: 'sync_alt', kind: 'route', target: '/guides/sync-garmin-to-suunto' },
       { label: 'COROS to Suunto Guide', icon: 'published_with_changes', kind: 'route', target: '/guides/sync-coros-to-suunto' },
       { label: 'Wahoo to Suunto Guide', icon: 'directions_bike', kind: 'route', target: '/guides/sync-wahoo-to-suunto' },

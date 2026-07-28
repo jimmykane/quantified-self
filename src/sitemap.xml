@@ -111,6 +111,16 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://quantified-self.io/guides/import-activities-to-suunto</loc>
+    <lastmod>2026-07-28</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/import-activities-to-wahoo</loc>
+    <lastmod>2026-07-28</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://quantified-self.io/guides/sync-garmin-to-suunto</loc>
     <lastmod>2026-05-29</lastmod>
     <priority>0.8</priority>

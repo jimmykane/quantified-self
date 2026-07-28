@@ -23,6 +23,8 @@ describe('public-seo-pages.content', () => {
       syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
       syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
+      importActivitiesToSuunto: 'guides/import-activities-to-suunto',
+      importActivitiesToWahoo: 'guides/import-activities-to-wahoo',
       syncSuuntoRoutesToGarmin: 'guides/sync-suunto-routes-to-garmin-courses',
       centralizeWorkoutData: 'guides/centralize-garmin-suunto-coros-workout-data',
     });
@@ -123,6 +125,16 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.howToSteps).toHaveLength(4);
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.faqItems.some(item => item.question === 'Will activities sent to Wahoo come back as Wahoo imports?')).toBe(true);
 
+    expect(PUBLIC_SEO_PAGES.importActivitiesToSuunto.h1).toBe('How to import activities to Suunto');
+    expect(PUBLIC_SEO_PAGES.importActivitiesToSuunto.description).toContain('FIT activities to Suunto');
+    expect(PUBLIC_SEO_PAGES.importActivitiesToSuunto.faqItems.some(item => item.question === 'Can I import a GPX route to Suunto as an activity?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.importActivitiesToSuunto.howToSteps).toHaveLength(4);
+
+    expect(PUBLIC_SEO_PAGES.importActivitiesToWahoo.h1).toBe('How to import activities to Wahoo');
+    expect(PUBLIC_SEO_PAGES.importActivitiesToWahoo.description).toContain('FIT-backed Garmin, COROS, and Suunto activities');
+    expect(PUBLIC_SEO_PAGES.importActivitiesToWahoo.faqItems.some(item => item.question === 'Can I import a GPX route to Wahoo as an activity?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.importActivitiesToWahoo.howToSteps).toHaveLength(4);
+
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.h1).toBe('How to send Suunto routes to Garmin courses');
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('Course Import');
     expect(PUBLIC_SEO_PAGES.syncSuuntoRoutesToGarmin.description).toContain('send routes already saved');
@@ -156,6 +168,8 @@ describe('public-seo-pages.content', () => {
     expect(guideHubLinks).toContain('/guides/sync-garmin-to-suunto');
     expect(guideHubLinks).toContain('/guides/sync-coros-to-suunto');
     expect(guideHubLinks).toContain('/guides/sync-wahoo-to-suunto');
+    expect(guideHubLinks).toContain('/guides/import-activities-to-suunto');
+    expect(guideHubLinks).toContain('/guides/import-activities-to-wahoo');
     expect(guideHubLinks).toContain('/guides/sync-suunto-routes-to-garmin-courses');
     expect(guideHubLinks).toContain('/guides/centralize-garmin-suunto-coros-workout-data');
     expect(guideHubLinks).toContain('/features');

@@ -40,7 +40,8 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('Compare workout data across devices');
     expect(text).toContain('benchmark reports, metric overlays, source files, and reviewer-ready exports');
     expect(text).toContain('Set up the connection you need');
-    expect(text).toContain('Garmin, COROS, or Wahoo activity sync to Suunto');
+    expect(text).toContain('importing activities to Suunto or Wahoo');
+    expect(text).toContain('syncing Garmin, COROS, or Wahoo activity data to Suunto');
     expect(text).toContain('Private dashboard, history import, and Suunto sync');
     expect(text).toContain('Activity sync, route imports, and sending routes to Garmin');
     expect(text).toContain('Send Suunto routes to Garmin');
@@ -62,6 +63,8 @@ describe('IntegrationsHubPageComponent', () => {
     expect(hrefs).toContain('/features/fit-gpx-tcx-file-analyzer');
     expect(hrefs).toContain('/features/sports-watch-benchmark');
     expect(hrefs).toContain('/guides');
+    expect(hrefs).toContain('/guides/import-activities-to-suunto');
+    expect(hrefs).toContain('/guides/import-activities-to-wahoo');
     expect(hrefs).toContain('/guides/sync-garmin-to-suunto');
     expect(hrefs).toContain('/guides/sync-coros-to-suunto');
     expect(hrefs).toContain('/guides/sync-wahoo-to-suunto');

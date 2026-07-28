@@ -137,6 +137,11 @@
       <a mat-stroked-button routerLink="/guides/centralize-garmin-suunto-coros-workout-data">
         Centralize Data Guide
       </a>
+      @for (action of page.relatedGuideActions ?? []; track action.routerLink) {
+      <a mat-stroked-button [routerLink]="action.routerLink">
+        {{ action.label }}
+      </a>
+      }
       <a mat-stroked-button [routerLink]="['/help']" fragment="service-connections">
         Read Support Details
       </a>

@@ -553,6 +553,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('[import activities to Suunto guide](/guides/import-activities-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('[import activities to Wahoo guide](/guides/import-activities-to-wahoo)');
     expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');
     expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
@@ -656,6 +658,18 @@ describe('help.content', () => {
       icon: 'route',
       kind: 'route',
       target: '/features/fit-gpx-route-files',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Import Activities to Suunto',
+      icon: 'upload_file',
+      kind: 'route',
+      target: '/guides/import-activities-to-suunto',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Import Activities to Wahoo',
+      icon: 'upload_file',
+      kind: 'route',
+      target: '/guides/import-activities-to-wahoo',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin to Suunto Guide',
