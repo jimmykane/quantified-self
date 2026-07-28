@@ -3923,6 +3923,110 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('hrvSamples');
   });
 
+  it('returns sleep and HRV coverage plus trend buckets in one bounded read', async () => {
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument(),
+      sleepDocument({
+        sleepDate: '2024-04-02',
+        startTimeMs: Date.parse('2024-04-01T20:00:00.000Z'),
+        endTimeMs: Date.parse('2024-04-02T04:00:00.000Z'),
+        durationSeconds: 7 * 60 * 60,
+        score: { value: 72, qualifier: 'fair' },
+        vitals: {
+          averageHrvMs: 41,
+        },
+        hrvSamples: [{ value: 41, timestampMs: 1_712_030_400_000 }],
+        providerFields: { garmin: { private: true } },
+      }),
+    ]);
+
+    const result = await createMcpDataService(dependencies).getSleepTrend({
+      uid: 'user-1',
+      startTimeMs: Date.parse('2024-04-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-04-03T00:00:00.000Z'),
+      groupBy: 'day',
+      timeZone: 'UTC',
+    });
+
+    expect(dependencies.fetchSleepDocuments).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      rangeStartTimeMs: Date.parse('2024-04-01T00:00:00.000Z'),
+      rangeEndTimeMs: Date.parse('2024-04-03T00:00:00.000Z'),
+      timeZone: 'UTC',
+      groupBy: 'day',
+      matchedSessionCount: 2,
+      availableVitals: [
+        {
+          type: 'averageHeartRateBpm',
+          label: 'Average heart rate',
+          unit: 'beats_per_minute',
+          sessionCount: 1,
+        },
+        {
+          type: 'averageHrvMs',
+          label: 'Average HRV',
+          unit: 'milliseconds',
+          sessionCount: 1,
+        },
+        {
+          type: 'overnightHrvMs',
+          label: 'Overnight HRV',
+          unit: 'milliseconds',
+          sessionCount: 1,
+        },
+      ],
+      buckets: [
+        expect.objectContaining({
+          bucketStartMs: Date.parse('2024-04-01T00:00:00.000Z'),
+          sessionCount: 1,
+          averageDurationSeconds: 8 * 60 * 60,
+          averageScore: 82,
+          averageVitals: {
+            averageHeartRateBpm: 50,
+            overnightHrvMs: 55,
+          },
+        }),
+        expect.objectContaining({
+          bucketStartMs: Date.parse('2024-04-02T00:00:00.000Z'),
+          sessionCount: 1,
+          averageDurationSeconds: 7 * 60 * 60,
+          averageScore: 72,
+          averageVitals: {
+            averageHrvMs: 41,
+          },
+        }),
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('providerUserId');
+    expect(JSON.stringify(result)).not.toContain('hrvSamples');
+    expect(JSON.stringify(result)).not.toContain('providerFields');
+  });
+
+  it('rejects a sleep trend that exceeds the shared session budget', async () => {
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(
+      Array.from({ length: 1_001 }, (_, index) => ({
+        ...sleepDocument(),
+        id: `sleep-${index}`,
+      })),
+    );
+
+    await expect(createMcpDataService(dependencies).getSleepTrend({
+      uid: 'user-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+      groupBy: 'day',
+      timeZone: 'UTC',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.fetchSleepDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2024-03-01T00:00:00.000Z'),
+      Date.parse('2024-05-01T00:00:00.000Z'),
+      1_001,
+    );
+  });
+
   it('preserves missing optional sleep measurements instead of treating them as zero', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
       sleepDocument({

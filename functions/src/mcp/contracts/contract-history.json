@@ -10,6 +10,16 @@
       "previousLifecycle": "developer",
       "rescanRequired": true,
       "summary": "Add sleep-vital availability discovery and clarify HRV guidance for authorized sleep tools."
+    },
+    {
+      "candidateLifecycle": "developer",
+      "candidateSha256": "4c72ab0c0adb9190c4d060cd83cc88f13b1303fdaaec467cdfc5e19b46759e87",
+      "formatVersion": 1,
+      "lifecycleAction": "developer-refresh",
+      "previousContractSha256": "ad92a2a493fda7930ba87791a914a3b65ca5e6fe7c0a0982d1c468c1f5de5257",
+      "previousLifecycle": "developer",
+      "rescanRequired": true,
+      "summary": "Add a one-call sleep and HRV trend tool and prefer it for recent sleep questions."
     }
   ]
 }

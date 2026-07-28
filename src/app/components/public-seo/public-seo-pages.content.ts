@@ -364,7 +364,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'bedtime',
             title: 'Sleep summaries and a compact morning briefing',
-            copy: 'Discover which safe aggregate sleep vitals, including HRV, are recorded before reviewing normalized sessions or daily, weekly, and monthly aggregates. With both sleep and Training-metrics permission, ask for a compact IANA-timezone morning briefing with your latest completed sleep, current-versus-usual 28-day Training totals and sport mix, and current readiness status—never provider identity, raw physiological samples, a workout plan, or medical advice.',
+            copy: 'Ask for one bounded sleep trend that combines recorded-vital coverage with duration, score, stages, HRV, heart rate, blood oxygen, and respiration across daily, weekly, or monthly buckets. With both sleep and Training-metrics permission, ask for a compact IANA-timezone morning briefing with your latest completed sleep, current-versus-usual 28-day Training totals and sport mix, and current readiness status—never provider identity, raw physiological samples, a workout plan, diagnosis, or medical advice.',
           },
           {
             icon: 'route',

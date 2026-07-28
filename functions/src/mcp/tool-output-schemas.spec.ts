@@ -562,6 +562,32 @@ function createFixtureDataService(
         sessionCount: 1,
       }],
     }),
+    getSleepTrend: vi.fn().mockResolvedValue({
+      rangeStartTimeMs: DAY_MS,
+      rangeEndTimeMs: NEXT_DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      groupBy: 'day',
+      matchedSessionCount: 1,
+      availableVitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+      buckets: [{
+        bucketStartMs: DAY_MS,
+        sessionCount: 1,
+        providers: ['GarminAPI'],
+        totalDurationSeconds: 28_800,
+        averageDurationSeconds: 28_800,
+        averageInBedDurationSeconds: null,
+        averageScore: 80,
+        stageDurationsSeconds: { deep: 3_600 },
+        averageVitals: {
+          overnightHrvMs: 55,
+        },
+      }],
+    }),
     listSleepSessions: vi.fn().mockResolvedValue({
       sessions: [{
         provider: 'GarminAPI',
@@ -965,6 +991,11 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
   },
   query_sleep_summary: {
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
+    timeZone: 'Europe/Helsinki',
+  },
+  get_sleep_trend: {
     start: '2026-07-01T00:00:00.000Z',
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
@@ -1781,6 +1812,33 @@ describe('MCP public output contracts', () => {
         unit: 'milliseconds',
         sessionCount: 1,
         providerUserId: 'private-provider-user',
+      }],
+    }).success).toBe(false);
+    expect(registry.get_sleep_trend.safeParse({
+      rangeStartTimeMs: DAY_MS,
+      rangeEndTimeMs: NEXT_DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      groupBy: 'day',
+      matchedSessionCount: 1,
+      availableVitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+      buckets: [{
+        bucketStartMs: DAY_MS,
+        sessionCount: 1,
+        providers: ['GarminAPI'],
+        totalDurationSeconds: 28_800,
+        averageDurationSeconds: 28_800,
+        averageInBedDurationSeconds: null,
+        averageScore: 80,
+        stageDurationsSeconds: {},
+        averageVitals: {
+          overnightHrvMs: 55,
+        },
+        hrvSamples: [{ value: 55 }],
       }],
     }).success).toBe(false);
     expect(registry.list_route_waypoints.safeParse({

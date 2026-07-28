@@ -36,6 +36,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_sleep_vitals',
   'list_sleep_sessions',
   'query_sleep_summary',
+  'get_sleep_trend',
   'get_daily_briefing',
   'list_activity_types',
   'list_activities',
@@ -331,6 +332,19 @@ const sleepVitalAvailability = z.strictObject({
   ]),
   sessionCount: count.positive(),
 }).meta({ title: 'McpSleepVitalAvailability' });
+const sleepSummaryBucket = z.strictObject({
+  bucketStartMs: timestampMs,
+  sessionCount: count,
+  providers: z.array(sleepProvider),
+  totalDurationSeconds: nonNegativeNumber,
+  averageDurationSeconds: nonNegativeNumber,
+  averageInBedDurationSeconds: nullableNonNegativeNumber,
+  averageScore: nullableNonNegativeNumber,
+  stageDurationsSeconds: sleepStageDurations,
+  averageVitals: z.strictObject({
+    ...sleepVitalsShape,
+  }),
+}).meta({ title: 'McpSleepSummaryBucket' });
 const sleepSession = z.strictObject({
   provider: sleepProvider,
   sleepDate: z.iso.date(),
@@ -935,6 +949,15 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
           ...sleepVitalsShape,
         }),
       })),
+    }),
+    get_sleep_trend: z.strictObject({
+      rangeStartTimeMs: timestampMs,
+      rangeEndTimeMs: timestampMs,
+      timeZone: z.string().min(1).max(80),
+      groupBy: z.enum(['day', 'week', 'month']),
+      matchedSessionCount: count,
+      availableVitals: z.array(sleepVitalAvailability),
+      buckets: z.array(sleepSummaryBucket),
     }),
     get_daily_briefing: z.strictObject({
       asOfTimeMs: timestampMs,

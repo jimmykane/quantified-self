@@ -2558,14 +2558,43 @@ export interface ListSleepVitalsResult {
   vitals: McpSleepVitalAvailability[];
 }
 
+export type McpSleepSummaryGroupBy = 'day' | 'week' | 'month';
+
 export interface QuerySleepSummaryInput {
   uid: string;
   startTimeMs: number;
   endTimeMs: number;
   includeNaps?: boolean;
   provider?: SleepProvider;
-  groupBy: 'day' | 'week' | 'month';
+  groupBy: McpSleepSummaryGroupBy;
   timeZone: string;
+}
+
+export interface McpSleepSummaryBucket {
+  bucketStartMs: number;
+  sessionCount: number;
+  providers: SleepProvider[];
+  totalDurationSeconds: number;
+  averageDurationSeconds: number;
+  averageInBedDurationSeconds: number | null;
+  averageScore: number | null;
+  stageDurationsSeconds: Partial<Record<SleepStage, number>>;
+  averageVitals: Partial<SleepVitals>;
+}
+
+export interface QuerySleepSummaryResult {
+  timeZone: string;
+  groupBy: McpSleepSummaryGroupBy;
+  matchedSessionCount: number;
+  buckets: McpSleepSummaryBucket[];
+}
+
+export type GetSleepTrendInput = QuerySleepSummaryInput;
+
+export interface GetSleepTrendResult extends QuerySleepSummaryResult {
+  rangeStartTimeMs: number;
+  rangeEndTimeMs: number;
+  availableVitals: McpSleepVitalAvailability[];
 }
 
 export interface GetDailyBriefingInput {
@@ -2933,6 +2962,108 @@ interface SleepSummaryAccumulator {
   stageDurationsSeconds: Record<string, number>;
   vitalSums: Record<string, number>;
   vitalCounts: Record<string, number>;
+}
+
+function buildSleepVitalAvailability(
+  sessions: readonly SafeSleepSession[],
+): McpSleepVitalAvailability[] {
+  const vitalSessionCounts = new Map<McpSleepVitalType, number>();
+  sessions.forEach((session) => {
+    MCP_SLEEP_VITAL_TYPES.forEach((type) => {
+      if (session.vitals?.[type] !== undefined) {
+        vitalSessionCounts.set(type, (vitalSessionCounts.get(type) || 0) + 1);
+      }
+    });
+  });
+  return MCP_SLEEP_VITAL_DESCRIPTORS.flatMap((descriptor) => {
+    const sessionCount = vitalSessionCounts.get(descriptor.type);
+    return sessionCount
+      ? [{ ...descriptor, sessionCount }]
+      : [];
+  });
+}
+
+function buildSleepSummaryResult(
+  sessions: readonly SafeSleepSession[],
+  groupBy: McpSleepSummaryGroupBy,
+  timeZone: string,
+): QuerySleepSummaryResult {
+  const interval = groupBy === 'day'
+    ? TimeIntervals.Daily
+    : groupBy === 'week'
+      ? TimeIntervals.Weekly
+      : TimeIntervals.Monthly;
+  const buckets = new Map<number, SleepSummaryAccumulator>();
+
+  sessions.forEach((session) => {
+    const bucketStartMs = resolveDateAggregationBucketStart(
+      new Date(session.endTimeMs),
+      interval,
+      timeZone,
+    );
+    const accumulator = buckets.get(bucketStartMs) || {
+      bucketStartMs,
+      sessionCount: 0,
+      providers: new Set<SleepProvider>(),
+      durationSeconds: 0,
+      inBedDurationSeconds: 0,
+      inBedCount: 0,
+      score: 0,
+      scoreCount: 0,
+      stageDurationsSeconds: {},
+      vitalSums: {},
+      vitalCounts: {},
+    };
+    accumulator.sessionCount += 1;
+    accumulator.providers.add(session.provider);
+    accumulator.durationSeconds += session.durationSeconds;
+    if (session.inBedDurationSeconds !== null) {
+      accumulator.inBedDurationSeconds += session.inBedDurationSeconds;
+      accumulator.inBedCount += 1;
+    }
+    if (session.score?.value !== null && session.score?.value !== undefined) {
+      accumulator.score += session.score.value;
+      accumulator.scoreCount += 1;
+    }
+    Object.entries(session.stageDurationsSeconds).forEach(([stage, duration]) => {
+      accumulator.stageDurationsSeconds[stage] =
+        (accumulator.stageDurationsSeconds[stage] || 0) + Number(duration);
+    });
+    Object.entries(session.vitals || {}).forEach(([key, value]) => {
+      const numeric = asNonNegativeNumber(value);
+      if (numeric !== null) {
+        accumulator.vitalSums[key] = (accumulator.vitalSums[key] || 0) + numeric;
+        accumulator.vitalCounts[key] = (accumulator.vitalCounts[key] || 0) + 1;
+      }
+    });
+    buckets.set(bucketStartMs, accumulator);
+  });
+
+  return {
+    timeZone,
+    groupBy,
+    matchedSessionCount: sessions.length,
+    buckets: [...buckets.values()]
+      .sort((left, right) => left.bucketStartMs - right.bucketStartMs)
+      .map(bucket => ({
+        bucketStartMs: bucket.bucketStartMs,
+        sessionCount: bucket.sessionCount,
+        providers: [...bucket.providers].sort(),
+        totalDurationSeconds: bucket.durationSeconds,
+        averageDurationSeconds: bucket.durationSeconds / bucket.sessionCount,
+        averageInBedDurationSeconds: bucket.inBedCount
+          ? bucket.inBedDurationSeconds / bucket.inBedCount
+          : null,
+        averageScore: bucket.scoreCount ? bucket.score / bucket.scoreCount : null,
+        stageDurationsSeconds: bucket.stageDurationsSeconds,
+        averageVitals: Object.fromEntries(
+          Object.entries(bucket.vitalSums).map(([key, sum]) => [
+            key,
+            sum / bucket.vitalCounts[key],
+          ]),
+        ),
+      })),
+  };
 }
 
 interface SafeActivityListEntry {
@@ -3594,6 +3725,31 @@ async function getActivityChartData(
 export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
+  const fetchBoundedSafeSleepSessions = async (
+    input: ListSleepVitalsInput,
+  ): Promise<SafeSleepSession[]> => {
+    const docs = await dependencies.fetchSleepDocuments(
+      input.uid,
+      input.startTimeMs,
+      input.endTimeMs,
+      MAX_SLEEP_QUERY_DOCUMENTS + 1,
+    );
+    if (docs.length > MAX_SLEEP_QUERY_DOCUMENTS) {
+      throw new McpDataError(
+        'query_too_large',
+        `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
+      );
+    }
+    return docs.flatMap((doc) => {
+      const session = toSafeSleepSession(doc.data);
+      return session
+        && (input.includeNaps || !session.isNap)
+        && (!input.provider || session.provider === input.provider)
+        ? [session]
+        : [];
+    });
+  };
+
   return {
     listActivityTypes() {
       const activityTypes = ActivityTypesHelper
@@ -4684,148 +4840,32 @@ export function createMcpDataService(
 
     async listSleepVitals(input: ListSleepVitalsInput): Promise<ListSleepVitalsResult> {
       validateBoundedRange(input.startTimeMs, input.endTimeMs);
-      const docs = await dependencies.fetchSleepDocuments(
-        input.uid,
-        input.startTimeMs,
-        input.endTimeMs,
-        MAX_SLEEP_QUERY_DOCUMENTS + 1,
-      );
-      if (docs.length > MAX_SLEEP_QUERY_DOCUMENTS) {
-        throw new McpDataError(
-          'query_too_large',
-          `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
-        );
-      }
-
-      const vitalSessionCounts = new Map<McpSleepVitalType, number>();
-      let matchedSessionCount = 0;
-      docs.forEach((doc) => {
-        const session = toSafeSleepSession(doc.data);
-        if (
-          !session
-          || (!input.includeNaps && session.isNap)
-          || (input.provider && session.provider !== input.provider)
-        ) {
-          return;
-        }
-        matchedSessionCount += 1;
-        MCP_SLEEP_VITAL_TYPES.forEach((type) => {
-          if (session.vitals?.[type] !== undefined) {
-            vitalSessionCounts.set(type, (vitalSessionCounts.get(type) || 0) + 1);
-          }
-        });
-      });
-
+      const sessions = await fetchBoundedSafeSleepSessions(input);
       return {
-        matchedSessionCount,
-        vitals: MCP_SLEEP_VITAL_DESCRIPTORS.flatMap((descriptor) => {
-          const sessionCount = vitalSessionCounts.get(descriptor.type);
-          return sessionCount
-            ? [{ ...descriptor, sessionCount }]
-            : [];
-        }),
+        matchedSessionCount: sessions.length,
+        vitals: buildSleepVitalAvailability(sessions),
       };
     },
 
-    async querySleepSummary(input: QuerySleepSummaryInput) {
+    async getSleepTrend(input: GetSleepTrendInput): Promise<GetSleepTrendResult> {
       validateBoundedRange(input.startTimeMs, input.endTimeMs);
       const timeZone = requireTimeZone(input.timeZone);
-      const docs = await dependencies.fetchSleepDocuments(
-        input.uid,
-        input.startTimeMs,
-        input.endTimeMs,
-        MAX_SLEEP_QUERY_DOCUMENTS + 1,
-      );
-      if (docs.length > MAX_SLEEP_QUERY_DOCUMENTS) {
-        throw new McpDataError(
-          'query_too_large',
-          `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
-        );
-      }
-      const interval = input.groupBy === 'day'
-        ? TimeIntervals.Daily
-        : input.groupBy === 'week'
-          ? TimeIntervals.Weekly
-          : TimeIntervals.Monthly;
-      const sessions = docs.flatMap((doc) => {
-        const session = toSafeSleepSession(doc.data);
-        return session
-          && (input.includeNaps || !session.isNap)
-          && (!input.provider || session.provider === input.provider)
-          ? [session]
-          : [];
-      });
-      const buckets = new Map<number, SleepSummaryAccumulator>();
-
-      sessions.forEach((session) => {
-        const bucketStartMs = resolveDateAggregationBucketStart(
-          new Date(session.endTimeMs),
-          interval,
-          timeZone,
-        );
-        const accumulator = buckets.get(bucketStartMs) || {
-          bucketStartMs,
-          sessionCount: 0,
-          providers: new Set<SleepProvider>(),
-          durationSeconds: 0,
-          inBedDurationSeconds: 0,
-          inBedCount: 0,
-          score: 0,
-          scoreCount: 0,
-          stageDurationsSeconds: {},
-          vitalSums: {},
-          vitalCounts: {},
-        };
-        accumulator.sessionCount += 1;
-        accumulator.providers.add(session.provider);
-        accumulator.durationSeconds += session.durationSeconds;
-        if (session.inBedDurationSeconds !== null) {
-          accumulator.inBedDurationSeconds += session.inBedDurationSeconds;
-          accumulator.inBedCount += 1;
-        }
-        if (session.score?.value !== null && session.score?.value !== undefined) {
-          accumulator.score += session.score.value;
-          accumulator.scoreCount += 1;
-        }
-        Object.entries(session.stageDurationsSeconds).forEach(([stage, duration]) => {
-          accumulator.stageDurationsSeconds[stage] =
-            (accumulator.stageDurationsSeconds[stage] || 0) + Number(duration);
-        });
-        Object.entries(session.vitals || {}).forEach(([key, value]) => {
-          const numeric = asNonNegativeNumber(value);
-          if (numeric !== null) {
-            accumulator.vitalSums[key] = (accumulator.vitalSums[key] || 0) + numeric;
-            accumulator.vitalCounts[key] = (accumulator.vitalCounts[key] || 0) + 1;
-          }
-        });
-        buckets.set(bucketStartMs, accumulator);
-      });
-
+      const sessions = await fetchBoundedSafeSleepSessions(input);
       return {
-        timeZone,
-        groupBy: input.groupBy,
-        matchedSessionCount: sessions.length,
-        buckets: [...buckets.values()]
-          .sort((left, right) => left.bucketStartMs - right.bucketStartMs)
-          .map(bucket => ({
-            bucketStartMs: bucket.bucketStartMs,
-            sessionCount: bucket.sessionCount,
-            providers: [...bucket.providers].sort(),
-            totalDurationSeconds: bucket.durationSeconds,
-            averageDurationSeconds: bucket.durationSeconds / bucket.sessionCount,
-            averageInBedDurationSeconds: bucket.inBedCount
-              ? bucket.inBedDurationSeconds / bucket.inBedCount
-              : null,
-            averageScore: bucket.scoreCount ? bucket.score / bucket.scoreCount : null,
-            stageDurationsSeconds: bucket.stageDurationsSeconds,
-            averageVitals: Object.fromEntries(
-              Object.entries(bucket.vitalSums).map(([key, sum]) => [
-                key,
-                sum / bucket.vitalCounts[key],
-              ]),
-            ),
-          })),
+        rangeStartTimeMs: input.startTimeMs,
+        rangeEndTimeMs: input.endTimeMs,
+        availableVitals: buildSleepVitalAvailability(sessions),
+        ...buildSleepSummaryResult(sessions, input.groupBy, timeZone),
       };
+    },
+
+    async querySleepSummary(
+      input: QuerySleepSummaryInput,
+    ): Promise<QuerySleepSummaryResult> {
+      validateBoundedRange(input.startTimeMs, input.endTimeMs);
+      const timeZone = requireTimeZone(input.timeZone);
+      const sessions = await fetchBoundedSafeSleepSessions(input);
+      return buildSleepSummaryResult(sessions, input.groupBy, timeZone);
     },
   };
 }

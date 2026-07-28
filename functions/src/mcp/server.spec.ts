@@ -229,6 +229,10 @@ describe('MCP HTTP scope enforcement', () => {
   it('requires sleep scope for sleep tools', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
+      params: { name: 'get_sleep_trend' },
+    })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
       params: { name: 'list_sleep_vitals' },
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
     expect(requiredScopesForRequest({
@@ -381,6 +385,7 @@ describe('MCP HTTP scope enforcement', () => {
       'query_measurements',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
+      'get_sleep_trend',
       'list_activity_types',
       'list_sleep_sessions',
       'list_sleep_vitals',
@@ -391,6 +396,7 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.SleepRead,
     ])).resolves.toEqual([
       'get_daily_briefing',
+      'get_sleep_trend',
       'get_training_metric',
       'list_activity_types',
       'list_metrics',
@@ -617,6 +623,12 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getInstructions()).not.toContain('list_metrics');
       expect(client.getInstructions()).not.toContain('list_activities');
       expect(client.getInstructions()).not.toContain('body weight');
+      expect(client.getInstructions()).toContain(
+        'use get_sleep_trend with the requested period',
+      );
+      const tools = (await client.listTools()).tools;
+      expect(tools.find(tool => tool.name === 'get_sleep_trend')?.description)
+        .toContain('recent sleep changes');
     } finally {
       await client.close();
       await server.close();

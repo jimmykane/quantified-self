@@ -382,7 +382,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
     instructions.push(
-      'For sleep HRV, heart rate, blood oxygen saturation, or respiration questions, first use list_sleep_vitals for the requested period to discover which safe aggregate values are actually recorded. Then use list_sleep_sessions for nightly readings or query_sleep_summary for local day, week, or month averages. Raw sensor samples are unavailable, and recorded values are not medical advice.',
+      'For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice.',
     );
   }
   if (
@@ -565,9 +565,32 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
+    server.registerTool('get_sleep_trend', {
+      title: 'Get sleep and HRV trend',
+      description: 'Get sleep duration, score, stages, HRV, heart rate, blood oxygen saturation, and respiration trends in one bounded call, with explicit coverage for every recorded safe aggregate vital. Prefer this for recent sleep changes, poor-sleep questions, or recovery-oriented sleep trends. It cannot diagnose illness and never returns raw sensor samples or provider payloads.',
+      inputSchema: {
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
+        includeNaps: z.boolean().default(false),
+        provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
+        groupBy: z.enum(['day', 'week', 'month']).default('day'),
+        timeZone: z.string().min(1).max(80),
+      },
+      outputSchema: outputSchemas.get_sleep_trend,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_sleep_trend', () => dataService.getSleepTrend({
+      uid: auth.uid,
+      startTimeMs: parseMcpDateTime(input.start, 'start'),
+      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      includeNaps: input.includeNaps,
+      provider: input.provider,
+      groupBy: input.groupBy,
+      timeZone: input.timeZone,
+    })));
+
     server.registerTool('list_sleep_vitals', {
       title: 'Discover available sleep vitals',
-      description: 'Discover which redacted aggregate sleep vital types have recorded values in a bounded period, including average or overnight HRV when available. Use this before answering a sleep-vital question, then use the session or summary tools for readings and trends. Raw sensor samples and provider payloads are never returned.',
+      description: 'Discover which redacted aggregate sleep vital types have recorded values in a bounded period, including average or overnight HRV when available. Use this for data-availability questions; use get_sleep_trend for readings and trends. Raw sensor samples and provider payloads are never returned.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
@@ -610,7 +633,7 @@ export function createMcpServer(
 
     server.registerTool('query_sleep_summary', {
       title: 'Summarize sleep and recorded vitals',
-      description: 'Aggregate redacted sleep sessions by local day, week, or month. Each bucket includes averages for available safe vitals such as HRV, heart rate, blood oxygen saturation, or respiration; raw samples are never returned.',
+      description: 'Aggregate redacted sleep sessions by local day, week, or month. Each bucket includes averages for available safe vitals; prefer get_sleep_trend when the question asks for coverage and a trend together. Raw samples are never returned.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
@@ -992,7 +1015,12 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
     ];
   }
-  if (['list_sleep_vitals', 'list_sleep_sessions', 'query_sleep_summary'].includes(toolName)) {
+  if ([
+    'get_sleep_trend',
+    'list_sleep_vitals',
+    'list_sleep_sessions',
+    'query_sleep_summary',
+  ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.SleepRead];
   }
   if (toolName === 'get_daily_briefing') {
