@@ -3625,6 +3625,18 @@ describe('MCP data service', () => {
       'user-1',
       DERIVED_METRIC_KINDS.TrainingSummary,
     );
+    trainingSummarySnapshot.payload.excludesMergedEvents = false;
+    const summaryIncludingMergedEvents = await createMcpDataService(dependencies)
+      .getDailyBriefing({
+        uid: 'user-1',
+        timeZone: 'Europe/Helsinki',
+      });
+    expect(summaryIncludingMergedEvents.trainingSummary).toMatchObject({
+      status: 'not_ready',
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
+    });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('GarminAPI');
     expect(serialized).not.toContain('private-source-key');
@@ -3733,7 +3745,7 @@ describe('MCP data service', () => {
         return {
           status: 'ready',
           schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-          updatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+          updatedAtMs: -1,
           payload: {
             dayBoundary: 'UTC',
             asOfDayMs: staleSummaryDayMs,
@@ -3754,7 +3766,7 @@ describe('MCP data service', () => {
       status: 'stale',
       dayBoundary: 'UTC',
       asOfDayMs: staleSummaryDayMs,
-      updatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+      updatedAtMs: null,
       baselineSourceWindowDays: null,
       current28d: null,
       usual28d: null,

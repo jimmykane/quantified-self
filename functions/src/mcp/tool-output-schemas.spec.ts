@@ -645,37 +645,81 @@ function createFixtureDataService(
         },
         usual28d: {
           equivalentPeriodDays: 28,
-          activityCount: 8.2,
-          durationSeconds: 21_600,
+          activityCount: 8,
+          durationSeconds: 21_200,
           intensitySeconds: {
-            easy: 14_000,
-            moderate: 5_000,
-            hard: 2_600,
+            easy: 13_600,
+            moderate: 5_100,
+            hard: 2_500,
           },
         },
-        disciplines: ['running', 'cycling', 'swimming'].map((discipline, index) => ({
-          discipline,
+        disciplines: [{
+          discipline: 'running',
           current28d: {
             equivalentPeriodDays: 28,
-            activityCount: index + 1,
-            durationSeconds: (index + 1) * 3_600,
+            activityCount: 6,
+            durationSeconds: 14_400,
             intensitySeconds: {
-              easy: (index + 1) * 2_000,
-              moderate: (index + 1) * 800,
-              hard: (index + 1) * 400,
+              easy: 9_000,
+              moderate: 3_600,
+              hard: 1_800,
             },
           },
           usual28d: {
             equivalentPeriodDays: 28,
-            activityCount: index + 0.5,
-            durationSeconds: (index + 1) * 3_000,
+            activityCount: 4.67,
+            durationSeconds: 11_200,
             intensitySeconds: {
-              easy: (index + 1) * 1_800,
-              moderate: (index + 1) * 700,
-              hard: (index + 1) * 300,
+              easy: 7_000,
+              moderate: 2_800,
+              hard: 1_400,
             },
           },
-        })),
+        }, {
+          discipline: 'cycling',
+          current28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 3,
+            durationSeconds: 10_800,
+            intensitySeconds: {
+              easy: 7_200,
+              moderate: 2_400,
+              hard: 1_200,
+            },
+          },
+          usual28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 2,
+            durationSeconds: 7_200,
+            intensitySeconds: {
+              easy: 4_800,
+              moderate: 1_600,
+              hard: 800,
+            },
+          },
+        }, {
+          discipline: 'swimming',
+          current28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 2,
+            durationSeconds: 3_600,
+            intensitySeconds: {
+              easy: 2_400,
+              moderate: 900,
+              hard: 300,
+            },
+          },
+          usual28d: {
+            equivalentPeriodDays: 28,
+            activityCount: 1.33,
+            durationSeconds: 2_800,
+            intensitySeconds: {
+              easy: 1_800,
+              moderate: 700,
+              hard: 300,
+            },
+          },
+        }],
       },
     }),
     listActivityTypes: vi.fn().mockReturnValue({
@@ -1193,6 +1237,31 @@ describe('MCP public output contracts', () => {
         current28d: null,
         usual28d: null,
         disciplines: [],
+      },
+    }).success).toBe(false);
+  });
+
+  it('rejects daily-briefing Training totals that disagree with the discipline breakdown', async () => {
+    const registry = createMcpOutputSchemaRegistry({
+      activityLocation: true,
+      routeLocation: true,
+    });
+    const fixture = await createFixtureDataService().getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+    if (fixture.trainingSummary.current28d === null) {
+      throw new Error('The daily-briefing fixture must include a Training Summary.');
+    }
+
+    expect(registry.get_daily_briefing.safeParse({
+      ...fixture,
+      trainingSummary: {
+        ...fixture.trainingSummary,
+        current28d: {
+          ...fixture.trainingSummary.current28d,
+          durationSeconds: fixture.trainingSummary.current28d.durationSeconds + 1,
+        },
       },
     }).success).toBe(false);
   });

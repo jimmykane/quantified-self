@@ -401,7 +401,7 @@ const dailyBriefingReadiness = z.strictObject({
 }).meta({ title: 'McpDailyBriefingReadiness' });
 
 const dailyBriefingTrainingWindowFields = {
-  equivalentPeriodDays: count,
+  equivalentPeriodDays: z.literal(28),
   durationSeconds: nonNegativeNumber,
   intensitySeconds: z.strictObject({
     easy: nonNegativeNumber,
@@ -431,7 +431,7 @@ const dailyBriefingTrainingSummary = z.strictObject({
   dayBoundary: z.literal('UTC'),
   asOfDayMs: nullableTimestampMs,
   updatedAtMs: nullableTimestampMs,
-  baselineSourceWindowDays: count.nullable(),
+  baselineSourceWindowDays: z.literal(84).nullable(),
   current28d: dailyBriefingCurrentTrainingWindow.nullable(),
   usual28d: dailyBriefingUsualTrainingWindow.nullable(),
   disciplines: z.array(dailyBriefingTrainingDiscipline).max(3),
@@ -479,6 +479,51 @@ const dailyBriefingTrainingSummary = z.strictObject({
       code: 'custom',
       message: 'A stale training summary must identify its snapshot day.',
     });
+  }
+  if (value.status === 'available' && hasCompleteSummary) {
+    const approximatelyEqual = (left: number, right: number) => (
+      Math.abs(left - right)
+        <= 4 * Number.EPSILON * Math.max(1, Math.abs(left), Math.abs(right))
+    );
+    const totalMatchesDisciplines = (window: 'current28d' | 'usual28d') => {
+      const total = value[window];
+      if (total === null) {
+        return false;
+      }
+      const disciplineWindows = value.disciplines.map(discipline => discipline[window]);
+      return disciplineWindows.every(entry => (
+        entry.equivalentPeriodDays === total.equivalentPeriodDays
+      ))
+        && approximatelyEqual(
+          total.activityCount,
+          disciplineWindows.reduce((sum, entry) => sum + entry.activityCount, 0),
+        )
+        && approximatelyEqual(
+          total.durationSeconds,
+          disciplineWindows.reduce((sum, entry) => sum + entry.durationSeconds, 0),
+        )
+        && approximatelyEqual(
+          total.intensitySeconds.easy,
+          disciplineWindows.reduce((sum, entry) => sum + entry.intensitySeconds.easy, 0),
+        )
+        && approximatelyEqual(
+          total.intensitySeconds.moderate,
+          disciplineWindows.reduce((sum, entry) => sum + entry.intensitySeconds.moderate, 0),
+        )
+        && approximatelyEqual(
+          total.intensitySeconds.hard,
+          disciplineWindows.reduce((sum, entry) => sum + entry.intensitySeconds.hard, 0),
+        );
+    };
+    if (
+      !totalMatchesDisciplines('current28d')
+      || !totalMatchesDisciplines('usual28d')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Training summary totals must equal the corresponding discipline summaries.',
+      });
+    }
   }
 }).meta({ title: 'McpDailyBriefingTrainingSummary' });
 

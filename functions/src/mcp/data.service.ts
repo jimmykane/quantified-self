@@ -881,6 +881,13 @@ function asFiniteNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function asSafeOperationalTimestampMs(value: unknown): number | null {
+  const numeric = asFiniteNumber(value);
+  return numeric !== null && Number.isSafeInteger(numeric) && numeric >= 0
+    ? numeric
+    : null;
+}
+
 function asNonNegativeNumber(value: unknown): number | null {
   const numeric = asFiniteNumber(value);
   return numeric !== null && numeric >= 0 ? numeric : null;
@@ -2734,7 +2741,7 @@ function unavailableDailyBriefingTrainingSummary(
     dayBoundary: 'UTC',
     asOfDayMs: asOfDayMs ?? null,
     updatedAtMs: status === 'stale'
-      ? asFiniteNumber(snapshot?.updatedAtMs)
+      ? asSafeOperationalTimestampMs(snapshot?.updatedAtMs)
       : null,
     baselineSourceWindowDays: null,
     current28d: null,
@@ -2776,8 +2783,8 @@ function projectDailyBriefingTrainingSummary(
       payload.asOfDayMs,
     );
   }
-  const hasExpectedWindowContract = payload.currentWindowDays
-    === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
+  const hasExpectedWindowContract = payload.excludesMergedEvents
+    && payload.currentWindowDays === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
     && payload.baselineWindowDays === DAILY_BRIEFING_TRAINING_BASELINE_WINDOW_DAYS;
   const hasExpectedDisciplines = payload.disciplines.length
     === DAILY_BRIEFING_TRAINING_DISCIPLINES.length
@@ -2815,7 +2822,7 @@ function projectDailyBriefingTrainingSummary(
     status: 'available',
     dayBoundary: 'UTC',
     asOfDayMs: payload.asOfDayMs,
-    updatedAtMs: asFiniteNumber(snapshot.updatedAtMs),
+    updatedAtMs: asSafeOperationalTimestampMs(snapshot.updatedAtMs),
     baselineSourceWindowDays: payload.baselineWindowDays,
     current28d: total('current28d'),
     usual28d: total('usual28d'),
