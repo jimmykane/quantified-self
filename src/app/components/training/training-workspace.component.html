@@ -748,58 +748,6 @@
             </div>
           }
         }
-        <article class="training-body-weight-panel qs-glass-card-panel" aria-labelledby="training-body-weight-title">
-          <header>
-            <div>
-              <h3 id="training-body-weight-title" class="qs-dashboard-chart-title">Body-weight trend</h3>
-              <p>Recorded measurements only</p>
-            </div>
-            <span>28-day view</span>
-          </header>
-          @if (bodyWeightTrend.state === 'unavailable') {
-            <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
-          } @else if (bodyWeightTrend.state === 'preparing') {
-            <div class="training-capacity-loading" role="status">
-              <mat-spinner diameter="24"></mat-spinner>
-              <div><strong>Preparing body-weight trend</strong><p>{{ bodyWeightTrend.statusText }}</p></div>
-            </div>
-          } @else {
-            @if (bodyWeightTrend.isUpdating) {
-              <p class="training-recovery-update" role="status">Updating recorded measurements…</p>
-            }
-            <div class="training-body-weight-summary">
-              <div>
-                <span>Latest</span>
-                <strong><app-training-metric-text [text]="bodyWeightTrend.latestWeightText"></app-training-metric-text></strong>
-                <small>{{ bodyWeightTrend.latestRecordedText }}</small>
-              </div>
-              <div>
-                <span>7-day median</span>
-                <strong><app-training-metric-text [text]="bodyWeightTrend.median7dText"></app-training-metric-text></strong>
-                <small>{{ bodyWeightTrend.change7dText }}</small>
-              </div>
-              <div>
-                <span>28-day median</span>
-                <strong><app-training-metric-text [text]="bodyWeightTrend.median28dText"></app-training-metric-text></strong>
-                <small>{{ bodyWeightTrend.change28dText }}</small>
-              </div>
-            </div>
-            @if (bodyWeightTrend.chartPoints.length) {
-              <app-training-body-weight-trend-chart
-                [points]="bodyWeightTrend.chartPoints"
-                [ariaLabel]="bodyWeightTrend.chartAriaLabel"
-                [darkTheme]="isDarkTheme()"
-                [unitSettings]="unitSettings"
-              ></app-training-body-weight-trend-chart>
-              <div class="training-body-weight-trend-dates">
-                <span>{{ bodyWeightTrend.chartStartLabel }}</span>
-                <span>{{ bodyWeightTrend.chartEndLabel }}</span>
-              </div>
-            }
-            <p class="training-body-weight-coverage">{{ bodyWeightTrend.coverageText }} · {{ bodyWeightTrend.statusText }}</p>
-            <p class="training-body-weight-source">{{ bodyWeightTrend.sourceText }}</p>
-          }
-        </article>
         @if (isSwimmingVisible) {
           @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
             <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
@@ -963,6 +911,68 @@
           }
         }
       </div>
+    </section>
+
+    <section class="training-section training-body-context-section" aria-labelledby="training-body-context-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Body context</p>
+          <h2 id="training-body-context-title">Recorded body weight</h2>
+        </div>
+        <span class="training-section-note">Separate from training load and readiness</span>
+      </div>
+      <article class="training-body-weight-panel qs-glass-card-panel" aria-labelledby="training-body-weight-title">
+        <header>
+          <div>
+            <h3 id="training-body-weight-title" class="qs-dashboard-chart-title">Body-weight trend</h3>
+            <p>Recorded measurements only</p>
+          </div>
+          <span>28-day view</span>
+        </header>
+        @if (bodyWeightTrend.state === 'unavailable') {
+          <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
+        } @else if (bodyWeightTrend.state === 'preparing') {
+          <div class="training-capacity-loading" role="status">
+            <mat-spinner diameter="24"></mat-spinner>
+            <div><strong>Preparing body-weight trend</strong><p>{{ bodyWeightTrend.statusText }}</p></div>
+          </div>
+        } @else {
+          @if (bodyWeightTrend.isUpdating) {
+            <p class="training-recovery-update" role="status">Updating recorded measurements…</p>
+          }
+          <div class="training-body-weight-summary">
+            <div>
+              <span>Latest</span>
+              <strong><app-training-metric-text [text]="bodyWeightTrend.latestWeightText"></app-training-metric-text></strong>
+              <small>{{ bodyWeightTrend.latestRecordedText }}</small>
+            </div>
+            <div>
+              <span>7-day median</span>
+              <strong><app-training-metric-text [text]="bodyWeightTrend.median7dText"></app-training-metric-text></strong>
+              <small>{{ bodyWeightTrend.change7dText }}</small>
+            </div>
+            <div>
+              <span>28-day median</span>
+              <strong><app-training-metric-text [text]="bodyWeightTrend.median28dText"></app-training-metric-text></strong>
+              <small>{{ bodyWeightTrend.change28dText }}</small>
+            </div>
+          </div>
+          @if (bodyWeightTrend.chartPoints.length) {
+            <app-training-body-weight-trend-chart
+              [points]="bodyWeightTrend.chartPoints"
+              [ariaLabel]="bodyWeightTrend.chartAriaLabel"
+              [darkTheme]="isDarkTheme()"
+              [unitSettings]="unitSettings"
+            ></app-training-body-weight-trend-chart>
+            <div class="training-body-weight-trend-dates">
+              <span>{{ bodyWeightTrend.chartStartLabel }}</span>
+              <span>{{ bodyWeightTrend.chartEndLabel }}</span>
+            </div>
+          }
+          <p class="training-body-weight-coverage">{{ bodyWeightTrend.coverageText }} · {{ bodyWeightTrend.statusText }}</p>
+          <p class="training-body-weight-source">{{ bodyWeightTrend.sourceText }}</p>
+        }
+      </article>
     </section>
   }
 </main>

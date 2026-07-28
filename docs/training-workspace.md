@@ -1032,6 +1032,15 @@ header so the summary, chart title, benchmark values, and plot remain aligned at
 It also states the strongest supported conclusion before the chart, describes the number of recent/annual power workouts
 and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
 
+### 8. Body-weight Context
+
+Body-weight context is the final Training section, after Settings vs Recent Evidence. Keeping it separate and last makes
+the recorded measurements available without presenting them as a performance marker or a primary training signal.
+
+The card shows the latest recorded value, current 7- and 28-day medians, eligible equal-window changes, and the sparse
+28-day trend described in the shared Dashboard and Training insight reuse section. It remains neutral context and does
+not affect Readiness, Form, TSS, the Training state, or any workout recommendation.
+
 ## Durability Deep Dive
 
 Durability is shared between sports-lib, Training, Best Build, and event detail. It measures whether an athlete maintains

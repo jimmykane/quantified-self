@@ -173,6 +173,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('**Body-weight trend**');
+    expect(trainingSection?.content).toContain('appears last on Training as secondary, neutral context');
     expect(trainingSection?.content).toContain('multiple measurements on one UTC day to a median');
     expect(trainingSection?.content).toContain('does not change the Training state, Form, Readiness');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
