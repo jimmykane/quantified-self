@@ -189,6 +189,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `mcpOAuthAccessTokens` / `mcpOAuthRefreshTokens` | 1 hour / 30 days | `expireAt` | Hashed MCP bearer and refresh credentials |
 | `mcpOAuthRateLimits` | About 5 minutes | `expireAt` | Distributed MCP request counters |
 | `users/*/mcpConnections` | 5 minutes while pending | `expireAt` | Abandoned MCP approvals; successful exchanges remove the TTL field |
+| `users/*/eventMergeOperations` | 7 days after the latest state transition | `expireAt` | Event-merge idempotency and reconciliation ledger |
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 

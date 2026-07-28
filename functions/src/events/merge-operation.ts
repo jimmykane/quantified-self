@@ -3,6 +3,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { ACTIVITY_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/activity-processing-config';
+import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { setEventDocumentIfUserActive } from '../utils';
 
 export type MergeType = 'benchmark' | 'multi';
@@ -29,6 +30,7 @@ interface MergeOperationRecord {
   leaseExpiresAtMs: number;
   response: MergeEventResponse | null;
   lastErrorCode: string | null;
+  expireAt: admin.firestore.Timestamp;
   createdAt: unknown;
   updatedAt: unknown;
   completedAt?: unknown;
@@ -50,6 +52,8 @@ export type MergeOperationClaim =
   };
 
 const MERGE_OPERATION_SCHEMA_VERSION = 1;
+// Firestore TTL deletes only this document. Keep operation records as leaf
+// documents and never add feature-owned subcollections beneath them.
 const MERGE_OPERATION_COLLECTION = 'eventMergeOperations';
 const MERGE_OPERATION_LEASE_GRACE_MS = 60 * 1000;
 const MERGE_OPERATION_LEASE_MS = (
@@ -69,6 +73,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isValidFirestoreTimestamp(value: unknown): value is admin.firestore.Timestamp {
+  const toMillis = (value as { toMillis?: unknown } | null)?.toMillis;
+  if (typeof toMillis !== 'function') {
+    return false;
+  }
+
+  try {
+    const milliseconds = toMillis.call(value);
+    return typeof milliseconds === 'number'
+      && Number.isFinite(milliseconds)
+      && milliseconds > 0;
+  } catch {
+    return false;
+  }
 }
 
 function hasValidOperationStatusState(value: Record<string, unknown>): boolean {
@@ -165,6 +185,7 @@ function asOperationRecord(value: unknown): MergeOperationRecord | null {
     || !isSafeMergeDocumentId(value.resultEventId)
     || !isNonNegativeInteger(value.attemptCount)
     || value.attemptCount === 0
+    || !isValidFirestoreTimestamp(value.expireAt)
     || !hasValidOperationStatusState(value)
   ) {
     return null;
@@ -238,6 +259,7 @@ function newProcessingRecord(
     leaseExpiresAtMs: input.nowMs + MERGE_OPERATION_LEASE_MS,
     response: null,
     lastErrorCode: null,
+    expireAt: getExpireAtTimestamp(TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS),
     createdAt: existing?.createdAt || serverTimestamp,
     updatedAt: serverTimestamp,
   };
@@ -421,6 +443,7 @@ export async function completeMergeOperation(input: {
         leaseExpiresAtMs: 0,
         response: input.response,
         lastErrorCode: null,
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS),
         updatedAt: serverTimestamp,
         completedAt: serverTimestamp,
       } satisfies MergeOperationRecord;
@@ -484,6 +507,7 @@ export async function markMergeOperationRetryable(input: {
         leaseExpiresAtMs: 0,
         response: null,
         lastErrorCode: safeErrorCode(input.error),
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS),
         createdAt: existing?.createdAt || serverTimestamp,
         updatedAt: serverTimestamp,
       } satisfies MergeOperationRecord;

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import { USAGE_LIMITS } from '../../../shared/limits';
+import { TTL_CONFIG } from '../shared/ttl-config';
 
 const hoisted = vi.hoisted(() => {
   let onCallOptions: unknown = null;
@@ -666,6 +667,66 @@ describe('mergeEvents', () => {
     expect(operationEntries[0][1]).not.toHaveProperty('eventIDs');
   });
 
+  it('should expire completed operation state after seven days without extending on replay', async () => {
+    const nowMs = Date.parse('2026-07-28T08:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    try {
+      await mergeEvents(request as any);
+
+      const operationEntry = [...hoisted.state.eventDocs.entries()]
+        .find(([path]) => path.includes('/eventMergeOperations/'));
+      expect(operationEntry).toBeDefined();
+      expect(operationEntry![1]).toMatchObject({ status: 'completed' });
+      const originalExpireAtMs = (
+        operationEntry![1].expireAt as { toMillis: () => number }
+      ).toMillis();
+      expect(originalExpireAtMs).toBe(
+        nowMs + (TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS * 24 * 60 * 60 * 1000),
+      );
+
+      vi.setSystemTime(nowMs + (24 * 60 * 60 * 1000));
+      await mergeEvents(request as any);
+
+      const replayedOperation = hoisted.state.eventDocs.get(operationEntry![0]);
+      expect((replayedOperation?.expireAt as { toMillis: () => number }).toMillis())
+        .toBe(originalExpireAtMs);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should expire retryable operation state seven days after the failed attempt', async () => {
+    const nowMs = Date.parse('2026-07-28T08:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(nowMs);
+    hoisted.mockWriteAllEventData.mockRejectedValueOnce(new Error('ambiguous write failure'));
+
+    try {
+      await expect(mergeEvents({
+        auth: { uid: 'u1' },
+        app: { appId: 'app-id' },
+        data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+      } as any)).rejects.toMatchObject({ code: 'internal' });
+
+      const operationEntry = [...hoisted.state.eventDocs.entries()]
+        .find(([path]) => path.includes('/eventMergeOperations/'));
+      expect(operationEntry).toBeDefined();
+      expect(operationEntry![1]).toMatchObject({ status: 'retryable' });
+      expect((operationEntry![1].expireAt as { toMillis: () => number }).toMillis()).toBe(
+        nowMs + (TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS * 24 * 60 * 60 * 1000),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('should return the canonical stored response when completion already won the race', async () => {
     hoisted.mockWriteAllEventData.mockImplementationOnce(
       async (userID: string, event: { getID: () => string }) => {
@@ -774,6 +835,26 @@ describe('mergeEvents', () => {
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
   });
 
+  it('should reject stored operation state with an invalid expiration timestamp', async () => {
+    const request = {
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    };
+
+    await mergeEvents(request as any);
+    const operationEntry = [...hoisted.state.eventDocs.entries()]
+      .find(([path]) => path.includes('/eventMergeOperations/'));
+    expect(operationEntry).toBeDefined();
+    hoisted.state.eventDocs.set(operationEntry![0], {
+      ...operationEntry![1],
+      expireAt: 'never',
+    });
+
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'internal' });
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
+  });
+
   it('should treat a reversed source selection as the same merge request', async () => {
     const firstResult = await mergeEvents({
       auth: { uid: 'u1' },
@@ -806,6 +887,13 @@ describe('mergeEvents', () => {
     await vi.waitFor(() => {
       expect(hoisted.mockWriteAllEventData).toHaveBeenCalledTimes(1);
     });
+
+    const processingOperation = [...hoisted.state.eventDocs.entries()]
+      .find(([path]) => path.includes('/eventMergeOperations/'))?.[1];
+    const retentionMs = TTL_CONFIG.EVENT_MERGE_OPERATION_IN_DAYS * 24 * 60 * 60 * 1000;
+    expect(processingOperation).toMatchObject({ status: 'processing' });
+    expect((processingOperation?.expireAt as { toMillis: () => number }).toMillis())
+      .toBeGreaterThan(Date.now() + retentionMs - 1000);
 
     await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'aborted' });
 

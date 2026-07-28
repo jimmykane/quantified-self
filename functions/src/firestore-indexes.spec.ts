@@ -159,6 +159,17 @@ describe('firestore indexes', () => {
         }
     });
 
+    it('keeps event merge operation TTL deployable without an automatic index', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'eventMergeOperations',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+    });
+
     it('exempts every TTL-only expiration field from automatic indexing', () => {
         const config = loadFirestoreIndexes();
 
