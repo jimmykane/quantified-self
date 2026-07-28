@@ -48,6 +48,7 @@ import {
   DERIVED_METRIC_SCHEMA_VERSION,
   DerivedMetricKind,
   DerivedTrainingReadinessMetricPayload,
+  DerivedTrainingSummaryMetricPayload,
   isDerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import {
@@ -127,6 +128,9 @@ const MAX_MEASUREMENT_RESPONSE_BYTES = 128 * 1024;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
 const DAILY_BRIEFING_SLEEP_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+const DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS = 28;
+const DAILY_BRIEFING_TRAINING_BASELINE_WINDOW_DAYS = 84;
+const DAILY_BRIEFING_TRAINING_DISCIPLINES = ['running', 'cycling', 'swimming'] as const;
 const MAX_DAILY_BRIEFING_SLEEP_SESSIONS = 32;
 const MAX_DAILY_BRIEFING_BASELINE_NIGHTS = 7;
 const MIN_DAILY_BRIEFING_BASELINE_NIGHTS = 3;
@@ -2573,6 +2577,34 @@ interface DailyBriefingReadiness {
   baselineEvidenceCount: number | null;
 }
 
+interface DailyBriefingTrainingWindow {
+  equivalentPeriodDays: number;
+  activityCount: number;
+  durationSeconds: number;
+  intensitySeconds: {
+    easy: number;
+    moderate: number;
+    hard: number;
+  };
+}
+
+interface DailyBriefingTrainingDiscipline {
+  discipline: 'running' | 'cycling' | 'swimming';
+  current28d: DailyBriefingTrainingWindow;
+  usual28d: DailyBriefingTrainingWindow;
+}
+
+interface DailyBriefingTrainingSummary {
+  status: 'available' | 'not_ready' | 'stale';
+  dayBoundary: 'UTC';
+  asOfDayMs: number | null;
+  updatedAtMs: number | null;
+  baselineSourceWindowDays: number | null;
+  current28d: DailyBriefingTrainingWindow | null;
+  usual28d: DailyBriefingTrainingWindow | null;
+  disciplines: DailyBriefingTrainingDiscipline[];
+}
+
 function projectDailyBriefingSleepSession(
   session: SafeSleepSession,
 ): DailyBriefingSleepSession {
@@ -2674,6 +2706,120 @@ function projectDailyBriefingReadiness(
     confidence: point.confidence,
     availableSignalCount: point.availableSignalCount,
     baselineEvidenceCount: point.baselineEvidenceCount,
+  };
+}
+
+function projectDailyBriefingTrainingWindow(
+  window: DerivedTrainingSummaryMetricPayload['disciplines'][number]['current28d'],
+): DailyBriefingTrainingWindow {
+  return {
+    equivalentPeriodDays: window.periodDays,
+    activityCount: window.activityCount,
+    durationSeconds: window.durationSeconds,
+    intensitySeconds: {
+      easy: window.easySeconds,
+      moderate: window.moderateSeconds,
+      hard: window.hardSeconds,
+    },
+  };
+}
+
+function unavailableDailyBriefingTrainingSummary(
+  status: 'not_ready' | 'stale',
+  snapshot?: Record<string, unknown> | null,
+  asOfDayMs?: number,
+): DailyBriefingTrainingSummary {
+  return {
+    status,
+    dayBoundary: 'UTC',
+    asOfDayMs: asOfDayMs ?? null,
+    updatedAtMs: status === 'stale'
+      ? asFiniteNumber(snapshot?.updatedAtMs)
+      : null,
+    baselineSourceWindowDays: null,
+    current28d: null,
+    usual28d: null,
+    disciplines: [],
+  };
+}
+
+function projectDailyBriefingTrainingSummary(
+  snapshot: Record<string, unknown> | null,
+  nowTimeMs: number,
+): DailyBriefingTrainingSummary {
+  const schemaVersion = asFiniteNumber(snapshot?.schemaVersion);
+  if (
+    !snapshot
+    || snapshot.status !== 'ready'
+    || snapshot.payload == null
+    || schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+  ) {
+    return unavailableDailyBriefingTrainingSummary('not_ready');
+  }
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[
+    DERIVED_METRIC_KINDS.TrainingSummary
+  ].safeParse(snapshot.payload);
+  if (!parsed.success) {
+    return unavailableDailyBriefingTrainingSummary('not_ready');
+  }
+  const payload = parsed.data as DerivedTrainingSummaryMetricPayload;
+  const now = new Date(nowTimeMs);
+  const currentUtcDayMs = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  if (payload.asOfDayMs !== currentUtcDayMs) {
+    return unavailableDailyBriefingTrainingSummary(
+      'stale',
+      snapshot,
+      payload.asOfDayMs,
+    );
+  }
+  const hasExpectedWindowContract = payload.currentWindowDays
+    === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
+    && payload.baselineWindowDays === DAILY_BRIEFING_TRAINING_BASELINE_WINDOW_DAYS;
+  const hasExpectedDisciplines = payload.disciplines.length
+    === DAILY_BRIEFING_TRAINING_DISCIPLINES.length
+    && DAILY_BRIEFING_TRAINING_DISCIPLINES.every(expectedDiscipline => (
+      payload.disciplines.filter(
+        discipline => discipline.discipline === expectedDiscipline,
+      ).length === 1
+    ))
+    && payload.disciplines.every(discipline => (
+      discipline.current28d.periodDays === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
+      && discipline.baseline28d.periodDays === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
+    ));
+  if (!hasExpectedWindowContract || !hasExpectedDisciplines) {
+    return unavailableDailyBriefingTrainingSummary('not_ready');
+  }
+  const disciplines = payload.disciplines.map(discipline => ({
+    discipline: discipline.discipline,
+    current28d: projectDailyBriefingTrainingWindow(discipline.current28d),
+    usual28d: projectDailyBriefingTrainingWindow(discipline.baseline28d),
+  }));
+  const total = (window: 'current28d' | 'usual28d') => {
+    const windows = disciplines.map(discipline => discipline[window]);
+    return {
+      equivalentPeriodDays: payload.currentWindowDays,
+      activityCount: windows.reduce((sum, entry) => sum + entry.activityCount, 0),
+      durationSeconds: windows.reduce((sum, entry) => sum + entry.durationSeconds, 0),
+      intensitySeconds: {
+        easy: windows.reduce((sum, entry) => sum + entry.intensitySeconds.easy, 0),
+        moderate: windows.reduce((sum, entry) => sum + entry.intensitySeconds.moderate, 0),
+        hard: windows.reduce((sum, entry) => sum + entry.intensitySeconds.hard, 0),
+      },
+    };
+  };
+  return {
+    status: 'available',
+    dayBoundary: 'UTC',
+    asOfDayMs: payload.asOfDayMs,
+    updatedAtMs: asFiniteNumber(snapshot.updatedAtMs),
+    baselineSourceWindowDays: payload.baselineWindowDays,
+    current28d: total('current28d'),
+    usual28d: total('usual28d'),
+    disciplines,
   };
 }
 
@@ -3706,6 +3852,16 @@ export function createMcpDataService(
       const baselineDurationSeconds = baseline.length >= MIN_DAILY_BRIEFING_BASELINE_NIGHTS
         ? baseline.reduce((total, session) => total + session.durationSeconds, 0) / baseline.length
         : null;
+      const [trainingReadinessSnapshot, trainingSummarySnapshot] = await Promise.all([
+        dependencies.fetchDerivedSnapshot(
+          input.uid,
+          DERIVED_METRIC_KINDS.TrainingReadiness,
+        ),
+        dependencies.fetchDerivedSnapshot(
+          input.uid,
+          DERIVED_METRIC_KINDS.TrainingSummary,
+        ),
+      ]);
       const result = {
         asOfTimeMs: nowTimeMs,
         timeZone,
@@ -3725,10 +3881,11 @@ export function createMcpDataService(
           },
         },
         trainingReadiness: projectDailyBriefingReadiness(
-          await dependencies.fetchDerivedSnapshot(
-            input.uid,
-            DERIVED_METRIC_KINDS.TrainingReadiness,
-          ),
+          trainingReadinessSnapshot,
+          nowTimeMs,
+        ),
+        trainingSummary: projectDailyBriefingTrainingSummary(
+          trainingSummarySnapshot,
           nowTimeMs,
         ),
       };

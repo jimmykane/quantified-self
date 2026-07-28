@@ -59,6 +59,7 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
     expect(dataAndPrivacySection?.content).toContain('compact morning briefing');
     expect(dataAndPrivacySection?.content).toContain('latest completed non-nap sleep');
+    expect(dataAndPrivacySection?.content).toContain('current-versus-usual equivalent 28-day Training totals');
     expect(dataAndPrivacySection?.content).toContain('current UTC-day Training readiness status');
     expect(dataAndPrivacySection?.content).toContain('morning briefing for your IANA timezone');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');

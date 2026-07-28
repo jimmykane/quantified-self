@@ -231,6 +231,41 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
   });
 
+  it('advertises the compact Training Summary in daily-briefing metadata', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [
+        MCP_OAUTH_SCOPES.MetricsRead,
+        MCP_OAUTH_SCOPES.SleepRead,
+      ],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'daily-briefing-metadata-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const dailyBriefing = (await client.listTools()).tools
+        .find(tool => tool.name === 'get_daily_briefing');
+
+      expect(client.getInstructions()).toContain(
+        'current-versus-usual equivalent 28-day Training totals and sport mix',
+      );
+      expect(dailyBriefing?.description).toContain(
+        'current-versus-usual equivalent 28-day Training totals',
+      );
+      expect(dailyBriefing?.description).toContain('Running/Cycling/Swimming mix');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('makes the static activity-type catalog available to every authorized client', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',

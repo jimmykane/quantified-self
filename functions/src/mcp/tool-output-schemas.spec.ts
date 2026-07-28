@@ -627,6 +627,56 @@ function createFixtureDataService(
         availableSignalCount: 4,
         baselineEvidenceCount: 14,
       },
+      trainingSummary: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        asOfDayMs: DAY_MS,
+        updatedAtMs: DAY_MS,
+        baselineSourceWindowDays: 84,
+        current28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 11,
+          durationSeconds: 28_800,
+          intensitySeconds: {
+            easy: 18_600,
+            moderate: 6_900,
+            hard: 3_300,
+          },
+        },
+        usual28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 8.2,
+          durationSeconds: 21_600,
+          intensitySeconds: {
+            easy: 14_000,
+            moderate: 5_000,
+            hard: 2_600,
+          },
+        },
+        disciplines: ['running', 'cycling', 'swimming'].map((discipline, index) => ({
+          discipline,
+          current28d: {
+            equivalentPeriodDays: 28,
+            activityCount: index + 1,
+            durationSeconds: (index + 1) * 3_600,
+            intensitySeconds: {
+              easy: (index + 1) * 2_000,
+              moderate: (index + 1) * 800,
+              hard: (index + 1) * 400,
+            },
+          },
+          usual28d: {
+            equivalentPeriodDays: 28,
+            activityCount: index + 0.5,
+            durationSeconds: (index + 1) * 3_000,
+            intensitySeconds: {
+              easy: (index + 1) * 1_800,
+              moderate: (index + 1) * 700,
+              hard: (index + 1) * 300,
+            },
+          },
+        })),
+      },
     }),
     listActivityTypes: vi.fn().mockReturnValue({
       activityTypeCount: 2,
@@ -1004,6 +1054,58 @@ describe('MCP public output contracts', () => {
           .safeParse(payload).success,
       ).toBe(true);
     });
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS.training_summary.safeParse({
+      ...derivedPayloadFixtures.training_summary,
+      disciplines: [{
+        discipline: 'running',
+        current28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS,
+          windowEndDayMs: NEXT_DAY_MS,
+          activityCount: 2,
+          durationSeconds: 7_200,
+          easySeconds: 3_600,
+          moderateSeconds: 2_400,
+          hardSeconds: 1_200,
+        },
+        baseline28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS - (84 * 24 * 60 * 60 * 1000),
+          windowEndDayMs: DAY_MS - 1,
+          activityCount: 0.67,
+          durationSeconds: 2_400,
+          easySeconds: 1_200,
+          moderateSeconds: 800,
+          hardSeconds: 400,
+        },
+      }],
+    }).success).toBe(true);
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS.training_summary.safeParse({
+      ...derivedPayloadFixtures.training_summary,
+      disciplines: [{
+        discipline: 'running',
+        current28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS,
+          windowEndDayMs: NEXT_DAY_MS,
+          activityCount: 0.67,
+          durationSeconds: 2_400,
+          easySeconds: 1_200,
+          moderateSeconds: 800,
+          hardSeconds: 400,
+        },
+        baseline28d: {
+          periodDays: 28,
+          windowStartDayMs: DAY_MS - (84 * 24 * 60 * 60 * 1000),
+          windowEndDayMs: DAY_MS - 1,
+          activityCount: 1,
+          durationSeconds: 3_600,
+          easySeconds: 1_800,
+          moderateSeconds: 1_200,
+          hardSeconds: 600,
+        },
+      }],
+    }).success).toBe(false);
 
     expect(registry.get_training_metric.safeParse({
       metricKind: DERIVED_METRIC_KINDS.Form,
@@ -1045,6 +1147,16 @@ describe('MCP public output contracts', () => {
         availableSignalCount: null,
         baselineEvidenceCount: null,
       },
+      trainingSummary: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        updatedAtMs: null,
+        baselineSourceWindowDays: null,
+        current28d: null,
+        usual28d: null,
+        disciplines: [],
+      },
     }).success).toBe(false);
     expect(registry.get_daily_briefing.safeParse({
       asOfTimeMs: DAY_MS,
@@ -1071,6 +1183,16 @@ describe('MCP public output contracts', () => {
         confidence: 'high',
         availableSignalCount: 4,
         baselineEvidenceCount: 14,
+      },
+      trainingSummary: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        updatedAtMs: null,
+        baselineSourceWindowDays: null,
+        current28d: null,
+        usual28d: null,
+        disciplines: [],
       },
     }).success).toBe(false);
   });
@@ -1744,6 +1866,17 @@ describe('MCP public output contracts', () => {
         confidence: null,
         availableSignalCount: null,
         baselineEvidenceCount: null,
+      },
+      trainingSummary: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        updatedAtMs: null,
+        baselineSourceWindowDays: null,
+        current28d: null,
+        usual28d: null,
+        disciplines: [],
+        sourceKey: 'training-summary-secret',
       },
       providerUserId: 'briefing-secret',
     });

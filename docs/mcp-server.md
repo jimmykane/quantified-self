@@ -388,7 +388,7 @@ The analytics and map entries follow the
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep and current UTC-day Training readiness status |
+| `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
@@ -710,8 +710,11 @@ deliberately.
 `get_daily_briefing` is a compact convenience read that requires both `metrics:read` and `sleep:read`; neither scope
 alone registers it. The caller supplies an IANA timezone. The response records the resulting local-day bounds and
 contains only the latest completed non-nap sleep session plus a duration comparison against up to seven earlier
-same-provider nights. Provider identity, raw vitals, stages, score components, sessions, locations, activities, body
-measurements, and source fields are absent from this projection.
+same-provider nights. It also projects the safe `training_summary` headline: equivalent current and usual 28-day
+workout counts, duration, easy/moderate/hard time totals, and the corresponding Running/Cycling/Swimming breakdown.
+The usual period is an equivalent 28-day comparison normalized from the snapshot's preceding 84-day source window, so
+its workout count may be fractional. Provider identity, raw vitals, stages, score components, sessions, locations,
+activities, body measurements, and source fields are absent from this projection.
 
 It also reads the current `training_readiness` snapshot through its exact strict payload schema, but returns only its
 freshness, score, label, confidence, and aggregate evidence counts. Readiness itself remains UTC-day based. A snapshot
@@ -733,7 +736,8 @@ requires no new Firestore composite index.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
 - A daily briefing reads at most 33 recent sleep documents from a fixed 14-day lookback, keeps at most 32 completed
-  non-nap sessions, uses at most seven same-provider baseline nights, and returns at most 16 KiB.
+  non-nap sessions, uses at most seven same-provider baseline nights, reads the ready `training_summary` and
+  `training_readiness` snapshots in parallel, and returns at most 16 KiB.
 - Explicit activity date ranges are at most 366 days; relative today/yesterday ranges require an IANA timezone. An
   omitted activity range starts newest-first across history. Activity-list calls scan at most 100 documents, return at
   most 100 matching entries, report scan counts/completion, and reject more than 512 KiB of cumulative selected data.

@@ -26,7 +26,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 5. Describe association rather than causation. Call out sparse or mismatched coverage that weakens the comparison.
 6. For a request such as “good morning” or a compact current readout, prefer the server's advertised daily-briefing
    tool when both `metrics:read` and `sleep:read` are available. Pass an explicit IANA timezone, preserve its local-day
-   and UTC-day boundary distinction, and do not expand it into a workout plan or medical advice.
+   and UTC-day boundary distinction, distinguish its equivalent 28-day Training summary from the preceding 84-day
+   comparison source, and do not expand it into a workout plan or medical advice.
 
 ## Permissions and Privacy
 
@@ -41,8 +42,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
   outside the public tool results.
 - Distinguish recorded measurements, aggregated activity metrics, normalized sleep data, and Training-derived
   snapshots.
-- A daily briefing is a limited current-context projection: its latest completed sleep and readiness status do not
-  establish a long-term trend or causation.
+- A daily briefing is a limited current-context projection: its latest completed sleep, current-versus-usual Training
+  summary, and readiness status do not establish a long-term trend or causation.
 - Describe trends and uncertainty without diagnosing a condition or presenting the result as medical advice.
 
 ## Response Style

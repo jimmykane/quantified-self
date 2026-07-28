@@ -20,7 +20,8 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
    types unless the user requests an overall view.
 6. For a compact morning readout, use the server's advertised daily-briefing tool only when the user also granted
    `sleep:read`; supply an explicit IANA timezone. Treat its UTC-day readiness freshness and explicit unavailable
-   states as authoritative.
+   states as authoritative. Its Training context is the current-versus-usual equivalent 28-day summary, including the
+   Running/Cycling/Swimming mix; do not substitute a specialist snapshot unless the user asks for that analysis.
 
 ## Limits
 

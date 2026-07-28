@@ -400,6 +400,88 @@ const dailyBriefingReadiness = z.strictObject({
   }
 }).meta({ title: 'McpDailyBriefingReadiness' });
 
+const dailyBriefingTrainingWindowFields = {
+  equivalentPeriodDays: count,
+  durationSeconds: nonNegativeNumber,
+  intensitySeconds: z.strictObject({
+    easy: nonNegativeNumber,
+    moderate: nonNegativeNumber,
+    hard: nonNegativeNumber,
+  }),
+};
+
+const dailyBriefingCurrentTrainingWindow = z.strictObject({
+  ...dailyBriefingTrainingWindowFields,
+  activityCount: count,
+}).meta({ title: 'McpDailyBriefingCurrentTrainingWindow' });
+
+const dailyBriefingUsualTrainingWindow = z.strictObject({
+  ...dailyBriefingTrainingWindowFields,
+  activityCount: nonNegativeNumber,
+}).meta({ title: 'McpDailyBriefingUsualTrainingWindow' });
+
+const dailyBriefingTrainingDiscipline = z.strictObject({
+  discipline: z.enum(['running', 'cycling', 'swimming']),
+  current28d: dailyBriefingCurrentTrainingWindow,
+  usual28d: dailyBriefingUsualTrainingWindow,
+}).meta({ title: 'McpDailyBriefingTrainingDiscipline' });
+
+const dailyBriefingTrainingSummary = z.strictObject({
+  status: z.enum(['available', 'not_ready', 'stale']),
+  dayBoundary: z.literal('UTC'),
+  asOfDayMs: nullableTimestampMs,
+  updatedAtMs: nullableTimestampMs,
+  baselineSourceWindowDays: count.nullable(),
+  current28d: dailyBriefingCurrentTrainingWindow.nullable(),
+  usual28d: dailyBriefingUsualTrainingWindow.nullable(),
+  disciplines: z.array(dailyBriefingTrainingDiscipline).max(3),
+}).superRefine((value, context) => {
+  const summaryFields = [
+    value.baselineSourceWindowDays,
+    value.current28d,
+    value.usual28d,
+  ];
+  const hasCompleteSummary = summaryFields.every(field => field !== null)
+    && value.disciplines.length === 3
+    && new Set(value.disciplines.map(discipline => discipline.discipline)).size === 3;
+  if (
+    value.status === 'available'
+    && (value.asOfDayMs === null || !hasCompleteSummary)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Available training summary must identify its day and include all three discipline summaries.',
+    });
+  }
+  if (
+    value.status !== 'available'
+    && (
+      summaryFields.some(field => field !== null)
+      || value.disciplines.length > 0
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Unavailable training summary must withhold summary values.',
+    });
+  }
+  if (
+    value.status === 'not_ready'
+    && (value.asOfDayMs !== null || value.updatedAtMs !== null)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Not-ready training summary must not expose snapshot timestamps.',
+    });
+  }
+  if (value.status === 'stale' && value.asOfDayMs === null) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A stale training summary must identify its snapshot day.',
+    });
+  }
+}).meta({ title: 'McpDailyBriefingTrainingSummary' });
+
 const activityTypeDescriptor = z.strictObject({
   activityType: z.string().min(1).max(120),
   activityGroup: z.string().min(1).max(120),
@@ -827,6 +909,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         }
       }),
       trainingReadiness: dailyBriefingReadiness,
+      trainingSummary: dailyBriefingTrainingSummary,
     }),
     list_activity_types: z.strictObject({
       activityTypeCount: count,

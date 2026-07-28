@@ -3427,7 +3427,7 @@ describe('MCP data service', () => {
         endTimeMs: Date.parse('2026-07-27T10:00:00.000Z'),
       }),
     ]);
-    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+    const readinessSnapshot = {
       status: 'ready',
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: nowTimeMs,
@@ -3455,7 +3455,93 @@ describe('MCP data service', () => {
           overnightHeartRateRatio: 0.98,
         }],
       },
-    });
+    };
+    const trainingSummarySnapshot = {
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: nowTimeMs,
+      payload: {
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        excludesMergedEvents: true,
+        disciplines: [{
+          discipline: 'running',
+          current28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-06-30T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            activityCount: 6,
+            durationSeconds: 14_400,
+            easySeconds: 9_000,
+            moderateSeconds: 3_600,
+            hardSeconds: 1_800,
+          },
+          baseline28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-04-07T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-06-29T00:00:00.000Z'),
+            activityCount: 4.67,
+            durationSeconds: 11_200,
+            easySeconds: 7_000,
+            moderateSeconds: 2_800,
+            hardSeconds: 1_400,
+          },
+        }, {
+          discipline: 'cycling',
+          current28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-06-30T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            activityCount: 3,
+            durationSeconds: 10_800,
+            easySeconds: 7_200,
+            moderateSeconds: 2_400,
+            hardSeconds: 1_200,
+          },
+          baseline28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-04-07T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-06-29T00:00:00.000Z'),
+            activityCount: 2,
+            durationSeconds: 7_200,
+            easySeconds: 4_800,
+            moderateSeconds: 1_600,
+            hardSeconds: 800,
+          },
+        }, {
+          discipline: 'swimming',
+          current28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-06-30T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            activityCount: 2,
+            durationSeconds: 3_600,
+            easySeconds: 2_400,
+            moderateSeconds: 900,
+            hardSeconds: 300,
+          },
+          baseline28d: {
+            periodDays: 28,
+            windowStartDayMs: Date.parse('2026-04-07T00:00:00.000Z'),
+            windowEndDayMs: Date.parse('2026-06-29T00:00:00.000Z'),
+            activityCount: 1.33,
+            durationSeconds: 2_800,
+            easySeconds: 1_800,
+            moderateSeconds: 700,
+            hardSeconds: 300,
+          },
+        }],
+      },
+    };
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => (
+        metricKind === DERIVED_METRIC_KINDS.TrainingSummary
+          ? trainingSummarySnapshot
+          : readinessSnapshot
+      ),
+    );
 
     const result = await createMcpDataService(dependencies).getDailyBriefing({
       uid: 'user-1',
@@ -3486,6 +3572,44 @@ describe('MCP data service', () => {
         availableSignalCount: 4,
         baselineEvidenceCount: 14,
       },
+      trainingSummary: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        baselineSourceWindowDays: 84,
+        current28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 11,
+          durationSeconds: 28_800,
+          intensitySeconds: {
+            easy: 18_600,
+            moderate: 6_900,
+            hard: 3_300,
+          },
+        },
+        usual28d: {
+          equivalentPeriodDays: 28,
+          activityCount: 8,
+          durationSeconds: 21_200,
+          intensitySeconds: {
+            easy: 13_600,
+            moderate: 5_100,
+            hard: 2_500,
+          },
+        },
+        disciplines: [{
+          discipline: 'running',
+          current28d: expect.objectContaining({ activityCount: 6 }),
+          usual28d: expect.objectContaining({ activityCount: 4.67 }),
+        }, {
+          discipline: 'cycling',
+          current28d: expect.objectContaining({ activityCount: 3 }),
+          usual28d: expect.objectContaining({ activityCount: 2 }),
+        }, {
+          discipline: 'swimming',
+          current28d: expect.objectContaining({ activityCount: 2 }),
+          usual28d: expect.objectContaining({ activityCount: 1.33 }),
+        }],
+      },
     });
     expect(dependencies.fetchSleepDocuments).toHaveBeenCalledWith(
       'user-1',
@@ -3493,12 +3617,22 @@ describe('MCP data service', () => {
       nowTimeMs,
       33,
     );
+    expect(dependencies.fetchDerivedSnapshot).toHaveBeenCalledWith(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingReadiness,
+    );
+    expect(dependencies.fetchDerivedSnapshot).toHaveBeenCalledWith(
+      'user-1',
+      DERIVED_METRIC_KINDS.TrainingSummary,
+    );
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('GarminAPI');
     expect(serialized).not.toContain('private-source-key');
     expect(serialized).not.toContain('averageHeartRateBpm');
     expect(serialized).not.toContain('overnightHeartRateRatio');
     expect(serialized).not.toContain('latestSleepAtMs');
+    expect(serialized).not.toContain('windowStartDayMs');
+    expect(serialized).not.toContain('windowEndDayMs');
   });
 
   it('makes unavailable daily-briefing inputs explicit without returning a stale readiness score', async () => {
@@ -3529,6 +3663,16 @@ describe('MCP data service', () => {
       confidence: null,
       availableSignalCount: null,
       baselineEvidenceCount: null,
+    });
+    expect(result.trainingSummary).toEqual({
+      status: 'not_ready',
+      dayBoundary: 'UTC',
+      asOfDayMs: null,
+      updatedAtMs: null,
+      baselineSourceWindowDays: null,
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
     });
   });
 
@@ -3576,6 +3720,80 @@ describe('MCP data service', () => {
       confidence: null,
       availableSignalCount: null,
       baselineEvidenceCount: null,
+    });
+  });
+
+  it('withholds stale or partial Training Summary snapshots from the daily briefing', async () => {
+    const staleSummaryDayMs = Date.parse('2026-07-26T00:00:00.000Z');
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => {
+        if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
+          return null;
+        }
+        return {
+          status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+          updatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+          payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs: staleSummaryDayMs,
+            currentWindowDays: 28,
+            baselineWindowDays: 84,
+            excludesMergedEvents: true,
+            disciplines: [],
+          },
+        };
+      },
+    );
+
+    const stale = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+    expect(stale.trainingSummary).toEqual({
+      status: 'stale',
+      dayBoundary: 'UTC',
+      asOfDayMs: staleSummaryDayMs,
+      updatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+      baselineSourceWindowDays: null,
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
+    });
+
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => {
+        if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
+          return null;
+        }
+        return {
+          status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+          updatedAtMs: Date.parse('2026-07-27T12:00:00.000Z'),
+          payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+            currentWindowDays: 28,
+            baselineWindowDays: 84,
+            excludesMergedEvents: true,
+            disciplines: [],
+          },
+        };
+      },
+    );
+    const partial = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+    expect(partial.trainingSummary).toEqual({
+      status: 'not_ready',
+      dayBoundary: 'UTC',
+      asOfDayMs: null,
+      updatedAtMs: null,
+      baselineSourceWindowDays: null,
+      current28d: null,
+      usual28d: null,
+      disciplines: [],
     });
   });
 

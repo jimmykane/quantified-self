@@ -73,6 +73,7 @@ describe('MCP client access policy', () => {
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('compact morning briefing');
     expect(content).toContain('latest completed non-nap sleep');
+    expect(content).toContain('current-versus-usual equivalent 28-day Training totals');
     expect(content).toContain('current UTC-day Training readiness status');
     expect(content).toContain('workout plans, and medical advice');
     expect(content).toContain('stored server-side only as hashes');

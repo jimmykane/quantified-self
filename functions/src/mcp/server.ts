@@ -375,7 +375,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
     instructions.push(
-      'For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep with a current UTC-day Training readiness signal; it is not a workout plan or medical advice.',
+      'For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and a current UTC-day Training readiness signal; it is not a workout plan or medical advice.',
     );
   }
   return instructions.join(' ');
@@ -604,7 +604,7 @@ export function createMcpServer(
   ) {
     server.registerTool('get_daily_briefing', {
       title: 'Get daily briefing',
-      description: 'Return a compact morning readout for an explicit IANA time zone. It includes only the latest completed non-nap sleep and a current UTC-day Training readiness signal. It never returns provider identity, physiology, locations, activity records, body measurements, a workout plan, or medical advice.',
+      description: 'Return a compact morning readout for an explicit IANA time zone. It includes only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and Running/Cycling/Swimming mix, and a current UTC-day Training readiness signal. It never returns provider identity, physiology, locations, activity records, body measurements, a workout plan, or medical advice.',
       inputSchema: {
         timeZone: z.string()
           .min(1)

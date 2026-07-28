@@ -354,6 +354,12 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
 scope. They are not standalone Training cards. Do not assume every requested snapshot maps one-to-one to visible markup.
 
+The MCP daily briefing uses only the two headline snapshots from this table: `training_summary` for the current-versus-
+usual 28-day Training context and `training_readiness` for current readiness. It projects a compact identity-free total
+and Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Form, CTL/ATL, ACWR, ramp, recovery,
+capacity, durability, power systems, and other specialist snapshots remain independently queryable rather than being
+silently recast as a daily workout recommendation.
+
 Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which is all registered derived kinds. Training-only
 kinds are excluded from the default Dashboard subscription and freshness scope. Dashboard adds `training_capacity` or
 `training_durability` to that scope only while a matching explicitly configured tile exists.
