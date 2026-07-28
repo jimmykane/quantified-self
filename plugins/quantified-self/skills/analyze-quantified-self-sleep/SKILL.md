@@ -12,9 +12,10 @@ returned.
 
 1. Establish the requested period, IANA timezone, whether naps belong in the analysis, and whether the user explicitly
    asked to filter by provider.
-2. Prefer grouped summaries for trends. Request individual sessions only when timing, stages, or session-level
-   variation matters. When naps are requested, keep the main-sleep headline separate and report naps and any
-   nap-inclusive total explicitly unless the user asks for a combined headline.
+2. For HRV, heart rate, blood oxygen saturation, or respiration questions, first discover which safe aggregate sleep
+   vitals are actually recorded for the requested period. Then prefer grouped summaries for trends and request
+   individual sessions only when nightly variation matters. When naps are requested, keep the main-sleep headline
+   separate and report naps and any nap-inclusive total explicitly unless the user asks for a combined headline.
 3. Preserve local-day boundaries, units, session counts, stage coverage, missing values, and pagination state.
 4. Compare like periods and state when sparse sessions, excluded naps, or incomplete stage data limit the conclusion.
 5. For a compact same-day morning readout, use the server's advertised daily-briefing tool only when both sleep and
@@ -28,6 +29,8 @@ returned.
   not infer Training readiness.
 - Treat a missing permission, no recorded sessions, filtered-out naps, and unavailable stage values as different
   outcomes.
+- Treat unavailable aggregate vital types as missing source data for that period; do not infer them from Training
+  readiness or from raw samples, which are never exposed.
 - Do not interpret missing stages as zero or use a provider filter unless the user asks for it.
 - Discuss sleep and recovery patterns without diagnosing a condition or claiming that sleep caused another outcome.
 

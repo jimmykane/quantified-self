@@ -15,7 +15,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    For an unqualified recovery or readiness question, clarify whether the user means Training, sleep, or a comparison
    between them before choosing a workflow.
 2. Discover the relevant measurement, metric, sleep, activity, or route capabilities before concluding that data are
-   unavailable.
+   unavailable. For a sleep-vital comparison, first discover which safe aggregate sleep values are recorded for the
+   selected period rather than searching activity metrics or inferring from Training readiness.
 3. Choose one bounded comparison period and IANA timezone. Query the cheapest summary from each domain before
    requesting individual sessions, activities, charts, or locations. For individual activities, discover canonical
    activity types before filtering; use timezone-aware relative periods for today or yesterday, and preserve the same

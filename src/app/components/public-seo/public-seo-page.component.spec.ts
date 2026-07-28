@@ -91,6 +91,7 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('body measurements, individual activity details');
     expect(text).toContain('identity-free body-weight history');
     expect(text).toContain('Sleep summaries and a compact morning briefing');
+    expect(text).toContain('safe aggregate sleep vitals, including HRV');
     expect(text).toContain('Saved-route summaries and optional locations');
     expect(text).toContain('Individual activity details and charts');
     expect(text).toContain('canonical Sports Lib activity types');

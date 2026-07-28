@@ -229,6 +229,10 @@ describe('MCP HTTP scope enforcement', () => {
   it('requires sleep scope for sleep tools', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
+      params: { name: 'list_sleep_vitals' },
+    })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
       params: { name: 'list_sleep_sessions' },
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
@@ -379,6 +383,7 @@ describe('MCP HTTP scope enforcement', () => {
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
       'list_activity_types',
       'list_sleep_sessions',
+      'list_sleep_vitals',
       'query_sleep_summary',
     ]);
     await expect(listToolNames([
@@ -390,6 +395,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_types',
       'list_metrics',
       'list_sleep_sessions',
+      'list_sleep_vitals',
       'query_metric',
       'query_sleep_summary',
     ]);

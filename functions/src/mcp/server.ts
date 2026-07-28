@@ -380,6 +380,11 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       'Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics.',
     );
   }
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
+    instructions.push(
+      'For sleep HRV, heart rate, blood oxygen saturation, or respiration questions, first use list_sleep_vitals for the requested period to discover which safe aggregate values are actually recorded. Then use list_sleep_sessions for nightly readings or query_sleep_summary for local day, week, or month averages. Raw sensor samples are unavailable, and recorded values are not medical advice.',
+    );
+  }
   if (
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
@@ -560,9 +565,28 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
+    server.registerTool('list_sleep_vitals', {
+      title: 'Discover available sleep vitals',
+      description: 'Discover which redacted aggregate sleep vital types have recorded values in a bounded period, including average or overnight HRV when available. Use this before answering a sleep-vital question, then use the session or summary tools for readings and trends. Raw sensor samples and provider payloads are never returned.',
+      inputSchema: {
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
+        includeNaps: z.boolean().default(false),
+        provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
+      },
+      outputSchema: outputSchemas.list_sleep_vitals,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('list_sleep_vitals', () => dataService.listSleepVitals({
+      uid: auth.uid,
+      startTimeMs: parseMcpDateTime(input.start, 'start'),
+      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      includeNaps: input.includeNaps,
+      provider: input.provider,
+    })));
+
     server.registerTool('list_sleep_sessions', {
-      title: 'List sleep sessions',
-      description: 'List redacted normalized sleep-session summaries. Raw samples and provider payloads are never returned.',
+      title: 'List sleep sessions and nightly vitals',
+      description: 'List redacted normalized sleep-session summaries with safe aggregate vitals, including average or overnight HRV when recorded. Raw sensor samples and provider payloads are never returned.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
@@ -585,8 +609,8 @@ export function createMcpServer(
     })));
 
     server.registerTool('query_sleep_summary', {
-      title: 'Query sleep summary',
-      description: 'Aggregate redacted sleep sessions by local day, week, or month.',
+      title: 'Summarize sleep and recorded vitals',
+      description: 'Aggregate redacted sleep sessions by local day, week, or month. Each bucket includes averages for available safe vitals such as HRV, heart rate, blood oxygen saturation, or respiration; raw samples are never returned.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
@@ -968,7 +992,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
     ];
   }
-  if (['list_sleep_sessions', 'query_sleep_summary'].includes(toolName)) {
+  if (['list_sleep_vitals', 'list_sleep_sessions', 'query_sleep_summary'].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.SleepRead];
   }
   if (toolName === 'get_daily_briefing') {

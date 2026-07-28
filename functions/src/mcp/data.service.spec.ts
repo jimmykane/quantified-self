@@ -3849,6 +3849,80 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('stages');
   });
 
+  it('discovers only recorded aggregate sleep vitals without source or sample data', async () => {
+    const secondarySession = sleepDocument({
+      vitals: {
+        averageHrvMs: 41,
+        hrvSampleCount: 96,
+        maxSpo2Percent: 98,
+        averageRespirationBrpm: 13,
+      },
+      hrvSamples: [{ value: 41, timestampMs: 1_712_000_000_000 }],
+      providerFields: { coros: { private: true } },
+    });
+    secondarySession.id = 'sleep-2';
+    const napSession = sleepDocument({
+      isNap: true,
+      vitals: { restingHeartRateBpm: 44 },
+    });
+    napSession.id = 'sleep-3';
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument(),
+      secondarySession,
+      napSession,
+    ]);
+
+    const result = await createMcpDataService(dependencies).listSleepVitals({
+      uid: 'user-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+    });
+
+    expect(result).toEqual({
+      matchedSessionCount: 2,
+      vitals: [
+        {
+          type: 'averageHeartRateBpm',
+          label: 'Average heart rate',
+          unit: 'beats_per_minute',
+          sessionCount: 1,
+        },
+        {
+          type: 'averageHrvMs',
+          label: 'Average HRV',
+          unit: 'milliseconds',
+          sessionCount: 1,
+        },
+        {
+          type: 'hrvSampleCount',
+          label: 'HRV sample count',
+          unit: 'count',
+          sessionCount: 1,
+        },
+        {
+          type: 'overnightHrvMs',
+          label: 'Overnight HRV',
+          unit: 'milliseconds',
+          sessionCount: 1,
+        },
+        {
+          type: 'maxSpo2Percent',
+          label: 'Maximum blood oxygen saturation',
+          unit: 'percent',
+          sessionCount: 1,
+        },
+        {
+          type: 'averageRespirationBrpm',
+          label: 'Average respiration',
+          unit: 'breaths_per_minute',
+          sessionCount: 1,
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('private');
+    expect(JSON.stringify(result)).not.toContain('hrvSamples');
+  });
+
   it('preserves missing optional sleep measurements instead of treating them as zero', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
       sleepDocument({

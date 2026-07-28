@@ -65,6 +65,12 @@ import {
   SleepVitals,
 } from '../../../shared/sleep';
 import {
+  MCP_SLEEP_VITAL_DESCRIPTORS,
+  MCP_SLEEP_VITAL_TYPES,
+  McpSleepVitalDescriptor,
+  McpSleepVitalType,
+} from './sleep-vitals';
+import {
   McpMetricDescriptor,
   projectSportsLibNumericMetricValue,
   resolveAvailableSportsLibMetrics,
@@ -194,16 +200,7 @@ export const SAFE_ACTIVITY_LOCATION_FIELDS = [
   new FieldPath('stats', DataEndPosition.type, 'latitudeDegrees'),
   new FieldPath('stats', DataEndPosition.type, 'longitudeDegrees'),
 ] as const;
-const SAFE_SLEEP_VITAL_KEYS = [
-  'averageHeartRateBpm',
-  'minimumHeartRateBpm',
-  'restingHeartRateBpm',
-  'averageHrvMs',
-  'hrvSampleCount',
-  'overnightHrvMs',
-  'maxSpo2Percent',
-  'averageRespirationBrpm',
-] as const satisfies readonly (keyof SleepVitals)[];
+const SAFE_SLEEP_VITAL_KEYS = MCP_SLEEP_VITAL_TYPES;
 
 export type McpDataErrorCode =
   | 'invalid_request'
@@ -2544,6 +2541,23 @@ export interface ListSleepSessionsInput {
   limit?: number;
 }
 
+export interface ListSleepVitalsInput {
+  uid: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  includeNaps?: boolean;
+  provider?: SleepProvider;
+}
+
+export interface McpSleepVitalAvailability extends McpSleepVitalDescriptor {
+  sessionCount: number;
+}
+
+export interface ListSleepVitalsResult {
+  matchedSessionCount: number;
+  vitals: McpSleepVitalAvailability[];
+}
+
 export interface QuerySleepSummaryInput {
   uid: string;
   startTimeMs: number;
@@ -4665,6 +4679,51 @@ export function createMcpDataService(
       return {
         sessions: page.map(entry => entry.session),
         nextCursor,
+      };
+    },
+
+    async listSleepVitals(input: ListSleepVitalsInput): Promise<ListSleepVitalsResult> {
+      validateBoundedRange(input.startTimeMs, input.endTimeMs);
+      const docs = await dependencies.fetchSleepDocuments(
+        input.uid,
+        input.startTimeMs,
+        input.endTimeMs,
+        MAX_SLEEP_QUERY_DOCUMENTS + 1,
+      );
+      if (docs.length > MAX_SLEEP_QUERY_DOCUMENTS) {
+        throw new McpDataError(
+          'query_too_large',
+          `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
+        );
+      }
+
+      const vitalSessionCounts = new Map<McpSleepVitalType, number>();
+      let matchedSessionCount = 0;
+      docs.forEach((doc) => {
+        const session = toSafeSleepSession(doc.data);
+        if (
+          !session
+          || (!input.includeNaps && session.isNap)
+          || (input.provider && session.provider !== input.provider)
+        ) {
+          return;
+        }
+        matchedSessionCount += 1;
+        MCP_SLEEP_VITAL_TYPES.forEach((type) => {
+          if (session.vitals?.[type] !== undefined) {
+            vitalSessionCounts.set(type, (vitalSessionCounts.get(type) || 0) + 1);
+          }
+        });
+      });
+
+      return {
+        matchedSessionCount,
+        vitals: MCP_SLEEP_VITAL_DESCRIPTORS.flatMap((descriptor) => {
+          const sessionCount = vitalSessionCounts.get(descriptor.type);
+          return sessionCount
+            ? [{ ...descriptor, sessionCount }]
+            : [];
+        }),
       };
     },
 

@@ -43,7 +43,7 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'sleep:read': {
     title: 'Sleep summaries',
-    description: 'Read redacted sleep sessions and aggregated sleep summaries.',
+    description: 'Read redacted sleep sessions and aggregated summaries, including bounded discovery of available aggregate HRV, heart-rate, blood-oxygen, and respiration values. Raw sensor samples and provider payloads are excluded.',
   },
   'activity-details:read': {
     title: 'Individual activity details',

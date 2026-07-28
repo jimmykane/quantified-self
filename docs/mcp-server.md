@@ -86,7 +86,7 @@ The bundled skills divide ownership deliberately:
 | --- | --- | --- |
 | `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
 | `analyze-quantified-self-training` | Training load, volume, performance trends, and Training-derived metrics | `metrics:read` |
-| `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, naps, and sleep-oriented trends | `sleep:read` |
+| `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
 | `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
@@ -386,6 +386,7 @@ The analytics and map entries follow the
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
+| `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
@@ -435,12 +436,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 21-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 22-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 21 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 22 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -764,7 +765,9 @@ response. The read projection includes only the provider name and fields eligibl
 provider identifiers, and score components do not enter the MCP process. Session output may include provider, sleep
 date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized score value/qualifier,
 and aggregate vitals. Missing optional numeric measurements remain unavailable and do not contribute zeroes to summary
-averages.
+averages. `list_sleep_vitals` first reports only the safe vital types that have at least one recorded session in the
+requested bounded period, their units, and session coverage. It lets clients discover HRV before querying nightly or
+grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
 
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
@@ -799,6 +802,8 @@ requires no new Firestore composite index.
 - Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the
   activity-type stat needed for filtering.
 - A sleep summary rejects matches above 1,000 sessions.
+- Sleep-vital discovery uses the same at-most-1,000-session bounded read as a sleep summary and returns only fixed
+  allowlisted type metadata and per-type session counts.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
 - A daily briefing reads at most 33 recent sleep documents from a fixed 14-day lookback, keeps at most 32 completed

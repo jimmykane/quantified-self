@@ -553,6 +553,15 @@ function createFixtureDataService(
         payload: derivedPayloadFixtures[metricKind],
       }),
     ),
+    listSleepVitals: vi.fn().mockResolvedValue({
+      matchedSessionCount: 1,
+      vitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+    }),
     listSleepSessions: vi.fn().mockResolvedValue({
       sessions: [{
         provider: 'GarminAPI',
@@ -946,6 +955,10 @@ const successfulToolArguments: Record<
   },
   get_training_metric: {
     metricKind: DERIVED_METRIC_KINDS.Form,
+  },
+  list_sleep_vitals: {
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
   },
   list_sleep_sessions: {
     start: '2026-07-01T00:00:00.000Z',
@@ -1759,6 +1772,16 @@ describe('MCP public output contracts', () => {
         providerUserId: 'private-provider-user',
       }],
       nextCursor: null,
+    }).success).toBe(false);
+    expect(registry.list_sleep_vitals.safeParse({
+      matchedSessionCount: 1,
+      vitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+        providerUserId: 'private-provider-user',
+      }],
     }).success).toBe(false);
     expect(registry.list_route_waypoints.safeParse({
       waypoints: [{

@@ -25,6 +25,7 @@ import {
   validateMcpDerivedPayload,
 } from './derived-output-schemas';
 import { MCP_MEASUREMENT_TYPE_IDS } from './measurement-catalog';
+import { MCP_SLEEP_VITAL_TYPES } from './sleep-vitals';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
   'list_measurement_types',
@@ -32,6 +33,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_metrics',
   'query_metric',
   'get_training_metric',
+  'list_sleep_vitals',
   'list_sleep_sessions',
   'query_sleep_summary',
   'get_daily_briefing',
@@ -317,6 +319,18 @@ const sleepVitalsShape = {
 const sleepVitals = z.strictObject({
   ...sleepVitalsShape,
 }).meta({ title: 'McpSleepVitals' });
+const sleepVitalAvailability = z.strictObject({
+  type: z.enum(MCP_SLEEP_VITAL_TYPES),
+  label: z.string().min(1).max(80),
+  unit: z.enum([
+    'beats_per_minute',
+    'milliseconds',
+    'count',
+    'percent',
+    'breaths_per_minute',
+  ]),
+  sessionCount: count.positive(),
+}).meta({ title: 'McpSleepVitalAvailability' });
 const sleepSession = z.strictObject({
   provider: sleepProvider,
   sleepDate: z.iso.date(),
@@ -896,6 +910,10 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       aggregation: metricAggregation,
     }),
     get_training_metric: trainingMetricOutput,
+    list_sleep_vitals: z.strictObject({
+      matchedSessionCount: count,
+      vitals: z.array(sleepVitalAvailability),
+    }),
     list_sleep_sessions: z.strictObject({
       sessions: z.array(sleepSession),
       ...MCP_PAGINATION_OUTPUT_SHAPE,

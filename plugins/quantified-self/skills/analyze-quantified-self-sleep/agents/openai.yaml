@@ -1,12 +1,12 @@
 interface:
   display_name: "Analyze Sleep"
-  short_description: "Review sleep duration, stages, and trends"
-  default_prompt: "Use $analyze-quantified-self-sleep to summarize my sleep trends over the last month."
+  short_description: "Review sleep, HRV, and trends"
+  default_prompt: "Use $analyze-quantified-self-sleep to summarize my sleep and HRV trend over the last month."
 dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Read-only Quantified Self normalized sleep summaries"
+      description: "Read-only Quantified Self sleep summaries and safe aggregate vitals"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:
