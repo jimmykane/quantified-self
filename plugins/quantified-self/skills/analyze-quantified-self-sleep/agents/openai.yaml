@@ -1,7 +1,7 @@
 interface:
   display_name: "Analyze Sleep"
   short_description: "Review sleep, HRV, and trends"
-  default_prompt: "Use $analyze-quantified-self-sleep to summarize my sleep and HRV trend over the last month."
+  default_prompt: "Use $analyze-quantified-self-sleep to summarize my sleep, HRV, blood-oxygen, and respiration trends over the last month."
 dependencies:
   tools:
     - type: "mcp"

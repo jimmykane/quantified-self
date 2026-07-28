@@ -1,6 +1,6 @@
 ---
 name: analyze-quantified-self-sleep
-description: Analyze the user's authorized Quantified Self sleep data through its read-only MCP tools. Use for sleep sessions, duration, stages, efficiency, naps, bedtime or wake-time patterns, and sleep-oriented recovery trends; use the cross-domain Quantified Self skill when comparing sleep with training, measurements, or activities.
+description: Analyze the user's authorized Quantified Self sleep data through its read-only MCP tools. Use for sleep sessions, duration, stages, efficiency, naps, bedtime or wake-time patterns, HRV, sleep heart rate, blood oxygen, respiration, and sleep-oriented recovery trends; use the cross-domain Quantified Self skill when comparing sleep with training, measurements, or activities.
 ---
 
 # Analyze Sleep
@@ -17,14 +17,20 @@ returned.
    read. Use capability discovery only for availability questions, and request individual sessions only when nightly
    timing or variation matters. When naps are requested, keep the main-sleep headline separate and report naps and any
    nap-inclusive total explicitly unless the user asks for a combined headline.
-3. Preserve local-day boundaries, units, session counts, stage coverage, missing values, and pagination state.
-4. Compare like periods and state when sparse sessions, excluded naps, or incomplete stage data limit the conclusion.
-5. For a compact same-day morning readout, use the server's advertised daily-briefing tool only when both sleep and
+3. Preserve the exact returned statistic and unit for every vital. In particular, label maximum blood-oxygen saturation
+   as a maximum and average respiration as an average; do not silently reinterpret either as an overnight mean,
+   minimum, desaturation event, or diagnosis.
+4. Preserve local-day boundaries, units, session counts, stage coverage, vital coverage, missing values, and pagination
+   state.
+5. Compare like periods and state when sparse sessions, excluded naps, or incomplete stage or vital data limit the
+   conclusion.
+6. For a compact same-day morning readout, use the server's advertised daily-briefing tool only when both sleep and
    Training-metrics access are available. Supply the user's explicit IANA timezone. It is a current-context shortcut,
    not a historical sleep trend or a medical assessment.
-6. If the user asks specifically how today's Training readiness incorporates sleep or HRV, use the advertised
+7. If the user asks specifically how today's Training readiness incorporates sleep or HRV, use the advertised
    live-readiness capability when both permissions are present. Keep its latest safe aggregate HRV/heart-rate values,
-   same-provider baseline medians, ratios, and evidence states distinct from the longer sleep trend.
+   same-provider baseline medians, ratios, and evidence states distinct from the longer sleep trend. Readiness does not
+   include blood oxygen or respiration; query the ordinary sleep trend separately when the user asks about those vitals.
 
 ## Limits
 
@@ -35,10 +41,14 @@ returned.
   outcomes.
 - Treat unavailable aggregate vital types as missing source data for that period; do not infer them from Training
   readiness or from raw samples, which are never exposed.
+- Do not describe maximum blood oxygen as average or minimum SpO₂, and do not infer oxygen desaturations, sleep apnea,
+  illness, or respiratory events from the aggregate.
 - Do not interpret missing stages as zero or use a provider filter unless the user asks for it.
 - Discuss sleep and recovery patterns without diagnosing a condition or claiming that sleep caused another outcome.
 
 ## Response
 
 - Lead with the sleep trend and period, then show the supporting duration, timing, stage, or session evidence.
-- State the timezone, nap treatment, and material coverage limitations.
+- When the user asks about recorded sleep vitals, include the available HRV, sleep heart-rate, blood-oxygen, and
+  respiration values that answer the question; do not bury a recorded requested vital behind duration or score alone.
+- State the timezone, nap treatment, exact vital statistic, and material coverage limitations.

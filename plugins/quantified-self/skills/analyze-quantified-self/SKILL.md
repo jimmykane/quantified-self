@@ -16,7 +16,9 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    between them before choosing a workflow.
 2. Discover the relevant measurement, metric, sleep, activity, or route capabilities before concluding that data are
    unavailable. For a sleep-vital comparison, prefer the one-call sleep trend capability so coverage and grouped values
-   share one bounded read rather than searching activity metrics or inferring from Training readiness.
+   share one bounded read rather than searching activity metrics or inferring from Training readiness. Preserve whether
+   the returned blood-oxygen statistic is a maximum and respiration is an average; neither belongs to the Readiness
+   formula, so request the sleep trend separately when the comparison needs them.
 3. Choose one bounded comparison period and IANA timezone. Query the cheapest summary from each domain before
    requesting individual sessions, activities, charts, or locations. For individual activities, discover canonical
    activity types before filtering; use timezone-aware relative periods for today or yesterday, and preserve the same
@@ -50,6 +52,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 - A daily briefing is a limited current-context projection: its latest completed sleep, current-versus-usual Training
   summary, and readiness status do not establish a long-term trend or causation.
 - The live readiness result explains the current score inputs; it is not itself a multi-day HRV or sleep trend.
+- Do not infer oxygen desaturations, respiratory events, illness, or a diagnosis from aggregate blood-oxygen or
+  respiration values.
 - Describe trends and uncertainty without diagnosing a condition or presenting the result as medical advice.
 
 ## Response Style

@@ -765,7 +765,10 @@ payload schema, structured-output fixture, and positive and negative redaction-c
 MCP reads normalized `users/{uid}/sleepSessions` documents through a Firestore field mask and creates a new allowlisted
 response. The read projection includes only the provider name, normalized timezone offset needed for Suunto readiness
 date grouping, and fields eligible for the response; raw samples, provider identifiers, provider-specific timestamps,
-and score components do not enter the MCP process. Session output may include provider, sleep
+and score components do not enter the MCP process. The fixed aggregate-vital allowlist covers average, minimum, and
+resting sleep heart rate; average and overnight HRV plus HRV sample count; maximum SpO₂; and average respiration.
+Garmin's maximum SpO₂ is normalized from its finite recorded sleep samples during ingestion so MCP can return the safe
+aggregate without loading or exposing the source series. Session output may include provider, sleep
 date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized score value/qualifier,
 and aggregate vitals. Missing optional numeric measurements remain unavailable and do not contribute zeroes to summary
 averages. The lower-level `list_sleep_vitals` reports only the safe vital types that have at least one recorded session in the
