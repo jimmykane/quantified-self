@@ -136,6 +136,44 @@ describe('ChartsSleepTrendComponent', () => {
     expect(visibleLabelCount).toBeLessThanOrEqual(10);
   });
 
+  it('uses weekday labels for sleep points from the current week', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 28, 12));
+    const currentWeekPoint = buildSleepPoint({
+      id: 'monday-sleep',
+      sleepDate: '2026-07-27',
+      categoryLabel: 'Mon, Jul 27',
+      startTimeMs: new Date(2026, 6, 26, 22).getTime(),
+      endTimeMs: new Date(2026, 6, 27, 6).getTime(),
+    });
+    const previousWeekPoint = buildSleepPoint({
+      id: 'sunday-sleep',
+      sleepDate: '2026-07-26',
+      categoryLabel: 'Sun, Jul 26',
+      startTimeMs: new Date(2026, 6, 25, 22).getTime(),
+      endTimeMs: new Date(2026, 6, 26, 6).getTime(),
+    });
+    component.sleepTrend = {
+      points: [previousWeekPoint, currentWeekPoint],
+      latestPoint: currentWeekPoint,
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const formatter = option?.xAxis?.axisLabel?.formatter as (value: string, index: number) => string;
+
+    expect(formatter('Sun, Jul 26', 0)).toBe('Sun, Jul 26');
+    expect(formatter('Mon, Jul 27', 1)).toBe('Mon');
+    vi.useRealTimers();
+  });
+
   it('reserves header space while sleep controls live in the tile header', () => {
     component.sleepRange = '30d';
     component.sleepWindowLabel = 'Last 30 days';
