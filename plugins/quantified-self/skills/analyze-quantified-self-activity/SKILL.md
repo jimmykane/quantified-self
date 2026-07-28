@@ -9,14 +9,14 @@ Resolve activities through opaque public references and request only the detail 
 
 ## Workflow
 
-1. Find the target activity and retain its opaque activity reference. For an unfiltered “latest activity” or “last
-   workout,” omit the date bounds and request one newest-first result. If the user names an activity type, such as their
-   latest run, omit the date bounds but inspect newest-first pages until the first matching type; do not mistake a newer
-   different activity for the requested one. For “today” or another calendar date, use explicit bounds for the user's
-   local day. Follow a returned cursor before concluding that no suitable activity exists. Never infer that an
-   individual workout is unavailable from aggregate metrics or a Training snapshot. When a family term such as run
-   could include trail, treadmill, indoor, or virtual variants, clarify only when that distinction can change the
-   answer.
+1. Find the target activity and retain its opaque activity reference. Discover canonical activity types when the user
+   names a sport, then apply the server-side activity-type filter. For “latest” or “last,” omit date selectors and
+   request one matching newest-first result. For “today” or “yesterday,” use the relative-period input with the user's
+   IANA timezone; use explicit paired bounds for another calendar date. Repeat the original filters with a returned
+   cursor until a match is found or the scan reports completion. Never infer that an individual workout is unavailable
+   from aggregate metrics or a Training snapshot. When a family term such as run could include trail, treadmill,
+   indoor, or virtual variants, use the catalog's group/indoor hints and clarify only when that distinction can change
+   the answer.
 2. Use the activity summary first. Request selected canonical metrics, laps, jumps, or swim lengths only when relevant
    to the activity type and question.
 3. Before charting, discover the chart metrics supported for the activity type. Request only the needed series and

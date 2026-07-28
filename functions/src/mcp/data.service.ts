@@ -132,6 +132,8 @@ const OPAQUE_VALUE_NONCE_BYTES = 12;
 const OPAQUE_VALUE_AUTH_TAG_BYTES = 16;
 const MAX_ACTIVITY_LIST_BYTES = 512 * 1024;
 const MAX_ACTIVITY_PAGE_SIZE = 100;
+const MAX_ACTIVITY_LIST_SCAN_DOCUMENTS = 100;
+const RELATIVE_DAY_FORWARD_PROBE_MS = 36 * 60 * 60 * 1000;
 const MAX_ACTIVITY_DETAIL_ENTRIES = 10_000;
 const MAX_ACTIVITY_DETAIL_BYTES = 512 * 1024;
 const MAX_ACTIVITY_DETAIL_RESPONSE_BYTES = 256 * 1024;
@@ -141,6 +143,7 @@ const MAX_ACTIVITY_METRIC_DOCUMENT_BYTES = 64 * 1024;
 const MAX_ACTIVITY_METRIC_RESPONSE_BYTES = 32 * 1024;
 const MAX_ROUTE_LIST_BYTES = 512 * 1024;
 const MAX_ROUTE_PAGE_SIZE = 100;
+const MAX_ROUTE_LIST_SCAN_DOCUMENTS = 100;
 const MAX_ROUTE_PREVIEW_SEGMENTS = 20;
 const MAX_ROUTE_PREVIEW_POINTS = 5_000;
 const MAX_ROUTE_PREVIEW_BYTES = 256 * 1024;
@@ -229,6 +232,27 @@ interface OrderedDocumentCursor {
 interface ActivityListCursor extends OrderedDocumentCursor {
   startTimeMs: number | null;
   endTimeMs: number | null;
+  activityTypesHash?: string;
+  relativePeriod?: McpActivityRelativePeriod | null;
+  timeZone?: string | null;
+}
+
+interface RouteListCursor extends OrderedDocumentCursor {
+  activityTypesHash?: string;
+  searchHash?: string;
+}
+
+interface ResolvedActivityListQuery {
+  startTimeMs?: number;
+  endTimeMs?: number;
+  activityTypes: string[];
+  relativePeriod: McpActivityRelativePeriod | null;
+  timeZone: string | null;
+}
+
+interface ResolvedRouteListQuery {
+  activityTypes: string[];
+  search: string | null;
 }
 
 type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
@@ -326,6 +350,7 @@ interface ActivityChartContextDocuments {
 }
 
 export interface McpDataServiceDependencies {
+  now: () => number;
   fetchMetricDiscoveryDocuments: (
     uid: string,
     limit: number,
@@ -470,6 +495,7 @@ async function readStorageFileWithinLimit(
 }
 
 const defaultDependencies: McpDataServiceDependencies = {
+  now: () => Date.now(),
   fetchMetricDiscoveryDocuments: async (uid, limit) => {
     const snapshot = await admin.firestore()
       .collection('users')
@@ -900,6 +926,13 @@ function validateOptionalBoundedRange(
   }
 }
 
+export const MCP_ACTIVITY_RELATIVE_PERIODS = [
+  'today',
+  'yesterday',
+] as const;
+export type McpActivityRelativePeriod =
+  typeof MCP_ACTIVITY_RELATIVE_PERIODS[number];
+
 function requireTimeZone(timeZone: string): string {
   const normalized = `${timeZone || ''}`.trim();
   if (!isValidIanaTimeZone(normalized)) {
@@ -1058,19 +1091,32 @@ function decodeOpaqueValue(
   }
 }
 
-function decodeOrderedCursor(
-  kind: 'route_cursor',
+function decodeRouteListCursor(
   cursor: string | undefined,
-  uid: string,
-  connectionId: string,
+  input: Pick<ListRoutesInput, 'uid' | 'connectionId'>,
+  query: ResolvedRouteListQuery,
 ): OrderedDocumentCursor | undefined {
   if (!cursor) {
     return undefined;
   }
-  const parsed = decodeOpaqueValue(kind, cursor, uid, connectionId, 'pagination cursor');
+  const parsed = decodeOpaqueValue(
+    'route_cursor',
+    cursor,
+    input.uid,
+    input.connectionId,
+    'pagination cursor',
+  ) as unknown as Partial<RouteListCursor>;
+  const cursorActivityTypesHash = parsed.activityTypesHash
+    ?? buildActivityTypesHash([]);
+  const cursorSearchHash = parsed.searchHash
+    ?? buildRouteSearchHash(null);
   if (
     !Number.isSafeInteger(parsed.timeMs)
     || !isValidFirestoreDocumentId(parsed.id)
+    || typeof cursorActivityTypesHash !== 'string'
+    || cursorActivityTypesHash !== buildActivityTypesHash(query.activityTypes)
+    || typeof cursorSearchHash !== 'string'
+    || cursorSearchHash !== buildRouteSearchHash(query.search)
   ) {
     throw new McpDataError('invalid_request', 'The pagination cursor is invalid.');
   }
@@ -1080,13 +1126,16 @@ function decodeOrderedCursor(
   };
 }
 
-function encodeOrderedCursor(
-  kind: 'route_cursor',
+function encodeRouteListCursor(
   cursor: OrderedDocumentCursor,
-  uid: string,
-  connectionId: string,
+  input: Pick<ListRoutesInput, 'uid' | 'connectionId'>,
+  query: ResolvedRouteListQuery,
 ): string {
-  return encodeOpaqueValue(kind, cursor as unknown as Record<string, unknown>, uid, connectionId);
+  return encodeOpaqueValue('route_cursor', {
+    ...cursor,
+    activityTypesHash: buildActivityTypesHash(query.activityTypes),
+    searchHash: buildRouteSearchHash(query.search),
+  }, input.uid, input.connectionId);
 }
 
 function decodeNearbyCursor(
@@ -1132,13 +1181,34 @@ function encodeNearbyCursor(
   }, uid, connectionId);
 }
 
+function buildActivityTypesHash(activityTypes: readonly string[]): string {
+  return createHash('sha256')
+    .update(JSON.stringify([...activityTypes].sort()), 'utf8')
+    .digest('base64url');
+}
+
+function buildRouteSearchHash(search: string | null): string {
+  return createHash('sha256')
+    .update(search ?? '', 'utf8')
+    .digest('base64url');
+}
+
 function decodeActivityListCursor(
   cursor: string | undefined,
   input: Pick<
     ListActivitiesInput,
-    'uid' | 'connectionId' | 'startTimeMs' | 'endTimeMs'
+    | 'uid'
+    | 'connectionId'
+    | 'startTimeMs'
+    | 'endTimeMs'
+    | 'relativePeriod'
+    | 'timeZone'
   >,
-): OrderedDocumentCursor | undefined {
+  activityTypes: readonly string[],
+): {
+  cursor: OrderedDocumentCursor;
+  query: ResolvedActivityListQuery;
+} | undefined {
   if (!cursor) {
     return undefined;
   }
@@ -1151,6 +1221,13 @@ function decodeActivityListCursor(
   ) as unknown as Partial<ActivityListCursor>;
   const cursorStartTimeMs = parsed.startTimeMs ?? null;
   const cursorEndTimeMs = parsed.endTimeMs ?? null;
+  const cursorActivityTypesHash = parsed.activityTypesHash
+    ?? buildActivityTypesHash([]);
+  const cursorRelativePeriod = parsed.relativePeriod ?? null;
+  const cursorTimeZone = parsed.timeZone ?? null;
+  const requestedRelativePeriod = input.relativePeriod ?? null;
+  const requestedTimeZone = input.timeZone ?? null;
+  const relativeCursor = requestedRelativePeriod !== null;
   if (
     !Number.isSafeInteger(parsed.timeMs)
     || !isValidFirestoreDocumentId(parsed.id)
@@ -1162,28 +1239,55 @@ function decodeActivityListCursor(
       cursorEndTimeMs !== null
       && !Number.isSafeInteger(cursorEndTimeMs)
     )
-    || cursorStartTimeMs !== (input.startTimeMs ?? null)
-    || cursorEndTimeMs !== (input.endTimeMs ?? null)
+    || cursorActivityTypesHash !== buildActivityTypesHash(activityTypes)
+    || cursorRelativePeriod !== requestedRelativePeriod
+    || cursorTimeZone !== requestedTimeZone
+    || (
+      relativeCursor
+      && (
+        cursorStartTimeMs === null
+        || cursorEndTimeMs === null
+        || cursorStartTimeMs > cursorEndTimeMs
+        || cursorEndTimeMs - cursorStartTimeMs > MAX_EVENT_QUERY_RANGE_MS
+      )
+    )
+    || (
+      !relativeCursor
+      && (
+        cursorStartTimeMs !== (input.startTimeMs ?? null)
+        || cursorEndTimeMs !== (input.endTimeMs ?? null)
+      )
+    )
   ) {
     throw new McpDataError('invalid_request', 'The pagination cursor is invalid.');
   }
   return {
-    timeMs: Number(parsed.timeMs),
-    id: parsed.id,
+    cursor: {
+      timeMs: Number(parsed.timeMs),
+      id: parsed.id,
+    },
+    query: {
+      startTimeMs: cursorStartTimeMs ?? undefined,
+      endTimeMs: cursorEndTimeMs ?? undefined,
+      activityTypes: [...activityTypes],
+      relativePeriod: requestedRelativePeriod,
+      timeZone: requestedTimeZone,
+    },
   };
 }
 
 function encodeActivityListCursor(
   cursor: OrderedDocumentCursor,
-  input: Pick<
-    ListActivitiesInput,
-    'uid' | 'connectionId' | 'startTimeMs' | 'endTimeMs'
-  >,
+  input: Pick<ListActivitiesInput, 'uid' | 'connectionId'>,
+  query: ResolvedActivityListQuery,
 ): string {
   return encodeOpaqueValue('activity_cursor', {
     ...cursor,
-    startTimeMs: input.startTimeMs ?? null,
-    endTimeMs: input.endTimeMs ?? null,
+    startTimeMs: query.startTimeMs ?? null,
+    endTimeMs: query.endTimeMs ?? null,
+    activityTypesHash: buildActivityTypesHash(query.activityTypes),
+    relativePeriod: query.relativePeriod,
+    timeZone: query.timeZone,
   }, input.uid, input.connectionId);
 }
 
@@ -1907,6 +2011,12 @@ function buildMeasurementPoints(
 }
 
 function resolveActivityTypes(activityTypes: readonly string[] | undefined): ActivityTypes[] {
+  if ((activityTypes || []).length > 20) {
+    throw new McpDataError(
+      'invalid_request',
+      'At most 20 activity types can be requested.',
+    );
+  }
   return (activityTypes || []).map((activityType) => {
     const resolved = ActivityTypesHelper.resolveActivityType(activityType);
     if (!resolved) {
@@ -1914,6 +2024,157 @@ function resolveActivityTypes(activityTypes: readonly string[] | undefined): Act
     }
     return resolved;
   });
+}
+
+function resolveCanonicalActivityTypes(
+  activityTypes: readonly string[] | undefined,
+): string[] {
+  return [
+    ...new Set(resolveActivityTypes(activityTypes).map(String)),
+  ].sort();
+}
+
+function normalizeRouteSearch(search: string | undefined): string | null {
+  const normalized = `${search || ''}`.trim().toLowerCase();
+  if (normalized.length > 120) {
+    throw new McpDataError(
+      'invalid_request',
+      'Route search text must not exceed 120 characters.',
+    );
+  }
+  return normalized || null;
+}
+
+function resolveRouteListQuery(input: ListRoutesInput): {
+  cursor?: OrderedDocumentCursor;
+  query: ResolvedRouteListQuery;
+} {
+  const query: ResolvedRouteListQuery = {
+    activityTypes: resolveCanonicalActivityTypes(input.activityTypes),
+    search: normalizeRouteSearch(input.search),
+  };
+  return {
+    cursor: decodeRouteListCursor(input.cursor, input, query),
+    query,
+  };
+}
+
+function resolveRelativeActivityRange(
+  relativePeriod: McpActivityRelativePeriod,
+  timeZone: string,
+  nowTimeMs: number,
+): {
+  startTimeMs: number;
+  endTimeMs: number;
+} {
+  if (!Number.isSafeInteger(nowTimeMs)) {
+    throw new McpDataError(
+      'temporarily_unavailable',
+      'The current activity date could not be resolved.',
+    );
+  }
+  const todayStartTimeMs = resolveDateAggregationBucketStart(
+    new Date(nowTimeMs),
+    TimeIntervals.Daily,
+    timeZone,
+  );
+  if (relativePeriod === 'yesterday') {
+    const startTimeMs = resolveDateAggregationBucketStart(
+      new Date(todayStartTimeMs - 1),
+      TimeIntervals.Daily,
+      timeZone,
+    );
+    return {
+      startTimeMs,
+      endTimeMs: todayStartTimeMs - 1,
+    };
+  }
+  const nextDayStartTimeMs = resolveDateAggregationBucketStart(
+    new Date(todayStartTimeMs + RELATIVE_DAY_FORWARD_PROBE_MS),
+    TimeIntervals.Daily,
+    timeZone,
+  );
+  return {
+    startTimeMs: todayStartTimeMs,
+    endTimeMs: nextDayStartTimeMs - 1,
+  };
+}
+
+function resolveActivityListQuery(
+  dependencies: Pick<McpDataServiceDependencies, 'now'>,
+  input: ListActivitiesInput,
+): {
+  cursor?: OrderedDocumentCursor;
+  query: ResolvedActivityListQuery;
+} {
+  const activityTypes = resolveCanonicalActivityTypes(input.activityTypes);
+  const relativePeriod = input.relativePeriod ?? null;
+  if (
+    relativePeriod !== null
+    && !MCP_ACTIVITY_RELATIVE_PERIODS.includes(relativePeriod)
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      'relativePeriod must be today or yesterday.',
+    );
+  }
+  if (
+    relativePeriod !== null
+    && (input.startTimeMs !== undefined || input.endTimeMs !== undefined)
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      'relativePeriod cannot be combined with start or end.',
+    );
+  }
+  if (relativePeriod === null && input.timeZone !== undefined) {
+    throw new McpDataError(
+      'invalid_request',
+      'timeZone is allowed only with relativePeriod.',
+    );
+  }
+  const timeZone = relativePeriod === null
+    ? null
+    : requireTimeZone(input.timeZone || '');
+  if (relativePeriod === null) {
+    validateOptionalBoundedRange(input.startTimeMs, input.endTimeMs);
+  }
+
+  const decoded = decodeActivityListCursor(
+    input.cursor,
+    {
+      ...input,
+      relativePeriod: relativePeriod ?? undefined,
+      timeZone: timeZone ?? undefined,
+    },
+    activityTypes,
+  );
+  if (decoded) {
+    return decoded;
+  }
+  if (relativePeriod !== null && timeZone !== null) {
+    return {
+      query: {
+        ...resolveRelativeActivityRange(
+          relativePeriod,
+          timeZone,
+          dependencies.now(),
+        ),
+        activityTypes,
+        relativePeriod,
+        timeZone,
+      },
+    };
+  }
+  return {
+    query: {
+      startTimeMs: input.startTimeMs,
+      endTimeMs: input.endTimeMs,
+      activityTypes,
+      relativePeriod: null,
+      timeZone: null,
+    },
+  };
 }
 
 function eventMatchesActivityFilter(event: EventInterface, activityTypes: readonly ActivityTypes[]): boolean {
@@ -2281,6 +2542,9 @@ export interface ListActivitiesInput {
   appBaseUrl: string;
   startTimeMs?: number;
   endTimeMs?: number;
+  activityTypes?: readonly string[];
+  relativePeriod?: McpActivityRelativePeriod;
+  timeZone?: string;
   includeLocation?: boolean;
   cursor?: string;
   limit?: number;
@@ -2336,6 +2600,8 @@ export interface ListRoutesInput {
   uid: string;
   connectionId: string;
   appBaseUrl: string;
+  activityTypes?: readonly string[];
+  search?: string;
   includeLocation?: boolean;
   cursor?: string;
   limit?: number;
@@ -2555,6 +2821,10 @@ function routeActivityTypesMatch(
   filters: readonly string[],
 ): boolean {
   return filters.length === 0 || filters.some(filter => candidates.includes(filter));
+}
+
+function routeNameMatches(candidate: string, search: string | null): boolean {
+  return search === null || candidate.toLowerCase().includes(search);
 }
 
 function projectActivityListEntry(
@@ -3017,6 +3287,26 @@ export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
   return {
+    listActivityTypes() {
+      const activityTypes = ActivityTypesHelper
+        .getActivityTypesAsUniqueArray()
+        .flatMap((activityType) => {
+          const resolved = ActivityTypesHelper.resolveActivityType(activityType);
+          return resolved
+            ? [{
+                activityType: resolved,
+                activityGroup: String(
+                  ActivityTypesHelper.getActivityGroupForActivityType(resolved),
+                ),
+                indoor: ActivityTypesHelper.isIndoorActivityType(resolved),
+              }]
+            : [];
+        });
+      return {
+        activityTypeCount: activityTypes.length,
+        activityTypes,
+      };
+    },
     listActivityChartMetrics(activityType?: string) {
       return listActivityChartMetrics(activityType);
     },
@@ -3224,17 +3514,21 @@ export function createMcpDataService(
     },
 
     async listActivities(input: ListActivitiesInput) {
-      validateOptionalBoundedRange(input.startTimeMs, input.endTimeMs);
+      const {
+        cursor,
+        query,
+      } = resolveActivityListQuery(dependencies, input);
       const limit = Math.min(
         MAX_ACTIVITY_PAGE_SIZE,
         Math.max(1, Math.floor(input.limit || 25)),
       );
-      const cursor = decodeActivityListCursor(input.cursor, input);
-      const scanLimit = limit;
+      const scanLimit = query.activityTypes.length
+        ? MAX_ACTIVITY_LIST_SCAN_DOCUMENTS
+        : limit;
       const documents = await dependencies.fetchActivityDocuments(
         input.uid,
-        input.startTimeMs,
-        input.endTimeMs,
+        query.startTimeMs,
+        query.endTimeMs,
         scanLimit + 1,
         cursor,
         input.includeLocation,
@@ -3245,9 +3539,13 @@ export function createMcpDataService(
           'The activity query returned more data than requested.',
         );
       }
-      const scannedDocuments = documents.slice(0, scanLimit);
+
+      const activities: SafeActivityListEntry['summary'][] = [];
+      let scannedActivityCount = 0;
+      let skippedActivityCount = 0;
       let cumulativeBytes = 0;
-      const entries = scannedDocuments.flatMap((document) => {
+      let lastScannedDocument: RawDocument | undefined;
+      for (const document of documents.slice(0, scanLimit)) {
         cumulativeBytes += measureJsonBytes(
           document.data,
           'The activity list contains data that cannot be processed safely.',
@@ -3258,26 +3556,49 @@ export function createMcpDataService(
             'The activity list exceeds the MCP processing limit.',
           );
         }
+        scannedActivityCount += 1;
+        lastScannedDocument = document;
         const entry = projectActivityListEntry(document, input);
-        return entry ? [entry] : [];
-      });
-      const page = entries.slice(0, limit);
-      const scanTruncated = documents.length > scanLimit;
-      const lastScannedDocument = scannedDocuments[scannedDocuments.length - 1];
+        if (
+          !entry
+          || !activityTypeMatches(entry.summary.activityType, query.activityTypes)
+        ) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        activities.push(entry.summary);
+        if (activities.length >= limit) {
+          break;
+        }
+      }
+      const hasMore = scannedActivityCount < documents.length;
       const lastScannedTimeMs = asTimestampMs(lastScannedDocument?.data.eventStartDate);
-      const nextCursor = scanTruncated
-        && lastScannedDocument
-        && lastScannedTimeMs !== null
-        && isValidFirestoreDocumentId(lastScannedDocument.id)
+      if (
+        hasMore
+        && (
+          !lastScannedDocument
+          || lastScannedTimeMs === null
+          || !isValidFirestoreDocumentId(lastScannedDocument.id)
+        )
+      ) {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'The activity query could not be paginated safely.',
+        );
+      }
+      const nextCursor = hasMore && lastScannedDocument && lastScannedTimeMs !== null
         ? encodeActivityListCursor({
             timeMs: lastScannedTimeMs,
             id: lastScannedDocument.id,
-          }, input)
+          }, input, query)
         : null;
 
       return {
-        activities: page.map(entry => entry.summary),
+        scannedActivityCount,
+        skippedActivityCount,
+        activities,
         nextCursor,
+        scanComplete: nextCursor === null,
       };
     },
 
@@ -3463,17 +3784,17 @@ export function createMcpDataService(
     },
 
     async listRoutes(input: ListRoutesInput) {
+      const {
+        cursor,
+        query,
+      } = resolveRouteListQuery(input);
       const limit = Math.min(
         MAX_ROUTE_PAGE_SIZE,
         Math.max(1, Math.floor(input.limit || 25)),
       );
-      const cursor = decodeOrderedCursor(
-        'route_cursor',
-        input.cursor,
-        input.uid,
-        input.connectionId,
-      );
-      const scanLimit = limit;
+      const scanLimit = query.activityTypes.length || query.search !== null
+        ? MAX_ROUTE_LIST_SCAN_DOCUMENTS
+        : limit;
       const documents = await dependencies.fetchRouteDocuments(
         input.uid,
         scanLimit + 1,
@@ -3486,9 +3807,12 @@ export function createMcpDataService(
           'The route query returned more data than requested.',
         );
       }
-      const scannedDocuments = documents.slice(0, scanLimit);
+      const routes: SafeRouteListEntry['summary'][] = [];
+      let scannedRouteCount = 0;
+      let skippedRouteCount = 0;
       let cumulativeBytes = 0;
-      const entries = scannedDocuments.flatMap((document) => {
+      let lastScannedDocument: RawDocument | undefined;
+      for (const document of documents.slice(0, scanLimit)) {
         cumulativeBytes += measureJsonBytes(
           document.data,
           'The route list contains data that cannot be processed safely.',
@@ -3499,26 +3823,50 @@ export function createMcpDataService(
             'The route list exceeds the MCP processing limit.',
           );
         }
+        scannedRouteCount += 1;
+        lastScannedDocument = document;
         const entry = projectRouteListEntry(document, input);
-        return entry ? [entry] : [];
-      });
-      const page = entries.slice(0, limit);
-      const scanTruncated = documents.length > scanLimit;
-      const lastScannedDocument = scannedDocuments[scannedDocuments.length - 1];
+        if (
+          !entry
+          || !routeActivityTypesMatch(entry.summary.activityTypes, query.activityTypes)
+          || !routeNameMatches(entry.summary.name, query.search)
+        ) {
+          skippedRouteCount += 1;
+          continue;
+        }
+        routes.push(entry.summary);
+        if (routes.length >= limit) {
+          break;
+        }
+      }
+      const hasMore = scannedRouteCount < documents.length;
       const lastScannedTimeMs = asTimestampMs(lastScannedDocument?.data.importedAt);
-      const nextCursor = scanTruncated
-        && lastScannedDocument
-        && lastScannedTimeMs !== null
-        && isValidFirestoreDocumentId(lastScannedDocument.id)
-        ? encodeOrderedCursor('route_cursor', {
+      if (
+        hasMore
+        && (
+          !lastScannedDocument
+          || lastScannedTimeMs === null
+          || !isValidFirestoreDocumentId(lastScannedDocument.id)
+        )
+      ) {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'The route query could not be paginated safely.',
+        );
+      }
+      const nextCursor = hasMore && lastScannedDocument && lastScannedTimeMs !== null
+        ? encodeRouteListCursor({
             timeMs: lastScannedTimeMs,
             id: lastScannedDocument.id,
-          }, input.uid, input.connectionId)
+          }, input, query)
         : null;
 
       return {
-        routes: page.map(entry => entry.summary),
+        scannedRouteCount,
+        skippedRouteCount,
+        routes,
         nextCursor,
+        scanComplete: nextCursor === null,
       };
     },
 

@@ -188,6 +188,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     },
     ActivityTypesHelper: {
         resolveActivityType: actual.ActivityTypesHelper.resolveActivityType.bind(actual.ActivityTypesHelper),
+        getActivityTypesAsUniqueArray:
+            actual.ActivityTypesHelper.getActivityTypesAsUniqueArray.bind(
+                actual.ActivityTypesHelper,
+            ),
         getActivityGroupForActivityType: (activityType: string) => {
             const resolvedActivityType = actual.ActivityTypesHelper
                 .resolveActivityType(activityType);

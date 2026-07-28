@@ -810,6 +810,14 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('exact source measurement timestamps');
     expect(dataAndPrivacySection?.content).toContain('provider/device metadata');
     expect(dataAndPrivacySection?.content).toContain('bounded chart-ready heart-rate');
+    expect(dataAndPrivacySection?.content).toContain('canonical Sports Lib activity types');
+    expect(dataAndPrivacySection?.content).toContain('filter newest-first activity scans');
+    expect(dataAndPrivacySection?.content).toContain('explicit IANA timezone');
+    expect(dataAndPrivacySection?.content).toContain('complete no-match result');
+    expect(dataAndPrivacySection?.content).toContain('your latest run');
+    expect(dataAndPrivacySection?.content).toContain('today’s or yesterday’s workouts');
+    expect(dataAndPrivacySection?.content).toContain('case-insensitive part of the route name');
+    expect(dataAndPrivacySection?.content).toContain('older history');
     expect(dataAndPrivacySection?.content).toContain('without a reparse, backfill, cache');
     expect(dataAndPrivacySection?.content).toContain('imported device/provider source keys are removed');
     expect(dataAndPrivacySection?.content).toContain('exact activity start/end coordinates');

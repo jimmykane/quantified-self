@@ -388,14 +388,15 @@ The analytics and map entries follow the
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Paginated newest-first safe activity summaries, optional paired date bounds, opaque references, signed-in app links, and optional exact start/end coordinates |
+| `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
 | `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
-| `list_routes` | `routes:read` | Paginated non-location saved-route summaries, opaque references, and signed-in app links; exact bounds require `route-location:read` |
+| `list_routes` | `routes:read` | Bounded newest-first scans with optional activity-type and case-insensitive name filters, opaque references, and signed-in app links; exact bounds require `route-location:read` |
 | `find_routes_near_location` | `routes:read` + `route-location:read` | Bounded newest-first scan measuring a location against persisted route previews |
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
@@ -438,7 +439,7 @@ response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVI
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 19 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 20 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -560,16 +561,25 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
-Activity discovery metadata explicitly maps workout, exercise-session, today, last, latest, and most-recent requests to
-`list_activities`. The list is always newest first. `start` and `end` are an optional pair: when omitted, the query starts
-at the newest persisted activity across the user's history, so an unfiltered latest-workout request starts with a
-bounded `limit: 1` call. A typed request such as “latest run” instead inspects newest-first pages until the first matching
-activity type; a newer activity of another type is not a match. When dates are present, the existing 366-day range limit
-applies. Clients follow `nextCursor` before concluding that no matching activity exists, including when an unusable
-stored document was safely skipped. Aggregate event metrics and Training snapshots are not evidence that an individual
-activity is unavailable, and scope-aware server instructions direct clients to check the activity list before making
-that conclusion. Activity-list cursors bind both to the connection and to either the exact requested range or the
-explicit unbounded mode.
+Activity discovery metadata explicitly maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
+named-sport requests to `list_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
+plus their group and indoor hints; filters accept those values or aliases recognized by Sports Lib and canonicalize
+them before scanning. A request such as “latest run” therefore uses a server-side type filter with `limit: 1`, so a newer
+activity of another type is skipped instead of being mistaken for the requested workout.
+
+The list is always newest first. `start` and `end` remain an optional explicit pair with the existing 366-day limit.
+Alternatively, `relativePeriod: "today" | "yesterday"` requires an explicit IANA `timeZone` and resolves the exact local
+calendar-day boundaries, including DST-short and DST-long days. Date selectors are mutually exclusive. Omitting every
+date selector starts at the newest persisted activity across all history. A relative-period cursor retains the first
+page's resolved millisecond range, so crossing local midnight between pages cannot move the query window.
+
+One filtered call scans at most 100 selected activity documents and can return fewer matches than requested.
+`scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
+from a partial scan. Clients repeat the original activity types and date-selection inputs with `nextCursor` until a
+match is found or `scanComplete` is true. The encrypted cursor is bound to the connection, canonical activity-type set,
+relative-period/timezone mode, and resolved or explicit date range; the type set is represented by a fixed SHA-256
+digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
+snapshots are not evidence that an individual activity is unavailable.
 
 `find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
 scope, it reuses the location field mask and safe summary projection. It matches only the persisted
@@ -607,10 +617,15 @@ available and within budgets; no backfill or persistent cache is created.
 ## Saved-route projection
 
 `routes:read` lists `users/{uid}/routes` through a field mask containing the route name, timestamps, activity types,
-counts, and the same fixed summary-stat allowlist. Bounds enter the field mask only with `route-location:read`; otherwise
-they are omitted and `locationRedacted` is true. It excludes source/delivery provenance, provider IDs, Storage
-metadata, creator data, route comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and
-cursors use the same UID-and-connection-bound authenticated-encryption design as activity references.
+counts, and the same fixed summary-stat allowlist. `list_routes` can filter the bounded newest-first scan by canonical
+Sports Lib activity types and/or a normalized case-insensitive substring of the route name. Each call scans at most 100
+selected documents and reports scanned/skipped counts, `nextCursor`, and `scanComplete`. Clients repeat the original
+filters until a match is found or the scan completes. The encrypted cursor binds the canonical activity-type set and
+normalized search text to the connection through fixed SHA-256 digests, keeping the cursor within its length limit.
+Bounds enter the field mask only with `route-location:read`; otherwise they are omitted and `locationRedacted` is true.
+The projection excludes source/delivery provenance, provider IDs, Storage metadata, creator data, route
+comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and cursors use the same
+UID-and-connection-bound authenticated-encryption design as activity references.
 
 `get_route_geometry`, `find_routes_near_location`, and `list_route_waypoints` are not registered without
 `route-location:read`, and missing permission is rejected before preview, Storage, parser, or Mapbox work.
@@ -636,11 +651,13 @@ validated coordinates, altitude, distance, route/point indexes, and a short norm
 descriptions, links, extensions, raw source bytes, and track points are never returned. The direct route URL uses the
 existing `/user/{uid}/route/{routeId}` page and still requires normal sign-in.
 
-The activity list orders on `eventStartDate` and applies an optional paired range on the same field; the route list
-orders on `importedAt`. In both cases the document name is only a deterministic pagination tie-breaker. These query
-shapes use Firestore's automatic single-field indexes, so the MCP surface adds no composite index or index
-configuration. All-history activity lists and nearby scans use the same `eventStartDate` order without a range
-predicate; optional bounded dates use the existing range-and-order shape.
+The activity list orders on `eventStartDate` and applies an optional explicit or resolved relative range on the same
+field; activity-type matching happens inside the bounded MCP scan rather than through another Firestore predicate. The
+route list orders on `importedAt`; its activity-type and name matching also happen inside the bounded scan. In both
+cases the document name is only a deterministic pagination tie-breaker. These query shapes use Firestore's automatic
+single-field indexes, so the MCP surface adds no composite index or index configuration. All-history activity lists
+and nearby scans use the same `eventStartDate` order without a range predicate; optional bounded dates use the existing
+range-and-order shape.
 
 ## Nearby-location resolution
 
@@ -699,9 +716,11 @@ deliberately.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
-- Activity date ranges, when supplied, are at most 366 days. An omitted activity range starts newest-first across
-  history. Activity and route list pages are at most 100 entries, read only one page plus a continuation sentinel per
-  call, and reject more than 512 KiB of cumulative selected data.
+- Explicit activity date ranges are at most 366 days; relative today/yesterday ranges require an IANA timezone. An
+  omitted activity range starts newest-first across history. Activity-list calls scan at most 100 documents, return at
+  most 100 matching entries, report scan counts/completion, and reject more than 512 KiB of cumulative selected data.
+  Route-list calls likewise scan at most 100 documents, return at most 100 matching entries, report scan
+  counts/completion, and reject more than 512 KiB of cumulative selected data.
 - Nearby activity calls scan at most 100 summaries, return at most 25 matches and 256 KiB, and can traverse all history
   only through encrypted query-bound pages.
 - Nearby route calls scan at most 50 summaries, load at most 12 persisted previews, process at most 1 MiB and 20,000

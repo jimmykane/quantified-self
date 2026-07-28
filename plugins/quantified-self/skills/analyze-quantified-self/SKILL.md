@@ -17,7 +17,10 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 2. Discover the relevant measurement, metric, sleep, activity, or route capabilities before concluding that data are
    unavailable.
 3. Choose one bounded comparison period and IANA timezone. Query the cheapest summary from each domain before
-   requesting individual sessions, activities, charts, or locations.
+   requesting individual sessions, activities, charts, or locations. For individual activities, discover canonical
+   activity types before filtering; use timezone-aware relative periods for today or yesterday, and preserve the same
+   filters across bounded scan cursors until the scan is complete. For saved routes, use the same canonical type filter
+   and optional case-insensitive route-name search, preserving both filters with every cursor.
 4. Align results only on comparable time buckets. Preserve each result's units, aggregation, coverage, freshness,
    pagination state, and missing values.
 5. Describe association rather than causation. Call out sparse or mismatched coverage that weakens the comparison.

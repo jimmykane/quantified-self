@@ -48,6 +48,10 @@ describe('MCP client access policy', () => {
     expect(content).toContain('exact source measurement timestamps');
     expect(content).toContain('provider/device metadata');
     expect(content).toContain('bounded chart-ready streams');
+    expect(content).toContain('discover canonical Sports Lib activity types');
+    expect(content).toContain('filter bounded newest-first scans');
+    expect(content).toContain('explicit IANA timezone');
+    expect(content).toContain('case-insensitive part of the route name');
     expect(content).toContain('does not create a reparse, backfill, cache');
     expect(content).toContain('imported device/provider source keys');
     expect(content).toContain('MTB jump measurements');

@@ -9,8 +9,11 @@ Use saved-route summaries first and request coordinate-bearing route data only w
 
 ## Workflow
 
-1. List bounded route summaries and retain the opaque route reference for follow-up requests.
-2. Filter by activity type when the user specifies one. Continue pagination only when the answer requires more routes.
+1. List bounded route summaries and retain the opaque route reference for follow-up requests. When the user names a
+   sport, discover its canonical activity type first and apply the server-side activity-type filter. Use the
+   case-insensitive route-name search for a named route or partial name.
+2. Preserve the original activity-type and name filters with every returned cursor. Continue until the requested match
+   is found or the scan reports completion; distinguish a complete no-match from older route history that remains.
 3. Request geometry for mapping or segment analysis and waypoints only when those details are relevant.
 4. For nearby searches, prefer direct coordinates when the user provides them. Explain that place-name searches send
    the location text to Mapbox, while direct-coordinate searches do not.

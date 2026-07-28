@@ -34,6 +34,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'get_training_metric',
   'list_sleep_sessions',
   'query_sleep_summary',
+  'list_activity_types',
   'list_activities',
   'find_activities_near_location',
   'list_activity_laps',
@@ -330,6 +331,12 @@ const sleepSession = z.strictObject({
   }).nullable(),
   vitals: sleepVitals.nullable(),
 }).meta({ title: 'McpSleepSession' });
+
+const activityTypeDescriptor = z.strictObject({
+  activityType: z.string().min(1).max(120),
+  activityGroup: z.string().min(1).max(120),
+  indoor: z.boolean(),
+}).meta({ title: 'McpActivityTypeDescriptor' });
 
 const activitySummaryBaseShape = {
   activityRef: MCP_ACTIVITY_REFERENCE_OUTPUT_SCHEMA,
@@ -716,13 +723,20 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         }),
       })),
     }),
+    list_activity_types: z.strictObject({
+      activityTypeCount: count,
+      activityTypes: z.array(activityTypeDescriptor),
+    }),
     list_activities: z.strictObject({
+      scannedActivityCount: count,
+      skippedActivityCount: count,
       activities: z.array(
         scope.activityLocation
           ? activitySummaryWithLocation
           : activitySummaryWithoutLocation,
       ),
       ...MCP_PAGINATION_OUTPUT_SHAPE,
+      scanComplete: z.boolean(),
     }),
     find_activities_near_location: scope.activityLocation
       ? z.strictObject({
@@ -770,12 +784,15 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       metrics: z.array(activityMetricValue),
     }),
     list_routes: z.strictObject({
+      scannedRouteCount: count,
+      skippedRouteCount: count,
       routes: z.array(
         scope.routeLocation
           ? routeSummaryWithLocation
           : routeSummaryWithoutLocation,
       ),
       ...MCP_PAGINATION_OUTPUT_SHAPE,
+      scanComplete: z.boolean(),
     }),
     find_routes_near_location: scope.routeLocation
       ? z.strictObject({

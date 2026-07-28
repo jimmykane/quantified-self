@@ -8,6 +8,7 @@ import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
   createMcpDataService,
   MAX_ACTIVITY_METRICS_PER_REQUEST,
+  MCP_ACTIVITY_RELATIVE_PERIODS,
   McpDataError,
 } from './data.service';
 import {
@@ -59,7 +60,13 @@ const MCP_NEARBY_RADIUS_SCHEMA = z.number()
   .default(25_000);
 const MCP_ACTIVITY_TYPES_SCHEMA = z.array(
   z.string().min(1).max(120),
-).max(20).optional();
+)
+  .max(20)
+  .describe('Optional canonical Sports Lib activity types or recognized aliases. Use list_activity_types to discover canonical values.')
+  .optional();
+const MCP_ACTIVITY_RELATIVE_PERIOD_SCHEMA = z.enum(
+  MCP_ACTIVITY_RELATIVE_PERIODS,
+);
 const MCP_SERVER_ICON_VARIANTS = [
   {
     path: '/assets/favicons/android-chrome-96x96.png',
@@ -345,7 +352,12 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   ];
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
     instructions.push(
-      'For a specific workout or activity—including today’s, latest, last, or most recent—call list_activities before reporting it unavailable; aggregate metrics and Training snapshots do not contain individual records. Omit dates and use limit 1 only for an unfiltered latest activity. For a named type, scan newest-first pages to the first match. Use local-day bounds for a date and follow nextCursor before concluding no match.',
+      'For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete.',
+    );
+  }
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
+    instructions.push(
+      'For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
@@ -383,7 +395,7 @@ export function createMcpServer(
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
-    version: '1.1.1',
+    version: '1.2.0',
     description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
     websiteUrl: publicBaseUrl,
     icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
@@ -394,6 +406,17 @@ export function createMcpServer(
   }, {
     instructions: buildMcpServerInstructions(auth),
   });
+
+  server.registerTool('list_activity_types', {
+    title: 'List activity types',
+    description: 'Discover the unique canonical Sports Lib activity types accepted by activity and route filters, with activity-group and indoor hints. Common aliases are normalized by filtered tools, but canonical values are preferred. This static catalog contains no account data.',
+    inputSchema: {},
+    outputSchema: outputSchemas.list_activity_types,
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+  }, () => runReadOnlyTool(
+    'list_activity_types',
+    async () => dataService.listActivityTypes(),
+  ));
 
   if (measurementToolsAvailable) {
     server.registerTool('list_measurement_types', {
@@ -571,22 +594,33 @@ export function createMcpServer(
     server.registerTool('list_activities', {
       title: 'List activities',
       description: activityLocationAvailable
-        ? 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first. Omit both dates and use limit 1 only for an unfiltered latest activity; for a named activity type, inspect pages until the first match. Provide both dates for a bounded period, and follow nextCursor before concluding no activity matched. Returns safe summaries, exact start and end coordinates when present, opaque references, and direct authenticated app links.'
-        : 'Use when the user asks to find, list, or inspect workouts, activities, or exercise sessions—including today’s, yesterday’s, latest, last, or most recent workout. Results are newest first. Omit both dates and use limit 1 only for an unfiltered latest activity; for a named activity type, inspect pages until the first match. Provide both dates for a bounded period, and follow nextCursor before concluding no activity matched. Returns safe non-location summaries with opaque references and direct authenticated app links; location fields are redacted.',
+        ? 'Find, list, or inspect individual workouts newest first. Filter server-side with activityTypes; use list_activity_types for canonical values. For today or yesterday, provide relativePeriod and an IANA timeZone. Otherwise provide start and end together for an explicit range, or omit all date selectors for all history/latest. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, safe summaries, exact start and end coordinates when present, opaque references, and authenticated app links.'
+        : 'Find, list, or inspect individual workouts newest first. Filter server-side with activityTypes; use list_activity_types for canonical values. For today or yesterday, provide relativePeriod and an IANA timeZone. Otherwise provide start and end together for an explicit range, or omit all date selectors for all history/latest. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, safe non-location summaries, opaque references, and authenticated app links; location fields are redacted.',
       inputSchema: {
         start: MCP_ISO_DATE_TIME_SCHEMA
-          .describe('Optional inclusive period start. Provide start and end together; omit both for newest-first activity history.')
+          .describe('Optional inclusive period start. Provide start and end together; do not combine them with relativePeriod.')
           .optional(),
         end: MCP_ISO_DATE_TIME_SCHEMA
-          .describe('Optional inclusive period end. Provide start and end together; omit both for newest-first activity history.')
+          .describe('Optional inclusive period end. Provide start and end together; do not combine them with relativePeriod.')
           .optional(),
-        cursor: MCP_CURSOR_SCHEMA.optional(),
+        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+        relativePeriod: MCP_ACTIVITY_RELATIVE_PERIOD_SCHEMA
+          .describe('Optional local calendar period. Requires timeZone and cannot be combined with start or end.')
+          .optional(),
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('IANA timezone required with relativePeriod; omit otherwise.')
+          .optional(),
+        cursor: MCP_CURSOR_SCHEMA
+          .describe('Continuation cursor. Repeat the original activityTypes and date-selection inputs when using it.')
+          .optional(),
         limit: z.number()
           .int()
           .min(1)
           .max(100)
           .default(25)
-          .describe('Maximum activities to return. Use 1 only for an unfiltered latest or last workout; use newest-first pages when matching a named activity type.'),
+          .describe('Maximum matching activities to return. Use 1 for a latest or last request, including a server-filtered named activity type.'),
       },
       outputSchema: outputSchemas.list_activities,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
@@ -600,6 +634,9 @@ export function createMcpServer(
       endTimeMs: input.end
         ? parseMcpDateTime(input.end, 'end')
         : undefined,
+      activityTypes: input.activityTypes,
+      relativePeriod: input.relativePeriod,
+      timeZone: input.timeZone,
       includeLocation: activityLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,
@@ -783,10 +820,17 @@ export function createMcpServer(
     server.registerTool('list_routes', {
       title: 'List saved routes',
       description: routeLocationAvailable
-        ? 'List bounded saved-route summaries, exact bounds, opaque references, and direct authenticated app links.'
-        : 'List bounded non-location saved-route summaries, opaque references, and direct authenticated app links. Bounds are redacted.',
+        ? 'List saved routes newest first. Filter server-side with activityTypes or a case-insensitive route-name search; use list_activity_types for canonical values. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, exact bounds, opaque references, and direct authenticated app links.'
+        : 'List saved routes newest first. Filter server-side with activityTypes or a case-insensitive route-name search; use list_activity_types for canonical values. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, non-location summaries, opaque references, and direct authenticated app links. Bounds are redacted.',
       inputSchema: {
-        cursor: MCP_CURSOR_SCHEMA.optional(),
+        activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+        search: z.string()
+          .max(120)
+          .describe('Optional case-insensitive text contained in the saved route name.')
+          .optional(),
+        cursor: MCP_CURSOR_SCHEMA
+          .describe('Continuation cursor. Repeat the original activityTypes and search inputs when using it.')
+          .optional(),
         limit: z.number().int().min(1).max(100).default(25),
       },
       outputSchema: outputSchemas.list_routes,
@@ -795,6 +839,8 @@ export function createMcpServer(
       uid: auth.uid,
       connectionId: auth.connectionId,
       appBaseUrl: publicBaseUrl,
+      activityTypes: input.activityTypes,
+      search: input.search,
       includeLocation: routeLocationAvailable,
       cursor: input.cursor,
       limit: input.limit,

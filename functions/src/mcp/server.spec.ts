@@ -221,6 +221,13 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
 
+  it('makes the static activity-type catalog available to every authorized client', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'list_activity_types' },
+    })).toEqual([]);
+  });
+
   it('requires separate activity-detail and route scopes for granular tools', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
@@ -296,18 +303,24 @@ describe('MCP HTTP scope enforcement', () => {
       }
     };
 
+    await expect(listToolNames([])).resolves.toEqual([
+      'list_activity_types',
+    ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.MetricsRead])).resolves.toEqual([
       'get_training_metric',
+      'list_activity_types',
       'list_metrics',
       'query_metric',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.MeasurementsRead,
     ])).resolves.toEqual([
+      'list_activity_types',
       'list_measurement_types',
       'query_measurements',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
+      'list_activity_types',
       'list_sleep_sessions',
       'query_sleep_summary',
     ]);
@@ -318,6 +331,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.MetricsRead,
@@ -331,10 +345,12 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
       'list_metrics',
       'query_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
+      'list_activity_types',
       'list_routes',
     ]);
     await expect(listToolNames([
@@ -343,6 +359,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'find_routes_near_location',
       'get_route_geometry',
+      'list_activity_types',
       'list_route_waypoints',
       'list_routes',
     ]);
@@ -357,6 +374,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
@@ -370,8 +388,60 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_jumps',
       'list_activity_laps',
       'list_activity_swim_lengths',
+      'list_activity_types',
       'list_routes',
     ]);
+  });
+
+  it('advertises bounded saved-route type and name filters', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1',
+      clientId: 'https://client.example/mcp.json',
+      connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.RoutesRead],
+    }, 'https://quantified-self.io');
+    const client = new Client({
+      name: 'route-filter-test-client',
+      version: '1.0.0',
+    });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const listRoutes = (await client.listTools()).tools
+        .find(tool => tool.name === 'list_routes');
+      const inputSchema = listRoutes?.inputSchema as {
+        properties?: Record<string, Record<string, unknown>>;
+        required?: string[];
+      } | undefined;
+
+      expect(client.getInstructions()).toContain(
+        'list_routes with activityTypes or search',
+      );
+      expect(client.getInstructions()).toContain(
+        'Repeat the filters with nextCursor until matched or scanComplete',
+      );
+      expect(listRoutes?.description).toContain('activityTypes');
+      expect(listRoutes?.description).toContain(
+        'case-insensitive route-name search',
+      );
+      expect(listRoutes?.description).toContain('scanComplete');
+      expect(inputSchema?.required || []).not.toContain('activityTypes');
+      expect(inputSchema?.required || []).not.toContain('search');
+      expect(inputSchema?.properties?.activityTypes?.description).toContain(
+        'list_activity_types',
+      );
+      expect(inputSchema?.properties?.search?.description).toContain(
+        'case-insensitive',
+      );
+      expect(inputSchema?.properties?.cursor?.description).toContain(
+        'Repeat the original activityTypes and search',
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('advertises first-class body-measurement routing and safe tool metadata', async () => {
@@ -500,12 +570,15 @@ describe('MCP HTTP scope enforcement', () => {
       await client.connect(clientTransport);
       const instructions = client.getInstructions() || '';
       const activityInstructionIndex = instructions.indexOf(
-        'For a specific workout or activity',
+        'For a workout',
       );
-      const cursorInstruction = 'follow nextCursor before concluding no match';
+      const cursorInstruction = 'Follow nextCursor until matched or scanComplete';
       const cursorInstructionIndex = instructions.indexOf(cursorInstruction);
-      const listActivities = (await client.listTools()).tools
+      const tools = (await client.listTools()).tools;
+      const listActivities = tools
         .find(tool => tool.name === 'list_activities');
+      const listActivityTypes = tools
+        .find(tool => tool.name === 'list_activity_types');
       const inputSchema = listActivities?.inputSchema as {
         properties?: Record<string, Record<string, unknown>>;
         required?: string[];
@@ -517,27 +590,38 @@ describe('MCP HTTP scope enforcement', () => {
       expect(cursorInstructionIndex + cursorInstruction.length)
         .toBeLessThanOrEqual(512);
       expect(instructions).toContain(
-        'aggregate metrics and Training snapshots do not contain individual records',
+        'aggregate metrics do not contain individual records',
       );
       expect(instructions).toContain(
-        'use limit 1 only for an unfiltered latest activity',
+        'relativePeriod plus timeZone for today or yesterday',
       );
       expect(instructions).toContain(
-        'For a named type, scan newest-first pages to the first match',
+        'add activityTypes and limit 1 when named',
       );
-      expect(listActivities?.description).toContain('today’s');
-      expect(listActivities?.description).toContain('latest');
-      expect(listActivities?.description).toContain('Results are newest first');
+      expect(listActivityTypes).toBeDefined();
+      expect(listActivities?.description).toContain('today or yesterday');
+      expect(listActivities?.description).toContain('all history/latest');
       expect(listActivities?.description).toContain(
-        'for a named activity type, inspect pages until the first match',
+        'Repeat the original filters with nextCursor',
       );
       expect(inputSchema?.required || []).not.toContain('start');
       expect(inputSchema?.required || []).not.toContain('end');
+      expect(inputSchema?.required || []).not.toContain('relativePeriod');
+      expect(inputSchema?.required || []).not.toContain('timeZone');
       expect(inputSchema?.properties?.start?.description).toContain(
         'Provide start and end together',
       );
+      expect(inputSchema?.properties?.activityTypes?.description).toContain(
+        'list_activity_types',
+      );
+      expect(inputSchema?.properties?.relativePeriod?.description).toContain(
+        'Requires timeZone',
+      );
+      expect(inputSchema?.properties?.timeZone?.description).toContain(
+        'IANA timezone',
+      );
       expect(inputSchema?.properties?.limit?.description).toContain(
-        'only for an unfiltered latest or last workout',
+        'server-filtered named activity type',
       );
 
       const partialRange = await client.callTool({
@@ -549,6 +633,17 @@ describe('MCP HTTP scope enforcement', () => {
       expect(partialRange.isError).toBe(true);
       expect(JSON.stringify(partialRange)).toContain(
         'start and end must either both be provided or both be omitted',
+      );
+
+      const missingRelativeTimeZone = await client.callTool({
+        name: 'list_activities',
+        arguments: {
+          relativePeriod: 'today',
+        },
+      });
+      expect(missingRelativeTimeZone.isError).toBe(true);
+      expect(JSON.stringify(missingRelativeTimeZone)).toContain(
+        'A valid IANA timezone is required',
       );
     } finally {
       await client.close();
@@ -711,7 +806,7 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getServerVersion()).toEqual({
         name: 'quantified-self',
         title: 'Quantified Self',
-        version: '1.1.1',
+        version: '1.2.0',
         description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [

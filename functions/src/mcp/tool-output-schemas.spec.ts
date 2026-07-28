@@ -591,13 +591,28 @@ function createFixtureDataService(
         },
       }],
     }),
+    listActivityTypes: vi.fn().mockReturnValue({
+      activityTypeCount: 2,
+      activityTypes: [{
+        activityType: 'Running',
+        activityGroup: 'running_group',
+        indoor: false,
+      }, {
+        activityType: 'Indoor Running',
+        activityGroup: 'running_group',
+        indoor: true,
+      }],
+    }),
     listActivities: vi.fn().mockResolvedValue({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [
         activityLocation
           ? activitySummaryWithLocation
           : activitySummaryRedacted,
       ],
       nextCursor: NEXT_CURSOR,
+      scanComplete: false,
     }),
     findActivitiesNearLocation: vi.fn().mockResolvedValue({
       location: {
@@ -708,10 +723,13 @@ function createFixtureDataService(
       }],
     }),
     listRoutes: vi.fn().mockResolvedValue({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [
         routeLocation ? routeSummaryWithLocation : routeSummaryRedacted,
       ],
       nextCursor: null,
+      scanComplete: true,
     }),
     findRoutesNearLocation: vi.fn().mockResolvedValue({
       location: {
@@ -807,7 +825,9 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  list_activity_types: {},
   list_activities: {
+    activityTypes: ['Running'],
     limit: 1,
   },
   find_activities_near_location: {
@@ -833,7 +853,10 @@ const successfulToolArguments: Record<
     activityRef: ACTIVITY_REF,
     metrics: ['Distance'],
   },
-  list_routes: {},
+  list_routes: {
+    activityTypes: ['Running'],
+    search: 'ridge',
+  },
   find_routes_near_location: {
     location: { query: 'Ioannina, Greece' },
   },
@@ -1034,7 +1057,31 @@ describe('MCP public output contracts', () => {
       expect.objectContaining({
         startTimeMs: undefined,
         endTimeMs: undefined,
+        activityTypes: ['Running'],
         limit: 1,
+      }),
+    );
+    await connection.client.callTool({
+      name: 'list_activities',
+      arguments: {
+        relativePeriod: 'today',
+        timeZone: 'Europe/Helsinki',
+        limit: 1,
+      },
+    });
+    expect(dataService.listActivities).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        startTimeMs: undefined,
+        endTimeMs: undefined,
+        relativePeriod: 'today',
+        timeZone: 'Europe/Helsinki',
+        limit: 1,
+      }),
+    );
+    expect(dataService.listRoutes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityTypes: ['Running'],
+        search: 'ridge',
       }),
     );
 
@@ -1119,9 +1166,19 @@ describe('MCP public output contracts', () => {
       items: [],
       nextCursor: null,
     }).success).toBe(true);
+    expect(registry.list_activities.safeParse({
+      scannedActivityCount: 0,
+      skippedActivityCount: 0,
+      activities: [],
+      nextCursor: null,
+      scanComplete: true,
+    }).success).toBe(true);
     expect(registry.list_routes.safeParse({
+      scannedRouteCount: 0,
+      skippedRouteCount: 0,
       routes: [],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(true);
   });
 
@@ -1219,8 +1276,11 @@ describe('MCP public output contracts', () => {
       routeLocation: false,
     });
     expect(parentRegistry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [activitySummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
     expect(parentRegistry.list_activity_jumps.safeParse({
       items: [{
@@ -1239,8 +1299,11 @@ describe('MCP public output contracts', () => {
       nextCursor: null,
     }).success).toBe(false);
     expect(parentRegistry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [routeSummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
     expect(parentRegistry.get_activity_chart_data.safeParse({
       activityType: 'Running',
@@ -1286,12 +1349,18 @@ describe('MCP public output contracts', () => {
       routeLocation: false,
     });
     expect(activityLocationOnlyRegistry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [activitySummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(true);
     expect(activityLocationOnlyRegistry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [routeSummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
 
     const routeLocationOnlyRegistry = createMcpOutputSchemaRegistry({
@@ -1299,12 +1368,18 @@ describe('MCP public output contracts', () => {
       routeLocation: true,
     });
     expect(routeLocationOnlyRegistry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [routeSummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(true);
     expect(routeLocationOnlyRegistry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [activitySummaryWithLocation],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
   });
 
@@ -1352,6 +1427,8 @@ describe('MCP public output contracts', () => {
       routeLocation: true,
     });
     expect(registry.list_activities.safeParse({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
       activities: [{
         ...activitySummaryWithLocation,
         eventID: 'private-event-id',
@@ -1361,13 +1438,26 @@ describe('MCP public output contracts', () => {
         },
       }],
       nextCursor: null,
+      scanComplete: true,
+    }).success).toBe(false);
+    expect(registry.list_activity_types.safeParse({
+      activityTypeCount: 1,
+      activityTypes: [{
+        activityType: 'Running',
+        activityGroup: 'running_group',
+        indoor: false,
+        sourceKey: 'private-source-key',
+      }],
     }).success).toBe(false);
     expect(registry.list_routes.safeParse({
+      scannedRouteCount: 1,
+      skippedRouteCount: 0,
       routes: [{
         ...routeSummaryWithLocation,
         storagePath: 'users/private/routes/source.fit',
       }],
       nextCursor: null,
+      scanComplete: true,
     }).success).toBe(false);
     expect(registry.list_sleep_sessions.safeParse({
       sessions: [{
