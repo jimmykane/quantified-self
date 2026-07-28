@@ -3386,6 +3386,199 @@ describe('MCP data service', () => {
     });
   });
 
+  it('returns a bounded, identity-free daily briefing from completed sleep and current readiness only', async () => {
+    const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
+    vi.mocked(dependencies.now).mockReturnValue(nowTimeMs);
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-27T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
+        sleepDate: '2026-07-27',
+        durationSeconds: 28_800,
+      }),
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-26T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-25T22:30:00.000Z'),
+        sleepDate: '2026-07-26',
+        durationSeconds: 27_000,
+      }),
+      sleepDocument({
+        id: 'duplicate-prior-night',
+        endTimeMs: Date.parse('2026-07-26T05:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-26T01:00:00.000Z'),
+        sleepDate: '2026-07-26',
+        durationSeconds: 14_400,
+      }),
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-25T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-24T22:15:00.000Z'),
+        sleepDate: '2026-07-25',
+        durationSeconds: 27_900,
+      }),
+      sleepDocument({
+        endTimeMs: Date.parse('2026-07-24T06:00:00.000Z'),
+        startTimeMs: Date.parse('2026-07-23T22:00:00.000Z'),
+        sleepDate: '2026-07-24',
+        durationSeconds: 28_200,
+      }),
+      sleepDocument({
+        id: 'nap-private',
+        isNap: true,
+        endTimeMs: Date.parse('2026-07-27T10:00:00.000Z'),
+      }),
+    ]);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: nowTimeMs,
+      payload: {
+        formulaVersion: 3,
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+        generatedAtMs: nowTimeMs,
+        historyDays: 14,
+        points: [{
+          dayMs: Date.parse('2026-07-27T00:00:00.000Z'),
+          score: 76,
+          label: 'Ready',
+          confidence: 'high',
+          availableSignalCount: 4,
+          baselineEvidenceCount: 14,
+          totalSignalCount: 4,
+          form: 12,
+          rampRate: 3,
+          sleepScore: 82,
+          latestSleepAtMs: Date.parse('2026-07-27T06:00:00.000Z'),
+          hrvRatio: 1.04,
+          averageHeartRateRatio: 0.98,
+          minimumHeartRateRatio: 0.97,
+          overnightHeartRateRatio: 0.98,
+        }],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result).toMatchObject({
+      asOfTimeMs: nowTimeMs,
+      timeZone: 'Europe/Helsinki',
+      sleep: {
+        status: 'available',
+        latestSession: {
+          sleepDate: '2026-07-27',
+          durationSeconds: 28_800,
+        },
+        comparison: {
+          sameProviderNightCount: 3,
+          averageDurationSeconds: 27_700,
+          durationDeltaSeconds: 1_100,
+        },
+      },
+      trainingReadiness: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        score: 76,
+        label: 'Ready',
+        confidence: 'high',
+        availableSignalCount: 4,
+        baselineEvidenceCount: 14,
+      },
+    });
+    expect(dependencies.fetchSleepDocuments).toHaveBeenCalledWith(
+      'user-1',
+      nowTimeMs - 14 * 24 * 60 * 60 * 1000,
+      nowTimeMs,
+      33,
+    );
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('GarminAPI');
+    expect(serialized).not.toContain('private-source-key');
+    expect(serialized).not.toContain('averageHeartRateBpm');
+    expect(serialized).not.toContain('overnightHeartRateRatio');
+    expect(serialized).not.toContain('latestSleepAtMs');
+  });
+
+  it('makes unavailable daily-briefing inputs explicit without returning a stale readiness score', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue(null);
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result.sleep).toEqual({
+      status: 'no_completed_session',
+      latestSession: null,
+      comparison: {
+        sameProviderNightCount: 0,
+        averageDurationSeconds: null,
+        durationDeltaSeconds: null,
+      },
+    });
+    expect(result.trainingReadiness).toEqual({
+      status: 'not_ready',
+      dayBoundary: 'UTC',
+      asOfDayMs: null,
+      generatedAtMs: null,
+      updatedAtMs: null,
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: null,
+      baselineEvidenceCount: null,
+    });
+  });
+
+  it('withholds a stale daily-readiness score even when the stored snapshot is ready', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+      payload: {
+        formulaVersion: 3,
+        dayBoundary: 'UTC',
+        asOfDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+        generatedAtMs: Date.parse('2026-07-26T12:00:00.000Z'),
+        historyDays: 14,
+        points: [{
+          dayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+          score: 64,
+          label: 'Mixed',
+          confidence: 'medium',
+          availableSignalCount: 3,
+          baselineEvidenceCount: 8,
+          totalSignalCount: 4,
+          form: 2,
+          rampRate: 1,
+          sleepScore: 80,
+          latestSleepAtMs: null,
+          hrvRatio: null,
+          averageHeartRateRatio: null,
+          minimumHeartRateRatio: null,
+          overnightHeartRateRatio: null,
+        }],
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result.trainingReadiness).toMatchObject({
+      status: 'stale',
+      asOfDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: null,
+      baselineEvidenceCount: null,
+    });
+  });
+
   it('redacts raw sleep samples, provider identifiers, stage intervals, and provider payloads', async () => {
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
       sleepDocument(),

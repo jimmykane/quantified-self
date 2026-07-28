@@ -57,6 +57,10 @@ describe('help.content', () => {
       .toContain('/assets/favicons/quantified-self-chatgpt-icon-256x256.png');
     expect(dataAndPrivacySection?.content).toContain('preferred minimum dimensions');
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
+    expect(dataAndPrivacySection?.content).toContain('compact morning briefing');
+    expect(dataAndPrivacySection?.content).toContain('latest completed non-nap sleep');
+    expect(dataAndPrivacySection?.content).toContain('current UTC-day Training readiness status');
+    expect(dataAndPrivacySection?.content).toContain('morning briefing for your IANA timezone');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');

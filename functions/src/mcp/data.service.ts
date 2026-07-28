@@ -47,6 +47,7 @@ import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DerivedMetricKind,
+  DerivedTrainingReadinessMetricPayload,
   isDerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import {
@@ -106,6 +107,7 @@ import {
   consumeActivityChartRateLimit,
   McpActivityChartRateLimitError,
 } from './activity-chart-rate-limit';
+import { MCP_DERIVED_PAYLOAD_SCHEMAS } from './derived-output-schemas';
 import { ActivityIdentityLike } from '../shared/activity-identity-matcher';
 import {
   boundsMayBeWithinRadius,
@@ -124,6 +126,11 @@ const METRIC_DISCOVERY_EVENT_LIMIT = 500;
 const MAX_MEASUREMENT_RESPONSE_BYTES = 128 * 1024;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
+const DAILY_BRIEFING_SLEEP_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+const MAX_DAILY_BRIEFING_SLEEP_SESSIONS = 32;
+const MAX_DAILY_BRIEFING_BASELINE_NIGHTS = 7;
+const MIN_DAILY_BRIEFING_BASELINE_NIGHTS = 3;
+const MAX_DAILY_BRIEFING_RESPONSE_BYTES = 16 * 1024;
 const SLEEP_CURSOR_VERSION = 1;
 const SLEEP_CURSOR_NONCE_BYTES = 12;
 const SLEEP_CURSOR_AUTH_TAG_BYTES = 16;
@@ -2536,6 +2543,140 @@ export interface QuerySleepSummaryInput {
   timeZone: string;
 }
 
+export interface GetDailyBriefingInput {
+  uid: string;
+  timeZone: string;
+}
+
+interface DailyBriefingSleepSession {
+  sleepDate: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  durationSeconds: number;
+  inBedDurationSeconds: number | null;
+  score: {
+    value: number | null;
+    qualifier: string | null;
+  } | null;
+}
+
+interface DailyBriefingReadiness {
+  status: 'available' | 'no_signal' | 'not_ready' | 'stale';
+  dayBoundary: 'UTC';
+  asOfDayMs: number | null;
+  generatedAtMs: number | null;
+  updatedAtMs: number | null;
+  score: number | null;
+  label: 'Ready' | 'Mixed' | 'Recover' | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+  availableSignalCount: number | null;
+  baselineEvidenceCount: number | null;
+}
+
+function projectDailyBriefingSleepSession(
+  session: SafeSleepSession,
+): DailyBriefingSleepSession {
+  return {
+    sleepDate: session.sleepDate,
+    startTimeMs: session.startTimeMs,
+    endTimeMs: session.endTimeMs,
+    durationSeconds: session.durationSeconds,
+    inBedDurationSeconds: session.inBedDurationSeconds,
+    score: session.score,
+  };
+}
+
+function unavailableDailyBriefingReadiness(
+  status: 'no_signal' | 'not_ready',
+): DailyBriefingReadiness {
+  return {
+    status,
+    dayBoundary: 'UTC',
+    asOfDayMs: null,
+    generatedAtMs: null,
+    updatedAtMs: null,
+    score: null,
+    label: null,
+    confidence: null,
+    availableSignalCount: null,
+    baselineEvidenceCount: null,
+  };
+}
+
+function projectDailyBriefingReadiness(
+  snapshot: Record<string, unknown> | null,
+  nowTimeMs: number,
+): DailyBriefingReadiness {
+  const schemaVersion = asFiniteNumber(snapshot?.schemaVersion);
+  if (
+    !snapshot
+    || snapshot.status !== 'ready'
+    || snapshot.payload == null
+    || schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+  ) {
+    return unavailableDailyBriefingReadiness('not_ready');
+  }
+
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[
+    DERIVED_METRIC_KINDS.TrainingReadiness
+  ].safeParse(snapshot.payload);
+  if (!parsed.success) {
+    return unavailableDailyBriefingReadiness('not_ready');
+  }
+  const payload = parsed.data as DerivedTrainingReadinessMetricPayload;
+  const now = new Date(nowTimeMs);
+  const currentUtcDayMs = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  const common = {
+    dayBoundary: 'UTC' as const,
+    asOfDayMs: payload.asOfDayMs,
+    generatedAtMs: payload.generatedAtMs,
+    updatedAtMs: asFiniteNumber(snapshot.updatedAtMs),
+  };
+  if (payload.asOfDayMs !== currentUtcDayMs) {
+    return {
+      status: 'stale',
+      ...common,
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: null,
+      baselineEvidenceCount: null,
+    };
+  }
+
+  const point = payload.points.find(candidate => candidate.dayMs === payload.asOfDayMs);
+  if (
+    !point
+    || point.score === null
+    || point.label === null
+    || point.confidence === null
+  ) {
+    return {
+      status: 'no_signal',
+      ...common,
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: null,
+      baselineEvidenceCount: null,
+    };
+  }
+
+  return {
+    status: 'available',
+    ...common,
+    score: point.score,
+    label: point.label,
+    confidence: point.confidence,
+    availableSignalCount: point.availableSignalCount,
+    baselineEvidenceCount: point.baselineEvidenceCount,
+  };
+}
+
 export interface ListActivitiesInput {
   uid: string;
   connectionId: string;
@@ -3511,6 +3652,92 @@ export function createMcpDataService(
         sourceEventCount: asNonNegativeNumber(snapshot.sourceEventCount),
         payload: redactDerivedPayload(snapshot.payload),
       };
+    },
+
+    async getDailyBriefing(input: GetDailyBriefingInput) {
+      const timeZone = requireTimeZone(input.timeZone);
+      const nowTimeMs = dependencies.now();
+      const localDay = resolveRelativeActivityRange(
+        'today',
+        timeZone,
+        nowTimeMs,
+      );
+      const docs = await dependencies.fetchSleepDocuments(
+        input.uid,
+        nowTimeMs - DAILY_BRIEFING_SLEEP_LOOKBACK_MS,
+        nowTimeMs,
+        MAX_DAILY_BRIEFING_SLEEP_SESSIONS + 1,
+      );
+      if (docs.length > MAX_DAILY_BRIEFING_SLEEP_SESSIONS + 1) {
+        throw new McpDataError(
+          'query_too_large',
+          'The daily briefing sleep query returned more data than requested.',
+        );
+      }
+      const sessions = docs
+        .flatMap(doc => {
+          const session = toSafeSleepSession(doc.data);
+          return session && !session.isNap && session.endTimeMs <= nowTimeMs
+            ? [session]
+            : [];
+        })
+        .sort((left, right) => right.endTimeMs - left.endTimeMs)
+        .slice(0, MAX_DAILY_BRIEFING_SLEEP_SESSIONS);
+      const latestSession = sessions[0] || null;
+      const baseline: SafeSleepSession[] = [];
+      const baselineSleepDates = new Set<string>();
+      if (latestSession) {
+        for (const session of sessions) {
+          if (
+            session.provider !== latestSession.provider
+            || session.sleepDate === latestSession.sleepDate
+            || session.endTimeMs >= latestSession.endTimeMs
+            || baselineSleepDates.has(session.sleepDate)
+          ) {
+            continue;
+          }
+          baseline.push(session);
+          baselineSleepDates.add(session.sleepDate);
+          if (baseline.length === MAX_DAILY_BRIEFING_BASELINE_NIGHTS) {
+            break;
+          }
+        }
+      }
+      const baselineDurationSeconds = baseline.length >= MIN_DAILY_BRIEFING_BASELINE_NIGHTS
+        ? baseline.reduce((total, session) => total + session.durationSeconds, 0) / baseline.length
+        : null;
+      const result = {
+        asOfTimeMs: nowTimeMs,
+        timeZone,
+        localDayStartTimeMs: localDay.startTimeMs,
+        localDayEndTimeMs: localDay.endTimeMs,
+        sleep: {
+          status: latestSession ? 'available' as const : 'no_completed_session' as const,
+          latestSession: latestSession
+            ? projectDailyBriefingSleepSession(latestSession)
+            : null,
+          comparison: {
+            sameProviderNightCount: baseline.length,
+            averageDurationSeconds: baselineDurationSeconds,
+            durationDeltaSeconds: latestSession && baselineDurationSeconds !== null
+              ? latestSession.durationSeconds - baselineDurationSeconds
+              : null,
+          },
+        },
+        trainingReadiness: projectDailyBriefingReadiness(
+          await dependencies.fetchDerivedSnapshot(
+            input.uid,
+            DERIVED_METRIC_KINDS.TrainingReadiness,
+          ),
+          nowTimeMs,
+        ),
+      };
+      requireJsonBudget(
+        result,
+        MAX_DAILY_BRIEFING_RESPONSE_BYTES,
+        'The daily briefing exceeds the MCP response limit.',
+      );
+      return result;
     },
 
     async listActivities(input: ListActivitiesInput) {

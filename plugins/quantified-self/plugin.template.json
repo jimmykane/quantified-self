@@ -32,7 +32,7 @@
     "privacyPolicyURL": "https://quantified-self.io/policies#privacy",
     "termsOfServiceURL": "https://quantified-self.io/policies#tos",
     "defaultPrompt": [
-      "Compare my sleep and training trends over the last four weeks.",
+      "Give me my morning briefing for Europe/Helsinki.",
       "Show my body-weight trend and explain the change without making medical claims.",
       "Plot pace and heart rate for my latest run and summarize the key sections."
     ],

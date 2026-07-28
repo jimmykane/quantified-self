@@ -388,6 +388,7 @@ The analytics and map entries follow the
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
+| `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep and current UTC-day Training readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
@@ -403,8 +404,8 @@ The analytics and map entries follow the
 
 Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
 tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
-before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` is registered only
-when both of its scopes are present.
+before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` and
+`get_daily_briefing` are registered only when both of their scopes are present.
 
 ### Strict structured output
 
@@ -434,12 +435,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 19-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 21-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 20 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 21 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -704,6 +705,21 @@ stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or 
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
 deliberately.
 
+## Daily briefing projection
+
+`get_daily_briefing` is a compact convenience read that requires both `metrics:read` and `sleep:read`; neither scope
+alone registers it. The caller supplies an IANA timezone. The response records the resulting local-day bounds and
+contains only the latest completed non-nap sleep session plus a duration comparison against up to seven earlier
+same-provider nights. Provider identity, raw vitals, stages, score components, sessions, locations, activities, body
+measurements, and source fields are absent from this projection.
+
+It also reads the current `training_readiness` snapshot through its exact strict payload schema, but returns only its
+freshness, score, label, confidence, and aggregate evidence counts. Readiness itself remains UTC-day based. A snapshot
+whose `asOfDayMs` is not the current UTC day is reported as `stale` with score and evidence fields withheld; missing or
+invalid snapshots use explicit `not_ready` or `no_signal` statuses. The tool provides context only: it does not create a
+workout plan, prescribe exercise, or provide medical advice. It uses the existing sleep-session query shape, so it
+requires no new Firestore composite index.
+
 ## Bounds and operational controls
 
 - Event and sleep date ranges are at most 366 days.
@@ -716,6 +732,8 @@ deliberately.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
+- A daily briefing reads at most 33 recent sleep documents from a fixed 14-day lookback, keeps at most 32 completed
+  non-nap sessions, uses at most seven same-provider baseline nights, and returns at most 16 KiB.
 - Explicit activity date ranges are at most 366 days; relative today/yesterday ranges require an IANA timezone. An
   omitted activity range starts newest-first across history. Activity-list calls scan at most 100 documents, return at
   most 100 matching entries, report scan counts/completion, and reject more than 512 KiB of cumulative selected data.

@@ -71,6 +71,10 @@ describe('MCP client access policy', () => {
     expect(content).toContain('Original files');
     expect(content).toContain('full-resolution recordings');
     expect(content).toContain('raw sleep-stage intervals');
+    expect(content).toContain('compact morning briefing');
+    expect(content).toContain('latest completed non-nap sleep');
+    expect(content).toContain('current UTC-day Training readiness status');
+    expect(content).toContain('workout plans, and medical advice');
     expect(content).toContain('stored server-side only as hashes');
     expect(content).toContain('becomes active and appears in Connections only after');
     expect(content).toContain('same exact verified client identity');

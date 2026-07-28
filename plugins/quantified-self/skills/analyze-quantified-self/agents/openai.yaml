@@ -1,7 +1,7 @@
 interface:
   display_name: "Analyze Quantified Self"
   short_description: "Compare trends across health and fitness data"
-  default_prompt: "Use $analyze-quantified-self to compare my recent sleep and training trends."
+  default_prompt: "Use $analyze-quantified-self to give me my morning briefing for Europe/Helsinki."
 dependencies:
   tools:
     - type: "mcp"

@@ -18,10 +18,15 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
 4. Preserve the returned aggregation, interval, units, sample counts, missing buckets, and snapshot freshness.
 5. Compare totals only with totals and rates or averages only with compatible values. Do not combine unlike activity
    types unless the user requests an overall view.
+6. For a compact morning readout, use the server's advertised daily-briefing tool only when the user also granted
+   `sleep:read`; supply an explicit IANA timezone. Treat its UTC-day readiness freshness and explicit unavailable
+   states as authoritative.
 
 ## Limits
 
 - If `metrics:read` is missing, explain that Activity and Training metrics access must be granted through reconnection.
+- The daily-briefing tool additionally needs `sleep:read`; do not reconstruct it from raw sleep or turn it into a
+  workout prescription.
 - Treat a missing metric, missing permission, incomplete page, and a not-ready Training snapshot as distinct outcomes.
 - Do not use a current Training-derived body-weight snapshot as historical weigh-in data.
 - Describe training and recovery patterns without medical diagnosis or unsupported causal claims.

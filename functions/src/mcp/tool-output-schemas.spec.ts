@@ -591,6 +591,43 @@ function createFixtureDataService(
         },
       }],
     }),
+    getDailyBriefing: vi.fn().mockResolvedValue({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'available',
+        latestSession: {
+          sleepDate: '2026-07-01',
+          startTimeMs: DAY_MS,
+          endTimeMs: NEXT_DAY_MS,
+          durationSeconds: 28_800,
+          inBedDurationSeconds: null,
+          score: {
+            value: 80,
+            qualifier: null,
+          },
+        },
+        comparison: {
+          sameProviderNightCount: 3,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: 1_200,
+        },
+      },
+      trainingReadiness: {
+        status: 'available',
+        dayBoundary: 'UTC',
+        asOfDayMs: DAY_MS,
+        generatedAtMs: DAY_MS,
+        updatedAtMs: DAY_MS,
+        score: 76,
+        label: 'Ready',
+        confidence: 'high',
+        availableSignalCount: 4,
+        baselineEvidenceCount: 14,
+      },
+    }),
     listActivityTypes: vi.fn().mockReturnValue({
       activityTypeCount: 2,
       activityTypes: [{
@@ -825,6 +862,9 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  get_daily_briefing: {
+    timeZone: 'Europe/Helsinki',
+  },
   list_activity_types: {},
   list_activities: {
     activityTypes: ['Running'],
@@ -978,6 +1018,60 @@ describe('MCP public output contracts', () => {
       updatedAtMs: -1,
       sourceEventCount: 0,
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.Form],
+    }).success).toBe(false);
+    expect(registry.get_daily_briefing.safeParse({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'available',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 0,
+          averageDurationSeconds: null,
+          durationDeltaSeconds: null,
+        },
+      },
+      trainingReadiness: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        generatedAtMs: null,
+        updatedAtMs: null,
+        score: null,
+        label: null,
+        confidence: null,
+        availableSignalCount: null,
+        baselineEvidenceCount: null,
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_briefing.safeParse({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'no_completed_session',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 0,
+          averageDurationSeconds: null,
+          durationDeltaSeconds: null,
+        },
+      },
+      trainingReadiness: {
+        status: 'stale',
+        dayBoundary: 'UTC',
+        asOfDayMs: DAY_MS,
+        generatedAtMs: DAY_MS,
+        updatedAtMs: DAY_MS,
+        score: 76,
+        label: 'Ready',
+        confidence: 'high',
+        availableSignalCount: 4,
+        baselineEvidenceCount: 14,
+      },
     }).success).toBe(false);
   });
 
@@ -1625,6 +1719,34 @@ describe('MCP public output contracts', () => {
       nextCursor: null,
       providerUserId: 'sleep-secret',
     });
+    mismatchService.getDailyBriefing = vi.fn().mockResolvedValue({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      sleep: {
+        status: 'no_completed_session',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 0,
+          averageDurationSeconds: null,
+          durationDeltaSeconds: null,
+        },
+      },
+      trainingReadiness: {
+        status: 'not_ready',
+        dayBoundary: 'UTC',
+        asOfDayMs: null,
+        generatedAtMs: null,
+        updatedAtMs: null,
+        score: null,
+        label: null,
+        confidence: null,
+        availableSignalCount: null,
+        baselineEvidenceCount: null,
+      },
+      providerUserId: 'briefing-secret',
+    });
     mismatchService.listActivities = vi.fn().mockResolvedValue({
       activities: [],
       nextCursor: null,
@@ -1642,6 +1764,7 @@ describe('MCP public output contracts', () => {
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
+      'get_daily_briefing',
       'list_activities',
       'list_routes',
     ] as const) {
@@ -1673,6 +1796,9 @@ describe('MCP public output contracts', () => {
     errorService.listSleepSessions = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.getDailyBriefing = vi.fn().mockImplementation(async () => {
+      throw expectedError();
+    });
     errorService.listActivities = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
@@ -1686,6 +1812,7 @@ describe('MCP public output contracts', () => {
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
+      'get_daily_briefing',
       'list_activities',
       'list_routes',
     ] as const) {

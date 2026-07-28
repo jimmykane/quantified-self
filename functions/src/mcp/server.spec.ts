@@ -221,6 +221,16 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
 
+  it('requires both metrics and sleep scopes for the daily briefing', () => {
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_daily_briefing' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ]);
+  });
+
   it('makes the static activity-type catalog available to every authorized client', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
@@ -322,6 +332,18 @@ describe('MCP HTTP scope enforcement', () => {
     await expect(listToolNames([MCP_OAUTH_SCOPES.SleepRead])).resolves.toEqual([
       'list_activity_types',
       'list_sleep_sessions',
+      'query_sleep_summary',
+    ]);
+    await expect(listToolNames([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ])).resolves.toEqual([
+      'get_daily_briefing',
+      'get_training_metric',
+      'list_activity_types',
+      'list_metrics',
+      'list_sleep_sessions',
+      'query_metric',
       'query_sleep_summary',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([

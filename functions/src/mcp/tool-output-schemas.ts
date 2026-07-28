@@ -34,6 +34,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'get_training_metric',
   'list_sleep_sessions',
   'query_sleep_summary',
+  'get_daily_briefing',
   'list_activity_types',
   'list_activities',
   'find_activities_near_location',
@@ -331,6 +332,73 @@ const sleepSession = z.strictObject({
   }).nullable(),
   vitals: sleepVitals.nullable(),
 }).meta({ title: 'McpSleepSession' });
+
+const dailyBriefingSleepSession = z.strictObject({
+  sleepDate: z.iso.date(),
+  startTimeMs: timestampMs,
+  endTimeMs: timestampMs,
+  durationSeconds: nonNegativeNumber,
+  inBedDurationSeconds: nullableNonNegativeNumber,
+  score: z.strictObject({
+    value: nullableNonNegativeNumber,
+    qualifier: z.string().max(120).nullable(),
+  }).nullable(),
+}).meta({ title: 'McpDailyBriefingSleepSession' });
+
+const dailyBriefingReadiness = z.strictObject({
+  status: z.enum(['available', 'no_signal', 'not_ready', 'stale']),
+  dayBoundary: z.literal('UTC'),
+  asOfDayMs: nullableTimestampMs,
+  generatedAtMs: nullableTimestampMs,
+  updatedAtMs: nullableTimestampMs,
+  score: nullableNumber,
+  label: z.enum(['Ready', 'Mixed', 'Recover']).nullable(),
+  confidence: z.enum(['high', 'medium', 'low']).nullable(),
+  availableSignalCount: count.nullable(),
+  baselineEvidenceCount: count.nullable(),
+}).superRefine((value, context) => {
+  const signalFields = [
+    value.score,
+    value.label,
+    value.confidence,
+    value.availableSignalCount,
+    value.baselineEvidenceCount,
+  ];
+  if (value.status === 'available' && signalFields.some(field => field === null)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Available readiness must include all safe signal fields.',
+    });
+  }
+  if (value.status !== 'available' && signalFields.some(field => field !== null)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Unavailable readiness must withhold all signal fields.',
+    });
+  }
+  if (
+    value.status === 'not_ready'
+    && (
+      value.asOfDayMs !== null
+      || value.generatedAtMs !== null
+      || value.updatedAtMs !== null
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Not-ready readiness must not expose snapshot timestamps.',
+    });
+  }
+  if (
+    value.status !== 'not_ready'
+    && (value.asOfDayMs === null || value.generatedAtMs === null)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A validated readiness snapshot must expose its day and generation time.',
+    });
+  }
+}).meta({ title: 'McpDailyBriefingReadiness' });
 
 const activityTypeDescriptor = z.strictObject({
   activityType: z.string().min(1).max(120),
@@ -722,6 +790,43 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
           ...sleepVitalsShape,
         }),
       })),
+    }),
+    get_daily_briefing: z.strictObject({
+      asOfTimeMs: timestampMs,
+      timeZone: z.string().min(1).max(80),
+      localDayStartTimeMs: timestampMs,
+      localDayEndTimeMs: timestampMs,
+      sleep: z.strictObject({
+        status: z.enum(['available', 'no_completed_session']),
+        latestSession: dailyBriefingSleepSession.nullable(),
+        comparison: z.strictObject({
+          sameProviderNightCount: count.max(7),
+          averageDurationSeconds: nullableNonNegativeNumber,
+          durationDeltaSeconds: nullableNumber,
+        }),
+      }).superRefine((value, context) => {
+        if (
+          (value.status === 'available' && value.latestSession === null)
+          || (value.status === 'no_completed_session' && value.latestSession !== null)
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['latestSession'],
+            message: 'Sleep availability must match latestSession presence.',
+          });
+        }
+        if (
+          value.comparison.averageDurationSeconds === null
+          && value.comparison.durationDeltaSeconds !== null
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['comparison', 'durationDeltaSeconds'],
+            message: 'A duration delta requires a baseline duration.',
+          });
+        }
+      }),
+      trainingReadiness: dailyBriefingReadiness,
     }),
     list_activity_types: z.strictObject({
       activityTypeCount: count,

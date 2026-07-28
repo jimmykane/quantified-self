@@ -359,8 +359,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'bedtime',
-            title: 'Sleep sessions and summaries',
-            copy: 'Review normalized sleep sessions plus daily, weekly, or monthly aggregates without exposing provider payloads, raw stage intervals, or raw physiological samples.',
+            title: 'Sleep summaries and a compact morning briefing',
+            copy: 'Review normalized sleep sessions plus daily, weekly, or monthly aggregates. With both sleep and Training-metrics permission, ask for a compact IANA-timezone morning briefing with your latest completed sleep and current readiness status—never provider identity, raw physiological samples, a workout plan, or medical advice.',
           },
           {
             icon: 'route',

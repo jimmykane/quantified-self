@@ -17,10 +17,15 @@ returned.
    nap-inclusive total explicitly unless the user asks for a combined headline.
 3. Preserve local-day boundaries, units, session counts, stage coverage, missing values, and pagination state.
 4. Compare like periods and state when sparse sessions, excluded naps, or incomplete stage data limit the conclusion.
+5. For a compact same-day morning readout, use the server's advertised daily-briefing tool only when both sleep and
+   Training-metrics access are available. Supply the user's explicit IANA timezone. It is a current-context shortcut,
+   not a historical sleep trend or a medical assessment.
 
 ## Limits
 
 - If `sleep:read` is missing, explain that Sleep summaries access must be granted through reconnection.
+- The daily-briefing tool additionally needs `metrics:read`; without both grants, use the ordinary sleep tools and do
+  not infer Training readiness.
 - Treat a missing permission, no recorded sessions, filtered-out naps, and unavailable stage values as different
   outcomes.
 - Do not interpret missing stages as zero or use a provider filter unless the user asks for it.

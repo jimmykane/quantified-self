@@ -370,6 +370,14 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       'Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics.',
     );
   }
+  if (
+    auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
+    && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
+  ) {
+    instructions.push(
+      'For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep with a current UTC-day Training readiness signal; it is not a workout plan or medical advice.',
+    );
+  }
   return instructions.join(' ');
 }
 
@@ -586,6 +594,27 @@ export function createMcpServer(
       includeNaps: input.includeNaps,
       provider: input.provider,
       groupBy: input.groupBy,
+      timeZone: input.timeZone,
+    })));
+  }
+
+  if (
+    auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
+    && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
+  ) {
+    server.registerTool('get_daily_briefing', {
+      title: 'Get daily briefing',
+      description: 'Return a compact morning readout for an explicit IANA time zone. It includes only the latest completed non-nap sleep and a current UTC-day Training readiness signal. It never returns provider identity, physiology, locations, activity records, body measurements, a workout plan, or medical advice.',
+      inputSchema: {
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Required IANA time zone used for the local-day boundaries in this briefing.'),
+      },
+      outputSchema: outputSchemas.get_daily_briefing,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_daily_briefing', () => dataService.getDailyBriefing({
+      uid: auth.uid,
       timeZone: input.timeZone,
     })));
   }
@@ -931,6 +960,12 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   }
   if (['list_sleep_sessions', 'query_sleep_summary'].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.SleepRead];
+  }
+  if (toolName === 'get_daily_briefing') {
+    return [
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ];
   }
   if ([
     'find_activities_near_location',
