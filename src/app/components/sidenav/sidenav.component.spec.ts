@@ -318,6 +318,9 @@ describe('SideNavComponent', () => {
         expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Going away');
         expect(aiInsightsItem?.nativeElement.classList.contains('ai-insights-retiring')).toBe(false);
         expect(aiInsightsItem?.nativeElement.getAttribute('aria-label')).toBeNull();
+
+        const template = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'), 'utf8');
+        expect(template).not.toMatch(/beta/i);
     });
 
     it('should link My Tracks directly for logged-in free users', () => {
