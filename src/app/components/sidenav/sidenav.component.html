@@ -49,38 +49,22 @@
     <mat-icon>monitoring</mat-icon>
     <span>Training <span class="nav-badge">New</span></span>
   </mat-list-item>
-  }
 
-  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
-    <mat-icon>compare_arrows</mat-icon>
-    <span>Compare Files</span>
+  <mat-list-item routerLinkActive="active" routerLink="/routes" (click)="closeSideNav()">
+    <mat-icon>route</mat-icon>
+    <span>Routes <span class="mat-small">(Beta)</span></span>
+    <span class="fill-space"></span>
   </mat-list-item>
 
-  @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNav()">
-    <mat-icon>card_membership</mat-icon>
-    <span>Membership</span>
-  </mat-list-item>
-  }
-
-  @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/login" (click)="closeSideNav()">
-    <mat-icon>assignment_ind</mat-icon>
-    <span>Login</span>
-  </mat-list-item>
-  }
-
-  @if (user) {
   <mat-list-item routerLinkActive="active" routerLink="/mytracks" (click)="closeSideNav()">
     <mat-icon>layers</mat-icon>
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
     <span class="fill-space"></span>
   </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" routerLink="/routes" (click)="closeSideNav()">
-    <mat-icon>route</mat-icon>
-    <span>Routes <span class="mat-small">(Beta)</span></span>
-    <span class="fill-space"></span>
+  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
+    <mat-icon>compare_arrows</mat-icon>
+    <span>Compare Files</span>
   </mat-list-item>
 
   <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
@@ -95,7 +79,26 @@
   </mat-list-item>
   }
 
+  @if (!user) {
+  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
+    <mat-icon>compare_arrows</mat-icon>
+    <span>Compare Files</span>
+  </mat-list-item>
+  }
 
+  @if (!user) {
+  <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNav()">
+    <mat-icon>card_membership</mat-icon>
+    <span>Membership</span>
+  </mat-list-item>
+  }
+
+  @if (!user) {
+  <mat-list-item routerLinkActive="active" routerLink="/login" (click)="closeSideNav()">
+    <mat-icon>assignment_ind</mat-icon>
+    <span>Login</span>
+  </mat-list-item>
+  }
 
   <!-- Account Section -->
   @if (user) {
