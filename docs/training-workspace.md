@@ -1246,6 +1246,7 @@ later output-to-heart-rate ratio is meaningful as a possible fade only when the 
 effort; intentional easing, changing terrain, coasting, or a pace change can legitimately produce the same pattern. It
 also explains that Training is for repeated comparable-session trends (smaller absolute decoupling/heart-rate drift and
 higher output retention are steadier), and that a missing result means no suitable comparison—not zero durability.
+The trigger uses the same compact 20 px Material title-info control and 16 px icon as other chart headers.
 
 ## Status and Empty-State Semantics
 
@@ -1456,6 +1457,7 @@ training-readiness.helper.spec.ts
 training-recovery-estimate.helper.spec.ts
 training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
+durability-reading-guide.component.spec.ts
 training-readiness-trend-chart.component.spec.ts
 training-body-weight-trend-chart.component.spec.ts
 event-json-sanitizer.spec.ts

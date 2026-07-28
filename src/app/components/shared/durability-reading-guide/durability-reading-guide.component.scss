@@ -2,6 +2,29 @@
   display: inline-flex;
 }
 
+.title-info-button {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  line-height: 20px;
+  flex: 0 0 auto;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  --mat-icon-button-state-layer-size: 20px;
+  --mat-icon-button-icon-size: 16px;
+}
+
+.title-info-button mat-icon {
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .durability-reading-guide-content {
   box-sizing: border-box;
   display: grid;
