@@ -391,6 +391,7 @@ The analytics and map entries follow the
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
 | `get_today_readiness` | `metrics:read` + `sleep:read` | Live Dashboard Today-equivalent readiness with Load, Sleep, HRV, and Overnight HR evidence |
+| `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
@@ -408,7 +409,8 @@ The analytics and map entries follow the
 Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
 tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
 before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics`,
-`get_today_readiness`, and `get_daily_briefing` are registered only when all of their respective scopes are present.
+`get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
+scopes are present.
 
 ### Strict structured output
 
@@ -438,12 +440,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 24-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 25-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 24 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 25 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -787,7 +789,7 @@ stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or 
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
 deliberately.
 
-## Current readiness and daily briefing projections
+## Current readiness and daily report projections
 
 ### Live today readiness
 
@@ -821,6 +823,32 @@ accepts average HRV before the normalized overnight-HRV fallback, excludes naps 
 current score, and never returns provider, session/document identity, source fields, raw samples, score components, or
 provider payloads. It is contextual and cannot diagnose illness, prescribe a workout, or establish a multi-day trend;
 use `get_sleep_trend` for trend questions.
+
+### Daily health and Training report
+
+`get_daily_report` is the preferred one-call source for a good-morning request or current daily report. It requires both
+`metrics:read` and `sleep:read`, accepts one explicit IANA timezone, and preserves the same local-day-context versus
+UTC-readiness-boundary distinction as `get_today_readiness`.
+
+The report reuses the live readiness loader, Form/ramp source selection, deterministic same-provider/date sleep grouping,
+and shared readiness evaluator rather than chaining public tool calls or defining another score. One projected 30-day
+sleep query supplies both the report and readiness. It reads at most 257 documents to enforce an at-most-256-session
+bound and selects only provider grouping, sleep date, start/end/duration, in-bed duration, normalized timezone offset,
+nap state, score value/qualifier, aggregate average/overnight HRV, and aggregate average/minimum sleep HR. Provider
+identity is used only for internal grouping and never enters the response.
+
+The latest completed main-sleep projection returns the safe session timing, duration, in-bed duration, score, and an
+explicit four-field aggregate-vital allowlist: average and overnight HRV in milliseconds plus average and minimum sleep
+heart rate in beats per minute. Each missing value is `null`; raw samples, SpO₂, respiration, provider identity, source
+metadata, and score components are absent. The duration comparison uses up to 14 earlier same-provider nights and
+requires at least three before returning an average or delta.
+
+The nested readiness object is the exact strict `get_today_readiness` result, including safe driver values, baselines,
+ratios, evidence states, and freshness. The Training summary reuses the frozen briefing's strict current-versus-usual
+equivalent 28-day projection. Server instructions tell clients to lead with sleep and recorded HRV/heart-rate values,
+summarize readiness in one sentence using at most two relevant available drivers, then summarize Training. The report
+does not diagnose illness, prescribe a workout, or establish a multi-day trend; use `get_sleep_trend` when the question
+asks about change over time, SpO₂, or respiration.
 
 ### Compact briefing
 
@@ -857,6 +885,8 @@ requires no new Firestore composite index.
 - Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 30-day bound, reads
   exactly the three ready load snapshots in parallel, and returns at most 16 KiB. Its score uses only the latest
   eligible main sleep plus up to 14 same-provider baseline nights after deterministic same-date aggregation.
+- A daily report reuses that same bounded sleep/readiness work, reads only the additional ready `training_summary`
+  snapshot, compares duration with at most 14 earlier same-provider nights, and returns at most 16 KiB.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
 - A daily briefing reads at most 33 recent sleep documents from a fixed 14-day lookback, keeps at most 32 completed

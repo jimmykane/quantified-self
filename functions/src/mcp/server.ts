@@ -390,7 +390,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
     instructions.push(
-      'For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For a broader compact morning readout, use get_daily_briefing; it combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and the compact stored readiness status. Neither tool is a workout plan or medical advice.',
+      'For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For good-morning requests, a daily report, or a current readout that should include recorded sleep HRV and sleep heart rate, use get_daily_report. Lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
     );
   }
   return instructions.join(' ');
@@ -677,6 +677,22 @@ export function createMcpServer(
         timeZone: input.timeZone,
       }),
     ));
+
+    server.registerTool('get_daily_report', {
+      title: 'Get daily health and training report',
+      description: 'Return one current report for an explicit IANA time zone. It combines the latest completed non-nap sleep with an explicit allowlist of aggregate average/overnight HRV and average/minimum sleep heart rate, the live Dashboard Today readiness and its safe same-provider evidence, and current-versus-usual equivalent 28-day Training totals and sport mix. In the answer, lead with sleep and recorded HRV/heart-rate values, keep readiness to one sentence using at most two relevant available drivers, then summarize Training. Provider identity, raw samples, SpO2, respiration, locations, activity records, body measurements, workout plans, diagnosis, and medical advice are excluded.',
+      inputSchema: {
+        timeZone: z.string()
+          .min(1)
+          .max(80)
+          .describe('Required IANA time zone used for local-day report context; readiness itself retains its documented UTC day boundary.'),
+      },
+      outputSchema: outputSchemas.get_daily_report,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_daily_report', () => dataService.getDailyReport({
+      uid: auth.uid,
+      timeZone: input.timeZone,
+    })));
 
     server.registerTool('get_daily_briefing', {
       title: 'Get daily briefing',
@@ -1044,6 +1060,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   }
   if ([
     'get_today_readiness',
+    'get_daily_report',
     'get_daily_briefing',
   ].includes(toolName)) {
     return [

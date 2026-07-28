@@ -32,10 +32,12 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    `metrics:read` and `sleep:read` are available. Preserve its UTC-day scoring boundary, local-day context, current load
    freshness, safe latest aggregate HRV/heart-rate values, same-provider baseline medians, ratios, and evidence states.
    Use a separate bounded sleep trend when the user asks whether those values changed over several days.
-7. For a request such as “good morning” or a compact current readout, prefer the server's advertised daily-briefing
-   tool when both `metrics:read` and `sleep:read` are available. Pass an explicit IANA timezone, preserve its local-day
-   and UTC-day boundary distinction, distinguish its equivalent 28-day Training summary from the preceding 84-day
-   comparison source, and do not expand it into a workout plan or medical advice.
+7. For a request such as “good morning,” a daily report, or a current readout, prefer the server's advertised daily
+   report tool when both `metrics:read` and `sleep:read` are available. Pass an explicit IANA timezone. Lead with the
+   latest sleep and recorded aggregate HRV/heart-rate values, summarize Readiness in one sentence using at most two
+   relevant available drivers, then summarize the equivalent 28-day Training context. Preserve the local-day versus
+   UTC-day boundary distinction and the preceding 84-day Training comparison source. Use the legacy daily briefing only
+   when the user explicitly asks for its physiology-free projection.
 
 ## Permissions and Privacy
 
@@ -50,8 +52,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
   outside the public tool results.
 - Distinguish recorded measurements, aggregated activity metrics, normalized sleep data, and Training-derived
   snapshots.
-- A daily briefing is a limited current-context projection: its latest completed sleep, current-versus-usual Training
-  summary, and readiness status do not establish a long-term trend or causation.
+- A daily report is a limited current-context projection: its latest completed sleep, aggregate HRV/heart-rate values,
+  current-versus-usual Training summary, and live readiness do not establish a long-term trend or causation.
 - The live readiness result explains the current score inputs; it is not itself a multi-day HRV or sleep trend.
 - Do not infer oxygen desaturations, respiratory events, illness, or a diagnosis from aggregate blood-oxygen or
   respiration values.

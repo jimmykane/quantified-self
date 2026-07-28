@@ -42,6 +42,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'query_sleep_summary',
   'get_sleep_trend',
   'get_today_readiness',
+  'get_daily_report',
   'get_daily_briefing',
   'list_activity_types',
   'list_activities',
@@ -80,6 +81,7 @@ const timestampMs = z.number()
 const nullableTimestampMs = timestampMs.nullable();
 const nullableNonNegativeTimestampMs = timestampMs.nonnegative().nullable();
 const cursor = z.string().min(1).max(512).nullable();
+const MIN_DAILY_REPORT_SLEEP_BASELINE_NIGHTS = 3;
 const unavailableLocationOutput = z.strictObject({}).superRefine(
   (_value, context) => {
     context.addIssue({
@@ -380,6 +382,24 @@ const dailyBriefingSleepSession = z.strictObject({
     qualifier: z.string().max(120).nullable(),
   }).nullable(),
 }).meta({ title: 'McpDailyBriefingSleepSession' });
+
+const dailyReportSleepSession = z.strictObject({
+  sleepDate: z.iso.date(),
+  startTimeMs: timestampMs,
+  endTimeMs: timestampMs,
+  durationSeconds: nonNegativeNumber,
+  inBedDurationSeconds: nullableNonNegativeNumber,
+  score: z.strictObject({
+    value: nullableNonNegativeNumber,
+    qualifier: z.string().max(120).nullable(),
+  }).nullable(),
+  vitals: z.strictObject({
+    averageHrvMs: nullablePositiveNumber,
+    overnightHrvMs: nullablePositiveNumber,
+    averageHeartRateBpm: nullablePositiveNumber,
+    minimumHeartRateBpm: nullablePositiveNumber,
+  }),
+}).meta({ title: 'McpDailyReportSleepSession' });
 
 const todayReadinessMetricStatus = z.enum([
   'available',
@@ -733,6 +753,152 @@ const dailyBriefingTrainingSummary = z.strictObject({
     }
   }
 }).meta({ title: 'McpDailyBriefingTrainingSummary' });
+
+function createTodayReadinessOutputSchema() {
+  return z.strictObject({
+    asOfTimeMs: timestampMs,
+    timeZone: z.string().min(1).max(80),
+    localDayStartTimeMs: timestampMs,
+    localDayEndTimeMs: timestampMs,
+    dayBoundary: z.literal('UTC'),
+    asOfDayMs: timestampMs,
+    formulaVersion: z.literal(READINESS_FORMULA_VERSION),
+    status: z.enum(['available', 'no_signal']),
+    score: readinessScore.nullable(),
+    label: z.enum(['Ready', 'Mixed', 'Recover']).nullable(),
+    confidence: z.enum(['high', 'medium', 'low']).nullable(),
+    availableSignalCount: count.max(READINESS_TOTAL_SIGNAL_COUNT),
+    availableWeightPercent: count.max(100),
+    baselineEvidenceCount: count.max(14),
+    totalSignalCount: z.literal(READINESS_TOTAL_SIGNAL_COUNT),
+    drivers: z.strictObject({
+      load: todayReadinessLoadDriver,
+      sleep: todayReadinessSleepDriver,
+      hrv: todayReadinessHrvDriver,
+      overnightHeartRate: todayReadinessOvernightHeartRateDriver,
+    }),
+  }).superRefine((value, context) => {
+    const signalFields = [
+      value.score,
+      value.label,
+      value.confidence,
+    ];
+    const projectedSignalCount = [
+      value.drivers.load.status === 'available',
+      value.drivers.sleep.status === 'available',
+      value.drivers.hrv.status === 'available',
+      value.drivers.overnightHeartRate.status === 'available',
+    ].filter(Boolean).length;
+    const projectedAvailableWeightPercent = (
+      value.drivers.load.status === 'available'
+        ? value.drivers.load.weightPercent
+        : 0
+    ) + (
+      value.drivers.sleep.status === 'available'
+        ? value.drivers.sleep.weightPercent
+        : 0
+    ) + (
+      value.drivers.hrv.status === 'available'
+        ? value.drivers.hrv.weightPercent
+        : 0
+    ) + (
+      value.drivers.overnightHeartRate.status === 'available'
+        ? value.drivers.overnightHeartRate.weightPercent
+        : 0
+    );
+    const maximumPerMetricBaselineCount = Math.max(
+      value.drivers.hrv.baselineNightCount,
+      value.drivers.overnightHeartRate.average.baselineNightCount,
+      value.drivers.overnightHeartRate.minimum.baselineNightCount,
+    );
+    if (
+      (value.status === 'available' && (
+        signalFields.some(field => field === null)
+        || value.availableSignalCount < 1
+      ))
+      || (
+        value.status === 'no_signal'
+        && (
+          signalFields.some(field => field !== null)
+          || value.availableSignalCount !== 0
+          || value.baselineEvidenceCount !== 0
+        )
+      )
+      || value.availableSignalCount !== projectedSignalCount
+      || value.availableWeightPercent !== projectedAvailableWeightPercent
+      || value.baselineEvidenceCount < maximumPerMetricBaselineCount
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Readiness availability must match its score and evidence counts.',
+      });
+    }
+  });
+}
+
+const dailyReportSleep = z.strictObject({
+  status: z.enum(['available', 'no_completed_session']),
+  latestSession: dailyReportSleepSession.nullable(),
+  comparison: z.strictObject({
+    sameProviderNightCount: count.max(14),
+    averageDurationSeconds: nullableNonNegativeNumber,
+    durationDeltaSeconds: nullableNumber,
+  }),
+}).superRefine((value, context) => {
+  if (
+    (value.status === 'available' && value.latestSession === null)
+    || (value.status === 'no_completed_session' && value.latestSession !== null)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['latestSession'],
+      message: 'Sleep availability must match latestSession presence.',
+    });
+  }
+  if (
+    value.comparison.averageDurationSeconds === null
+    && value.comparison.durationDeltaSeconds !== null
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['comparison', 'durationDeltaSeconds'],
+      message: 'A duration delta requires a baseline duration.',
+    });
+  }
+  if (
+    (
+      value.status === 'no_completed_session'
+      && (
+        value.comparison.sameProviderNightCount !== 0
+        || value.comparison.averageDurationSeconds !== null
+        || value.comparison.durationDeltaSeconds !== null
+      )
+    )
+    || (
+      value.comparison.sameProviderNightCount
+        < MIN_DAILY_REPORT_SLEEP_BASELINE_NIGHTS
+      && (
+        value.comparison.averageDurationSeconds !== null
+        || value.comparison.durationDeltaSeconds !== null
+      )
+    )
+    || (
+      value.status === 'available'
+      && value.comparison.sameProviderNightCount
+        >= MIN_DAILY_REPORT_SLEEP_BASELINE_NIGHTS
+      && (
+        value.comparison.averageDurationSeconds === null
+        || value.comparison.durationDeltaSeconds === null
+      )
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['comparison'],
+      message: 'Sleep comparison values must match sleep and baseline availability.',
+    });
+  }
+}).meta({ title: 'McpDailyReportSleep' });
 
 const activityTypeDescriptor = z.strictObject({
   activityType: z.string().min(1).max(120),
@@ -1138,84 +1304,11 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       availableVitals: z.array(sleepVitalAvailability),
       buckets: z.array(sleepSummaryBucket),
     }),
-    get_today_readiness: z.strictObject({
-      asOfTimeMs: timestampMs,
-      timeZone: z.string().min(1).max(80),
-      localDayStartTimeMs: timestampMs,
-      localDayEndTimeMs: timestampMs,
-      dayBoundary: z.literal('UTC'),
-      asOfDayMs: timestampMs,
-      formulaVersion: z.literal(READINESS_FORMULA_VERSION),
-      status: z.enum(['available', 'no_signal']),
-      score: readinessScore.nullable(),
-      label: z.enum(['Ready', 'Mixed', 'Recover']).nullable(),
-      confidence: z.enum(['high', 'medium', 'low']).nullable(),
-      availableSignalCount: count.max(READINESS_TOTAL_SIGNAL_COUNT),
-      availableWeightPercent: count.max(100),
-      baselineEvidenceCount: count.max(14),
-      totalSignalCount: z.literal(READINESS_TOTAL_SIGNAL_COUNT),
-      drivers: z.strictObject({
-        load: todayReadinessLoadDriver,
-        sleep: todayReadinessSleepDriver,
-        hrv: todayReadinessHrvDriver,
-        overnightHeartRate: todayReadinessOvernightHeartRateDriver,
-      }),
-    }).superRefine((value, context) => {
-      const signalFields = [
-        value.score,
-        value.label,
-        value.confidence,
-      ];
-      const projectedSignalCount = [
-        value.drivers.load.status === 'available',
-        value.drivers.sleep.status === 'available',
-        value.drivers.hrv.status === 'available',
-        value.drivers.overnightHeartRate.status === 'available',
-      ].filter(Boolean).length;
-      const projectedAvailableWeightPercent = (
-        value.drivers.load.status === 'available'
-          ? value.drivers.load.weightPercent
-          : 0
-      ) + (
-        value.drivers.sleep.status === 'available'
-          ? value.drivers.sleep.weightPercent
-          : 0
-      ) + (
-        value.drivers.hrv.status === 'available'
-          ? value.drivers.hrv.weightPercent
-          : 0
-      ) + (
-        value.drivers.overnightHeartRate.status === 'available'
-          ? value.drivers.overnightHeartRate.weightPercent
-          : 0
-      );
-      const maximumPerMetricBaselineCount = Math.max(
-        value.drivers.hrv.baselineNightCount,
-        value.drivers.overnightHeartRate.average.baselineNightCount,
-        value.drivers.overnightHeartRate.minimum.baselineNightCount,
-      );
-      if (
-        (value.status === 'available' && (
-          signalFields.some(field => field === null)
-          || value.availableSignalCount < 1
-        ))
-        || (
-          value.status === 'no_signal'
-          && (
-            signalFields.some(field => field !== null)
-            || value.availableSignalCount !== 0
-            || value.baselineEvidenceCount !== 0
-          )
-        )
-        || value.availableSignalCount !== projectedSignalCount
-        || value.availableWeightPercent !== projectedAvailableWeightPercent
-        || value.baselineEvidenceCount < maximumPerMetricBaselineCount
-      ) {
-        context.addIssue({
-          code: 'custom',
-          message: 'Readiness availability must match its score and evidence counts.',
-        });
-      }
+    get_today_readiness: createTodayReadinessOutputSchema(),
+    get_daily_report: z.strictObject({
+      sleep: dailyReportSleep,
+      readiness: createTodayReadinessOutputSchema(),
+      trainingSummary: dailyBriefingTrainingSummary,
     }),
     get_daily_briefing: z.strictObject({
       asOfTimeMs: timestampMs,

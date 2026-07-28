@@ -23,15 +23,16 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
    load freshness, recorded-versus-duration sleep score source, same-provider HRV and overnight-heart-rate baselines,
    evidence counts, and explicit missing or insufficient-baseline states. Do not reconstruct those drivers from a
    historical readiness snapshot.
-7. For a compact morning readout, use the server's advertised daily-briefing tool only when the user also granted
-   `sleep:read`; supply an explicit IANA timezone. Treat its UTC-day readiness freshness and explicit unavailable
-   states as authoritative. Its Training context is the current-versus-usual equivalent 28-day summary, including the
-   Running/Cycling/Swimming mix; do not substitute a specialist snapshot unless the user asks for that analysis.
+7. For a morning or daily readout, use the server's advertised daily report tool only when the user also granted
+   `sleep:read`; supply an explicit IANA timezone. Lead with the latest sleep and recorded aggregate HRV/heart-rate
+   values, summarize Readiness in one sentence using at most two relevant available drivers, then present the
+   current-versus-usual equivalent 28-day Training summary and Running/Cycling/Swimming mix. Treat UTC-day readiness
+   freshness and explicit unavailable states as authoritative; do not substitute a specialist snapshot unless asked.
 
 ## Limits
 
 - If `metrics:read` is missing, explain that Activity and Training metrics access must be granted through reconnection.
-- The live-readiness and daily-briefing tools additionally need `sleep:read`; do not reconstruct either from raw sleep
+- The live-readiness and daily-report tools additionally need `sleep:read`; do not reconstruct either from raw sleep
   or turn the result into a workout prescription.
 - Treat a missing metric, missing permission, incomplete page, and a not-ready Training snapshot as distinct outcomes.
 - Do not use a current Training-derived body-weight snapshot as historical weigh-in data.

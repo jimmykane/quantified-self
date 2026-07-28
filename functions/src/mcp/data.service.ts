@@ -155,8 +155,11 @@ const MAX_DAILY_BRIEFING_SLEEP_SESSIONS = 32;
 const MAX_DAILY_BRIEFING_BASELINE_NIGHTS = 7;
 const MIN_DAILY_BRIEFING_BASELINE_NIGHTS = 3;
 const MAX_DAILY_BRIEFING_RESPONSE_BYTES = 16 * 1024;
-const MAX_TODAY_READINESS_SLEEP_DOCUMENTS = 256;
+const MAX_LIVE_READINESS_SLEEP_DOCUMENTS = 256;
 const MAX_TODAY_READINESS_RESPONSE_BYTES = 16 * 1024;
+const MAX_DAILY_REPORT_BASELINE_NIGHTS = 14;
+const MIN_DAILY_REPORT_BASELINE_NIGHTS = 3;
+const MAX_DAILY_REPORT_RESPONSE_BYTES = 16 * 1024;
 const SLEEP_CURSOR_VERSION = 1;
 const SLEEP_CURSOR_NONCE_BYTES = 12;
 const SLEEP_CURSOR_AUTH_TAG_BYTES = 16;
@@ -624,9 +627,11 @@ const defaultDependencies: McpDataServiceDependencies = {
         'startTimeMs',
         'endTimeMs',
         'durationSeconds',
+        'inBedDurationSeconds',
         'timezoneOffsetSeconds',
         'isNap',
         new FieldPath('score', 'value'),
+        new FieldPath('score', 'qualifier'),
         new FieldPath('vitals', 'averageHrvMs'),
         new FieldPath('vitals', 'overnightHrvMs'),
         new FieldPath('vitals', 'averageHeartRateBpm'),
@@ -2662,6 +2667,8 @@ export interface GetDailyBriefingInput {
   timeZone: string;
 }
 
+export type GetDailyReportInput = GetDailyBriefingInput;
+
 export interface GetTodayReadinessInput {
   uid: string;
   timeZone: string;
@@ -2752,6 +2759,28 @@ interface DailyBriefingSleepSession {
     value: number | null;
     qualifier: string | null;
   } | null;
+}
+
+interface DailyReportSleepVitals {
+  averageHrvMs: number | null;
+  overnightHrvMs: number | null;
+  averageHeartRateBpm: number | null;
+  minimumHeartRateBpm: number | null;
+}
+
+interface DailyReportSleepSession extends DailyBriefingSleepSession {
+  vitals: DailyReportSleepVitals;
+}
+
+interface DailyReportSleepNight {
+  id: string;
+  provider: SleepProvider;
+  sleepDate: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  durationSeconds: number;
+  session: DailyReportSleepSession;
+  evidence: ReadinessSleepEvidencePoint;
 }
 
 interface DailyBriefingReadiness {
@@ -3099,16 +3128,19 @@ function parseReadyDerivedPayload<T>(
     : null;
 }
 
-function buildTodayReadinessSleepEvidence(
+function buildTodayReadinessSleepNights(
   documents: readonly RawDocument[],
-): ReadinessSleepEvidencePoint[] {
-  const grouped = new Map<string, ReadinessSleepEvidencePoint[]>();
+): DailyReportSleepNight[] {
+  const grouped = new Map<string, Array<{
+    session: SafeSleepSession;
+    evidence: ReadinessSleepEvidencePoint;
+  }>>();
   for (const document of documents) {
     const session = toSafeSleepSession(document.data);
     if (!session || session.isNap) {
       continue;
     }
-    const point: ReadinessSleepEvidencePoint = {
+    const evidence: ReadinessSleepEvidencePoint = {
       id: document.id,
       sleepDate: resolveTodayReadinessSleepDate(document.data, session),
       provider: session.provider,
@@ -3122,40 +3154,102 @@ function buildTodayReadinessSleepEvidence(
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
     };
-    const key = `${point.sleepDate}:${point.provider}`;
-    grouped.set(key, [...(grouped.get(key) || []), point]);
+    const key = `${evidence.sleepDate}:${evidence.provider}`;
+    grouped.set(key, [
+      ...(grouped.get(key) || []),
+      {
+        session,
+        evidence,
+      },
+    ]);
   }
 
-  return [...grouped.values()].map((points) => {
-    const sorted = [...points].sort((left, right) => (
-      (left.endTimeMs || 0) - (right.endTimeMs || 0)
-      || (left.startTimeMs || 0) - (right.startTimeMs || 0)
-      || left.id.localeCompare(right.id)
+  return [...grouped.values()].map((entries) => {
+    const sorted = [...entries].sort((left, right) => (
+      (left.evidence.endTimeMs || 0) - (right.evidence.endTimeMs || 0)
+      || (left.evidence.startTimeMs || 0) - (right.evidence.startTimeMs || 0)
+      || left.evidence.id.localeCompare(right.evidence.id)
     ));
     const latest = sorted[sorted.length - 1];
-    const averageHrvValues = positiveValues(points.map(point => point.averageHrvMs));
+    const averageHrvValues = positiveValues(
+      entries.map(entry => entry.session.vitals?.averageHrvMs ?? null),
+    );
+    const overnightHrvValues = positiveValues(
+      entries.map(entry => entry.session.vitals?.overnightHrvMs ?? null),
+    );
+    const selectedHrvValues = positiveValues(
+      entries.map(entry => (
+        entry.session.vitals?.averageHrvMs
+        ?? entry.session.vitals?.overnightHrvMs
+        ?? null
+      )),
+    );
     const averageHeartRateValues = positiveValues(
-      points.map(point => point.averageHeartRateBpm),
+      entries.map(entry => entry.session.vitals?.averageHeartRateBpm ?? null),
     );
     const minimumHeartRateValues = positiveValues(
-      points.map(point => point.minimumHeartRateBpm),
+      entries.map(entry => entry.session.vitals?.minimumHeartRateBpm ?? null),
     );
-    return {
-      ...latest,
-      id: sorted.map(point => point.id).join('|'),
-      startTimeMs: Math.min(...points.map(point => point.startTimeMs as number)),
-      endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
-      totalSeconds: points.reduce(
-        (total, point) => total + Math.max(0, point.totalSeconds || 0),
-        0,
-      ),
-      averageHrvMs: average(averageHrvValues),
+    const inBedDurationValues = entries
+      .map(entry => entry.session.inBedDurationSeconds)
+      .filter((value): value is number => value !== null);
+    const id = sorted.map(entry => entry.evidence.id).join('|');
+    const startTimeMs = Math.min(
+      ...entries.map(entry => entry.evidence.startTimeMs as number),
+    );
+    const endTimeMs = Math.max(
+      ...entries.map(entry => entry.evidence.endTimeMs as number),
+    );
+    const durationSeconds = entries.reduce(
+      (total, entry) => total + Math.max(0, entry.evidence.totalSeconds || 0),
+      0,
+    );
+    const evidence: ReadinessSleepEvidencePoint = {
+      ...latest.evidence,
+      id,
+      startTimeMs,
+      endTimeMs,
+      totalSeconds: durationSeconds,
+      averageHrvMs: average(selectedHrvValues),
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
         ? Math.min(...minimumHeartRateValues)
         : null,
     };
-  });
+    return {
+      id,
+      provider: latest.session.provider,
+      sleepDate: evidence.sleepDate,
+      startTimeMs,
+      endTimeMs,
+      durationSeconds,
+      session: {
+        sleepDate: evidence.sleepDate,
+        startTimeMs,
+        endTimeMs,
+        durationSeconds,
+        inBedDurationSeconds: inBedDurationValues.length
+          ? inBedDurationValues.reduce((total, value) => total + value, 0)
+          : null,
+        score: latest.session.score,
+        vitals: {
+          averageHrvMs: average(averageHrvValues),
+          overnightHrvMs: average(overnightHrvValues),
+          averageHeartRateBpm: average(averageHeartRateValues),
+          minimumHeartRateBpm: minimumHeartRateValues.length
+            ? Math.min(...minimumHeartRateValues)
+            : null,
+        },
+      },
+      evidence,
+    };
+  }).sort((left, right) => (
+    right.endTimeMs - left.endTimeMs
+    || right.startTimeMs - left.startTimeMs
+    || right.provider.localeCompare(left.provider)
+    || right.sleepDate.localeCompare(left.sleepDate)
+    || right.id.localeCompare(left.id)
+  ));
 }
 
 function resolveTodayReadinessSleepDate(
@@ -3296,6 +3390,107 @@ function projectTodayReadiness(
         average: averageHeartRateDriver,
         minimum: minimumHeartRateDriver,
       },
+    },
+  };
+}
+
+interface LoadedTodayReadiness {
+  result: GetTodayReadinessResult;
+  sleepNights: DailyReportSleepNight[];
+}
+
+async function loadTodayReadiness(
+  dependencies: McpDataServiceDependencies,
+  input: GetTodayReadinessInput,
+): Promise<LoadedTodayReadiness> {
+  const timeZone = requireTimeZone(input.timeZone);
+  const nowTimeMs = dependencies.now();
+  const localDay = resolveRelativeActivityRange(
+    'today',
+    timeZone,
+    nowTimeMs,
+  );
+  const [
+    sleepDocuments,
+    formSnapshot,
+    formNowSnapshot,
+    rampRateSnapshot,
+  ] = await Promise.all([
+    dependencies.fetchReadinessSleepDocuments(
+      input.uid,
+      nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+      nowTimeMs,
+      MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
+    ),
+    dependencies.fetchDerivedSnapshot(
+      input.uid,
+      DERIVED_METRIC_KINDS.Form,
+    ),
+    dependencies.fetchDerivedSnapshot(
+      input.uid,
+      DERIVED_METRIC_KINDS.FormNow,
+    ),
+    dependencies.fetchDerivedSnapshot(
+      input.uid,
+      DERIVED_METRIC_KINDS.RampRate,
+    ),
+  ]);
+  if (sleepDocuments.length > MAX_LIVE_READINESS_SLEEP_DOCUMENTS) {
+    throw new McpDataError(
+      'query_too_large',
+      `The readiness query matches more than ${MAX_LIVE_READINESS_SLEEP_DOCUMENTS} sleep sessions.`,
+    );
+  }
+  const load = resolveTodayReadinessLoadContext(
+    formSnapshot,
+    formNowSnapshot,
+    rampRateSnapshot,
+    nowTimeMs,
+  );
+  const sleepNights = buildTodayReadinessSleepNights(sleepDocuments);
+  const evaluation = buildReadinessEvaluation({
+    form: load.form,
+    rampRate: load.rampRate,
+    sleepPoints: sleepNights.map(night => night.evidence),
+    nowMs: nowTimeMs,
+  });
+  return {
+    result: projectTodayReadiness({
+      nowTimeMs,
+      timeZone,
+      localDayStartTimeMs: localDay.startTimeMs,
+      localDayEndTimeMs: localDay.endTimeMs,
+      load,
+      evaluation,
+    }),
+    sleepNights,
+  };
+}
+
+function projectDailyReportSleep(
+  sleepNights: readonly DailyReportSleepNight[],
+) {
+  const latestNight = sleepNights[0] || null;
+  const baseline = latestNight
+    ? sleepNights.filter(night => (
+      night.provider === latestNight.provider
+      && night.sleepDate !== latestNight.sleepDate
+      && night.endTimeMs < latestNight.endTimeMs
+    )).slice(0, MAX_DAILY_REPORT_BASELINE_NIGHTS)
+    : [];
+  const averageDurationSeconds = baseline.length >= MIN_DAILY_REPORT_BASELINE_NIGHTS
+    ? baseline.reduce((total, night) => total + night.durationSeconds, 0)
+      / baseline.length
+    : null;
+  return {
+    status: latestNight ? 'available' as const : 'no_completed_session' as const,
+    latestSession: latestNight?.session ?? null,
+    comparison: {
+      sameProviderNightCount: baseline.length,
+      averageDurationSeconds,
+      durationDeltaSeconds: latestNight && averageDurationSeconds !== null
+        ? latestNight.durationSeconds - averageDurationSeconds
+        : null,
     },
   };
 }
@@ -4445,68 +4640,42 @@ export function createMcpDataService(
     async getTodayReadiness(
       input: GetTodayReadinessInput,
     ): Promise<GetTodayReadinessResult> {
-      const timeZone = requireTimeZone(input.timeZone);
-      const nowTimeMs = dependencies.now();
-      const localDay = resolveRelativeActivityRange(
-        'today',
-        timeZone,
-        nowTimeMs,
-      );
-      const [
-        sleepDocuments,
-        formSnapshot,
-        formNowSnapshot,
-        rampRateSnapshot,
-      ] = await Promise.all([
-        dependencies.fetchReadinessSleepDocuments(
-          input.uid,
-          nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
-          nowTimeMs,
-          MAX_TODAY_READINESS_SLEEP_DOCUMENTS + 1,
-        ),
-        dependencies.fetchDerivedSnapshot(
-          input.uid,
-          DERIVED_METRIC_KINDS.Form,
-        ),
-        dependencies.fetchDerivedSnapshot(
-          input.uid,
-          DERIVED_METRIC_KINDS.FormNow,
-        ),
-        dependencies.fetchDerivedSnapshot(
-          input.uid,
-          DERIVED_METRIC_KINDS.RampRate,
-        ),
-      ]);
-      if (sleepDocuments.length > MAX_TODAY_READINESS_SLEEP_DOCUMENTS) {
-        throw new McpDataError(
-          'query_too_large',
-          `The readiness query matches more than ${MAX_TODAY_READINESS_SLEEP_DOCUMENTS} sleep sessions.`,
-        );
-      }
-      const load = resolveTodayReadinessLoadContext(
-        formSnapshot,
-        formNowSnapshot,
-        rampRateSnapshot,
-        nowTimeMs,
-      );
-      const evaluation = buildReadinessEvaluation({
-        form: load.form,
-        rampRate: load.rampRate,
-        sleepPoints: buildTodayReadinessSleepEvidence(sleepDocuments),
-        nowMs: nowTimeMs,
-      });
-      const result = projectTodayReadiness({
-        nowTimeMs,
-        timeZone,
-        localDayStartTimeMs: localDay.startTimeMs,
-        localDayEndTimeMs: localDay.endTimeMs,
-        load,
-        evaluation,
-      });
+      const { result } = await loadTodayReadiness(dependencies, input);
       requireJsonBudget(
         result,
         MAX_TODAY_READINESS_RESPONSE_BYTES,
         'The current readiness response exceeds the MCP response limit.',
+      );
+      return result;
+    },
+
+    async getDailyReport(input: GetDailyReportInput) {
+      const timeZone = requireTimeZone(input.timeZone);
+      const [
+        readiness,
+        trainingSummarySnapshot,
+      ] = await Promise.all([
+        loadTodayReadiness(dependencies, {
+          ...input,
+          timeZone,
+        }),
+        dependencies.fetchDerivedSnapshot(
+          input.uid,
+          DERIVED_METRIC_KINDS.TrainingSummary,
+        ),
+      ]);
+      const result = {
+        sleep: projectDailyReportSleep(readiness.sleepNights),
+        readiness: readiness.result,
+        trainingSummary: projectDailyBriefingTrainingSummary(
+          trainingSummarySnapshot,
+          readiness.result.asOfTimeMs,
+        ),
+      };
+      requireJsonBudget(
+        result,
+        MAX_DAILY_REPORT_RESPONSE_BYTES,
+        'The daily report exceeds the MCP response limit.',
       );
       return result;
     },

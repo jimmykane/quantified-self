@@ -241,10 +241,17 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
 
-  it('requires both metrics and sleep scopes for current readiness and the daily briefing', () => {
+  it('requires both metrics and sleep scopes for readiness and daily reports', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'get_today_readiness' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.SleepRead,
+    ]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_daily_report' },
     })).toEqual([
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.SleepRead,
@@ -258,7 +265,7 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
   });
 
-  it('advertises live readiness drivers and the compact Training Summary', async () => {
+  it('advertises live readiness drivers and the daily health and Training report', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({
       uid: 'user-1',
@@ -280,19 +287,30 @@ describe('MCP HTTP scope enforcement', () => {
       const tools = (await client.listTools()).tools;
       const dailyBriefing = tools
         .find(tool => tool.name === 'get_daily_briefing');
+      const dailyReport = tools
+        .find(tool => tool.name === 'get_daily_report');
       const todayReadiness = tools
         .find(tool => tool.name === 'get_today_readiness');
 
       expect(client.getInstructions()).toContain(
-        'current-versus-usual equivalent 28-day Training totals and sport mix',
+        'use get_daily_report',
       );
       expect(client.getInstructions()).toContain(
         'current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence',
+      );
+      expect(client.getInstructions()).toContain(
+        'summarize readiness in one sentence using at most the two most relevant available drivers',
       );
       expect(todayReadiness?.description).toContain(
         'same live recovery-aware readiness shown by Dashboard Today',
       );
       expect(todayReadiness?.description).toContain('same-provider baseline medians');
+      expect(dailyReport?.description).toContain(
+        'aggregate average/overnight HRV and average/minimum sleep heart rate',
+      );
+      expect(dailyReport?.description).toContain(
+        'keep readiness to one sentence',
+      );
       expect(dailyBriefing?.description).toContain(
         'current-versus-usual equivalent 28-day Training totals',
       );
@@ -413,6 +431,7 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.SleepRead,
     ])).resolves.toEqual([
       'get_daily_briefing',
+      'get_daily_report',
       'get_sleep_trend',
       'get_today_readiness',
       'get_training_metric',

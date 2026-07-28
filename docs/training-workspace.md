@@ -354,11 +354,13 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
 scope. They are not standalone Training cards. Do not assume every requested snapshot maps one-to-one to visible markup.
 
-The MCP daily briefing uses only the two headline snapshots from this table: `training_summary` for the current-versus-
-usual 28-day Training context and `training_readiness` for current readiness. It projects a compact identity-free total
-and Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Form, CTL/ATL, ACWR, ramp, recovery,
-capacity, durability, power systems, and other specialist snapshots remain independently queryable rather than being
-silently recast as a daily workout recommendation.
+The legacy MCP daily briefing uses only the two headline snapshots from this table: `training_summary` for the
+current-versus-usual 28-day Training context and `training_readiness` for current readiness. The additive
+`get_daily_report` tool reuses that same strict Training Summary projection but combines it with the live Dashboard
+Today-equivalent readiness path and safe latest sleep HRV/heart-rate aggregates. Both project a compact identity-free
+total and Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Form, CTL/ATL, ACWR, ramp,
+recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather
+than being silently recast as a daily workout recommendation.
 
 Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which is all registered derived kinds. Training-only
 kinds are excluded from the default Dashboard subscription and freshness scope. Dashboard adds `training_capacity` or
@@ -414,7 +416,8 @@ Training state and Readiness are fixed inside the optional Today summary:
   cannot select different latest evidence because query order changed. MCP's additive `get_today_readiness` tool applies
   this same live formula, current Form/ramp preference, bounded 30-day sleep source, and same-provider baselines. It
   exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
-  states; the compact daily briefing remains unchanged.
+  states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
+  compact Training Summary; the frozen daily briefing remains unchanged.
 - **Body-weight trend** reads only positive persisted Sports-lib `Weight` values, in canonical kilograms. Multiple values
   on the same UTC day reduce to a daily median; the snapshot retains the latest 28 UTC days with missing days as null
   points, the latest recorded value, and current 7- and 28-day medians. Its change values compare each current window
@@ -1368,10 +1371,11 @@ The explicitly named live `get_today_readiness` tool is not a derived-snapshot p
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
 exists because the persisted 14-day `training_readiness` point can lag newly imported sleep and because the registered
-daily-briefing schema is frozen. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants
-used by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and
-evidence selection. Never replace the MCP's allowlisted driver response with raw snapshot, provider, or sleep-session
-documents.
+daily-briefing schema is frozen. The additive `get_daily_report` shares that live loader and evaluator, exposes only
+average/overnight HRV plus average/minimum sleep HR for the latest grouped main sleep, and adds the existing strict
+Training Summary projection. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants used
+by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and evidence
+selection. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
 
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map

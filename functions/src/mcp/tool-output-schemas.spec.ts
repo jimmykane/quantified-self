@@ -429,7 +429,7 @@ function createFixtureDataService(
 ): InjectedDataService {
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
-  return {
+  const service = {
     listMeasurementTypes: vi.fn().mockResolvedValue({
       measurementTypes: [{
         id: 'body_weight',
@@ -1023,6 +1023,42 @@ function createFixtureDataService(
       waypointCount: 1,
     }),
   } as unknown as InjectedDataService;
+  service.getDailyReport = vi.fn().mockImplementation(async input => {
+    const [readiness, briefing] = await Promise.all([
+      service.getTodayReadiness(input),
+      service.getDailyBriefing(input),
+    ]);
+    return {
+      sleep: {
+        status: 'available',
+        latestSession: {
+          sleepDate: '2026-07-01',
+          startTimeMs: DAY_MS,
+          endTimeMs: NEXT_DAY_MS,
+          durationSeconds: 28_800,
+          inBedDurationSeconds: 30_600,
+          score: {
+            value: 80,
+            qualifier: 'good',
+          },
+          vitals: {
+            averageHrvMs: 55,
+            overnightHrvMs: 56,
+            averageHeartRateBpm: 49,
+            minimumHeartRateBpm: 40,
+          },
+        },
+        comparison: {
+          sameProviderNightCount: 5,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: 1_200,
+        },
+      },
+      readiness,
+      trainingSummary: briefing.trainingSummary,
+    };
+  });
+  return service;
 }
 
 const successfulToolArguments: Record<
@@ -1065,6 +1101,9 @@ const successfulToolArguments: Record<
     timeZone: 'Europe/Helsinki',
   },
   get_today_readiness: {
+    timeZone: 'Europe/Helsinki',
+  },
+  get_daily_report: {
     timeZone: 'Europe/Helsinki',
   },
   get_daily_briefing: {
@@ -1436,6 +1475,64 @@ describe('MCP public output contracts', () => {
         current28d: {
           ...fixture.trainingSummary.current28d,
           durationSeconds: fixture.trainingSummary.current28d.durationSeconds + 1,
+        },
+      },
+    }).success).toBe(false);
+  });
+
+  it('keeps the daily report sleep-vital allowlist strict and its availability states consistent', async () => {
+    const registry = createMcpOutputSchemaRegistry({
+      activityLocation: true,
+      routeLocation: true,
+    });
+    const fixture = await createFixtureDataService().getDailyReport({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(registry.get_daily_report.safeParse(fixture).success).toBe(true);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        ...fixture.sleep,
+        latestSession: fixture.sleep.latestSession
+          ? {
+              ...fixture.sleep.latestSession,
+              vitals: {
+                ...fixture.sleep.latestSession.vitals,
+                maxSpo2Percent: 99,
+              },
+            }
+          : null,
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        ...fixture.sleep,
+        latestSession: null,
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        status: 'no_completed_session',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 5,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: null,
+        },
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        ...fixture.sleep,
+        comparison: {
+          sameProviderNightCount: 2,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: 1_200,
         },
       },
     }).success).toBe(false);
@@ -2166,6 +2263,10 @@ describe('MCP public output contracts', () => {
 
   it('fails closed on contract mismatches in every tool family', async () => {
     const mismatchService = createFixtureDataService();
+    const dailyReportFixture = await mismatchService.getDailyReport({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
     mismatchService.listMeasurementTypes = vi.fn().mockResolvedValue({
       measurementTypes: [],
       sourceKey: 'measurement-secret',
@@ -2253,6 +2354,10 @@ describe('MCP public output contracts', () => {
       },
       sourceKey: 'readiness-secret',
     });
+    mismatchService.getDailyReport = vi.fn().mockResolvedValue({
+      ...dailyReportFixture,
+      providerUserId: 'daily-report-secret',
+    });
     mismatchService.getDailyBriefing = vi.fn().mockResolvedValue({
       asOfTimeMs: DAY_MS,
       timeZone: 'Europe/Helsinki',
@@ -2310,6 +2415,7 @@ describe('MCP public output contracts', () => {
       'list_metrics',
       'list_sleep_sessions',
       'get_today_readiness',
+      'get_daily_report',
       'get_daily_briefing',
       'list_activities',
       'list_routes',
@@ -2345,6 +2451,9 @@ describe('MCP public output contracts', () => {
     errorService.getDailyBriefing = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.getDailyReport = vi.fn().mockImplementation(async () => {
+      throw expectedError();
+    });
     errorService.listActivities = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
@@ -2358,6 +2467,7 @@ describe('MCP public output contracts', () => {
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
+      'get_daily_report',
       'get_daily_briefing',
       'list_activities',
       'list_routes',

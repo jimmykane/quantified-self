@@ -72,8 +72,10 @@ describe('MCP client access policy', () => {
     expect(content).toContain('full-resolution recordings');
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('one-call sleep trend');
-    expect(content).toContain('compact morning briefing');
+    expect(content).toContain('preferred daily report');
     expect(content).toContain('latest completed non-nap sleep');
+    expect(content).toContain('average/overnight HRV');
+    expect(content).toContain('average/minimum sleep heart rate');
     expect(content).toContain('current-versus-usual equivalent 28-day Training totals');
     expect(content).toContain('same live UTC-day Readiness used by Dashboard Today');
     expect(content).toContain('same-provider baseline medians');

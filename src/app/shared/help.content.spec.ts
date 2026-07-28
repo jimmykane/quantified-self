@@ -58,14 +58,16 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('preferred minimum dimensions');
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
     expect(dataAndPrivacySection?.content).toContain('one-call sleep trend');
-    expect(dataAndPrivacySection?.content).toContain('compact morning briefing');
+    expect(dataAndPrivacySection?.content).toContain('preferred daily report');
     expect(dataAndPrivacySection?.content).toContain('latest completed non-nap sleep');
+    expect(dataAndPrivacySection?.content).toContain('average/overnight HRV');
+    expect(dataAndPrivacySection?.content).toContain('average/minimum sleep heart rate');
     expect(dataAndPrivacySection?.content).toContain('current-versus-usual equivalent 28-day Training totals');
     expect(dataAndPrivacySection?.content).toContain('same live UTC-day Readiness used by Dashboard Today');
     expect(dataAndPrivacySection?.content).toContain('same-provider baseline medians');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-baseline states');
     expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
-    expect(dataAndPrivacySection?.content).toContain('morning briefing for your IANA timezone');
+    expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');

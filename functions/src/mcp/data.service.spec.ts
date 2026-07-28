@@ -3728,6 +3728,331 @@ describe('MCP data service', () => {
     });
   });
 
+  it('returns one bounded daily report with safe sleep HRV, heart rate, and live readiness', async () => {
+    const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
+    const nights = [{
+      id: 'baseline-private-1',
+      sleepDate: '2026-07-24',
+      endTimeMs: Date.parse('2026-07-24T06:00:00.000Z'),
+      durationSeconds: 28_800,
+      hrv: 40,
+      overnightHrv: 41,
+      averageHeartRate: 54,
+      minimumHeartRate: 46,
+    }, {
+      id: 'baseline-private-2',
+      sleepDate: '2026-07-25',
+      endTimeMs: Date.parse('2026-07-25T06:00:00.000Z'),
+      durationSeconds: 28_800,
+      hrv: 50,
+      overnightHrv: 51,
+      averageHeartRate: 52,
+      minimumHeartRate: 44,
+    }, {
+      id: 'baseline-private-3',
+      sleepDate: '2026-07-26',
+      endTimeMs: Date.parse('2026-07-26T06:00:00.000Z'),
+      durationSeconds: 28_800,
+      hrv: 60,
+      overnightHrv: 61,
+      averageHeartRate: 50,
+      minimumHeartRate: 42,
+    }, {
+      id: 'latest-private',
+      sleepDate: '2026-07-27',
+      endTimeMs: Date.parse('2026-07-27T06:00:00.000Z'),
+      durationSeconds: 29_700,
+      hrv: 55,
+      overnightHrv: 56,
+      averageHeartRate: 49,
+      minimumHeartRate: 40,
+    }];
+    vi.mocked(dependencies.now).mockReturnValue(nowTimeMs);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(
+      nights.map((night, index) => ({
+        ...sleepDocument({
+          sleepDate: night.sleepDate,
+          startTimeMs: night.endTimeMs - night.durationSeconds * 1000,
+          endTimeMs: night.endTimeMs,
+          durationSeconds: night.durationSeconds,
+          inBedDurationSeconds: night.durationSeconds + 900,
+          score: index === nights.length - 1
+            ? {
+                value: 84,
+                qualifier: 'good',
+                components: { private: true },
+              }
+            : null,
+          vitals: {
+            averageHrvMs: night.hrv,
+            overnightHrvMs: night.overnightHrv,
+            averageHeartRateBpm: night.averageHeartRate,
+            minimumHeartRateBpm: night.minimumHeartRate,
+            maxSpo2Percent: 99,
+            averageRespirationBrpm: 12,
+            rawSamples: [{ private: true }],
+          },
+        }),
+        id: night.id,
+      })),
+    );
+
+    const result = await createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result).toMatchObject({
+      sleep: {
+        status: 'available',
+        latestSession: {
+          sleepDate: '2026-07-27',
+          startTimeMs: nights[3].endTimeMs - nights[3].durationSeconds * 1000,
+          endTimeMs: nights[3].endTimeMs,
+          durationSeconds: 29_700,
+          inBedDurationSeconds: 30_600,
+          score: {
+            value: 84,
+            qualifier: 'good',
+          },
+          vitals: {
+            averageHrvMs: 55,
+            overnightHrvMs: 56,
+            averageHeartRateBpm: 49,
+            minimumHeartRateBpm: 40,
+          },
+        },
+        comparison: {
+          sameProviderNightCount: 3,
+          averageDurationSeconds: 28_800,
+          durationDeltaSeconds: 900,
+        },
+      },
+      readiness: {
+        asOfTimeMs: nowTimeMs,
+        timeZone: 'Europe/Helsinki',
+        status: 'available',
+        availableSignalCount: 3,
+        availableWeightPercent: 60,
+        baselineEvidenceCount: 3,
+        drivers: {
+          load: {
+            status: 'not_ready',
+          },
+          sleep: {
+            status: 'available',
+            recordedScore: 84,
+          },
+          hrv: {
+            status: 'available',
+            latestMs: 55,
+            baselineMedianMs: 50,
+            baselineNightCount: 3,
+            ratio: 1.1,
+          },
+          overnightHeartRate: {
+            status: 'available',
+            average: {
+              latestBpm: 49,
+              baselineMedianBpm: 52,
+              baselineNightCount: 3,
+            },
+            minimum: {
+              latestBpm: 40,
+              baselineMedianBpm: 44,
+              baselineNightCount: 3,
+            },
+          },
+        },
+      },
+      trainingSummary: {
+        status: 'not_ready',
+      },
+    });
+    expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenCalledWith(
+      'user-1',
+      nowTimeMs - 30 * 24 * 60 * 60 * 1000,
+      nowTimeMs,
+      257,
+    );
+    expect(dependencies.fetchSleepDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchDerivedSnapshot).toHaveBeenCalledTimes(4);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('GarminAPI');
+    expect(serialized).not.toContain('private-');
+    expect(serialized).not.toContain('maxSpo2Percent');
+    expect(serialized).not.toContain('averageRespirationBrpm');
+    expect(serialized).not.toContain('components');
+    expect(serialized).not.toContain('rawSamples');
+  });
+
+  it('rejects an invalid daily-report timezone before reading account data', async () => {
+    await expect(createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'Not/A_Timezone',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'invalid_timezone',
+    });
+
+    expect(dependencies.fetchReadinessSleepDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchDerivedSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('returns explicit unavailable states when the daily report has no account evidence', async () => {
+    const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
+    vi.mocked(dependencies.now).mockReturnValue(nowTimeMs);
+
+    const result = await createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result).toMatchObject({
+      sleep: {
+        status: 'no_completed_session',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 0,
+          averageDurationSeconds: null,
+          durationDeltaSeconds: null,
+        },
+      },
+      readiness: {
+        status: 'no_signal',
+        score: null,
+        availableSignalCount: 0,
+        availableWeightPercent: 0,
+        baselineEvidenceCount: 0,
+        drivers: {
+          load: {
+            status: 'not_ready',
+          },
+          sleep: {
+            status: 'no_recent_session',
+          },
+          hrv: {
+            status: 'not_recorded',
+          },
+          overnightHeartRate: {
+            status: 'not_recorded',
+          },
+        },
+      },
+      trainingSummary: {
+        status: 'not_ready',
+      },
+    });
+  });
+
+  it('uses the same deterministic same-provider sleep-night grouping for the report and readiness', async () => {
+    const nightlyDocument = (
+      id: string,
+      sleepDate: string,
+      startTimeMs: number,
+      endTimeMs: number,
+      hrv: number,
+      averageHeartRate: number,
+      minimumHeartRate: number,
+      score: number | null = null,
+    ) => ({
+      ...sleepDocument({
+        sleepDate,
+        startTimeMs,
+        endTimeMs,
+        durationSeconds: (endTimeMs - startTimeMs) / 1000,
+        inBedDurationSeconds: (endTimeMs - startTimeMs) / 1000,
+        score: score === null ? null : {
+          value: score,
+          qualifier: 'recorded',
+        },
+        vitals: {
+          averageHrvMs: hrv,
+          averageHeartRateBpm: averageHeartRate,
+          minimumHeartRateBpm: minimumHeartRate,
+        },
+      }),
+      id,
+    });
+    const baselineDates = ['2026-07-24', '2026-07-25', '2026-07-26'];
+    const baselineHrv = [40, 50, 60];
+    const documents = baselineDates.map((sleepDate, index) => {
+      const endTimeMs = Date.parse(`${sleepDate}T06:00:00.000Z`);
+      return nightlyDocument(
+        `baseline-${index}`,
+        sleepDate,
+        endTimeMs - 28_800_000,
+        endTimeMs,
+        baselineHrv[index],
+        52,
+        44,
+      );
+    });
+    documents.push(
+      nightlyDocument(
+        'latest-a',
+        '2026-07-27',
+        Date.parse('2026-07-26T22:00:00.000Z'),
+        Date.parse('2026-07-27T02:00:00.000Z'),
+        50,
+        50,
+        42,
+      ),
+      nightlyDocument(
+        'latest-b',
+        '2026-07-27',
+        Date.parse('2026-07-27T02:00:00.000Z'),
+        Date.parse('2026-07-27T06:00:00.000Z'),
+        60,
+        48,
+        40,
+        82,
+      ),
+    );
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(
+      documents,
+    );
+
+    const result = await createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result.sleep.latestSession).toMatchObject({
+      sleepDate: '2026-07-27',
+      startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-27T06:00:00.000Z'),
+      durationSeconds: 28_800,
+      inBedDurationSeconds: 28_800,
+      score: {
+        value: 82,
+        qualifier: 'recorded',
+      },
+      vitals: {
+        averageHrvMs: 55,
+        averageHeartRateBpm: 49,
+        minimumHeartRateBpm: 40,
+      },
+    });
+    expect(result.readiness.drivers.sleep).toMatchObject({
+      durationSeconds: 28_800,
+      recordedScore: 82,
+    });
+    expect(result.readiness.drivers.hrv).toMatchObject({
+      latestMs: 55,
+      baselineMedianMs: 50,
+    });
+    expect(result.readiness.drivers.overnightHeartRate).toMatchObject({
+      average: {
+        latestBpm: 49,
+        baselineMedianBpm: 52,
+      },
+      minimum: {
+        latestBpm: 40,
+        baselineMedianBpm: 44,
+      },
+    });
+  });
+
   it('returns a bounded, identity-free daily briefing from completed sleep and current readiness only', async () => {
     const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
     vi.mocked(dependencies.now).mockReturnValue(nowTimeMs);
