@@ -2152,6 +2152,32 @@ describe('MCP public output contracts', () => {
         },
       }],
     }).success).toBe(false);
+    const multiMetricOutput = {
+      metric: metricDescriptor,
+      matchedEventCount: 1,
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Daily,
+        buckets: [],
+      },
+    };
+    expect(registry.query_metrics.safeParse({
+      results: [{
+        ...multiMetricOutput,
+        aggregation: {
+          ...multiMetricOutput.aggregation,
+          dataType: 'Ascent',
+        },
+      }],
+    }).success).toBe(false);
+    expect(registry.query_metrics.safeParse({
+      results: [
+        multiMetricOutput,
+        multiMetricOutput,
+      ],
+    }).success).toBe(false);
     expect(registry.list_training_metrics.safeParse({
       metrics: [{
         metricKind: DERIVED_METRIC_KINDS.Form,
@@ -2164,6 +2190,22 @@ describe('MCP public output contracts', () => {
         sourceEventCount: 1,
         sourceFingerprint: 'private-source-fingerprint',
       }],
+    }).success).toBe(false);
+    const duplicateTrainingMetric = {
+      metricKind: DERIVED_METRIC_KINDS.Form,
+      title: 'Form',
+      description: 'Training form.',
+      category: 'load' as const,
+      periodLabel: 'Daily',
+      status: 'ready' as const,
+      updatedAtMs: DAY_MS,
+      sourceEventCount: 1,
+    };
+    expect(registry.list_training_metrics.safeParse({
+      metrics: [
+        duplicateTrainingMetric,
+        duplicateTrainingMetric,
+      ],
     }).success).toBe(false);
     expect(registry.get_activity_overview.safeParse({
       activityType: 'Running',

@@ -46,6 +46,7 @@ import {
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_METRICS_ENTRY_TYPES,
   DerivedFormMetricPayload,
   DerivedFormNowMetricPayload,
   DerivedMetricKind,
@@ -188,7 +189,7 @@ const MAX_ACTIVITY_OVERVIEW_DETAIL_BYTES = 512 * 1024;
 const MAX_ACTIVITY_OVERVIEW_STATS_BYTES = 64 * 1024;
 const MAX_ACTIVITY_OVERVIEW_RESPONSE_BYTES = 64 * 1024;
 const MAX_ACTIVITY_RANKING_DOCUMENTS = 2_000;
-const ACTIVITY_RANKING_PAGE_SIZE = 100;
+const ACTIVITY_RANKING_PAGE_SIZE = 25;
 const MAX_ACTIVITY_RANKING_DOCUMENT_BYTES = 512 * 1024;
 const MAX_ACTIVITY_RANKING_RESPONSE_BYTES = 128 * 1024;
 const MAX_TRAINING_METRIC_CATALOG_RESPONSE_BYTES = 64 * 1024;
@@ -618,6 +619,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .collection('derivedMetrics')
       .where(FieldPath.documentId(), 'in', [...metricKinds])
       .select(
+        'entryType',
         'metricKind',
         'status',
         'schemaVersion',
@@ -2425,8 +2427,8 @@ function buildMetricAggregationEventJson(
   return {
     ...data,
     stats,
-    // Only the requested metrics and activity type cross the Sports Lib import
-    // boundary after the cumulative query budgets have passed.
+    // Only the requested metric stats and activity type cross the Sports Lib
+    // import boundary after the cumulative query budgets have passed.
     activities: [],
     powerCurve: null,
   } as unknown as EventJSONInterface;
@@ -2586,6 +2588,10 @@ export interface McpTrainingMetricAvailabilityDescriptor
   status: McpTrainingMetricAvailability;
   updatedAtMs: number | null;
   sourceEventCount: number | null;
+}
+
+export interface ListTrainingMetricsResult {
+  metrics: McpTrainingMetricAvailabilityDescriptor[];
 }
 
 interface ResolvedMetricSelector {
@@ -4621,9 +4627,16 @@ async function getActivityOverview(
     MAX_ACTIVITY_OVERVIEW_DETAIL_BYTES,
     'The activity details exceed the MCP overview processing limit.',
   );
+  const safeStats = rawStats as Record<string, unknown> | undefined;
   const availableMetrics = resolveAvailableSportsLibMetrics([
-    rawStats as Record<string, unknown> | undefined,
-  ]).filter(metric => !isFirstClassMcpMeasurementMetric(metric.type));
+    safeStats,
+  ]).filter(metric => (
+    !isFirstClassMcpMeasurementMetric(metric.type)
+    && projectSportsLibNumericMetricValue(
+      metric.type,
+      safeStats?.[metric.type],
+    ) !== null
+  ));
   const activityType = normalizeActivityType(document.data.type);
   const chartSourceDeclared = await dependencies.hasActivityChartSource(
     input.uid,
@@ -4765,6 +4778,7 @@ async function rankActivitiesByMetric(
   );
   const candidates = documents.flatMap((document) => {
     const eventId = document.data.eventID;
+    const sortTimeMs = asTimestampMs(document.data.eventStartDate);
     const startTimeMs = asTimestampMs(document.data.startDate);
     const endTimeMs = asTimestampMs(document.data.endDate);
     const activityType = normalizeActivityType(document.data.type);
@@ -4778,6 +4792,9 @@ async function rankActivitiesByMetric(
     if (
       !isValidFirestoreDocumentId(document.id)
       || !isValidFirestoreDocumentId(eventId)
+      || sortTimeMs === null
+      || sortTimeMs < input.startTimeMs
+      || sortTimeMs > input.endTimeMs
       || startTimeMs === null
       || endTimeMs === null
       || endTimeMs < startTimeMs
@@ -5094,7 +5111,9 @@ export function createMcpDataService(
       };
     },
 
-    async listTrainingMetrics(input: ListTrainingMetricsInput) {
+    async listTrainingMetrics(
+      input: ListTrainingMetricsInput,
+    ): Promise<ListTrainingMetricsResult> {
       const descriptors = getMcpTrainingMetricDescriptors(input.search);
       const snapshots = new Map(
         (await dependencies.fetchDerivedSnapshotMetadataDocuments(
@@ -5105,6 +5124,7 @@ export function createMcpDataService(
       const metrics = descriptors.map(descriptor => {
         const snapshot = snapshots.get(descriptor.metricKind);
         const schemaVersion = asFiniteNumber(snapshot?.schemaVersion);
+        const snapshotEntryType = snapshot?.entryType;
         const snapshotMetricKind = snapshot?.metricKind;
         const rawStatus = snapshot?.status;
         let status: McpTrainingMetricAvailability;
@@ -5112,10 +5132,8 @@ export function createMcpDataService(
           status = 'missing';
         } else if (
           schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
-          || (
-            snapshotMetricKind !== undefined
-            && snapshotMetricKind !== descriptor.metricKind
-          )
+          || snapshotEntryType !== DERIVED_METRICS_ENTRY_TYPES.Snapshot
+          || snapshotMetricKind !== descriptor.metricKind
         ) {
           status = 'schema_mismatch';
         } else if (
@@ -5131,7 +5149,7 @@ export function createMcpDataService(
         return {
           ...descriptor,
           status,
-          updatedAtMs: asNonNegativeNumber(snapshot?.updatedAtMs),
+          updatedAtMs: asSafeInteger(snapshot?.updatedAtMs),
           sourceEventCount: asSafeInteger(snapshot?.sourceEventCount),
         };
       });

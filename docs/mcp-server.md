@@ -579,7 +579,8 @@ catalog; the source file is not downloaded or parsed. Coordinates and raw detail
 
 `rank_activities_by_metric` resolves the same canonical numeric catalog, then reads only the selected activity fields and
 the chosen stat in bounded Firestore pages. It returns coordinate-free opaque references and values, with deterministic
-value/start-time/document ordering. First-class body measurements remain excluded.
+value/start-time/document ordering. Its range scan reuses the existing single-field `eventStartDate` ordering plus the
+document-ID tie-break, so it requires no new composite index. First-class body measurements remain excluded.
 
 ## First-class body measurements
 
@@ -792,9 +793,10 @@ change values—never source document or measurement identities.
 
 `list_training_metrics` adds presentation and routing metadata without adding another kind registry: its descriptor map
 is compile-time exhaustive against `DERIVED_METRIC_KINDS`. It reads only snapshot envelope metadata for the matching
-descriptors and reports `ready`, `building`, `failed`, `stale`, `missing`, or `schema_mismatch`. It never returns a
-snapshot payload, backend error text, event identity, or source provenance. Clients should use it before deciding that
-a Training metric is unavailable, and call `get_training_metric` only for a ready kind.
+descriptors, validates the snapshot entry type and metric identity, and reports `ready`, `building`, `failed`, `stale`,
+`missing`, or `schema_mismatch`. It never returns a snapshot payload, backend error text, event identity, or source
+provenance. Clients should use it before deciding that a Training metric is unavailable, and call
+`get_training_metric` only for a ready kind.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
@@ -954,7 +956,7 @@ requires no new Firestore composite index.
   return at most 32 KiB.
 - Activity overviews process at most 64 KiB of stats plus 10,000 detail entries/512 KiB of raw detail arrays, do not
   parse original source files, and return at most 64 KiB.
-- Activity ranking reads at most 2,000 projected activities in pages of 100, rejects more than 512 KiB of projected
+- Activity ranking reads at most 2,000 projected activities in pages of 25, rejects more than 512 KiB of projected
   activity data, returns at most 25 results, and has a 128 KiB response limit.
 - Training metric discovery reads only the snapshot envelope for descriptors matching the optional search and returns
   at most 64 KiB; it does not read or project snapshot payloads.

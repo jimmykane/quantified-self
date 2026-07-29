@@ -25,6 +25,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_METRICS_ENTRY_TYPES,
 } from '../../../shared/derived-metrics';
 import {
   buildReadinessSignals,
@@ -831,6 +832,7 @@ describe('MCP data service', () => {
           [DataDuration.type]: 3_600,
           [DataDistance.type]: 20_000,
           [DataPowerAvg.type]: 220,
+          [DataAscent.type]: 'invalid-ascent',
           [DataWeight.type]: 71,
           [DataStartPosition.type]: {
             latitudeDegrees: 39.6671,
@@ -887,6 +889,9 @@ describe('MCP data service', () => {
     expect(result.availableMetrics.map(metric => metric.type)).not.toContain(
       DataWeight.type,
     );
+    expect(result.availableMetrics.map(metric => metric.type)).not.toContain(
+      DataAscent.type,
+    );
     expect(dependencies.hasActivityChartSource).toHaveBeenCalledWith(
       'user-1',
       'event-1',
@@ -895,6 +900,35 @@ describe('MCP data service', () => {
     expect(serialized).not.toMatch(
       /latitudeDegrees|longitudeDegrees|sourceKey|private-device|private-file/,
     );
+  });
+
+  it('rejects oversized activity overview projections before chart-source reads', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      limit: 1,
+    });
+    vi.mocked(dependencies.fetchActivityOverviewDocument).mockResolvedValue(
+      activityDocument({
+        stats: {
+          [DataDistance.type]: 'x'.repeat(65 * 1024),
+        },
+      }),
+    );
+
+    await expect(service.getActivityOverview({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef,
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
+    expect(dependencies.hasActivityChartSource).not.toHaveBeenCalled();
   });
 
   it('ranks bounded activity metrics with deterministic ties and no identity leakage', async () => {
@@ -940,6 +974,17 @@ describe('MCP data service', () => {
       },
     });
     cycling.id = 'activity-3';
+    const outsideRange = activityDocument({
+      eventID: 'event-4',
+      eventStartDate: Date.parse('2026-07-05T08:00:00.000Z'),
+      type: ActivityTypes.Running,
+      startDate: Date.parse('2026-07-05T08:00:00.000Z'),
+      endDate: Date.parse('2026-07-05T09:00:00.000Z'),
+      stats: {
+        [DataAscent.type]: 500,
+      },
+    });
+    outsideRange.id = 'activity-4';
     vi.mocked(dependencies.fetchActivityRankingDocuments).mockResolvedValue([
       {
         ...first,
@@ -952,6 +997,10 @@ describe('MCP data service', () => {
       {
         ...cycling,
         cursor: 'cursor-3',
+      },
+      {
+        ...outsideRange,
+        cursor: 'cursor-4',
       },
     ]);
 
@@ -971,7 +1020,7 @@ describe('MCP data service', () => {
         type: DataAscent.type,
       },
       order: 'highest',
-      scannedActivityCount: 3,
+      scannedActivityCount: 4,
       matchedActivityCount: 2,
       activities: [{
         rank: 1,
@@ -990,7 +1039,7 @@ describe('MCP data service', () => {
       Date.parse('2026-07-01T00:00:00.000Z'),
       Date.parse('2026-07-04T00:00:00.000Z'),
       DataAscent.type,
-      100,
+      25,
       undefined,
     );
     expect(JSON.stringify(result)).not.toContain('private-first-source');
@@ -1007,6 +1056,27 @@ describe('MCP data service', () => {
       code: 'invalid_metric',
     });
     expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized projected activity ranking data', async () => {
+    vi.mocked(dependencies.fetchActivityRankingDocuments).mockResolvedValue([
+      activityDocument({
+        stats: {
+          [DataAscent.type]: 'x'.repeat(513 * 1024),
+        },
+      }),
+    ]);
+
+    await expect(createMcpDataService(dependencies).rankActivitiesByMetric({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      metric: DataAscent.type,
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-04T00:00:00.000Z'),
+      order: 'highest',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'query_too_large',
+    });
   });
 
   it('finds activities by exact start or end position without geocoding coordinates', async () => {
@@ -3390,49 +3460,77 @@ describe('MCP data service', () => {
     vi.mocked(dependencies.fetchDerivedSnapshotMetadataDocuments)
       .mockImplementation(async (_uid, metricKinds) => metricKinds.flatMap(
         (metricKind) => {
-        if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
-          return [{
-            id: metricKind,
-            data: {
-            metricKind,
-            status: 'ready',
-            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-            updatedAtMs: 123,
-            sourceEventCount: 9,
-            payload: {
-              privateProviderPayload: 'must-not-be-returned',
-            },
-            lastError: 'private-error',
-            },
-          }];
-        }
-        if (metricKind === DERIVED_METRIC_KINDS.FormNow) {
-          return [{
-            id: metricKind,
-            data: {
-            metricKind,
-            status: 'building',
-            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-            updatedAtMs: 122,
-            sourceEventCount: 8,
-            payload: null,
-            },
-          }];
-        }
-        if (metricKind === DERIVED_METRIC_KINDS.RampRate) {
-          return [{
-            id: metricKind,
-            data: {
-            metricKind,
-            status: 'ready',
-            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1,
-            updatedAtMs: 121,
-            sourceEventCount: 7,
-            payload: {},
-            },
-          }];
-        }
-        return [];
+          if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
+            return [{
+              id: metricKind,
+              data: {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+                metricKind,
+                status: 'ready',
+                schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+                updatedAtMs: 123,
+                sourceEventCount: 9,
+                payload: {
+                  privateProviderPayload: 'must-not-be-returned',
+                },
+                lastError: 'private-error',
+              },
+            }];
+          }
+          if (metricKind === DERIVED_METRIC_KINDS.FormNow) {
+            return [{
+              id: metricKind,
+              data: {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+                metricKind,
+                status: 'building',
+                schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+                updatedAtMs: 122,
+                sourceEventCount: 8,
+                payload: null,
+              },
+            }];
+          }
+          if (metricKind === DERIVED_METRIC_KINDS.RampRate) {
+            return [{
+              id: metricKind,
+              data: {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+                metricKind,
+                status: 'ready',
+                schemaVersion: DERIVED_METRIC_SCHEMA_VERSION - 1,
+                updatedAtMs: 121,
+                sourceEventCount: 7,
+                payload: {},
+              },
+            }];
+          }
+          if (metricKind === DERIVED_METRIC_KINDS.RecoveryNow) {
+            return [{
+              id: metricKind,
+              data: {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+                status: 'ready',
+                schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+                updatedAtMs: 120.5,
+                sourceEventCount: 6,
+              },
+            }];
+          }
+          if (metricKind === DERIVED_METRIC_KINDS.Acwr) {
+            return [{
+              id: metricKind,
+              data: {
+                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
+                metricKind,
+                status: 'ready',
+                schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+                updatedAtMs: 120,
+                sourceEventCount: 6,
+              },
+            }];
+          }
+          return [];
         },
       ));
 
@@ -3464,6 +3562,15 @@ describe('MCP data service', () => {
       }),
       expect.objectContaining({
         metricKind: DERIVED_METRIC_KINDS.RampRate,
+        status: 'schema_mismatch',
+      }),
+      expect.objectContaining({
+        metricKind: DERIVED_METRIC_KINDS.RecoveryNow,
+        status: 'schema_mismatch',
+        updatedAtMs: null,
+      }),
+      expect.objectContaining({
+        metricKind: DERIVED_METRIC_KINDS.Acwr,
         status: 'schema_mismatch',
       }),
       expect.objectContaining({

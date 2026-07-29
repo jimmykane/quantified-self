@@ -1201,6 +1201,14 @@ const multiMetricResult = z.strictObject({
   metric: MCP_METRIC_DESCRIPTOR_OUTPUT_SCHEMA,
   matchedEventCount: count,
   aggregation: metricAggregation,
+}).superRefine((value, context) => {
+  if (value.aggregation.dataType !== value.metric.type) {
+    context.addIssue({
+      code: 'custom',
+      path: ['aggregation', 'dataType'],
+      message: 'Aggregation data type must match its metric descriptor.',
+    });
+  }
 });
 
 const trainingMetricAvailability = z.strictObject({
@@ -1220,6 +1228,18 @@ const trainingMetricAvailability = z.strictObject({
   updatedAtMs: nullableNonNegativeTimestampMs,
   sourceEventCount: count.nullable(),
 });
+
+const trainingMetricCatalog = z.array(trainingMetricAvailability)
+  .max(Object.values(DERIVED_METRIC_KINDS).length)
+  .superRefine((metrics, context) => {
+    const metricKinds = new Set(metrics.map(metric => metric.metricKind));
+    if (metricKinds.size !== metrics.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Training metric kinds must be unique.',
+      });
+    }
+  });
 
 const activityOverviewDetailAvailability = z.strictObject({
   kind: z.enum(['laps', 'jumps', 'swim_lengths']),
@@ -1345,10 +1365,21 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       aggregation: metricAggregation,
     }),
     query_metrics: z.strictObject({
-      results: z.array(multiMetricResult).min(1).max(4),
+      results: z.array(multiMetricResult).min(1).max(4)
+        .superRefine((results, context) => {
+          const selectors = new Set(results.map(result => (
+            `${result.metric.type}\0${result.aggregation.valueType}`
+          )));
+          if (selectors.size !== results.length) {
+            context.addIssue({
+              code: 'custom',
+              message: 'Multi-metric results must be unique.',
+            });
+          }
+        }),
     }),
     list_training_metrics: z.strictObject({
-      metrics: z.array(trainingMetricAvailability),
+      metrics: trainingMetricCatalog,
     }),
     get_training_metric: trainingMetricOutput,
     list_sleep_vitals: z.strictObject({
