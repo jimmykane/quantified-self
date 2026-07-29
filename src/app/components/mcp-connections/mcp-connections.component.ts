@@ -3,6 +3,7 @@ import { Clipboard, ClipboardModule } from '@angular/cdk/clipboard';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -37,6 +38,7 @@ interface McpConnection {
     ClipboardModule,
     MatButtonModule,
     MatCardModule,
+    MatCheckboxModule,
     MatDividerModule,
     MatIconModule,
     MatProgressSpinnerModule,

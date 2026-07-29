@@ -78,8 +78,18 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Activity locations');
     expect(content).toContain('Saved-route summaries');
     expect(content).toContain('Saved-route locations and geometry');
-    expect(content).toContain('Disconnect here remains authoritative');
-    expect(content).toContain('Reauthorizing the same verified client');
+    expect(content).toContain('These apps can only view the data you approved');
+    expect(content).toContain('Disconnect an app here to stop sharing');
+    expect(content).toContain('Reconnecting the same app keeps the current connection active');
+
+    const permissionInputs = Array.from(
+      fixture.nativeElement.querySelectorAll<HTMLInputElement>(
+        '.mcp-connections__permissions input[type="checkbox"]',
+      ),
+    );
+    expect(permissionInputs).toHaveLength(connection.scopes.length);
+    expect(permissionInputs.every(input => input.checked)).toBe(true);
+    expect(permissionInputs.every(input => input.disabled)).toBe(true);
   });
 
   it('uses a standard glass-card stack matching the connection workspace', async () => {
