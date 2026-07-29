@@ -119,6 +119,10 @@ class ServerWhatsNewService {
     return undefined;
   }
 
+  getChangelogsOnceLoaded(): Observable<ChangelogPost[]> {
+    return of([]);
+  }
+
   setAdminMode(): void {
     return undefined;
   }

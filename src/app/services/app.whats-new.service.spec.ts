@@ -4,7 +4,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import { Firestore, collectionData, Timestamp } from 'app/firebase/firestore';
 import { LoggerService } from './logger.service';
-import { of, BehaviorSubject } from 'rxjs';
+import { of, BehaviorSubject, Subject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
@@ -97,6 +97,24 @@ describe('AppWhatsNewService', () => {
         TestBed.tick();
 
         expect(collectionDataMock).toHaveBeenCalledOnce();
+    });
+
+    it('should wait for the first Firestore result without confusing it with the idle empty state', () => {
+        const firestoreResult = new Subject<ChangelogPost[]>();
+        collectionDataMock.mockReturnValue(firestoreResult);
+        service = TestBed.inject(AppWhatsNewService);
+        TestBed.tick();
+        const results: ChangelogPost[][] = [];
+
+        service.getChangelogsOnceLoaded().subscribe(changelogs => results.push(changelogs));
+        TestBed.tick();
+
+        expect(results).toEqual([]);
+        expect(collectionDataMock).toHaveBeenCalledOnce();
+
+        firestoreResult.next([]);
+
+        expect(results).toEqual([[]]);
     });
 
     it('should subscribe to changelogs automatically when a user signs in', () => {

@@ -2,8 +2,8 @@ import { Injectable, Injector, computed, inject, signal } from '@angular/core';
 import { Firestore, collection, collectionData, query, orderBy, where, Timestamp, addDoc, doc, updateDoc, deleteDoc } from 'app/firebase/firestore';
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
-import { of } from 'rxjs';
+import { filter, map, shareReplay, switchMap, take } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from './logger.service';
@@ -58,6 +58,11 @@ export interface ChangelogPost {
     type: 'major' | 'minor' | 'patch' | 'announcement';
 }
 
+interface ChangelogLoadState {
+    loaded: boolean;
+    changelogs: ChangelogPost[];
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -93,21 +98,37 @@ export class AppWhatsNewService {
         }
     });
 
-    // Re-create observable stream based on the computed query
-    public changelogs$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
+    // Keep the idle placeholder distinct from a real, successfully loaded empty collection.
+    private readonly changelogLoadState$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
         switchMap(q => q
-            ? collectionData(q, { idField: 'id' })
-            : of<ChangelogPost[]>([])
+            ? collectionData(q, { idField: 'id' }).pipe(
+                map(changelogs => ({
+                    loaded: true,
+                    changelogs: changelogs as ChangelogPost[],
+                })),
+            )
+            : of<ChangelogLoadState>({ loaded: false, changelogs: [] })
         ),
-        map(changelogs => changelogs as ChangelogPost[]),
         shareReplay({ bufferSize: 1, refCount: true })
     );
 
+    public readonly changelogs$ = this.changelogLoadState$.pipe(
+        map(state => state.changelogs),
+    );
     public readonly changelogs = toSignal(this.changelogs$, { initialValue: [] });
     private _localStorageTrigger = signal(0);
 
     public ensureChangelogsLoaded(): void {
         this._changelogsRequested.set(true);
+    }
+
+    public getChangelogsOnceLoaded(): Observable<ChangelogPost[]> {
+        this.ensureChangelogsLoaded();
+        return this.changelogLoadState$.pipe(
+            filter(state => state.loaded),
+            map(state => state.changelogs),
+            take(1),
+        );
     }
 
     // Get the current user's last seen date from appSettings
