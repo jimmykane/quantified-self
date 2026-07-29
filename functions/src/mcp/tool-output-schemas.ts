@@ -627,7 +627,7 @@ const dailyBriefingReadiness = z.strictObject({
   }
 }).meta({ title: 'McpDailyBriefingReadiness' });
 
-const dailyBriefingTrainingWindowFields = {
+const dailyTrainingSummaryWindowFields = {
   equivalentPeriodDays: z.literal(28),
   durationSeconds: nonNegativeNumber,
   intensitySeconds: z.strictObject({
@@ -637,31 +637,31 @@ const dailyBriefingTrainingWindowFields = {
   }),
 };
 
-const dailyBriefingCurrentTrainingWindow = z.strictObject({
-  ...dailyBriefingTrainingWindowFields,
+const dailyTrainingSummaryCurrentWindow = z.strictObject({
+  ...dailyTrainingSummaryWindowFields,
   activityCount: count,
 }).meta({ title: 'McpDailyBriefingCurrentTrainingWindow' });
 
-const dailyBriefingUsualTrainingWindow = z.strictObject({
-  ...dailyBriefingTrainingWindowFields,
+const dailyTrainingSummaryUsualWindow = z.strictObject({
+  ...dailyTrainingSummaryWindowFields,
   activityCount: nonNegativeNumber,
 }).meta({ title: 'McpDailyBriefingUsualTrainingWindow' });
 
-const dailyBriefingTrainingDiscipline = z.strictObject({
+const dailyTrainingSummaryDiscipline = z.strictObject({
   discipline: z.enum(['running', 'cycling', 'swimming']),
-  current28d: dailyBriefingCurrentTrainingWindow,
-  usual28d: dailyBriefingUsualTrainingWindow,
+  current28d: dailyTrainingSummaryCurrentWindow,
+  usual28d: dailyTrainingSummaryUsualWindow,
 }).meta({ title: 'McpDailyBriefingTrainingDiscipline' });
 
-const dailyBriefingTrainingSummary = z.strictObject({
+const dailyTrainingSummary = z.strictObject({
   status: z.enum(['available', 'not_ready', 'stale']),
   dayBoundary: z.literal('UTC'),
   asOfDayMs: nullableTimestampMs,
   updatedAtMs: nullableTimestampMs,
   baselineSourceWindowDays: z.literal(84).nullable(),
-  current28d: dailyBriefingCurrentTrainingWindow.nullable(),
-  usual28d: dailyBriefingUsualTrainingWindow.nullable(),
-  disciplines: z.array(dailyBriefingTrainingDiscipline).max(3),
+  current28d: dailyTrainingSummaryCurrentWindow.nullable(),
+  usual28d: dailyTrainingSummaryUsualWindow.nullable(),
+  disciplines: z.array(dailyTrainingSummaryDiscipline).max(3),
 }).superRefine((value, context) => {
   const summaryFields = [
     value.baselineSourceWindowDays,
@@ -1308,7 +1308,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
     get_daily_report: z.strictObject({
       sleep: dailyReportSleep,
       readiness: createTodayReadinessOutputSchema(),
-      trainingSummary: dailyBriefingTrainingSummary,
+      trainingSummary: dailyTrainingSummary,
     }),
     get_daily_briefing: z.strictObject({
       asOfTimeMs: timestampMs,
@@ -1346,7 +1346,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         }
       }),
       trainingReadiness: dailyBriefingReadiness,
-      trainingSummary: dailyBriefingTrainingSummary,
+      trainingSummary: dailyTrainingSummary,
     }),
     list_activity_types: z.strictObject({
       activityTypeCount: count,

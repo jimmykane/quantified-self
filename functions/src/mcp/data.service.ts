@@ -148,9 +148,9 @@ const MAX_MEASUREMENT_RESPONSE_BYTES = 128 * 1024;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
 const DAILY_BRIEFING_SLEEP_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
-const DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS = 28;
-const DAILY_BRIEFING_TRAINING_BASELINE_WINDOW_DAYS = 84;
-const DAILY_BRIEFING_TRAINING_DISCIPLINES = ['running', 'cycling', 'swimming'] as const;
+const DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
+const DAILY_TRAINING_SUMMARY_BASELINE_WINDOW_DAYS = 84;
+const DAILY_TRAINING_SUMMARY_DISCIPLINES = ['running', 'cycling', 'swimming'] as const;
 const MAX_DAILY_BRIEFING_SLEEP_SESSIONS = 32;
 const MAX_DAILY_BRIEFING_BASELINE_NIGHTS = 7;
 const MIN_DAILY_BRIEFING_BASELINE_NIGHTS = 3;
@@ -2802,7 +2802,7 @@ interface DailyBriefingReadiness {
   baselineEvidenceCount: number | null;
 }
 
-interface DailyBriefingTrainingWindow {
+interface DailyTrainingSummaryWindow {
   equivalentPeriodDays: number;
   activityCount: number;
   durationSeconds: number;
@@ -2813,21 +2813,21 @@ interface DailyBriefingTrainingWindow {
   };
 }
 
-interface DailyBriefingTrainingDiscipline {
+interface DailyTrainingSummaryDiscipline {
   discipline: 'running' | 'cycling' | 'swimming';
-  current28d: DailyBriefingTrainingWindow;
-  usual28d: DailyBriefingTrainingWindow;
+  current28d: DailyTrainingSummaryWindow;
+  usual28d: DailyTrainingSummaryWindow;
 }
 
-interface DailyBriefingTrainingSummary {
+interface DailyTrainingSummary {
   status: 'available' | 'not_ready' | 'stale';
   dayBoundary: 'UTC';
   asOfDayMs: number | null;
   updatedAtMs: number | null;
   baselineSourceWindowDays: number | null;
-  current28d: DailyBriefingTrainingWindow | null;
-  usual28d: DailyBriefingTrainingWindow | null;
-  disciplines: DailyBriefingTrainingDiscipline[];
+  current28d: DailyTrainingSummaryWindow | null;
+  usual28d: DailyTrainingSummaryWindow | null;
+  disciplines: DailyTrainingSummaryDiscipline[];
 }
 
 function projectDailyBriefingSleepSession(
@@ -2934,9 +2934,9 @@ function projectDailyBriefingReadiness(
   };
 }
 
-function projectDailyBriefingTrainingWindow(
+function projectDailyTrainingSummaryWindow(
   window: DerivedTrainingSummaryMetricPayload['disciplines'][number]['current28d'],
-): DailyBriefingTrainingWindow {
+): DailyTrainingSummaryWindow {
   return {
     equivalentPeriodDays: window.periodDays,
     activityCount: window.activityCount,
@@ -2949,11 +2949,11 @@ function projectDailyBriefingTrainingWindow(
   };
 }
 
-function unavailableDailyBriefingTrainingSummary(
+function unavailableDailyTrainingSummary(
   status: 'not_ready' | 'stale',
   snapshot?: Record<string, unknown> | null,
   asOfDayMs?: number,
-): DailyBriefingTrainingSummary {
+): DailyTrainingSummary {
   return {
     status,
     dayBoundary: 'UTC',
@@ -2968,10 +2968,10 @@ function unavailableDailyBriefingTrainingSummary(
   };
 }
 
-function projectDailyBriefingTrainingSummary(
+function projectDailyTrainingSummary(
   snapshot: Record<string, unknown> | null,
   nowTimeMs: number,
-): DailyBriefingTrainingSummary {
+): DailyTrainingSummary {
   const schemaVersion = asFiniteNumber(snapshot?.schemaVersion);
   if (
     !snapshot
@@ -2979,13 +2979,13 @@ function projectDailyBriefingTrainingSummary(
     || snapshot.payload == null
     || schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
   ) {
-    return unavailableDailyBriefingTrainingSummary('not_ready');
+    return unavailableDailyTrainingSummary('not_ready');
   }
   const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[
     DERIVED_METRIC_KINDS.TrainingSummary
   ].safeParse(snapshot.payload);
   if (!parsed.success) {
-    return unavailableDailyBriefingTrainingSummary('not_ready');
+    return unavailableDailyTrainingSummary('not_ready');
   }
   const payload = parsed.data as DerivedTrainingSummaryMetricPayload;
   const now = new Date(nowTimeMs);
@@ -2995,33 +2995,33 @@ function projectDailyBriefingTrainingSummary(
     now.getUTCDate(),
   );
   if (payload.asOfDayMs !== currentUtcDayMs) {
-    return unavailableDailyBriefingTrainingSummary(
+    return unavailableDailyTrainingSummary(
       'stale',
       snapshot,
       payload.asOfDayMs,
     );
   }
   const hasExpectedWindowContract = payload.excludesMergedEvents
-    && payload.currentWindowDays === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
-    && payload.baselineWindowDays === DAILY_BRIEFING_TRAINING_BASELINE_WINDOW_DAYS;
+    && payload.currentWindowDays === DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS
+    && payload.baselineWindowDays === DAILY_TRAINING_SUMMARY_BASELINE_WINDOW_DAYS;
   const hasExpectedDisciplines = payload.disciplines.length
-    === DAILY_BRIEFING_TRAINING_DISCIPLINES.length
-    && DAILY_BRIEFING_TRAINING_DISCIPLINES.every(expectedDiscipline => (
+    === DAILY_TRAINING_SUMMARY_DISCIPLINES.length
+    && DAILY_TRAINING_SUMMARY_DISCIPLINES.every(expectedDiscipline => (
       payload.disciplines.filter(
         discipline => discipline.discipline === expectedDiscipline,
       ).length === 1
     ))
     && payload.disciplines.every(discipline => (
-      discipline.current28d.periodDays === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
-      && discipline.baseline28d.periodDays === DAILY_BRIEFING_TRAINING_CURRENT_WINDOW_DAYS
+      discipline.current28d.periodDays === DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS
+      && discipline.baseline28d.periodDays === DAILY_TRAINING_SUMMARY_CURRENT_WINDOW_DAYS
     ));
   if (!hasExpectedWindowContract || !hasExpectedDisciplines) {
-    return unavailableDailyBriefingTrainingSummary('not_ready');
+    return unavailableDailyTrainingSummary('not_ready');
   }
   const disciplines = payload.disciplines.map(discipline => ({
     discipline: discipline.discipline,
-    current28d: projectDailyBriefingTrainingWindow(discipline.current28d),
-    usual28d: projectDailyBriefingTrainingWindow(discipline.baseline28d),
+    current28d: projectDailyTrainingSummaryWindow(discipline.current28d),
+    usual28d: projectDailyTrainingSummaryWindow(discipline.baseline28d),
   }));
   const total = (window: 'current28d' | 'usual28d') => {
     const windows = disciplines.map(discipline => discipline[window]);
@@ -4687,7 +4687,7 @@ export function createMcpDataService(
       const result = {
         sleep: projectDailyReportSleep(readiness.sleepNights),
         readiness: readiness.result,
-        trainingSummary: projectDailyBriefingTrainingSummary(
+        trainingSummary: projectDailyTrainingSummary(
           trainingSummarySnapshot,
           readiness.result.asOfTimeMs,
         ),
@@ -4784,7 +4784,7 @@ export function createMcpDataService(
           trainingReadinessSnapshot,
           nowTimeMs,
         ),
-        trainingSummary: projectDailyBriefingTrainingSummary(
+        trainingSummary: projectDailyTrainingSummary(
           trainingSummarySnapshot,
           nowTimeMs,
         ),
