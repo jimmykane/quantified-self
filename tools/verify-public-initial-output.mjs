@@ -4,12 +4,13 @@ import { JSDOM } from 'jsdom';
 
 const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
+const prerenderManifestPath = path.join(path.dirname(outputDirectory), 'prerendered-routes.json');
 const sourceMapCache = new Map();
-const EXPECTED_PRERENDERED_PAGE_COUNT = 26;
 
 const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/home\/home\.component\.ts$/,
   /^src\/app\/components\/help\/help-page\.component\.ts$/,
+  /^src\/app\/components\/policies\/policies\.component\.ts$/,
   /^src\/app\/components\/integrations\/integrations-hub-page\.component\.ts$/,
   /^src\/app\/components\/integrations\/provider-integration-page\.component\.ts$/,
   /^src\/app\/components\/features\/workout-data-comparison-page\.component\.ts$/,
@@ -204,10 +205,19 @@ function assertNoInitialStylesheet(label, pattern) {
 
 function assertPrerenderedDocuments() {
   const documentPaths = collectIndexDocuments(outputDirectory);
-  if (documentPaths.length !== EXPECTED_PRERENDERED_PAGE_COUNT) {
-    throw new Error(
-      `Expected ${EXPECTED_PRERENDERED_PAGE_COUNT} prerendered pages, found ${documentPaths.length}.`,
-    );
+  const actualRoutes = documentPaths.map(routeForDocument);
+  const expectedRoutes = readPrerenderedRoutes();
+  const actualRouteSet = new Set(actualRoutes);
+  const expectedRouteSet = new Set(expectedRoutes);
+  const missingRoutes = expectedRoutes.filter(route => !actualRouteSet.has(route));
+  const unexpectedRoutes = actualRoutes.filter(route => !expectedRouteSet.has(route));
+
+  if (missingRoutes.length > 0 || unexpectedRoutes.length > 0) {
+    const details = [
+      missingRoutes.length > 0 ? `missing: ${missingRoutes.join(', ')}` : '',
+      unexpectedRoutes.length > 0 ? `unexpected: ${unexpectedRoutes.join(', ')}` : '',
+    ].filter(Boolean).join('; ');
+    throw new Error(`Prerendered browser documents do not match the generated route manifest (${details}).`);
   }
 
   for (const documentPath of documentPaths) {
@@ -245,6 +255,41 @@ function assertPrerenderedDocuments() {
   console.log(
     `Verified ${documentPaths.length} prerendered pages: title, description, H1, valid JSON-LD, and public footer.`,
   );
+}
+
+function readPrerenderedRoutes() {
+  if (!fs.existsSync(prerenderManifestPath)) {
+    throw new Error(`Expected a prerender route manifest at ${prerenderManifestPath}. Run the production build first.`);
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(prerenderManifestPath, 'utf8'));
+  } catch (error) {
+    throw new Error(`Could not parse the prerender route manifest at ${prerenderManifestPath}.`, { cause: error });
+  }
+
+  if (!manifest?.routes || typeof manifest.routes !== 'object' || Array.isArray(manifest.routes)) {
+    throw new Error(`Expected ${prerenderManifestPath} to contain a routes object.`);
+  }
+
+  const routes = Object.keys(manifest.routes).map(normalizeRoute);
+  if (routes.length === 0) {
+    throw new Error(`Expected ${prerenderManifestPath} to contain at least one route.`);
+  }
+  if (new Set(routes).size !== routes.length) {
+    throw new Error(`Expected ${prerenderManifestPath} to contain unique normalized routes.`);
+  }
+
+  return routes.sort();
+}
+
+function normalizeRoute(route) {
+  const normalizedRoute = route.trim().replace(/\/+$/, '') || '/';
+  if (!normalizedRoute.startsWith('/')) {
+    throw new Error(`Expected prerender route "${route}" to start with "/".`);
+  }
+  return normalizedRoute;
 }
 
 function collectIndexDocuments(directory) {

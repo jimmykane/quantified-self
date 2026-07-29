@@ -665,6 +665,13 @@ const topLevelRoutes: Routes = [
       preload: true,
       policyPage: 'all',
       description: 'Read our Privacy Policy, Terms of Service, and Data Protection information.',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'Quantified Self Privacy Policy & Terms',
+        url: 'https://quantified-self.io/policies',
+        inLanguage: 'en',
+      },
     },
   },
   {

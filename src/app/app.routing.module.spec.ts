@@ -100,6 +100,10 @@ describe('AppRoutingModule routes', () => {
     expect(policiesRoute?.data).toMatchObject({
       title: 'Privacy Policy & Terms',
       policyPage: 'all',
+      jsonLd: {
+        '@type': 'WebPage',
+        url: 'https://quantified-self.io/policies',
+      },
     });
   });
 
