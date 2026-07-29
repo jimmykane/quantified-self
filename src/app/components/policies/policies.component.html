@@ -1,10 +1,13 @@
 <div class="policies-hero">
-  <h1>Legal & Privacy</h1>
-  <p>Transparency about how we handle your data, your rights, and our terms of service.</p>
+  <h1>{{ pageTitle }}</h1>
+  <p>{{ pageSummary }}</p>
 </div>
 
 <div class="policies-container">
-  <section class="connected-services-section" [attr.id]="connectedServicesPolicy.id">
+  <section
+    *ngIf="showConnectedServices"
+    class="connected-services-section"
+    [attr.id]="connectedServicesPolicy.id">
     <mat-card appearance="outlined" class="connected-services-card">
       <mat-card-header>
         <div mat-card-avatar class="policy-avatar">
@@ -19,7 +22,7 @@
           <a
             *ngFor="let link of connectedServicesPolicy.navLinks"
             class="policy-anchor-link"
-            [routerLink]="['/policies']"
+            [routerLink]="[pagePath]"
             [fragment]="link.id">
             <mat-icon>{{ link.icon }}</mat-icon>
             <span>{{ link.label }}</span>

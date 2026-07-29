@@ -42,6 +42,10 @@ describe('integration-pages.content', () => {
       .toContain('saved Suunto routes to Wahoo automatically');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question.includes('disconnecting'))?.answer)
       .toContain('previously imported activities remain');
+    expect(PROVIDER_INTEGRATION_PAGES.wahoo.relatedGuideActions).toContainEqual({
+      label: 'Import Activities to Wahoo',
+      routerLink: '/guides/import-activities-to-wahoo',
+    });
   });
 
   it('should keep Garmin and COROS SEO intent distinct from the Suunto sync page', () => {
@@ -74,6 +78,10 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'GPX and FIT route upload')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Send Suunto routes to Garmin')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.tools.some(tool => tool.title === 'Send Suunto routes to Wahoo')).toBe(true);
+    expect(PROVIDER_INTEGRATION_PAGES.suunto.relatedGuideActions).toContainEqual({
+      label: 'Import Activities to Suunto',
+      routerLink: '/guides/import-activities-to-suunto',
+    });
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Quantified Self sync routes with Suunto?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to Garmin courses?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.suunto.faqItems.some(item => item.question === 'Can Suunto routes sync to Wahoo?')).toBe(true);

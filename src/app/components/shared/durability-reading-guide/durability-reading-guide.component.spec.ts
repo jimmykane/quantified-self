@@ -9,6 +9,8 @@ import { MatMenuModule } from '@angular/material/menu';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BehaviorSubject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -44,6 +46,26 @@ describe('DurabilityReadingGuideComponent', () => {
 
   afterEach(() => {
     overlayContainer.getContainerElement().replaceChildren();
+  });
+
+  it('uses the compact app-standard title info control', () => {
+    fixture.detectChanges();
+
+    const trigger = fixture.nativeElement.querySelector('.title-info-button') as HTMLButtonElement;
+    const icon = trigger.querySelector('mat-icon') as HTMLElement;
+    const styles = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/app/components/shared/durability-reading-guide/durability-reading-guide.component.scss',
+      ),
+      'utf8',
+    );
+
+    expect(trigger).not.toBeNull();
+    expect(icon).not.toBeNull();
+    expect(styles).toMatch(/\.title-info-button\s*\{[^}]*--mat-icon-button-state-layer-size:\s*20px/s);
+    expect(styles).toMatch(/\.title-info-button\s*\{[^}]*--mat-icon-button-icon-size:\s*16px/s);
+    expect(styles).toMatch(/\.title-info-button mat-icon\s*\{[^}]*font-size:\s*16px/s);
   });
 
   it('opens the concise event guide in a desktop Material menu', async () => {

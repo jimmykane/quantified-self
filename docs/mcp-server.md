@@ -39,8 +39,9 @@ the client successfully exchanges its authorization code for credentials, and le
 
 The crawlable product overview lives at `/features/mcp-server`. It is a prerendered public page with route metadata,
 canonical metadata, visible capability and boundary copy, FAQ structured data, and links to the setup and policy
-details. `/help#data-and-privacy` owns the user setup instructions, while `/policies#mcp-clients` owns the complete
-disclosure.
+details. `/help#data-and-privacy` owns the user setup instructions, while `/policies#mcp-clients` owns the complete MCP
+disclosure. `/privacy` and `/terms` are dedicated prerendered reviewer URLs; `/policies` is also prerendered and remains
+the consolidated legal page.
 
 The protocol endpoint, OAuth endpoints, well-known metadata endpoints, and authenticated `/mcp/authorize` consent page
 must never be added to the sitemap. Keep them disallowed in `src/robots.txt`, and keep consent route metadata set to
@@ -86,7 +87,7 @@ The bundled skills divide ownership deliberately:
 | --- | --- | --- |
 | `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
 | `analyze-quantified-self-training` | Training load, volume, performance trends, and Training-derived metrics | `metrics:read` |
-| `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, naps, and sleep-oriented trends | `sleep:read` |
+| `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
 | `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
@@ -384,28 +385,43 @@ The analytics and map entries follow the
 | `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
+| `query_metrics` | `metrics:read` | Up to four event-stat aggregations over one shared bounded read, date range, grouping, timezone, and activity filter |
+| `list_training_metrics` | `metrics:read` | Human-readable Training metric catalog with current snapshot availability metadata but no payloads or provenance |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
+| `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
+| `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over a bounded date range |
+| `get_sleep_trend` | `sleep:read` | One-call sleep duration, score, stage, HRV, and other safe aggregate-vital coverage and trend |
+| `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
+| `get_today_readiness` | `metrics:read` + `sleep:read` | Live Dashboard Today-equivalent readiness with Load, Sleep, HRV, and Overnight HR evidence |
+| `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
-| `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
+| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
+| `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
+| `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
 | `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
 | `list_routes` | `routes:read` | Bounded newest-first scans with optional activity-type and case-insensitive name filters, opaque references, and signed-in app links; exact bounds require `route-location:read` |
-| `find_routes_near_location` | `routes:read` + `route-location:read` | Bounded newest-first scan measuring a location against persisted route previews |
+| `find_routes_near_location` | `routes:read` + `route-location:read` | Frozen compatibility tool for nearby saved-route scans |
+| `search_routes_near_location` | `routes:read` + `route-location:read` | Preferred closed-world nearby saved-route search against persisted route previews |
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
-Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
-tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
-before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics` and
-`get_daily_briefing` are registered only when both of their scopes are present.
+Every tool is annotated read-only, non-destructive, and idempotent. The preferred `search_*_near_location` tools are
+closed-world: a place-name input can make a bounded Mapbox geocoding read, but it cannot write to Mapbox or change
+publicly visible internet state. The already-registered `find_*_near_location` variants retain their frozen
+`openWorldHint: true` metadata for compatibility, while server instructions route new requests to the corrected
+additive tools. The HTTP layer checks every required scope before the tool call and only registers tools covered by the
+bearer token. `get_activity_metrics`, `get_activity_overview`, `rank_activities_by_metric`,
+`get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
+scopes are present.
 
 ### Strict structured output
 
@@ -435,12 +451,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 21-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 32-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 21 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 32 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -545,10 +561,26 @@ expose precise position.
 It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing non-MCP callers keep
 their prior local-time behavior when they omit the timezone.
 
+`query_metrics` uses the same range, paging, byte, stat-entry, filtering, import, and aggregation primitives. It accepts
+one to four canonical metric/aggregation selectors, deduplicates identical selectors, fetches the bounded event range
+once, and imports each eligible event once with only the selected stats plus activity type. It then builds one result
+per selector with the shared grouping, interval, timezone, and activity-type filters. It does not create a metric
+catalog document or any other persisted cache.
+
 `get_activity_metrics` reuses the same catalog and alias resolution. The request is canonicalized and deduplicated before
 Firestore access, and each stored value is reconstructed through its Sports Lib data class. Only finite values accepted
 by that class are returned; missing or invalid selected values are reported as unavailable. This keeps new eligible
 Sports Lib numeric metrics on the same automatic surface instead of introducing a per-activity registry.
+
+`get_activity_overview` reads one reference-bound activity projection and returns only its canonical activity type,
+redaction marker, the numeric metrics actually present, allowlisted lap/jump/swim-length availability,
+and whether an original chart source is declared. Candidate chart metric IDs come from the existing activity-chart
+catalog; the source file is not downloaded or parsed. Coordinates and raw detail records are never part of this tool.
+
+`rank_activities_by_metric` resolves the same canonical numeric catalog, then reads only the selected activity fields and
+the chosen stat in bounded Firestore pages. It returns coordinate-free opaque references and values, with deterministic
+value/start-time/document ordering. Its range scan reuses the existing single-field `eventStartDate` ordering plus the
+document-ID tie-break, so it requires no new composite index. First-class body measurements remain excluded.
 
 ## First-class body measurements
 
@@ -629,16 +661,19 @@ them. The separately requested direct app URL uses the existing `/user/{uid}/eve
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
 Activity discovery metadata explicitly maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
-named-sport requests to `list_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
+named-sport requests to `query_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
 plus their group and indoor hints; filters accept those values or aliases recognized by Sports Lib and canonicalize
 them before scanning. A request such as “latest run” therefore uses a server-side type filter with `limit: 1`, so a newer
 activity of another type is skipped instead of being mistaken for the requested workout.
 
-The list is always newest first. `start` and `end` remain an optional explicit pair with the existing 366-day limit.
-Alternatively, `relativePeriod: "today" | "yesterday"` requires an explicit IANA `timeZone` and resolves the exact local
-calendar-day boundaries, including DST-short and DST-long days. Date selectors are mutually exclusive. Omitting every
-date selector starts at the newest persisted activity across all history. A relative-period cursor retains the first
-page's resolved millisecond range, so crossing local midnight between pages cannot move the query window.
+`query_activities` is always newest first. Its advertised JSON Schema uses `oneOf` for exactly three legal date modes:
+an explicit paired `start` and `end` with the existing 366-day limit; a
+`relativePeriod: "today" | "yesterday"` paired with an explicit IANA `timeZone`; or an unbounded mode that omits all
+four date selectors. The relative mode resolves exact local calendar-day boundaries, including DST-short and DST-long
+days. Invalid partial or mixed selectors therefore fail schema validation before service work instead of relying only
+on runtime validation. A relative-period cursor retains the first page's resolved millisecond range, so crossing local
+midnight between pages cannot move the query window. `search_activities_near_location` similarly advertises an explicit
+paired range or an unbounded mode.
 
 One filtered call scans at most 100 selected activity documents and can return fewer matches than requested.
 `scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
@@ -648,8 +683,9 @@ relative-period/timezone mode, and resolved or explicit date range; the type set
 digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
 snapshots are not evidence that an individual activity is unavailable.
 
-`find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
-scope, it reuses the location field mask and safe summary projection. It matches only the persisted
+The nearby activity tools are not registered and Mapbox is not called without `activity-location:read`.
+`search_activities_near_location` is the preferred corrected surface. With the scope, it reuses the location field mask
+and safe summary projection. It matches only the persisted
 start and end positions, not the raw activity track: the response reports the nearest matching coordinate, whether it
 was the start or end, and the great-circle distance. An optional paired start/end date filter retains the 366-day bound.
 If dates are omitted, the scan starts with the newest activity and continues through encrypted, query-bound cursors.
@@ -694,15 +730,16 @@ The projection excludes source/delivery provenance, provider IDs, Storage metada
 comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and cursors use the same
 UID-and-connection-bound authenticated-encryption design as activity references.
 
-`get_route_geometry`, `find_routes_near_location`, and `list_route_waypoints` are not registered without
+`get_route_geometry`, both nearby-route variants, and `list_route_waypoints` are not registered without
 `route-location:read`, and missing permission is rejected before preview, Storage, parser, or Mapbox work.
 `get_route_geometry` reads only the persisted Sports Lib route preview. The response fixes the contract to preview
 version 1, `polyline5`, precision 5, exact bounds, at most 20 segments and 5,000 decoded preview points. Segment IDs and
 names are excluded. Each segment includes explicit `startPosition` and `endPosition` values derived from the first and
 last decoded preview point. This is the deliberately simplified preview, not the source route's raw point stream.
 
-`find_routes_near_location` first uses each route's persisted exact bounds as a cheap exclusion check, then reads only
-the `preview` field for plausible candidates. It decodes the persisted `polyline5` once and measures the nearest point
+`search_routes_near_location` is the preferred corrected surface. It first uses each route's persisted exact bounds as a
+cheap exclusion check, then reads only the `preview` field for plausible candidates. It decodes the persisted
+`polyline5` once and measures the nearest point
 on every preview segment using spherical geometry, so a route can match anywhere along its preview rather than only at
 its endpoints. Encoded segments are preflighted against their declared point counts before decoding, and invalid preview
 attempts consume the same cumulative point-work budget as valid previews. The result includes the nearest point and
@@ -728,7 +765,7 @@ range-and-order shape.
 
 ## Nearby-location resolution
 
-Both nearby tools accept either `{ latitudeDegrees, longitudeDegrees }` or `{ query }`, plus a radius from 100 to
+The preferred nearby-search tools accept either `{ latitudeDegrees, longitudeDegrees }` or `{ query }`, plus a radius from 100 to
 500,000 metres. Direct coordinates are validated and used entirely inside Quantified Self. Place text is normalized,
 limited to 20 words and 200 characters, and sent to the Mapbox Geocoding v6 forward endpoint with autocomplete disabled,
 one result, and temporary (uncached) use. MCP never invokes an AI model to repair or reinterpret a failed place lookup.
@@ -740,11 +777,12 @@ bounding box enter the application. Authentication, rate-limit, timeout, malform
 to safe MCP errors without logging the query or resolved coordinates. In addition to the normal MCP connection request
 limit, place-name lookups have a distributed limit of 30 per connection per minute. Their counter documents use the
 existing `mcpOAuthRateLimits` collection and `expireAt` TTL lifecycle. Direct-coordinate calls do not consume that
-geocoding budget.
+geocoding budget. This read-only lookup does not change public internet state, so the preferred nearby-search tools use
+`openWorldHint: false`.
 
 ## Training-derived metrics
 
-MCP reads only `status: "ready"` documents with the exact current schema from
+MCP returns Training snapshot payloads only from `status: "ready"` documents with the exact current schema in
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
 exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels,
 identity-derived source fingerprints, and imported device/provider provenance (`sourceKey` and `previousSourceKey`) from
@@ -753,6 +791,13 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
+`list_training_metrics` adds presentation and routing metadata without adding another kind registry: its descriptor map
+is compile-time exhaustive against `DERIVED_METRIC_KINDS`. It reads only snapshot envelope metadata for the matching
+descriptors, validates the snapshot entry type and metric identity, and reports `ready`, `building`, `failed`, `stale`,
+`missing`, or `schema_mismatch`. It never returns a snapshot payload, backend error text, event identity, or source
+provenance. Clients should use it before deciding that a Training metric is unavailable, and call
+`get_training_metric` only for a ready kind.
+
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
 payload schema, structured-output fixture, and positive and negative redaction-contract tests.
@@ -760,18 +805,99 @@ payload schema, structured-output fixture, and positive and negative redaction-c
 ## Sleep projection
 
 MCP reads normalized `users/{uid}/sleepSessions` documents through a Firestore field mask and creates a new allowlisted
-response. The read projection includes only the provider name and fields eligible for that response; raw samples,
-provider identifiers, and score components do not enter the MCP process. Session output may include provider, sleep
+response. The read projection includes only the provider name, normalized timezone offset needed for Suunto readiness
+date grouping, and fields eligible for the response; raw samples, provider identifiers, provider-specific timestamps,
+and score components do not enter the MCP process. The fixed aggregate-vital allowlist covers average, minimum, and
+resting sleep heart rate; average and overnight HRV plus HRV sample count; maximum SpO₂; and average respiration.
+Garmin's maximum SpO₂ is normalized from its valid recorded sleep samples during ingestion so MCP can return the safe
+aggregate without loading or exposing the source series. Non-positive Garmin respiration samples do not contribute to
+its normalized average. Session output may include provider, sleep
 date, start/end time, duration, in-bed duration, nap status, stage-duration totals, normalized score value/qualifier,
 and aggregate vitals. Missing optional numeric measurements remain unavailable and do not contribute zeroes to summary
-averages.
+averages. The lower-level `list_sleep_vitals` reports only the safe vital types that have at least one recorded session in the
+requested bounded period, their units, and session coverage. It lets clients discover HRV before querying nightly or
+grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
+`get_sleep_trend` is the preferred one-call path for recent sleep or recovery-oriented questions. It returns the exact
+requested range, IANA timezone, grouping, recorded-vital coverage, and the same safe duration, score, stage, and
+aggregate-vital buckets as the lower-level summary path. The implementation performs one bounded projected read and
+cannot diagnose illness or infer missing physiology. An individual session's SpO₂ aggregate is its maximum; a grouped
+bucket's value is the average of the contributing session maxima. Grouped respiration likewise averages the
+contributing session-level averages.
+
+The trend and lower-level summary now call one shared normalized sleep loader and aggregation path, so HRV, sleep heart
+rate, SpO₂, respiration, stage, and duration values cannot drift between those tools. The daily report continues to use
+the same normalized sleep fields and safe value rules for its allowed latest-night HRV and heart-rate fields. Missing
+physiology stays absent/null and is never converted to zero. Server and bundled-skill instructions explicitly route
+multi-day physiology questions to `get_sleep_trend` and availability-only questions to `list_sleep_vitals`.
 
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
 deliberately.
 
-## Daily briefing projection
+## Current readiness and daily report projections
+
+### Live today readiness
+
+`get_today_readiness` is the one-call source for the current recovery-aware score and requires both `metrics:read` and
+`sleep:read`. It deliberately does not widen the frozen daily-briefing output. The caller supplies an IANA timezone for
+local-day context, while the score retains the Dashboard and Training UTC-day boundary.
+
+The tool reads exactly the ready `form`, `form_now`, and `ramp_rate` snapshot documents plus one bounded 30-day,
+readiness-only sleep projection. That dedicated Firestore field mask reads only provider grouping, sleep date,
+start/end/duration, normalized timezone offset, nap state, score value, aggregate average/overnight HRV, and aggregate
+average/minimum sleep HR; it does not materialize stages, score qualifiers, SpO₂, respiration, or other sleep fields.
+The tool rebuilds the current zero-load decay series from Form's persisted daily loads and prefers its current Form and
+seven-day CTL ramp, using the current-day compact snapshots only for a value the series cannot supply. This is the same
+source-selection contract as Dashboard Today. The load calculation shares the canonical CTL/ATL constants and daily-load
+builder with the dashboard, while scoring and sleep-evidence selection call the environment-neutral
+`shared/readiness.ts` evaluator.
+
+The response returns the score, label, confidence, total/available driver count, available original weight before
+missing-driver renormalization, aggregate baseline-evidence count, and four explicit driver groups:
+
+- Load (40%): current Form, seven-day ramp, UTC day, and the oldest selected snapshot update time.
+- Sleep (25%): the eligible latest main-sleep date, end time, duration, resulting score, and whether that score was recorded
+  or derived from duration.
+- HRV (20%): latest safe aggregate milliseconds, same-provider baseline median, matching-night count, and ratio.
+- Overnight HR (15%): the combined ratio plus separate average and minimum sleep-HR latest values, baseline medians,
+  matching-night counts, and ratios.
+
+HRV and heart-rate states distinguish `not_recorded` from `insufficient_baseline`; a ratio requires at least three prior
+same-provider values. The tool aggregates duplicate same-provider/date sessions with the same readiness grouping rules,
+accepts average HRV before the normalized overnight-HRV fallback, excludes naps and evidence older than 48 hours for the
+current score, and never returns provider, session/document identity, source fields, raw samples, score components, or
+provider payloads. It is contextual and cannot diagnose illness, prescribe a workout, or establish a multi-day trend;
+use `get_sleep_trend` for trend questions.
+
+### Daily health and Training report
+
+`get_daily_report` is the preferred one-call source for a good-morning request or current daily report. It requires both
+`metrics:read` and `sleep:read`, accepts one explicit IANA timezone, and preserves the same local-day-context versus
+UTC-readiness-boundary distinction as `get_today_readiness`.
+
+The report reuses the live readiness loader, Form/ramp source selection, deterministic same-provider/date sleep grouping,
+and shared readiness evaluator rather than chaining public tool calls or defining another score. One projected 30-day
+sleep query supplies both the report and readiness. It reads at most 257 documents to enforce an at-most-256-session
+bound and selects only provider grouping, sleep date, start/end/duration, in-bed duration, normalized timezone offset,
+nap state, score value/qualifier, aggregate average/overnight HRV, and aggregate average/minimum sleep HR. Provider
+identity is used only for internal grouping and never enters the response.
+
+The latest completed main-sleep projection returns the safe session timing, duration, in-bed duration, score, and an
+explicit four-field aggregate-vital allowlist: average and overnight HRV in milliseconds plus average and minimum sleep
+heart rate in beats per minute. Each missing value is `null`; a grouped sleep returns in-bed duration only when every
+fragment recorded it, preventing a partial sum from looking complete. Raw samples, SpO₂, respiration, provider identity,
+source metadata, and score components are absent. The duration comparison uses up to 14 earlier same-provider nights
+and requires at least three before returning an average or delta.
+
+The nested readiness object is the exact strict `get_today_readiness` result, including safe driver values, baselines,
+ratios, evidence states, and freshness. The Training summary reuses the frozen briefing's strict current-versus-usual
+equivalent 28-day projection. Server instructions tell clients to lead with sleep and recorded HRV/heart-rate values,
+summarize readiness in one sentence using at most two relevant available drivers, then summarize Training. The report
+does not diagnose illness, prescribe a workout, or establish a multi-day trend; use `get_sleep_trend` when the question
+asks about change over time, SpO₂, or respiration.
+
+### Compact briefing
 
 `get_daily_briefing` is a compact convenience read that requires both `metrics:read` and `sleep:read`; neither scope
 alone registers it. The caller supplies an IANA timezone. The response records the resulting local-day bounds and
@@ -798,7 +924,18 @@ requires no new Firestore composite index.
   4 MiB of cumulative serialized event stats, or more than 20,000 cumulative top-level stat entries.
 - Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the
   activity-type stat needed for filtering.
+- Multi-metric queries accept at most four selectors, share the same 2,000-event, 4 MiB, and 20,000-entry work budgets,
+  import each eligible event once, and return at most 256 KiB.
 - A sleep summary rejects matches above 1,000 sessions.
+- Sleep-vital discovery uses the same at-most-1,000-session bounded read as a sleep summary and returns only fixed
+  allowlisted type metadata and per-type session counts.
+- One-call sleep trends use that same at-most-1,000-session bounded read, return only fixed coverage metadata and strict
+  summary buckets, and do not perform a separate discovery read.
+- Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 30-day bound, reads
+  exactly the three ready load snapshots in parallel, and returns at most 16 KiB. Its score uses only the latest
+  eligible main sleep plus up to 14 same-provider baseline nights after deterministic same-date aggregation.
+- A daily report reuses that same bounded sleep/readiness work, reads only the additional ready `training_summary`
+  snapshot, compares duration with at most 14 earlier same-provider nights, and returns at most 16 KiB.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
   document ID used to resume pagination.
 - A daily briefing reads at most 33 recent sleep documents from a fixed 14-day lookback, keeps at most 32 completed
@@ -817,6 +954,12 @@ requires no new Firestore composite index.
   most 100 entries and 256 KiB per page.
 - Per-activity metric calls accept at most 25 requested types, process at most 64 KiB of selected document data, and
   return at most 32 KiB.
+- Activity overviews process at most 64 KiB of stats plus 10,000 detail entries/512 KiB of raw detail arrays, do not
+  parse original source files, and return at most 64 KiB.
+- Activity ranking reads at most 2,000 projected activities in pages of 25, rejects more than 512 KiB of projected
+  activity data, returns at most 25 results, and has a 128 KiB response limit.
+- Training metric discovery reads only the snapshot envelope for descriptors matching the optional search and returns
+  at most 64 KiB; it does not read or project snapshot payloads.
 - On-demand activity charts accept one to four metrics, default to 300 and allow at most 400 points per metric, and
   default to 500 and allow at most 1,000 breadcrumb points. One parse may read at most four files, 12 MiB cumulative
   raw/compressed bytes, 64 MiB cumulative decompressed bytes, and 250,000 selected samples, with a 20-second internal

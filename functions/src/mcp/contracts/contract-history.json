@@ -1,4 +1,35 @@
 {
   "registryVersion": 1,
-  "transitions": []
+  "transitions": [
+    {
+      "candidateLifecycle": "developer",
+      "candidateSha256": "ad92a2a493fda7930ba87791a914a3b65ca5e6fe7c0a0982d1c468c1f5de5257",
+      "formatVersion": 1,
+      "lifecycleAction": "developer-refresh",
+      "previousContractSha256": "dba8a038278d8449ee4512a02cee3239744a8e4b72f97f90a391d41fa9d69cbf",
+      "previousLifecycle": "developer",
+      "rescanRequired": true,
+      "summary": "Add sleep-vital availability discovery and clarify HRV guidance for authorized sleep tools."
+    },
+    {
+      "candidateLifecycle": "developer",
+      "candidateSha256": "4c72ab0c0adb9190c4d060cd83cc88f13b1303fdaaec467cdfc5e19b46759e87",
+      "formatVersion": 1,
+      "lifecycleAction": "developer-refresh",
+      "previousContractSha256": "ad92a2a493fda7930ba87791a914a3b65ca5e6fe7c0a0982d1c468c1f5de5257",
+      "previousLifecycle": "developer",
+      "rescanRequired": true,
+      "summary": "Add a one-call sleep and HRV trend tool and prefer it for recent sleep questions."
+    },
+    {
+      "candidateLifecycle": "developer",
+      "candidateSha256": "e1f30bc57d3963bde5c51585c29a2d75a0421560c8e2f75a6d509cb923a407b0",
+      "formatVersion": 1,
+      "lifecycleAction": "developer-refresh",
+      "previousContractSha256": "4c72ab0c0adb9190c4d060cd83cc88f13b1303fdaaec467cdfc5e19b46759e87",
+      "previousLifecycle": "developer",
+      "rescanRequired": true,
+      "summary": "Add a live current-readiness tool with strict Load, Sleep, HRV, and Overnight HR evidence."
+    }
+  ]
 }

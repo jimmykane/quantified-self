@@ -207,57 +207,65 @@
               }
             </dl>
           }
-          @if (trainingRecoveryEstimate; as estimate) {
-            <aside class="training-readiness-imported-recovery" aria-label="Imported recovery estimate">
-              <mat-icon aria-hidden="true">timer</mat-icon>
-              <div class="training-readiness-imported-recovery-copy">
-                <span class="training-metric-label">Imported recovery estimate</span>
-                <div class="training-readiness-imported-recovery-value">
-                  <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
-                  <span>remaining</span>
-                </div>
-                <p>{{ estimate.detailText }}</p>
-              </div>
-              @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
-            </aside>
-          }
           <p class="training-readiness-source">{{ trainingReadiness.sourceText }}</p>
 
-          <section class="training-recovery-history" aria-labelledby="training-recovery-history-title">
-            <div class="training-recovery-history-summary">
-              <div>
-                <strong id="training-recovery-history-title">Recovery history</strong>
-                <span>Recorded sleep: current 28 days vs previous 84 days</span>
+          <section class="training-recovery-context" aria-labelledby="training-recovery-context-title">
+            <header class="training-recovery-context-header">
+              <strong id="training-recovery-context-title">Recovery context</strong>
+              <span>Imported estimate and recorded sleep, when available</span>
+            </header>
+
+            @if (trainingRecoveryEstimate; as estimate) {
+              <aside class="training-readiness-imported-recovery" aria-label="Recovery left from imported estimate">
+                <mat-icon aria-hidden="true">timer</mat-icon>
+                <div class="training-readiness-imported-recovery-copy">
+                  <span class="training-metric-label">Recovery left</span>
+                  <div class="training-readiness-imported-recovery-value">
+                    <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
+                    <span>remaining · until {{ estimate.finishTimeMs | date:'shortTime' }}</span>
+                  </div>
+                  <p>{{ estimate.detailText }}</p>
+                </div>
+                @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
+              </aside>
+            }
+
+            <section class="training-recovery-history" aria-labelledby="training-recovery-history-title">
+              <div class="training-recovery-history-summary">
+                <div>
+                  <strong id="training-recovery-history-title">Sleep history</strong>
+                  <span>Recorded sleep: current 28 days vs previous 84 days</span>
+                </div>
+                <button mat-button type="button"
+                  [attr.aria-expanded]="trainingRecoveryHistoryExpanded"
+                  aria-controls="training-recovery-history-details"
+                  (click)="toggleTrainingRecoveryHistory()">
+                  <span>{{ trainingRecoveryHistoryExpanded ? 'Hide sleep details' : 'Show sleep details' }}</span>
+                  <mat-icon aria-hidden="true">{{ trainingRecoveryHistoryExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+                </button>
               </div>
-              <button mat-button type="button"
-                [attr.aria-expanded]="trainingRecoveryHistoryExpanded"
-                aria-controls="training-recovery-history-details"
-                (click)="toggleTrainingRecoveryHistory()">
-                <span>{{ trainingRecoveryHistoryExpanded ? 'Hide' : 'Details' }}</span>
-                <mat-icon aria-hidden="true">{{ trainingRecoveryHistoryExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
-              </button>
-            </div>
-            <p class="training-recovery-history-compact">{{ trainingRecovery.compactText }}</p>
-            <div id="training-recovery-history-details" [hidden]="!trainingRecoveryHistoryExpanded">
-              @if (trainingRecovery.isUpdating) {
-                <p class="training-recovery-update" role="status">Updating recovery history…</p>
-              }
-              <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
-              @if (trainingRecovery.metricRows.length) {
-                <dl class="training-recovery-table">
-                  <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
-                  @for (row of trainingRecovery.metricRows; track row.label) {
-                    <div>
-                      <dt>{{ row.label }}</dt>
-                      <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
-                      <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
-                      <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
-                    </div>
-                  }
-                </dl>
-              }
-              <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
-            </div>
+              <p class="training-recovery-history-compact">{{ trainingRecovery.compactText }}</p>
+              <div id="training-recovery-history-details" [hidden]="!trainingRecoveryHistoryExpanded">
+                @if (trainingRecovery.isUpdating) {
+                  <p class="training-recovery-update" role="status">Updating sleep history…</p>
+                }
+                <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
+                @if (trainingRecovery.metricRows.length) {
+                  <dl class="training-recovery-table">
+                    <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
+                    @for (row of trainingRecovery.metricRows; track row.label) {
+                      <div>
+                        <dt>{{ row.label }}</dt>
+                        <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
+                        <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
+                        <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                      </div>
+                    }
+                  </dl>
+                }
+                <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
+              </div>
+            </section>
           </section>
         </article>
       </div>
@@ -427,7 +435,17 @@
           </div>
           @for (card of explanation.cards; track card.key) {
             <article class="training-insight-panel qs-glass-card-panel" [attr.data-tone]="card.tone">
-              <h3 class="training-insight-title">{{ card.title }}</h3>
+              <h3 class="training-insight-title">
+                @if (card.iconActivityType) {
+                  <app-activity-type-icon
+                    class="training-activity-family-icon"
+                    [activityType]="card.iconActivityType"
+                    size="20px"
+                    aria-hidden="true">
+                  </app-activity-type-icon>
+                }
+                <span>{{ card.title }}</span>
+              </h3>
               <strong><app-training-metric-text [text]="card.valueText"></app-training-metric-text></strong>
               @if (card.descriptionItems?.length) {
                 <ul class="training-insight-list">
@@ -738,58 +756,6 @@
             </div>
           }
         }
-        <article class="training-body-weight-panel qs-glass-card-panel" aria-labelledby="training-body-weight-title">
-          <header>
-            <div>
-              <h3 id="training-body-weight-title" class="qs-dashboard-chart-title">Body-weight trend</h3>
-              <p>Recorded measurements only</p>
-            </div>
-            <span>28-day view</span>
-          </header>
-          @if (bodyWeightTrend.state === 'unavailable') {
-            <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
-          } @else if (bodyWeightTrend.state === 'preparing') {
-            <div class="training-capacity-loading" role="status">
-              <mat-spinner diameter="24"></mat-spinner>
-              <div><strong>Preparing body-weight trend</strong><p>{{ bodyWeightTrend.statusText }}</p></div>
-            </div>
-          } @else {
-            @if (bodyWeightTrend.isUpdating) {
-              <p class="training-recovery-update" role="status">Updating recorded measurements…</p>
-            }
-            <div class="training-body-weight-summary">
-              <div>
-                <span>Latest</span>
-                <strong><app-training-metric-text [text]="bodyWeightTrend.latestWeightText"></app-training-metric-text></strong>
-                <small>{{ bodyWeightTrend.latestRecordedText }}</small>
-              </div>
-              <div>
-                <span>7-day median</span>
-                <strong><app-training-metric-text [text]="bodyWeightTrend.median7dText"></app-training-metric-text></strong>
-                <small>{{ bodyWeightTrend.change7dText }}</small>
-              </div>
-              <div>
-                <span>28-day median</span>
-                <strong><app-training-metric-text [text]="bodyWeightTrend.median28dText"></app-training-metric-text></strong>
-                <small>{{ bodyWeightTrend.change28dText }}</small>
-              </div>
-            </div>
-            @if (bodyWeightTrend.chartPoints.length) {
-              <app-training-body-weight-trend-chart
-                [points]="bodyWeightTrend.chartPoints"
-                [ariaLabel]="bodyWeightTrend.chartAriaLabel"
-                [darkTheme]="isDarkTheme()"
-                [unitSettings]="unitSettings"
-              ></app-training-body-weight-trend-chart>
-              <div class="training-body-weight-trend-dates">
-                <span>{{ bodyWeightTrend.chartStartLabel }}</span>
-                <span>{{ bodyWeightTrend.chartEndLabel }}</span>
-              </div>
-            }
-            <p class="training-body-weight-coverage">{{ bodyWeightTrend.coverageText }} · {{ bodyWeightTrend.statusText }}</p>
-            <p class="training-body-weight-source">{{ bodyWeightTrend.sourceText }}</p>
-          }
-        </article>
         @if (isSwimmingVisible) {
           @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
             <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
@@ -953,6 +919,68 @@
           }
         }
       </div>
+    </section>
+
+    <section class="training-section training-body-context-section" aria-labelledby="training-body-context-title">
+      <div class="training-section-heading">
+        <div>
+          <p>Body context</p>
+          <h2 id="training-body-context-title">Recorded body weight</h2>
+        </div>
+        <span class="training-section-note">Separate from training load and readiness</span>
+      </div>
+      <article class="training-body-weight-panel qs-glass-card-panel" aria-labelledby="training-body-weight-title">
+        <header>
+          <div>
+            <h3 id="training-body-weight-title" class="qs-dashboard-chart-title">Body-weight trend</h3>
+            <p>Recorded measurements only</p>
+          </div>
+          <span>28-day view</span>
+        </header>
+        @if (bodyWeightTrend.state === 'unavailable') {
+          <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
+        } @else if (bodyWeightTrend.state === 'preparing') {
+          <div class="training-capacity-loading" role="status">
+            <mat-spinner diameter="24"></mat-spinner>
+            <div><strong>Preparing body-weight trend</strong><p>{{ bodyWeightTrend.statusText }}</p></div>
+          </div>
+        } @else {
+          @if (bodyWeightTrend.isUpdating) {
+            <p class="training-recovery-update" role="status">Updating recorded measurements…</p>
+          }
+          <div class="training-body-weight-summary">
+            <div>
+              <span>Latest</span>
+              <strong><app-training-metric-text [text]="bodyWeightTrend.latestWeightText"></app-training-metric-text></strong>
+              <small>{{ bodyWeightTrend.latestRecordedText }}</small>
+            </div>
+            <div>
+              <span>7-day median</span>
+              <strong><app-training-metric-text [text]="bodyWeightTrend.median7dText"></app-training-metric-text></strong>
+              <small>{{ bodyWeightTrend.change7dText }}</small>
+            </div>
+            <div>
+              <span>28-day median</span>
+              <strong><app-training-metric-text [text]="bodyWeightTrend.median28dText"></app-training-metric-text></strong>
+              <small>{{ bodyWeightTrend.change28dText }}</small>
+            </div>
+          </div>
+          @if (bodyWeightTrend.chartPoints.length) {
+            <app-training-body-weight-trend-chart
+              [points]="bodyWeightTrend.chartPoints"
+              [ariaLabel]="bodyWeightTrend.chartAriaLabel"
+              [darkTheme]="isDarkTheme()"
+              [unitSettings]="unitSettings"
+            ></app-training-body-weight-trend-chart>
+            <div class="training-body-weight-trend-dates">
+              <span>{{ bodyWeightTrend.chartStartLabel }}</span>
+              <span>{{ bodyWeightTrend.chartEndLabel }}</span>
+            </div>
+          }
+          <p class="training-body-weight-coverage">{{ bodyWeightTrend.coverageText }} · {{ bodyWeightTrend.statusText }}</p>
+          <p class="training-body-weight-source">{{ bodyWeightTrend.sourceText }}</p>
+        }
+      </article>
     </section>
   }
 </main>

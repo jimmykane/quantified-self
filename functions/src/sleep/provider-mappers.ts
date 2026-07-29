@@ -242,12 +242,35 @@ function sampleMapToPoints(value: unknown): SleepSamplePoint[] {
         .sort((left, right) => (left.offsetSeconds || 0) - (right.offsetSeconds || 0));
 }
 
-function averageSampleValue(samples: readonly SleepSamplePoint[]): number | null {
-    if (!samples.length) {
+function averagePositiveSampleValue(samples: readonly SleepSamplePoint[]): number | null {
+    let total = 0;
+    let count = 0;
+    for (const sample of samples) {
+        if (sample.value > 0) {
+            total += sample.value;
+            count += 1;
+        }
+    }
+    return count ? Math.round((total / count) * 10) / 10 : null;
+}
+
+function normalizeSpo2Percent(value: number | null): number | null {
+    if (value === null || value <= 0) {
         return null;
     }
-    const total = samples.reduce((sum, sample) => sum + sample.value, 0);
-    return Math.round((total / samples.length) * 10) / 10;
+    const percent = value <= 1 ? value * 100 : value;
+    return percent <= 100 ? percent : null;
+}
+
+function maximumSpo2SamplePercent(samples: readonly SleepSamplePoint[]): number | null {
+    let maximum: number | null = null;
+    for (const sample of samples) {
+        const percent = normalizeSpo2Percent(sample.value);
+        if (percent !== null && (maximum === null || percent > maximum)) {
+            maximum = percent;
+        }
+    }
+    return maximum;
 }
 
 function buildGarminStageIntervals(sleepLevelsMap: unknown): SleepStageInterval[] {
@@ -352,7 +375,8 @@ export function mapGarminSleepSummary(
                 components: Object.keys(sleepScores).length ? sleepScores as Record<string, unknown> : null,
             },
             vitals: {
-                averageRespirationBrpm: averageSampleValue(respirationSamples),
+                averageRespirationBrpm: averagePositiveSampleValue(respirationSamples),
+                maxSpo2Percent: maximumSpo2SamplePercent(spo2Samples),
             },
             respirationSamples,
             spo2Samples,
@@ -414,13 +438,12 @@ export function mapSuuntoSleepSample(
         [SLEEP_STAGES.Rem]: remSeconds,
         [SLEEP_STAGES.Awake]: wakeAfterSleepOnsetSeconds + wakeBeforeOffBedSeconds,
     });
-    const maxSpo2 = asNumber(entryData.MaxSpo2);
     const vitals: SleepVitals = {
         averageHeartRateBpm: asNumber(entryData.HRAvg),
         minimumHeartRateBpm: asNumber(entryData.HRMin),
         averageHrvMs: asNumber(entryData.AvgHRV),
         hrvSampleCount: asNumber(entryData.AvgHRVSampleCount),
-        maxSpo2Percent: maxSpo2 === null ? null : (maxSpo2 <= 1 ? maxSpo2 * 100 : maxSpo2),
+        maxSpo2Percent: normalizeSpo2Percent(asNumber(entryData.MaxSpo2)),
     };
 
     return {

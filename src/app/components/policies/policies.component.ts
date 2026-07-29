@@ -1,7 +1,6 @@
 import { AfterViewInit, Component, OnDestroy, inject } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
-import { AppAuthService } from '../../authentication/app.auth.service';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import {
   CONNECTED_SERVICES_POLICY_SECTION,
@@ -18,16 +17,33 @@ import {
 export class PoliciesComponent implements AfterViewInit, OnDestroy {
   private readonly document = inject(DOCUMENT);
   private readonly route = inject(ActivatedRoute);
+  private readonly pageMode = this.resolvePageMode();
   private readonly onHashChange = () => this.scrollToCurrentHash();
   private initialScrollTimeoutId: number | null = null;
   private fragmentSubscription: Subscription | null = null;
 
-  policies: PolicyItem[] = POLICY_CONTENT;
-  connectedServicesPolicy = CONNECTED_SERVICES_POLICY_SECTION;
-
-  constructor(public authService: AppAuthService, public router: Router) {
-
-  }
+  readonly policies: PolicyItem[] = this.pageMode === 'terms'
+    ? POLICY_CONTENT.filter(policy => policy.id === 'tos')
+    : this.pageMode === 'privacy'
+      ? POLICY_CONTENT.filter(policy => policy.id !== 'tos')
+      : POLICY_CONTENT;
+  readonly connectedServicesPolicy = CONNECTED_SERVICES_POLICY_SECTION;
+  readonly showConnectedServices = this.pageMode !== 'terms';
+  readonly pagePath = this.pageMode === 'privacy'
+    ? '/privacy'
+    : this.pageMode === 'terms'
+      ? '/terms'
+      : '/policies';
+  readonly pageTitle = this.pageMode === 'privacy'
+    ? 'Privacy Policy'
+    : this.pageMode === 'terms'
+      ? 'Terms of Service'
+      : 'Legal & Privacy';
+  readonly pageSummary = this.pageMode === 'privacy'
+    ? 'How Quantified Self handles your data, connected services, processors, security, and privacy rights.'
+    : this.pageMode === 'terms'
+      ? 'The subscription, renewal, cancellation, refund, pricing, and plan terms for Quantified Self.'
+      : 'Transparency about how we handle your data, your rights, and our terms of service.';
 
   ngAfterViewInit(): void {
     this.document.defaultView?.addEventListener('hashchange', this.onHashChange, { passive: true });
@@ -45,6 +61,12 @@ export class PoliciesComponent implements AfterViewInit, OnDestroy {
     this.fragmentSubscription?.unsubscribe();
     this.fragmentSubscription = null;
     this.document.defaultView?.removeEventListener('hashchange', this.onHashChange);
+  }
+
+  private resolvePageMode(): 'all' | 'privacy' | 'terms' {
+    const mode = this.route.snapshot.data['policyPage']
+      ?? this.route.parent?.snapshot.data['policyPage'];
+    return mode === 'privacy' || mode === 'terms' ? mode : 'all';
   }
 
   private clearPendingScroll(): void {

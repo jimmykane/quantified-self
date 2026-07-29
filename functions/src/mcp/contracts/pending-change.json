@@ -1,0 +1,7 @@
+{
+  "formatVersion": 1,
+  "candidateSha256": "b26d8b9508e0ac93c8426715082e4407fb52c770d4e872f283eee295783a52bb",
+  "lifecycleAction": "developer-refresh",
+  "summary": "Add the daily report and contract-safe activity and nearby-search replacements, then add bounded multi-metric queries, Training capability discovery, activity overviews and rankings, and clearer sleep-vital routing.",
+  "rescanRequired": true
+}

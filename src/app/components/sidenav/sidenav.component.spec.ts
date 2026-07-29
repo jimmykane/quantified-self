@@ -238,7 +238,7 @@ describe('SideNavComponent', () => {
         expect(component.hasPaidAccess).toBe(false);
     });
 
-    it('links signed-in users to the new Training workspace', () => {
+    it('links signed-in users to the Training workspace without a new badge', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             displayName: 'Athlete',
@@ -255,7 +255,7 @@ describe('SideNavComponent', () => {
             trainingItem?.nativeElement.getAttribute('routerlink')
             ?? trainingItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/training');
-        expect(trainingItem?.nativeElement.textContent).toContain('New');
+        expect(trainingItem?.nativeElement.textContent).not.toContain('New');
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
@@ -276,7 +276,7 @@ describe('SideNavComponent', () => {
         expect(template).toContain('routerLink="/settings" [queryParams]="{ section: \'profile\' }"');
     });
 
-    it('places AI Insights after the signed-in activity navigation items', () => {
+    it('orders signed-in navigation with AI Insights last', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             displayName: 'Athlete',
@@ -285,12 +285,42 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
         const navigationItems = fixture.debugElement.queryAll(By.css('mat-list-item'));
+        const dashboardItem = navigationItems.find(item => item.nativeElement.textContent.includes('Dashboard'));
+        const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
+        const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
         const aiInsightsItem = navigationItems.find(item => item.nativeElement.textContent.includes('AI Insights'));
+        const compareFilesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Compare Files'));
 
+        expect(dashboardItem).toBeTruthy();
+        expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
+        expect(myTracksItem).toBeTruthy();
         expect(aiInsightsItem).toBeTruthy();
-        expect(navigationItems.indexOf(aiInsightsItem!)).toBeGreaterThan(navigationItems.indexOf(routesItem!));
+        expect(compareFilesItem).toBeTruthy();
+        const dashboardIndex = navigationItems.indexOf(dashboardItem!);
+        expect([
+            navigationItems.indexOf(dashboardItem!),
+            navigationItems.indexOf(trainingItem!),
+            navigationItems.indexOf(routesItem!),
+            navigationItems.indexOf(myTracksItem!),
+            navigationItems.indexOf(compareFilesItem!),
+            navigationItems.indexOf(aiInsightsItem!),
+        ]).toEqual([
+            dashboardIndex,
+            dashboardIndex + 1,
+            dashboardIndex + 2,
+            dashboardIndex + 3,
+            dashboardIndex + 4,
+            dashboardIndex + 5,
+        ]);
+        expect(aiInsightsItem?.nativeElement.textContent).toContain('AI Insights');
+        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Going away');
+        expect(aiInsightsItem?.nativeElement.classList.contains('ai-insights-retiring')).toBe(false);
+        expect(aiInsightsItem?.nativeElement.getAttribute('aria-label')).toBeNull();
+
+        const template = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'), 'utf8');
+        expect(template).not.toMatch(/beta/i);
     });
 
     it('should link My Tracks directly for logged-in free users', () => {

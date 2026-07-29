@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildReadinessEvaluation,
   buildReadinessSignals,
   calculateReadinessScore,
   combineReadinessOvernightHeartRateRatios,
@@ -105,5 +106,52 @@ describe('readiness', () => {
     expect(combineReadinessOvernightHeartRateRatios(0.9, null)).toBe(0.9);
     expect(combineReadinessOvernightHeartRateRatios(null, 0.96)).toBe(0.96);
     expect(combineReadinessOvernightHeartRateRatios(null, null)).toBeNull();
+  });
+
+  it('returns the exact selected latest and baseline evidence without changing the public signals', () => {
+    const baseline = [1, 2, 3, 4].map(index => ({
+      ...sleepPoint(
+        `baseline-${index}`,
+        `2026-01-0${index}`,
+        index * 1000,
+        60 + index,
+        50 + index,
+      ),
+      averageHrvMs: 40 + (index * 10),
+    }));
+    const latest = {
+      ...sleepPoint('latest', '2026-01-05', 5000, 55, 48),
+      averageHrvMs: 70,
+      score: 82,
+    };
+    const input = {
+      form: -4,
+      rampRate: 1,
+      sleepPoints: [...baseline, latest],
+      nowMs: 6000,
+    };
+
+    const evaluation = buildReadinessEvaluation(input);
+
+    expect(evaluation?.signals).toEqual(buildReadinessSignals(input));
+    expect(evaluation?.latestSleep).toBe(latest);
+    expect(evaluation?.baselineSleep.map(point => point.id)).toEqual([
+      'baseline-1',
+      'baseline-2',
+      'baseline-3',
+      'baseline-4',
+    ]);
+    expect(evaluation?.hrv).toEqual({
+      latestValue: 70,
+      baselineMedian: 65,
+      baselineValueCount: 4,
+      ratio: 70 / 65,
+    });
+    expect(evaluation?.averageHeartRate).toEqual({
+      latestValue: 55,
+      baselineMedian: 62.5,
+      baselineValueCount: 4,
+      ratio: 55 / 62.5,
+    });
   });
 });

@@ -172,6 +172,10 @@ class ServerAnalyticsService {
   logActivitySyncRouteBackfill(): void {
     return undefined;
   }
+
+  logToolCompareView(): void {
+    return undefined;
+  }
 }
 
 export const SERVER_APP_PROVIDERS = [

@@ -52,7 +52,12 @@ describe('serverRoutes', () => {
     const prerenderRoutes = serverRoutes.filter(route => route.renderMode === RenderMode.Prerender);
 
     expect(prerenderRoutes.map(route => route.path)).toEqual([...PRERENDERED_PUBLIC_ROUTES]);
-    expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual(['help']);
+    expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual([
+      'help',
+      'policies',
+      'privacy',
+      'terms',
+    ]);
     expect(PRERENDERED_TOOLS_ROUTES).toEqual([
       'tools',
       'tools/compare',
@@ -73,6 +78,8 @@ describe('serverRoutes', () => {
       'guides/sync-garmin-to-suunto',
       'guides/sync-coros-to-suunto',
       'guides/sync-wahoo-to-suunto',
+      'guides/import-activities-to-suunto',
+      'guides/import-activities-to-wahoo',
       'guides/sync-suunto-routes-to-garmin-courses',
       'guides/centralize-garmin-suunto-coros-workout-data',
     ]);
@@ -94,6 +101,9 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('share/comparison/:userID/:eventID')).toBe(false);
     expect(prerenderedPaths.has('pricing')).toBe(false);
     expect(prerenderedPaths.has('help')).toBe(true);
+    expect(prerenderedPaths.has('policies')).toBe(true);
+    expect(prerenderedPaths.has('privacy')).toBe(true);
+    expect(prerenderedPaths.has('terms')).toBe(true);
     expect(prerenderedPaths.has('releases')).toBe(false);
     expect(prerenderedPaths.has('ai-insights')).toBe(false);
     expect(prerenderedPaths.has('tools')).toBe(true);
@@ -112,6 +122,8 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('guides/sync-garmin-to-suunto')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-coros-to-suunto')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-wahoo-to-suunto')).toBe(true);
+    expect(prerenderedPaths.has('guides/import-activities-to-suunto')).toBe(true);
+    expect(prerenderedPaths.has('guides/import-activities-to-wahoo')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-suunto-routes-to-garmin-courses')).toBe(true);
     expect(prerenderedPaths.has('guides/centralize-garmin-suunto-coros-workout-data')).toBe(true);
   });

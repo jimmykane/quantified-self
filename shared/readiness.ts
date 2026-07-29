@@ -33,6 +33,22 @@ export interface ReadinessSignalsContext {
   overnightHeartRateRatio: number | null;
 }
 
+export interface ReadinessRatioEvidence {
+  latestValue: number | null;
+  baselineMedian: number | null;
+  baselineValueCount: number;
+  ratio: number | null;
+}
+
+export interface ReadinessEvaluation {
+  signals: ReadinessSignalsContext;
+  latestSleep: ReadinessSleepEvidencePoint | null;
+  baselineSleep: readonly ReadinessSleepEvidencePoint[];
+  hrv: ReadinessRatioEvidence;
+  averageHeartRate: ReadinessRatioEvidence;
+  minimumHeartRate: ReadinessRatioEvidence;
+}
+
 export interface ReadinessScoreContext {
   score: number;
   availableSignalCount: number;
@@ -63,6 +79,21 @@ export function buildReadinessSignals(input: {
   sleepPoints?: readonly ReadinessSleepEvidencePoint[] | null;
   nowMs?: number;
 }): ReadinessSignalsContext | null {
+  return buildReadinessEvaluation(input)?.signals ?? null;
+}
+
+/**
+ * Canonical readiness calculation plus the selected sleep evidence.
+ *
+ * Public projections must still create an explicit allowlist from this
+ * internal context because sleep points contain provider and record identity.
+ */
+export function buildReadinessEvaluation(input: {
+  form?: unknown;
+  rampRate?: unknown;
+  sleepPoints?: readonly ReadinessSleepEvidencePoint[] | null;
+  nowMs?: number;
+}): ReadinessEvaluation | null {
   const nowMs = toFiniteNumber(input.nowMs) ?? Date.now();
   const sleepPoints = (input.sleepPoints || [])
     .filter((point) => {
@@ -94,27 +125,27 @@ export function buildReadinessSignals(input: {
   const form = toFiniteNumber(input.form);
   const rampRate = toFiniteNumber(input.rampRate);
   const sleepScore = resolveSleepScore(latestSleep);
-  const hrvRatio = resolveRatioToMedian(
+  const hrv = resolveRatioEvidence(
     latestSleep?.averageHrvMs,
     baselineSleep.map(point => point.averageHrvMs),
   );
-  const averageHeartRateRatio = resolveRatioToMedian(
+  const averageHeartRate = resolveRatioEvidence(
     latestSleep?.averageHeartRateBpm,
     baselineSleep.map(point => point.averageHeartRateBpm),
   );
-  const minimumHeartRateRatio = resolveRatioToMedian(
+  const minimumHeartRate = resolveRatioEvidence(
     latestSleep?.minimumHeartRateBpm,
     baselineSleep.map(point => point.minimumHeartRateBpm),
   );
   const overnightHeartRateRatio = combineReadinessOvernightHeartRateRatios(
-    averageHeartRateRatio,
-    minimumHeartRateRatio,
+    averageHeartRate.ratio,
+    minimumHeartRate.ratio,
   );
   const scoreContext = calculateReadinessScore({
     form,
     rampRate,
     sleepScore,
-    hrvRatio,
+    hrvRatio: hrv.ratio,
     overnightHeartRateRatio,
   });
   if (!scoreContext) {
@@ -127,20 +158,27 @@ export function buildReadinessSignals(input: {
   )).length;
 
   return {
-    score: scoreContext.score,
-    label: scoreContext.score >= 75 ? 'Ready' : scoreContext.score >= 55 ? 'Mixed' : 'Recover',
-    confidence: resolveReadinessConfidence(scoreContext.availableWeight, baselineEvidenceCount),
-    availableSignalCount: scoreContext.availableSignalCount,
-    baselineEvidenceCount,
-    totalSignalCount: READINESS_TOTAL_SIGNAL_COUNT,
-    form,
-    rampRate,
-    sleepScore,
-    latestSleepAtMs: latestSleep ? resolveReadinessSleepPointTime(latestSleep) : null,
-    hrvRatio,
-    averageHeartRateRatio,
-    minimumHeartRateRatio,
-    overnightHeartRateRatio,
+    signals: {
+      score: scoreContext.score,
+      label: scoreContext.score >= 75 ? 'Ready' : scoreContext.score >= 55 ? 'Mixed' : 'Recover',
+      confidence: resolveReadinessConfidence(scoreContext.availableWeight, baselineEvidenceCount),
+      availableSignalCount: scoreContext.availableSignalCount,
+      baselineEvidenceCount,
+      totalSignalCount: READINESS_TOTAL_SIGNAL_COUNT,
+      form,
+      rampRate,
+      sleepScore,
+      latestSleepAtMs: latestSleep ? resolveReadinessSleepPointTime(latestSleep) : null,
+      hrvRatio: hrv.ratio,
+      averageHeartRateRatio: averageHeartRate.ratio,
+      minimumHeartRateRatio: minimumHeartRate.ratio,
+      overnightHeartRateRatio,
+    },
+    latestSleep,
+    baselineSleep,
+    hrv,
+    averageHeartRate,
+    minimumHeartRate,
   };
 }
 
@@ -259,20 +297,36 @@ function resolveSleepScore(point: ReadinessSleepEvidencePoint | null): number | 
   return clamp(100 - (Math.abs(hours - 8) * 20), 0, 100);
 }
 
-function resolveRatioToMedian(value: unknown, baselineValues: readonly unknown[]): number | null {
-  const current = toFiniteNumber(value);
+function resolveRatioEvidence(
+  value: unknown,
+  baselineValues: readonly unknown[],
+): ReadinessRatioEvidence {
+  const latestValue = toPositiveFiniteNumber(value);
   const baseline = baselineValues
-    .map(toFiniteNumber)
-    .filter((candidate): candidate is number => candidate !== null && candidate > 0)
+    .map(toPositiveFiniteNumber)
+    .filter((candidate): candidate is number => candidate !== null)
     .sort((left, right) => left - right);
-  if (current === null || current <= 0 || baseline.length < 3) {
-    return null;
-  }
-  const middle = Math.floor(baseline.length / 2);
-  const median = baseline.length % 2
-    ? baseline[middle]
-    : (baseline[middle - 1] + baseline[middle]) / 2;
-  return median > 0 ? current / median : null;
+  const baselineMedian = baseline.length
+    ? resolveMedian(baseline)
+    : null;
+  return {
+    latestValue,
+    baselineMedian,
+    baselineValueCount: baseline.length,
+    ratio: latestValue !== null
+      && baseline.length >= 3
+      && baselineMedian !== null
+      && baselineMedian > 0
+      ? latestValue / baselineMedian
+      : null,
+  };
+}
+
+function resolveMedian(values: readonly number[]): number {
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2
+    ? values[middle]
+    : (values[middle - 1] + values[middle]) / 2;
 }
 
 export function resolveReadinessConfidence(

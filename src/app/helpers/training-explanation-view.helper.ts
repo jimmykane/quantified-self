@@ -9,6 +9,7 @@ export type TrainingExplanationTone = 'positive' | 'negative' | 'neutral';
 export interface TrainingExplanationCardViewModel {
   key: 'load' | 'contributors' | 'mix' | 'rhythm';
   title: string;
+  iconActivityType: string | null;
   valueText: string;
   description: string;
   descriptionItems?: readonly string[];
@@ -34,6 +35,7 @@ export function buildTrainingExplanationViewModel(
   const cards: TrainingExplanationCardViewModel[] = [{
     key: 'load',
     title: 'Overall load',
+    iconActivityType: null,
     valueText: formatLoadOutcome(currentLoad, usualLoad),
     description: currentLoad === null
       ? `No TSS is available for this 28-day window (${current.parentLoadEventCount}/${current.parentEventCount} workouts with load).`
@@ -56,6 +58,7 @@ export function buildTrainingExplanationViewModel(
     cards.push({
       key: 'contributors',
       title: 'Top contributors',
+      iconActivityType: null,
       valueText: `${formatNumber(contributors.reduce((sum, item) => sum + item.loadSharePercent, 0))}% of load`,
       description: descriptionItems.join(' · '),
       descriptionItems,
@@ -68,6 +71,7 @@ export function buildTrainingExplanationViewModel(
     cards.push({
       key: 'mix',
       title: `${sportDriver.label} load`,
+      iconActivityType: sportDriver.iconActivityType,
       valueText: formatLoadOutcome(sportDriver.currentTss, sportDriver.usualTss),
       description: `${formatNumber(sportDriver.currentTss)} TSS now; the usual 28-day median is ${formatNumber(sportDriver.usualTss)} TSS. ${sportDriver.currentActivities} workouts now; ${sportDriver.usualActivities} usual.`,
       tone: 'neutral',
@@ -77,9 +81,11 @@ export function buildTrainingExplanationViewModel(
   const rhythmDriver = resolveRhythmDriver(current.rhythms, baselineMedian.rhythms);
   if (rhythmDriver) {
     const delta = rhythmDriver.current.activeDayCount - rhythmDriver.usual.activeDayCount;
+    const disciplineLabel = formatDiscipline(rhythmDriver.current.discipline);
     cards.push({
       key: 'rhythm',
-      title: `${formatDiscipline(rhythmDriver.current.discipline)} rhythm`,
+      title: `${disciplineLabel} rhythm`,
+      iconActivityType: disciplineLabel,
       valueText: formatRhythmOutcome(delta),
       description: `${rhythmDriver.current.sessionCount} workouts across ${rhythmDriver.current.activeWeekCount} active weeks. Longest inactivity gap: ${formatDayCount(rhythmDriver.current.longestInactivityGapDays)}; usual is ${formatDayCount(rhythmDriver.usual.longestInactivityGapDays)}.`,
       tone: 'neutral',
@@ -125,6 +131,7 @@ function resolveSportLoadDriver(current: DerivedTrainingExplanationSportLoad[], 
       }
       return [{
         label: currentItem.label,
+        iconActivityType: resolveTrainingSportIconActivityType(currentItem.sport, currentItem.label),
         currentTss: currentItem.trainingStressScore,
         usualTss: usualItem.trainingStressScore,
         currentActivities: currentItem.activityCount,
@@ -132,6 +139,15 @@ function resolveSportLoadDriver(current: DerivedTrainingExplanationSportLoad[], 
       }];
     })
     .sort((left, right) => Math.abs(right.currentTss - right.usualTss) - Math.abs(left.currentTss - left.usualTss))[0] || null;
+}
+
+function resolveTrainingSportIconActivityType(
+  sport: DerivedTrainingExplanationSportLoad['sport'],
+  label: string,
+): string | null {
+  return sport === 'running' || sport === 'cycling' || sport === 'swimming'
+    ? label
+    : null;
 }
 
 function resolveRhythmDriver(current: DerivedTrainingExplanationRhythm[], usual: DerivedTrainingExplanationRhythm[]) {

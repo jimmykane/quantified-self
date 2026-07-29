@@ -34,14 +34,26 @@ describe('buildTrainingExplanationViewModel', () => {
   it('explains load, contributors, sport load, rhythm, and coverage', () => {
     const view = buildTrainingExplanationViewModel(payload());
     expect(view?.cards).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'load', valueText: 'Above usual load', tone: 'neutral' }),
+      expect.objectContaining({ key: 'load', iconActivityType: null, valueText: 'Above usual load', tone: 'neutral' }),
       expect.objectContaining({
         key: 'contributors',
+        iconActivityType: null,
         description: 'Long run (40%; mostly running)',
         descriptionItems: ['Long run (40%; mostly running)'],
       }),
-      expect.objectContaining({ key: 'mix', title: 'Running load', valueText: 'Above usual load', tone: 'neutral' }),
-      expect.objectContaining({ key: 'rhythm', valueText: 'More active days', tone: 'neutral' }),
+      expect.objectContaining({
+        key: 'mix',
+        title: 'Running load',
+        iconActivityType: 'Running',
+        valueText: 'Above usual load',
+        tone: 'neutral',
+      }),
+      expect.objectContaining({
+        key: 'rhythm',
+        iconActivityType: 'Running',
+        valueText: 'More active days',
+        tone: 'neutral',
+      }),
     ]));
     expect(view?.conclusionText).toBe('Your overall training load is higher than usual.');
     expect(view?.evidenceText).toContain('4/4 current workouts');
@@ -75,7 +87,44 @@ describe('buildTrainingExplanationViewModel', () => {
 
     const rhythm = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'rhythm');
 
-    expect(rhythm).toEqual(expect.objectContaining({ title: 'Cycling rhythm', valueText: 'Same rhythm' }));
+    expect(rhythm).toEqual(expect.objectContaining({
+      title: 'Cycling rhythm',
+      iconActivityType: 'Cycling',
+      valueText: 'Same rhythm',
+    }));
+  });
+
+  it('keeps aggregate Other and Unclassified load cards free of a misleading family icon', () => {
+    for (const sport of ['other', 'unclassified'] as const) {
+      const input = payload();
+      const label = sport === 'other' ? 'Other' : 'Unclassified';
+      input.current.sportLoads = [{
+        sport,
+        label,
+        activityCount: 2,
+        loadActivityCount: 2,
+        trainingStressScore: 120,
+        loadSharePercent: 40,
+      }];
+      input.baselineMedian = {
+        ...input.baselineMedian,
+        sportLoads: [{
+          sport,
+          label,
+          activityCount: 1,
+          loadActivityCount: 1,
+          trainingStressScore: 60,
+          loadSharePercent: 30,
+        }],
+      };
+
+      const loadCard = buildTrainingExplanationViewModel(input)?.cards.find(card => card.key === 'mix');
+
+      expect(loadCard).toEqual(expect.objectContaining({
+        title: `${label} load`,
+        iconActivityType: null,
+      }));
+    }
   });
 
   it('preserves each top contributor as a separate display item', () => {

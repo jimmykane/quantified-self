@@ -93,12 +93,36 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
     expect(element.textContent).toContain('Settings vs recent evidence');
+    expect(element.textContent).toContain('Recorded body weight');
+    const performanceGrid = element.querySelector('.training-performance-grid');
+    const bodyContextSection = element.querySelector('.training-body-context-section');
+    expect(performanceGrid?.querySelector('.training-body-weight-panel')).toBeNull();
+    expect(bodyContextSection?.querySelector('.training-body-weight-panel')).not.toBeNull();
+    expect(element.querySelector('main.training-workspace')?.lastElementChild).toBe(bodyContextSection);
     expect(element.querySelector('app-durability-reading-guide[context="training"]')).not.toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
     expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
-    const importedRecovery = element.querySelector('.training-readiness-imported-recovery');
-    expect(importedRecovery?.textContent).toContain('Imported recovery estimate');
+    const recoveryContext = element.querySelector('.training-recovery-context');
+    const importedRecovery = recoveryContext?.querySelector('.training-readiness-imported-recovery');
+    const sleepHistory = recoveryContext?.querySelector('.training-recovery-history');
+    const sleepHistoryDetails = sleepHistory?.querySelector('#training-recovery-history-details') as HTMLElement | null;
+    expect(recoveryContext?.querySelector('#training-recovery-context-title')?.textContent).toContain('Recovery context');
+    expect(element.querySelector('.training-readiness-source')?.nextElementSibling).toBe(recoveryContext);
+    expect(importedRecovery?.textContent).toContain('Recovery left');
+    expect(importedRecovery?.textContent).toContain('remaining · until');
+    expect(importedRecovery?.textContent).toContain('Imported post-workout estimate');
     expect(importedRecovery?.textContent).toContain('separate from Readiness and Freshness');
+    expect(sleepHistory?.querySelector('#training-recovery-history-title')?.textContent).toContain('Sleep history');
+    expect(importedRecovery?.nextElementSibling).toBe(sleepHistory);
+    expect(sleepHistoryDetails?.hidden).toBe(true);
+    expect((importedRecovery as HTMLElement | null)?.hidden).toBe(false);
+    expect(element.querySelector('#training-recovery-history-details .training-readiness-imported-recovery')).toBeNull();
+    const sleepDetailsButton = sleepHistory?.querySelector('button') as HTMLButtonElement | null;
+    expect(sleepDetailsButton?.textContent).toContain('Show sleep details');
+    sleepDetailsButton?.click();
+    fixture.detectChanges();
+    expect(sleepDetailsButton?.textContent).toContain('Hide sleep details');
+    expect(sleepHistoryDetails?.hidden).toBe(false);
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
@@ -107,6 +131,129 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Preparing rolling power capacity');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders activity-family icons only for sport-specific training driver cards', async () => {
+    const coverage = {
+      totalCount: 4,
+      loadedCount: 4,
+      classifiedCount: 4,
+      unclassifiedCount: 0,
+      ratio: 1,
+    };
+    const currentMetrics = {
+      parentEventCount: 4,
+      parentLoadEventCount: 4,
+      parentTrainingStressScore: 300,
+      parentLoadCoverage: coverage,
+      childActivityCount: 4,
+      childLoadActivityCount: 4,
+      childTrainingStressScore: 300,
+      childLoadCoverage: coverage,
+      sportLoads: [{
+        sport: 'cycling' as const,
+        label: 'Cycling',
+        activityCount: 4,
+        loadActivityCount: 4,
+        trainingStressScore: 300,
+        loadSharePercent: 100,
+      }],
+      rhythms: [{
+        discipline: 'running' as const,
+        sessionCount: 3,
+        activeDayCount: 10,
+        activeWeekCount: 4,
+        longestInactivityGapDays: 3,
+        longestSessionDurationSeconds: 7_200,
+      }],
+    };
+    const baselineMetrics = {
+      ...currentMetrics,
+      parentTrainingStressScore: 200,
+      childTrainingStressScore: 200,
+      sportLoads: [{
+        ...currentMetrics.sportLoads[0],
+        activityCount: 3,
+        loadActivityCount: 3,
+        trainingStressScore: 200,
+      }],
+      rhythms: [{
+        ...currentMetrics.rhythms[0],
+        sessionCount: 2,
+        activeDayCount: 8,
+      }],
+    };
+    const derivedState: DashboardDerivedMetricsState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 0,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+      trainingExplanationStatus: 'ready',
+      trainingExplanation: {
+        dayBoundary: 'UTC',
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineBlockCount: 3,
+        excludesMergedEvents: true,
+        excludesMissingDates: true,
+        excludesFutureEvents: true,
+        current: {
+          periodDays: 28,
+          windowStartDayMs: 1,
+          windowEndDayMs: 2,
+          ...currentMetrics,
+        },
+        baselineBlocks: Array.from({ length: 3 }, () => ({
+          periodDays: 28 as const,
+          windowStartDayMs: 1,
+          windowEndDayMs: 2,
+          ...baselineMetrics,
+        })),
+        baselineMedian: baselineMetrics,
+        topContributors: [{
+          eventId: 'event-1',
+          label: 'Long ride',
+          startDayMs: 1,
+          trainingStressScore: 150,
+          loadSharePercent: 50,
+          childComposition: currentMetrics.sportLoads,
+        }],
+      },
+    };
+    const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+
+    const cards = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.training-insight-panel'),
+    );
+    const sportCards = cards.filter(card => /Cycling load|Running rhythm/u.test(card.textContent || ''));
+    const globalCards = cards.filter(card => /Overall load|Top contributors/u.test(card.textContent || ''));
+    const icons = sportCards.map(card => card.querySelector<HTMLElement>('app-activity-type-icon'));
+
+    expect(sportCards).toHaveLength(2);
+    expect(icons.every(Boolean)).toBe(true);
+    expect(icons.map(icon => icon?.getAttribute('aria-hidden'))).toEqual(['true', 'true']);
+    expect(icons.map(icon => (icon as HTMLElement & { activityType?: string })?.activityType))
+      .toEqual(['Cycling', 'Running']);
+    expect(globalCards).toHaveLength(2);
+    expect(globalCards.every(card => card.querySelector('app-activity-type-icon') === null)).toBe(true);
   });
 
   it('keeps the last complete Training state visible but labels it while the Form/TSS refresh is building', async () => {

@@ -57,16 +57,24 @@ describe('help.content', () => {
       .toContain('/assets/favicons/quantified-self-chatgpt-icon-256x256.png');
     expect(dataAndPrivacySection?.content).toContain('preferred minimum dimensions');
     expect(dataAndPrivacySection?.content).toContain('10 KB upload limit');
-    expect(dataAndPrivacySection?.content).toContain('compact morning briefing');
+    expect(dataAndPrivacySection?.content).toContain('one-call sleep trend');
+    expect(dataAndPrivacySection?.content).toContain('preferred daily report');
     expect(dataAndPrivacySection?.content).toContain('latest completed non-nap sleep');
+    expect(dataAndPrivacySection?.content).toContain('average/overnight HRV');
+    expect(dataAndPrivacySection?.content).toContain('average/minimum sleep heart rate');
     expect(dataAndPrivacySection?.content).toContain('current-versus-usual equivalent 28-day Training totals');
-    expect(dataAndPrivacySection?.content).toContain('current UTC-day Training readiness status');
-    expect(dataAndPrivacySection?.content).toContain('morning briefing for your IANA timezone');
+    expect(dataAndPrivacySection?.content).toContain('same live UTC-day Readiness used by Dashboard Today');
+    expect(dataAndPrivacySection?.content).toContain('same-provider baseline medians');
+    expect(dataAndPrivacySection?.content).toContain('missing or insufficient-baseline states');
+    expect(dataAndPrivacySection?.content).toContain('today’s Readiness drivers');
+    expect(dataAndPrivacySection?.content).toContain('daily report with sleep HRV and sleep heart rate');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('### Android authorization handoff');
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
     expect(dataAndPrivacySection?.content).toContain('cannot force Android or the ChatGPT app');
     expect(dataAndPrivacySection?.content).toContain('[Read-only MCP Server feature page](/features/mcp-server)');
+    expect(dataAndPrivacySection?.content).toContain('[Privacy Policy](/privacy)');
+    expect(dataAndPrivacySection?.content).toContain('[Terms of Service](/terms)');
     expect(dataAndPrivacySection?.links).toContainEqual({
       label: 'MCP Server',
       icon: 'devices',
@@ -79,6 +87,18 @@ describe('help.content', () => {
       kind: 'route',
       target: '/services',
       queryParams: { serviceName: 'mcp' },
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'Privacy Policy',
+      icon: 'lock_outline',
+      kind: 'route',
+      target: '/privacy',
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'Terms of Service',
+      icon: 'gavel',
+      kind: 'route',
+      target: '/terms',
     });
   });
 
@@ -102,6 +122,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Active total');
     expect(gettingStartedSection?.content).toContain('Latest workout');
     expect(gettingStartedSection?.content).toContain('updating');
+  });
+
+  it('should document the Dashboard Today recovery countdown behavior', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('estimated local finish time as Training');
+    expect(gettingStartedSection?.content).toContain('disappears when elapsed');
   });
 
   it('should document dashboard manager curated/custom/map categories', () => {
@@ -131,7 +158,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('does not automatically add sleep, KPI, curated training, or power-curve tiles');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
-    expect(gettingStartedSection?.content).toContain('**Add recommended**');
+    expect(gettingStartedSection?.content).toContain('**Reset to default**');
+    expect(gettingStartedSection?.content).toContain('replaces the current dashboard tiles');
     expect(gettingStartedSection?.content).toContain('**Add everything**');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('**Training** remains the fixed analytical workspace');
@@ -166,6 +194,7 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('**Body-weight trend**');
+    expect(trainingSection?.content).toContain('appears last on Training as secondary, neutral context');
     expect(trainingSection?.content).toContain('multiple measurements on one UTC day to a median');
     expect(trainingSection?.content).toContain('does not change the Training state, Form, Readiness');
     expect(trainingSection?.content).toContain('A Cycling Power Curve proves that power was recorded');
@@ -195,7 +224,13 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('one activity leg at a time');
     expect(trainingSection?.content).toContain('shown first as quick picks');
     expect(trainingSection?.content).toContain('selecting an event never changes its tags');
-    expect(trainingSection?.content).toContain('**Recovery history**');
+    expect(trainingSection?.content).toContain('**Recovery context**');
+    expect(trainingSection?.content).toContain('**Recovery left**');
+    expect(trainingSection?.content).toContain('**Sleep history**');
+    expect(trainingSection?.content).toContain('remains visible while sleep details are collapsed');
+    expect(trainingSection?.content).toContain('estimated local finish time');
+    expect(trainingSection?.content).toContain('**Show sleep details**');
+    expect(trainingSection?.content).toContain('omitted quietly when missing or elapsed');
     expect(trainingSection?.content).toContain('without changing the Training state');
     expect(trainingSection?.content).toContain('Dashboard **Today** shows the same compact state label and caption');
     expect(trainingSection?.content).toContain('same current formula as Dashboard Today');
@@ -553,6 +588,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('[import activities to Suunto guide](/guides/import-activities-to-suunto)');
+    expect(serviceConnectionsSection?.content).toContain('[import activities to Wahoo guide](/guides/import-activities-to-wahoo)');
     expect(serviceConnectionsSection?.content).toContain('[centralized workout data guide](/guides/centralize-garmin-suunto-coros-workout-data)');
     expect(serviceConnectionsSection?.content).toContain('uploaded FIT/TCX/GPX/JSON/SML activity files');
     expect(serviceConnectionsSection?.content).toContain('reviewer workflows for device tests, YouTube videos, and blog posts');
@@ -656,6 +693,18 @@ describe('help.content', () => {
       icon: 'route',
       kind: 'route',
       target: '/features/fit-gpx-route-files',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Import Activities to Suunto',
+      icon: 'upload_file',
+      kind: 'route',
+      target: '/guides/import-activities-to-suunto',
+    });
+    expect(serviceConnectionsSection?.links).toContainEqual({
+      label: 'Import Activities to Wahoo',
+      icon: 'upload_file',
+      kind: 'route',
+      target: '/guides/import-activities-to-wahoo',
     });
     expect(serviceConnectionsSection?.links).toContainEqual({
       label: 'Garmin to Suunto Guide',

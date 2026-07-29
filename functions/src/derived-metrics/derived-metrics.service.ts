@@ -144,6 +144,12 @@ import {
     type ReadinessSleepEvidencePoint,
 } from '../../../shared/readiness';
 import {
+    buildTrainingLoadPoints,
+    TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS,
+    TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS,
+    type TrainingLoadPoint,
+} from '../../../shared/training-load';
+import {
     normalizeSleepProvider,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
@@ -196,8 +202,6 @@ const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
     'vitals.minimumHeartRateBpm',
 ] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const CTL_TIME_CONSTANT_DAYS = 42;
-const ATL_TIME_CONSTANT_DAYS = 7;
 const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
 const TRAINING_SUMMARY_CURRENT_WINDOW_DAYS = 28;
@@ -290,14 +294,7 @@ function isClassifiedTrainingActivitySource(
     return activity.discipline !== null;
 }
 
-interface DerivedLoadPoint {
-    dayMs: number;
-    load: number;
-    ctl: number;
-    atl: number;
-    formSameDay: number;
-    formPriorDay: number | null;
-}
+type DerivedLoadPoint = TrainingLoadPoint;
 
 export interface StartDerivedMetricsProcessingResult {
     dirtyMetricKinds: DerivedMetricKind[];
@@ -701,45 +698,13 @@ function buildDerivedLoadPoints(
         endDayMs?: number | null;
     },
 ): DerivedLoadPoint[] {
-    if (!dailyLoadsByUtcDay.size) {
-        return [];
-    }
-
-    const sortedDays = [...dailyLoadsByUtcDay.keys()].sort((left, right) => left - right);
-    const startDay = sortedDays[0];
-    const latestDayWithSourceLoad = sortedDays[sortedDays.length - 1];
-    const requestedEndDay = toFiniteNumber(options?.endDayMs);
-    const normalizedRequestedEndDay = requestedEndDay === null
-        ? null
-        : resolveUtcDayStartMs(requestedEndDay);
-    const endDay = normalizedRequestedEndDay === null
-        ? latestDayWithSourceLoad
-        : Math.max(latestDayWithSourceLoad, normalizedRequestedEndDay);
-    if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
-        return [];
-    }
-
-    const points: DerivedLoadPoint[] = [];
-    let previousCtl = 0;
-    let previousAtl = 0;
-
-    for (let dayMs = startDay; dayMs <= endDay; dayMs += DAY_MS) {
-        const load = dailyLoadsByUtcDay.get(dayMs) || 0;
-        const ctl = previousCtl + ((load - previousCtl) / CTL_TIME_CONSTANT_DAYS);
-        const atl = previousAtl + ((load - previousAtl) / ATL_TIME_CONSTANT_DAYS);
-        points.push({
+    return buildTrainingLoadPoints(
+        [...dailyLoadsByUtcDay.entries()].map(([dayMs, load]) => ({
             dayMs,
             load,
-            ctl,
-            atl,
-            formSameDay: ctl - atl,
-            formPriorDay: points.length ? previousCtl - previousAtl : null,
-        });
-        previousCtl = ctl;
-        previousAtl = atl;
-    }
-
-    return points;
+        })),
+        options?.endDayMs,
+    );
 }
 
 function resolveRollingLoad(points: readonly DerivedLoadPoint[], index: number, days: number): number {
@@ -793,8 +758,10 @@ function projectSameDayFormWithZeroLoad(
     let previousAtl = atl;
     let projectedSameDayForm = previousCtl - previousAtl;
     for (let dayOffset = 1; dayOffset <= projectionDays; dayOffset += 1) {
-        const nextCtl = previousCtl + ((0 - previousCtl) / CTL_TIME_CONSTANT_DAYS);
-        const nextAtl = previousAtl + ((0 - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+        const nextCtl = previousCtl
+            + ((0 - previousCtl) / TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS);
+        const nextAtl = previousAtl
+            + ((0 - previousAtl) / TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS);
         projectedSameDayForm = nextCtl - nextAtl;
         previousCtl = nextCtl;
         previousAtl = nextAtl;
@@ -1096,8 +1063,10 @@ function buildFreshnessForecastMetricPayload(
 
     for (let dayOffset = 1; dayOffset <= FORECAST_DAYS; dayOffset += 1) {
         const trainingStressScore = 0;
-        const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
-        const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+        const ctl = previousCtl
+            + ((trainingStressScore - previousCtl) / TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS);
+        const atl = previousAtl
+            + ((trainingStressScore - previousAtl) / TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS);
         forecastPoints.push({
             dayMs: latestPoint.dayMs + (dayOffset * DAY_MS),
             trainingStressScore,

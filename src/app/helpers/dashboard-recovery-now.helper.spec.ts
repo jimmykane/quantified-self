@@ -6,6 +6,7 @@ import {
   resolveLatestWorkoutRecoverySeconds,
   resolveLatestRecoveryNowContext,
   resolveRecoveryEventEndTimeMs,
+  resolveRecoveryFinishTimeMs,
   resolveRemainingRecoverySeconds,
 } from './dashboard-recovery-now.helper';
 
@@ -143,6 +144,22 @@ describe('dashboard-recovery-now.helper', () => {
     };
 
     expect(resolveRemainingRecoverySeconds(context, nowMs)).toBe(6 * 60 * 60);
+  });
+
+  it('resolves the estimated finish from the same active remaining recovery', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    const context = {
+      totalSeconds: 7200,
+      endTimeMs: nowMs,
+      segments: [
+        { totalSeconds: 3600, endTimeMs: nowMs },
+        { totalSeconds: 3600, endTimeMs: nowMs - (30 * 60 * 1000) },
+      ],
+    };
+
+    expect(resolveRecoveryFinishTimeMs(context, nowMs)).toBe(nowMs + (90 * 60 * 1000));
+    expect(resolveRecoveryFinishTimeMs(context, nowMs + (4 * 60 * 60 * 1000))).toBeNull();
+    expect(resolveRecoveryFinishTimeMs(null, nowMs)).toBeNull();
   });
 
   it('resolves active total recovery from currently active segments only', () => {

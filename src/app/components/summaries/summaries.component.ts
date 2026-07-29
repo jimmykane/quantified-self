@@ -57,6 +57,7 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import {
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
+  resolveRecoveryFinishTimeMs,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../helpers/dashboard-recovery-now.helper';
@@ -193,6 +194,7 @@ interface DashboardTodayReadinessViewModel {
   overnightHeartRateText: string;
   overnightHeartRateTone: DashboardTodayReadinessTone;
   recoveryText: string;
+  recoveryFinishTimeMs: number | null;
 }
 
 interface DashboardTodayTrainingStateViewModel {
@@ -214,6 +216,7 @@ function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessV
     overnightHeartRateText: '--',
     overnightHeartRateTone: 'neutral',
     recoveryText: '--',
+    recoveryFinishTimeMs: null,
   };
 }
 
@@ -1645,11 +1648,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
       nowMs,
     });
-    const recoveryText = formatSleepDuration(resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext));
+    const recoveryText = formatSleepDuration(resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs));
+    const recoveryFinishTimeMs = resolveRecoveryFinishTimeMs(this.derivedRecoveryNowContext, nowMs);
     if (!context) {
       return {
         ...createEmptyDashboardTodayReadinessViewModel(),
         recoveryText,
+        recoveryFinishTimeMs,
       };
     }
     return {
@@ -1665,6 +1670,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),
       overnightHeartRateTone: this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true),
       recoveryText,
+      recoveryFinishTimeMs,
     };
   }
 

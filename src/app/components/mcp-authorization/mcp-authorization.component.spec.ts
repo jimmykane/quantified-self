@@ -81,6 +81,7 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('exact source timestamps');
     expect(content).toContain('selected canonical numeric metrics for one activity');
     expect(content).toContain('Sleep summaries');
+    expect(content).toContain('available aggregate HRV');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('bounded on-demand chart series');
     expect(content).toContain('Activity locations');

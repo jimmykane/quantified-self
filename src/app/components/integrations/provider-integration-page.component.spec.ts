@@ -64,6 +64,8 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('GPX and FIT route upload');
     expect(text).toContain('FIT sources are converted to GPX for Suunto');
     expect(text).toContain('Can Quantified Self sync routes with Suunto?');
+    expect(Array.from(fixture.nativeElement.querySelectorAll('a')).map((link: HTMLAnchorElement) => link.getAttribute('href')))
+      .toContain('/guides/import-activities-to-suunto');
   });
 
   it('should render COROS integration content and provider limits', () => {
@@ -88,6 +90,8 @@ describe('ProviderIntegrationPageComponent', () => {
     expect(text).toContain('Direct GPX/FIT course/route delivery');
     expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');
     expect(text).toContain('sleep sync, plans, and other Wahoo forwarding are not enabled');
+    expect(Array.from(fixture.nativeElement.querySelectorAll('a')).map((link: HTMLAnchorElement) => link.getAttribute('href')))
+      .toContain('/guides/import-activities-to-wahoo');
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {

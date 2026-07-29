@@ -487,7 +487,7 @@ export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
  */
 export const getUserCount = onAdminCall<UserCountRequest, UserCountResponse>({
     region: FUNCTIONS_MANIFEST.getUserCount.region,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async (request) => {
     try {
         const db = admin.firestore();

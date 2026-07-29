@@ -159,8 +159,8 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-Training is available to signed-in users from the sidenav and is marked **New**. The route header includes a
-Feedback action that opens the configured support email with a Training-specific subject. Dashboard offers one
+Training is available to signed-in users from the sidenav. The route header includes a Feedback action that opens the
+configured support email with a Training-specific subject. Dashboard offers one
 **Open Training** route action, but does not add curated Training snapshots as default Dashboard dependencies or
 configurable tiles.
 
@@ -354,11 +354,13 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
 scope. They are not standalone Training cards. Do not assume every requested snapshot maps one-to-one to visible markup.
 
-The MCP daily briefing uses only the two headline snapshots from this table: `training_summary` for the current-versus-
-usual 28-day Training context and `training_readiness` for current readiness. It projects a compact identity-free total
-and Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Form, CTL/ATL, ACWR, ramp, recovery,
-capacity, durability, power systems, and other specialist snapshots remain independently queryable rather than being
-silently recast as a daily workout recommendation.
+The legacy MCP daily briefing uses only the two headline snapshots from this table: `training_summary` for the
+current-versus-usual 28-day Training context and `training_readiness` for current readiness. The additive
+`get_daily_report` tool reuses that same strict Training Summary projection but combines it with the live Dashboard
+Today-equivalent readiness path and safe latest sleep HRV/heart-rate aggregates. Both project a compact identity-free
+total and Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Form, CTL/ATL, ACWR, ramp,
+recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather
+than being silently recast as a daily workout recommendation.
 
 Training currently watches `TRAINING_WORKSPACE_DERIVED_METRIC_KINDS`, which is all registered derived kinds. Training-only
 kinds are excluded from the default Dashboard subscription and freshness scope. Dashboard adds `training_capacity` or
@@ -411,7 +413,11 @@ Training state and Readiness are fixed inside the optional Today summary:
   retired pre-release raw value `KpiReadinessConfidence` has a narrow cleanup predicate for local preview settings; it
   is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
   sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
-  cannot select different latest evidence because query order changed.
+  cannot select different latest evidence because query order changed. MCP's additive `get_today_readiness` tool applies
+  this same live formula, current Form/ramp preference, bounded 30-day sleep source, and same-provider baselines. It
+  exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
+  states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
+  compact Training Summary; the frozen daily briefing remains unchanged.
 - **Body-weight trend** reads only positive persisted Sports-lib `Weight` values, in canonical kilograms. Multiple values
   on the same UTC day reduce to a daily median; the snapshot retains the latest 28 UTC days with missing days as null
   points, the latest recorded value, and current 7- and 28-day medians. Its change values compare each current window
@@ -644,17 +650,21 @@ values, so ECharts leaves visible gaps rather than interpolating them.
 
 #### Recovery remaining
 
-`recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as one compact
-row inside Readiness, with its live countdown and explicit separation from the Readiness score and Freshness/Form. It
-replaces the former top-level status tile so the same timer is not presented twice. Dashboard Today shows the same active
-countdown as an imported estimate beneath its score. The timer uses the stored end time, is contextual rather than a
-second recovery model, and never changes Readiness, Freshness, or the Training state. The worker scans a bounded 16-day
-event window; no events in that window is a valid empty result for new or inactive users and is logged as informational
-rather than a warning.
+`recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as the compact
+**Recovery left** row at the start of the Recovery context inside Readiness, directly before Sleep history. Its live
+countdown includes the estimated local finish clock, remains visible while the sleep details are collapsed, and explicitly
+stays separate from the Readiness score and Freshness/Form. It replaces the former top-level status tile so the same timer
+is not presented twice. Dashboard Today uses the same **Recovery left** label, remaining duration, and estimated local
+finish clock beneath its score. Both surfaces remove the row without a placeholder when the estimate elapses. The timer
+uses the stored end time, is contextual rather than a second recovery model, and never changes Readiness, Freshness, or
+the Training state. The worker scans a bounded 16-day event window; no events in that window is a valid empty result for
+new or inactive users and is logged as informational rather than a warning.
 
-#### Recovery history
+#### Recovery context and sleep history
 
-The expandable Recovery history inside Readiness uses:
+Recovery context groups the optional active Recovery left estimate with the always-available Sleep history summary.
+Sleep history remains independently expandable through explicit **Show sleep details** and **Hide sleep details**
+controls; collapsing its details never hides an active countdown. The expandable Sleep history inside Readiness uses:
 
 - Current: the current 28-day window.
 - Reference: the immediately preceding 84-day window.
@@ -799,7 +809,9 @@ The four driver cards use one balanced row on wide screens, a two-by-two tablet 
 Within each card, the card heading, plain-language outcome, supporting explanation, and coverage note use distinct type
 levels. The outcome uses language such as `Above usual load` or `Same rhythm`; exact TSS and workout counts stay in the
 supporting sentence rather than competing with the conclusion. Contributor events render as separate list items so an
-event label and its load share do not split into an ambiguous separator-delimited sentence.
+event label and its load share do not split into an ambiguous separator-delimited sentence. Running, Cycling, and
+Swimming load and rhythm headings reuse the shared activity-type component so their icon comes from the sports-lib
+activity-group family; overall load, contributor, Other, and Unclassified cards remain text-only.
 
 The section-level conclusion and evidence-quality line appear before the cards. They make TSS coverage explicit without
 turning missing data into a negative or positive training judgment.
@@ -1024,6 +1036,15 @@ header so the summary, chart title, benchmark values, and plot remain aligned at
 It also states the strongest supported conclusion before the chart, describes the number of recent/annual power workouts
 and comparable duration points, and only highlights a duration for follow-up when it is materially below its annual best.
 
+### 8. Body-weight Context
+
+Body-weight context is the final Training section, after Settings vs Recent Evidence. Keeping it separate and last makes
+the recorded measurements available without presenting them as a performance marker or a primary training signal.
+
+The card shows the latest recorded value, current 7- and 28-day medians, eligible equal-window changes, and the sparse
+28-day trend described in the shared Dashboard and Training insight reuse section. It remains neutral context and does
+not affect Readiness, Form, TSS, the Training state, or any workout recommendation.
+
 ## Durability Deep Dive
 
 Durability is shared between sports-lib, Training, Best Build, and event detail. It measures whether an athlete maintains
@@ -1229,6 +1250,7 @@ later output-to-heart-rate ratio is meaningful as a possible fade only when the 
 effort; intentional easing, changing terrain, coasting, or a pace change can legitimately produce the same pattern. It
 also explains that Training is for repeated comparable-session trends (smaller absolute decoupling/heart-rate drift and
 higher output retention are steadier), and that a missing result means no suitable comparison—not zero durability.
+The trigger uses the same compact 20 px Material title-info control and 16 px icon as other chart headers.
 
 ## Status and Empty-State Semantics
 
@@ -1361,6 +1383,24 @@ The read-only MCP server does not recalculate Training metrics and does not scan
 and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being
 interpreted as zero.
 
+`list_training_metrics` is the lightweight discovery path. Its human title, description, category, and period label map
+is compile-time exhaustive against `DERIVED_METRIC_KINDS`; it is presentation metadata, not a competing calculation or
+kind registry. For the optionally searched kinds it reads only snapshot identity/status/schema/update/source-count
+envelope fields, validates the entry type and metric kind, and reports
+ready/building/failed/stale/missing/schema-mismatch. It never returns payloads, worker error text, event identity, or
+device/provider provenance. Clients should use it before `get_training_metric` so a missing or rebuilding snapshot is
+not mistaken for an unsupported Training capability.
+
+The explicitly named live `get_today_readiness` tool is not a derived-snapshot projection. It requires both
+Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
+rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
+exists because the persisted 14-day `training_readiness` point can lag newly imported sleep and because the registered
+daily-briefing schema is frozen. The additive `get_daily_report` shares that live loader and evaluator, exposes only
+average/overnight HRV plus average/minimum sleep HR for the latest grouped main sleep, and adds the existing strict
+Training Summary projection. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants used
+by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and evidence
+selection. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
+
 There is deliberately no separate MCP metric-discovery registry. A newly registered kind is discoverable, but its payload
 must still pass the MCP privacy boundary in `functions/src/mcp/data.service.ts` and the exhaustive safe-payload schema map
 in `functions/src/mcp/derived-output-schemas.ts`. The server recursively removes event/activity IDs, names, and labels,
@@ -1429,6 +1469,7 @@ training-readiness.helper.spec.ts
 training-recovery-estimate.helper.spec.ts
 training-swim-performance.helper.spec.ts
 training-durability-trajectory-chart.component.spec.ts
+durability-reading-guide.component.spec.ts
 training-readiness-trend-chart.component.spec.ts
 training-body-weight-trend-chart.component.spec.ts
 event-json-sanitizer.spec.ts
@@ -1452,8 +1493,8 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - event and manual benchmark flows for 8/10/12 weeks;
 - no TSS, no zones, no pace, no SWOLF, and no sleep;
 - limited and cross-provider sleep;
-- Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, and
-  expandable Recovery history states;
+- Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, active and
+  elapsed Recovery left, and expandable Sleep history states;
 - Dashboard Today Training state and Readiness with full, partial, and missing evidence, matching Form/ramp fallbacks,
   plus Today hidden and retired local-preview tile cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;

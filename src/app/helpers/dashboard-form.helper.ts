@@ -4,9 +4,12 @@ import {
   type DerivedFormDailyLoadEntry,
   type LegacyDerivedFormDailyLoadEntry,
 } from '@shared/derived-metrics';
+import {
+  buildTrainingLoadPoints,
+  TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS,
+  TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS,
+} from '@shared/training-load';
 
-const CTL_TIME_CONSTANT_DAYS = 42;
-const ATL_TIME_CONSTANT_DAYS = 7;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 
 export const DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE = 'Training Stress Score';
@@ -76,8 +79,10 @@ function buildDashboardFormPointsFromDailyLoadMap(
 
   daySequence.forEach((dayTime) => {
     const trainingStressScore = dailyTrainingStressScores.get(dayTime) || 0;
-    const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
-    const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+    const ctl = previousCtl
+      + ((trainingStressScore - previousCtl) / TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS);
+    const atl = previousAtl
+      + ((trainingStressScore - previousAtl) / TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS);
 
     points.push({
       time: dayTime,
@@ -162,21 +167,14 @@ export function buildDashboardFormPointsFromDailyLoads(
     return [];
   }
 
-  const dailyTrainingStressScores = normalizedDailyLoads.reduce((scores, load) => {
-    scores.set(load.dayMs, (scores.get(load.dayMs) || 0) + load.load);
-    return scores;
-  }, new Map<number, number>());
-
-  return buildDashboardFormPointsFromDailyLoadMap(
-    dailyTrainingStressScores,
-    (startDay, endDay) => {
-      const daySequence: number[] = [];
-      for (let dayMs = startDay; dayMs <= endDay; dayMs += UTC_DAY_MS) {
-        daySequence.push(dayMs);
-      }
-      return daySequence;
-    },
-  );
+  return buildTrainingLoadPoints(normalizedDailyLoads).map(point => ({
+    time: point.dayMs,
+    trainingStressScore: point.load,
+    ctl: point.ctl,
+    atl: point.atl,
+    formSameDay: point.formSameDay,
+    formPriorDay: point.formPriorDay,
+  }));
 }
 
 export function extendDashboardFormPointsWithZeroLoadUntil(
@@ -205,8 +203,10 @@ export function extendDashboardFormPointsWithZeroLoadUntil(
 
   for (let dayMs = lastPoint.time + UTC_DAY_MS; dayMs <= endDayTimeMs; dayMs += UTC_DAY_MS) {
     const trainingStressScore = 0;
-    const ctl = previousCtl + ((trainingStressScore - previousCtl) / CTL_TIME_CONSTANT_DAYS);
-    const atl = previousAtl + ((trainingStressScore - previousAtl) / ATL_TIME_CONSTANT_DAYS);
+    const ctl = previousCtl
+      + ((trainingStressScore - previousCtl) / TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS);
+    const atl = previousAtl
+      + ((trainingStressScore - previousAtl) / TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS);
 
     extendedPoints.push({
       time: dayMs,
@@ -333,7 +333,7 @@ export function buildDashboardFormRenderPoints(
 
   return [...bucketedPoints.entries()]
     .sort((left, right) => left[0] - right[0])
-    .map(([time, bucket]) => ({
+    .map(([, bucket]) => ({
       ...bucket.lastPoint,
       // Plot aggregated buckets at their latest included day so ongoing
       // week/month buckets render up to "today" instead of bucket start.

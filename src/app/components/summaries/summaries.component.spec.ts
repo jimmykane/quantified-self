@@ -682,7 +682,10 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('/100');
     expect(nativeElement.querySelector('.dashboard-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
-      .toContain('2h 00m remaining · separate from score');
+      .toContain('Recovery left · 2h 00m remaining · until');
+    expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBe(nowMs + (2 * 3_600_000));
+    expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
+      .not.toContain('Imported recovery estimate');
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
     expect(nativeElement.querySelector('dd[data-tone="positive"]')?.textContent).toContain('+10%');
@@ -693,6 +696,15 @@ describe('SummariesComponent', () => {
     const sleep = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Sleep');
     expect(sleep?.querySelector('small')?.textContent?.trim()).toBe('Today');
+
+    (component as any).derivedRecoveryNowContext = {
+      totalSeconds: 3_600,
+      endTimeMs: nowMs - (2 * 3_600_000),
+    };
+    component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
+
+    expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBeNull();
+    expect(component.dashboardTodayReadiness.recoveryText).toBe('--');
   });
 
   it('shows the same TSS-only training state as Training above Today readiness', () => {

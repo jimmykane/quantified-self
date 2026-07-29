@@ -15,6 +15,20 @@ describe('ActivityTypeIconComponent', () => {
     expect(component.getIcon()).toBe('directions_run');
   });
 
+  it('uses activity-family icons for Training discipline labels', () => {
+    const component = new ActivityTypeIconComponent();
+    const expectedIcons = new Map([
+      ['Running', 'directions_run'],
+      ['Cycling', 'directions_bike'],
+      ['Swimming', 'pool'],
+    ]);
+
+    for (const [activityType, expectedIcon] of expectedIcons) {
+      component.activityType = activityType;
+      expect(component.getIcon()).toBe(expectedIcon);
+    }
+  });
+
   it('resolves virtual activities to computer icon', () => {
     const component = new ActivityTypeIconComponent();
     component.activityType = 'VirtualRide';

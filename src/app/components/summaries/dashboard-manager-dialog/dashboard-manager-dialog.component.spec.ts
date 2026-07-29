@@ -2,7 +2,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, of, throwError } from 'rxjs';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -973,7 +973,9 @@ describe('DashboardManagerDialogComponent', () => {
     const styles = readFileSync(stylesPath, 'utf8');
 
     expect(template).not.toContain('Simplify dashboard');
-    expect(template).toContain('Add recommended');
+    expect(template).toContain('Reset to default');
+    expect(template).toContain('replaces all current dashboard tiles');
+    expect(template).toContain('class="qs-mat-primary" data-testid="dashboard-manager-reset-default-button"');
     expect(template).toContain('Add everything');
     expect(template).toContain('Remove all');
     expect(template).toContain('Show Today summary');
@@ -988,8 +990,16 @@ describe('DashboardManagerDialogComponent', () => {
     expect(styles).toContain('.dashboard-manager-button-content mat-icon');
     expect(styles).toContain('.dashboard-manager-button-content mat-spinner');
     expect(styles).toMatch(
+      /\.dashboard-manager-reset-warning\s*{[^}]*color:\s*var\(--mat-sys-error\);/,
+    );
+    expect(styles).toMatch(
       /:host ::ng-deep \.dashboard-manager-bulk-actions \.mdc-button__label\s*{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;/,
     );
+
+    const resetButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-reset-default-button"]');
+    const resetWarning: HTMLElement = fixture.nativeElement.querySelector('#dashboard-manager-reset-warning');
+    expect(resetButton.getAttribute('aria-describedby')).toBe(resetWarning.id);
+    expect(template).toContain('class="dashboard-manager-error" role="alert"');
   });
 
   it('starts a new dashboard clean rather than adding default training tiles', () => {
@@ -1122,19 +1132,120 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.savingAction).toBeNull();
   });
 
-  it('refreshes sleep eligibility when adding recommended tiles', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = [];
+  it('resets the dashboard to the refreshed recommended tiles', async () => {
     sleepServiceMock.watchForDashboard.mockReturnValueOnce(of([{ id: 'recent-sleep' }]));
 
-    await component.addRecommendedTiles();
+    expect(component.isResetToDefaultDisabled).toBe(false);
+
+    await component.resetToDefault();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
+    expect(tiles.some((tile: any) => (
+      tile.chartType === ChartTypes.ColumnsVertical
+      && tile.dataType === DataDistance.type
+    ))).toBe(false);
+    expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
     expect(sleepServiceMock.watchForDashboard).toHaveBeenCalledWith(
       'user-1',
       expect.any(Number),
       expect.any(Number),
     );
+    expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
+    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('shows a Resetting loading state while the default reset is saving', async () => {
+    const saveDeferred = createDeferred<boolean>();
+    userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
+
+    const resetPromise = component.resetToDefault();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const resetButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-reset-default-button"]');
+    expect(component.isResetToDefaultSaving).toBe(true);
+    expect(component.savingAction).toBe('resetToDefault');
+    expect(resetButton.getAttribute('aria-busy')).toBe('true');
+    expect(resetButton.textContent).toContain('Resetting...');
+    expect(resetButton.querySelector('mat-spinner')).toBeTruthy();
+
+    saveDeferred.resolve(true);
+    await resetPromise;
+
+    expect(component.isSaving).toBe(false);
+    expect(component.savingAction).toBeNull();
+  });
+
+  it('restores dashboard settings when resetting to default fails', async () => {
+    const dashboardSettings = dialogData.user.settings.dashboardSettings;
+    dashboardSettings.showTodaySummary = false;
+    component.showTodaySummary = false;
+    dashboardSettings.autoTiles = {
+      kpiAcwr: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: 'default-kpi',
+      },
+    };
+    const originalTiles = dashboardSettings.tiles.map((tile: any) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    }));
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.resetToDefault();
+
+    expect(component.saveError).toBe('Could not save dashboard settings.');
+    expect(dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(dashboardSettings.showTodaySummary).toBe(false);
+    expect(component.showTodaySummary).toBe(false);
+    expect(dashboardSettings.autoTiles.kpiAcwr).toEqual({
+      state: 'dismissed',
+      dismissedAt: 1_777_000_000_000,
+      source: 'default-kpi',
+    });
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('restores absent auto-tile metadata when resetting a legacy dashboard fails', async () => {
+    const dashboardSettings = dialogData.user.settings.dashboardSettings;
+    const recoveryTile = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY,
+      order: 0,
+      size: getExpectedPresetDefaultSize(
+        getDashboardManagerPresetDefinitions()
+          .find(definition => definition.id === DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY)!,
+      ),
+    });
+    dashboardSettings.tiles = [recoveryTile];
+    delete dashboardSettings.autoTiles;
+    delete dashboardSettings.dismissedCuratedRecoveryNowTile;
+    userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
+
+    await component.resetToDefault();
+
+    expect(dashboardSettings.tiles).toStrictEqual([recoveryTile]);
+    expect(dashboardSettings).not.toHaveProperty('autoTiles');
+    expect(dashboardSettings).not.toHaveProperty('dismissedCuratedRecoveryNowTile');
+  });
+
+  it('keeps the current dashboard when recommendation evidence cannot be loaded', async () => {
+    const originalTiles = dialogData.user.settings.dashboardSettings.tiles.map((tile: any) => ({
+      ...tile,
+      size: tile.size ? { ...tile.size } : tile.size,
+    }));
+    eventServiceMock.getEventsBy.mockReturnValueOnce(throwError(() => new Error('events unavailable')));
+
+    await component.resetToDefault();
+
+    expect(component.saveError).toBe('Could not load recommended dashboard tiles. Please try again.');
+    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
   });
 
   it('does not offer the retired Readiness Signals preview tile through recommendations', async () => {
@@ -1150,7 +1261,7 @@ describe('DashboardManagerDialogComponent', () => {
       source: { provider: 'GarminAPI', sourceSessionKey: 'stale-sleep' },
     }]));
 
-    await component.addRecommendedTiles();
+    await component.resetToDefault();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
@@ -1238,7 +1349,7 @@ describe('DashboardManagerDialogComponent', () => {
       },
     }));
 
-    await component.addRecommendedTiles();
+    await component.resetToDefault();
 
     const tiles = dialogData.user.settings.dashboardSettings.tiles;
     expect(tiles.some((tile: any) => (

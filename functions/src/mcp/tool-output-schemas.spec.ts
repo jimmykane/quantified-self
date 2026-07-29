@@ -429,7 +429,7 @@ function createFixtureDataService(
 ): InjectedDataService {
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
-  return {
+  const service = {
     listMeasurementTypes: vi.fn().mockResolvedValue({
       measurementTypes: [{
         id: 'body_weight',
@@ -544,6 +544,38 @@ function createFixtureDataService(
         }],
       },
     }),
+    queryMetrics: vi.fn().mockResolvedValue({
+      results: [{
+        metric: metricDescriptor,
+        matchedEventCount: 1,
+        aggregation: {
+          dataType: 'Distance',
+          valueType: ChartDataValueTypes.Total,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Daily,
+          buckets: [{
+            bucketKey: DAY_MS,
+            time: DAY_MS,
+            totalCount: 1,
+            aggregateValue: 10_000,
+            seriesValues: { Running: 10_000 },
+            seriesCounts: { Running: 1 },
+          }],
+        },
+      }],
+    }),
+    listTrainingMetrics: vi.fn().mockResolvedValue({
+      metrics: [{
+        metricKind: DERIVED_METRIC_KINDS.Form,
+        title: 'Fitness, fatigue, and Form history',
+        description: 'Daily TSS-based fitness, fatigue, Form, and load history.',
+        category: 'load',
+        periodLabel: 'Available daily history',
+        status: 'ready',
+        updatedAtMs: DAY_MS,
+        sourceEventCount: 1,
+      }],
+    }),
     getTrainingMetric: vi.fn().mockImplementation(
       async (_uid: string, metricKind: DerivedMetricKind) => ({
         metricKind,
@@ -553,6 +585,41 @@ function createFixtureDataService(
         payload: derivedPayloadFixtures[metricKind],
       }),
     ),
+    listSleepVitals: vi.fn().mockResolvedValue({
+      matchedSessionCount: 1,
+      vitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+    }),
+    getSleepTrend: vi.fn().mockResolvedValue({
+      rangeStartTimeMs: DAY_MS,
+      rangeEndTimeMs: NEXT_DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      groupBy: 'day',
+      matchedSessionCount: 1,
+      availableVitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+      buckets: [{
+        bucketStartMs: DAY_MS,
+        sessionCount: 1,
+        providers: ['GarminAPI'],
+        totalDurationSeconds: 28_800,
+        averageDurationSeconds: 28_800,
+        averageInBedDurationSeconds: null,
+        averageScore: 80,
+        stageDurationsSeconds: { deep: 3_600 },
+        averageVitals: {
+          overnightHrvMs: 55,
+        },
+      }],
+    }),
     listSleepSessions: vi.fn().mockResolvedValue({
       sessions: [{
         provider: 'GarminAPI',
@@ -590,6 +657,70 @@ function createFixtureDataService(
           averageHeartRateBpm: 50,
         },
       }],
+    }),
+    getTodayReadiness: vi.fn().mockResolvedValue({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      dayBoundary: 'UTC',
+      asOfDayMs: DAY_MS,
+      formulaVersion: 3,
+      status: 'available',
+      score: 76,
+      label: 'Ready',
+      confidence: 'high',
+      availableSignalCount: 4,
+      availableWeightPercent: 100,
+      baselineEvidenceCount: 5,
+      totalSignalCount: 4,
+      drivers: {
+        load: {
+          status: 'available',
+          weightPercent: 40,
+          form: -2,
+          rampRate: 1,
+          asOfDayMs: DAY_MS,
+          sourceUpdatedAtMs: DAY_MS,
+        },
+        sleep: {
+          status: 'available',
+          weightPercent: 25,
+          score: 80,
+          scoreSource: 'recorded',
+          latestSleepAtMs: DAY_MS,
+          sleepDate: '2026-07-01',
+          durationSeconds: 28_800,
+          recordedScore: 80,
+        },
+        hrv: {
+          status: 'available',
+          weightPercent: 20,
+          latestMs: 55,
+          baselineMedianMs: 50,
+          baselineNightCount: 5,
+          ratio: 1.1,
+        },
+        overnightHeartRate: {
+          status: 'available',
+          weightPercent: 15,
+          combinedRatio: 0.95,
+          average: {
+            status: 'available',
+            latestBpm: 49,
+            baselineMedianBpm: 52,
+            baselineNightCount: 5,
+            ratio: 49 / 52,
+          },
+          minimum: {
+            status: 'not_recorded',
+            latestBpm: null,
+            baselineMedianBpm: null,
+            baselineNightCount: 0,
+            ratio: null,
+          },
+        },
+      },
     }),
     getDailyBriefing: vi.fn().mockResolvedValue({
       asOfTimeMs: DAY_MS,
@@ -853,6 +984,34 @@ function createFixtureDataService(
         available: true,
       }],
     }),
+    getActivityOverview: vi.fn().mockResolvedValue({
+      activityType: 'Running',
+      locationRedacted: true,
+      availableMetrics: [metricDescriptor],
+      details: [
+        { kind: 'laps', status: 'available', count: 2 },
+        { kind: 'jumps', status: 'empty', count: 0 },
+        { kind: 'swim_lengths', status: 'unavailable', count: null },
+      ],
+      chartData: {
+        sourceDeclared: true,
+        candidateMetrics: MCP_ACTIVITY_CHART_METRICS.map(metric => metric.id),
+      },
+    }),
+    rankActivitiesByMetric: vi.fn().mockResolvedValue({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: DAY_MS + 3_600_000,
+        activityType: 'Running',
+        value: 10_000,
+      }],
+    }),
     listRoutes: vi.fn().mockResolvedValue({
       scannedRouteCount: 1,
       skippedRouteCount: 0,
@@ -924,6 +1083,42 @@ function createFixtureDataService(
       waypointCount: 1,
     }),
   } as unknown as InjectedDataService;
+  service.getDailyReport = vi.fn().mockImplementation(async input => {
+    const [readiness, briefing] = await Promise.all([
+      service.getTodayReadiness(input),
+      service.getDailyBriefing(input),
+    ]);
+    return {
+      sleep: {
+        status: 'available',
+        latestSession: {
+          sleepDate: '2026-07-01',
+          startTimeMs: DAY_MS,
+          endTimeMs: NEXT_DAY_MS,
+          durationSeconds: 28_800,
+          inBedDurationSeconds: 30_600,
+          score: {
+            value: 80,
+            qualifier: 'good',
+          },
+          vitals: {
+            averageHrvMs: 55,
+            overnightHrvMs: 56,
+            averageHeartRateBpm: 49,
+            minimumHeartRateBpm: 40,
+          },
+        },
+        comparison: {
+          sameProviderNightCount: 5,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: 1_200,
+        },
+      },
+      readiness,
+      trainingSummary: briefing.trainingSummary,
+    };
+  });
+  return service;
 }
 
 const successfulToolArguments: Record<
@@ -944,8 +1139,22 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  query_metrics: {
+    metrics: [{
+      metric: 'Distance',
+      aggregation: 'total',
+    }],
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
+    timeZone: 'Europe/Helsinki',
+  },
+  list_training_metrics: {},
   get_training_metric: {
     metricKind: DERIVED_METRIC_KINDS.Form,
+  },
+  list_sleep_vitals: {
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
   },
   list_sleep_sessions: {
     start: '2026-07-01T00:00:00.000Z',
@@ -956,6 +1165,17 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  get_sleep_trend: {
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
+    timeZone: 'Europe/Helsinki',
+  },
+  get_today_readiness: {
+    timeZone: 'Europe/Helsinki',
+  },
+  get_daily_report: {
+    timeZone: 'Europe/Helsinki',
+  },
   get_daily_briefing: {
     timeZone: 'Europe/Helsinki',
   },
@@ -964,7 +1184,14 @@ const successfulToolArguments: Record<
     activityTypes: ['Running'],
     limit: 1,
   },
+  query_activities: {
+    activityTypes: ['Running'],
+    limit: 1,
+  },
   find_activities_near_location: {
+    location: coordinate,
+  },
+  search_activities_near_location: {
     location: coordinate,
   },
   list_activity_laps: {
@@ -987,11 +1214,22 @@ const successfulToolArguments: Record<
     activityRef: ACTIVITY_REF,
     metrics: ['Distance'],
   },
+  get_activity_overview: {
+    activityRef: ACTIVITY_REF,
+  },
+  rank_activities_by_metric: {
+    metric: 'Distance',
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
+  },
   list_routes: {
     activityTypes: ['Running'],
     search: 'ridge',
   },
   find_routes_near_location: {
+    location: { query: 'Ioannina, Greece' },
+  },
+  search_routes_near_location: {
     location: { query: 'Ioannina, Greece' },
   },
   get_route_geometry: {
@@ -1165,6 +1403,70 @@ describe('MCP public output contracts', () => {
       sourceEventCount: 0,
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.Form],
     }).success).toBe(false);
+    expect(registry.get_today_readiness.safeParse({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      dayBoundary: 'UTC',
+      asOfDayMs: DAY_MS,
+      formulaVersion: 3,
+      status: 'no_signal',
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: 0,
+      availableWeightPercent: 0,
+      baselineEvidenceCount: 0,
+      totalSignalCount: 4,
+      drivers: {
+        load: {
+          status: 'not_ready',
+          weightPercent: 40,
+          form: null,
+          rampRate: null,
+          asOfDayMs: null,
+          sourceUpdatedAtMs: null,
+        },
+        sleep: {
+          status: 'no_recent_session',
+          weightPercent: 25,
+          score: null,
+          scoreSource: null,
+          latestSleepAtMs: null,
+          sleepDate: null,
+          durationSeconds: null,
+          recordedScore: null,
+        },
+        hrv: {
+          status: 'not_recorded',
+          weightPercent: 20,
+          latestMs: null,
+          baselineMedianMs: null,
+          baselineNightCount: 0,
+          ratio: null,
+        },
+        overnightHeartRate: {
+          status: 'not_recorded',
+          weightPercent: 15,
+          combinedRatio: null,
+          average: {
+            status: 'not_recorded',
+            latestBpm: null,
+            baselineMedianBpm: null,
+            baselineNightCount: 0,
+            ratio: null,
+          },
+          minimum: {
+            status: 'not_recorded',
+            latestBpm: null,
+            baselineMedianBpm: null,
+            baselineNightCount: 0,
+            ratio: null,
+          },
+        },
+      },
+    }).success).toBe(true);
     expect(registry.get_daily_briefing.safeParse({
       asOfTimeMs: DAY_MS,
       timeZone: 'Europe/Helsinki',
@@ -1261,6 +1563,103 @@ describe('MCP public output contracts', () => {
         current28d: {
           ...fixture.trainingSummary.current28d,
           durationSeconds: fixture.trainingSummary.current28d.durationSeconds + 1,
+        },
+      },
+    }).success).toBe(false);
+  });
+
+  it('keeps the daily report sleep-vital allowlist strict and its availability states consistent', async () => {
+    const registry = createMcpOutputSchemaRegistry({
+      activityLocation: true,
+      routeLocation: true,
+    });
+    const fixture = await createFixtureDataService().getDailyReport({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(registry.get_daily_report.safeParse(fixture).success).toBe(true);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        ...fixture.sleep,
+        latestSession: fixture.sleep.latestSession
+          ? {
+              ...fixture.sleep.latestSession,
+              vitals: {
+                ...fixture.sleep.latestSession.vitals,
+                maxSpo2Percent: 99,
+              },
+            }
+          : null,
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        ...fixture.sleep,
+        latestSession: null,
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        status: 'no_completed_session',
+        latestSession: null,
+        comparison: {
+          sameProviderNightCount: 5,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: null,
+        },
+      },
+    }).success).toBe(false);
+    expect(registry.get_daily_report.safeParse({
+      ...fixture,
+      sleep: {
+        ...fixture.sleep,
+        comparison: {
+          sameProviderNightCount: 2,
+          averageDurationSeconds: 27_600,
+          durationDeltaSeconds: 1_200,
+        },
+      },
+    }).success).toBe(false);
+  });
+
+  it('rejects impossible live-readiness baseline and combined-heart-rate states', async () => {
+    const registry = createMcpOutputSchemaRegistry({
+      activityLocation: true,
+      routeLocation: true,
+    });
+    const fixture = await createFixtureDataService().getTodayReadiness({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(registry.get_today_readiness.safeParse({
+      ...fixture,
+      drivers: {
+        ...fixture.drivers,
+        hrv: {
+          ...fixture.drivers.hrv,
+          status: 'insufficient_baseline',
+          baselineMedianMs: 50,
+          baselineNightCount: 0,
+          ratio: null,
+        },
+      },
+    }).success).toBe(false);
+
+    expect(registry.get_today_readiness.safeParse({
+      ...fixture,
+      availableSignalCount: 3,
+      availableWeightPercent: 85,
+      drivers: {
+        ...fixture.drivers,
+        overnightHeartRate: {
+          ...fixture.drivers.overnightHeartRate,
+          status: 'insufficient_baseline',
+          combinedRatio: null,
         },
       },
     }).success).toBe(false);
@@ -1529,6 +1928,8 @@ describe('MCP public output contracts', () => {
     );
     expect(JSON.stringify(advertised.list_activities))
       .not.toContain('startPosition');
+    expect(JSON.stringify(advertised.query_activities))
+      .not.toContain('startPosition');
     expect(JSON.stringify(advertised.list_activity_jumps))
       .not.toContain('latitudeDegrees');
     expect(JSON.stringify(advertised.list_routes)).not.toContain('bounds');
@@ -1537,6 +1938,7 @@ describe('MCP public output contracts', () => {
 
     for (const toolName of [
       'list_activities',
+      'query_activities',
       'list_activity_jumps',
       'get_activity_chart_data',
       'list_routes',
@@ -1734,6 +2136,149 @@ describe('MCP public output contracts', () => {
         sourceKey: 'private-source-key',
       }],
     }).success).toBe(false);
+    expect(registry.query_metrics.safeParse({
+      results: [{
+        metric: {
+          ...metricDescriptor,
+          sourceKey: 'private-source-key',
+        },
+        matchedEventCount: 1,
+        aggregation: {
+          dataType: 'Distance',
+          valueType: ChartDataValueTypes.Total,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Daily,
+          buckets: [],
+        },
+      }],
+    }).success).toBe(false);
+    const multiMetricOutput = {
+      metric: metricDescriptor,
+      matchedEventCount: 1,
+      aggregation: {
+        dataType: 'Distance',
+        valueType: ChartDataValueTypes.Total,
+        categoryType: ChartDataCategoryTypes.DateType,
+        resolvedTimeInterval: TimeIntervals.Daily,
+        buckets: [],
+      },
+    };
+    expect(registry.query_metrics.safeParse({
+      results: [{
+        ...multiMetricOutput,
+        aggregation: {
+          ...multiMetricOutput.aggregation,
+          dataType: 'Ascent',
+        },
+      }],
+    }).success).toBe(false);
+    expect(registry.query_metrics.safeParse({
+      results: [
+        multiMetricOutput,
+        multiMetricOutput,
+      ],
+    }).success).toBe(false);
+    expect(registry.list_training_metrics.safeParse({
+      metrics: [{
+        metricKind: DERIVED_METRIC_KINDS.Form,
+        title: 'Form',
+        description: 'Training form.',
+        category: 'load',
+        periodLabel: 'Daily',
+        status: 'ready',
+        updatedAtMs: DAY_MS,
+        sourceEventCount: 1,
+        sourceFingerprint: 'private-source-fingerprint',
+      }],
+    }).success).toBe(false);
+    const duplicateTrainingMetric = {
+      metricKind: DERIVED_METRIC_KINDS.Form,
+      title: 'Form',
+      description: 'Training form.',
+      category: 'load' as const,
+      periodLabel: 'Daily',
+      status: 'ready' as const,
+      updatedAtMs: DAY_MS,
+      sourceEventCount: 1,
+    };
+    expect(registry.list_training_metrics.safeParse({
+      metrics: [
+        duplicateTrainingMetric,
+        duplicateTrainingMetric,
+      ],
+    }).success).toBe(false);
+    expect(registry.get_activity_overview.safeParse({
+      activityType: 'Running',
+      locationRedacted: true,
+      startPosition: coordinate,
+      availableMetrics: [metricDescriptor],
+      details: [
+        { kind: 'laps', status: 'available', count: 1 },
+        { kind: 'jumps', status: 'empty', count: 0 },
+        { kind: 'swim_lengths', status: 'unavailable', count: null },
+      ],
+      chartData: {
+        sourceDeclared: false,
+        candidateMetrics: [],
+      },
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: NEXT_DAY_MS,
+        activityType: 'Running',
+        value: 10_000,
+        eventID: 'private-event-id',
+      }],
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 2,
+      matchedActivityCount: 2,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: NEXT_DAY_MS,
+        endTimeMs: DAY_MS,
+        activityType: 'Running',
+        value: 10_000,
+      }, {
+        rank: 2,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: NEXT_DAY_MS,
+        activityType: 'Running',
+        value: 11_000,
+      }],
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 2,
+      matchedActivityCount: 2,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: NEXT_DAY_MS,
+        activityType: 'Running',
+        value: 10_000,
+      }, {
+        rank: 2,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: NEXT_DAY_MS,
+        endTimeMs: NEXT_DAY_MS + 3_600_000,
+        activityType: 'Running',
+        value: 10_000,
+      }],
+    }).success).toBe(false);
     expect(registry.list_routes.safeParse({
       scannedRouteCount: 1,
       skippedRouteCount: 0,
@@ -1759,6 +2304,70 @@ describe('MCP public output contracts', () => {
         providerUserId: 'private-provider-user',
       }],
       nextCursor: null,
+    }).success).toBe(false);
+    expect(registry.list_sleep_vitals.safeParse({
+      matchedSessionCount: 1,
+      vitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+        providerUserId: 'private-provider-user',
+      }],
+    }).success).toBe(false);
+    expect(registry.get_sleep_trend.safeParse({
+      rangeStartTimeMs: DAY_MS,
+      rangeEndTimeMs: NEXT_DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      groupBy: 'day',
+      matchedSessionCount: 1,
+      availableVitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+      buckets: [{
+        bucketStartMs: DAY_MS,
+        sessionCount: 1,
+        providers: ['GarminAPI'],
+        totalDurationSeconds: 28_800,
+        averageDurationSeconds: 28_800,
+        averageInBedDurationSeconds: null,
+        averageScore: 80,
+        stageDurationsSeconds: {},
+        averageVitals: {
+          overnightHrvMs: 55,
+        },
+        hrvSamples: [{ value: 55 }],
+      }],
+    }).success).toBe(false);
+    expect(registry.get_sleep_trend.safeParse({
+      rangeStartTimeMs: DAY_MS,
+      rangeEndTimeMs: NEXT_DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      groupBy: 'day',
+      matchedSessionCount: 1,
+      availableVitals: [{
+        type: 'overnightHrvMs',
+        label: 'Overnight HRV',
+        unit: 'milliseconds',
+        sessionCount: 1,
+      }],
+      buckets: [{
+        bucketStartMs: DAY_MS,
+        sessionCount: 1,
+        providers: ['GarminAPI'],
+        totalDurationSeconds: 28_800,
+        averageDurationSeconds: 28_800,
+        averageInBedDurationSeconds: null,
+        averageScore: 80,
+        stageDurationsSeconds: {},
+        averageVitals: {
+          overnightHrvMs: 55,
+          providerRecoveryScore: 99,
+        },
+      }],
     }).success).toBe(false);
     expect(registry.list_route_waypoints.safeParse({
       waypoints: [{
@@ -1888,6 +2497,10 @@ describe('MCP public output contracts', () => {
 
   it('fails closed on contract mismatches in every tool family', async () => {
     const mismatchService = createFixtureDataService();
+    const dailyReportFixture = await mismatchService.getDailyReport({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
     mismatchService.listMeasurementTypes = vi.fn().mockResolvedValue({
       measurementTypes: [],
       sourceKey: 'measurement-secret',
@@ -1909,6 +2522,75 @@ describe('MCP public output contracts', () => {
       sessions: [],
       nextCursor: null,
       providerUserId: 'sleep-secret',
+    });
+    mismatchService.getTodayReadiness = vi.fn().mockResolvedValue({
+      asOfTimeMs: DAY_MS,
+      timeZone: 'Europe/Helsinki',
+      localDayStartTimeMs: DAY_MS,
+      localDayEndTimeMs: NEXT_DAY_MS - 1,
+      dayBoundary: 'UTC',
+      asOfDayMs: DAY_MS,
+      formulaVersion: 3,
+      status: 'no_signal',
+      score: null,
+      label: null,
+      confidence: null,
+      availableSignalCount: 0,
+      availableWeightPercent: 0,
+      baselineEvidenceCount: 0,
+      totalSignalCount: 4,
+      drivers: {
+        load: {
+          status: 'not_ready',
+          weightPercent: 40,
+          form: null,
+          rampRate: null,
+          asOfDayMs: null,
+          sourceUpdatedAtMs: null,
+        },
+        sleep: {
+          status: 'no_recent_session',
+          weightPercent: 25,
+          score: null,
+          scoreSource: null,
+          latestSleepAtMs: null,
+          sleepDate: null,
+          durationSeconds: null,
+          recordedScore: null,
+        },
+        hrv: {
+          status: 'not_recorded',
+          weightPercent: 20,
+          latestMs: null,
+          baselineMedianMs: null,
+          baselineNightCount: 0,
+          ratio: null,
+        },
+        overnightHeartRate: {
+          status: 'not_recorded',
+          weightPercent: 15,
+          combinedRatio: null,
+          average: {
+            status: 'not_recorded',
+            latestBpm: null,
+            baselineMedianBpm: null,
+            baselineNightCount: 0,
+            ratio: null,
+          },
+          minimum: {
+            status: 'not_recorded',
+            latestBpm: null,
+            baselineMedianBpm: null,
+            baselineNightCount: 0,
+            ratio: null,
+          },
+        },
+      },
+      sourceKey: 'readiness-secret',
+    });
+    mismatchService.getDailyReport = vi.fn().mockResolvedValue({
+      ...dailyReportFixture,
+      providerUserId: 'daily-report-secret',
     });
     mismatchService.getDailyBriefing = vi.fn().mockResolvedValue({
       asOfTimeMs: DAY_MS,
@@ -1954,10 +2636,20 @@ describe('MCP public output contracts', () => {
       nextCursor: null,
       activityId: 'activity-secret',
     });
+    mismatchService.findActivitiesNearLocation = vi.fn().mockResolvedValue({
+      activities: [],
+      nextCursor: null,
+      activityId: 'nearby-activity-secret',
+    });
     mismatchService.listRoutes = vi.fn().mockResolvedValue({
       routes: [],
       nextCursor: null,
       originalFiles: ['route-secret'],
+    });
+    mismatchService.findRoutesNearLocation = vi.fn().mockResolvedValue({
+      routes: [],
+      nextCursor: null,
+      originalFiles: ['nearby-route-secret'],
     });
     const connection = await connectFixtureServer(mismatchService);
     connections.push(connection);
@@ -1966,9 +2658,16 @@ describe('MCP public output contracts', () => {
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
+      'get_today_readiness',
+      'get_daily_report',
       'get_daily_briefing',
       'list_activities',
+      'query_activities',
+      'find_activities_near_location',
+      'search_activities_near_location',
       'list_routes',
+      'find_routes_near_location',
+      'search_routes_near_location',
     ] as const) {
       const result = await connection.client.callTool({
         name: toolName,
@@ -2001,12 +2700,25 @@ describe('MCP public output contracts', () => {
     errorService.getDailyBriefing = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.getDailyReport = vi.fn().mockImplementation(async () => {
+      throw expectedError();
+    });
     errorService.listActivities = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.findActivitiesNearLocation = vi.fn().mockImplementation(
+      async () => {
+        throw expectedError();
+      },
+    );
     errorService.listRoutes = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.findRoutesNearLocation = vi.fn().mockImplementation(
+      async () => {
+        throw expectedError();
+      },
+    );
     const connection = await connectFixtureServer(errorService);
     connections.push(connection);
 
@@ -2014,9 +2726,15 @@ describe('MCP public output contracts', () => {
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
+      'get_daily_report',
       'get_daily_briefing',
       'list_activities',
+      'query_activities',
+      'find_activities_near_location',
+      'search_activities_near_location',
       'list_routes',
+      'find_routes_near_location',
+      'search_routes_near_location',
     ] as const) {
       const result = await connection.client.callTool({
         name: toolName,

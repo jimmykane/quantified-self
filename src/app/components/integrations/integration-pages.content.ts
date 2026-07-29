@@ -14,6 +14,11 @@ export interface IntegrationFaq {
   answer: string;
 }
 
+export interface ProviderGuideAction {
+  label: string;
+  routerLink: string;
+}
+
 export interface ProviderSource {
   label: string;
   serviceName: ServiceNames;
@@ -43,6 +48,7 @@ export interface ProviderIntegrationPage {
   faqItems: readonly IntegrationFaq[];
   closingTitle: string;
   closingCopy: string;
+  relatedGuideActions?: readonly ProviderGuideAction[];
 }
 
 export interface IntegrationHubCard {
@@ -320,6 +326,9 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     closingTitle: 'Connect once, then keep your services aligned',
     closingCopy: 'New Garmin and COROS workouts can move to Suunto automatically after setup. Suunto routes can be imported into Quantified Self and sent to Garmin or Wahoo when both connections are ready.',
+    relatedGuideActions: [
+      { label: 'Import Activities to Suunto', routerLink: '/guides/import-activities-to-suunto' },
+    ],
   },
   coros: {
     slug: 'coros',
@@ -554,6 +563,9 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     closingTitle: 'Connect Wahoo and keep completed workouts in context',
     closingCopy: 'Import Wahoo FIT activities automatically, sync eligible retained Wahoo activities to Suunto, send the FIT activities or GPX/FIT courses/routes you choose directly to Wahoo, optionally deliver saved Suunto routes to Wahoo, add the history range you need, and analyze everything in the same private archive.',
+    relatedGuideActions: [
+      { label: 'Import Activities to Wahoo', routerLink: '/guides/import-activities-to-wahoo' },
+    ],
   },
 };
 

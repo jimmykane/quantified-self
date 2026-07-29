@@ -28,8 +28,29 @@ const REGISTERED_CONTRACT_PATH = path.resolve(
   __dirname,
   'contracts/registered-contract.json',
 );
+const PENDING_CHANGE_PATH = path.resolve(
+  __dirname,
+  'contracts/pending-change.json',
+);
+const CONTRACT_CAPTURE_TIMEOUT_MS = 20_000;
 
 let registered: RegisteredMcpContract;
+let pending: McpContractChangeRecord | null;
+
+async function readOptionalFile(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, 'utf8');
+  } catch (error) {
+    if (
+      error instanceof Error
+      && 'code' in error
+      && error.code === 'ENOENT'
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
 
 function variantDigest(value: unknown): string {
   return createHash('sha256')
@@ -100,23 +121,41 @@ beforeAll(async () => {
   registered = parseRegisteredMcpContract(JSON.parse(
     await readFile(REGISTERED_CONTRACT_PATH, 'utf8'),
   ) as unknown);
+  const pendingText = await readOptionalFile(PENDING_CHANGE_PATH);
+  pending = pendingText
+    ? parseMcpContractChangeRecord(JSON.parse(pendingText) as unknown)
+    : null;
 });
 
 describe('MCP registered-contract compatibility', () => {
-  it('matches the settled in-memory server across every scope profile', async () => {
-    const candidate = await captureMcpContract(
-      registered.contract.origin,
-    );
+  it(
+    'matches the settled baseline or its exact pending contract across every scope profile',
+    async () => {
+      const candidate = await captureMcpContract(
+        registered.contract.origin,
+      );
+      const evaluation = evaluateMcpContractGate(
+        registered,
+        candidate,
+        pending,
+      );
 
-    expect(digestMcpContract(candidate)).toBe(registered.contractSha256);
-    expect(compareMcpContracts(registered.contract, candidate)).toEqual({
-      breaking: [],
-      releaseRequired: [],
-    });
-    expect(
-      Object.keys(candidate.profiles['all-scopes'].tools).sort(),
-    ).toEqual([...PUBLIC_MCP_TOOL_NAMES].sort());
-  });
+      expect(evaluation.errors).toEqual([]);
+      expect(evaluation.comparison.breaking).toEqual([]);
+      if (pending) {
+        expect(evaluation.pendingActionRequired).toBe(true);
+        expect(evaluation.candidateSha256).toBe(pending.candidateSha256);
+      } else {
+        expect(evaluation.pendingActionRequired).toBe(false);
+        expect(evaluation.candidateSha256).toBe(registered.contractSha256);
+        expect(evaluation.comparison.releaseRequired).toEqual([]);
+      }
+      expect(
+        Object.keys(candidate.profiles['all-scopes'].tools).sort(),
+      ).toEqual([...PUBLIC_MCP_TOOL_NAMES].sort());
+    },
+    CONTRACT_CAPTURE_TIMEOUT_MS,
+  );
 
   it('normalizes semantically unordered schema arrays and object keys', () => {
     const left = {

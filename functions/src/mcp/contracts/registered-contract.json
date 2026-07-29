@@ -89,7 +89,7 @@
         }
       },
       "all-parent-scopes": {
-        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and a current UTC-day Training readiness signal; it is not a workout plan or medical advice.",
+        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice. For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For a broader compact morning readout, use get_daily_briefing; it combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and the compact stored readiness status. Neither tool is a workout plan or medical advice.",
         "scopes": [
           "activity-details:read",
           "measurements:read",
@@ -101,6 +101,8 @@
           "get_activity_chart_data": "2a63d7841192f900bbfd7f34a96a3fa5952a3c09b6487d0ce55832583857a948",
           "get_activity_metrics": "dea5d1a51e3660782f3037b05c22eeb92ba7980ef8b9d07c759b978ab182eab3",
           "get_daily_briefing": "3411fe7be0ea17ba506f49a25fcd1fe98eef7bb78122032bbb83c8ec9b224a52",
+          "get_sleep_trend": "0a12cc2ac2d8f9f811f2922b876d2bcb3fd5c51b327287977d5bebfc85b8dba2",
+          "get_today_readiness": "a26bf0664c58a70be50e0bb851113c3dc6a4a8d88e449826637c5ed7cea532d9",
           "get_training_metric": "cdc6068afc49769c181212316999f0ef1a84a1b2997b1fafcd67e32e3074c7af",
           "list_activities": "788c5eb6875b0268b48879950794354227a315406ac1f7bfc6a4059a3f42d856",
           "list_activity_chart_metrics": "74ea47854774e54295347084dff13413aef02016027fd0234872e3c6aceeb661",
@@ -111,14 +113,15 @@
           "list_measurement_types": "6cded5f8af60f1250155ab3b39555fa9a9f08ed3f9771c21b87af481c58eeec3",
           "list_metrics": "78f9a010af6b27c16145cf06b24861d3ce2be84e4b4eb0f76a7b84a90486a8b8",
           "list_routes": "37c3c39770803366832b82119c47952dd9e0aecb8c4edb62acf3ce8ce11ae56a",
-          "list_sleep_sessions": "b6f5316041580cf36558b8f67f64c931ed6ebcfbb68b9f7fb998cbd5a8965e3f",
+          "list_sleep_sessions": "d7f88edd15f9d787280eebf6511b11ec839a184ed4d10f3603e0ca6d40ba6dda",
+          "list_sleep_vitals": "74c516608e3f7761050a18511bcee544aee8e405d24215a0f7d6f5a4f8db6ede",
           "query_measurements": "5de1fa8c4e299663d227b5724c0dba1a548ec6f4d9b19635a7971d8dca33a0f0",
           "query_metric": "804ce926f726efc680243de6faa631256a348d52fd0548090a0abd951f1dc78f",
-          "query_sleep_summary": "4b48af5014105fb04da9eacfa19892b263f0eea95957d53a9ca06aceeadca39a"
+          "query_sleep_summary": "9c5d43f33c0079230bae77f66c7adb37f289a786b33413fc44a4ba166c11a8ad"
         }
       },
       "all-scopes": {
-        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For a compact morning readout, use get_daily_briefing with an explicit IANA time zone. It combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and a current UTC-day Training readiness signal; it is not a workout plan or medical advice.",
+        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete. For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete. Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics. For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice. For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For a broader compact morning readout, use get_daily_briefing; it combines only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and sport mix, and the compact stored readiness status. Neither tool is a workout plan or medical advice.",
         "scopes": [
           "activity-details:read",
           "activity-location:read",
@@ -135,6 +138,8 @@
           "get_activity_metrics": "dea5d1a51e3660782f3037b05c22eeb92ba7980ef8b9d07c759b978ab182eab3",
           "get_daily_briefing": "3411fe7be0ea17ba506f49a25fcd1fe98eef7bb78122032bbb83c8ec9b224a52",
           "get_route_geometry": "84f63a17ddd0423c95214071ae7b575426970511cff04e82b42c7152bb0cc3a3",
+          "get_sleep_trend": "0a12cc2ac2d8f9f811f2922b876d2bcb3fd5c51b327287977d5bebfc85b8dba2",
+          "get_today_readiness": "a26bf0664c58a70be50e0bb851113c3dc6a4a8d88e449826637c5ed7cea532d9",
           "get_training_metric": "cdc6068afc49769c181212316999f0ef1a84a1b2997b1fafcd67e32e3074c7af",
           "list_activities": "83df0be6b26362a414d30d73edda1e1b9b6fcd136e676fef2a4fd8dc5f2ff18c",
           "list_activity_chart_metrics": "74ea47854774e54295347084dff13413aef02016027fd0234872e3c6aceeb661",
@@ -146,10 +151,11 @@
           "list_metrics": "78f9a010af6b27c16145cf06b24861d3ce2be84e4b4eb0f76a7b84a90486a8b8",
           "list_route_waypoints": "9e7788af58afaa9959900e5ef64575f7b9afb0541763d12b472155edfeaad334",
           "list_routes": "cd8631a4e18b0a9093fbc94b7fdab8ebd6d0313c80c651974f9cc2a6e9298638",
-          "list_sleep_sessions": "b6f5316041580cf36558b8f67f64c931ed6ebcfbb68b9f7fb998cbd5a8965e3f",
+          "list_sleep_sessions": "d7f88edd15f9d787280eebf6511b11ec839a184ed4d10f3603e0ca6d40ba6dda",
+          "list_sleep_vitals": "74c516608e3f7761050a18511bcee544aee8e405d24215a0f7d6f5a4f8db6ede",
           "query_measurements": "5de1fa8c4e299663d227b5724c0dba1a548ec6f4d9b19635a7971d8dca33a0f0",
           "query_metric": "804ce926f726efc680243de6faa631256a348d52fd0548090a0abd951f1dc78f",
-          "query_sleep_summary": "4b48af5014105fb04da9eacfa19892b263f0eea95957d53a9ca06aceeadca39a"
+          "query_sleep_summary": "9c5d43f33c0079230bae77f66c7adb37f289a786b33413fc44a4ba166c11a8ad"
         }
       },
       "measurements": {
@@ -207,14 +213,16 @@
         }
       },
       "sleep": {
-        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted.",
+        "instructions": "Use only the read-only tools exposed for the permissions this connection was granted. For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice.",
         "scopes": [
           "sleep:read"
         ],
         "tools": {
+          "get_sleep_trend": "0a12cc2ac2d8f9f811f2922b876d2bcb3fd5c51b327287977d5bebfc85b8dba2",
           "list_activity_types": "ba2e1a16702351a35fa14ddbde639bda198c929050111261c60fa07e4d4af963",
-          "list_sleep_sessions": "b6f5316041580cf36558b8f67f64c931ed6ebcfbb68b9f7fb998cbd5a8965e3f",
-          "query_sleep_summary": "4b48af5014105fb04da9eacfa19892b263f0eea95957d53a9ca06aceeadca39a"
+          "list_sleep_sessions": "d7f88edd15f9d787280eebf6511b11ec839a184ed4d10f3603e0ca6d40ba6dda",
+          "list_sleep_vitals": "74c516608e3f7761050a18511bcee544aee8e405d24215a0f7d6f5a4f8db6ede",
+          "query_sleep_summary": "9c5d43f33c0079230bae77f66c7adb37f289a786b33413fc44a4ba166c11a8ad"
         }
       }
     },
@@ -276,6 +284,304 @@
       "protocolVersion": "2025-11-25"
     },
     "toolVariants": {
+      "0a12cc2ac2d8f9f811f2922b876d2bcb3fd5c51b327287977d5bebfc85b8dba2": {
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        },
+        "description": "Get sleep duration, score, stages, HRV, heart rate, blood oxygen saturation, and respiration trends in one bounded call, with explicit coverage for every recorded safe aggregate vital. Prefer this for recent sleep changes, poor-sleep questions, or recovery-oriented sleep trends. It cannot diagnose illness and never returns raw sensor samples or provider payloads.",
+        "execution": {
+          "taskSupport": "forbidden"
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "end": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            },
+            "groupBy": {
+              "default": "day",
+              "enum": [
+                "day",
+                "month",
+                "week"
+              ],
+              "type": "string"
+            },
+            "includeNaps": {
+              "default": false,
+              "type": "boolean"
+            },
+            "provider": {
+              "enum": [
+                "COROSAPI",
+                "GarminAPI",
+                "SuuntoApp"
+              ],
+              "type": "string"
+            },
+            "start": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            },
+            "timeZone": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "end",
+            "start",
+            "timeZone"
+          ],
+          "type": "object"
+        },
+        "name": "get_sleep_trend",
+        "outputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "availableVitals": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sessionCount": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "enum": [
+                      "averageHeartRateBpm",
+                      "averageHrvMs",
+                      "averageRespirationBrpm",
+                      "hrvSampleCount",
+                      "maxSpo2Percent",
+                      "minimumHeartRateBpm",
+                      "overnightHrvMs",
+                      "restingHeartRateBpm"
+                    ],
+                    "type": "string"
+                  },
+                  "unit": {
+                    "enum": [
+                      "beats_per_minute",
+                      "breaths_per_minute",
+                      "count",
+                      "milliseconds",
+                      "percent"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label",
+                  "sessionCount",
+                  "type",
+                  "unit"
+                ],
+                "title": "McpSleepVitalAvailability",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "buckets": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "averageDurationSeconds": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "averageInBedDurationSeconds": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "averageScore": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "averageVitals": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "averageHeartRateBpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "averageHrvMs": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "averageRespirationBrpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "hrvSampleCount": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "maxSpo2Percent": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "minimumHeartRateBpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "overnightHrvMs": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "restingHeartRateBpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "bucketStartMs": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "providers": {
+                    "items": {
+                      "enum": [
+                        "COROSAPI",
+                        "GarminAPI",
+                        "SuuntoApp"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "sessionCount": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "stageDurationsSeconds": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "awake": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "deep": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "light": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "rem": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "unknown": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "unmeasurable": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "title": "McpSleepStageDurations",
+                    "type": "object"
+                  },
+                  "totalDurationSeconds": {
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "averageDurationSeconds",
+                  "averageInBedDurationSeconds",
+                  "averageScore",
+                  "averageVitals",
+                  "bucketStartMs",
+                  "providers",
+                  "sessionCount",
+                  "stageDurationsSeconds",
+                  "totalDurationSeconds"
+                ],
+                "title": "McpSleepSummaryBucket",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "groupBy": {
+              "enum": [
+                "day",
+                "month",
+                "week"
+              ],
+              "type": "string"
+            },
+            "matchedSessionCount": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rangeEndTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "rangeStartTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "timeZone": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "availableVitals",
+            "buckets",
+            "groupBy",
+            "matchedSessionCount",
+            "rangeEndTimeMs",
+            "rangeStartTimeMs",
+            "timeZone"
+          ],
+          "type": "object"
+        },
+        "title": "Get sleep and HRV trend"
+      },
       "2a63d7841192f900bbfd7f34a96a3fa5952a3c09b6487d0ce55832583857a948": {
         "annotations": {
           "destructiveHint": false,
@@ -2440,241 +2746,6 @@
         },
         "title": "List activity jumps"
       },
-      "4b48af5014105fb04da9eacfa19892b263f0eea95957d53a9ca06aceeadca39a": {
-        "annotations": {
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false,
-          "readOnlyHint": true
-        },
-        "description": "Aggregate redacted sleep sessions by local day, week, or month.",
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "inputSchema": {
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "properties": {
-            "end": {
-              "format": "date-time",
-              "maxLength": 64,
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-              "type": "string"
-            },
-            "groupBy": {
-              "default": "day",
-              "enum": [
-                "day",
-                "month",
-                "week"
-              ],
-              "type": "string"
-            },
-            "includeNaps": {
-              "default": false,
-              "type": "boolean"
-            },
-            "provider": {
-              "enum": [
-                "COROSAPI",
-                "GarminAPI",
-                "SuuntoApp"
-              ],
-              "type": "string"
-            },
-            "start": {
-              "format": "date-time",
-              "maxLength": 64,
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-              "type": "string"
-            },
-            "timeZone": {
-              "maxLength": 80,
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "end",
-            "start",
-            "timeZone"
-          ],
-          "type": "object"
-        },
-        "name": "query_sleep_summary",
-        "outputSchema": {
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": false,
-          "properties": {
-            "buckets": {
-              "items": {
-                "additionalProperties": false,
-                "properties": {
-                  "averageDurationSeconds": {
-                    "minimum": 0,
-                    "type": "number"
-                  },
-                  "averageInBedDurationSeconds": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "averageScore": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "averageVitals": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "averageHeartRateBpm": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "averageHrvMs": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "averageRespirationBrpm": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "hrvSampleCount": {
-                        "maximum": 9007199254740991,
-                        "minimum": 0,
-                        "type": "integer"
-                      },
-                      "maxSpo2Percent": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "minimumHeartRateBpm": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "overnightHrvMs": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "restingHeartRateBpm": {
-                        "minimum": 0,
-                        "type": "number"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "bucketStartMs": {
-                    "maximum": 9007199254740991,
-                    "minimum": -9007199254740991,
-                    "type": "integer"
-                  },
-                  "providers": {
-                    "items": {
-                      "enum": [
-                        "COROSAPI",
-                        "GarminAPI",
-                        "SuuntoApp"
-                      ],
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  "sessionCount": {
-                    "maximum": 9007199254740991,
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "stageDurationsSeconds": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "awake": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "deep": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "light": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "rem": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "unknown": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "unmeasurable": {
-                        "minimum": 0,
-                        "type": "number"
-                      }
-                    },
-                    "title": "McpSleepStageDurations",
-                    "type": "object"
-                  },
-                  "totalDurationSeconds": {
-                    "minimum": 0,
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "averageDurationSeconds",
-                  "averageInBedDurationSeconds",
-                  "averageScore",
-                  "averageVitals",
-                  "bucketStartMs",
-                  "providers",
-                  "sessionCount",
-                  "stageDurationsSeconds",
-                  "totalDurationSeconds"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "groupBy": {
-              "enum": [
-                "day",
-                "month",
-                "week"
-              ],
-              "type": "string"
-            },
-            "matchedSessionCount": {
-              "maximum": 9007199254740991,
-              "minimum": 0,
-              "type": "integer"
-            },
-            "timeZone": {
-              "maxLength": 80,
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "buckets",
-            "groupBy",
-            "matchedSessionCount",
-            "timeZone"
-          ],
-          "type": "object"
-        },
-        "title": "Query sleep summary"
-      },
       "5de1fa8c4e299663d227b5724c0dba1a548ec6f4d9b19635a7971d8dca33a0f0": {
         "annotations": {
           "destructiveHint": false,
@@ -3247,6 +3318,119 @@
           "type": "object"
         },
         "title": "List body measurement types"
+      },
+      "74c516608e3f7761050a18511bcee544aee8e405d24215a0f7d6f5a4f8db6ede": {
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        },
+        "description": "Discover which redacted aggregate sleep vital types have recorded values in a bounded period, including average or overnight HRV when available. Use this for data-availability questions; use get_sleep_trend for readings and trends. Raw sensor samples and provider payloads are never returned.",
+        "execution": {
+          "taskSupport": "forbidden"
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "end": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            },
+            "includeNaps": {
+              "default": false,
+              "type": "boolean"
+            },
+            "provider": {
+              "enum": [
+                "COROSAPI",
+                "GarminAPI",
+                "SuuntoApp"
+              ],
+              "type": "string"
+            },
+            "start": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "end",
+            "start"
+          ],
+          "type": "object"
+        },
+        "name": "list_sleep_vitals",
+        "outputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "matchedSessionCount": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "vitals": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sessionCount": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "enum": [
+                      "averageHeartRateBpm",
+                      "averageHrvMs",
+                      "averageRespirationBrpm",
+                      "hrvSampleCount",
+                      "maxSpo2Percent",
+                      "minimumHeartRateBpm",
+                      "overnightHrvMs",
+                      "restingHeartRateBpm"
+                    ],
+                    "type": "string"
+                  },
+                  "unit": {
+                    "enum": [
+                      "beats_per_minute",
+                      "breaths_per_minute",
+                      "count",
+                      "milliseconds",
+                      "percent"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label",
+                  "sessionCount",
+                  "type",
+                  "unit"
+                ],
+                "title": "McpSleepVitalAvailability",
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "matchedSessionCount",
+            "vitals"
+          ],
+          "type": "object"
+        },
+        "title": "Discover available sleep vitals"
       },
       "74ea47854774e54295347084dff13413aef02016027fd0234872e3c6aceeb661": {
         "annotations": {
@@ -5992,6 +6176,241 @@
         },
         "title": "List activity swim lengths"
       },
+      "9c5d43f33c0079230bae77f66c7adb37f289a786b33413fc44a4ba166c11a8ad": {
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        },
+        "description": "Aggregate redacted sleep sessions by local day, week, or month. Each bucket includes averages for available safe vitals; prefer get_sleep_trend when the question asks for coverage and a trend together. Raw samples are never returned.",
+        "execution": {
+          "taskSupport": "forbidden"
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "end": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            },
+            "groupBy": {
+              "default": "day",
+              "enum": [
+                "day",
+                "month",
+                "week"
+              ],
+              "type": "string"
+            },
+            "includeNaps": {
+              "default": false,
+              "type": "boolean"
+            },
+            "provider": {
+              "enum": [
+                "COROSAPI",
+                "GarminAPI",
+                "SuuntoApp"
+              ],
+              "type": "string"
+            },
+            "start": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            },
+            "timeZone": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "end",
+            "start",
+            "timeZone"
+          ],
+          "type": "object"
+        },
+        "name": "query_sleep_summary",
+        "outputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "buckets": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "averageDurationSeconds": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "averageInBedDurationSeconds": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "averageScore": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "averageVitals": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "averageHeartRateBpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "averageHrvMs": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "averageRespirationBrpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "hrvSampleCount": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "maxSpo2Percent": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "minimumHeartRateBpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "overnightHrvMs": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "restingHeartRateBpm": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "bucketStartMs": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "providers": {
+                    "items": {
+                      "enum": [
+                        "COROSAPI",
+                        "GarminAPI",
+                        "SuuntoApp"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "sessionCount": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "stageDurationsSeconds": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "awake": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "deep": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "light": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "rem": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "unknown": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "unmeasurable": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "title": "McpSleepStageDurations",
+                    "type": "object"
+                  },
+                  "totalDurationSeconds": {
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "averageDurationSeconds",
+                  "averageInBedDurationSeconds",
+                  "averageScore",
+                  "averageVitals",
+                  "bucketStartMs",
+                  "providers",
+                  "sessionCount",
+                  "stageDurationsSeconds",
+                  "totalDurationSeconds"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "groupBy": {
+              "enum": [
+                "day",
+                "month",
+                "week"
+              ],
+              "type": "string"
+            },
+            "matchedSessionCount": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "timeZone": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "buckets",
+            "groupBy",
+            "matchedSessionCount",
+            "timeZone"
+          ],
+          "type": "object"
+        },
+        "title": "Summarize sleep and recorded vitals"
+      },
       "9e7788af58afaa9959900e5ef64575f7b9afb0541763d12b472155edfeaad334": {
         "annotations": {
           "destructiveHint": false,
@@ -6126,6 +6545,565 @@
           "type": "object"
         },
         "title": "List saved-route waypoints"
+      },
+      "a26bf0664c58a70be50e0bb851113c3dc6a4a8d88e449826637c5ed7cea532d9": {
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        },
+        "description": "Calculate the same live recovery-aware readiness shown by Dashboard Today from current UTC-day Form/ramp and a bounded 30-day sleep query. Returns the score plus explicit Load, Sleep, HRV, and Overnight HR drivers, including latest safe aggregate values, same-provider baseline medians, evidence counts, ratios, and freshness. Provider identity, raw samples, activities, locations, workout plans, diagnosis, and medical advice are excluded.",
+        "execution": {
+          "taskSupport": "forbidden"
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "timeZone": {
+              "description": "Required IANA time zone used only for local-day context; readiness itself uses the documented UTC day boundary.",
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "timeZone"
+          ],
+          "type": "object"
+        },
+        "name": "get_today_readiness",
+        "outputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "asOfDayMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "asOfTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "availableSignalCount": {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "availableWeightPercent": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "baselineEvidenceCount": {
+              "maximum": 14,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "confidence": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "low",
+                    "medium"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dayBoundary": {
+              "const": "UTC",
+              "type": "string"
+            },
+            "drivers": {
+              "additionalProperties": false,
+              "properties": {
+                "hrv": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "baselineMedianMs": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "baselineNightCount": {
+                      "maximum": 14,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "latestMs": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ratio": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "insufficient_baseline",
+                        "not_recorded"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 20,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "baselineMedianMs",
+                    "baselineNightCount",
+                    "latestMs",
+                    "ratio",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessHrvDriver",
+                  "type": "object"
+                },
+                "load": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "asOfDayMs": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "form": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "rampRate": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "sourceUpdatedAtMs": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "not_ready"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 40,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "asOfDayMs",
+                    "form",
+                    "rampRate",
+                    "sourceUpdatedAtMs",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessLoadDriver",
+                  "type": "object"
+                },
+                "overnightHeartRate": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "average": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "baselineMedianBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "baselineNightCount": {
+                          "maximum": 14,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "latestBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "ratio": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "enum": [
+                            "available",
+                            "insufficient_baseline",
+                            "not_recorded"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "baselineMedianBpm",
+                        "baselineNightCount",
+                        "latestBpm",
+                        "ratio",
+                        "status"
+                      ],
+                      "title": "McpTodayReadinessHeartRateDriver",
+                      "type": "object"
+                    },
+                    "combinedRatio": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "minimum": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "baselineMedianBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "baselineNightCount": {
+                          "maximum": 14,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "latestBpm": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "ratio": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "enum": [
+                            "available",
+                            "insufficient_baseline",
+                            "not_recorded"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "baselineMedianBpm",
+                        "baselineNightCount",
+                        "latestBpm",
+                        "ratio",
+                        "status"
+                      ],
+                      "title": "McpTodayReadinessHeartRateDriver",
+                      "type": "object"
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "insufficient_baseline",
+                        "not_recorded"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 15,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "average",
+                    "combinedRatio",
+                    "minimum",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessOvernightHeartRateDriver",
+                  "type": "object"
+                },
+                "sleep": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "durationSeconds": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "latestSleepAtMs": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recordedScore": {
+                      "anyOf": [
+                        {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "score": {
+                      "anyOf": [
+                        {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "scoreSource": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "duration",
+                            "recorded"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sleepDate": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "available",
+                        "no_recent_session"
+                      ],
+                      "type": "string"
+                    },
+                    "weightPercent": {
+                      "const": 25,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "durationSeconds",
+                    "latestSleepAtMs",
+                    "recordedScore",
+                    "score",
+                    "scoreSource",
+                    "sleepDate",
+                    "status",
+                    "weightPercent"
+                  ],
+                  "title": "McpTodayReadinessSleepDriver",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "hrv",
+                "load",
+                "overnightHeartRate",
+                "sleep"
+              ],
+              "type": "object"
+            },
+            "formulaVersion": {
+              "const": 3,
+              "type": "number"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Mixed",
+                    "Ready",
+                    "Recover"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "localDayEndTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "localDayStartTimeMs": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            },
+            "score": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "enum": [
+                "available",
+                "no_signal"
+              ],
+              "type": "string"
+            },
+            "timeZone": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            "totalSignalCount": {
+              "const": 4,
+              "type": "number"
+            }
+          },
+          "required": [
+            "asOfDayMs",
+            "asOfTimeMs",
+            "availableSignalCount",
+            "availableWeightPercent",
+            "baselineEvidenceCount",
+            "confidence",
+            "dayBoundary",
+            "drivers",
+            "formulaVersion",
+            "label",
+            "localDayEndTimeMs",
+            "localDayStartTimeMs",
+            "score",
+            "status",
+            "timeZone",
+            "totalSignalCount"
+          ],
+          "type": "object"
+        },
+        "title": "Get today readiness"
       },
       "ac9def788e1ffec436271c830e541e68691f6448ee2faa916610b3c3da69bdde": {
         "annotations": {
@@ -7083,267 +8061,6 @@
           "type": "object"
         },
         "title": "List activity jumps"
-      },
-      "b6f5316041580cf36558b8f67f64c931ed6ebcfbb68b9f7fb998cbd5a8965e3f": {
-        "annotations": {
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false,
-          "readOnlyHint": true
-        },
-        "description": "List redacted normalized sleep-session summaries. Raw samples and provider payloads are never returned.",
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "inputSchema": {
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "properties": {
-            "cursor": {
-              "maxLength": 512,
-              "type": "string"
-            },
-            "end": {
-              "format": "date-time",
-              "maxLength": 64,
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-              "type": "string"
-            },
-            "includeNaps": {
-              "default": false,
-              "type": "boolean"
-            },
-            "limit": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            },
-            "provider": {
-              "enum": [
-                "COROSAPI",
-                "GarminAPI",
-                "SuuntoApp"
-              ],
-              "type": "string"
-            },
-            "start": {
-              "format": "date-time",
-              "maxLength": 64,
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "end",
-            "start"
-          ],
-          "type": "object"
-        },
-        "name": "list_sleep_sessions",
-        "outputSchema": {
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": false,
-          "properties": {
-            "nextCursor": {
-              "anyOf": [
-                {
-                  "maxLength": 512,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "sessions": {
-              "items": {
-                "additionalProperties": false,
-                "properties": {
-                  "durationSeconds": {
-                    "minimum": 0,
-                    "type": "number"
-                  },
-                  "endTimeMs": {
-                    "maximum": 9007199254740991,
-                    "minimum": -9007199254740991,
-                    "type": "integer"
-                  },
-                  "inBedDurationSeconds": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "isNap": {
-                    "type": "boolean"
-                  },
-                  "provider": {
-                    "enum": [
-                      "COROSAPI",
-                      "GarminAPI",
-                      "SuuntoApp"
-                    ],
-                    "type": "string"
-                  },
-                  "score": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "qualifier": {
-                            "anyOf": [
-                              {
-                                "maxLength": 120,
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "value": {
-                            "anyOf": [
-                              {
-                                "minimum": 0,
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "required": [
-                          "qualifier",
-                          "value"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "sleepDate": {
-                    "format": "date",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
-                    "type": "string"
-                  },
-                  "stageDurationsSeconds": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "awake": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "deep": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "light": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "rem": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "unknown": {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      "unmeasurable": {
-                        "minimum": 0,
-                        "type": "number"
-                      }
-                    },
-                    "title": "McpSleepStageDurations",
-                    "type": "object"
-                  },
-                  "startTimeMs": {
-                    "maximum": 9007199254740991,
-                    "minimum": -9007199254740991,
-                    "type": "integer"
-                  },
-                  "vitals": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "averageHeartRateBpm": {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          "averageHrvMs": {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          "averageRespirationBrpm": {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          "hrvSampleCount": {
-                            "maximum": 9007199254740991,
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          "maxSpo2Percent": {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          "minimumHeartRateBpm": {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          "overnightHrvMs": {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          "restingHeartRateBpm": {
-                            "minimum": 0,
-                            "type": "number"
-                          }
-                        },
-                        "title": "McpSleepVitals",
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "durationSeconds",
-                  "endTimeMs",
-                  "inBedDurationSeconds",
-                  "isNap",
-                  "provider",
-                  "score",
-                  "sleepDate",
-                  "stageDurationsSeconds",
-                  "startTimeMs",
-                  "vitals"
-                ],
-                "title": "McpSleepSession",
-                "type": "object"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "nextCursor",
-            "sessions"
-          ],
-          "type": "object"
-        },
-        "title": "List sleep sessions"
       },
       "ba2e1a16702351a35fa14ddbde639bda198c929050111261c60fa07e4d4af963": {
         "annotations": {
@@ -17883,6 +18600,267 @@
         },
         "title": "Get a Training metric"
       },
+      "d7f88edd15f9d787280eebf6511b11ec839a184ed4d10f3603e0ca6d40ba6dda": {
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        },
+        "description": "List redacted normalized sleep-session summaries with safe aggregate vitals, including average or overnight HRV when recorded. Raw sensor samples and provider payloads are never returned.",
+        "execution": {
+          "taskSupport": "forbidden"
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "cursor": {
+              "maxLength": 512,
+              "type": "string"
+            },
+            "end": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            },
+            "includeNaps": {
+              "default": false,
+              "type": "boolean"
+            },
+            "limit": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "provider": {
+              "enum": [
+                "COROSAPI",
+                "GarminAPI",
+                "SuuntoApp"
+              ],
+              "type": "string"
+            },
+            "start": {
+              "format": "date-time",
+              "maxLength": 64,
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "end",
+            "start"
+          ],
+          "type": "object"
+        },
+        "name": "list_sleep_sessions",
+        "outputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "nextCursor": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sessions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "durationSeconds": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "endTimeMs": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "inBedDurationSeconds": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "isNap": {
+                    "type": "boolean"
+                  },
+                  "provider": {
+                    "enum": [
+                      "COROSAPI",
+                      "GarminAPI",
+                      "SuuntoApp"
+                    ],
+                    "type": "string"
+                  },
+                  "score": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "qualifier": {
+                            "anyOf": [
+                              {
+                                "maxLength": 120,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "value": {
+                            "anyOf": [
+                              {
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "qualifier",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sleepDate": {
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                    "type": "string"
+                  },
+                  "stageDurationsSeconds": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "awake": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "deep": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "light": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "rem": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "unknown": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "unmeasurable": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "title": "McpSleepStageDurations",
+                    "type": "object"
+                  },
+                  "startTimeMs": {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  "vitals": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "averageHeartRateBpm": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "averageHrvMs": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "averageRespirationBrpm": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "hrvSampleCount": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "maxSpo2Percent": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "minimumHeartRateBpm": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "overnightHrvMs": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "restingHeartRateBpm": {
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "title": "McpSleepVitals",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "durationSeconds",
+                  "endTimeMs",
+                  "inBedDurationSeconds",
+                  "isNap",
+                  "provider",
+                  "score",
+                  "sleepDate",
+                  "stageDurationsSeconds",
+                  "startTimeMs",
+                  "vitals"
+                ],
+                "title": "McpSleepSession",
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "nextCursor",
+            "sessions"
+          ],
+          "type": "object"
+        },
+        "title": "List sleep sessions and nightly vitals"
+      },
       "d7fcb618f0a70d6a71399c11e680190edc85069615dccfae52a3f97c7b8502b9": {
         "annotations": {
           "destructiveHint": false,
@@ -28000,7 +28978,7 @@
       }
     }
   },
-  "contractSha256": "dba8a038278d8449ee4512a02cee3239744a8e4b72f97f90a391d41fa9d69cbf",
+  "contractSha256": "e1f30bc57d3963bde5c51585c29a2d75a0421560c8e2f75a6d509cb923a407b0",
   "lifecycle": "developer",
   "registryVersion": 1
 }

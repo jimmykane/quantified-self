@@ -49,8 +49,8 @@
       </div>
       <small class="dashboard-readiness-method">Load + sleep signals · Freshness stays TSS-only</small>
       <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
-      @if (dashboardTodayReadiness.recoveryText !== '--') {
-      <small class="dashboard-readiness-imported-recovery">Imported recovery estimate · {{ dashboardTodayReadiness.recoveryText }} remaining · separate from score</small>
+      @if (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null) {
+      <small class="dashboard-readiness-imported-recovery">Recovery left · {{ dashboardTodayReadiness.recoveryText }} remaining · until {{ dashboardTodayReadiness.recoveryFinishTimeMs | date:'shortTime' }} · separate from score</small>
       }
     </div>
     <dl>

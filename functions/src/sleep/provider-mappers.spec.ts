@@ -24,8 +24,18 @@ describe('sleep provider mappers', () => {
                 deep: [{ startTimeInSeconds: 1777330800, endTimeInSeconds: 1777334400 }],
                 rem: [{ startTimeInSeconds: 1777340000, endTimeInSeconds: 1777341800 }],
             },
-            timeOffsetSleepRespiration: { '60': 14.5, '120': 15.5 },
-            timeOffsetSleepSpo2: { '60': 95 },
+            timeOffsetSleepRespiration: {
+                '60': 14.5,
+                '120': 15.5,
+                '180': 0,
+                '240': -1,
+            },
+            timeOffsetSleepSpo2: {
+                '60': 95,
+                '120': 0.97,
+                '180': 0,
+                '240': 101,
+            },
             overallSleepScore: { value: 88, qualifierKey: 'GOOD' },
         }, 'garmin-user-1', 1000);
 
@@ -44,6 +54,7 @@ describe('sleep provider mappers', () => {
         expect(result?.session.vitals?.averageRespirationBrpm).toBe(15);
         expect(result?.session.vitals?.averageHeartRateBpm).toBeUndefined();
         expect(result?.session.vitals?.minimumHeartRateBpm).toBeUndefined();
+        expect(result?.session.vitals?.maxSpo2Percent).toBe(97);
         expect(result?.session.spo2Samples?.[0].value).toBe(95);
     });
 
@@ -54,9 +65,11 @@ describe('sleep provider mappers', () => {
             startTimeInSeconds: 1777330800,
             startTimeOffsetInSeconds: null,
             durationInSeconds: 28800,
+            timeOffsetSleepRespiration: { '60': 0, '120': -1 },
         }, 'garmin-user-1', 1000);
 
         expect(result?.session.timezoneOffsetSeconds).toBeNull();
+        expect(result?.session.vitals?.averageRespirationBrpm).toBeNull();
     });
 
     it('maps Suunto 247 sleep samples and treats one-based SpO2 as percent', () => {
@@ -93,6 +106,20 @@ describe('sleep provider mappers', () => {
         expect(result?.session.vitals?.minimumHeartRateBpm).toBe(45);
         expect(result?.session.vitals?.maxSpo2Percent).toBe(97);
         expect(result?.session.score?.value).toBe(81);
+    });
+
+    it('keeps invalid Suunto SpO2 unavailable', () => {
+        const result = mapSuuntoSleepSample({
+            entryData: {
+                Duration: 28800,
+                SleepId: 12346,
+                BedtimeStart: '2026-04-27T21:30:00.000Z',
+                BedtimeEnd: '2026-04-28T05:30:00.000Z',
+                MaxSpo2: 101,
+            },
+        }, 'suunto-user-1', 2000);
+
+        expect(result?.session.vitals?.maxSpo2Percent).toBeNull();
     });
 
     it('keeps Suunto naps on the nap date and overnight sleep on the local wake date', () => {

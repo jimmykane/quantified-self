@@ -8,7 +8,8 @@ describe('buildTrainingRecoveryEstimateViewModel', () => {
       endTimeMs: Date.UTC(2026, 6, 14, 8),
     }, 'stale', Date.UTC(2026, 6, 14, 9))).toEqual({
       valueText: '1h 00m',
-      detailText: 'Active post-workout timer. It is separate from Readiness and Freshness.',
+      finishTimeMs: Date.UTC(2026, 6, 14, 10),
+      detailText: 'Imported post-workout estimate. It is separate from Readiness and Freshness.',
       isUpdating: true,
     });
   });

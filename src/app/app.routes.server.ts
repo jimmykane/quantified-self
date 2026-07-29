@@ -27,12 +27,17 @@ export const PRERENDERED_GUIDE_ROUTES = [
   PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
   PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
   PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
+  PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
+  PUBLIC_GUIDE_PATHS.importActivitiesToWahoo,
   PUBLIC_GUIDE_PATHS.syncSuuntoRoutesToGarmin,
   PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
 ] as const;
 
 export const PRERENDERED_STATIC_PUBLIC_ROUTES = [
   'help',
+  'policies',
+  'privacy',
+  'terms',
 ] as const;
 
 export const PRERENDERED_TOOLS_ROUTES = [
@@ -81,7 +86,6 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'share/comparison/:userID/:eventID',
   'user/:userID/event/:eventID',
   'user/:userID/route/:routeID',
-  'policies',
   'ai-insights',
 ] as const;
 

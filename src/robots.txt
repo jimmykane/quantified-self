@@ -2,6 +2,9 @@ User-agent: *
 Allow: /
 Allow: /pricing
 Allow: /help
+Allow: /policies
+Allow: /privacy
+Allow: /terms
 Allow: /tools
 Allow: /tools/compare
 Allow: /integrations
@@ -16,6 +19,8 @@ Allow: /features/fit-gpx-tcx-file-analyzer
 Allow: /features/fit-gpx-route-files
 Allow: /features/sports-watch-benchmark
 Allow: /guides
+Allow: /guides/import-activities-to-suunto
+Allow: /guides/import-activities-to-wahoo
 Allow: /guides/sync-garmin-to-suunto
 Allow: /guides/sync-coros-to-suunto
 Allow: /guides/sync-suunto-routes-to-garmin-courses
