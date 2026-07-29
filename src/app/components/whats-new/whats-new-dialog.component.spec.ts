@@ -4,15 +4,16 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { AppUpdateService } from '../../services/app.update.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { MatDialogRef } from '@angular/material/dialog';
-import { signal, input, computed } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
-import { Router } from '@angular/router';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { ChangelogPost } from '../../services/app.whats-new.service';
 
 describe('WhatsNewDialogComponent', () => {
     let component: WhatsNewDialogComponent;
     let fixture: ComponentFixture<WhatsNewDialogComponent>;
+    let changelogsSignal: WritableSignal<ChangelogPost[]>;
     let mockWhatsNewService: any;
     let mockUpdateService: any;
     let mockAnalyticsService: any;
@@ -20,10 +21,11 @@ describe('WhatsNewDialogComponent', () => {
 
     beforeEach(async () => {
         // Create a signal for changelogs
-        const changelogsSignal = signal([]);
+        changelogsSignal = signal<ChangelogPost[]>([]);
         mockWhatsNewService = {
             markAsRead: vi.fn(),
-            changelogs: changelogsSignal
+            changelogs: changelogsSignal,
+            isUnread: vi.fn().mockReturnValue(false)
         };
 
         // Create a signal for isUpdateAvailable
@@ -92,5 +94,20 @@ describe('WhatsNewDialogComponent', () => {
         reloadBtn.click();
 
         expect(mockUpdateService.activateUpdate).toHaveBeenCalled();
+    });
+
+    it('should use flush mobile content alignment only for the single-entry notification feed', () => {
+        changelogsSignal.set([{
+            id: 'release-1',
+            title: 'Test release',
+            description: 'Release details',
+            date: new Date('2026-07-29T00:00:00Z'),
+            type: 'minor',
+            version: '1.0.0',
+            published: true
+        }]);
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.changelog-panel-notification')).not.toBeNull();
     });
 });

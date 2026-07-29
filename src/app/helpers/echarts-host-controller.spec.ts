@@ -126,6 +126,42 @@ describe('EChartsHostController', () => {
     expect(visualViewportEventListeners.size).toBe(0);
   });
 
+  it('should initialize the replacement host when the first host is removed during lazy initialization', async () => {
+    const loader = buildLoaderMock();
+    const firstChart = {
+      isDisposed: vi.fn().mockReturnValue(false),
+      dispatchAction: vi.fn(),
+    };
+    const replacementChart = {
+      isDisposed: vi.fn().mockReturnValue(false),
+      dispatchAction: vi.fn(),
+    };
+    let resolveFirstInitialization: ((chart: typeof firstChart) => void) | null = null;
+    loader.init
+      .mockImplementationOnce(() => new Promise(resolve => {
+        resolveFirstInitialization = resolve;
+      }))
+      .mockResolvedValueOnce(replacementChart);
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+    });
+    const firstContainer = document.createElement('div');
+    const replacementContainer = document.createElement('div');
+
+    const firstInitialization = controller.init(firstContainer);
+    controller.dispose();
+    const replacementInitialization = controller.init(replacementContainer);
+    resolveFirstInitialization?.(firstChart);
+
+    await expect(firstInitialization).resolves.toBeNull();
+    await expect(replacementInitialization).resolves.toBe(replacementChart);
+    expect(loader.init).toHaveBeenCalledTimes(2);
+    expect(loader.init).toHaveBeenNthCalledWith(1, firstContainer, undefined, undefined);
+    expect(loader.init).toHaveBeenNthCalledWith(2, replacementContainer, undefined, undefined);
+    expect(loader.dispose).toHaveBeenCalledWith(firstChart);
+    expect(resizeObserverRecords.at(-1)?.observe).toHaveBeenCalledWith(replacementContainer);
+  });
+
   it('should allow disabling mobile tap feedback attachment', async () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({

@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { z } from 'zod';
 import { McpDataError } from './data.service';
 import {
   McpOAuthError,
@@ -26,6 +27,7 @@ import {
   resolveMcpAuthorizationRequesterKey,
   resolvePublicBaseUrl,
   requireMcpTokenGrantType,
+  summarizeMcpOutputValidationIssues,
   supportsMcpTransportMethod,
 } from './server';
 
@@ -1155,6 +1157,36 @@ describe('MCP HTTP scope enforcement', () => {
           }),
         }],
       }));
+  });
+
+  it('logs only bounded Zod issue paths and codes for output validation failures', () => {
+    const parsed = z.strictObject({
+      readiness: z.strictObject({
+        drivers: z.strictObject({
+          load: z.number(),
+        }),
+      }),
+    }).safeParse({
+      readiness: {
+        drivers: {
+          load: 'private-health-value',
+        },
+      },
+    });
+    if (parsed.success) {
+      throw new Error('Expected the diagnostic fixture to fail validation.');
+    }
+
+    const summary = summarizeMcpOutputValidationIssues(parsed.error);
+
+    expect(summary).toEqual([{
+      code: 'invalid_type',
+      path: ['readiness', 'drivers', 'load'],
+    }]);
+    expect(JSON.stringify(summary)).not.toContain('private-health-value');
+    expect(summarizeMcpOutputValidationIssues(
+      new Error('users/private-user/secret-path'),
+    )).toBeNull();
   });
 
   it('distinguishes invalid tokens, rate limits, and backend authentication failures', () => {

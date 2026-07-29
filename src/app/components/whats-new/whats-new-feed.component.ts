@@ -20,6 +20,7 @@ export class WhatsNewFeedComponent {
 
     public limit = input<number | null>(null);
     public displayMode = input<'compact' | 'full'>('full');
+    public notificationLayout = input(false);
 
     public changelogs = computed(() => {
         const logs = this.whatsNewService.changelogs();
