@@ -385,8 +385,12 @@ The analytics and map entries follow the
 | `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
+| `query_metrics` | `metrics:read` | Up to four event-stat aggregations over one shared bounded read, date range, grouping, timezone, and activity filter |
+| `list_training_metrics` | `metrics:read` | Human-readable Training metric catalog with current snapshot availability metadata but no payloads or provenance |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
+| `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
+| `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over a bounded date range |
 | `get_sleep_trend` | `sleep:read` | One-call sleep duration, score, stage, HRV, and other safe aggregate-vital coverage and trend |
 | `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
@@ -415,7 +419,7 @@ closed-world: a place-name input can make a bounded Mapbox geocoding read, but i
 publicly visible internet state. The already-registered `find_*_near_location` variants retain their frozen
 `openWorldHint: true` metadata for compatibility, while server instructions route new requests to the corrected
 additive tools. The HTTP layer checks every required scope before the tool call and only registers tools covered by the
-bearer token. `get_activity_metrics`,
+bearer token. `get_activity_metrics`, `get_activity_overview`, `rank_activities_by_metric`,
 `get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
 scopes are present.
 
@@ -447,12 +451,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 25-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 32-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 25 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 32 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -557,10 +561,25 @@ expose precise position.
 It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing non-MCP callers keep
 their prior local-time behavior when they omit the timezone.
 
+`query_metrics` uses the same range, paging, byte, stat-entry, filtering, import, and aggregation primitives. It accepts
+one to four canonical metric/aggregation selectors, deduplicates identical selectors, fetches the bounded event range
+once, and imports each eligible event once with only the selected stats plus activity type. It then builds one result
+per selector with the shared grouping, interval, timezone, and activity-type filters. It does not create a metric
+catalog document or any other persisted cache.
+
 `get_activity_metrics` reuses the same catalog and alias resolution. The request is canonicalized and deduplicated before
 Firestore access, and each stored value is reconstructed through its Sports Lib data class. Only finite values accepted
 by that class are returned; missing or invalid selected values are reported as unavailable. This keeps new eligible
 Sports Lib numeric metrics on the same automatic surface instead of introducing a per-activity registry.
+
+`get_activity_overview` reads one reference-bound activity projection and returns only its canonical activity type,
+redaction marker, the numeric metrics actually present, allowlisted lap/jump/swim-length availability,
+and whether an original chart source is declared. Candidate chart metric IDs come from the existing activity-chart
+catalog; the source file is not downloaded or parsed. Coordinates and raw detail records are never part of this tool.
+
+`rank_activities_by_metric` resolves the same canonical numeric catalog, then reads only the selected activity fields and
+the chosen stat in bounded Firestore pages. It returns coordinate-free opaque references and values, with deterministic
+value/start-time/document ordering. First-class body measurements remain excluded.
 
 ## First-class body measurements
 
@@ -762,7 +781,7 @@ geocoding budget. This read-only lookup does not change public internet state, s
 
 ## Training-derived metrics
 
-MCP reads only `status: "ready"` documents with the exact current schema from
+MCP returns Training snapshot payloads only from `status: "ready"` documents with the exact current schema in
 `users/{uid}/derivedMetrics/{metricKind}`. Valid kinds come from `DERIVED_METRIC_KINDS`; no second MCP kind registry
 exists. The response retains schema/freshness metadata but recursively removes event/activity IDs, names, labels,
 identity-derived source fingerprints, and imported device/provider provenance (`sourceKey` and `previousSourceKey`) from
@@ -770,6 +789,12 @@ the payload. It then validates the result against the exact schema for that `met
 instead of being serialized. For example, `body_weight_trend` is discoverable through `list_metrics` and readable through
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
+
+`list_training_metrics` adds presentation and routing metadata without adding another kind registry: its descriptor map
+is compile-time exhaustive against `DERIVED_METRIC_KINDS`. It reads only snapshot envelope metadata for the matching
+descriptors and reports `ready`, `building`, `failed`, `stale`, `missing`, or `schema_mismatch`. It never returns a
+snapshot payload, backend error text, event identity, or source provenance. Clients should use it before deciding that
+a Training metric is unavailable, and call `get_training_metric` only for a ready kind.
 
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
@@ -796,6 +821,12 @@ aggregate-vital buckets as the lower-level summary path. The implementation perf
 cannot diagnose illness or infer missing physiology. An individual session's SpO₂ aggregate is its maximum; a grouped
 bucket's value is the average of the contributing session maxima. Grouped respiration likewise averages the
 contributing session-level averages.
+
+The trend and lower-level summary now call one shared normalized sleep loader and aggregation path, so HRV, sleep heart
+rate, SpO₂, respiration, stage, and duration values cannot drift between those tools. The daily report continues to use
+the same normalized sleep fields and safe value rules for its allowed latest-night HRV and heart-rate fields. Missing
+physiology stays absent/null and is never converted to zero. Server and bundled-skill instructions explicitly route
+multi-day physiology questions to `get_sleep_trend` and availability-only questions to `list_sleep_vitals`.
 
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
@@ -891,6 +922,8 @@ requires no new Firestore composite index.
   4 MiB of cumulative serialized event stats, or more than 20,000 cumulative top-level stat entries.
 - Sports Lib import begins only after those cumulative budgets pass and receives only the requested metric plus the
   activity-type stat needed for filtering.
+- Multi-metric queries accept at most four selectors, share the same 2,000-event, 4 MiB, and 20,000-entry work budgets,
+  import each eligible event once, and return at most 256 KiB.
 - A sleep summary rejects matches above 1,000 sessions.
 - Sleep-vital discovery uses the same at-most-1,000-session bounded read as a sleep summary and returns only fixed
   allowlisted type metadata and per-type session counts.
@@ -919,6 +952,12 @@ requires no new Firestore composite index.
   most 100 entries and 256 KiB per page.
 - Per-activity metric calls accept at most 25 requested types, process at most 64 KiB of selected document data, and
   return at most 32 KiB.
+- Activity overviews process at most 64 KiB of stats plus 10,000 detail entries/512 KiB of raw detail arrays, do not
+  parse original source files, and return at most 64 KiB.
+- Activity ranking reads at most 2,000 projected activities in pages of 100, rejects more than 512 KiB of projected
+  activity data, returns at most 25 results, and has a 128 KiB response limit.
+- Training metric discovery reads only the snapshot envelope for descriptors matching the optional search and returns
+  at most 64 KiB; it does not read or project snapshot payloads.
 - On-demand activity charts accept one to four metrics, default to 300 and allow at most 400 points per metric, and
   default to 500 and allow at most 1,000 breadcrumb points. One parse may read at most four files, 12 MiB cumulative
   raw/compressed bytes, 64 MiB cumulative decompressed bytes, and 250,000 selected samples, with a 20-second internal

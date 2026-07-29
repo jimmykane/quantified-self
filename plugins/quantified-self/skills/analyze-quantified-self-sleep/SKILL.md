@@ -17,6 +17,8 @@ returned.
    read. Use capability discovery only for availability questions, and request individual sessions only when nightly
    timing or variation matters. When naps are requested, keep the main-sleep headline separate and report naps and any
    nap-inclusive total explicitly unless the user asks for a combined headline.
+   Never conclude that a safe aggregate vital is unavailable from a daily shortcut or activity-metric search; check
+   the sleep trend or sleep-vital capability first.
 3. Preserve the exact returned statistic and unit for every vital. An individual-session blood-oxygen value is that
    session's maximum; a grouped trend value averages the contributing sessions' maxima. Likewise, grouped respiration
    averages the contributing sessions' average respiration. Do not reinterpret either as an overnight mean or minimum
@@ -43,6 +45,8 @@ returned.
   outcomes.
 - Treat unavailable aggregate vital types as missing source data for that period; do not infer them from Training
   readiness or from raw samples, which are never exposed.
+- Missing aggregate vitals remain missing rather than zero. Preserve that distinction across session, grouped-trend,
+  daily-report, and readiness responses.
 - Do not describe maximum blood oxygen as average or minimum SpO₂, and do not infer oxygen desaturations, sleep apnea,
   illness, or respiratory events from the aggregate.
 - Do not interpret missing stages as zero or use a provider filter unless the user asks for it.

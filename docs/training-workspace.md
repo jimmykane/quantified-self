@@ -1383,6 +1383,13 @@ The read-only MCP server does not recalculate Training metrics and does not scan
 and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being
 interpreted as zero.
 
+`list_training_metrics` is the lightweight discovery path. Its human title, description, category, and period label map
+is compile-time exhaustive against `DERIVED_METRIC_KINDS`; it is presentation metadata, not a competing calculation or
+kind registry. For the optionally searched kinds it reads only snapshot status/schema/update/source-count envelope
+fields and reports ready/building/failed/stale/missing/schema-mismatch. It never returns payloads, worker error text,
+event identity, or device/provider provenance. Clients should use it before `get_training_metric` so a missing or
+rebuilding snapshot is not mistaken for an unsupported Training capability.
+
 The explicitly named live `get_today_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It

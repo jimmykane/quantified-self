@@ -10,11 +10,13 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
 ## Workflow
 
 1. Establish the requested period, IANA timezone, activity-type filters, and comparison baseline.
-2. Discover available persisted metrics and Training-derived kinds before selecting one.
+2. Discover available persisted metrics and use the Training capability catalog to distinguish a supported kind from
+   a ready, rebuilding, stale, missing, failed, or schema-incompatible snapshot before selecting one.
    If several live metrics plausibly match a broad term such as load, use their returned metadata and units to explain
    the choices and ask which interpretation the user wants; never merge unlike candidates.
-3. Use bounded aggregate queries for trends across activities. Use a ready Training snapshot only when its documented
-   window and freshness match the question.
+3. Use one shared bounded aggregate request when comparing up to four activity metrics over the same range, grouping,
+   timezone, and activity filters. Use a ready Training snapshot only when its documented window and freshness match
+   the question.
 4. Preserve the returned aggregation, interval, units, sample counts, missing buckets, and snapshot freshness.
 5. Compare totals only with totals and rates or averages only with compatible values. Do not combine unlike activity
    types unless the user requests an overall view.
@@ -34,7 +36,8 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
 - If `metrics:read` is missing, explain that Activity and Training metrics access must be granted through reconnection.
 - The live-readiness and daily-report tools additionally need `sleep:read`; do not reconstruct either from raw sleep
   or turn the result into a workout prescription.
-- Treat a missing metric, missing permission, incomplete page, and a not-ready Training snapshot as distinct outcomes.
+- Treat an unsupported metric, a supported but not-ready Training snapshot, missing permission, and incomplete page as
+  distinct outcomes. Do not conclude that a Training capability is unsupported before checking its catalog status.
 - Do not use a current Training-derived body-weight snapshot as historical weigh-in data.
 - Describe training and recovery patterns without medical diagnosis or unsupported causal claims.
 

@@ -218,6 +218,14 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
+      params: { name: 'query_metrics' },
+    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'list_training_metrics' },
+    })).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
       params: { name: 'query_measurements' },
     })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
     expect(requiredScopesForRequest({
@@ -402,6 +410,20 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
     ]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'get_activity_overview' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'rank_activities_by_metric' },
+    })).toEqual([
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
   });
 
   it('registers only the tools granted by the bearer scopes', async () => {
@@ -434,7 +456,9 @@ describe('MCP HTTP scope enforcement', () => {
       'get_training_metric',
       'list_activity_types',
       'list_metrics',
+      'list_training_metrics',
       'query_metric',
+      'query_metrics',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.MeasurementsRead,
@@ -463,7 +487,9 @@ describe('MCP HTTP scope enforcement', () => {
       'list_metrics',
       'list_sleep_sessions',
       'list_sleep_vitals',
+      'list_training_metrics',
       'query_metric',
+      'query_metrics',
       'query_sleep_summary',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
@@ -482,6 +508,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'get_activity_chart_data',
       'get_activity_metrics',
+      'get_activity_overview',
       'get_training_metric',
       'list_activities',
       'list_activity_chart_metrics',
@@ -490,8 +517,11 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_swim_lengths',
       'list_activity_types',
       'list_metrics',
+      'list_training_metrics',
       'query_activities',
       'query_metric',
+      'query_metrics',
+      'rank_activities_by_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.RoutesRead])).resolves.toEqual([
       'list_activity_types',
@@ -758,6 +788,10 @@ describe('MCP HTTP scope enforcement', () => {
       expect(instructions).toContain(
         'add activityTypes and limit 1 when named',
       );
+      expect(instructions).toContain(
+        'Use get_activity_overview before granular activity reads',
+      );
+      expect(instructions).toContain('rank_activities_by_metric');
       expect(listActivityTypes).toBeDefined();
       expect(queryActivities?.description).toContain('relativePeriod/timeZone');
       expect(queryActivities?.description).toContain('unbounded history');
@@ -1013,7 +1047,7 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getServerVersion()).toEqual({
         name: 'quantified-self',
         title: 'Quantified Self',
-        version: '1.2.0',
+        version: '1.3.0',
         description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [

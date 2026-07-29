@@ -17,13 +17,17 @@ Resolve activities through opaque public references and request only the detail 
    from aggregate metrics or a Training snapshot. When a family term such as run could include trail, treadmill,
    indoor, or virtual variants, use the catalog's group/indoor hints and clarify only when that distinction can change
    the answer.
-2. Use the activity summary first. Request selected canonical metrics, laps, jumps, or swim lengths only when relevant
-   to the activity type and question.
+2. After resolving the opaque reference, use the coordinate-free activity overview to check the metrics, lap, jump,
+   swim-length, and chart capabilities actually available. Request granular data only when relevant to the activity
+   type and question.
 3. Before charting, discover the chart metrics supported for the activity type. Request only the needed series and
    axis, and use bounded points appropriate for the requested presentation.
 4. Treat returned chart points as whole-activity downsampling rather than full-resolution raw samples. Preserve axes,
    canonical units, source and returned counts, missing counts, and processing limitations.
 5. Continue pagination only when the requested analysis needs the remaining detail.
+6. For highest, lowest, best, or worst requests tied to one persisted numeric metric, use the bounded ranking
+   capability instead of downloading activity pages and sorting them client-side. Preserve its metric unit, date range,
+   activity filter, scan coverage, and deterministic order.
 
 ## Permissions and Privacy
 

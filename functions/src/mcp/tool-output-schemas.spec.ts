@@ -544,6 +544,38 @@ function createFixtureDataService(
         }],
       },
     }),
+    queryMetrics: vi.fn().mockResolvedValue({
+      results: [{
+        metric: metricDescriptor,
+        matchedEventCount: 1,
+        aggregation: {
+          dataType: 'Distance',
+          valueType: ChartDataValueTypes.Total,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Daily,
+          buckets: [{
+            bucketKey: DAY_MS,
+            time: DAY_MS,
+            totalCount: 1,
+            aggregateValue: 10_000,
+            seriesValues: { Running: 10_000 },
+            seriesCounts: { Running: 1 },
+          }],
+        },
+      }],
+    }),
+    listTrainingMetrics: vi.fn().mockResolvedValue({
+      metrics: [{
+        metricKind: DERIVED_METRIC_KINDS.Form,
+        title: 'Fitness, fatigue, and Form history',
+        description: 'Daily TSS-based fitness, fatigue, Form, and load history.',
+        category: 'load',
+        periodLabel: 'Available daily history',
+        status: 'ready',
+        updatedAtMs: DAY_MS,
+        sourceEventCount: 1,
+      }],
+    }),
     getTrainingMetric: vi.fn().mockImplementation(
       async (_uid: string, metricKind: DerivedMetricKind) => ({
         metricKind,
@@ -952,6 +984,34 @@ function createFixtureDataService(
         available: true,
       }],
     }),
+    getActivityOverview: vi.fn().mockResolvedValue({
+      activityType: 'Running',
+      locationRedacted: true,
+      availableMetrics: [metricDescriptor],
+      details: [
+        { kind: 'laps', status: 'available', count: 2 },
+        { kind: 'jumps', status: 'empty', count: 0 },
+        { kind: 'swim_lengths', status: 'unavailable', count: null },
+      ],
+      chartData: {
+        sourceDeclared: true,
+        candidateMetrics: MCP_ACTIVITY_CHART_METRICS.map(metric => metric.id),
+      },
+    }),
+    rankActivitiesByMetric: vi.fn().mockResolvedValue({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: DAY_MS + 3_600_000,
+        activityType: 'Running',
+        value: 10_000,
+      }],
+    }),
     listRoutes: vi.fn().mockResolvedValue({
       scannedRouteCount: 1,
       skippedRouteCount: 0,
@@ -1079,6 +1139,16 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  query_metrics: {
+    metrics: [{
+      metric: 'Distance',
+      aggregation: 'total',
+    }],
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
+    timeZone: 'Europe/Helsinki',
+  },
+  list_training_metrics: {},
   get_training_metric: {
     metricKind: DERIVED_METRIC_KINDS.Form,
   },
@@ -1143,6 +1213,14 @@ const successfulToolArguments: Record<
   get_activity_metrics: {
     activityRef: ACTIVITY_REF,
     metrics: ['Distance'],
+  },
+  get_activity_overview: {
+    activityRef: ACTIVITY_REF,
+  },
+  rank_activities_by_metric: {
+    metric: 'Distance',
+    start: '2026-07-01T00:00:00.000Z',
+    end: '2026-07-02T00:00:00.000Z',
   },
   list_routes: {
     activityTypes: ['Running'],
@@ -2056,6 +2134,107 @@ describe('MCP public output contracts', () => {
         activityGroup: 'running_group',
         indoor: false,
         sourceKey: 'private-source-key',
+      }],
+    }).success).toBe(false);
+    expect(registry.query_metrics.safeParse({
+      results: [{
+        metric: {
+          ...metricDescriptor,
+          sourceKey: 'private-source-key',
+        },
+        matchedEventCount: 1,
+        aggregation: {
+          dataType: 'Distance',
+          valueType: ChartDataValueTypes.Total,
+          categoryType: ChartDataCategoryTypes.DateType,
+          resolvedTimeInterval: TimeIntervals.Daily,
+          buckets: [],
+        },
+      }],
+    }).success).toBe(false);
+    expect(registry.list_training_metrics.safeParse({
+      metrics: [{
+        metricKind: DERIVED_METRIC_KINDS.Form,
+        title: 'Form',
+        description: 'Training form.',
+        category: 'load',
+        periodLabel: 'Daily',
+        status: 'ready',
+        updatedAtMs: DAY_MS,
+        sourceEventCount: 1,
+        sourceFingerprint: 'private-source-fingerprint',
+      }],
+    }).success).toBe(false);
+    expect(registry.get_activity_overview.safeParse({
+      activityType: 'Running',
+      locationRedacted: true,
+      startPosition: coordinate,
+      availableMetrics: [metricDescriptor],
+      details: [
+        { kind: 'laps', status: 'available', count: 1 },
+        { kind: 'jumps', status: 'empty', count: 0 },
+        { kind: 'swim_lengths', status: 'unavailable', count: null },
+      ],
+      chartData: {
+        sourceDeclared: false,
+        candidateMetrics: [],
+      },
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 1,
+      matchedActivityCount: 1,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: NEXT_DAY_MS,
+        activityType: 'Running',
+        value: 10_000,
+        eventID: 'private-event-id',
+      }],
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 2,
+      matchedActivityCount: 2,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: NEXT_DAY_MS,
+        endTimeMs: DAY_MS,
+        activityType: 'Running',
+        value: 10_000,
+      }, {
+        rank: 2,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: NEXT_DAY_MS,
+        activityType: 'Running',
+        value: 11_000,
+      }],
+    }).success).toBe(false);
+    expect(registry.rank_activities_by_metric.safeParse({
+      metric: metricDescriptor,
+      order: 'highest',
+      scannedActivityCount: 2,
+      matchedActivityCount: 2,
+      activities: [{
+        rank: 1,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: DAY_MS,
+        endTimeMs: NEXT_DAY_MS,
+        activityType: 'Running',
+        value: 10_000,
+      }, {
+        rank: 2,
+        activityRef: ACTIVITY_REF,
+        startTimeMs: NEXT_DAY_MS,
+        endTimeMs: NEXT_DAY_MS + 3_600_000,
+        activityType: 'Running',
+        value: 10_000,
       }],
     }).success).toBe(false);
     expect(registry.list_routes.safeParse({

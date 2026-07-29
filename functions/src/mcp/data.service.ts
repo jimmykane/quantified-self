@@ -85,6 +85,10 @@ import {
   McpSleepVitalType,
 } from './sleep-vitals';
 import {
+  getMcpTrainingMetricDescriptors,
+  McpTrainingMetricDescriptor,
+} from './training-metric-catalog';
+import {
   McpMetricDescriptor,
   projectSportsLibNumericMetricValue,
   resolveAvailableSportsLibMetrics,
@@ -177,6 +181,17 @@ const MAX_ACTIVITY_DETAIL_PAGE_SIZE = 100;
 export const MAX_ACTIVITY_METRICS_PER_REQUEST = 25;
 const MAX_ACTIVITY_METRIC_DOCUMENT_BYTES = 64 * 1024;
 const MAX_ACTIVITY_METRIC_RESPONSE_BYTES = 32 * 1024;
+const MAX_MULTI_METRIC_SELECTORS = 4;
+const MAX_MULTI_METRIC_RESPONSE_BYTES = 256 * 1024;
+const MAX_ACTIVITY_OVERVIEW_DETAIL_ENTRIES = 10_000;
+const MAX_ACTIVITY_OVERVIEW_DETAIL_BYTES = 512 * 1024;
+const MAX_ACTIVITY_OVERVIEW_STATS_BYTES = 64 * 1024;
+const MAX_ACTIVITY_OVERVIEW_RESPONSE_BYTES = 64 * 1024;
+const MAX_ACTIVITY_RANKING_DOCUMENTS = 2_000;
+const ACTIVITY_RANKING_PAGE_SIZE = 100;
+const MAX_ACTIVITY_RANKING_DOCUMENT_BYTES = 512 * 1024;
+const MAX_ACTIVITY_RANKING_RESPONSE_BYTES = 128 * 1024;
+const MAX_TRAINING_METRIC_CATALOG_RESPONSE_BYTES = 64 * 1024;
 const MAX_ROUTE_LIST_BYTES = 512 * 1024;
 const MAX_ROUTE_PAGE_SIZE = 100;
 const MAX_ROUTE_LIST_SCAN_DOCUMENTS = 100;
@@ -393,6 +408,10 @@ export interface McpDataServiceDependencies {
     uid: string,
     metricKind: DerivedMetricKind,
   ) => Promise<Record<string, unknown> | null>;
+  fetchDerivedSnapshotMetadataDocuments: (
+    uid: string,
+    metricKinds: readonly DerivedMetricKind[],
+  ) => Promise<RawDocument[]>;
   fetchSleepDocuments: (
     uid: string,
     startTimeMs: number,
@@ -433,6 +452,22 @@ export interface McpDataServiceDependencies {
     activityId: string,
     metricTypes: readonly string[],
   ) => Promise<RawDocument | null>;
+  fetchActivityOverviewDocument: (
+    uid: string,
+    activityId: string,
+  ) => Promise<RawDocument | null>;
+  hasActivityChartSource: (
+    uid: string,
+    eventId: string,
+  ) => Promise<boolean>;
+  fetchActivityRankingDocuments: (
+    uid: string,
+    startTimeMs: number,
+    endTimeMs: number,
+    metricType: string,
+    limit: number,
+    cursor?: unknown,
+  ) => Promise<RawDocument[]>;
   fetchActivityChartContext: (
     uid: string,
     eventId: string,
@@ -572,6 +607,28 @@ const defaultDependencies: McpDataServiceDependencies = {
       .doc(metricKind)
       .get();
     return snapshot.exists ? snapshot.data() as Record<string, unknown> : null;
+  },
+  fetchDerivedSnapshotMetadataDocuments: async (uid, metricKinds) => {
+    if (metricKinds.length === 0) {
+      return [];
+    }
+    const snapshot = await admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection('derivedMetrics')
+      .where(FieldPath.documentId(), 'in', [...metricKinds])
+      .select(
+        'metricKind',
+        'status',
+        'schemaVersion',
+        'updatedAtMs',
+        'sourceEventCount',
+      )
+      .get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    }));
   },
   fetchSleepDocuments: async (uid, startTimeMs, endTimeMs, limit, cursor) => {
     let query = admin.firestore()
@@ -767,6 +824,80 @@ const defaultDependencies: McpDataServiceDependencies = {
       id: doc.id,
       data: doc.data() as Record<string, unknown>,
     } : null;
+  },
+  fetchActivityOverviewDocument: async (uid, activityId) => {
+    const snapshot = await admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection('activities')
+      .where(FieldPath.documentId(), '==', activityId)
+      .limit(1)
+      .select(
+        'eventID',
+        'type',
+        'stats',
+        'laps',
+        'events',
+        'swimLengths',
+      )
+      .get();
+    const doc = snapshot.docs[0];
+    return doc ? {
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    } : null;
+  },
+  hasActivityChartSource: async (uid, eventId) => {
+    const snapshot = await admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection('events')
+      .where(FieldPath.documentId(), '==', eventId)
+      .limit(1)
+      .select('originalFile', 'originalFiles')
+      .get();
+    const doc = snapshot.docs[0];
+    return Boolean(
+      doc
+      && extractActivityChartSourceFiles(
+        doc.data() as Record<string, unknown>,
+      ).length > 0
+    );
+  },
+  fetchActivityRankingDocuments: async (
+    uid,
+    startTimeMs,
+    endTimeMs,
+    metricType,
+    limit,
+    cursor,
+  ) => {
+    let query = admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection('activities')
+      .where('eventStartDate', '>=', new Date(startTimeMs))
+      .where('eventStartDate', '<=', new Date(endTimeMs))
+      .orderBy('eventStartDate', 'desc')
+      .orderBy(FieldPath.documentId(), 'desc')
+      .limit(limit)
+      .select(
+        'eventID',
+        'eventStartDate',
+        'startDate',
+        'endDate',
+        'type',
+        new FieldPath('stats', metricType),
+      );
+    if (cursor) {
+      query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
+    }
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+      cursor: doc,
+    }));
   },
   fetchActivityChartContext: async (uid, eventId) => {
     const db = admin.firestore();
@@ -2271,13 +2402,13 @@ function eventMatchesActivityFilter(event: EventInterface, activityTypes: readon
 
 function buildMetricAggregationEventJson(
   data: Record<string, unknown>,
-  metricType: string,
+  metricTypes: readonly string[],
 ): EventJSONInterface {
   const rawStats = data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
     ? data.stats as Record<string, unknown>
     : {};
   const stats = Object.fromEntries(
-    [metricType, DataActivityTypes.type].flatMap((type) => {
+    [...new Set([...metricTypes, DataActivityTypes.type])].flatMap((type) => {
       const value = rawStats[type];
       if (value === undefined) {
         return [];
@@ -2294,7 +2425,7 @@ function buildMetricAggregationEventJson(
   return {
     ...data,
     stats,
-    // Only the requested metric and activity type cross the Sports Lib import
+    // Only the requested metrics and activity type cross the Sports Lib import
     // boundary after the cumulative query budgets have passed.
     activities: [],
     powerCurve: null,
@@ -2414,11 +2545,143 @@ export interface QueryMetricInput {
   metric: string;
   startTimeMs: number;
   endTimeMs: number;
-  aggregation: 'total' | 'average' | 'minimum' | 'maximum';
+  aggregation: McpMetricAggregation;
   groupBy: 'date' | 'activity_type';
   interval: 'auto' | 'hourly' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semesterly' | 'yearly';
   timeZone: string;
   activityTypes?: readonly string[];
+}
+
+export type McpMetricAggregation =
+  | 'total'
+  | 'average'
+  | 'minimum'
+  | 'maximum';
+
+export interface McpMetricSelectorInput {
+  metric: string;
+  aggregation: McpMetricAggregation;
+}
+
+export interface QueryMetricsInput
+  extends Omit<QueryMetricInput, 'metric' | 'aggregation'> {
+  metrics: readonly McpMetricSelectorInput[];
+}
+
+export interface ListTrainingMetricsInput {
+  uid: string;
+  search?: string;
+}
+
+export type McpTrainingMetricAvailability =
+  | 'ready'
+  | 'building'
+  | 'failed'
+  | 'stale'
+  | 'missing'
+  | 'schema_mismatch';
+
+export interface McpTrainingMetricAvailabilityDescriptor
+  extends McpTrainingMetricDescriptor {
+  status: McpTrainingMetricAvailability;
+  updatedAtMs: number | null;
+  sourceEventCount: number | null;
+}
+
+interface ResolvedMetricSelector {
+  metric: McpMetricDescriptor;
+  aggregation: McpMetricAggregation;
+}
+
+function resolveMetricSelectors(
+  selectors: readonly McpMetricSelectorInput[],
+): ResolvedMetricSelector[] {
+  if (
+    !Array.isArray(selectors)
+    || selectors.length === 0
+    || selectors.length > MAX_MULTI_METRIC_SELECTORS
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      `Choose between 1 and ${MAX_MULTI_METRIC_SELECTORS} metric selections.`,
+    );
+  }
+  const resolved = selectors.map((selector) => {
+    if (
+      !selector
+      || typeof selector !== 'object'
+      || Array.isArray(selector)
+    ) {
+      throw new McpDataError(
+        'invalid_metric',
+        'Each metric selection must identify a supported numeric Sports Lib type.',
+      );
+    }
+    const metric = resolveSportsLibNumericMetric(selector.metric);
+    if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
+      throw new McpDataError(
+        'invalid_metric',
+        'Each metric selection must identify a supported numeric Sports Lib type.',
+      );
+    }
+    resolveValueType(selector.aggregation);
+    return {
+      metric,
+      aggregation: selector.aggregation,
+    };
+  });
+  return [...new Map(resolved.map(selector => [
+    `${selector.metric.type}\0${selector.aggregation}`,
+    selector,
+  ])).values()];
+}
+
+async function querySelectedMetrics(
+  dependencies: McpDataServiceDependencies,
+  input: QueryMetricsInput,
+) {
+  validateBoundedRange(input.startTimeMs, input.endTimeMs);
+  const timeZone = requireTimeZone(input.timeZone);
+  const selectors = resolveMetricSelectors(input.metrics);
+  const activityTypes = resolveActivityTypes(input.activityTypes);
+  const docs = await fetchBoundedEventDocuments(dependencies, input);
+  const metricTypes = [...new Set(
+    selectors.map(selector => selector.metric.type),
+  )];
+  const events = docs.flatMap((doc) => {
+    if (isBenchmarkEventForTrainingMetrics(doc.data)) {
+      return [];
+    }
+    try {
+      const event = dependencies.importEvent(
+        buildMetricAggregationEventJson(doc.data, metricTypes),
+        doc.id,
+      );
+      return eventMatchesActivityFilter(event, activityTypes) ? [event] : [];
+    } catch {
+      return [];
+    }
+  });
+  const results = selectors.map(selector => ({
+    metric: selector.metric,
+    matchedEventCount: events.length,
+    aggregation: buildEventStatAggregation(events, {
+      dataType: selector.metric.type,
+      valueType: resolveValueType(selector.aggregation),
+      categoryType: resolveCategoryType(input.groupBy),
+      requestedTimeInterval: resolveTimeInterval(input.interval),
+      timeZone,
+    }),
+  }));
+  const result = {
+    results,
+  };
+  requireJsonBudget(
+    result,
+    MAX_MULTI_METRIC_RESPONSE_BYTES,
+    'The multi-metric query exceeds the MCP response limit.',
+  );
+  return result;
 }
 
 export interface ListMeasurementTypesResult {
@@ -3597,6 +3860,23 @@ export interface GetActivityMetricsInput {
   metrics: readonly string[];
 }
 
+export interface GetActivityOverviewInput {
+  uid: string;
+  connectionId: string;
+  activityRef: string;
+}
+
+export interface RankActivitiesByMetricInput {
+  uid: string;
+  connectionId: string;
+  metric: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  activityTypes?: readonly string[];
+  order: 'highest' | 'lowest';
+  limit?: number;
+}
+
 export interface GetActivityChartDataInput extends ActivityChartDataInput {
   uid: string;
   connectionId: string;
@@ -4239,6 +4519,315 @@ async function getActivityMetrics(
   return result;
 }
 
+type McpActivityDetailAvailability = {
+  status: 'available' | 'empty' | 'unavailable';
+  count: number | null;
+};
+
+function projectActivityOverviewDetailAvailability(
+  value: unknown,
+  detailKind: ActivityDetailKind,
+): McpActivityDetailAvailability {
+  if (!Array.isArray(value)) {
+    return {
+      status: 'unavailable',
+      count: null,
+    };
+  }
+  if (value.length === 0) {
+    return {
+      status: 'empty',
+      count: 0,
+    };
+  }
+  const count = value.reduce((total, candidate, index) => {
+    const projected = detailKind === 'laps'
+      ? projectLap(candidate, index)
+      : detailKind === 'jumps'
+        ? projectJump(candidate, index, false)
+        : projectSwimLength(candidate, index);
+    return total + (projected ? 1 : 0);
+  }, 0);
+  return count > 0
+    ? {
+        status: 'available',
+        count,
+      }
+    : {
+        status: 'unavailable',
+        count: null,
+      };
+}
+
+async function getActivityOverview(
+  dependencies: McpDataServiceDependencies,
+  input: GetActivityOverviewInput,
+) {
+  const reference = decodeActivityReference(
+    input.activityRef,
+    input.uid,
+    input.connectionId,
+  );
+  const document = await dependencies.fetchActivityOverviewDocument(
+    input.uid,
+    reference.activityId,
+  );
+  if (
+    !document
+    || document.id !== reference.activityId
+    || document.data.eventID !== reference.eventId
+  ) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The requested activity overview is not available.',
+    );
+  }
+  const rawStats = document.data.stats;
+  if (
+    rawStats !== undefined
+    && (
+      !rawStats
+      || typeof rawStats !== 'object'
+      || Array.isArray(rawStats)
+    )
+  ) {
+    throw new McpDataError(
+      'detail_not_available',
+      'The requested activity metrics are not available.',
+    );
+  }
+  requireJsonBudget(
+    rawStats,
+    MAX_ACTIVITY_OVERVIEW_STATS_BYTES,
+    'The activity metrics exceed the MCP overview processing limit.',
+  );
+  const detailValues = {
+    laps: document.data.laps,
+    jumps: document.data.events,
+    swimLengths: document.data.swimLengths,
+  };
+  const detailEntryCount = Object.values(detailValues).reduce<number>(
+    (total, value) => total + (Array.isArray(value) ? value.length : 0),
+    0,
+  );
+  if (detailEntryCount > MAX_ACTIVITY_OVERVIEW_DETAIL_ENTRIES) {
+    throw new McpDataError(
+      'query_too_large',
+      'The activity contains too many detail records for an MCP overview.',
+    );
+  }
+  requireJsonBudget(
+    detailValues,
+    MAX_ACTIVITY_OVERVIEW_DETAIL_BYTES,
+    'The activity details exceed the MCP overview processing limit.',
+  );
+  const availableMetrics = resolveAvailableSportsLibMetrics([
+    rawStats as Record<string, unknown> | undefined,
+  ]).filter(metric => !isFirstClassMcpMeasurementMetric(metric.type));
+  const activityType = normalizeActivityType(document.data.type);
+  const chartSourceDeclared = await dependencies.hasActivityChartSource(
+    input.uid,
+    reference.eventId,
+  );
+  const chartMetrics = activityType
+    ? listActivityChartMetrics(activityType).metrics
+    : [];
+  const result = {
+    activityType,
+    locationRedacted: true as const,
+    availableMetrics,
+    details: [
+      {
+        kind: 'laps' as const,
+        ...projectActivityOverviewDetailAvailability(
+          detailValues.laps,
+          'laps',
+        ),
+      },
+      {
+        kind: 'jumps' as const,
+        ...projectActivityOverviewDetailAvailability(
+          detailValues.jumps,
+          'jumps',
+        ),
+      },
+      {
+        kind: 'swim_lengths' as const,
+        ...projectActivityOverviewDetailAvailability(
+          detailValues.swimLengths,
+          'swim_lengths',
+        ),
+      },
+    ],
+    chartData: {
+      sourceDeclared: chartSourceDeclared,
+      candidateMetrics: chartMetrics.map(metric => metric.metric),
+    },
+  };
+  requireJsonBudget(
+    result,
+    MAX_ACTIVITY_OVERVIEW_RESPONSE_BYTES,
+    'The activity overview exceeds the MCP response limit.',
+  );
+  return result;
+}
+
+async function fetchBoundedActivityRankingDocuments(
+  dependencies: McpDataServiceDependencies,
+  input: Pick<
+    RankActivitiesByMetricInput,
+    'uid' | 'startTimeMs' | 'endTimeMs'
+  >,
+  metricType: string,
+): Promise<RawDocument[]> {
+  const documents: RawDocument[] = [];
+  let cursor: unknown;
+  let cumulativeBytes = 0;
+
+  while (documents.length <= MAX_ACTIVITY_RANKING_DOCUMENTS) {
+    const pageLimit = Math.min(
+      ACTIVITY_RANKING_PAGE_SIZE,
+      MAX_ACTIVITY_RANKING_DOCUMENTS + 1 - documents.length,
+    );
+    const page = await dependencies.fetchActivityRankingDocuments(
+      input.uid,
+      input.startTimeMs,
+      input.endTimeMs,
+      metricType,
+      pageLimit,
+      cursor,
+    );
+    if (page.length > pageLimit) {
+      throw new McpDataError(
+        'query_too_large',
+        `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the date range.`,
+      );
+    }
+    for (const document of page) {
+      cumulativeBytes += measureJsonBytes(
+        document.data,
+        'The ranking query contains activity data that cannot be processed safely.',
+      );
+      if (cumulativeBytes > MAX_ACTIVITY_RANKING_DOCUMENT_BYTES) {
+        throw new McpDataError(
+          'query_too_large',
+          'The ranking query contains too much activity metric data. Narrow the date range.',
+        );
+      }
+      documents.push({
+        id: document.id,
+        data: document.data,
+      });
+      if (documents.length > MAX_ACTIVITY_RANKING_DOCUMENTS) {
+        throw new McpDataError(
+          'query_too_large',
+          `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the date range.`,
+        );
+      }
+    }
+    if (page.length < pageLimit) {
+      return documents;
+    }
+    cursor = page[page.length - 1]?.cursor;
+    if (cursor === undefined) {
+      throw new Error(
+        'The MCP activity ranking page did not provide a pagination cursor.',
+      );
+    }
+  }
+  return documents;
+}
+
+async function rankActivitiesByMetric(
+  dependencies: McpDataServiceDependencies,
+  input: RankActivitiesByMetricInput,
+) {
+  validateBoundedRange(input.startTimeMs, input.endTimeMs);
+  const metric = resolveSportsLibNumericMetric(input.metric);
+  if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
+    throw new McpDataError(
+      'invalid_metric',
+      'The ranking metric is not a supported numeric Sports Lib type.',
+    );
+  }
+  if (input.order !== 'highest' && input.order !== 'lowest') {
+    throw new McpDataError(
+      'invalid_request',
+      'Ranking order must be highest or lowest.',
+    );
+  }
+  const activityTypes = resolveActivityTypes(input.activityTypes).map(String);
+  const limit = Math.min(25, Math.max(1, Math.floor(input.limit || 10)));
+  const documents = await fetchBoundedActivityRankingDocuments(
+    dependencies,
+    input,
+    metric.type,
+  );
+  const candidates = documents.flatMap((document) => {
+    const eventId = document.data.eventID;
+    const startTimeMs = asTimestampMs(document.data.startDate);
+    const endTimeMs = asTimestampMs(document.data.endDate);
+    const activityType = normalizeActivityType(document.data.type);
+    const rawStats = document.data.stats;
+    const value = rawStats && typeof rawStats === 'object' && !Array.isArray(rawStats)
+      ? projectSportsLibNumericMetricValue(
+          metric.type,
+          (rawStats as Record<string, unknown>)[metric.type],
+        )
+      : null;
+    if (
+      !isValidFirestoreDocumentId(document.id)
+      || !isValidFirestoreDocumentId(eventId)
+      || startTimeMs === null
+      || endTimeMs === null
+      || endTimeMs < startTimeMs
+      || value === null
+      || !activityTypeMatches(activityType, activityTypes)
+    ) {
+      return [];
+    }
+    return [{
+      id: document.id,
+      activityRef: encodeOpaqueValue('activity_ref', {
+        activityId: document.id,
+        eventId,
+      }, input.uid, input.connectionId),
+      startTimeMs,
+      endTimeMs,
+      activityType,
+      value,
+    }];
+  });
+  candidates.sort((left, right) => {
+    const valueOrder = input.order === 'highest'
+      ? right.value - left.value
+      : left.value - right.value;
+    return valueOrder
+      || right.startTimeMs - left.startTimeMs
+      || left.id.localeCompare(right.id);
+  });
+  const result = {
+    metric,
+    order: input.order,
+    scannedActivityCount: documents.length,
+    matchedActivityCount: candidates.length,
+    activities: candidates.slice(0, limit).map((candidate, index) => ({
+      rank: index + 1,
+      activityRef: candidate.activityRef,
+      startTimeMs: candidate.startTimeMs,
+      endTimeMs: candidate.endTimeMs,
+      activityType: candidate.activityType,
+      value: candidate.value,
+    })),
+  };
+  requireJsonBudget(
+    result,
+    MAX_ACTIVITY_RANKING_RESPONSE_BYTES,
+    'The activity ranking exceeds the MCP response limit.',
+  );
+  return result;
+}
+
 function extractActivityChartSourceFiles(
   eventData: Record<string, unknown>,
 ): OriginalFileMetaData[] {
@@ -4427,6 +5016,24 @@ export function createMcpDataService(
         : [];
     });
   };
+  const loadSleepSummary = async (
+    input: QuerySleepSummaryInput,
+  ): Promise<{
+    sessions: SafeSleepSession[];
+    summary: QuerySleepSummaryResult;
+  }> => {
+    validateBoundedRange(input.startTimeMs, input.endTimeMs);
+    const timeZone = requireTimeZone(input.timeZone);
+    const sessions = await fetchBoundedSafeSleepSessions(input);
+    return {
+      sessions,
+      summary: buildSleepSummaryResult(
+        sessions,
+        input.groupBy,
+        timeZone,
+      ),
+    };
+  };
 
   return {
     listActivityTypes() {
@@ -4487,44 +5094,71 @@ export function createMcpDataService(
       };
     },
 
-    async queryMetric(input: QueryMetricInput) {
-      validateBoundedRange(input.startTimeMs, input.endTimeMs);
-      const timeZone = requireTimeZone(input.timeZone);
-      const metric = resolveSportsLibNumericMetric(input.metric);
-      if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
-        throw new McpDataError('invalid_metric', 'The metric is not a supported numeric Sports Lib type.');
-      }
-      const activityTypes = resolveActivityTypes(input.activityTypes);
-      const docs = await fetchBoundedEventDocuments(dependencies, input);
-
-      const events = docs.flatMap((doc) => {
-        if (isBenchmarkEventForTrainingMetrics(doc.data)) {
-          return [];
+    async listTrainingMetrics(input: ListTrainingMetricsInput) {
+      const descriptors = getMcpTrainingMetricDescriptors(input.search);
+      const snapshots = new Map(
+        (await dependencies.fetchDerivedSnapshotMetadataDocuments(
+          input.uid,
+          descriptors.map(descriptor => descriptor.metricKind),
+        )).map(document => [document.id, document.data]),
+      );
+      const metrics = descriptors.map(descriptor => {
+        const snapshot = snapshots.get(descriptor.metricKind);
+        const schemaVersion = asFiniteNumber(snapshot?.schemaVersion);
+        const snapshotMetricKind = snapshot?.metricKind;
+        const rawStatus = snapshot?.status;
+        let status: McpTrainingMetricAvailability;
+        if (!snapshot) {
+          status = 'missing';
+        } else if (
+          schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+          || (
+            snapshotMetricKind !== undefined
+            && snapshotMetricKind !== descriptor.metricKind
+          )
+        ) {
+          status = 'schema_mismatch';
+        } else if (
+          rawStatus === 'ready'
+          || rawStatus === 'building'
+          || rawStatus === 'failed'
+          || rawStatus === 'stale'
+        ) {
+          status = rawStatus;
+        } else {
+          status = 'schema_mismatch';
         }
-        try {
-          const event = dependencies.importEvent(
-            buildMetricAggregationEventJson(doc.data, metric.type),
-            doc.id,
-          );
-          return eventMatchesActivityFilter(event, activityTypes) ? [event] : [];
-        } catch {
-          return [];
-        }
+        return {
+          ...descriptor,
+          status,
+          updatedAtMs: asNonNegativeNumber(snapshot?.updatedAtMs),
+          sourceEventCount: asSafeInteger(snapshot?.sourceEventCount),
+        };
       });
-
-      const aggregation = buildEventStatAggregation(events, {
-        dataType: metric.type,
-        valueType: resolveValueType(input.aggregation),
-        categoryType: resolveCategoryType(input.groupBy),
-        requestedTimeInterval: resolveTimeInterval(input.interval),
-        timeZone,
-      });
-
-      return {
-        metric,
-        matchedEventCount: events.length,
-        aggregation,
+      const result = {
+        metrics,
       };
+      requireJsonBudget(
+        result,
+        MAX_TRAINING_METRIC_CATALOG_RESPONSE_BYTES,
+        'The Training metric catalog exceeds the MCP response limit.',
+      );
+      return result;
+    },
+
+    async queryMetric(input: QueryMetricInput) {
+      const result = await querySelectedMetrics(dependencies, {
+        ...input,
+        metrics: [{
+          metric: input.metric,
+          aggregation: input.aggregation,
+        }],
+      });
+      return result.results[0];
+    },
+
+    async queryMetrics(input: QueryMetricsInput) {
+      return querySelectedMetrics(dependencies, input);
     },
 
     async listMeasurementTypes(): Promise<ListMeasurementTypesResult> {
@@ -5063,6 +5697,14 @@ export function createMcpDataService(
       return getActivityMetrics(dependencies, input);
     },
 
+    async getActivityOverview(input: GetActivityOverviewInput) {
+      return getActivityOverview(dependencies, input);
+    },
+
+    async rankActivitiesByMetric(input: RankActivitiesByMetricInput) {
+      return rankActivitiesByMetric(dependencies, input);
+    },
+
     async getActivityChartData(input: GetActivityChartDataInput) {
       return getActivityChartData(dependencies, input);
     },
@@ -5571,24 +6213,22 @@ export function createMcpDataService(
     },
 
     async getSleepTrend(input: GetSleepTrendInput): Promise<GetSleepTrendResult> {
-      validateBoundedRange(input.startTimeMs, input.endTimeMs);
-      const timeZone = requireTimeZone(input.timeZone);
-      const sessions = await fetchBoundedSafeSleepSessions(input);
+      const {
+        sessions,
+        summary,
+      } = await loadSleepSummary(input);
       return {
         rangeStartTimeMs: input.startTimeMs,
         rangeEndTimeMs: input.endTimeMs,
         availableVitals: buildSleepVitalAvailability(sessions),
-        ...buildSleepSummaryResult(sessions, input.groupBy, timeZone),
+        ...summary,
       };
     },
 
     async querySleepSummary(
       input: QuerySleepSummaryInput,
     ): Promise<QuerySleepSummaryResult> {
-      validateBoundedRange(input.startTimeMs, input.endTimeMs);
-      const timeZone = requireTimeZone(input.timeZone);
-      const sessions = await fetchBoundedSafeSleepSessions(input);
-      return buildSleepSummaryResult(sessions, input.groupBy, timeZone);
+      return (await loadSleepSummary(input)).summary;
     },
   };
 }

@@ -30,12 +30,17 @@ import {
 } from './derived-output-schemas';
 import { MCP_MEASUREMENT_TYPE_IDS } from './measurement-catalog';
 import { MCP_SLEEP_VITAL_TYPES } from './sleep-vitals';
+import {
+  MCP_TRAINING_METRIC_CATEGORIES,
+} from './training-metric-catalog';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
   'list_measurement_types',
   'query_measurements',
   'list_metrics',
   'query_metric',
+  'query_metrics',
+  'list_training_metrics',
   'get_training_metric',
   'list_sleep_vitals',
   'list_sleep_sessions',
@@ -55,6 +60,8 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_activity_chart_metrics',
   'get_activity_chart_data',
   'get_activity_metrics',
+  'get_activity_overview',
+  'rank_activities_by_metric',
   'list_routes',
   'find_routes_near_location',
   'search_routes_near_location',
@@ -1011,6 +1018,12 @@ const chartCatalogMetricSchemas = MCP_ACTIVITY_CHART_METRICS.map(metric => (
   }).meta({ title: `McpChartCatalog_${metric.id}` })
 )) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
 const chartCatalogMetric = z.union(chartCatalogMetricSchemas);
+const activityOverviewChartMetric = z.enum(
+  MCP_ACTIVITY_CHART_METRICS.map(metric => metric.id) as [
+    typeof MCP_ACTIVITY_CHART_METRICS[number]['id'],
+    ...Array<typeof MCP_ACTIVITY_CHART_METRICS[number]['id']>,
+  ],
+);
 const chartSeriesSchemas = MCP_ACTIVITY_CHART_METRICS.map(metric => (
   z.strictObject({
     metric: z.literal(metric.id),
@@ -1184,6 +1197,66 @@ const metricAggregation = z.strictObject({
   })),
 }).meta({ title: 'McpMetricAggregation' });
 
+const multiMetricResult = z.strictObject({
+  metric: MCP_METRIC_DESCRIPTOR_OUTPUT_SCHEMA,
+  matchedEventCount: count,
+  aggregation: metricAggregation,
+});
+
+const trainingMetricAvailability = z.strictObject({
+  metricKind: derivedMetricKind,
+  title: z.string().min(1).max(160),
+  description: z.string().min(1).max(1_000),
+  category: z.enum(MCP_TRAINING_METRIC_CATEGORIES),
+  periodLabel: z.string().min(1).max(200),
+  status: z.enum([
+    'ready',
+    'building',
+    'failed',
+    'stale',
+    'missing',
+    'schema_mismatch',
+  ]),
+  updatedAtMs: nullableNonNegativeTimestampMs,
+  sourceEventCount: count.nullable(),
+});
+
+const activityOverviewDetailAvailability = z.strictObject({
+  kind: z.enum(['laps', 'jumps', 'swim_lengths']),
+  status: z.enum(['available', 'empty', 'unavailable']),
+  count: count.nullable(),
+}).superRefine((value, context) => {
+  const countMatchesStatus = (
+    (value.status === 'available' && value.count !== null && value.count > 0)
+    || (value.status === 'empty' && value.count === 0)
+    || (value.status === 'unavailable' && value.count === null)
+  );
+  if (!countMatchesStatus) {
+    context.addIssue({
+      code: 'custom',
+      path: ['count'],
+      message: 'Activity detail count must match its availability status.',
+    });
+  }
+});
+
+const rankedActivity = z.strictObject({
+  rank: z.number().int().positive().max(25),
+  activityRef: MCP_ACTIVITY_REFERENCE_OUTPUT_SCHEMA,
+  startTimeMs: timestampMs,
+  endTimeMs: timestampMs,
+  activityType: z.string().max(120).nullable(),
+  value: number,
+}).superRefine((value, context) => {
+  if (value.endTimeMs < value.startTimeMs) {
+    context.addIssue({
+      code: 'custom',
+      path: ['endTimeMs'],
+      message: 'Ranked activity end time must not precede its start time.',
+    });
+  }
+});
+
 function paginatedItems<T extends z.ZodType>(items: T) {
   return z.strictObject({
     items: z.array(items),
@@ -1270,6 +1343,12 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       metric: MCP_METRIC_DESCRIPTOR_OUTPUT_SCHEMA,
       matchedEventCount: count,
       aggregation: metricAggregation,
+    }),
+    query_metrics: z.strictObject({
+      results: z.array(multiMetricResult).min(1).max(4),
+    }),
+    list_training_metrics: z.strictObject({
+      metrics: z.array(trainingMetricAvailability),
     }),
     get_training_metric: trainingMetricOutput,
     list_sleep_vitals: z.strictObject({
@@ -1431,6 +1510,81 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       selectedMetricCount: count,
       availableMetricCount: count,
       metrics: z.array(activityMetricValue),
+    }),
+    get_activity_overview: z.strictObject({
+      activityType: z.string().max(120).nullable(),
+      locationRedacted: z.literal(true),
+      availableMetrics: z.array(MCP_METRIC_DESCRIPTOR_OUTPUT_SCHEMA),
+      details: z.array(activityOverviewDetailAvailability).length(3)
+        .superRefine((details, context) => {
+          const kinds = new Set(details.map(detail => detail.kind));
+          if (kinds.size !== 3) {
+            context.addIssue({
+              code: 'custom',
+              message: 'Activity overview must describe each detail kind once.',
+            });
+          }
+        }),
+      chartData: z.strictObject({
+        sourceDeclared: z.boolean(),
+        candidateMetrics: z.array(activityOverviewChartMetric),
+      }),
+    }),
+    rank_activities_by_metric: z.strictObject({
+      metric: MCP_METRIC_DESCRIPTOR_OUTPUT_SCHEMA,
+      order: z.enum(['highest', 'lowest']),
+      scannedActivityCount: count.max(2_000),
+      matchedActivityCount: count.max(2_000),
+      activities: z.array(rankedActivity).max(25),
+    }).superRefine((value, context) => {
+      if (value.matchedActivityCount > value.scannedActivityCount) {
+        context.addIssue({
+          code: 'custom',
+          path: ['matchedActivityCount'],
+          message: 'Matched activity count must not exceed scanned count.',
+        });
+      }
+      if (value.activities.length > value.matchedActivityCount) {
+        context.addIssue({
+          code: 'custom',
+          path: ['activities'],
+          message: 'Returned activities must not exceed matched count.',
+        });
+      }
+      value.activities.forEach((activity, index) => {
+        if (activity.rank !== index + 1) {
+          context.addIssue({
+            code: 'custom',
+            path: ['activities', index, 'rank'],
+            message: 'Activity ranks must be sequential.',
+          });
+        }
+        const previous = value.activities[index - 1];
+        if (
+          previous
+          && (
+            (value.order === 'highest' && activity.value > previous.value)
+            || (value.order === 'lowest' && activity.value < previous.value)
+          )
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['activities', index, 'value'],
+            message: 'Ranked activity values must match the requested order.',
+          });
+        }
+        if (
+          previous
+          && activity.value === previous.value
+          && activity.startTimeMs > previous.startTimeMs
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['activities', index, 'startTimeMs'],
+            message: 'Equal ranked values must use newest activity first.',
+          });
+        }
+      });
     }),
     list_routes: z.strictObject({
       scannedRouteCount: count,

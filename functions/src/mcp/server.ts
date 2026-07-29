@@ -490,7 +490,15 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
     instructions.push(
-      'For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then query_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. For nearby history, use search_activities_near_location. Follow nextCursor until matched or scanComplete.',
+      'For a workout, use list_activity_types if needed, then query_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. For nearby history, use search_activities_near_location. Follow nextCursor until matched or scanComplete.',
+    );
+  }
+  if (
+    auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
+    && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+  ) {
+    instructions.push(
+      'Use get_activity_overview before granular activity reads. For highest or lowest activities by one metric, use rank_activities_by_metric.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
@@ -505,12 +513,12 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
     instructions.push(
-      'Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot. Use list_metrics and query_metric for activity and other numeric event metrics.',
+      'Use list_training_metrics before assuming a Training-derived metric is unavailable, then use get_training_metric only when its status is ready. Use list_metrics and query_metric for activity and other numeric event metrics; use query_metrics to compare up to four over one bounded range. Use get_training_metric with body_weight_trend only for the ready 28-day Training snapshot.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
     instructions.push(
-      'get_sleep_trend returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice.',
+      'get_sleep_trend returns recorded-vital coverage and local day, week, or month values in one call. Never conclude that sleep HRV, heart rate, SpO2, or respiration is unavailable before checking get_sleep_trend or list_sleep_vitals. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Missing values remain null rather than zero. Raw sensor samples are unavailable, and recorded values are not medical advice.',
     );
   }
   if (
@@ -546,7 +554,7 @@ export function createMcpServer(
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
-    version: '1.2.0',
+    version: '1.3.0',
     description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
     websiteUrl: publicBaseUrl,
     icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
@@ -675,6 +683,67 @@ export function createMcpServer(
       timeZone: input.timeZone,
       activityTypes: input.activityTypes,
     })));
+
+    server.registerTool('query_metrics', {
+      title: 'Query several activity or event metrics',
+      description: measurementToolsAvailable
+        ? 'Query up to four activity metrics over one range; use query_measurements for body measurements.'
+        : 'Query up to four activity metrics over one range.',
+      inputSchema: {
+        metrics: z.array(z.object({
+          metric: z.string().min(1).max(160),
+          aggregation: z.enum([
+            'total',
+            'average',
+            'minimum',
+            'maximum',
+          ]).default('average'),
+        }).strict()).min(1).max(4),
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
+        groupBy: z.enum(['date', 'activity_type']).default('date'),
+        interval: z.enum([
+          'auto',
+          'hourly',
+          'daily',
+          'weekly',
+          'biweekly',
+          'monthly',
+          'quarterly',
+          'semesterly',
+          'yearly',
+        ]).default('daily'),
+        timeZone: z.string().min(1).max(80),
+        activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
+      },
+      outputSchema: outputSchemas.query_metrics,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('query_metrics', () => dataService.queryMetrics({
+      uid: auth.uid,
+      metrics: input.metrics,
+      startTimeMs: parseMcpDateTime(input.start, 'start'),
+      endTimeMs: parseMcpDateTime(input.end, 'end'),
+      groupBy: input.groupBy,
+      interval: input.interval,
+      timeZone: input.timeZone,
+      activityTypes: input.activityTypes,
+    })));
+
+    server.registerTool('list_training_metrics', {
+      title: 'List Training metrics',
+      description: 'List Training metric descriptions and current snapshot status.',
+      inputSchema: {
+        search: z.string().max(120).optional(),
+      },
+      outputSchema: outputSchemas.list_training_metrics,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'list_training_metrics',
+      () => dataService.listTrainingMetrics({
+        uid: auth.uid,
+        search: input.search,
+      }),
+    ));
 
     server.registerTool('get_training_metric', {
       title: 'Get a Training metric',
@@ -1095,6 +1164,23 @@ export function createMcpServer(
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
+    server.registerTool('get_activity_overview', {
+      title: 'Get activity overview',
+      description: 'Inspect coordinate-free activity capabilities before granular reads.',
+      inputSchema: {
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+      },
+      outputSchema: outputSchemas.get_activity_overview,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'get_activity_overview',
+      () => dataService.getActivityOverview({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        activityRef: input.activityRef,
+      }),
+    ));
+
     server.registerTool('get_activity_metrics', {
       title: 'Get activity metrics',
       description: `Read up to ${MAX_ACTIVITY_METRICS_PER_REQUEST} explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Requires both metric and activity-detail access.`,
@@ -1113,6 +1199,33 @@ export function createMcpServer(
         connectionId: auth.connectionId,
         activityRef: input.activityRef,
         metrics: input.metrics,
+      }),
+    ));
+
+    server.registerTool('rank_activities_by_metric', {
+      title: 'Rank activities by metric',
+      description: 'Rank up to 25 activities by one metric.',
+      inputSchema: {
+        metric: z.string().min(1).max(160),
+        start: MCP_ISO_DATE_TIME_SCHEMA,
+        end: MCP_ISO_DATE_TIME_SCHEMA,
+        activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
+        order: z.enum(['highest', 'lowest']).default('highest'),
+        limit: z.number().int().min(1).max(25).default(10),
+      },
+      outputSchema: outputSchemas.rank_activities_by_metric,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool(
+      'rank_activities_by_metric',
+      () => dataService.rankActivitiesByMetric({
+        uid: auth.uid,
+        connectionId: auth.connectionId,
+        metric: input.metric,
+        startTimeMs: parseMcpDateTime(input.start, 'start'),
+        endTimeMs: parseMcpDateTime(input.end, 'end'),
+        activityTypes: input.activityTypes,
+        order: input.order,
+        limit: input.limit,
       }),
     ));
   }
@@ -1250,7 +1363,11 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     && typeof (params as Record<string, unknown>).arguments === 'object'
     ? (params as Record<string, unknown>).arguments as Record<string, unknown>
     : {};
-  if (toolName === 'get_activity_metrics') {
+  if ([
+    'get_activity_metrics',
+    'get_activity_overview',
+    'rank_activities_by_metric',
+  ].includes(toolName)) {
     return [
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
@@ -1326,6 +1443,8 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   if ([
     'list_metrics',
     'query_metric',
+    'query_metrics',
+    'list_training_metrics',
     'get_training_metric',
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.MetricsRead];

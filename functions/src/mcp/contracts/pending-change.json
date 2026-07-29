@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "823b8bb259a7927c9addc435ba2d06d4d581b64de13c77c847fbf12e3c03e53c",
+  "candidateSha256": "1cfde090692e90974f7098293a583704325ae0c4fd9f17b90098e4cd88830f7a",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add the daily report, front-load daily and sleep routing, and add contract-safe activity and nearby-search replacements with structural date modes and closed-world annotations.",
+  "summary": "Add the daily report and contract-safe activity and nearby-search replacements, then add bounded multi-metric queries, Training capability discovery, activity overviews and rankings, and clearer sleep-vital routing.",
   "rescanRequired": true
 }
