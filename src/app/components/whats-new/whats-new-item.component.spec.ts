@@ -4,6 +4,7 @@ import { Timestamp } from 'app/firebase/firestore';
 import { ChangelogPost } from '../../services/app.whats-new.service';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatExpansionPanelHeader } from '@angular/material/expansion';
 
 describe('WhatsNewItemComponent', () => {
     let component: WhatsNewItemComponent;
@@ -58,7 +59,27 @@ describe('WhatsNewItemComponent', () => {
         fixture.componentRef.setInput('notificationLayout', true);
         fixture.detectChanges();
 
+        const header = fixture.debugElement.query(By.directive(MatExpansionPanelHeader));
+        const headerComponent = header.componentInstance as MatExpansionPanelHeader;
+
         expect(panel.classList.contains('changelog-panel-notification')).toBe(true);
+        expect(headerComponent.collapsedHeight).toBe('');
+        expect(headerComponent.expandedHeight).toBe('');
+    });
+
+    it('should let full-mode headers grow so wrapped titles do not cover release metadata', () => {
+        fixture.componentRef.setInput('post', {
+            ...mockPost,
+            title: 'Deeper Training Insights and a Smarter Dashboard'
+        });
+        fixture.detectChanges();
+
+        const header = fixture.debugElement.query(By.directive(MatExpansionPanelHeader));
+        const headerComponent = header.componentInstance as MatExpansionPanelHeader;
+
+        expect(headerComponent.collapsedHeight).toBe('auto');
+        expect(headerComponent.expandedHeight).toBe('auto');
+        expect(header.query(By.css('.header-date'))).toBeTruthy();
     });
 
     it('should render markdown description in full mode', async () => {

@@ -32,7 +32,9 @@
     [expanded]="expanded()"
     class="changelog-panel qs-overlay-flat"
     [class.changelog-panel-notification]="notificationLayout()">
-    <mat-expansion-panel-header>
+    <mat-expansion-panel-header
+        [collapsedHeight]="notificationLayout() ? '' : 'auto'"
+        [expandedHeight]="notificationLayout() ? '' : 'auto'">
         <mat-panel-title>
             <div class="header-stack">
                 <div class="header-left header-top">
