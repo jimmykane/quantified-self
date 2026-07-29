@@ -95,6 +95,67 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     fixture.destroy();
   });
 
+  it('initializes a replacement chart host when the first lazy initialization is still pending', async () => {
+    const firstChart = {
+      dispatchAction: vi.fn(),
+      isDisposed: vi.fn(() => false),
+    };
+    const replacementChart = {
+      dispatchAction: vi.fn(),
+      isDisposed: vi.fn(() => false),
+    };
+    let resolveFirstInitialization: ((chart: typeof firstChart) => void) | null = null;
+    const eChartsLoader = {
+      attachMobileSeriesTapFeedback: vi.fn(() => () => undefined),
+      dispose: vi.fn(),
+      init: vi.fn()
+        .mockImplementationOnce(() => new Promise(resolve => {
+          resolveFirstInitialization = resolve;
+        }))
+        .mockResolvedValueOnce(replacementChart),
+      resize: vi.fn(),
+      setOption: vi.fn(),
+      subscribeToViewportResize: vi.fn(() => () => undefined),
+    };
+    await TestBed.configureTestingModule({
+      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      providers: [
+        { provide: EChartsLoaderService, useValue: eChartsLoader },
+        { provide: LoggerService, useValue: { error: vi.fn() } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TrainingDurabilityTrajectoryChartComponent);
+
+    fixture.detectChanges();
+    fixture.componentRef.setInput('trajectory', trajectory());
+    fixture.componentRef.setInput('status', 'ready');
+    fixture.detectChanges();
+    const firstChartElement = fixture.nativeElement.querySelector('.durability-trajectory-chart');
+    expect(firstChartElement).not.toBeNull();
+    expect(eChartsLoader.init).toHaveBeenCalledTimes(1);
+
+    fixture.componentRef.setInput('trajectory', null);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.durability-trajectory-chart')).toBeNull();
+
+    fixture.componentRef.setInput('trajectory', trajectory());
+    fixture.detectChanges();
+    const replacementChartElement = fixture.nativeElement.querySelector('.durability-trajectory-chart');
+    expect(replacementChartElement).not.toBeNull();
+    expect(replacementChartElement).not.toBe(firstChartElement);
+
+    resolveFirstInitialization?.(firstChart);
+    await vi.waitFor(() => expect(eChartsLoader.init).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(1));
+
+    expect(eChartsLoader.init).toHaveBeenNthCalledWith(2, replacementChartElement, 'light', undefined);
+    expect(eChartsLoader.dispose).toHaveBeenCalledWith(firstChart);
+    expect(eChartsLoader.setOption.mock.calls[0][0]).toBe(replacementChart);
+
+    fixture.destroy();
+  });
+
   it('plots a readable 12-week primary metric with power-data bars and explained ineligible weeks', () => {
     const component = createComponent();
     component.trajectory = trajectory();

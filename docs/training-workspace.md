@@ -1204,8 +1204,12 @@ exhaustive list of every threshold that activity missed.
 
 The trajectory chart host is conditionally mounted only after its view model exists. Its Angular view query must remain
 dynamic and initialize through the shared ECharts host controller when that element appears; a static query resolves
-before the conditional view and leaves the chart blank. The component lifecycle spec must exercise that delayed host
-insertion rather than only assigning a synthetic element before testing chart options.
+before the conditional view and leaves the chart blank. Conditional removal can also race the controller's lazy ECharts
+load: disposal invalidates both the pending result and every caller waiting on that lifecycle, then the controller
+serializes a fresh initialization against the replacement element. Otherwise a completed chart can bind to the detached
+host and leave the visible replacement blank. The component lifecycle spec must exercise delayed host insertion and a
+remove/reinsert cycle during pending initialization rather than only assigning a synthetic element before testing chart
+options.
 
 The usual value is withheld unless evidence exists in at least two baseline blocks with at least two samples in total.
 Best Build requires at least two samples on both sides of the exact context.

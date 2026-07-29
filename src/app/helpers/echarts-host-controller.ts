@@ -53,6 +53,7 @@ export class EChartsHostController {
   private unsubscribeViewportResize: (() => void) | null = null;
   private unsubscribeTapFeedback: (() => void) | null = null;
   private currentTheme: string | undefined;
+  private lifecycleVersion = 0;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -72,12 +73,28 @@ export class EChartsHostController {
     }
 
     if (this.initPromise) {
-      return this.initPromise;
+      const lifecycleVersion = this.lifecycleVersion;
+      const pendingInitialization = this.initPromise;
+      await pendingInitialization;
+      if (this.initPromise === pendingInitialization) {
+        this.initPromise = null;
+      }
+      if (lifecycleVersion !== this.lifecycleVersion) {
+        return null;
+      }
+      return this.init(container, requestedTheme);
     }
 
-    this.initPromise = (async () => {
+    const lifecycleVersion = this.lifecycleVersion;
+    const initialization = (async () => {
       try {
-        this.chart = await this.config.eChartsLoader.init(container, requestedTheme, this.config.initOptions);
+        const chart = await this.config.eChartsLoader.init(container, requestedTheme, this.config.initOptions);
+        if (lifecycleVersion !== this.lifecycleVersion) {
+          this.config.eChartsLoader.dispose(chart);
+          return null;
+        }
+
+        this.chart = chart;
         this.currentTheme = requestedTheme;
         this.observeContainer(container);
         this.subscribeToViewportResize();
@@ -91,12 +108,16 @@ export class EChartsHostController {
           error
         );
         return null;
-      } finally {
-        this.initPromise = null;
       }
     })();
-
-    return this.initPromise;
+    this.initPromise = initialization;
+    try {
+      return await initialization;
+    } finally {
+      if (this.initPromise === initialization) {
+        this.initPromise = null;
+      }
+    }
   }
 
   public getChart(): EChartsType | null {
@@ -139,6 +160,8 @@ export class EChartsHostController {
   }
 
   public dispose(): void {
+    this.lifecycleVersion += 1;
+
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
