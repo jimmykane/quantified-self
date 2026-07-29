@@ -152,6 +152,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private readonly userGrowthTrend = signal<UserGrowthTrendResponse | null>(null);
     private readonly subscriptionHistoryTrend = signal<SubscriptionHistoryTrendResponse | null>(null);
     private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
+    private userFetchRequestSequence = 0;
     private readonly supportedSortFields = new Set([
         'email',
         'displayName',
@@ -257,6 +258,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     fetchUsers(): void {
+        const requestSequence = ++this.userFetchRequestSequence;
         this.isLoading = true;
         this.error = null;
 
@@ -271,11 +273,17 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
         this.adminService.getUsers(params).pipe(takeUntil(this.destroy$)).subscribe({
             next: (response) => {
+                if (requestSequence !== this.userFetchRequestSequence) {
+                    return;
+                }
                 this.users = response.users;
                 this.totalCount = response.totalCount;
                 this.isLoading = false;
             },
             error: (err) => {
+                if (requestSequence !== this.userFetchRequestSequence) {
+                    return;
+                }
                 this.error = 'Failed to load users. ' + (err.message || '');
                 this.isLoading = false;
                 this.logger.error('AdminUserManagement error:', err);
