@@ -67,6 +67,122 @@ const MCP_ACTIVITY_TYPES_SCHEMA = z.array(
 const MCP_ACTIVITY_RELATIVE_PERIOD_SCHEMA = z.enum(
   MCP_ACTIVITY_RELATIVE_PERIODS,
 );
+const MCP_ACTIVITY_TIME_ZONE_SCHEMA = z.string()
+  .min(1)
+  .max(80);
+const MCP_ACTIVITY_LIST_INPUT_SCHEMA = z.object({
+  start: MCP_ISO_DATE_TIME_SCHEMA
+    .describe('Inclusive explicit-range start. Provide together with end; omit for relative or unbounded mode.')
+    .optional(),
+  end: MCP_ISO_DATE_TIME_SCHEMA
+    .describe('Inclusive explicit-range end. Provide together with start; omit for relative or unbounded mode.')
+    .optional(),
+  activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+  relativePeriod: MCP_ACTIVITY_RELATIVE_PERIOD_SCHEMA
+    .describe('Local calendar period: today or yesterday. Requires timeZone; omit for explicit or unbounded mode.')
+    .optional(),
+  timeZone: MCP_ACTIVITY_TIME_ZONE_SCHEMA
+    .describe('IANA time zone required with relativePeriod; omit for explicit or unbounded mode.')
+    .optional(),
+  cursor: MCP_CURSOR_SCHEMA
+    .describe('Continuation cursor. Repeat the original activityTypes and date-selection inputs when using it.')
+    .optional(),
+  limit: z.number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(25)
+    .describe('Maximum matching activities to return. Use 1 for a latest or last request, including a server-filtered named activity type.'),
+}).superRefine((input, context) => {
+  const explicitRange = input.start !== undefined || input.end !== undefined;
+  const relativeRange = input.relativePeriod !== undefined || input.timeZone !== undefined;
+  const validExplicitRange = input.start !== undefined
+    && input.end !== undefined
+    && !relativeRange;
+  const validRelativeRange = input.relativePeriod !== undefined
+    && input.timeZone !== undefined
+    && !explicitRange;
+  if (!validExplicitRange && !validRelativeRange && (explicitRange || relativeRange)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Choose exactly one date mode: both start and end, both relativePeriod and timeZone, or no date selectors.',
+    });
+  }
+}).describe(
+  'Choose exactly one date mode: an explicit start/end range, a relativePeriod/timeZone range, or no date selectors for unbounded newest-first history.',
+).meta({
+  oneOf: [
+    {
+      title: 'Explicit date range',
+      required: ['start', 'end'],
+      not: {
+        anyOf: [
+          { required: ['relativePeriod'] },
+          { required: ['timeZone'] },
+        ],
+      },
+    },
+    {
+      title: 'Relative date range',
+      required: ['relativePeriod', 'timeZone'],
+      not: {
+        anyOf: [
+          { required: ['start'] },
+          { required: ['end'] },
+        ],
+      },
+    },
+    {
+      title: 'Unbounded newest-first history',
+      not: {
+        anyOf: [
+          { required: ['start'] },
+          { required: ['end'] },
+          { required: ['relativePeriod'] },
+          { required: ['timeZone'] },
+        ],
+      },
+    },
+  ],
+});
+const MCP_NEARBY_ACTIVITY_INPUT_SCHEMA = z.object({
+  location: MCP_NEARBY_LOCATION_SCHEMA,
+  radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+  start: MCP_ISO_DATE_TIME_SCHEMA
+    .describe('Inclusive explicit-range start. Provide together with end, or omit both for unbounded mode.')
+    .optional(),
+  end: MCP_ISO_DATE_TIME_SCHEMA
+    .describe('Inclusive explicit-range end. Provide together with start, or omit both for unbounded mode.')
+    .optional(),
+  activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+  cursor: MCP_CURSOR_SCHEMA.optional(),
+  limit: z.number().int().min(1).max(25).default(10),
+}).superRefine((input, context) => {
+  if ((input.start === undefined) !== (input.end === undefined)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Provide both start and end for an explicit date range, or omit both for unbounded mode.',
+    });
+  }
+}).describe(
+  'Choose either an explicit start/end range or an unbounded newest-first history scan.',
+).meta({
+  oneOf: [
+    {
+      title: 'Explicit date range',
+      required: ['start', 'end'],
+    },
+    {
+      title: 'Unbounded newest-first history',
+      not: {
+        anyOf: [
+          { required: ['start'] },
+          { required: ['end'] },
+        ],
+      },
+    },
+  ],
+});
 const MCP_SERVER_ICON_VARIANTS = [
   {
     path: '/assets/favicons/android-chrome-96x96.png',
@@ -360,14 +476,26 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const instructions = [
     'Use only the read-only tools exposed for the permissions this connection was granted.',
   ];
+  if (
+    auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
+    && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
+  ) {
+    instructions.push(
+      'For a good-morning request or current daily report, use get_daily_report. For multi-day sleep, HRV, heart-rate, SpO2, or respiration trends, use get_sleep_trend. Use get_today_readiness only for the current recovery score and its evidence. Supply the requested IANA time zone.',
+    );
+  } else if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
+    instructions.push(
+      'For sleep trends—including HRV, heart rate, SpO2, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone.',
+    );
+  }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
     instructions.push(
-      'For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then list_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. Follow nextCursor until matched or scanComplete.',
+      'For a workout—including today, yesterday, latest, or a named sport—use list_activity_types when needed, then query_activities; aggregate metrics do not contain individual records. Use relativePeriod plus timeZone for today or yesterday. For latest, omit dates; add activityTypes and limit 1 when named. For nearby history, use search_activities_near_location. Follow nextCursor until matched or scanComplete.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
     instructions.push(
-      'For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Repeat the filters with nextCursor until matched or scanComplete.',
+      'For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Use search_routes_near_location for nearby saved routes. Repeat the filters with nextCursor until matched or scanComplete.',
     );
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
@@ -382,7 +510,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
     instructions.push(
-      'For sleep trends—including recent changes in duration, score, stages, HRV, heart rate, blood oxygen saturation, or respiration—use get_sleep_trend with the requested period and an explicit IANA time zone. It returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice.',
+      'get_sleep_trend returns recorded-vital coverage and local day, week, or month values in one call. Use list_sleep_vitals only for availability questions and list_sleep_sessions for individual nights. Raw sensor samples are unavailable, and recorded values are not medical advice.',
     );
   }
   if (
@@ -390,7 +518,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
     instructions.push(
-      'For the current recovery-aware score and its Load, Sleep, HRV, and Overnight HR evidence, use get_today_readiness with an explicit IANA time zone. It calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For good-morning requests, a daily report, or a current readout that should include recorded sleep HRV and sleep heart rate, use get_daily_report. Lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
+      'get_today_readiness calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
     );
   }
   return instructions.join(' ');
@@ -763,6 +891,32 @@ export function createMcpServer(
       limit: input.limit,
     })));
 
+    server.registerTool('query_activities', {
+      title: 'Query activities',
+      description: activityLocationAvailable
+        ? 'Query individual workouts newest first with one explicit date mode: start/end, relativePeriod/timeZone, or unbounded history. Filter server-side with activityTypes; use list_activity_types for canonical values. Returns bounded scan counts, safe summaries, exact start and end coordinates when present, opaque references, and authenticated app links.'
+        : 'Query individual workouts newest first with one explicit date mode: start/end, relativePeriod/timeZone, or unbounded history. Filter server-side with activityTypes; use list_activity_types for canonical values. Returns bounded scan counts, safe non-location summaries, opaque references, and authenticated app links; location fields are redacted.',
+      inputSchema: MCP_ACTIVITY_LIST_INPUT_SCHEMA,
+      outputSchema: outputSchemas.query_activities,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('query_activities', () => dataService.listActivities({
+      uid: auth.uid,
+      connectionId: auth.connectionId,
+      appBaseUrl: publicBaseUrl,
+      startTimeMs: input.start
+        ? parseMcpDateTime(input.start, 'start')
+        : undefined,
+      endTimeMs: input.end
+        ? parseMcpDateTime(input.end, 'end')
+        : undefined,
+      activityTypes: input.activityTypes,
+      relativePeriod: input.relativePeriod,
+      timeZone: input.timeZone,
+      includeLocation: activityLocationAvailable,
+      cursor: input.cursor,
+      limit: input.limit,
+    })));
+
     if (activityLocationAvailable) {
       server.registerTool('find_activities_near_location', {
         title: 'Find activities near a location',
@@ -780,6 +934,32 @@ export function createMcpServer(
         annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool(
         'find_activities_near_location',
+        () => dataService.findActivitiesNearLocation({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          appBaseUrl: publicBaseUrl,
+          location: input.location,
+          radiusMeters: input.radiusMeters,
+          startTimeMs: input.start
+            ? parseMcpDateTime(input.start, 'start')
+            : undefined,
+          endTimeMs: input.end
+            ? parseMcpDateTime(input.end, 'end')
+            : undefined,
+          activityTypes: input.activityTypes,
+          cursor: input.cursor,
+          limit: input.limit,
+        }),
+      ));
+
+      server.registerTool('search_activities_near_location', {
+        title: 'Search activities near a location',
+        description: 'Search activities whose exact start or end coordinate is within a radius, using either a complete start/end range or unbounded newest-first history. Place text is resolved with a read-only Mapbox lookup; direct coordinates do not call Mapbox.',
+        inputSchema: MCP_NEARBY_ACTIVITY_INPUT_SCHEMA,
+        outputSchema: outputSchemas.search_activities_near_location,
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool(
+        'search_activities_near_location',
         () => dataService.findActivitiesNearLocation({
           uid: auth.uid,
           connectionId: auth.connectionId,
@@ -994,6 +1174,32 @@ export function createMcpServer(
         }),
       ));
 
+      server.registerTool('search_routes_near_location', {
+        title: 'Search saved routes near a location',
+        description: 'Search saved routes whose persisted preview passes within a radius. Place text is resolved with a read-only Mapbox lookup; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
+        inputSchema: {
+          location: MCP_NEARBY_LOCATION_SCHEMA,
+          radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
+          activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
+          cursor: MCP_CURSOR_SCHEMA.optional(),
+          limit: z.number().int().min(1).max(10).default(10),
+        },
+        outputSchema: outputSchemas.search_routes_near_location,
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool(
+        'search_routes_near_location',
+        () => dataService.findRoutesNearLocation({
+          uid: auth.uid,
+          connectionId: auth.connectionId,
+          appBaseUrl: publicBaseUrl,
+          location: input.location,
+          radiusMeters: input.radiusMeters,
+          activityTypes: input.activityTypes,
+          cursor: input.cursor,
+          limit: input.limit,
+        }),
+      ));
+
       server.registerTool('get_route_geometry', {
         title: 'Get saved-route geometry',
         description: 'Get the bounded polyline5 preview geometry, exact bounds, and explicit start and end coordinates for each segment of one saved route.',
@@ -1070,6 +1276,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   }
   if ([
     'find_activities_near_location',
+    'search_activities_near_location',
   ].includes(toolName)) {
     return [
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
@@ -1087,6 +1294,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   }
   if ([
     'list_activities',
+    'query_activities',
     'list_activity_laps',
     'list_activity_jumps',
     'list_activity_swim_lengths',
@@ -1097,6 +1305,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   }
   if ([
     'find_routes_near_location',
+    'search_routes_near_location',
     'get_route_geometry',
     'list_route_waypoints',
   ].includes(toolName)) {

@@ -23,6 +23,8 @@ const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   'help',
   'releases',
   'policies',
+  'privacy',
+  'terms',
   'tools',
   'tools/compare',
   'tools/compare/saved',
@@ -481,9 +483,51 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'privacy',
+    loadChildren: () => import('./modules/policies.module').then(module => module.PoliciesModule),
+    data: {
+      title: 'Privacy Policy',
+      animation: 'Policies',
+      preload: true,
+      policyPage: 'privacy',
+      description: 'Read how Quantified Self handles personal data, connected services, processors, security, retention, and privacy rights.',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'Quantified Self Privacy Policy',
+        url: 'https://quantified-self.io/privacy',
+        inLanguage: 'en',
+      },
+    },
+  },
+  {
+    path: 'terms',
+    loadChildren: () => import('./modules/policies.module').then(module => module.PoliciesModule),
+    data: {
+      title: 'Terms of Service',
+      animation: 'Policies',
+      preload: true,
+      policyPage: 'terms',
+      description: 'Read the subscription, renewal, cancellation, refund, pricing, and plan terms for Quantified Self.',
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'Quantified Self Terms of Service',
+        url: 'https://quantified-self.io/terms',
+        inLanguage: 'en',
+      },
+    },
+  },
+  {
     path: 'policies',
     loadChildren: () => import('./modules/policies.module').then(module => module.PoliciesModule),
-    data: { title: 'Policies', animation: 'Policies', preload: true }
+    data: {
+      title: 'Privacy Policy & Terms',
+      animation: 'Policies',
+      preload: true,
+      policyPage: 'all',
+      description: 'Read our Privacy Policy, Terms of Service, and Data Protection information.',
+    },
   },
   {
     path: '',

@@ -29,8 +29,8 @@
       "Read"
     ],
     "websiteURL": "https://quantified-self.io/",
-    "privacyPolicyURL": "https://quantified-self.io/policies#privacy",
-    "termsOfServiceURL": "https://quantified-self.io/policies#tos",
+    "privacyPolicyURL": "https://quantified-self.io/privacy",
+    "termsOfServiceURL": "https://quantified-self.io/terms",
     "defaultPrompt": [
       "Give me my daily report with sleep HRV and sleep heart rate for Europe/Helsinki.",
       "Show my body-weight trend and explain the change without making medical claims.",

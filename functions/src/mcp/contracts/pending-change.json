@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "b1f39623fd3326db664a4ce7479754f5eb1384bd71c3ed1f29efada115ceb019",
+  "candidateSha256": "823b8bb259a7927c9addc435ba2d06d4d581b64de13c77c847fbf12e3c03e53c",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add a daily report tool with safe aggregate sleep HRV and heart rate, live readiness evidence, and compact Training context.",
+  "summary": "Add the daily report, front-load daily and sleep routing, and add contract-safe activity and nearby-search replacements with structural date modes and closed-world annotations.",
   "rescanRequired": true
 }

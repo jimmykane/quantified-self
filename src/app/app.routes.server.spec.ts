@@ -52,7 +52,12 @@ describe('serverRoutes', () => {
     const prerenderRoutes = serverRoutes.filter(route => route.renderMode === RenderMode.Prerender);
 
     expect(prerenderRoutes.map(route => route.path)).toEqual([...PRERENDERED_PUBLIC_ROUTES]);
-    expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual(['help']);
+    expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual([
+      'help',
+      'policies',
+      'privacy',
+      'terms',
+    ]);
     expect(PRERENDERED_TOOLS_ROUTES).toEqual([
       'tools',
       'tools/compare',
@@ -96,6 +101,9 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('share/comparison/:userID/:eventID')).toBe(false);
     expect(prerenderedPaths.has('pricing')).toBe(false);
     expect(prerenderedPaths.has('help')).toBe(true);
+    expect(prerenderedPaths.has('policies')).toBe(true);
+    expect(prerenderedPaths.has('privacy')).toBe(true);
+    expect(prerenderedPaths.has('terms')).toBe(true);
     expect(prerenderedPaths.has('releases')).toBe(false);
     expect(prerenderedPaths.has('ai-insights')).toBe(false);
     expect(prerenderedPaths.has('tools')).toBe(true);

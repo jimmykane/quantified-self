@@ -39,8 +39,9 @@ the client successfully exchanges its authorization code for credentials, and le
 
 The crawlable product overview lives at `/features/mcp-server`. It is a prerendered public page with route metadata,
 canonical metadata, visible capability and boundary copy, FAQ structured data, and links to the setup and policy
-details. `/help#data-and-privacy` owns the user setup instructions, while `/policies#mcp-clients` owns the complete
-disclosure.
+details. `/help#data-and-privacy` owns the user setup instructions, while `/policies#mcp-clients` owns the complete MCP
+disclosure. `/privacy` and `/terms` are dedicated prerendered reviewer URLs; `/policies` is also prerendered and remains
+the consolidated legal page.
 
 The protocol endpoint, OAuth endpoints, well-known metadata endpoints, and authenticated `/mcp/authorize` consent page
 must never be added to the sitemap. Keep them disallowed in `src/robots.txt`, and keep consent route metadata set to
@@ -394,21 +395,27 @@ The analytics and map entries follow the
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first filtered activity scans, optional explicit or relative date selection, opaque references, signed-in app links, and optional exact start/end coordinates |
-| `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Bounded newest-first scan matching an activity's exact start or end coordinate against a radius |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
+| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
+| `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
+| `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
 | `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
 | `list_routes` | `routes:read` | Bounded newest-first scans with optional activity-type and case-insensitive name filters, opaque references, and signed-in app links; exact bounds require `route-location:read` |
-| `find_routes_near_location` | `routes:read` + `route-location:read` | Bounded newest-first scan measuring a location against persisted route previews |
+| `find_routes_near_location` | `routes:read` + `route-location:read` | Frozen compatibility tool for nearby saved-route scans |
+| `search_routes_near_location` | `routes:read` + `route-location:read` | Preferred closed-world nearby saved-route search against persisted route previews |
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
-Every tool is annotated read-only, non-destructive, and idempotent. Tools are closed-world except the two nearby-location
-tools, which are marked open-world because a place-name input can call Mapbox. The HTTP layer checks every required scope
-before the tool call, and only registers tools covered by the bearer token. `get_activity_metrics`,
+Every tool is annotated read-only, non-destructive, and idempotent. The preferred `search_*_near_location` tools are
+closed-world: a place-name input can make a bounded Mapbox geocoding read, but it cannot write to Mapbox or change
+publicly visible internet state. The already-registered `find_*_near_location` variants retain their frozen
+`openWorldHint: true` metadata for compatibility, while server instructions route new requests to the corrected
+additive tools. The HTTP layer checks every required scope before the tool call and only registers tools covered by the
+bearer token. `get_activity_metrics`,
 `get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
 scopes are present.
 
@@ -634,16 +641,19 @@ them. The separately requested direct app URL uses the existing `/user/{uid}/eve
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
 Activity discovery metadata explicitly maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
-named-sport requests to `list_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
+named-sport requests to `query_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
 plus their group and indoor hints; filters accept those values or aliases recognized by Sports Lib and canonicalize
 them before scanning. A request such as “latest run” therefore uses a server-side type filter with `limit: 1`, so a newer
 activity of another type is skipped instead of being mistaken for the requested workout.
 
-The list is always newest first. `start` and `end` remain an optional explicit pair with the existing 366-day limit.
-Alternatively, `relativePeriod: "today" | "yesterday"` requires an explicit IANA `timeZone` and resolves the exact local
-calendar-day boundaries, including DST-short and DST-long days. Date selectors are mutually exclusive. Omitting every
-date selector starts at the newest persisted activity across all history. A relative-period cursor retains the first
-page's resolved millisecond range, so crossing local midnight between pages cannot move the query window.
+`query_activities` is always newest first. Its advertised JSON Schema uses `oneOf` for exactly three legal date modes:
+an explicit paired `start` and `end` with the existing 366-day limit; a
+`relativePeriod: "today" | "yesterday"` paired with an explicit IANA `timeZone`; or an unbounded mode that omits all
+four date selectors. The relative mode resolves exact local calendar-day boundaries, including DST-short and DST-long
+days. Invalid partial or mixed selectors therefore fail schema validation before service work instead of relying only
+on runtime validation. A relative-period cursor retains the first page's resolved millisecond range, so crossing local
+midnight between pages cannot move the query window. `search_activities_near_location` similarly advertises an explicit
+paired range or an unbounded mode.
 
 One filtered call scans at most 100 selected activity documents and can return fewer matches than requested.
 `scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
@@ -653,8 +663,9 @@ relative-period/timezone mode, and resolved or explicit date range; the type set
 digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
 snapshots are not evidence that an individual activity is unavailable.
 
-`find_activities_near_location` is not registered and Mapbox is not called without `activity-location:read`. With the
-scope, it reuses the location field mask and safe summary projection. It matches only the persisted
+The nearby activity tools are not registered and Mapbox is not called without `activity-location:read`.
+`search_activities_near_location` is the preferred corrected surface. With the scope, it reuses the location field mask
+and safe summary projection. It matches only the persisted
 start and end positions, not the raw activity track: the response reports the nearest matching coordinate, whether it
 was the start or end, and the great-circle distance. An optional paired start/end date filter retains the 366-day bound.
 If dates are omitted, the scan starts with the newest activity and continues through encrypted, query-bound cursors.
@@ -699,15 +710,16 @@ The projection excludes source/delivery provenance, provider IDs, Storage metada
 comments/descriptions/links/extensions, streams, and arbitrary stats. Route references and cursors use the same
 UID-and-connection-bound authenticated-encryption design as activity references.
 
-`get_route_geometry`, `find_routes_near_location`, and `list_route_waypoints` are not registered without
+`get_route_geometry`, both nearby-route variants, and `list_route_waypoints` are not registered without
 `route-location:read`, and missing permission is rejected before preview, Storage, parser, or Mapbox work.
 `get_route_geometry` reads only the persisted Sports Lib route preview. The response fixes the contract to preview
 version 1, `polyline5`, precision 5, exact bounds, at most 20 segments and 5,000 decoded preview points. Segment IDs and
 names are excluded. Each segment includes explicit `startPosition` and `endPosition` values derived from the first and
 last decoded preview point. This is the deliberately simplified preview, not the source route's raw point stream.
 
-`find_routes_near_location` first uses each route's persisted exact bounds as a cheap exclusion check, then reads only
-the `preview` field for plausible candidates. It decodes the persisted `polyline5` once and measures the nearest point
+`search_routes_near_location` is the preferred corrected surface. It first uses each route's persisted exact bounds as a
+cheap exclusion check, then reads only the `preview` field for plausible candidates. It decodes the persisted
+`polyline5` once and measures the nearest point
 on every preview segment using spherical geometry, so a route can match anywhere along its preview rather than only at
 its endpoints. Encoded segments are preflighted against their declared point counts before decoding, and invalid preview
 attempts consume the same cumulative point-work budget as valid previews. The result includes the nearest point and
@@ -733,7 +745,7 @@ range-and-order shape.
 
 ## Nearby-location resolution
 
-Both nearby tools accept either `{ latitudeDegrees, longitudeDegrees }` or `{ query }`, plus a radius from 100 to
+The preferred nearby-search tools accept either `{ latitudeDegrees, longitudeDegrees }` or `{ query }`, plus a radius from 100 to
 500,000 metres. Direct coordinates are validated and used entirely inside Quantified Self. Place text is normalized,
 limited to 20 words and 200 characters, and sent to the Mapbox Geocoding v6 forward endpoint with autocomplete disabled,
 one result, and temporary (uncached) use. MCP never invokes an AI model to repair or reinterpret a failed place lookup.
@@ -745,7 +757,8 @@ bounding box enter the application. Authentication, rate-limit, timeout, malform
 to safe MCP errors without logging the query or resolved coordinates. In addition to the normal MCP connection request
 limit, place-name lookups have a distributed limit of 30 per connection per minute. Their counter documents use the
 existing `mcpOAuthRateLimits` collection and `expireAt` TTL lifecycle. Direct-coordinate calls do not consume that
-geocoding budget.
+geocoding budget. This read-only lookup does not change public internet state, so the preferred nearby-search tools use
+`openWorldHint: false`.
 
 ## Training-derived metrics
 

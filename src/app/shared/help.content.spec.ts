@@ -73,6 +73,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('**Open supported links**');
     expect(dataAndPrivacySection?.content).toContain('cannot force Android or the ChatGPT app');
     expect(dataAndPrivacySection?.content).toContain('[Read-only MCP Server feature page](/features/mcp-server)');
+    expect(dataAndPrivacySection?.content).toContain('[Privacy Policy](/privacy)');
+    expect(dataAndPrivacySection?.content).toContain('[Terms of Service](/terms)');
     expect(dataAndPrivacySection?.links).toContainEqual({
       label: 'MCP Server',
       icon: 'devices',
@@ -85,6 +87,18 @@ describe('help.content', () => {
       kind: 'route',
       target: '/services',
       queryParams: { serviceName: 'mcp' },
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'Privacy Policy',
+      icon: 'lock_outline',
+      kind: 'route',
+      target: '/privacy',
+    });
+    expect(dataAndPrivacySection?.links).toContainEqual({
+      label: 'Terms of Service',
+      icon: 'gavel',
+      kind: 'route',
+      target: '/terms',
     });
   });
 

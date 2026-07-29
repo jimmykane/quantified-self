@@ -2,6 +2,9 @@ User-agent: *
 Allow: /
 Allow: /pricing
 Allow: /help
+Allow: /policies
+Allow: /privacy
+Allow: /terms
 Allow: /tools
 Allow: /tools/compare
 Allow: /integrations

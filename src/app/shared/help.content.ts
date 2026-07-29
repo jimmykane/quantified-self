@@ -802,6 +802,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 - For AI Insights, we do **not** share your raw activity data with AI providers.
 - Only the minimum derived stats required to answer your prompt are sent.
 - The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
+- The dedicated [Privacy Policy](/privacy) and [Terms of Service](/terms) pages are public and readable without signing in.
 
 ## Settings you can change yourself
 
@@ -875,6 +876,8 @@ This action cannot be undone.
         target: '/services',
         queryParams: { serviceName: 'mcp' },
       },
+      { label: 'Privacy Policy', icon: 'lock_outline', kind: 'route', target: '/privacy' },
+      { label: 'Terms of Service', icon: 'gavel', kind: 'route', target: '/terms' },
       { label: 'Policies', icon: 'policy', kind: 'route', target: '/policies' },
       { label: 'Garmin Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_GARMIN_DATA_FRAGMENT },
       { label: 'Suunto Data Privacy', icon: 'policy', kind: 'route', target: '/policies', fragment: POLICIES_SUUNTO_DATA_FRAGMENT },

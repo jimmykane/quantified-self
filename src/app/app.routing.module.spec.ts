@@ -47,6 +47,39 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Read-only MCP client access');
   });
 
+  it('defines dedicated public privacy and terms routes for reviewer-readable legal pages', () => {
+    const privacyRoute = routes.find(route => route.path === 'privacy');
+    const termsRoute = routes.find(route => route.path === 'terms');
+    const policiesRoute = routes.find(route => route.path === 'policies');
+
+    expect(privacyRoute?.canMatch).toBeUndefined();
+    expect(privacyRoute?.loadChildren).toBeTypeOf('function');
+    expect(privacyRoute?.data).toMatchObject({
+      title: 'Privacy Policy',
+      policyPage: 'privacy',
+      description: expect.stringContaining('personal data'),
+      jsonLd: {
+        '@type': 'WebPage',
+        url: 'https://quantified-self.io/privacy',
+      },
+    });
+    expect(termsRoute?.canMatch).toBeUndefined();
+    expect(termsRoute?.loadChildren).toBeTypeOf('function');
+    expect(termsRoute?.data).toMatchObject({
+      title: 'Terms of Service',
+      policyPage: 'terms',
+      description: expect.stringContaining('subscription'),
+      jsonLd: {
+        '@type': 'WebPage',
+        url: 'https://quantified-self.io/terms',
+      },
+    });
+    expect(policiesRoute?.data).toMatchObject({
+      title: 'Privacy Policy & Terms',
+      policyPage: 'all',
+    });
+  });
+
   it('should define a public pricing route with membership JSON-LD', async () => {
     const pricingRoute = routes.find(route => route.path === 'pricing');
     const subscriptionsRoute = routes.find(route => route.path === 'subscriptions');

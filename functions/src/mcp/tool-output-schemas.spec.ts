@@ -1114,7 +1114,14 @@ const successfulToolArguments: Record<
     activityTypes: ['Running'],
     limit: 1,
   },
+  query_activities: {
+    activityTypes: ['Running'],
+    limit: 1,
+  },
   find_activities_near_location: {
+    location: coordinate,
+  },
+  search_activities_near_location: {
     location: coordinate,
   },
   list_activity_laps: {
@@ -1142,6 +1149,9 @@ const successfulToolArguments: Record<
     search: 'ridge',
   },
   find_routes_near_location: {
+    location: { query: 'Ioannina, Greece' },
+  },
+  search_routes_near_location: {
     location: { query: 'Ioannina, Greece' },
   },
   get_route_geometry: {
@@ -1840,6 +1850,8 @@ describe('MCP public output contracts', () => {
     );
     expect(JSON.stringify(advertised.list_activities))
       .not.toContain('startPosition');
+    expect(JSON.stringify(advertised.query_activities))
+      .not.toContain('startPosition');
     expect(JSON.stringify(advertised.list_activity_jumps))
       .not.toContain('latitudeDegrees');
     expect(JSON.stringify(advertised.list_routes)).not.toContain('bounds');
@@ -1848,6 +1860,7 @@ describe('MCP public output contracts', () => {
 
     for (const toolName of [
       'list_activities',
+      'query_activities',
       'list_activity_jumps',
       'get_activity_chart_data',
       'list_routes',
@@ -2402,10 +2415,20 @@ describe('MCP public output contracts', () => {
       nextCursor: null,
       activityId: 'activity-secret',
     });
+    mismatchService.findActivitiesNearLocation = vi.fn().mockResolvedValue({
+      activities: [],
+      nextCursor: null,
+      activityId: 'nearby-activity-secret',
+    });
     mismatchService.listRoutes = vi.fn().mockResolvedValue({
       routes: [],
       nextCursor: null,
       originalFiles: ['route-secret'],
+    });
+    mismatchService.findRoutesNearLocation = vi.fn().mockResolvedValue({
+      routes: [],
+      nextCursor: null,
+      originalFiles: ['nearby-route-secret'],
     });
     const connection = await connectFixtureServer(mismatchService);
     connections.push(connection);
@@ -2418,7 +2441,12 @@ describe('MCP public output contracts', () => {
       'get_daily_report',
       'get_daily_briefing',
       'list_activities',
+      'query_activities',
+      'find_activities_near_location',
+      'search_activities_near_location',
       'list_routes',
+      'find_routes_near_location',
+      'search_routes_near_location',
     ] as const) {
       const result = await connection.client.callTool({
         name: toolName,
@@ -2457,9 +2485,19 @@ describe('MCP public output contracts', () => {
     errorService.listActivities = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.findActivitiesNearLocation = vi.fn().mockImplementation(
+      async () => {
+        throw expectedError();
+      },
+    );
     errorService.listRoutes = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.findRoutesNearLocation = vi.fn().mockImplementation(
+      async () => {
+        throw expectedError();
+      },
+    );
     const connection = await connectFixtureServer(errorService);
     connections.push(connection);
 
@@ -2470,7 +2508,12 @@ describe('MCP public output contracts', () => {
       'get_daily_report',
       'get_daily_briefing',
       'list_activities',
+      'query_activities',
+      'find_activities_near_location',
+      'search_activities_near_location',
       'list_routes',
+      'find_routes_near_location',
+      'search_routes_near_location',
     ] as const) {
       const result = await connection.client.callTool({
         name: toolName,

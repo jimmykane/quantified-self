@@ -46,7 +46,9 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'get_daily_briefing',
   'list_activity_types',
   'list_activities',
+  'query_activities',
   'find_activities_near_location',
+  'search_activities_near_location',
   'list_activity_laps',
   'list_activity_jumps',
   'list_activity_swim_lengths',
@@ -55,6 +57,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'get_activity_metrics',
   'list_routes',
   'find_routes_near_location',
+  'search_routes_near_location',
   'get_route_geometry',
   'list_route_waypoints',
 ] as const;
@@ -1363,7 +1366,28 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       ...MCP_PAGINATION_OUTPUT_SHAPE,
       scanComplete: z.boolean(),
     }),
+    query_activities: z.strictObject({
+      scannedActivityCount: count,
+      skippedActivityCount: count,
+      activities: z.array(
+        scope.activityLocation
+          ? activitySummaryWithLocation
+          : activitySummaryWithoutLocation,
+      ),
+      ...MCP_PAGINATION_OUTPUT_SHAPE,
+      scanComplete: z.boolean(),
+    }),
     find_activities_near_location: scope.activityLocation
+      ? z.strictObject({
+          location: nearbyLocationResult,
+          scannedActivityCount: count,
+          skippedActivityCount: count,
+          activities: z.array(nearbyActivity),
+          ...MCP_PAGINATION_OUTPUT_SHAPE,
+          scanComplete: z.boolean(),
+        })
+      : unavailableLocationOutput,
+    search_activities_near_location: scope.activityLocation
       ? z.strictObject({
           location: nearbyLocationResult,
           scannedActivityCount: count,
@@ -1420,6 +1444,18 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       scanComplete: z.boolean(),
     }),
     find_routes_near_location: scope.routeLocation
+      ? z.strictObject({
+          location: nearbyLocationResult,
+          scannedRouteCount: count,
+          loadedRoutePreviewCount: count,
+          decodedRoutePointCount: count,
+          skippedRouteCount: count,
+          routes: z.array(nearbyRoute),
+          ...MCP_PAGINATION_OUTPUT_SHAPE,
+          scanComplete: z.boolean(),
+        })
+      : unavailableLocationOutput,
+    search_routes_near_location: scope.routeLocation
       ? z.strictObject({
           location: nearbyLocationResult,
           scannedRouteCount: count,

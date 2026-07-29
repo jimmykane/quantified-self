@@ -59,7 +59,6 @@
     "/share/comparison/*/*",
     "/user/*/event/*",
     "/user/*/route/*",
-    "/policies",
     "/ai-insights",
     "!/**/*.*",
     "!/**/*__*",

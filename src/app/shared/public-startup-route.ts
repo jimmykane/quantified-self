@@ -9,6 +9,8 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/help',
   '/releases',
   '/policies',
+  '/privacy',
+  '/terms',
   '/tools',
   '/tools/compare',
   '/tools/compare/saved',
