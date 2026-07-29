@@ -222,7 +222,7 @@
                   <span class="training-metric-label">Recovery left</span>
                   <div class="training-readiness-imported-recovery-value">
                     <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
-                    <span>remaining</span>
+                    <span>remaining · until {{ estimate.finishTimeMs | date:'shortTime' }}</span>
                   </div>
                   <p>{{ estimate.detailText }}</p>
                 </div>
@@ -240,7 +240,7 @@
                   [attr.aria-expanded]="trainingRecoveryHistoryExpanded"
                   aria-controls="training-recovery-history-details"
                   (click)="toggleTrainingRecoveryHistory()">
-                  <span>{{ trainingRecoveryHistoryExpanded ? 'Hide' : 'Details' }}</span>
+                  <span>{{ trainingRecoveryHistoryExpanded ? 'Hide sleep details' : 'Show sleep details' }}</span>
                   <mat-icon aria-hidden="true">{{ trainingRecoveryHistoryExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
                 </button>
               </div>

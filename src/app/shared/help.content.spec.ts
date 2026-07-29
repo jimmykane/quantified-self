@@ -110,6 +110,13 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('updating');
   });
 
+  it('should document the Dashboard Today recovery countdown behavior', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('estimated local finish time as Training');
+    expect(gettingStartedSection?.content).toContain('disappears when elapsed');
+  });
+
   it('should document dashboard manager curated/custom/map categories', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
@@ -206,7 +213,10 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('**Recovery context**');
     expect(trainingSection?.content).toContain('**Recovery left**');
     expect(trainingSection?.content).toContain('**Sleep history**');
-    expect(trainingSection?.content).toContain('countdown remains visible while sleep details are collapsed');
+    expect(trainingSection?.content).toContain('remains visible while sleep details are collapsed');
+    expect(trainingSection?.content).toContain('estimated local finish time');
+    expect(trainingSection?.content).toContain('**Show sleep details**');
+    expect(trainingSection?.content).toContain('omitted quietly when missing or elapsed');
     expect(trainingSection?.content).toContain('without changing the Training state');
     expect(trainingSection?.content).toContain('Dashboard **Today** shows the same compact state label and caption');
     expect(trainingSection?.content).toContain('same current formula as Dashboard Today');

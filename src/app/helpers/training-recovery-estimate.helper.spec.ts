@@ -8,6 +8,7 @@ describe('buildTrainingRecoveryEstimateViewModel', () => {
       endTimeMs: Date.UTC(2026, 6, 14, 8),
     }, 'stale', Date.UTC(2026, 6, 14, 9))).toEqual({
       valueText: '1h 00m',
+      finishTimeMs: Date.UTC(2026, 6, 14, 10),
       detailText: 'Imported post-workout estimate. It is separate from Readiness and Freshness.',
       isUpdating: true,
     });

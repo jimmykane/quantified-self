@@ -187,6 +187,19 @@ export function resolveRemainingRecoverySeconds(
   return Math.max(0, Math.floor(remainingSeconds));
 }
 
+export function resolveRecoveryFinishTimeMs(
+  context: DashboardRecoveryNowContext | null | undefined,
+  nowMs = Date.now(),
+): number | null {
+  const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
+  if (remainingSeconds === null || remainingSeconds <= 0) {
+    return null;
+  }
+
+  const finishTimeMs = nowMs + (remainingSeconds * 1000);
+  return Number.isFinite(finishTimeMs) ? finishTimeMs : null;
+}
+
 export function resolveActiveRecoveryTotalSeconds(
   context: DashboardRecoveryNowContext | null | undefined,
   nowMs = Date.now(),

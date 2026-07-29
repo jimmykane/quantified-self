@@ -103,7 +103,7 @@ h3 { margin-bottom: 0; font-size: var(--training-card-title-font-size); line-hei
 .training-readiness-imported-recovery { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 0 10px; margin-top: 14px; }
 .training-readiness-imported-recovery > mat-icon { width: 18px; height: 18px; margin-top: 2px; color: var(--mat-sys-primary); font-size: 18px; line-height: 18px; }
 .training-readiness-imported-recovery-copy { min-width: 0; }
-.training-readiness-imported-recovery-value { display: flex; align-items: baseline; gap: 5px; margin-top: 3px; }
+.training-readiness-imported-recovery-value { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; margin-top: 3px; }
 .training-readiness-imported-recovery-value strong { font-size: 19px; line-height: 1.15; }
 .training-readiness-imported-recovery-value > span, .training-readiness-imported-recovery-copy p { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.35; }
 .training-readiness-imported-recovery-copy p { margin: 5px 0 0; }

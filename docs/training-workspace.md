@@ -652,18 +652,19 @@ values, so ECharts leaves visible gaps rather than interpolating them.
 
 `recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as the compact
 **Recovery left** row at the start of the Recovery context inside Readiness, directly before Sleep history. Its live
-countdown remains visible while the sleep details are collapsed and explicitly stays separate from the Readiness score
-and Freshness/Form. It replaces the former top-level status tile so the same timer is not presented twice. Dashboard
-Today shows the same active countdown as an imported estimate beneath its score. The timer uses the stored end time, is
-contextual rather than a second recovery model, and never changes Readiness, Freshness, or the Training state. The worker
-scans a bounded 16-day event window; no events in that window is a valid empty result for new or inactive users and is
-logged as informational rather than a warning.
+countdown includes the estimated local finish clock, remains visible while the sleep details are collapsed, and explicitly
+stays separate from the Readiness score and Freshness/Form. It replaces the former top-level status tile so the same timer
+is not presented twice. Dashboard Today uses the same **Recovery left** label, remaining duration, and estimated local
+finish clock beneath its score. Both surfaces remove the row without a placeholder when the estimate elapses. The timer
+uses the stored end time, is contextual rather than a second recovery model, and never changes Readiness, Freshness, or
+the Training state. The worker scans a bounded 16-day event window; no events in that window is a valid empty result for
+new or inactive users and is logged as informational rather than a warning.
 
 #### Recovery context and sleep history
 
 Recovery context groups the optional active Recovery left estimate with the always-available Sleep history summary.
-Sleep history remains independently expandable; collapsing its details never hides an active countdown. The expandable
-Sleep history inside Readiness uses:
+Sleep history remains independently expandable through explicit **Show sleep details** and **Hide sleep details**
+controls; collapsing its details never hides an active countdown. The expandable Sleep history inside Readiness uses:
 
 - Current: the current 28-day window.
 - Reference: the immediately preceding 84-day window.

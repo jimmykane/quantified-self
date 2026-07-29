@@ -109,6 +109,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryContext?.querySelector('#training-recovery-context-title')?.textContent).toContain('Recovery context');
     expect(element.querySelector('.training-readiness-source')?.nextElementSibling).toBe(recoveryContext);
     expect(importedRecovery?.textContent).toContain('Recovery left');
+    expect(importedRecovery?.textContent).toContain('remaining · until');
     expect(importedRecovery?.textContent).toContain('Imported post-workout estimate');
     expect(importedRecovery?.textContent).toContain('separate from Readiness and Freshness');
     expect(sleepHistory?.querySelector('#training-recovery-history-title')?.textContent).toContain('Sleep history');
@@ -116,6 +117,12 @@ describe('TrainingWorkspaceComponent', () => {
     expect(sleepHistoryDetails?.hidden).toBe(true);
     expect((importedRecovery as HTMLElement | null)?.hidden).toBe(false);
     expect(element.querySelector('#training-recovery-history-details .training-readiness-imported-recovery')).toBeNull();
+    const sleepDetailsButton = sleepHistory?.querySelector('button') as HTMLButtonElement | null;
+    expect(sleepDetailsButton?.textContent).toContain('Show sleep details');
+    sleepDetailsButton?.click();
+    fixture.detectChanges();
+    expect(sleepDetailsButton?.textContent).toContain('Hide sleep details');
+    expect(sleepHistoryDetails?.hidden).toBe(false);
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
