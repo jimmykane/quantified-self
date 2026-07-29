@@ -3367,9 +3367,19 @@ function resolveTodayReadinessLoadContext(
     : null;
   const form = formFromSeries ?? fallbackForm;
   const rampRate = rampRateFromSeries ?? fallbackRampRate;
+  const formSourceUpdatedAtMs = formFromSeries !== null
+    ? readyForm?.updatedAtMs
+    : fallbackForm !== null
+      ? readyFormNow?.updatedAtMs
+      : null;
+  const rampRateSourceUpdatedAtMs = rampRateFromSeries !== null
+    ? readyForm?.updatedAtMs
+    : fallbackRampRate !== null
+      ? readyRampRate?.updatedAtMs
+      : null;
   const selectedSourceUpdatedAtMs = [
-    formFromSeries !== null ? readyForm?.updatedAtMs : readyFormNow?.updatedAtMs,
-    rampRateFromSeries !== null ? readyForm?.updatedAtMs : readyRampRate?.updatedAtMs,
+    formSourceUpdatedAtMs,
+    rampRateSourceUpdatedAtMs,
   ].filter((value): value is number => value !== null && value !== undefined);
 
   return {

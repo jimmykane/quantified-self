@@ -43,6 +43,7 @@ import {
   SAFE_ACTIVITY_LOCATION_FIELDS,
 } from './data.service';
 import { McpActivityChartRateLimitError } from './activity-chart-rate-limit';
+import { createMcpOutputSchemaRegistry } from './tool-output-schemas';
 
 function makeEvent(
   startDate: string,
@@ -4186,6 +4187,78 @@ describe('MCP data service', () => {
         },
       },
     });
+  });
+
+  it('omits load freshness when ready snapshots have no current load value', async () => {
+    const asOfDayMs = Date.parse('2026-07-27T00:00:00.000Z');
+    const previousDayMs = asOfDayMs - (24 * 60 * 60 * 1000);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(
+      async (_uid, metricKind) => {
+        if (metricKind === DERIVED_METRIC_KINDS.Form) {
+          return {
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            updatedAtMs: Date.parse('2026-07-27T08:00:00.000Z'),
+            payload: {
+              dayBoundary: 'UTC',
+              rangeStartDayMs: null,
+              rangeEndDayMs: null,
+              dailyLoads: [],
+              excludesMergedEvents: true,
+            },
+          };
+        }
+        if (metricKind === DERIVED_METRIC_KINDS.FormNow) {
+          return {
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            updatedAtMs: Date.parse('2026-07-27T09:00:00.000Z'),
+            payload: {
+              dayBoundary: 'UTC',
+              asOfDayMs,
+              latestDayMs: previousDayMs,
+              value: 8,
+              trend8Weeks: [],
+            },
+          };
+        }
+        if (metricKind === DERIVED_METRIC_KINDS.RampRate) {
+          return {
+            status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+            updatedAtMs: Date.parse('2026-07-27T10:00:00.000Z'),
+            payload: {
+              dayBoundary: 'UTC',
+              asOfDayMs,
+              latestDayMs: previousDayMs,
+              ctlToday: 42,
+              ctl7DaysAgo: 40,
+              rampRate: 2,
+              trend8Weeks: [],
+            },
+          };
+        }
+        return null;
+      },
+    );
+
+    const result = await createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result.readiness.drivers.load).toEqual({
+      status: 'not_ready',
+      weightPercent: 40,
+      form: null,
+      rampRate: null,
+      asOfDayMs: null,
+      sourceUpdatedAtMs: null,
+    });
+    expect(createMcpOutputSchemaRegistry({
+      activityLocation: true,
+      routeLocation: true,
+    }).get_daily_report.safeParse(result).success).toBe(true);
   });
 
   it('uses the normalized Suunto offset for live-readiness sleep-date grouping', async () => {

@@ -462,14 +462,36 @@ function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
       return toolResult(validated as Record<string, unknown>);
     } catch (error) {
       if (!(error instanceof McpDataError)) {
+        const validationIssues = summarizeMcpOutputValidationIssues(error);
         logger.error('[MCP] Tool execution failed', {
           toolName: name,
           errorName: error instanceof Error ? error.name : 'unknown',
+          ...(validationIssues ? { validationIssues } : {}),
         });
       }
       return formatMcpToolError(error);
     }
   };
+}
+
+export function summarizeMcpOutputValidationIssues(
+  error: unknown,
+): Array<{ code: string; path: Array<string | number> }> | null {
+  if (!(error instanceof z.ZodError)) {
+    return null;
+  }
+  return error.issues.slice(0, 8).map(issue => ({
+    code: issue.code,
+    path: issue.path.slice(0, 8).map(part => {
+      if (typeof part === 'number') {
+        return part;
+      }
+      return typeof part === 'string'
+        && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(part)
+        ? part
+        : '<dynamic>';
+    }),
+  }));
 }
 
 function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
