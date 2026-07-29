@@ -67,6 +67,7 @@ const EMPTY_CHART_UPDATE_SETTINGS: ChartSetOptionSettings = {
     notMerge: true,
     lazyUpdate: false
 };
+const ADMIN_USER_SEARCH_DEBOUNCE_MS = 750;
 
 @Component({
     selector: 'app-admin-user-management',
@@ -124,6 +125,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     // Search and sort state
     searchTerm = '';
+    searchInputValue = '';
     sortField = 'created';
     sortDirection: 'asc' | 'desc' = 'desc';
 
@@ -170,7 +172,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     async ngOnInit(): Promise<void> {
         // Handle search debounce
         this.searchSubject.pipe(
-            debounceTime(300),
+            debounceTime(ADMIN_USER_SEARCH_DEBOUNCE_MS),
             distinctUntilChanged(),
             takeUntil(this.destroy$)
         ).subscribe(term => {
@@ -316,10 +318,12 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     onSearchInput(event: Event): void {
         const value = (event.target as HTMLInputElement).value;
+        this.searchInputValue = value;
         this.searchSubject.next(value);
     }
 
     clearSearch(): void {
+        this.searchInputValue = '';
         this.searchTerm = '';
         this.searchSubject.next('');
     }

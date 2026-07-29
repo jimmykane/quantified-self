@@ -220,6 +220,8 @@ describe('AdminUserManagementComponent', () => {
         }
     };
 
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
     beforeEach(async () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
@@ -706,12 +708,41 @@ describe('AdminUserManagementComponent', () => {
         expect(component.isAdmin(mockUsers[1])).toBe(false);
     });
 
+    it('should debounce rapid search input before fetching users', async () => {
+        vi.clearAllMocks();
+        component.currentPage = 3;
+
+        component.onSearchInput({ target: { value: 's' } } as unknown as Event);
+        component.onSearchInput({ target: { value: 'se' } } as unknown as Event);
+        component.onSearchInput({ target: { value: 'serg' } } as unknown as Event);
+
+        expect(component.searchInputValue).toBe('serg');
+        expect(component.searchTerm).toBe('');
+        expect(adminServiceSpy.getUsers).not.toHaveBeenCalled();
+
+        await wait(850);
+
+        expect(component.searchTerm).toBe('serg');
+        expect(component.currentPage).toBe(0);
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledTimes(1);
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 0,
+            pageSize: 10,
+            searchTerm: 'serg',
+            sortField: 'created',
+            sortDirection: 'desc',
+            filterService: undefined
+        });
+    });
+
     it('should update searchTerm on input and reset page on clear', () => {
+        component.searchInputValue = 'existing';
         component.searchTerm = 'existing';
         component.currentPage = 3;
 
         component.clearSearch();
 
+        expect(component.searchInputValue).toBe('');
         expect(component.searchTerm).toBe('');
     });
 
