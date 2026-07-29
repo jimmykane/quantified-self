@@ -304,7 +304,7 @@ function getGlobalRouteCount(
  */
 export const listUsers = onAdminCall<ListUsersRequest, ListUsersResponse>({
     region: FUNCTIONS_MANIFEST.listUsers.region,
-    memory: '256MiB',
+    memory: '512MiB',
     timeoutSeconds: 120,
 }, async (request) => {
     try {
