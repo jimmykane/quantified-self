@@ -42,7 +42,11 @@ import { computed } from '@angular/core';
         }
 
         <div class="feed-wrapper">
-          <app-whats-new-feed [limit]="1" [displayMode]="'full'"></app-whats-new-feed>
+          <app-whats-new-feed
+            [limit]="1"
+            [displayMode]="'full'"
+            [notificationLayout]="true"
+          ></app-whats-new-feed>
         </div>
       </div>
     </mat-dialog-content>

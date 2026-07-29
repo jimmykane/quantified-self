@@ -27,7 +27,11 @@
 </mat-card>
 
 <!-- FULL MODE: Expansion Panels (Releases Page) -->
-<mat-expansion-panel *ngIf="displayMode() === 'full'" [expanded]="expanded()" class="changelog-panel qs-overlay-flat">
+<mat-expansion-panel
+    *ngIf="displayMode() === 'full'"
+    [expanded]="expanded()"
+    class="changelog-panel qs-overlay-flat"
+    [class.changelog-panel-notification]="notificationLayout()">
     <mat-expansion-panel-header>
         <mat-panel-title>
             <div class="header-stack">

@@ -16,6 +16,7 @@ export class WhatsNewItemComponent {
     public displayMode = input<'compact' | 'full'>('full');
     public isUnread = input<boolean>(false);
     public expanded = input<boolean>(false);
+    public notificationLayout = input(false);
 
     public postClick = output<void>();
     public readonly displayDate = computed(() => coerceChangelogPostDate(this.post().date));

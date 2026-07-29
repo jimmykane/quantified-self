@@ -51,6 +51,16 @@ describe('WhatsNewItemComponent', () => {
         expect(spy).toHaveBeenCalled();
     });
 
+    it('should apply flush content alignment only when notification layout is requested', () => {
+        const panel = fixture.debugElement.query(By.css('.changelog-panel')).nativeElement as HTMLElement;
+        expect(panel.classList.contains('changelog-panel-notification')).toBe(false);
+
+        fixture.componentRef.setInput('notificationLayout', true);
+        fixture.detectChanges();
+
+        expect(panel.classList.contains('changelog-panel-notification')).toBe(true);
+    });
+
     it('should render markdown description in full mode', async () => {
         fixture.componentRef.setInput('displayMode', 'full');
         fixture.componentRef.setInput('expanded', true);

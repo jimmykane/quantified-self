@@ -2,7 +2,7 @@
     <!-- FULL MODE: Expansion Panels (Releases Page) -->
     <mat-accordion *ngIf="displayMode() === 'full'" class="full-accordion" multi="true">
         <app-whats-new-item *ngFor="let log of changelogs(); let first = first" [post]="log" [displayMode]="'full'"
-            [isUnread]="isUnread(log)" [expanded]="first">
+            [isUnread]="isUnread(log)" [expanded]="first" [notificationLayout]="notificationLayout()">
         </app-whats-new-item>
     </mat-accordion>
 
