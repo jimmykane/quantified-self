@@ -650,17 +650,20 @@ values, so ECharts leaves visible gaps rather than interpolating them.
 
 #### Recovery remaining
 
-`recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as one compact
-row inside Readiness, with its live countdown and explicit separation from the Readiness score and Freshness/Form. It
-replaces the former top-level status tile so the same timer is not presented twice. Dashboard Today shows the same active
-countdown as an imported estimate beneath its score. The timer uses the stored end time, is contextual rather than a
-second recovery model, and never changes Readiness, Freshness, or the Training state. The worker scans a bounded 16-day
-event window; no events in that window is a valid empty result for new or inactive users and is logged as informational
-rather than a warning.
+`recovery_now` combines supported imported post-workout recovery estimates. An active estimate appears as the compact
+**Recovery left** row at the start of the Recovery context inside Readiness, directly before Sleep history. Its live
+countdown remains visible while the sleep details are collapsed and explicitly stays separate from the Readiness score
+and Freshness/Form. It replaces the former top-level status tile so the same timer is not presented twice. Dashboard
+Today shows the same active countdown as an imported estimate beneath its score. The timer uses the stored end time, is
+contextual rather than a second recovery model, and never changes Readiness, Freshness, or the Training state. The worker
+scans a bounded 16-day event window; no events in that window is a valid empty result for new or inactive users and is
+logged as informational rather than a warning.
 
-#### Recovery history
+#### Recovery context and sleep history
 
-The expandable Recovery history inside Readiness uses:
+Recovery context groups the optional active Recovery left estimate with the always-available Sleep history summary.
+Sleep history remains independently expandable; collapsing its details never hides an active countdown. The expandable
+Sleep history inside Readiness uses:
 
 - Current: the current 28-day window.
 - Reference: the immediately preceding 84-day window.
@@ -1481,8 +1484,8 @@ Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. 
 - event and manual benchmark flows for 8/10/12 weeks;
 - no TSS, no zones, no pace, no SWOLF, and no sleep;
 - limited and cross-provider sleep;
-- Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, and
-  expandable Recovery history states;
+- Readiness today preparing, unavailable, partial, full-evidence, 48-hour expiry, stale history, chart-gap, active and
+  elapsed Recovery left, and expandable Sleep history states;
 - Dashboard Today Training state and Readiness with full, partial, and missing evidence, matching Form/ramp fallbacks,
   plus Today hidden and retired local-preview tile cleanup;
 - durability missing evidence, ineligible evidence, sparse baseline, and ready comparison;

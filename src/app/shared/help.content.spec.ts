@@ -203,7 +203,10 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('one activity leg at a time');
     expect(trainingSection?.content).toContain('shown first as quick picks');
     expect(trainingSection?.content).toContain('selecting an event never changes its tags');
-    expect(trainingSection?.content).toContain('**Recovery history**');
+    expect(trainingSection?.content).toContain('**Recovery context**');
+    expect(trainingSection?.content).toContain('**Recovery left**');
+    expect(trainingSection?.content).toContain('**Sleep history**');
+    expect(trainingSection?.content).toContain('countdown remains visible while sleep details are collapsed');
     expect(trainingSection?.content).toContain('without changing the Training state');
     expect(trainingSection?.content).toContain('Dashboard **Today** shows the same compact state label and caption');
     expect(trainingSection?.content).toContain('same current formula as Dashboard Today');

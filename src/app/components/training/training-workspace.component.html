@@ -207,57 +207,65 @@
               }
             </dl>
           }
-          @if (trainingRecoveryEstimate; as estimate) {
-            <aside class="training-readiness-imported-recovery" aria-label="Imported recovery estimate">
-              <mat-icon aria-hidden="true">timer</mat-icon>
-              <div class="training-readiness-imported-recovery-copy">
-                <span class="training-metric-label">Imported recovery estimate</span>
-                <div class="training-readiness-imported-recovery-value">
-                  <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
-                  <span>remaining</span>
-                </div>
-                <p>{{ estimate.detailText }}</p>
-              </div>
-              @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
-            </aside>
-          }
           <p class="training-readiness-source">{{ trainingReadiness.sourceText }}</p>
 
-          <section class="training-recovery-history" aria-labelledby="training-recovery-history-title">
-            <div class="training-recovery-history-summary">
-              <div>
-                <strong id="training-recovery-history-title">Recovery history</strong>
-                <span>Recorded sleep: current 28 days vs previous 84 days</span>
+          <section class="training-recovery-context" aria-labelledby="training-recovery-context-title">
+            <header class="training-recovery-context-header">
+              <strong id="training-recovery-context-title">Recovery context</strong>
+              <span>Imported estimate and recorded sleep, when available</span>
+            </header>
+
+            @if (trainingRecoveryEstimate; as estimate) {
+              <aside class="training-readiness-imported-recovery" aria-label="Recovery left from imported estimate">
+                <mat-icon aria-hidden="true">timer</mat-icon>
+                <div class="training-readiness-imported-recovery-copy">
+                  <span class="training-metric-label">Recovery left</span>
+                  <div class="training-readiness-imported-recovery-value">
+                    <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
+                    <span>remaining</span>
+                  </div>
+                  <p>{{ estimate.detailText }}</p>
+                </div>
+                @if (estimate.isUpdating) { <small role="status">Updating estimate…</small> }
+              </aside>
+            }
+
+            <section class="training-recovery-history" aria-labelledby="training-recovery-history-title">
+              <div class="training-recovery-history-summary">
+                <div>
+                  <strong id="training-recovery-history-title">Sleep history</strong>
+                  <span>Recorded sleep: current 28 days vs previous 84 days</span>
+                </div>
+                <button mat-button type="button"
+                  [attr.aria-expanded]="trainingRecoveryHistoryExpanded"
+                  aria-controls="training-recovery-history-details"
+                  (click)="toggleTrainingRecoveryHistory()">
+                  <span>{{ trainingRecoveryHistoryExpanded ? 'Hide' : 'Details' }}</span>
+                  <mat-icon aria-hidden="true">{{ trainingRecoveryHistoryExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+                </button>
               </div>
-              <button mat-button type="button"
-                [attr.aria-expanded]="trainingRecoveryHistoryExpanded"
-                aria-controls="training-recovery-history-details"
-                (click)="toggleTrainingRecoveryHistory()">
-                <span>{{ trainingRecoveryHistoryExpanded ? 'Hide' : 'Details' }}</span>
-                <mat-icon aria-hidden="true">{{ trainingRecoveryHistoryExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
-              </button>
-            </div>
-            <p class="training-recovery-history-compact">{{ trainingRecovery.compactText }}</p>
-            <div id="training-recovery-history-details" [hidden]="!trainingRecoveryHistoryExpanded">
-              @if (trainingRecovery.isUpdating) {
-                <p class="training-recovery-update" role="status">Updating recovery history…</p>
-              }
-              <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
-              @if (trainingRecovery.metricRows.length) {
-                <dl class="training-recovery-table">
-                  <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
-                  @for (row of trainingRecovery.metricRows; track row.label) {
-                    <div>
-                      <dt>{{ row.label }}</dt>
-                      <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
-                      <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
-                      <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
-                    </div>
-                  }
-                </dl>
-              }
-              <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
-            </div>
+              <p class="training-recovery-history-compact">{{ trainingRecovery.compactText }}</p>
+              <div id="training-recovery-history-details" [hidden]="!trainingRecoveryHistoryExpanded">
+                @if (trainingRecovery.isUpdating) {
+                  <p class="training-recovery-update" role="status">Updating sleep history…</p>
+                }
+                <p class="training-recovery-detail">{{ trainingRecovery.detailText }}</p>
+                @if (trainingRecovery.metricRows.length) {
+                  <dl class="training-recovery-table">
+                    <div class="training-recovery-table-heading"><dt>Metric</dt><dd>{{ trainingRecovery.currentLabel }}</dd><dd>{{ trainingRecovery.referenceLabel }}</dd><dd>Change</dd></div>
+                    @for (row of trainingRecovery.metricRows; track row.label) {
+                      <div>
+                        <dt>{{ row.label }}</dt>
+                        <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
+                        <dd [class.training-recovery-sleep-window]="row.label === 'Typical sleep window'"><app-training-metric-text [text]="row.referenceText"></app-training-metric-text></dd>
+                        <dd class="training-comparison-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
+                      </div>
+                    }
+                  </dl>
+                }
+                <p class="training-recovery-source">{{ trainingRecovery.sourceText }}</p>
+              </div>
+            </section>
           </section>
         </article>
       </div>
