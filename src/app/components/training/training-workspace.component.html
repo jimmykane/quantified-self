@@ -37,11 +37,12 @@
       <button
         mat-stroked-button
         type="button"
+        class="training-sport-visibility-action"
         (click)="openTrainingSportVisibilityDialog()"
         [attr.aria-label]="visibleDisciplinesAccessibleLabel"
       >
         <mat-icon aria-hidden="true">tune</mat-icon>
-        <span>{{ visibleDisciplinesCompactLabel }}</span>
+        <span class="training-sport-visibility-action-label">{{ visibleDisciplinesCompactLabel }}</span>
       </button>
       <a
         mat-stroked-button

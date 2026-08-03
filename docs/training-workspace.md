@@ -514,9 +514,10 @@ Power systems surface. The optional imported recovery snapshot participates only
 estimate is visible, so missing, failed, or elapsed optional recovery does not keep the route header in an updating
 state. Compact Form Now, Ramp Rate, and Form +7 snapshots participate only when the primary Form or freshness-forecast
 series cannot supply the displayed fallback value. Dashboard uses the same continuity rule in its existing top
-summary-header slot before Today and the tiles. On narrow screens, secondary labeled actions compact to accessible
-icon-only controls so Retry does not introduce horizontal overflow. These fixed header slots prevent derived status
-changes from moving the value cards or initially presenting stale values without context.
+summary-header slot before Today and the tiles. On narrow screens, every Training route-header action compacts to an
+accessible icon-only control so Retry cannot wrap the action row when a single-sport label is selected. These fixed
+header slots prevent derived status changes from moving the value cards or initially presenting stale values without
+context.
 
 Sport visibility has two modes:
 

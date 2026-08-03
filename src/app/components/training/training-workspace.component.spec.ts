@@ -3,6 +3,8 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -118,6 +120,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
     expect(feedbackAction?.getAttribute('target')).toBe('_blank');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
+    const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
+    expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sports shown.');
+    expect(sportVisibilityAction?.querySelector('.training-sport-visibility-action-label')?.textContent?.trim()).toBe('All 3');
     expect(element.textContent).toContain('Compared with your usual 28 days');
     expect(element.querySelector('.training-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(element.textContent).toContain('What drove this');
@@ -162,6 +167,21 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).not.toContain('Preparing rolling power capacity');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps every route-header action compact throughout narrow phone widths', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
+    const styles = readFileSync(stylePath, 'utf8');
+    const compactActionsStart = styles.indexOf('@media (max-width: 600px)');
+    const extraSmallLayoutStart = styles.indexOf('@media (max-width: 400px)', compactActionsStart);
+    const compactActionsStyles = styles.slice(compactActionsStart, extraSmallLayoutStart);
+
+    expect(compactActionsStart).toBeGreaterThan(-1);
+    expect(extraSmallLayoutStart).toBeGreaterThan(compactActionsStart);
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
+    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
+    expect(compactActionsStyles).toContain('width: 48px;');
   });
 
   it('renders activity-family icons only for sport-specific training driver cards', async () => {
