@@ -24,11 +24,13 @@
   min-width: 0;
 }
 
+.activity-calendar-month--surface {
+  padding: clamp(12px, 1.8vw, 20px);
+  overflow: hidden;
+}
+
 .activity-calendar--year .activity-calendar-month {
   padding: 12px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 6px;
-  background: var(--mat-sys-surface-container-low);
 }
 
 .activity-calendar-month h2 {
@@ -104,7 +106,6 @@
 
 .activity-calendar-day--outside {
   color: var(--mat-sys-on-surface-variant);
-  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 62%, transparent);
 }
 
 .activity-calendar-day--blank {

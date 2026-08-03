@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { By } from '@angular/platform-browser';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
@@ -31,14 +33,27 @@ describe('ActivityCalendarGridComponent', () => {
     expect(markers).toHaveLength(2);
     expect(markers[0].style.getPropertyValue('--calendar-marker-compact-diameter')).toMatch(/px$/);
     expect(markers[0].style.getPropertyValue('--calendar-marker-diameter')).toMatch(/px$/);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-month')?.classList)
+      .not.toContain('qs-glass-card-panel');
   });
 
-  it('renders twelve compact month panels in yearly mode', async () => {
+  it('renders twelve glass month panels in yearly mode', async () => {
     const fixture = await renderGrid('year', false, []);
+    const monthPanels = [...fixture.nativeElement.querySelectorAll('.activity-calendar-month')] as HTMLElement[];
 
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-month')).toHaveLength(12);
+    expect(monthPanels).toHaveLength(12);
+    expect(monthPanels.every(panel => panel.classList.contains('qs-glass-card-panel'))).toBe(true);
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-month h2')).toHaveLength(12);
     expect(fixture.nativeElement.querySelector('.activity-calendar')?.classList.contains('activity-calendar--year')).toBe(true);
+  });
+
+  it('does not use calendar-specific gray surface fills', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
+      'utf8',
+    );
+
+    expect(styles).not.toContain('surface-container-low');
   });
 });
 

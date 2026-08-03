@@ -14,6 +14,8 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Running');
     expect(fixture.nativeElement.textContent).toContain('Morning run');
     expect(fixture.nativeElement.querySelector('a')?.getAttribute('href')).toBe('/user/user-1/event/event-1');
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day-family-list mat-list-item')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.calendar-day-family-duration')?.textContent).toContain('1h');
   });
 
   it('replaces generic timestamp names without repeating the activity type', async () => {

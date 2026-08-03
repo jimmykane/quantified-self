@@ -43,22 +43,7 @@ h3 {
 }
 
 .calendar-day-family-list {
-  display: grid;
-  gap: 4px;
-}
-
-.calendar-day-family-row {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  min-height: 40px;
-  align-items: center;
-  gap: 10px;
-}
-
-.calendar-day-family-row > span:not(.calendar-day-family-icon) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0;
 }
 
 .calendar-day-family-icon {
@@ -70,16 +55,11 @@ h3 {
   border-radius: 50%;
   background: var(--calendar-family-color);
   color: var(--mat-sys-on-primary-container);
-}
-
-.calendar-day-family-icon mat-icon {
-  width: 18px;
-  height: 18px;
   font-size: 18px;
   line-height: 18px;
 }
 
-.calendar-day-family-row strong {
+.calendar-day-family-duration {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.05rem;
   letter-spacing: 0;

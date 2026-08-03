@@ -13,17 +13,18 @@
 
     <section aria-labelledby="calendar-day-family-title">
       <h3 id="calendar-day-family-title">Sport families</h3>
-      <div class="calendar-day-family-list">
+      <mat-list class="calendar-day-family-list">
         @for (family of data.day.families; track family.id) {
-        <div class="calendar-day-family-row">
-          <span class="calendar-day-family-icon" [style.--calendar-family-color]="family.color">
-            <mat-icon aria-hidden="true">{{ familyIcons[family.activityTypeGroup] }}</mat-icon>
-          </span>
-          <span>{{ family.label }}</span>
-          <strong>{{ family.durationLabel }}</strong>
-        </div>
+        <mat-list-item>
+          <mat-icon matListItemIcon class="calendar-day-family-icon"
+            [style.--calendar-family-color]="family.color" aria-hidden="true">
+            {{ familyIcons[family.activityTypeGroup] }}
+          </mat-icon>
+          <span matListItemTitle>{{ family.label }}</span>
+          <strong matListItemMeta class="calendar-day-family-duration">{{ family.durationLabel }}</strong>
+        </mat-list-item>
         }
-      </div>
+      </mat-list>
     </section>
 
     <mat-divider></mat-divider>

@@ -5,7 +5,10 @@
   [class.activity-calendar--compact]="compact">
   <div class="activity-calendar-months">
     @for (month of model.months; track month.id) {
-    <section class="activity-calendar-month" [attr.aria-label]="month.label">
+    <section class="activity-calendar-month"
+      [class.activity-calendar-month--surface]="!compact"
+      [class.qs-glass-card-panel]="!compact"
+      [attr.aria-label]="month.label">
       @if (model.view === 'year') {
       <h2>{{ month.label }}</h2>
       }
