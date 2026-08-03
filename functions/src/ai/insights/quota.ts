@@ -8,6 +8,7 @@ import type {
   AiInsightsQuotaStatus,
 } from '../../../../shared/ai-insights.types';
 import { getAiInsightsRequestLimitForRole } from '../../../../shared/limits';
+import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { getUserRoleAndGracePeriod, isGracePeriodActive } from '../../utils';
 
 const AI_INSIGHTS_USAGE_COLLECTION = 'aiInsightsUsage';
@@ -70,6 +71,7 @@ export interface AiInsightsQuotaDependencies {
   isGracePeriodActive: typeof isGracePeriodActive;
   getActiveSubscriptionPeriod: (userID: string) => Promise<SubscriptionPeriod | null>;
   getLatestPaidSubscriptionPeriod: (userID: string) => Promise<SubscriptionPeriod | null>;
+  getDeletionGuard: typeof getUserDeletionGuardStateInTransaction;
 }
 
 export interface AiInsightsQuotaApi {
@@ -97,6 +99,7 @@ const defaultAiInsightsQuotaDependencies: AiInsightsQuotaDependencies = {
   isGracePeriodActive,
   getActiveSubscriptionPeriod: async (userID) => getActiveSubscriptionPeriodFromFirestore(userID),
   getLatestPaidSubscriptionPeriod: async (userID) => getLatestPaidSubscriptionPeriodFromFirestore(userID),
+  getDeletionGuard: getUserDeletionGuardStateInTransaction,
 };
 
 function toDate(value: unknown): Date | null {
@@ -251,11 +254,11 @@ function buildCalendarMonthPeriod(now: Date): CalendarMonthPeriod {
 }
 
 function getUsageDocRef(
+  db: FirebaseFirestore.Firestore,
   userID: string,
   periodDocId: string,
-  dependencies: AiInsightsQuotaDependencies,
 ): FirebaseFirestore.DocumentReference {
-  return dependencies.db()
+  return db
     .collection('users')
     .doc(userID)
     .collection(AI_INSIGHTS_USAGE_COLLECTION)
@@ -409,7 +412,6 @@ async function resolveAiInsightsQuotaWindow(
     }
 
     logger.warn('[aiInsightsQuota] Missing last paid subscription period for grace AI user', {
-      userID,
       role,
       hasGrace,
     });
@@ -432,7 +434,6 @@ async function resolveAiInsightsQuotaWindow(
   }
 
   logger.warn('[aiInsightsQuota] Missing subscription period for paid AI user; marking ineligible', {
-    userID,
     role,
     hasGrace,
   });
@@ -454,21 +455,34 @@ async function resolveAiInsightsQuotaWindow(
 async function withQuotaDocumentTransaction<T>(
   userID: string,
   periodDocId: string,
-  baseStatus: ResolvedAiInsightsQuotaWindow['status'],
   dependencies: AiInsightsQuotaDependencies,
   handler: (
     transaction: FirebaseFirestore.Transaction,
+    docRef: FirebaseFirestore.DocumentReference,
     usageDoc: AiInsightsQuotaUsageDoc,
     nowMs: number,
     nowIso: string,
   ) => Promise<T> | T,
 ): Promise<T> {
-  const docRef = getUsageDocRef(userID, periodDocId, dependencies);
-  return dependencies.db().runTransaction(async (transaction) => {
+  const db = dependencies.db();
+  const docRef = getUsageDocRef(db, userID, periodDocId);
+  return db.runTransaction(async (transaction) => {
     const now = dependencies.now();
+    const deletionGuard = await dependencies.getDeletionGuard(
+      db,
+      transaction,
+      userID,
+      now.getTime(),
+    );
+    if (deletionGuard.shouldSkip) {
+      throw new HttpsError(
+        'permission-denied',
+        'AI request quota is unavailable for this account.',
+      );
+    }
     const snapshot = await transaction.get(docRef);
     const usageDoc = normalizeUsageDoc(snapshot, now.getTime());
-    return handler(transaction, usageDoc, now.getTime(), now.toISOString());
+    return handler(transaction, docRef, usageDoc, now.getTime(), now.toISOString());
   });
 }
 
@@ -482,7 +496,8 @@ export async function getAiInsightsQuotaStatus(
     return buildQuotaStatus(resolvedWindow.status, 0, 0);
   }
 
-  const snapshot = await getUsageDocRef(userID, resolvedWindow.periodDocId, dependencies).get();
+  const db = dependencies.db();
+  const snapshot = await getUsageDocRef(db, userID, resolvedWindow.periodDocId).get();
   const usageDoc = normalizeUsageDoc(
     snapshot as FirebaseFirestore.DocumentSnapshot,
     dependencies.now().getTime(),
@@ -514,40 +529,36 @@ export async function reserveAiInsightsQuotaForRequest(
   await withQuotaDocumentTransaction(
     userID,
     resolvedWindow.periodDocId,
-    resolvedWindow.status,
     dependencies,
-    async (transaction, usageDoc, nowMs) => {
-    const reservationMap = { ...usageDoc.reservationMap };
-    const activeRequestCount = Object.keys(reservationMap).length;
-    if (usageDoc.successfulRequestCount + activeRequestCount >= resolvedWindow.status.limit) {
-      logger.warn('[aiInsightsQuota] Reservation denied because limit was reached', {
-        userID,
-        periodDocId: resolvedWindow.periodDocId,
-        successfulRequestCount: usageDoc.successfulRequestCount,
-        activeRequestCount,
-        limit: resolvedWindow.status.limit,
-      });
-      throw new HttpsError('resource-exhausted', AI_INSIGHTS_LIMIT_REACHED_MESSAGE);
-    }
+    async (transaction, docRef, usageDoc, nowMs) => {
+      const reservationMap = { ...usageDoc.reservationMap };
+      const activeRequestCount = Object.keys(reservationMap).length;
+      if (usageDoc.successfulRequestCount + activeRequestCount >= resolvedWindow.status.limit) {
+        logger.warn('[aiInsightsQuota] Reservation denied because limit was reached', {
+          periodDocId: resolvedWindow.periodDocId,
+          successfulRequestCount: usageDoc.successfulRequestCount,
+          activeRequestCount,
+          limit: resolvedWindow.status.limit,
+        });
+        throw new HttpsError('resource-exhausted', AI_INSIGHTS_LIMIT_REACHED_MESSAGE);
+      }
 
-    reservationMap[reservationID] = nowMs + AI_INSIGHTS_RESERVATION_TTL_MS;
-    transaction.set(
-      getUsageDocRef(userID, resolvedWindow.periodDocId as string, dependencies),
-      buildUsageDocPayload(
-        resolvedWindow.status,
-        usageDoc.successfulRequestCount,
-        reservationMap,
-        dependencies,
-        usageDoc.lastSuccessfulRequestAt,
-      ),
-      { merge: true },
-    );
+      reservationMap[reservationID] = nowMs + AI_INSIGHTS_RESERVATION_TTL_MS;
+      transaction.set(
+        docRef,
+        buildUsageDocPayload(
+          resolvedWindow.status,
+          usageDoc.successfulRequestCount,
+          reservationMap,
+          dependencies,
+          usageDoc.lastSuccessfulRequestAt,
+        ),
+        { merge: true },
+      );
     },
   );
 
   logger.info('[aiInsightsQuota] Reserved quota slot', {
-    userID,
-    reservationID,
     periodDocId: resolvedWindow.periodDocId,
   });
 
@@ -581,15 +592,14 @@ export async function finalizeAiInsightsQuotaReservation(
   const result = await withQuotaDocumentTransaction(
     reservation.userID,
     reservation.periodDocId,
-    reservationStatus,
     dependencies,
-    async (transaction, usageDoc, _nowMs, nowIso) => {
+    async (transaction, docRef, usageDoc, _nowMs, nowIso) => {
       const reservationMap = { ...usageDoc.reservationMap };
       delete reservationMap[reservation.reservationID];
       const successfulRequestCount = usageDoc.successfulRequestCount + 1;
 
       transaction.set(
-        getUsageDocRef(reservation.userID, reservation.periodDocId, dependencies),
+        docRef,
         buildUsageDocPayload(reservationStatus, successfulRequestCount, reservationMap, dependencies, nowIso),
         { merge: true },
       );
@@ -599,8 +609,6 @@ export async function finalizeAiInsightsQuotaReservation(
   );
 
   logger.info('[aiInsightsQuota] Finalized successful AI request quota usage', {
-    userID: reservation.userID,
-    reservationID: reservation.reservationID,
     periodDocId: reservation.periodDocId,
   });
 
@@ -623,14 +631,13 @@ export async function releaseAiInsightsQuotaReservation(
   const result = await withQuotaDocumentTransaction(
     reservation.userID,
     reservation.periodDocId,
-    reservationStatus,
     dependencies,
-    async (transaction, usageDoc) => {
+    async (transaction, docRef, usageDoc) => {
       const reservationMap = { ...usageDoc.reservationMap };
       delete reservationMap[reservation.reservationID];
 
       transaction.set(
-        getUsageDocRef(reservation.userID, reservation.periodDocId, dependencies),
+        docRef,
         buildUsageDocPayload(
           reservationStatus,
           usageDoc.successfulRequestCount,
@@ -646,8 +653,6 @@ export async function releaseAiInsightsQuotaReservation(
   );
 
   logger.info('[aiInsightsQuota] Released quota reservation', {
-    userID: reservation.userID,
-    reservationID: reservation.reservationID,
     periodDocId: reservation.periodDocId,
   });
 

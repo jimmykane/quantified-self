@@ -82,8 +82,9 @@ describe('PoliciesComponent', () => {
     expect(sectionCopy).toContain('latest six completed conversation turns');
     expect(sectionCopy).toContain('Original FIT/GPX/TCX/JSON/SML files');
     expect(sectionCopy).toContain('unavailable to the Assistant');
-    expect(sectionCopy).toContain('becomes unavailable seven days after');
-    expect(sectionCopy).toContain('deleted asynchronously by Firestore TTL');
+    expect(sectionCopy).toContain('becomes unavailable about seven days after');
+    expect(sectionCopy).toContain('at most four extra minutes');
+    expect(sectionCopy).toContain('Firestore TTL then deletes it asynchronously');
   });
 
   it('renders public controller and contact details', () => {

@@ -38,6 +38,29 @@ function createTestServer(): McpServer {
 }
 
 describe('Assistant MCP session', () => {
+  it('resolves the complete curated boundary from the production MCP server', async () => {
+    const session = await createAssistantMcpSession(
+      'user-1',
+      'https://quantified-self.io',
+    );
+
+    try {
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES);
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_chart_data');
+      expect(session.tools.map(tool => tool.name)).not.toContain(
+        'search_activities_near_location',
+      );
+      expect(session.tools.find(tool => tool.name === 'list_activity_jumps')?.description)
+        .toContain('coordinates redacted');
+      const dailyReportSchema = session.tools
+        .find(tool => tool.name === 'get_daily_report')?.inputSchema;
+      expect(dailyReportSchema?.required).toContain('timeZone');
+    } finally {
+      await session.close();
+    }
+  });
+
   it('uses the MCP server in-process and exposes only the curated non-location tools', async () => {
     let capturedAuth: AuthenticatedMcpRequest | null = null;
     let capturedPublicBaseUrl = '';

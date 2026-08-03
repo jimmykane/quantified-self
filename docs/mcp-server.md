@@ -24,7 +24,9 @@ The built-in Assistant reuses this server through an SDK `Client` and linked `In
 `createMcpServer` with a fixed first-party identity, conservative non-location read scopes, and a second explicit tool
 allowlist. It does not call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
 scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
-This prevents the Assistant from becoming a parallel data API.
+Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
+references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
+offer a validated safe app link. This prevents the Assistant from becoming a parallel data API.
 
 The internal adapter is implementation-only and does not alter the registered public MCP contract. Adding a public
 tool or response field still requires the digest-bound lifecycle below. Every such change must also review whether the

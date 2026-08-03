@@ -5,7 +5,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
-import { AssistantService } from '../../services/assistant.service';
+import {
+  AssistantError,
+  AssistantService,
+} from '../../services/assistant.service';
 import { AssistantPageComponent } from './assistant-page.component';
 
 const chatResponse: AssistantChatResponse = {
@@ -100,6 +103,7 @@ describe('AssistantPageComponent', () => {
     expect(text).toContain('Grounded in the same read-only MCP tools');
     expect(text).toContain('Location and routes are not available');
     expect(text).toContain('Prefer ChatGPT or another compatible client?');
+    expect(fixture.nativeElement.querySelector('mat-chip')?.textContent.trim()).toBe('Beta');
     expect(fixture.nativeElement.querySelector('.assistant-welcome')?.classList)
       .toContain('qs-glass-card-panel');
   });
@@ -114,7 +118,7 @@ describe('AssistantPageComponent', () => {
     }));
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Your readiness is 72 today.');
-    expect(text).toContain('1 grounded source');
+    expect(text).toContain('1 grounded result');
     expect(text).toContain('Get daily report');
     expect(text).toContain('19 of 20 Assistant requests remaining');
   });
@@ -140,6 +144,155 @@ describe('AssistantPageComponent', () => {
 
     expect(assistantService.sendMessage).not.toHaveBeenCalled();
     expect(component.promptControl.value).toBe('How am I today?');
+  });
+
+  it('keeps whitespace-only prompts invalid', async () => {
+    await component.ngOnInit();
+    component.promptControl.setValue('   \n  ');
+
+    await component.sendMessage();
+
+    expect(component.promptControl.invalid).toBe(true);
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the authoritative quota after a failed grounded attempt', async () => {
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('model unavailable'));
+    quotaService.loadQuotaStatus.mockResolvedValueOnce({
+      ...chatResponse.quota,
+      successfulRequestCount: 2,
+      remainingCount: 18,
+    });
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+
+    expect(component.errorMessage()).toBe('Friendly error');
+    expect(component.promptControl.value).toBe('How am I today?');
+    expect(component.quota()?.remainingCount).toBe(18);
+    expect(quotaService.loadQuotaStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks quota unavailable when a failed-send refresh returns no status', async () => {
+    const existingQuota = {
+      ...chatResponse.quota,
+      successfulRequestCount: 2,
+      remainingCount: 18,
+    };
+    component.quota.set(existingQuota);
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('model unavailable'));
+    quotaService.loadQuotaStatus.mockResolvedValueOnce(null);
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+
+    expect(component.quota()).toBeNull();
+    expect(component.quotaText()).toContain('Allowance status unavailable');
+    expect(quotaService.loadQuotaStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers a turn committed before the callable response was lost', async () => {
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('network response lost'));
+    assistantService.getConversation.mockResolvedValueOnce(chatResponse.conversation);
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+
+    expect(component.conversation()).toEqual(chatResponse.conversation);
+    expect(component.promptControl.value).toBe('');
+    expect(component.errorMessage()).toBeNull();
+    expect(quotaService.loadQuotaStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers a committed turn after bounded history drops the oldest pair', async () => {
+    const previousMessages = Array.from({ length: 6 }, (_, index) => ([
+      {
+        id: `user-${index}`,
+        role: 'user' as const,
+        text: `Question ${index}`,
+        createdAt: '2026-08-03T12:00:00.000Z',
+      },
+      {
+        id: `assistant-${index}`,
+        role: 'assistant' as const,
+        text: `Answer ${index}`,
+        createdAt: '2026-08-03T12:00:00.000Z',
+        evidence: [],
+      },
+    ])).flat();
+    const previousConversation = {
+      ...chatResponse.conversation,
+      messages: previousMessages,
+    };
+    const refreshedConversation = {
+      ...previousConversation,
+      messages: [
+        ...previousMessages.slice(2),
+        {
+          id: 'new-user',
+          role: 'user' as const,
+          text: 'One more question',
+          createdAt: '2026-08-03T12:05:00.000Z',
+        },
+        {
+          id: 'new-assistant',
+          role: 'assistant' as const,
+          text: 'One more answer',
+          createdAt: '2026-08-03T12:05:00.000Z',
+          evidence: [],
+        },
+      ],
+    };
+    component.conversation.set(previousConversation);
+    component.promptControl.setValue('One more question');
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('network response lost'));
+    assistantService.getConversation.mockResolvedValueOnce(refreshedConversation);
+
+    await component.sendMessage();
+
+    expect(component.conversation()).toEqual(refreshedConversation);
+    expect(component.promptControl.value).toBe('');
+    expect(component.errorMessage()).toBeNull();
+  });
+
+  it('reloads a conversation generation changed by another tab', async () => {
+    const replacementConversation = {
+      ...chatResponse.conversation,
+      conversationId: 'conversation-2',
+      messages: [],
+    };
+    assistantService.sendMessage.mockRejectedValueOnce(new AssistantError(
+      'CONVERSATION_CHANGED',
+      'Conversation changed.',
+    ));
+    assistantService.getConversation.mockResolvedValueOnce(replacementConversation);
+    component.conversation.set(chatResponse.conversation);
+    component.promptControl.setValue('Keep this prompt');
+
+    await component.sendMessage();
+
+    expect(component.conversation()).toEqual(replacementConversation);
+    expect(component.promptControl.value).toBe('Keep this prompt');
+    expect(component.errorMessage()).toContain('It has been refreshed');
+    expect(assistantService.getConversation).toHaveBeenCalledTimes(2);
+  });
+
+  it('reconciles an authoritative replacement after a generic send failure', async () => {
+    const replacementConversation = {
+      ...chatResponse.conversation,
+      conversationId: 'conversation-2',
+      messages: [],
+    };
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('network unavailable'));
+    assistantService.getConversation.mockResolvedValueOnce(replacementConversation);
+    component.conversation.set(chatResponse.conversation);
+    component.promptControl.setValue('Keep this prompt');
+
+    await component.sendMessage();
+
+    expect(component.conversation()).toEqual(replacementConversation);
+    expect(component.promptControl.value).toBe('Keep this prompt');
+    expect(component.errorMessage()).toBe('Friendly error');
   });
 
   it('does not race send or reset against the initial conversation load', async () => {

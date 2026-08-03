@@ -95,6 +95,7 @@ function toMillis(value: unknown): number | null {
 
 function parseStoredConversation(
   data: FirebaseFirestore.DocumentData | undefined,
+  nowMs: number,
 ): StoredAssistantConversation | null {
   if (!data
     || data.version !== ASSISTANT_CONVERSATION_VERSION
@@ -120,7 +121,12 @@ function parseStoredConversation(
     : data.pendingTurn
       && typeof data.pendingTurn === 'object'
       && typeof data.pendingTurn.id === 'string'
+      && data.pendingTurn.id.length >= 1
+      && data.pendingTurn.id.length <= 120
       && typeof data.pendingTurn.expiresAtMs === 'number'
+      && Number.isSafeInteger(data.pendingTurn.expiresAtMs)
+      && data.pendingTurn.expiresAtMs > 0
+      && data.pendingTurn.expiresAtMs <= nowMs + ASSISTANT_PENDING_TURN_TTL_MS
       ? {
         id: data.pendingTurn.id,
         expiresAtMs: data.pendingTurn.expiresAtMs,
@@ -221,7 +227,7 @@ export function createAssistantConversationStore(
         }
         const snapshot = await transaction.get(conversationRef);
         const conversation = snapshot.exists
-          ? parseStoredConversation(snapshot.data())
+          ? parseStoredConversation(snapshot.data(), nowMs)
           : null;
         if (!conversation || conversation.expireAt.toMillis() <= nowMs) {
           return null;
@@ -239,7 +245,7 @@ export function createAssistantConversationStore(
         await assertUserCanPersist(dependencies, db, transaction, uid, nowMs);
         const snapshot = await transaction.get(conversationRef);
         const storedConversation = snapshot.exists
-          ? parseStoredConversation(snapshot.data())
+          ? parseStoredConversation(snapshot.data(), nowMs)
           : null;
         const conversation = !storedConversation
           || storedConversation.expireAt.toMillis() <= nowMs
@@ -264,8 +270,10 @@ export function createAssistantConversationStore(
         const turnId = dependencies.createId();
         const updatedConversation: StoredAssistantConversation = {
           ...conversation,
-          updatedAt: Timestamp.fromDate(now),
-          expireAt: Timestamp.fromMillis(nowMs + ASSISTANT_CONVERSATION_RETENTION_MS),
+          expireAt: Timestamp.fromMillis(Math.max(
+            conversation.expireAt.toMillis(),
+            nowMs + ASSISTANT_PENDING_TURN_TTL_MS,
+          )),
           pendingTurn: {
             id: turnId,
             expiresAtMs: nowMs + ASSISTANT_PENDING_TURN_TTL_MS,
@@ -294,7 +302,7 @@ export function createAssistantConversationStore(
         await assertUserCanPersist(dependencies, db, transaction, uid, nowMs);
         const snapshot = await transaction.get(conversationRef);
         const conversation = snapshot.exists
-          ? parseStoredConversation(snapshot.data())
+          ? parseStoredConversation(snapshot.data(), nowMs)
           : null;
         if (!conversation
           || conversation.conversationId !== begunTurn.conversationId
@@ -336,7 +344,7 @@ export function createAssistantConversationStore(
         await assertUserCanPersist(dependencies, db, transaction, uid, nowMs);
         const snapshot = await transaction.get(conversationRef);
         const conversation = snapshot.exists
-          ? parseStoredConversation(snapshot.data())
+          ? parseStoredConversation(snapshot.data(), nowMs)
           : null;
         if (!conversation
           || conversation.conversationId !== begunTurn.conversationId

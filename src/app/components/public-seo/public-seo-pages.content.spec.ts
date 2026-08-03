@@ -105,8 +105,17 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.aiInsights.sections.some(section => (
       section.items.some(item => item.title === 'Grounded every turn')
     ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.aiInsights.sections.some(section => (
+      section.items.some(item => item.copy.includes('at most four extra minutes'))
+    ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.aiInsights.faqItems.some(item => (
       item.answer.includes('External MCP connections remain the advanced bring-your-own-AI path')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.aiInsights.faqItems.some(item => (
+      item.answer.includes('your message, browser timezone, and bounded recent conversation context')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.aiInsights.faqItems.some(item => (
+      item.answer.includes('Direct in-app URLs are withheld')
     ))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.h1).toBe('Compare FIT, TCX, GPX, JSON, and SML workout files');

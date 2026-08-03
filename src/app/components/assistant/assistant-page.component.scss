@@ -69,13 +69,11 @@ h1 {
   line-height: 1.45;
 }
 
-.assistant-beta-label {
-  padding: 2px 6px;
-  border-radius: 10px;
-  color: var(--mat-sys-on-secondary-container);
-  background: var(--mat-sys-secondary-container);
-  font-size: 0.65rem;
-  font-weight: 700;
+.assistant-beta-chip {
+  min-height: 24px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .assistant-header-actions {

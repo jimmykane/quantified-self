@@ -18,6 +18,16 @@ import {
 const ASSISTANT_MAX_TOOL_CALLS_PER_TURN = 6;
 const ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL = ASSISTANT_MAX_TOOL_CALLS_PER_TURN;
 const ASSISTANT_MAX_CUMULATIVE_TOOL_OUTPUT_BYTES = 512 * 1024;
+const ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS = 1_024;
+const ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS = 2_048;
+const ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES = new Set<AssistantMcpToolName>([
+  'query_measurements',
+  'query_metric',
+  'query_metrics',
+  'get_sleep_trend',
+  'get_today_readiness',
+  'get_daily_report',
+]);
 
 const AssistantModelOutputSchema = z.object({
   answer: z.string().trim().min(1).max(ASSISTANT_MAX_RESPONSE_CHARS),
@@ -86,6 +96,96 @@ function asToolInput(value: unknown): Record<string, unknown> {
   throw new Error('The Assistant model returned invalid tool input.');
 }
 
+function applyAssistantToolDefaults(
+  toolName: AssistantMcpToolName,
+  toolInput: Record<string, unknown>,
+  timeZone: string,
+): Record<string, unknown> {
+  return ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES.has(toolName)
+    && toolInput.timeZone === undefined
+    ? { ...toolInput, timeZone }
+    : toolInput;
+}
+
+function buildAssistantModelInputSchema(
+  toolName: AssistantMcpToolName,
+  inputJsonSchema: AssistantRuntimeTool['inputJsonSchema'],
+): AssistantRuntimeTool['inputJsonSchema'] {
+  if (!ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES.has(toolName)
+    || !Array.isArray(inputJsonSchema.required)
+    || !inputJsonSchema.required.includes('timeZone')) {
+    return inputJsonSchema;
+  }
+  return {
+    ...inputJsonSchema,
+    required: inputJsonSchema.required.filter(field => field !== 'timeZone'),
+  };
+}
+
+function projectAssistantToolResultForModel(
+  value: unknown,
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map(projectAssistantToolResultForModel);
+  }
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== 'appUrl')
+      .map(([key, child]) => [key, projectAssistantToolResultForModel(child)]),
+  );
+}
+
+function normalizeFieldName(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[-\s]+/g, '_')
+    .toLowerCase();
+}
+
+function collectAnswerForbiddenValues(
+  value: unknown,
+  forbiddenValues: Set<string>,
+): void {
+  if (Array.isArray(value)) {
+    value.forEach(child => collectAnswerForbiddenValues(child, forbiddenValues));
+    return;
+  }
+  if (typeof value !== 'object' || value === null) {
+    return;
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedKey = normalizeFieldName(key);
+    if (typeof child === 'string') {
+      const isReference = /(?:^|_)ref$/.test(normalizedKey)
+        && child.length >= 16;
+      const isOpaqueCursor = /(?:^|_)cursor$/.test(normalizedKey)
+        && child.length >= 40
+        && /^[A-Za-z0-9_-]+$/.test(child);
+      if (normalizedKey === 'app_url' || isReference || isOpaqueCursor) {
+        forbiddenValues.add(child);
+      }
+    }
+    collectAnswerForbiddenValues(child, forbiddenValues);
+  }
+}
+
+function assertAnswerDoesNotEchoToolSecrets(
+  answer: string,
+  invocations: readonly AssistantToolInvocation[],
+): void {
+  const forbiddenValues = new Set<string>();
+  invocations.forEach(invocation => collectAnswerForbiddenValues(
+    invocation.structuredContent,
+    forbiddenValues,
+  ));
+  if ([...forbiddenValues].some(value => answer.includes(value))) {
+    throw new Error('The Assistant response included a protected tool reference.');
+  }
+}
+
 export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generateAnswer'] = async (input) => {
   const tools = input.tools.map(tool => aiInsightsGenkit.dynamicTool({
     name: tool.name,
@@ -108,6 +208,9 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     tools,
     toolChoice: 'required',
     returnToolRequests: true,
+    config: {
+      maxOutputTokens: ASSISTANT_INITIAL_MODEL_MAX_OUTPUT_TOKENS,
+    },
   });
   if (initialResponse.toolRequests.length === 0) {
     throw new Error('The Assistant model did not select a grounding tool.');
@@ -140,6 +243,9 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     tools,
     toolChoice: 'auto',
     maxTurns: ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL,
+    config: {
+      maxOutputTokens: ASSISTANT_RESPONSE_MODEL_MAX_OUTPUT_TOKENS,
+    },
     output: { schema: AssistantModelOutputSchema },
   });
   const parsed = AssistantModelOutputSchema.safeParse(output);
@@ -182,13 +288,21 @@ export function createAssistantRuntime(
         const tools: AssistantRuntimeTool[] = session.tools.map(tool => ({
           name: tool.name,
           description: `${tool.title}. ${tool.description}`,
-          inputJsonSchema: tool.inputSchema,
+          inputJsonSchema: buildAssistantModelInputSchema(
+            tool.name,
+            tool.inputSchema,
+          ),
           execute: async (toolInput) => {
             if (toolCallCount >= ASSISTANT_MAX_TOOL_CALLS_PER_TURN) {
               throw new Error('The Assistant tool-call budget was exceeded.');
             }
             toolCallCount += 1;
-            const result = await session.callTool(tool.name, toolInput);
+            const resolvedToolInput = applyAssistantToolDefaults(
+              tool.name,
+              toolInput,
+              input.timeZone,
+            );
+            const result = await session.callTool(tool.name, resolvedToolInput);
             cumulativeToolOutputBytes += Buffer.byteLength(
               JSON.stringify(result.structuredContent),
               'utf8',
@@ -200,7 +314,9 @@ export function createAssistantRuntime(
               name: tool.name,
               structuredContent: result.structuredContent,
             });
-            return result.structuredContent;
+            return projectAssistantToolResultForModel(
+              result.structuredContent,
+            ) as Record<string, unknown>;
           },
         }));
         const answer = await dependencies.generateAnswer({
@@ -214,6 +330,7 @@ export function createAssistantRuntime(
         if (invocations.length === 0) {
           throw new Error('The Assistant response was not grounded in current account data.');
         }
+        assertAnswerDoesNotEchoToolSecrets(answer, invocations);
         return {
           answer: AssistantModelOutputSchema.parse({ answer }).answer,
           evidence: buildAssistantEvidenceList(session.tools, invocations),

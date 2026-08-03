@@ -27,12 +27,17 @@ describe('Built-in Assistant policy', () => {
     const content = topic?.content.join(' ') || '';
 
     expect(CONNECTED_SERVICES_POLICY_SECTION.summary).toContain('built-in Assistant');
+    expect(content).toContain("browser's IANA timezone");
     expect(content).toContain('latest six completed conversation turns');
     expect(content).toContain('bounded validated results from the non-location read-only tools');
+    expect(content).toContain('Direct in-app URLs are withheld from Gemini');
+    expect(content).toContain('opaque reference or cursor is rejected');
     expect(content).toContain('exact locations');
-    expect(content).toContain('server-owned active conversation becomes unavailable seven days after');
-    expect(content).toContain('deleted asynchronously by Firestore TTL');
+    expect(content).toContain('server-owned active conversation becomes unavailable about seven days after');
+    expect(content).toContain('at most four extra minutes');
+    expect(content).toContain('Firestore TTL then deletes it asynchronously');
     expect(content).toContain('built-in Assistant has no location or saved-route tools');
+    expect(content).toContain('older AI Insights endpoint retained temporarily for rollback');
   });
 });
 

@@ -498,13 +498,15 @@ export async function getUserRoleAndGracePeriod(userID: string): Promise<{ role:
     const userRecord = await admin.auth().getUser(userID);
     const role = (userRecord.customClaims?.['stripeRole'] as string) || 'free';
     const gracePeriodUntil = userRecord.customClaims?.['gracePeriodUntil'] as number;
-    logger.info(`[getUserRoleAndGracePeriod] User: ${userID}, Role: ${role}, GracePeriodUntil: ${gracePeriodUntil}, Now: ${Date.now()}, Active: ${isGracePeriodActive(gracePeriodUntil)}`);
     return { role, gracePeriodUntil };
   } catch (e: any) {
     if (e.code === 'auth/user-not-found') {
       throw new UserNotFoundError(`User ${userID} not found in Auth`);
     }
-    logger.error(`Error fetching user role for ${userID}:`, e);
+    logger.error('[getUserRoleAndGracePeriod] Could not resolve role context.', {
+      errorName: e instanceof Error ? e.name : 'unknown',
+      errorCode: typeof e?.code === 'string' ? e.code : 'unknown',
+    });
     return { role: 'free' }; // Safe default for other errors
   }
 }

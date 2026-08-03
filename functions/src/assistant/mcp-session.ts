@@ -100,9 +100,10 @@ export async function createAssistantMcpSession(
     await server.connect(serverTransport);
     await client.connect(clientTransport);
     const listedTools = (await client.listTools()).tools;
-    const tools = listedTools
-      .filter(tool => isAssistantToolName(tool.name))
-      .map(tool => ({
+    const listedToolsByName = new Map(listedTools.map(tool => [tool.name, tool]));
+    const tools = ASSISTANT_MCP_TOOL_NAMES.flatMap((name) => {
+      const tool = listedToolsByName.get(name);
+      return tool ? [{
         name: tool.name as AssistantMcpToolName,
         title: tool.title || tool.name,
         description: tool.description || tool.title || tool.name,
@@ -110,7 +111,8 @@ export async function createAssistantMcpSession(
         ...(tool.outputSchema
           ? { outputSchema: tool.outputSchema as AssistantMcpToolDefinition['outputSchema'] }
           : {}),
-      }));
+      }] : [];
+    });
     const listedToolNames = new Set(tools.map(tool => tool.name));
     const missingToolNames = ASSISTANT_MCP_TOOL_NAMES.filter(name => !listedToolNames.has(name));
     if (missingToolNames.length > 0) {

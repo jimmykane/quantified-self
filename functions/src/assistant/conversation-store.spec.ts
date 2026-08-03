@@ -123,6 +123,95 @@ describe('Assistant conversation store', () => {
     expect((await store.getActiveConversation('user-1'))?.messages).toEqual([]);
   });
 
+  it('extends retention only after a turn completes', async () => {
+    const harness = createFirestoreHarness();
+    let now = new Date('2026-08-01T12:00:00.000Z');
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => now,
+      createId: () => `id-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const reset = await store.resetConversation('user-1');
+    const originalExpiry = reset.expiresAt;
+
+    now = new Date('2026-08-02T12:00:00.000Z');
+    const releasedTurn = await store.beginTurn('user-1', reset.conversationId);
+    await store.releaseTurn('user-1', releasedTurn);
+    expect((await store.getActiveConversation('user-1'))?.expiresAt)
+      .toBe(originalExpiry);
+
+    const completedTurn = await store.beginTurn('user-1', reset.conversationId);
+    const completed = await store.completeTurn(
+      'user-1',
+      completedTurn,
+      message('completed-user', 'user', 'Completed question'),
+      message('completed-assistant', 'assistant', 'Completed answer'),
+    );
+    expect(completed.expiresAt).toBe('2026-08-09T12:00:00.000Z');
+  });
+
+  it('keeps a nearly expired conversation alive for the pending-turn lease only', async () => {
+    const harness = createFirestoreHarness();
+    let now = new Date('2026-08-01T12:00:00.000Z');
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => now,
+      createId: () => `id-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const reset = await store.resetConversation('user-1');
+
+    now = new Date('2026-08-08T11:59:00.000Z');
+    const begun = await store.beginTurn('user-1', reset.conversationId);
+    expect((await store.getActiveConversation('user-1'))?.expiresAt)
+      .toBe('2026-08-08T12:03:00.000Z');
+
+    await store.releaseTurn('user-1', begun);
+    expect((await store.getActiveConversation('user-1'))?.expiresAt)
+      .toBe('2026-08-08T12:03:00.000Z');
+  });
+
+  it('does not let malformed or impossible persisted lease data lock the conversation', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00.000Z'),
+      createId: () => `id-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const reset = await store.resetConversation('user-1');
+    const path = 'users/user-1/assistantConversations/active';
+    const stored = harness.documents.get(path);
+    harness.documents.set(path, {
+      ...stored,
+      pendingTurn: {
+        id: 'malformed-turn',
+        expiresAtMs: Date.parse('2026-08-03T12:04:00.001Z'),
+      },
+    });
+
+    await expect(store.beginTurn('user-1', reset.conversationId)).resolves.toMatchObject({
+      conversationId: reset.conversationId,
+      turnId: 'id-2',
+    });
+  });
+
   it('fails closed when account deletion has started', async () => {
     const harness = createFirestoreHarness();
     const store = createAssistantConversationStore({

@@ -432,7 +432,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Ask a question and press **Send**. Press **Shift + Enter** for a new line.
 - Starter prompts fill the composer; they do not send automatically.
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
-- Every current answer must use at least one read-only Quantified Self result. Expand **grounded sources** below an answer to inspect compact facts and app links produced from actual tool results.
+- Every current answer must use at least one read-only Quantified Self result. Expand **grounded results** below an answer to inspect compact facts and app links produced from actual tool results.
 - Use **New chat** to clear the stored messages and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
 ## What the Assistant can read
@@ -446,14 +446,14 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Privacy boundaries
 
 - The built-in Assistant has no access to exact activity locations, route summaries, route geometry, waypoints, raw chart streams, original files, write tools, or dashboard settings.
-- Gemini receives the bounded, validated read-only tool results selected for the current question. Raw FIT, TCX, GPX, JSON, and SML files are not sent.
+- Gemini receives your message, the browser's IANA timezone for local-day context, bounded recent conversation context, and the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and an answer that repeats an opaque reference or cursor is rejected. Raw FIT, TCX, GPX, JSON, and SML files are not sent.
 - Evidence rendering removes opaque references, cursors, provider, device, source, owner, token, and identifier fields again before display.
 - The Assistant is fitness information, not medical advice. Verify important health and Training decisions.
 
 ## Retention and control
 
 - Quantified Self stores one active conversation per user, with at most the latest six completed turns.
-- The active conversation becomes unavailable after **seven days**. Firestore TTL then deletes its expired record asynchronously; account deletion removes it directly.
+- The active conversation becomes unavailable about **seven days** after its latest completed turn or reset. A response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL then deletes the expired record asynchronously; account deletion removes it directly.
 - Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
 - **New chat** immediately replaces the stored conversation and removes its prior message content.
 
@@ -830,7 +830,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 - Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
 - The built-in Assistant sends Gemini your message, bounded recent conversation context, and only the validated read-only Quantified Self results selected for that question.
-- The Assistant cannot access or send raw activity files, saved routes, exact locations, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable after seven days, and is then deleted asynchronously by Firestore TTL.
+- The Assistant cannot access or send raw activity files, saved routes, exact locations, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable about seven days after the latest completed turn or reset (with at most four extra minutes for a response already in progress), and is then deleted asynchronously by Firestore TTL.
 - The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 - The dedicated [Privacy Policy](/privacy) and [Terms of Service](/terms) pages are public and readable without signing in.
 

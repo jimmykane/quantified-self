@@ -64,6 +64,10 @@ type StoredDoc = Record<string, unknown> | undefined;
 class FakeDocumentSnapshot {
   constructor(private readonly storedDoc: StoredDoc) { }
 
+  get exists(): boolean {
+    return this.storedDoc !== undefined;
+  }
+
   data(): StoredDoc {
     return this.storedDoc;
   }
@@ -164,6 +168,8 @@ describe('ai insights quota', () => {
 
   beforeEach(() => {
     fakeDb = new FakeFirestore();
+    fakeDb.seedDocument('users/user-1', {});
+    fakeDb.seedDocument('users/user-2', {});
     reservationCounter = 0;
 
     setAiInsightsQuotaDependenciesForTesting({
@@ -264,6 +270,35 @@ describe('ai insights quota', () => {
     expect(releasedStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
     expect(quotaStatus.successfulRequestCount).toBe(0);
     expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
+  });
+
+  it('does not create or update quota state after account deletion starts', async () => {
+    fakeDb.seedDocument('userDeletionTombstones/user-1', {
+      expireAt: new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    await expect(reserveAiInsightsQuotaForRequest('user-1'))
+      .rejects.toMatchObject<HttpsError>({ code: 'permission-denied' });
+    expect(fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`))
+      .toBeUndefined();
+    expect(fakeDb.getWriteCount()).toBe(0);
+  });
+
+  it('does not finalize or release an existing reservation after deletion starts', async () => {
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const usagePath = `users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`;
+    const storedBeforeDeletion = fakeDb.getDocument(usagePath);
+    const writesBeforeDeletion = fakeDb.getWriteCount();
+    fakeDb.seedDocument('userDeletionTombstones/user-1', {
+      expireAt: new Date('2026-03-20T12:00:00.000Z'),
+    });
+
+    await expect(finalizeAiInsightsQuotaReservation(reservation))
+      .rejects.toMatchObject<HttpsError>({ code: 'permission-denied' });
+    await expect(releaseAiInsightsQuotaReservation(reservation))
+      .rejects.toMatchObject<HttpsError>({ code: 'permission-denied' });
+    expect(fakeDb.getDocument(usagePath)).toEqual(storedBeforeDeletion);
+    expect(fakeDb.getWriteCount()).toBe(writesBeforeDeletion);
   });
 
   it('finalizes an existing reservation even if the user becomes ineligible afterward', async () => {

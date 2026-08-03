@@ -8,13 +8,21 @@ const response: AssistantChatResponse = {
   conversation: {
     version: 1,
     conversationId: 'conversation-1',
-    messages: [{
-      id: 'message-1',
-      role: 'assistant',
-      text: 'Your readiness is 72 today.',
-      createdAt: '2026-08-03T12:00:00.000Z',
-      evidence: [],
-    }],
+    messages: [
+      {
+        id: 'message-1',
+        role: 'user',
+        text: 'How am I today?',
+        createdAt: '2026-08-03T12:00:00.000Z',
+      },
+      {
+        id: 'message-2',
+        role: 'assistant',
+        text: 'Your readiness is 72 today.',
+        createdAt: '2026-08-03T12:00:00.000Z',
+        evidence: [],
+      },
+    ],
     expiresAt: '2026-08-10T12:00:00.000Z',
   },
   quota: {

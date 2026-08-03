@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildAssistantEvidence } from './evidence';
 
 describe('Assistant evidence', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('builds bounded display facts and safe app links from validated MCP output', () => {
     const evidence = buildAssistantEvidence({
       name: 'query_activities',
@@ -19,6 +23,10 @@ describe('Assistant evidence', () => {
         sourceKey: 'must-not-leak',
         provider: 'must-not-leak',
         latitudeDegrees: 39.665,
+        lat: 39.666,
+        lng: 20.854,
+        bbox: [20.8, 39.6, 20.9, 39.7],
+        center: [20.853, 39.665],
         startPosition: {
           longitudeDegrees: 20.853,
         },
@@ -39,7 +47,9 @@ describe('Assistant evidence', () => {
     }]);
     expect(JSON.stringify(evidence)).not.toContain('opaque-ref');
     expect(JSON.stringify(evidence)).not.toContain('must-not-leak');
-    expect(JSON.stringify(evidence)).not.toMatch(/Latitude|Longitude|39\.665|20\.853/);
+    expect(JSON.stringify(evidence)).not.toMatch(
+      /Latitude|Longitude|Position|Bbox|Center|39\.66|20\.85/,
+    );
   });
 
   it('formats top-level health facts but rejects external links', () => {
@@ -61,5 +71,59 @@ describe('Assistant evidence', () => {
       { label: 'Average Heart Rate Bpm', value: '51.24' },
     ]);
     expect(evidence.links).toEqual([]);
+  });
+
+  it('does not use denied provenance counts in its fallback summary', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_training_metric',
+      title: 'Get a Training metric',
+    }, {
+      sourceCount: 9,
+    });
+
+    expect(evidence.summary).toBe('Grounded in Get a Training metric.');
+    expect(evidence.facts).toEqual([]);
+  });
+
+  it('does not discover app links nested under denied provenance fields', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_training_metric',
+      title: 'Get a Training metric',
+    }, {
+      provider: {
+        appUrl: 'https://quantified-self.io/user/private/event/private',
+      },
+    });
+
+    expect(evidence.links).toEqual([]);
+  });
+
+  it('rejects allowlisted hosts on unexpected ports or with credentials', () => {
+    for (const appUrl of [
+      'https://quantified-self.io:444/user/u/event/e',
+      'https://user:password@quantified-self.io/user/u/event/e',
+    ]) {
+      expect(buildAssistantEvidence({
+        name: 'query_activities',
+        title: 'Query activities',
+      }, { appUrl }).links).toEqual([]);
+    }
+  });
+
+  it('accepts an explicit loopback app link only in the Functions emulator', () => {
+    const appUrl = 'https://localhost:4200/user/u/event/e';
+    expect(buildAssistantEvidence({
+      name: 'query_activities',
+      title: 'Query activities',
+    }, { appUrl }).links).toEqual([]);
+
+    vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
+    expect(buildAssistantEvidence({
+      name: 'query_activities',
+      title: 'Query activities',
+    }, { appUrl }).links).toEqual([{
+      label: 'Open in Quantified Self',
+      url: appUrl,
+    }]);
   });
 });

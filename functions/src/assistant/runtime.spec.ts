@@ -28,6 +28,7 @@ function createSession() {
         properties: {
           timeZone: { type: 'string' },
         },
+        required: ['timeZone'],
       },
       outputSchema: {
         type: 'object',
@@ -109,10 +110,12 @@ describe('Assistant runtime', () => {
     expect(generate).toHaveBeenNthCalledWith(1, expect.objectContaining({
       toolChoice: 'required',
       returnToolRequests: true,
+      config: { maxOutputTokens: 1_024 },
     }));
     expect(generate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       system: expect.stringContaining('first-party Quantified Self Assistant'),
       toolChoice: 'auto',
+      config: { maxOutputTokens: 2_048 },
       messages: expect.arrayContaining([{
         role: 'tool',
         content: [{
@@ -137,7 +140,8 @@ describe('Assistant runtime', () => {
       generateAnswer: async (input) => {
         expect(input.currentTime).toBe('2026-08-03T12:00:00.000Z');
         expect(input.timeZone).toBe('Europe/Helsinki');
-        await input.tools[0].execute({ timeZone: input.timeZone });
+        expect(input.tools[0].inputJsonSchema.required).toEqual([]);
+        await input.tools[0].execute({});
         return 'Your readiness is 72 today.';
       },
     });
@@ -163,6 +167,71 @@ describe('Assistant runtime', () => {
       title: 'Get daily report',
     })]);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('preserves an explicit model-selected timezone', async () => {
+    const { session, callTool } = createSession();
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({ timeZone: 'America/New_York' });
+        return 'The requested local report is ready.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'Use New York time.',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    });
+
+    expect(callTool).toHaveBeenCalledWith('get_daily_report', {
+      timeZone: 'America/New_York',
+    });
+  });
+
+  it('does not add a timezone to unbounded activity discovery', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: { activities: [] },
+    });
+    const session: AssistantMcpSession = {
+      instructions: 'Use activity discovery.',
+      tools: [{
+        name: 'query_activities',
+        title: 'Query activities',
+        description: 'Find activities.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            relativePeriod: { type: 'string' },
+            timeZone: { type: 'string' },
+            limit: { type: 'number' },
+          },
+        },
+      }],
+      callTool,
+      close,
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({ limit: 1 });
+        return 'No recent activities were found.';
+      },
+    });
+
+    await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'What was my latest activity?',
+      timeZone: 'Europe/Helsinki',
+      history: [],
+    });
+
+    expect(callTool).toHaveBeenCalledWith('query_activities', { limit: 1 });
   });
 
   it('fails ungrounded model responses and always closes the MCP session', async () => {
@@ -250,5 +319,70 @@ describe('Assistant runtime', () => {
     })).rejects.toThrow('cumulative tool-output budget was exceeded');
     expect(callTool).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('withholds direct app URLs from the model while retaining safe evidence links', async () => {
+    const { session, callTool } = createSession();
+    const activityRef = 'a'.repeat(64);
+    callTool.mockResolvedValue({
+      structuredContent: {
+        activities: [{
+          activityRef,
+          activityType: 'Running',
+          appUrl: 'https://quantified-self.io/user/private/event/private',
+        }],
+      },
+    });
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await expect(input.tools[0].execute({ timeZone: 'UTC' })).resolves.toEqual({
+          activities: [{
+            activityRef,
+            activityType: 'Running',
+          }],
+        });
+        return 'Your latest recorded activity was Running.';
+      },
+    });
+
+    const result = await runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'What was my latest activity?',
+      timeZone: 'UTC',
+      history: [],
+    });
+
+    expect(result.evidence[0].links).toEqual([{
+      label: 'Open in Quantified Self',
+      url: 'https://quantified-self.io/user/private/event/private',
+    }]);
+  });
+
+  it('rejects an answer that echoes an opaque MCP reference or cursor', async () => {
+    const { session, callTool } = createSession();
+    const opaqueCursor = 'c'.repeat(64);
+    callTool.mockResolvedValue({
+      structuredContent: {
+        activities: [],
+        nextCursor: opaqueCursor,
+      },
+    });
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({ timeZone: 'UTC' });
+        return `Continue with cursor ${opaqueCursor}.`;
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'What was my latest activity?',
+      timeZone: 'UTC',
+      history: [],
+    })).rejects.toThrow('protected tool reference');
   });
 });

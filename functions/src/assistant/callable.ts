@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -12,7 +13,6 @@ import {
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import {
-  getAiInsightsQuotaStatus,
   reserveAiInsightsQuotaForRequest,
   finalizeAiInsightsQuotaReservation,
   releaseAiInsightsQuotaReservation,
@@ -42,7 +42,7 @@ const ASSISTANT_HOSTED_APP_ORIGINS = new Set([
 ]);
 
 export interface AssistantCallableDependencies {
-  getQuotaStatus: typeof getAiInsightsQuotaStatus;
+  assertLegalAccess: (uid: string) => Promise<void>;
   reserveQuota: typeof reserveAiInsightsQuotaForRequest;
   finalizeQuota: typeof finalizeAiInsightsQuotaReservation;
   releaseQuota: typeof releaseAiInsightsQuotaReservation;
@@ -58,8 +58,25 @@ export interface AssistantCallableDependencies {
   now: () => Date;
 }
 
+export async function assertAssistantLegalAccess(
+  uid: string,
+  db: Pick<FirebaseFirestore.Firestore, 'doc'> = admin.firestore(),
+): Promise<void> {
+  const snapshot = await db.doc(`users/${uid}/legal/agreements`).get();
+  const agreements = snapshot.data();
+  if (!snapshot.exists
+    || agreements?.acceptedPrivacyPolicy !== true
+    || agreements?.acceptedDataPolicy !== true
+    || agreements?.acceptedTos !== true) {
+    throw new HttpsError(
+      'permission-denied',
+      'Complete onboarding before using the Assistant.',
+    );
+  }
+}
+
 const defaultDependencies: AssistantCallableDependencies = {
-  getQuotaStatus: getAiInsightsQuotaStatus,
+  assertLegalAccess: assertAssistantLegalAccess,
   reserveQuota: reserveAiInsightsQuotaForRequest,
   finalizeQuota: finalizeAiInsightsQuotaReservation,
   releaseQuota: releaseAiInsightsQuotaReservation,
@@ -138,10 +155,13 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
     );
   }
   assertValidTimeZone(timeZone);
-  if (data.conversationId !== undefined
-    && (typeof data.conversationId !== 'string'
-      || data.conversationId.length < 1
-      || data.conversationId.length > 120)) {
+  const conversationId = typeof data.conversationId === 'string'
+    ? data.conversationId.trim()
+    : data.conversationId;
+  if (conversationId !== undefined
+    && (typeof conversationId !== 'string'
+      || conversationId.length < 1
+      || conversationId.length > 120)) {
     throw new HttpsError(
       'invalid-argument',
       'conversationId must contain 1 to 120 characters.',
@@ -150,8 +170,8 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   return {
     message,
     timeZone,
-    ...(data.conversationId
-      ? { conversationId: data.conversationId }
+    ...(conversationId
+      ? { conversationId }
       : {}),
   };
 }
@@ -190,20 +210,11 @@ export async function runAssistantChat(
 ): Promise<AssistantChatResponse> {
   const uid = requireAuthenticatedUid(context);
   const input = parseAssistantChatRequest(value);
-  const initialQuotaStatus = await dependencies.getQuotaStatus(uid);
-  if (!initialQuotaStatus.isEligible) {
-    throw new HttpsError('permission-denied', 'The Assistant is unavailable for this account.');
-  }
-  if (initialQuotaStatus.remainingCount <= 0) {
-    throw new HttpsError(
-      'resource-exhausted',
-      'Assistant limit reached for this billing period.',
-    );
-  }
 
   let reservation: AiInsightsQuotaReservation | null = null;
   let begunTurn: BegunAssistantTurn | null = null;
   try {
+    await dependencies.assertLegalAccess(uid);
     reservation = await dependencies.reserveQuota(uid);
     begunTurn = await dependencies.conversationStore.beginTurn(
       uid,

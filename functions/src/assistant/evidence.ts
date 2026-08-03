@@ -7,16 +7,17 @@ import type {
   AssistantMcpToolDefinition,
   AssistantMcpToolName,
 } from './mcp-session';
+import { isFunctionsEmulator } from '../utils';
 
 const MAX_FACTS = 6;
 const MAX_LINKS = 3;
 const MAX_WALK_DEPTH = 4;
-const SAFE_APP_HOSTS = new Set([
-  'quantified-self.io',
-  'www.quantified-self.io',
-  'beta.quantified-self.io',
+const SAFE_APP_ORIGINS = new Set([
+  'https://quantified-self.io',
+  'https://www.quantified-self.io',
+  'https://beta.quantified-self.io',
 ]);
-const DENIED_FIELD_PATTERN = /(?:^|_)(?:uid|user|owner|email|token|secret|source|provider|device|cursor|ref|id|latitude|longitude|coordinates?|geometry|polyline|waypoints?|bounds|start_position|end_position)(?:$|_)/i;
+const DENIED_FIELD_PATTERN = /(?:^|_)(?:uid|user|owner|email|token|secret|source|provider|device|cursor|ref|id|lat|latitude|lng|lon|longitude|gps|location|coordinates?|position|geometry|polyline|waypoints?|bounds|bbox|center)(?:$|_)/i;
 const SUMMARY_ARRAY_KEYS = [
   'activities',
   'sessions',
@@ -142,7 +143,13 @@ function parseSafeAppUrl(value: unknown): string | null {
   }
   try {
     const url = new URL(value);
-    if (url.protocol !== 'https:' || !SAFE_APP_HOSTS.has(url.hostname)) {
+    const isAllowedLoopback = isFunctionsEmulator()
+      && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+      && (url.protocol === 'http:' || url.protocol === 'https:')
+      && !!url.port;
+    if ((!SAFE_APP_ORIGINS.has(url.origin) && !isAllowedLoopback)
+      || url.username
+      || url.password) {
       return null;
     }
     return url.toString();
@@ -181,6 +188,9 @@ function collectLinks(
       }
       continue;
     }
+    if (isDeniedField(key)) {
+      continue;
+    }
     collectLinks(child, links, seenUrls, depth + 1);
     if (links.length >= MAX_LINKS) {
       return;
@@ -197,7 +207,9 @@ function buildSummary(toolTitle: string, output: Record<string, unknown>): strin
     }
   }
   const countEntry = Object.entries(output)
-    .find(([key, value]) => /count$/i.test(key) && typeof value === 'number');
+    .find(([key, value]) => /count$/i.test(key)
+      && !isDeniedField(key)
+      && typeof value === 'number');
   if (countEntry) {
     return `${humanizeFieldName(countEntry[0])}: ${countEntry[1]}.`;
   }

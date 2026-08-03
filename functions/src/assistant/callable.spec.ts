@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { HttpsError } from 'firebase-functions/v2/https';
 import {
   AssistantConversationStoreError,
   type AssistantConversationStore,
@@ -6,6 +7,7 @@ import {
 import type { AssistantCallableDependencies } from './callable';
 import {
   ASSISTANT_CALLABLE_OPTIONS,
+  assertAssistantLegalAccess,
   resolveAssistantAppBaseUrl,
   runAssistantChat,
   runGetAssistantConversation,
@@ -30,13 +32,21 @@ function createDependencies() {
   const conversation = {
     version: 1 as const,
     conversationId: 'conversation-1',
-    messages: [{
-      id: 'assistant-message',
-      role: 'assistant' as const,
-      text: 'Your readiness is 72 today.',
-      createdAt: '2026-08-03T12:00:00.000Z',
-      evidence: [],
-    }],
+    messages: [
+      {
+        id: 'user-message',
+        role: 'user' as const,
+        text: 'How am I today?',
+        createdAt: '2026-08-03T12:00:00.000Z',
+      },
+      {
+        id: 'assistant-message',
+        role: 'assistant' as const,
+        text: 'Your readiness is 72 today.',
+        createdAt: '2026-08-03T12:00:00.000Z',
+        evidence: [],
+      },
+    ],
     expiresAt: '2026-08-10T12:00:00.000Z',
   };
   const store: AssistantConversationStore = {
@@ -63,7 +73,7 @@ function createDependencies() {
     isEligible: true,
   };
   const dependencies: AssistantCallableDependencies = {
-    getQuotaStatus: vi.fn().mockResolvedValue(quota),
+    assertLegalAccess: vi.fn().mockResolvedValue(undefined),
     reserveQuota: vi.fn().mockResolvedValue(reservation),
     finalizeQuota: vi.fn().mockResolvedValue(quota),
     releaseQuota: vi.fn().mockResolvedValue(quota),
@@ -92,6 +102,35 @@ const context = {
 };
 
 describe('Assistant callable', () => {
+  it('checks the server-authoritative required legal agreements', async () => {
+    const get = vi.fn()
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          acceptedPrivacyPolicy: true,
+          acceptedDataPolicy: true,
+          acceptedTos: true,
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          acceptedPrivacyPolicy: true,
+          acceptedDataPolicy: false,
+          acceptedTos: true,
+        }),
+      });
+    const db = {
+      doc: vi.fn(() => ({ get })),
+    };
+
+    await expect(assertAssistantLegalAccess('user-1', db as never))
+      .resolves.toBeUndefined();
+    await expect(assertAssistantLegalAccess('user-1', db as never))
+      .rejects.toMatchObject({ code: 'permission-denied' });
+    expect(db.doc).toHaveBeenCalledWith('users/user-1/legal/agreements');
+  });
+
   it('keeps an explicit platform concurrency and instance cost bound', () => {
     expect(ASSISTANT_CALLABLE_OPTIONS).toMatchObject({
       concurrency: 10,
@@ -122,6 +161,7 @@ describe('Assistant callable', () => {
       quota,
     });
 
+    expect(dependencies.assertLegalAccess).toHaveBeenCalledWith('user-1');
     expect(dependencies.reserveQuota).toHaveBeenCalledWith('user-1');
     expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1');
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
@@ -138,6 +178,21 @@ describe('Assistant callable', () => {
       expect.objectContaining({ role: 'user', text: 'How am I today?' }),
       expect.objectContaining({ role: 'assistant', text: 'Your readiness is 72 today.' }),
     );
+  });
+
+  it('requires accepted legal agreements before reserving quota or starting a turn', async () => {
+    const { dependencies, store } = createDependencies();
+    vi.mocked(dependencies.assertLegalAccess).mockRejectedValue(new HttpsError(
+      'permission-denied',
+      'Complete onboarding before using the Assistant.',
+    ));
+
+    await expect(runAssistantChat({
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
+    expect(store.beginTurn).not.toHaveBeenCalled();
   });
 
   it('releases an unused quota reservation when the conversation is busy', async () => {
@@ -180,6 +235,12 @@ describe('Assistant callable', () => {
       message: '   ',
       timeZone: 'UTC',
     }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(runAssistantChat({
+      message: 'How am I today?',
+      timeZone: 'UTC',
+      conversationId: '   ',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(dependencies.assertLegalAccess).not.toHaveBeenCalled();
     expect(dependencies.reserveQuota).not.toHaveBeenCalled();
   });
 

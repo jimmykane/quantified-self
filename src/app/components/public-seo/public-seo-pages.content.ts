@@ -549,7 +549,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'timer',
             title: 'Short-lived conversation',
-            copy: 'Only the latest six completed turns are retained in one server-owned active conversation. It becomes unavailable after seven days, is deleted asynchronously by Firestore TTL, and can be cleared immediately with New chat.',
+            copy: 'Only the latest six completed turns are retained in one server-owned active conversation. It becomes unavailable about seven days after the latest completed turn or reset; a response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL deletes it asynchronously, and New chat clears it immediately.',
           },
         ],
       },
@@ -561,7 +561,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does the Assistant send raw files or routes to Gemini?',
-        answer: 'No. Gemini receives only the bounded, validated read-only tool results selected for the current question. Original FIT, TCX, GPX, JSON, and SML files, saved routes, and exact locations are not available to the built-in Assistant.',
+        answer: 'No. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer. Original FIT, TCX, GPX, JSON, and SML files, saved routes, and exact locations are not available to the built-in Assistant.',
       },
       {
         question: 'Is the Assistant available on the free plan?',

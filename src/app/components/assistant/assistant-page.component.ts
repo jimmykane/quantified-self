@@ -13,6 +13,7 @@ import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
+  ASSISTANT_MAX_STORED_MESSAGES,
   type AssistantConversation,
   type AssistantMessage,
 } from '@shared/assistant.types';
@@ -20,7 +21,10 @@ import type { AiInsightsQuotaStatus } from '@shared/ai-insights.types';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { MaterialModule } from '../../modules/material.module';
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
-import { AssistantService } from '../../services/assistant.service';
+import {
+  AssistantError,
+  AssistantService,
+} from '../../services/assistant.service';
 
 @Component({
   selector: 'app-assistant-page',
@@ -46,6 +50,7 @@ export class AssistantPageComponent implements OnInit {
     nonNullable: true,
     validators: [
       Validators.required,
+      Validators.pattern(/\S/),
       Validators.maxLength(ASSISTANT_MAX_MESSAGE_CHARS),
     ],
   });
@@ -72,7 +77,9 @@ export class AssistantPageComponent implements OnInit {
   readonly quotaText = computed(() => {
     const status = this.quota();
     if (!status) {
-      return '';
+      return this.loadingConversation()
+        ? 'Assistant allowance is loading'
+        : 'Allowance status unavailable; it will be checked when you send';
     }
     return `${status.remainingCount} of ${status.limit} Assistant requests remaining`;
   });
@@ -121,8 +128,8 @@ export class AssistantPageComponent implements OnInit {
     });
     this.promptControl.setValue('');
     this.scrollToConversationEnd();
+    const activeConversation = this.conversation();
     try {
-      const activeConversation = this.conversation();
       const response = await this.assistantService.sendMessage({
         message: text,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -133,8 +140,35 @@ export class AssistantPageComponent implements OnInit {
       this.conversation.set(response.conversation);
       this.quota.set(response.quota);
     } catch (error) {
-      this.errorMessage.set(this.assistantService.getErrorMessage(error));
-      this.promptControl.setValue(text);
+      let refreshedConversation: AssistantConversation | null | undefined;
+      try {
+        refreshedConversation = await this.assistantService.getConversation();
+      } catch {
+        // Preserve the original send failure when reconciliation is unavailable.
+      }
+      if (this.isCompletedTurnRecovery(activeConversation, refreshedConversation, text)) {
+        this.conversation.set(refreshedConversation);
+        this.errorMessage.set(null);
+      } else {
+        if (refreshedConversation !== undefined) {
+          this.conversation.set(refreshedConversation);
+        }
+        this.errorMessage.set(this.assistantService.getErrorMessage(error));
+        this.promptControl.setValue(text);
+        if (error instanceof AssistantError
+          && error.code === 'CONVERSATION_CHANGED'
+          && refreshedConversation !== undefined) {
+          this.errorMessage.set(
+            'The conversation changed in another tab. It has been refreshed; try again.',
+          );
+        }
+      }
+      try {
+        this.quota.set(await this.quotaService.loadQuotaStatus());
+      } catch {
+        // Do not present a potentially stale allowance after a failed attempt.
+        this.quota.set(null);
+      }
     } finally {
       this.pendingUserMessage.set(null);
       this.sending.set(false);
@@ -177,5 +211,30 @@ export class AssistantPageComponent implements OnInit {
         block: 'end',
       });
     });
+  }
+
+  private isCompletedTurnRecovery(
+    previousConversation: AssistantConversation | null,
+    refreshedConversation: AssistantConversation | null | undefined,
+    sentText: string,
+  ): refreshedConversation is AssistantConversation {
+    if (!refreshedConversation
+      || (previousConversation
+        && refreshedConversation.conversationId !== previousConversation.conversationId)) {
+      return false;
+    }
+    const previousMessages = previousConversation?.messages ?? [];
+    const previousMessageIds = new Set(previousMessages.map(message => message.id));
+    const userMessage = refreshedConversation.messages.at(-2);
+    const assistantMessage = refreshedConversation.messages.at(-1);
+    return refreshedConversation.messages.length === Math.min(
+      previousMessages.length + 2,
+      ASSISTANT_MAX_STORED_MESSAGES,
+    )
+      && userMessage?.role === 'user'
+      && userMessage.text === sentText
+      && !previousMessageIds.has(userMessage.id)
+      && assistantMessage?.role === 'assistant'
+      && !previousMessageIds.has(assistantMessage.id);
   }
 }

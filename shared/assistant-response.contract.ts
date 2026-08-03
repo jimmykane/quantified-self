@@ -18,14 +18,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(value).every(key => allowed.has(key));
+}
+
 function isBoundedString(value: unknown, min: number, max: number): value is string {
   return typeof value === 'string' && value.length >= min && value.length <= max;
 }
 
 function isIsoDate(value: unknown): value is string {
-  return typeof value === 'string'
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
-    && Number.isFinite(Date.parse(value));
+  if (typeof value !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return false;
+  }
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
 }
 
 function isSafeEvidenceUrl(value: unknown): value is string {
@@ -34,12 +45,20 @@ function isSafeEvidenceUrl(value: unknown): value is string {
   }
   try {
     const url = new URL(value);
-    return url.protocol === 'https:'
-      && [
-        'quantified-self.io',
-        'www.quantified-self.io',
-        'beta.quantified-self.io',
-      ].includes(url.hostname);
+    const isHostedOrigin = [
+      'https://quantified-self.io',
+      'https://www.quantified-self.io',
+      'https://beta.quantified-self.io',
+    ].includes(url.origin);
+    const isLoopbackOrigin = (
+      url.hostname === 'localhost'
+      || url.hostname === '127.0.0.1'
+    )
+      && (url.protocol === 'http:' || url.protocol === 'https:')
+      && !!url.port;
+    return (isHostedOrigin || isLoopbackOrigin)
+      && !url.username
+      && !url.password;
   } catch {
     return false;
   }
@@ -47,6 +66,7 @@ function isSafeEvidenceUrl(value: unknown): value is string {
 
 function isEvidence(value: unknown): value is AssistantEvidence {
   if (!isRecord(value)
+    || !hasOnlyKeys(value, ['toolName', 'title', 'summary', 'facts', 'links'])
     || !isBoundedString(value.toolName, 1, 120)
     || !isBoundedString(value.title, 1, 160)
     || !isBoundedString(value.summary, 1, 300)
@@ -58,9 +78,11 @@ function isEvidence(value: unknown): value is AssistantEvidence {
   }
 
   const factsValid = value.facts.every(fact => isRecord(fact)
+    && hasOnlyKeys(fact, ['label', 'value'])
     && isBoundedString(fact.label, 1, 80)
     && isBoundedString(fact.value, 1, 160));
   const linksValid = value.links.every(link => isRecord(link)
+    && hasOnlyKeys(link, ['label', 'url'])
     && isBoundedString(link.label, 1, 80)
     && isSafeEvidenceUrl(link.url));
   return factsValid && linksValid;
@@ -68,6 +90,7 @@ function isEvidence(value: unknown): value is AssistantEvidence {
 
 function isMessage(value: unknown): value is AssistantMessage {
   if (!isRecord(value)
+    || !hasOnlyKeys(value, ['id', 'role', 'text', 'createdAt', 'evidence'])
     || !isBoundedString(value.id, 1, 120)
     || (value.role !== 'user' && value.role !== 'assistant')
     || !isBoundedString(
@@ -81,10 +104,27 @@ function isMessage(value: unknown): value is AssistantMessage {
     return false;
   }
 
+  if (value.role === 'user') {
+    return value.evidence === undefined;
+  }
   return value.evidence === undefined
     || (Array.isArray(value.evidence)
       && value.evidence.length <= ASSISTANT_MAX_EVIDENCE_ITEMS
       && value.evidence.every(isEvidence));
+}
+
+function hasValidMessageSequence(messages: AssistantMessage[]): boolean {
+  if (messages.length % 2 !== 0) {
+    return false;
+  }
+  const messageIds = new Set<string>();
+  return messages.every((message, index) => {
+    if (messageIds.has(message.id)) {
+      return false;
+    }
+    messageIds.add(message.id);
+    return message.role === (index % 2 === 0 ? 'user' : 'assistant');
+  });
 }
 
 export function validateAssistantConversation(
@@ -92,6 +132,9 @@ export function validateAssistantConversation(
 ): AssistantValidationResult<AssistantConversation> {
   if (!isRecord(value)) {
     return { ok: false, reason: 'conversation_not_object' };
+  }
+  if (!hasOnlyKeys(value, ['version', 'conversationId', 'messages', 'expiresAt'])) {
+    return { ok: false, reason: 'unexpected_conversation_fields' };
   }
   if (value.version !== ASSISTANT_CONVERSATION_VERSION) {
     return { ok: false, reason: 'unsupported_version' };
@@ -101,7 +144,8 @@ export function validateAssistantConversation(
   }
   if (!Array.isArray(value.messages)
     || value.messages.length > ASSISTANT_MAX_STORED_MESSAGES
-    || !value.messages.every(isMessage)) {
+    || !value.messages.every(isMessage)
+    || !hasValidMessageSequence(value.messages)) {
     return { ok: false, reason: 'invalid_messages' };
   }
   if (!isIsoDate(value.expiresAt)) {
@@ -117,20 +161,36 @@ export function validateAssistantChatResponse(
   if (!isRecord(value)) {
     return { ok: false, reason: 'response_not_object' };
   }
+  if (!hasOnlyKeys(value, ['conversation', 'quota'])) {
+    return { ok: false, reason: 'unexpected_response_fields' };
+  }
   const conversation = validateAssistantConversation(value.conversation);
   if (conversation.ok === false) {
     return { ok: false, reason: conversation.reason };
   }
   const quota = value.quota;
   if (!isRecord(quota)
+    || !hasOnlyKeys(quota, [
+      'role',
+      'limit',
+      'successfulRequestCount',
+      'activeRequestCount',
+      'remainingCount',
+      'periodStart',
+      'periodEnd',
+      'periodKind',
+      'resetMode',
+      'isEligible',
+      'blockedReason',
+    ])
     || !['free', 'basic', 'pro'].includes(`${quota.role}`)
-    || !Number.isInteger(quota.limit)
+    || !Number.isSafeInteger(quota.limit)
     || (quota.limit as number) < 0
-    || !Number.isInteger(quota.successfulRequestCount)
+    || !Number.isSafeInteger(quota.successfulRequestCount)
     || (quota.successfulRequestCount as number) < 0
-    || !Number.isInteger(quota.activeRequestCount)
+    || !Number.isSafeInteger(quota.activeRequestCount)
     || (quota.activeRequestCount as number) < 0
-    || !Number.isInteger(quota.remainingCount)
+    || !Number.isSafeInteger(quota.remainingCount)
     || (quota.remainingCount as number) < 0
     || (quota.periodStart !== null && !isIsoDate(quota.periodStart))
     || (quota.periodEnd !== null && !isIsoDate(quota.periodEnd))
@@ -141,6 +201,30 @@ export function validateAssistantChatResponse(
     || ![null, 'requires_pro', 'limit_reached'].includes(
       quota.blockedReason as null | string,
     )) {
+    return { ok: false, reason: 'invalid_quota' };
+  }
+
+  const limit = quota.limit as number;
+  const successfulRequestCount = quota.successfulRequestCount as number;
+  const activeRequestCount = quota.activeRequestCount as number;
+  const remainingCount = quota.remainingCount as number;
+  const isEligible = quota.isEligible as boolean;
+  const expectedRemainingCount = isEligible
+    ? Math.max(0, limit - successfulRequestCount - activeRequestCount)
+    : 0;
+  const expectedBlockedReason = !isEligible
+    ? 'requires_pro'
+    : expectedRemainingCount === 0
+      ? 'limit_reached'
+      : null;
+  const hasPeriodStart = quota.periodStart !== null;
+  const hasPeriodEnd = quota.periodEnd !== null;
+  if (remainingCount !== expectedRemainingCount
+    || quota.blockedReason !== expectedBlockedReason
+    || hasPeriodStart !== hasPeriodEnd
+    || (isEligible && !hasPeriodStart)
+    || (hasPeriodStart
+      && Date.parse(quota.periodStart as string) >= Date.parse(quota.periodEnd as string))) {
     return { ok: false, reason: 'invalid_quota' };
   }
 

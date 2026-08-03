@@ -19,7 +19,7 @@ the conversational Assistant.
 ```text
 Angular Assistant page
   -> Auth + App Check callable
-  -> existing per-plan AI quota reservation
+  -> atomic existing per-plan AI quota reservation
   -> server-owned conversation turn lock
   -> in-process MCP Client + InMemoryTransport
   -> createMcpServer with curated first-party scopes and tool allowlist
@@ -43,8 +43,9 @@ The callable surface consists of:
 - `resetAssistantConversation`: replaces the active conversation generation so an older in-flight response cannot
   restore cleared content.
 
-All three require Firebase Authentication and App Check. Firestore rules deny browser access to
-`users/{uid}/assistantConversations/{conversationId}`.
+All three require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
+the backend also verifies the required privacy, data, and Terms agreements in the server-authoritative legal document.
+Firestore rules deny browser access to `users/{uid}/assistantConversations/active`.
 
 ## Tool and data boundary
 
@@ -64,16 +65,27 @@ route and location permissions; that is the intended path for those questions.
 
 Every current answer must execute at least one allowlisted tool. Genkit tools are built from the MCP server's live JSON
 input schemas. MCP validates every structured result against its strict output schema before the model receives it; the
-large output schemas are therefore not duplicated into the Gemini tool declaration. The runtime allows at most six
-tool calls, seven model turns, and 512 KiB of cumulative validated tool output per user turn. Tool failures, schema
-failures, budget failures, and ungrounded responses fail the request rather than producing an unsupported answer.
+large output schemas are therefore not duplicated into the Gemini tool declaration. For the six tools where a timezone
+is unconditionally required, the model-facing schema permits omission and the runtime supplies the browser's validated
+IANA timezone before canonical MCP validation; an explicit timezone selected from the user's request remains unchanged.
+Conditionally timed activity discovery is not defaulted, so unbounded history remains a valid mode. The runtime allows at most six
+tool calls, seven model turns, 512 KiB of cumulative validated tool output, 1,024 output tokens for initial tool
+selection, and 2,048 output tokens for each continuation response per user turn. The final stored answer remains capped
+at 4,000 characters. Tool failures, schema failures, budget failures, and ungrounded responses fail the request rather
+than producing an unsupported answer.
 
 The model receives only:
 
 - the current user message and IANA timezone;
 - at most the latest six completed conversation turns;
 - the MCP server instructions and allowlisted tool schemas;
-- the bounded validated outputs of tools selected for the current question.
+- the bounded validated outputs of tools selected for the current question, with direct in-app URLs removed before
+  model delivery.
+
+Opaque references and cursors remain available to the model only because bounded follow-up detail and pagination calls
+need them. After generation, the runtime rejects any answer that repeats an exact opaque reference, opaque cursor, or
+direct app URL from the current tool results. The user-facing evidence adapter can still turn a validated app URL into
+an explicit safe link without sending that URL to Gemini.
 
 System instructions require clear missing-data handling, separation of facts from cautious interpretation, no diagnosis
 or workout prescription, and no chain-of-thought disclosure. They are defense in depth; authorization, schema
@@ -86,7 +98,8 @@ not authored by the model. The evidence adapter:
 
 - caps evidence at six tool results, six compact facts per result, and three app links;
 - removes identifiers, cursors, source/provider/device provenance, tokens, and similar fields again before display;
-- accepts links only on HTTPS Quantified Self hosts;
+- accepts production links only on exact HTTPS Quantified Self origins, with explicit loopback origins permitted only
+  while running the Functions emulator;
 - never stores raw tool output in the conversation document.
 
 This evidence is a compact audit aid, not a full transcript of internal tool calls.
@@ -100,11 +113,14 @@ There is one active document at `users/{uid}/assistantConversations/active`:
 - an opaque conversation generation ID;
 - one four-minute pending-turn lease to serialize requests.
 
-Each completed turn refreshes `expireAt` to seven days. The conversation becomes unavailable when that timestamp passes;
-Firestore TTL deletes the expired record asynchronously. **New chat** immediately replaces the document with a new
-generation and no messages. Account deletion recursively removes the user document and all Assistant subcollection
-data. Every transactional write, including failure cleanup, checks the shared user-deletion guard so an in-flight
-request cannot recreate data after deletion starts.
+Each completed turn refreshes `expireAt` to seven days. Starting a turn never renews that seven-day retention, but it
+raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a
+valid response is still being generated. A failed attempt can therefore retain an otherwise expiring conversation for
+at most four extra minutes. The conversation becomes unavailable when `expireAt` passes; Firestore TTL deletes the
+expired record asynchronously. **New chat** immediately replaces the document with a new generation and no messages.
+Account deletion recursively removes the user document and all Assistant subcollection data. Every transactional
+write, including failure cleanup, checks the shared user-deletion guard so an in-flight request cannot recreate data
+after deletion starts.
 
 The Assistant reuses the existing AI request ledger and role limits. A reservation is released if no model attempt
 starts, such as when another turn owns the conversation lease. Once the reservation is finalized, a failed model or
@@ -112,9 +128,10 @@ tool attempt still consumes the request. Loading or resetting a conversation doe
 
 ## Operations, rollout, and rollback
 
-Roll out the backend callables before the frontend route. A frontend rollback can point `/ai-insights` back to the
-previous component while leaving the new server-owned documents to expire. A backend rollback must leave the shared
-quota ledger compatible and must not relax Firestore rules for Assistant documents.
+Deploy the Firestore rules and single-field index exemptions before exposing the feature, then roll out the three
+backend callables before the frontend route. A frontend rollback can point `/ai-insights` back to the previous component
+while leaving the new server-owned documents to expire. A backend rollback must leave the shared quota ledger compatible
+and must not relax Firestore rules for Assistant documents.
 
 Do not log prompts, conversation text, tool arguments, tool output, coordinates, or user IDs from the Assistant path.
 Operational logs should contain only safe error classes and lifecycle outcomes. Monitor callable errors, quota failures,
