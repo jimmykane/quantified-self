@@ -7,6 +7,8 @@ import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
+const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
+
 function resolveEventTimeMs(event: { time?: unknown }): number | null {
     const eventTimeIso = `${event?.time || ''}`.trim();
     if (!eventTimeIso) {
@@ -90,6 +92,7 @@ async function handleDerivedMetricsSourceWrite(
 export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
     document: 'users/{uid}/events/{eventId}',
+    memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
     concurrency: 1,
     retry: true,
@@ -98,6 +101,7 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
 export const onDashboardDerivedMetricsActivityWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
     document: 'users/{uid}/activities/{activityId}',
+    memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
     concurrency: 1,
     retry: true,
@@ -106,6 +110,7 @@ export const onDashboardDerivedMetricsActivityWrite = onDocumentWritten({
 export const onDashboardDerivedMetricsSleepWrite = onDocumentWritten({
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
     document: 'users/{uid}/sleepSessions/{sleepSessionId}',
+    memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
     concurrency: 1,
     retry: true,
