@@ -27,10 +27,11 @@
           mat-stroked-button
           type="button"
           class="training-derived-metrics-retry"
+          aria-label="Retry derived metrics update"
           (click)="retryDerivedMetricsRebuild()"
         >
           <mat-icon aria-hidden="true">refresh</mat-icon>
-          <span>Retry</span>
+          <span class="training-derived-metrics-retry-label">Retry</span>
         </button>
       }
       <button
@@ -51,7 +52,7 @@
         aria-label="Send feedback about Training to support"
       >
         <mat-icon aria-hidden="true">feedback</mat-icon>
-        <span>Feedback</span>
+        <span class="training-feedback-action-label">Feedback</span>
       </a>
       <a
         mat-stroked-button

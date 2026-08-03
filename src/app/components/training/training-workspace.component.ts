@@ -672,13 +672,19 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private refreshDerivedMetricsRouteStatus(): void {
+    const nowMs = Date.now();
+    const currentTrainingState = buildCurrentTrainingStateContext({
+      formPoints: this.derivedState.formPoints,
+      fallbackFormNow: this.derivedState.formNow,
+      fallbackRampRate: this.derivedState.rampRate,
+      nowMs,
+    });
+    const hasForecastFreshness = this.derivedState.freshnessForecast?.points
+      ?.some(point => point.isForecast) === true;
     const statuses = [
       this.derivedState.formStatus,
       this.derivedState.acwrStatus,
-      this.derivedState.rampRateStatus,
       this.derivedState.monotonyStrainStatus,
-      this.derivedState.formNowStatus,
-      this.derivedState.formPlus7dStatus,
       this.derivedState.freshnessForecastStatus,
       this.derivedState.intensityDistributionStatus,
       this.derivedState.trainingSummaryStatus,
@@ -688,6 +694,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.derivedState.trainingReadinessStatus,
       this.derivedState.bodyWeightTrendStatus,
     ];
+    if (!currentTrainingState.formNowFromSeries) {
+      statuses.push(this.derivedState.formNowStatus);
+    }
+    if (!currentTrainingState.rampRateFromSeries) {
+      statuses.push(this.derivedState.rampRateStatus);
+    }
+    if (!hasForecastFreshness) {
+      statuses.push(this.derivedState.formPlus7dStatus);
+    }
     if (this.trainingRecoveryEstimate) {
       statuses.push(this.derivedState.recoveryNowStatus);
     }

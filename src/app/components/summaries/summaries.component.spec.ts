@@ -329,6 +329,20 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('font-size: 1rem;');
   });
 
+  it('keeps narrow derived-status actions compact and accessibly named', () => {
+    const templatePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html');
+    const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
+    const template = readFileSync(templatePath, 'utf8');
+    const styles = readFileSync(stylePath, 'utf8');
+
+    expect(template).toContain('aria-label="Retry derived metrics update"');
+    expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
+    expect(template).toContain('class="dashboard-training-link-label"');
+    expect(styles).toContain('@media (max-width: 600px)');
+    expect(styles).toContain('.dashboard-derived-metrics-retry-label,');
+    expect(styles).toContain('.dashboard-training-link-label');
+  });
+
   it('does not mutate dashboard tile arrays during live drag sorting', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html');
     const template = readFileSync(templatePath, 'utf8');

@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -59,6 +59,10 @@ function createRouteReadyDerivedState(
 
 describe('TrainingWorkspaceComponent', () => {
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
@@ -1736,6 +1740,7 @@ describe('TrainingWorkspaceComponent', () => {
     const retryButton = fixture.nativeElement.querySelector('.training-derived-metrics-retry') as HTMLButtonElement;
     expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
       .toContain('Derived metrics update failed');
+    expect(retryButton.getAttribute('aria-label')).toBe('Retry derived metrics update');
     retryButton.click();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
       { uid: 'user-1' },
@@ -1767,6 +1772,68 @@ describe('TrainingWorkspaceComponent', () => {
       recoveryNow: { totalSeconds: 3_600, endTimeMs: nowMs },
     });
     (component as any).refreshTrainingRecoveryEstimate();
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+  });
+
+  it('ignores compact fallback failures when the rendered Form and forecast series supply those values', () => {
+    const nowMs = Date.UTC(2026, 6, 18);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const formPoints = [
+      {
+        time: nowMs - (7 * 24 * 60 * 60 * 1000),
+        trainingStressScore: 40,
+        ctl: 100,
+        atl: 98,
+        formSameDay: 2,
+        formPriorDay: 1,
+      },
+      {
+        time: nowMs,
+        trainingStressScore: 60,
+        ctl: 102,
+        atl: 98,
+        formSameDay: 4,
+        formPriorDay: 3,
+      },
+    ];
+    const freshnessForecast = {
+      generatedAtMs: nowMs,
+      points: [{
+        dayMs: nowMs + (7 * 24 * 60 * 60 * 1000),
+        trainingStressScore: 0,
+        ctl: 90,
+        atl: 70,
+        formSameDay: 20,
+        formPriorDay: 19,
+        isForecast: true,
+      }],
+    };
+    component.derivedState = createRouteReadyDerivedState({
+      formPoints,
+      freshnessForecast,
+      formNowStatus: 'failed',
+      rampRateStatus: 'failed',
+      formPlus7dStatus: 'failed',
+    });
+
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+
+    component.derivedState = { ...component.derivedState, formPoints: null };
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+
+    component.derivedState = { ...component.derivedState, formPoints, freshnessForecast: null };
     (component as any).refreshDerivedMetricsRouteStatus();
     expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
   });

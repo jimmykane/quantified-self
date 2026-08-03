@@ -134,6 +134,29 @@
   }
 }
 
+@media (max-width: 600px) {
+  .dashboard-summary-header .dashboard-derived-metrics-retry,
+  .dashboard-summary-header .dashboard-training-link {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    margin-right: 0.25rem;
+    min-width: 48px;
+    padding-inline: 0;
+    width: 48px;
+  }
+
+  .dashboard-derived-metrics-retry-label,
+  .dashboard-training-link-label {
+    display: none;
+  }
+
+  .dashboard-section-actions .dashboard-derived-metrics-retry mat-icon,
+  .dashboard-section-actions .dashboard-training-link mat-icon {
+    margin-inline: 0;
+  }
+}
+
 .dashboard-main-sections {
   display: grid;
   gap: 0.9rem;
