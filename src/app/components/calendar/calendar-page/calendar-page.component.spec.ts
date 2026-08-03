@@ -101,12 +101,46 @@ describe('CalendarPageComponent', () => {
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('could not be loaded');
   });
+
+  it('shows the selected month empty state when only an adjacent grid day has an activity', async () => {
+    watchEvents.mockReturnValue(of([createEvent(new Date(2026, 8, 1, 8))]));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.hasEvents()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('No activities in August 2026');
+  });
+
+  it('refreshes the today marker when the window regains focus', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 7, 3, 10));
+      watchEvents.mockReturnValue(of([]));
+      const fixture = TestBed.createComponent(CalendarPageComponent);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.calendarModel().months[0].days
+        .find(day => day.dateKey === '2026-08-03')?.isToday).toBe(true);
+
+      vi.setSystemTime(new Date(2026, 7, 4, 10));
+      fixture.componentInstance.refreshToday();
+
+      expect(fixture.componentInstance.calendarModel().months[0].days
+        .find(day => day.dateKey === '2026-08-03')?.isToday).toBe(false);
+      expect(fixture.componentInstance.calendarModel().months[0].days
+        .find(day => day.dateKey === '2026-08-04')?.isToday).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
-function createEvent(): EventInterface {
+function createEvent(startDate = new Date(2026, 7, 3, 8)): EventInterface {
   return {
     name: 'Morning run',
-    startDate: new Date(2026, 7, 3, 8),
+    startDate,
     getID: () => 'event-1',
     getActivityTypesAsArray: () => [ActivityTypes.Running],
     getActivityTypesAsString: () => 'Running',

@@ -25,9 +25,12 @@ describe('ActivityCalendarGridComponent', () => {
       createEvent('ride-1', new Date(2026, 7, 3, 12), ActivityTypes.Cycling, 1800),
     ]);
     const stage = fixture.nativeElement.querySelector('.activity-calendar-marker-stage');
+    const markers = [...stage.querySelectorAll('.activity-calendar-marker')] as HTMLElement[];
 
     expect(stage.classList).toContain('activity-calendar-marker-stage--concentric');
-    expect(stage.querySelectorAll('.activity-calendar-marker')).toHaveLength(2);
+    expect(markers).toHaveLength(2);
+    expect(markers[0].style.getPropertyValue('--calendar-marker-compact-diameter')).toMatch(/px$/);
+    expect(markers[0].style.getPropertyValue('--calendar-marker-diameter')).toMatch(/px$/);
   });
 
   it('renders twelve compact month panels in yearly mode', async () => {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
@@ -52,6 +52,7 @@ export class CalendarPageComponent {
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly locale = inject(LOCALE_ID);
   private readonly reloadSequence = signal(0);
+  private readonly today = signal(new Date());
   private readonly initialRouteState = resolveRouteState(this.route.snapshot.queryParamMap);
   private readonly routeState$ = this.route.queryParamMap.pipe(
     map(params => resolveRouteState(params)),
@@ -93,12 +94,20 @@ export class CalendarPageComponent {
       anchorDate: state.anchorDate,
       startOfWeek: this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
       locale: this.locale,
+      now: this.today(),
     });
   });
   readonly isLoading = computed(() => this.eventState().status === 'loading');
   readonly hasError = computed(() => this.eventState().status === 'error');
-  readonly hasEvents = computed(() => this.eventState().events.length > 0);
+  readonly hasEvents = computed(() => this.calendarModel().months.some(month => (
+    month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
+  )));
   readonly emptyStateLabel = computed(() => `No activities in ${this.calendarModel().periodLabel}`);
+
+  @HostListener('window:focus')
+  refreshToday(): void {
+    this.today.set(new Date());
+  }
 
   selectView(value: unknown): void {
     const view = normalizeActivityCalendarView(value, this.routeState().view);

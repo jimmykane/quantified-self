@@ -78,6 +78,26 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('No activities this month');
     expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeNull();
   });
+
+  it('refreshes the today marker without re-querying during the same month', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 7, 3, 10));
+      watchEvents.mockReturnValue(of([createEvent(new Date(2026, 7, 3, 8))]));
+      const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+      fixture.componentRef.setInput('user', user);
+      fixture.detectChanges();
+
+      vi.setSystemTime(new Date(2026, 7, 4, 10));
+      fixture.componentInstance.refreshCalendarDate();
+
+      expect(fixture.componentInstance.calendarModel().months[0].days
+        .find(day => day.dateKey === '2026-08-04')?.isToday).toBe(true);
+      expect(watchEvents).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 function createEvent(startDate?: Date): EventInterface {

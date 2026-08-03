@@ -44,6 +44,7 @@ export class ActivityCalendarTileComponent {
   private readonly locale = inject(LOCALE_ID);
   private readonly anchorDate = signal(startOfCurrentMonth());
   private readonly reloadSequence = signal(0);
+  private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
   readonly eventState = toSignal(combineLatest([
@@ -72,6 +73,7 @@ export class ActivityCalendarTileComponent {
     anchorDate: this.anchorDate(),
     startOfWeek: this.user()?.settings?.unitSettings?.startOfTheWeek,
     locale: this.locale,
+    now: this.today(),
   }));
   readonly isLoading = computed(() => this.eventState().status === 'loading');
   readonly hasError = computed(() => this.eventState().status === 'error');
@@ -80,8 +82,10 @@ export class ActivityCalendarTileComponent {
   )));
 
   @HostListener('window:focus')
-  refreshMonth(): void {
-    const currentMonth = startOfCurrentMonth();
+  refreshCalendarDate(): void {
+    const now = new Date();
+    this.today.set(now);
+    const currentMonth = startOfCurrentMonth(now);
     if (currentMonth.getTime() !== this.anchorDate().getTime()) {
       this.anchorDate.set(currentMonth);
     }
@@ -102,7 +106,6 @@ export class ActivityCalendarTileComponent {
   }
 }
 
-function startOfCurrentMonth(): Date {
-  const now = new Date();
+function startOfCurrentMonth(now = new Date()): Date {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }

@@ -32,8 +32,8 @@
               @for (family of day.visibleFamilies; track family.id) {
               <span class="activity-calendar-marker"
                 [style.background-color]="family.color"
-                [style.width.px]="compact || model.view === 'year' ? family.compactDiameterPx : family.diameterPx"
-                [style.height.px]="compact || model.view === 'year' ? family.compactDiameterPx : family.diameterPx"
+                [style.--calendar-marker-diameter]="family.diameterPx + 'px'"
+                [style.--calendar-marker-compact-diameter]="family.compactDiameterPx + 'px'"
                 [style.z-index]="$index + 1"
                 [attr.title]="family.label + ': ' + family.durationLabel"></span>
               }

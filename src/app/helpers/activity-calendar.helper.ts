@@ -9,6 +9,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { getActivityTypeGroupLabel } from '@shared/activity-type-group.metadata';
 import { AppActivityTypeGroupColors } from '../services/color/app.activity-type-group.colors';
+import { resolveTrainingEventDisplayLabel } from './training-event-label.helper';
 
 export type ActivityCalendarView = 'week' | 'month' | 'year';
 
@@ -284,14 +285,14 @@ export function resolveActivityCalendarEventLabel(event: EventInterface): string
   const candidateLabels = [
     event?.name,
     event?.description,
-    event?.getActivityTypesAsString?.(),
   ];
   for (const candidate of candidateLabels) {
-    if (typeof candidate === 'string' && candidate.trim()) {
-      return candidate.trim();
+    const label = resolveTrainingEventDisplayLabel(candidate);
+    if (label) {
+      return label;
     }
   }
-  return 'Activity';
+  return `${event?.getActivityTypesAsString?.() || ''}`.trim() || 'Activity';
 }
 
 function buildMonthViewModel(
@@ -352,20 +353,23 @@ function buildDayViewModel(
     || right.eventCount - left.eventCount
     || left.label.localeCompare(right.label)
   ));
-  let maximumSizePercent = 100;
+  let maximumConcentricSizePercent = 100;
   const families = sortedAccumulators.map<ActivityCalendarFamilySummary>((family) => {
-    const targetSize = calculateMarkerSizePercent(family.durationSeconds);
-    const sizePercent = Math.max(MIN_MARKER_SIZE_PERCENT, Math.min(targetSize, maximumSizePercent));
-    maximumSizePercent = Math.max(
+    const sizePercent = calculateMarkerSizePercent(family.durationSeconds);
+    const concentricSizePercent = Math.max(
       MIN_MARKER_SIZE_PERCENT,
-      sizePercent - MIN_CONCENTRIC_SIZE_DIFFERENCE_PERCENT,
+      Math.min(sizePercent, maximumConcentricSizePercent),
+    );
+    maximumConcentricSizePercent = Math.max(
+      MIN_MARKER_SIZE_PERCENT,
+      concentricSizePercent - MIN_CONCENTRIC_SIZE_DIFFERENCE_PERCENT,
     );
     return {
       ...family,
       durationLabel: formatActivityCalendarDuration(family.durationSeconds, family.hasUnknownDuration),
       sizePercent,
       diameterPx: Math.round(8 + ((30 - 8) * sizePercent / 100)),
-      compactDiameterPx: Math.round(4 + ((18 - 4) * sizePercent / 100)),
+      compactDiameterPx: Math.round(4 + ((18 - 4) * concentricSizePercent / 100)),
     };
   });
   const totalDurationSeconds = families.reduce((total, family) => total + family.durationSeconds, 0);

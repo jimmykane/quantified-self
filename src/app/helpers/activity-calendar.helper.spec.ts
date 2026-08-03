@@ -13,6 +13,7 @@ import {
   navigateActivityCalendarDate,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
+  resolveActivityCalendarEventLabel,
   resolveActivityCalendarQueryWindow,
 } from './activity-calendar.helper';
 
@@ -117,6 +118,34 @@ describe('activity-calendar helper', () => {
       durationSeconds: 5400,
     });
     expect(day?.totalDurationSeconds).toBe(5400);
+  });
+
+  it('keeps equal durations equal in separated layouts while nesting compact markers', () => {
+    const model = buildActivityCalendarViewModel([
+      createEvent('run-1', new Date(2026, 7, 8, 8), [ActivityTypes.Running], 3600),
+      createEvent('ride-1', new Date(2026, 7, 8, 10), [ActivityTypes.Cycling], 3600),
+    ], {
+      view: 'month',
+      anchorDate: new Date(2026, 7, 8),
+      startOfWeek: DaysOfTheWeek.Monday,
+      locale: 'en-US',
+    });
+    const families = model.months[0].days.find(day => day.eventCount > 0)?.families || [];
+
+    expect(families).toHaveLength(2);
+    expect(families[0].sizePercent).toBe(families[1].sizePercent);
+    expect(families[0].diameterPx).toBe(families[1].diameterPx);
+    expect(families[0].compactDiameterPx - families[1].compactDiameterPx).toBeGreaterThanOrEqual(2);
+  });
+
+  it('falls back from generic event names to a meaningful activity label', () => {
+    const event = {
+      name: '2026-08-03T08:30:00.000Z',
+      description: 'New Event',
+      getActivityTypesAsString: () => 'Running',
+    } as unknown as EventInterface;
+
+    expect(resolveActivityCalendarEventLabel(event)).toBe('Running');
   });
 
   it('limits visible family markers and retains unknown-duration activities', () => {

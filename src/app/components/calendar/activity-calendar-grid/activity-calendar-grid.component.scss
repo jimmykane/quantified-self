@@ -141,6 +141,8 @@
 
 .activity-calendar-marker {
   display: block;
+  width: var(--calendar-marker-diameter);
+  height: var(--calendar-marker-diameter);
   flex: 0 0 auto;
   box-sizing: border-box;
   border-radius: 50%;
@@ -155,6 +157,8 @@
   position: absolute;
   top: 50%;
   left: 50%;
+  width: var(--calendar-marker-compact-diameter);
+  height: var(--calendar-marker-compact-diameter);
   border: 1px solid var(--mat-sys-surface);
   transform: translate(-50%, -50%);
 }
@@ -230,6 +234,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
+    width: var(--calendar-marker-compact-diameter);
+    height: var(--calendar-marker-compact-diameter);
     border: 1px solid var(--mat-sys-surface);
     transform: translate(-50%, -50%);
   }

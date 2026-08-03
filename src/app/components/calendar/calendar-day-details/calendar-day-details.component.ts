@@ -19,9 +19,7 @@ export interface CalendarDayDetailsData {
 interface CalendarDayEventRow {
   id: string;
   label: string;
-  activityTypeLabel: string;
-  timeLabel: string;
-  durationLabel: string;
+  detailLabel: string;
   route: string[] | null;
 }
 
@@ -53,16 +51,22 @@ export class CalendarDayDetailsComponent {
     const eventId = `${event?.getID?.() || ''}`.trim();
     const startDate = resolveEventStartDate(event);
     const durationSeconds = resolveActivityCalendarEventDurationSeconds(event);
+    const label = resolveActivityCalendarEventLabel(event);
+    const activityTypeLabel = `${event?.getActivityTypesAsString?.() || 'Activity'}`.trim() || 'Activity';
+    const timeLabel = startDate
+      ? new Intl.DateTimeFormat(this.data.locale, { hour: 'numeric', minute: '2-digit' }).format(startDate)
+      : 'Time unavailable';
+    const durationLabel = durationSeconds === null
+      ? 'Duration unavailable'
+      : formatActivityCalendarDuration(durationSeconds);
     return {
       id: eventId || `${startDate?.getTime() || 'activity'}`,
-      label: resolveActivityCalendarEventLabel(event),
-      activityTypeLabel: `${event?.getActivityTypesAsString?.() || 'Activity'}`.trim() || 'Activity',
-      timeLabel: startDate
-        ? new Intl.DateTimeFormat(this.data.locale, { hour: 'numeric', minute: '2-digit' }).format(startDate)
-        : 'Time unavailable',
-      durationLabel: durationSeconds === null
-        ? 'Duration unavailable'
-        : formatActivityCalendarDuration(durationSeconds),
+      label,
+      detailLabel: [
+        activityTypeLabel.toLocaleLowerCase() === label.toLocaleLowerCase() ? null : activityTypeLabel,
+        timeLabel,
+        durationLabel,
+      ].filter((value): value is string => !!value).join(' - '),
       route: eventId && this.data.userId
         ? ['/user', this.data.userId, 'event', eventId]
         : null,
