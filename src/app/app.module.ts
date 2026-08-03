@@ -19,8 +19,7 @@ import { providePerformance, getPerformance } from 'app/firebase/performance';
 import { provideAnalytics, initializeAnalytics } from 'app/firebase/analytics';
 import { provideRemoteConfig, getRemoteConfig } from 'app/firebase/remote-config';
 import { provideStorage, getStorage } from 'app/firebase/storage';
-import { MaterialModule } from './modules/material.module';
-import { SharedModule } from './modules/shared.module';
+import { AppShellModule } from './modules/app-shell.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { FullscreenOverlayContainer, OverlayContainer } from '@angular/cdk/overlay';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
@@ -31,7 +30,6 @@ import { ServiceWorkerModule } from '@angular/service-worker';
 import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
 
 import { AppUpdateService } from './services/app.update.service';
-import { OnboardingComponent } from './components/onboarding/onboarding.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
 import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
@@ -86,12 +84,10 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
   bootstrap: [AppComponent],
   imports: [
     BrowserModule,
-    SharedModule,
     AppRoutingModule,
     ClipboardModule,
-    MaterialModule,
+    AppShellModule,
     ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production || environment.beta }),
-    OnboardingComponent,
     MaintenanceComponent,
     ImpersonationBannerComponent
   ],

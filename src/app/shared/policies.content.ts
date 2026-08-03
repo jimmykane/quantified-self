@@ -1,4 +1,5 @@
 import { QUANTIFIED_SELF_OPERATOR } from './company-contact';
+import { POLICY_CONSENT_FORM_CONTROL_NAMES } from './policy-consent-fields';
 
 export interface PolicyItem {
     id: string;
@@ -174,7 +175,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Third-Party Processors and Recipients:</strong> Your data may be processed by Google Cloud (hosting and storage in the EU region), Stripe (payments), Google Analytics (only with consent), Mapbox (place resolution for location-based AI queries and MCP place-name searches), Google GenAI / Gemini (AI Insights using minimum derived stats only), connected fitness services you explicitly use, and MCP clients you explicitly authorize. See <a href="#connected-services-data">Connected Services, AI &amp; Third-Party Processing</a> below for details.'
         ],
         checkboxLabel: 'I have read and agree to the Privacy Policy and acknowledge my data ownership rights.',
-        formControlName: 'acceptPrivacyPolicy'
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.privacy
     },
     {
         id: 'data',
@@ -188,7 +189,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Retention:</strong> We retain your data while your account is active and has a valid subscription. After a 30-day grace period, plan limits and feature restrictions apply. Existing activities are not automatically deleted due to downgrade alone.'
         ],
         checkboxLabel: 'I have read and agree to the Data Availability Policy.',
-        formControlName: 'acceptDataPolicy'
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.data
     },
     {
         id: 'gdpr',
@@ -216,7 +217,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Withdraw Consent:</strong> You can withdraw your analytics consent at any time in your account settings.'
         ],
         checkboxLabel: 'I have read and consent to the collection of anonymized usage data for analytics.',
-        formControlName: 'acceptTrackingPolicy',
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.tracking,
         isOptional: true
     },
     {
@@ -232,7 +233,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Plan Changes After Cancellation:</strong> Upon expiration or cancellation of a subscription, your account moves to the applicable plan limits after any grace period. Stored activities are not automatically deleted due to plan expiration or cancellation. It is still your responsibility to keep your own backups of critical data.'
         ],
         checkboxLabel: 'I have read and agree to the Terms of Service and Subscription Policy.',
-        formControlName: 'acceptTos'
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.terms
     },
     {
         id: 'marketing',
@@ -245,7 +246,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>No Spam:</strong> We respect your inbox and only send relevant updates about the service.'
         ],
         checkboxLabel: 'I have read and agree to receive marketing emails and updates.',
-        formControlName: 'acceptMarketingPolicy',
+        formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.marketing,
         isOptional: true
     }
 ];

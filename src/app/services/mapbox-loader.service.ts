@@ -18,6 +18,7 @@ export function resolveMapboxEsmWorkerUrl(baseUri: string): string {
 export class MapboxLoaderService {
     private mapboxgl: MapboxGlApi | null = null;
     private apiLoadingPromise: Promise<MapboxGlApi> | null = null;
+    private stylesLoadingPromise: Promise<void> | null = null;
 
     constructor(
         private zone: NgZone,
@@ -41,15 +42,34 @@ export class MapboxLoaderService {
             return this.apiLoadingPromise;
         }
 
-        this.apiLoadingPromise = import('mapbox-gl/dist/esm/mapbox-gl.js').then((module: MapboxGlRuntime) => {
+        this.apiLoadingPromise = Promise.all([
+            import('mapbox-gl/dist/esm/mapbox-gl.js'),
+            this.loadMapboxStyles(),
+        ]).then(([module]) => {
             const mapboxgl = module.default || (module as unknown as MapboxGlApi);
             mapboxgl.workerUrl = resolveMapboxEsmWorkerUrl(document.baseURI);
             mapboxgl.accessToken = environment.mapboxAccessToken;
             this.mapboxgl = mapboxgl;
             return mapboxgl;
+        }).catch((error: unknown) => {
+            this.apiLoadingPromise = null;
+            throw error;
         });
 
         return this.apiLoadingPromise;
+    }
+
+    private loadMapboxStyles(): Promise<void> {
+        if (!this.stylesLoadingPromise) {
+            this.stylesLoadingPromise = import('mapbox-gl/dist/mapbox-gl.css')
+                .then(() => undefined)
+                .catch((error: unknown) => {
+                    this.stylesLoadingPromise = null;
+                    throw error;
+                });
+        }
+
+        return this.stylesLoadingPromise;
     }
 
     /**

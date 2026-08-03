@@ -25,7 +25,7 @@ describe('releasesResolver', () => {
 
     beforeEach(() => {
         whatsNewServiceSpy = {
-            changelogs$: of(mockChangelogs)
+            getChangelogsOnceLoaded: vi.fn(() => of(mockChangelogs))
         };
 
         TestBed.configureTestingModule({
@@ -44,6 +44,7 @@ describe('releasesResolver', () => {
         const state = {} as RouterStateSnapshot;
 
         (executeResolver(route, state) as any).subscribe((result: ChangelogPost[]) => {
+            expect(whatsNewServiceSpy.getChangelogsOnceLoaded).toHaveBeenCalledOnce();
             expect(result).toEqual(mockChangelogs);
             done();
         });

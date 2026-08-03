@@ -130,6 +130,7 @@ describe('AppShellComponent', () => {
                     provide: AppWhatsNewService, useValue: {
                         unreadCount: signal(0),
                         markAsRead: vi.fn(),
+                        ensureChangelogsLoaded: vi.fn(),
                         setAdminMode: vi.fn()
                     }
                 },
@@ -588,11 +589,13 @@ describe('AppShellComponent', () => {
         expect(component.hasBanner).toBe(false);
     });
 
-    it('should open whats new dialog with expected config', () => {
+    it('should open whats new dialog with expected config', async () => {
         const dialog = TestBed.inject(MatDialog) as any;
-        component.openWhatsNew();
+        const whatsNewService = TestBed.inject(AppWhatsNewService) as any;
+        await component.openWhatsNew();
         const [, config] = dialog.open.mock.calls.at(-1);
 
+        expect(whatsNewService.ensureChangelogsLoaded).toHaveBeenCalledOnce();
         expect(dialog.open).toHaveBeenCalledWith(
             expect.any(Function),
             expect.objectContaining({

@@ -5,7 +5,6 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { Observable, from, firstValueFrom, of, combineLatest, defer, distinctUntilChanged, NEVER, throwError, timer } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
-import { AppEventService } from './app.event.service';
 import { catchError, filter, map, take, switchMap, shareReplay, retry, startWith, tap, timeout } from 'rxjs/operators';
 import {
   AppThemes,
@@ -237,7 +236,6 @@ export class AppUserService implements OnDestroy {
   private auth = inject(Auth);
   private functionsService = inject(AppFunctionsService);
   private logger = inject(LoggerService);
-  private eventService = inject(AppEventService);
   private http = inject(HttpClient);
   private windowService = inject(AppWindowService);
   private usersWithIncompleteProfileReads = new Set<string>();

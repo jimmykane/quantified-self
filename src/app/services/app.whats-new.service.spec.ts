@@ -4,7 +4,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import { Firestore, collectionData, Timestamp } from 'app/firebase/firestore';
 import { LoggerService } from './logger.service';
-import { of, BehaviorSubject } from 'rxjs';
+import { of, BehaviorSubject, Subject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
@@ -27,7 +27,7 @@ vi.mock('app/firebase/firestore', () => {
     return {
         collection: vi.fn(),
         collectionData: vi.fn(() => of([])),
-        query: vi.fn(),
+        query: vi.fn(() => ({})),
         orderBy: vi.fn(),
         where: vi.fn(),
         Firestore: MockFirestore,
@@ -48,6 +48,7 @@ describe('AppWhatsNewService', () => {
 
     beforeEach(() => {
         userSubject.next(null);
+        collectionDataMock.mockClear();
         collectionDataMock.mockReturnValue(of([]));
         authServiceMock = {
             user$: userSubject.asObservable(),
@@ -84,6 +85,57 @@ describe('AppWhatsNewService', () => {
     it('should be created', () => {
         service = TestBed.inject(AppWhatsNewService);
         expect(service).toBeTruthy();
+    });
+
+    it('should not subscribe to changelogs for a signed-out user until requested', () => {
+        service = TestBed.inject(AppWhatsNewService);
+        TestBed.tick();
+
+        expect(collectionDataMock).not.toHaveBeenCalled();
+
+        service.ensureChangelogsLoaded();
+        TestBed.tick();
+
+        expect(collectionDataMock).toHaveBeenCalledOnce();
+    });
+
+    it('should wait for the first Firestore result without confusing it with the idle empty state', () => {
+        const firestoreResult = new Subject<ChangelogPost[]>();
+        collectionDataMock.mockReturnValue(firestoreResult);
+        service = TestBed.inject(AppWhatsNewService);
+        TestBed.tick();
+        const results: ChangelogPost[][] = [];
+
+        service.getChangelogsOnceLoaded().subscribe(changelogs => results.push(changelogs));
+        TestBed.tick();
+
+        expect(results).toEqual([]);
+        expect(collectionDataMock).toHaveBeenCalledOnce();
+
+        firestoreResult.next([]);
+
+        expect(results).toEqual([[]]);
+    });
+
+    it('should subscribe to changelogs automatically when a user signs in', () => {
+        service = TestBed.inject(AppWhatsNewService);
+        TestBed.tick();
+
+        userSubject.next({ uid: '123' });
+        TestBed.tick();
+
+        expect(collectionDataMock).toHaveBeenCalledOnce();
+    });
+
+    it('should not restart the changelog query for signed-in profile updates', () => {
+        service = TestBed.inject(AppWhatsNewService);
+        userSubject.next({ uid: '123', displayName: 'Before' });
+        TestBed.tick();
+
+        userSubject.next({ uid: '123', displayName: 'After' });
+        TestBed.tick();
+
+        expect(collectionDataMock).toHaveBeenCalledOnce();
     });
 
     it('should keep admin mode enabled while scoped requests are active', () => {
@@ -421,7 +473,7 @@ describe('AppWhatsNewService', () => {
 
         userSubject.next(user);
         service = TestBed.inject(AppWhatsNewService);
-        TestBed.flushEffects();
+        TestBed.tick();
 
         expect(service.unreadCount()).toBe(1);
     });

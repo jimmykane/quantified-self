@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { BrowserUpgradeDialogComponent } from '../components/browser-upgrade-dialog/browser-upgrade-dialog.component';
 import { AppWindowService } from './app.window.service';
 
 @Injectable({
@@ -20,10 +19,7 @@ export class BrowserCompatibilityService {
         const isSupported = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
 
         if (!isSupported && showDialog) {
-            this.dialog.open(BrowserUpgradeDialogComponent, {
-                width: '400px',
-                maxWidth: '90vw'
-            });
+            this.openBrowserUpgradeDialog();
         }
 
         return isSupported;
@@ -44,5 +40,18 @@ export class BrowserCompatibilityService {
         } catch {
             return false;
         }
+    }
+
+    private openBrowserUpgradeDialog(): void {
+        void import('../components/browser-upgrade-dialog/browser-upgrade-dialog.component')
+            .then(({ BrowserUpgradeDialogComponent }) => {
+                this.dialog.open(BrowserUpgradeDialogComponent, {
+                    width: '400px',
+                    maxWidth: '90vw'
+                });
+            })
+            .catch((error: unknown) => {
+                console.error('Failed to load the browser upgrade dialog.', error);
+            });
     }
 }

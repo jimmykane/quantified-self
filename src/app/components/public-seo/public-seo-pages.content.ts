@@ -1,22 +1,15 @@
 import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import {
+  PUBLIC_FEATURE_PATHS,
+  PUBLIC_GUIDE_PATHS,
+} from './public-seo-pages.paths';
+import type { PublicSeoPageKey } from './public-seo-pages.paths';
 
-export type PublicSeoPageKey =
-  | 'featuresHub'
-  | 'trainingAnalysis'
-  | 'mcpServer'
-  | 'aiInsights'
-  | 'workoutFileComparison'
-  | 'fitGpxTcxFileAnalyzer'
-  | 'routeFiles'
-  | 'sportsWatchBenchmark'
-  | 'guidesHub'
-  | 'syncGarminToSuunto'
-  | 'syncCorosToSuunto'
-  | 'syncWahooToSuunto'
-  | 'importActivitiesToSuunto'
-  | 'importActivitiesToWahoo'
-  | 'syncSuuntoRoutesToGarmin'
-  | 'centralizeWorkoutData';
+export {
+  PUBLIC_FEATURE_PATHS,
+  PUBLIC_GUIDE_PATHS,
+} from './public-seo-pages.paths';
+export type { PublicSeoPageKey } from './public-seo-pages.paths';
 
 export interface PublicSeoAction {
   label: string;
@@ -70,28 +63,6 @@ export interface PublicSeoRouteData {
   publicSeoPage: PublicSeoPage;
   jsonLd: Record<string, unknown>;
 }
-
-export const PUBLIC_FEATURE_PATHS = {
-  hub: 'features',
-  trainingAnalysis: 'features/training-analysis',
-  mcpServer: 'features/mcp-server',
-  aiInsights: 'features/ai-insights',
-  workoutFileComparison: 'features/workout-file-comparison',
-  fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
-  routeFiles: 'features/fit-gpx-route-files',
-  sportsWatchBenchmark: 'features/sports-watch-benchmark',
-} as const;
-
-export const PUBLIC_GUIDE_PATHS = {
-  hub: 'guides',
-  syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
-  syncCorosToSuunto: 'guides/sync-coros-to-suunto',
-  syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
-  importActivitiesToSuunto: 'guides/import-activities-to-suunto',
-  importActivitiesToWahoo: 'guides/import-activities-to-wahoo',
-  syncSuuntoRoutesToGarmin: 'guides/sync-suunto-routes-to-garmin-courses',
-  centralizeWorkoutData: 'guides/centralize-garmin-suunto-coros-workout-data',
-} as const;
 
 const SITE_ORIGIN = 'https://quantified-self.io';
 const STARTER_ACTIVITY_LIMIT = USAGE_LIMITS.free;
