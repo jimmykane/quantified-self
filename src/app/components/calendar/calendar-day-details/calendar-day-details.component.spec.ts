@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
@@ -23,6 +25,15 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('2026-08-03T08:30:00.000Z');
     expect(fixture.nativeElement.querySelector('.calendar-day-details')?.getAttribute('aria-label'))
       .toBe('Monday, August 3, 2026');
+  });
+
+  it('uses the shared bottom-sheet surface without an inset background', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
+      'utf8',
+    );
+
+    expect(styles).not.toMatch(/\.calendar-day-details\s*\{[^}]*\bbackground\s*:/s);
   });
 });
 
