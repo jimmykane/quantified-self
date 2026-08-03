@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HomeComponent } from './home.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,7 +13,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
-import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -28,13 +28,10 @@ describe('HomeComponent', () => {
             user$: userSubject.asObservable()
         };
 
-        mockRouter = {
-            navigate: vi.fn()
-        };
-
         await TestBed.configureTestingModule({
-            declarations: [HomeComponent, TypedPromptRotatorComponent],
             imports: [
+                HomeComponent,
+                RouterTestingModule.withRoutes([]),
                 MatIconModule,
                 MatIconTestingModule,
                 MatCardModule,
@@ -45,9 +42,11 @@ describe('HomeComponent', () => {
             ],
             providers: [
                 { provide: AppAuthService, useValue: mockAuthService },
-                { provide: Router, useValue: mockRouter }
             ]
         }).compileComponents();
+
+        mockRouter = TestBed.inject(Router);
+        vi.spyOn(mockRouter, 'navigate').mockResolvedValue(true);
     });
 
     beforeEach(() => {
@@ -239,6 +238,29 @@ describe('HomeComponent', () => {
         expect(component.aiPromptExamples).toEqual(sharedHeroPrompts);
         const promptText = fixture.nativeElement.querySelector('.hero-prompt-text') as HTMLElement | null;
         expect(promptText?.textContent?.trim()).toBe((sharedHeroPrompts[0] ?? '').slice(0, 1));
+    });
+
+    it('should keep animated content visible when IntersectionObserver is unavailable', () => {
+        const originalIntersectionObserver = globalThis.IntersectionObserver;
+        Object.defineProperty(globalThis, 'IntersectionObserver', {
+            value: undefined,
+            configurable: true,
+        });
+
+        try {
+            component.ngAfterViewInit();
+            const animatedElements = Array.from(
+                fixture.nativeElement.querySelectorAll('.animate-on-scroll')
+            ) as Element[];
+
+            expect(animatedElements.length).toBeGreaterThan(0);
+            expect(animatedElements.every(element => element.classList.contains('is-visible'))).toBe(true);
+        } finally {
+            Object.defineProperty(globalThis, 'IntersectionObserver', {
+                value: originalIntersectionObserver,
+                configurable: true,
+            });
+        }
     });
 
     describe('navigateToDashboardOrLogin', () => {

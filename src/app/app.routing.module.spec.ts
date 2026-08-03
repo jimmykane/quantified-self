@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import type { Route } from '@angular/router';
 import { routes as appRoutes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { aiInsightsGuard } from './authentication/ai-insights.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
-import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.content';
+import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
+import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
 import { PublicPricingComponent } from './components/public-pricing/public-pricing.component';
 import { PricingComponent } from './components/pricing/pricing.component';
 
@@ -14,6 +16,27 @@ const routes = [
   ...appRoutes.filter(route => route !== publicLayoutRoute),
   ...(publicLayoutRoute?.children || []),
 ];
+
+async function resolvedRouteData(route: Route | undefined): Promise<Record<string, unknown>> {
+  if (!route) {
+    throw new Error('Expected route to exist.');
+  }
+
+  const resolvedEntries = await Promise.all(
+    Object.entries(route.resolve ?? {}).map(async ([key, resolver]) => {
+      if (typeof resolver !== 'function') {
+        throw new Error(`Expected ${key} to use a functional resolver.`);
+      }
+
+      return [key, await (resolver as () => Promise<unknown>)()] as const;
+    }),
+  );
+
+  return {
+    ...route.data,
+    ...Object.fromEntries(resolvedEntries),
+  };
+}
 
 describe('AppRoutingModule routes', () => {
   it('should define a public help route with help metadata', () => {
@@ -77,6 +100,10 @@ describe('AppRoutingModule routes', () => {
     expect(policiesRoute?.data).toMatchObject({
       title: 'Privacy Policy & Terms',
       policyPage: 'all',
+      jsonLd: {
+        '@type': 'WebPage',
+        url: 'https://quantified-self.io/policies',
+      },
     });
   });
 
@@ -127,6 +154,14 @@ describe('AppRoutingModule routes', () => {
     expect(routesRoute).toBeTruthy();
     expect(routesRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(routesRoute?.data?.['robots']).toBe('noindex, follow');
+  });
+
+  it('should keep route-detail hydration behind its authenticated lazy resolver', () => {
+    const routeDetailRoute = routes.find(route => route.path === 'user/:userID/route/:routeID');
+
+    expect(routeDetailRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(routeDetailRoute?.loadComponent).toBeTypeOf('function');
+    expect(routeDetailRoute?.resolve).toEqual({ route: lazyRouteResolver });
   });
 
   it('allows authenticated onboarded users to manage MCP from Connections', () => {
@@ -181,16 +216,20 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
-  it('should define a public integrations hub route with collection metadata', () => {
+  it('should define a public integrations hub route with lazily resolved collection metadata', async () => {
     const integrationsRoute = routes.find(route => route.path === 'integrations');
+    const routeData = await resolvedRouteData(integrationsRoute);
 
     expect(integrationsRoute).toBeTruthy();
     expect(integrationsRoute?.canMatch).toBeUndefined();
     expect(integrationsRoute?.loadComponent).toBeTypeOf('function');
     expect(integrationsRoute?.data).toMatchObject({
-      title: 'Integrations',
       preload: true,
       animation: 'Integrations',
+    });
+    expect(integrationsRoute?.data?.['title']).toBeUndefined();
+    expect(routeData).toMatchObject({
+      title: 'Integrations',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'CollectionPage',
@@ -199,10 +238,10 @@ describe('AppRoutingModule routes', () => {
         inLanguage: 'en',
       },
     });
-    expect(integrationsRoute?.data?.['description']).toContain('Garmin, Suunto, COROS, and Wahoo integrations');
+    expect(routeData['description']).toContain('Garmin, Suunto, COROS, and Wahoo integrations');
   });
 
-  it('should define public Garmin, Suunto, COROS, and Wahoo provider integration routes', () => {
+  it('should define public Garmin, Suunto, COROS, and Wahoo provider integration routes', async () => {
     const expectedRoutes = [
       { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'private Garmin training dashboard' },
       { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
@@ -212,20 +251,26 @@ describe('AppRoutingModule routes', () => {
 
     for (const expectedRoute of expectedRoutes) {
       const route = routes.find(candidate => candidate.path === expectedRoute.path);
-      const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+      const routeData = await resolvedRouteData(route);
+      const jsonLd = routeData['jsonLd'] as Record<string, unknown> | undefined;
 
       expect(route).toBeTruthy();
       expect(route?.canMatch).toBeUndefined();
       expect(route?.loadComponent).toBeTypeOf('function');
+      expect(route?.data).toMatchObject({
+        preload: true,
+        animation: 'Integrations',
+      });
+      expect(route?.data?.['title']).toBeUndefined();
       expect(route?.data?.['integrationProvider']).toBe(expectedRoute.provider);
-      expect(route?.data?.['keywords']).toBeUndefined();
-      expect(route?.data?.['description']).toContain(expectedRoute.descriptionText);
+      expect(routeData['keywords']).toBeUndefined();
+      expect(routeData['description']).toContain(expectedRoute.descriptionText);
       expect(jsonLd?.['@type']).toBe('WebPage');
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
     }
 
     const garminRoute = routes.find(candidate => candidate.path === 'integrations/garmin');
-    expect(garminRoute?.data?.['title']).toBe('Private Garmin Training Dashboard');
+    expect((await resolvedRouteData(garminRoute))['title']).toBe('Private Garmin Training Dashboard');
   });
 
   it('should define public tools routes with compare workflow metadata', () => {
@@ -267,18 +312,24 @@ describe('AppRoutingModule routes', () => {
     expect(savedRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
-  it('should define a public workout data comparison feature route with SEO metadata', () => {
+  it('should define a public workout data comparison feature route with lazily resolved SEO metadata', async () => {
     const route = routes.find(candidate => candidate.path === 'features/workout-data-comparison');
-    const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+    const routeData = await resolvedRouteData(route);
+    const jsonLd = routeData['jsonLd'] as Record<string, unknown> | undefined;
 
     expect(route).toBeTruthy();
     expect(route?.canMatch).toBeUndefined();
     expect(route?.loadComponent).toBeTypeOf('function');
-    expect(route?.data?.['title']).toBe('Workout Data Comparison');
-    expect(route?.data?.['description']).toContain('custom FIT, TCX, or GPX workout data');
-    expect(route?.data?.['description']).toContain('free-plan manual uploads');
-    expect(route?.data?.['description']).toContain('reviewer-ready device comparisons');
-    expect(route?.data?.['keywords']).toBeUndefined();
+    expect(route?.data).toMatchObject({
+      preload: true,
+      animation: 'Features',
+    });
+    expect(route?.data?.['title']).toBeUndefined();
+    expect(routeData['title']).toBe('Workout Data Comparison');
+    expect(routeData['description']).toContain('custom FIT, TCX, or GPX workout data');
+    expect(routeData['description']).toContain('free-plan manual uploads');
+    expect(routeData['description']).toContain('reviewer-ready device comparisons');
+    expect(routeData['keywords']).toBeUndefined();
     expect(jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
@@ -288,7 +339,7 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
-  it('should define public feature SEO routes with metadata and no guards', () => {
+  it('should define public feature SEO routes with lazily resolved metadata and no guards', async () => {
     const expectedRoutes = [
       {
         path: PUBLIC_FEATURE_PATHS.hub,
@@ -301,6 +352,12 @@ describe('AppRoutingModule routes', () => {
         title: 'Training Analysis for Endurance Athletes',
         h1: 'Training analysis for endurance athletes',
         descriptionText: 'readiness, load trends, intensity, durability, sleep context, and historical build comparisons',
+      },
+      {
+        path: PUBLIC_FEATURE_PATHS.mcpServer,
+        title: 'Read-only MCP Server for Training Data',
+        h1: 'Connect ChatGPT to your training data with a read-only MCP server',
+        descriptionText: 'read-only MCP',
       },
       {
         path: PUBLIC_FEATURE_PATHS.aiInsights,
@@ -336,15 +393,21 @@ describe('AppRoutingModule routes', () => {
 
     for (const expectedRoute of expectedRoutes) {
       const route = routes.find(candidate => candidate.path === expectedRoute.path);
-      const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
-      const page = route?.data?.['publicSeoPage'] as Record<string, unknown> | undefined;
+      const routeData = await resolvedRouteData(route);
+      const jsonLd = routeData['jsonLd'] as Record<string, unknown> | undefined;
+      const page = routeData['publicSeoPage'] as Record<string, unknown> | undefined;
 
       expect(route).toBeTruthy();
       expect(route?.canMatch).toBeUndefined();
       expect(route?.loadComponent).toBeTypeOf('function');
-      expect(route?.data?.['title']).toBe(expectedRoute.title);
-      expect(route?.data?.['description']).toContain(expectedRoute.descriptionText);
-      expect(route?.data?.['keywords']).toBeUndefined();
+      expect(route?.data).toMatchObject({
+        preload: true,
+        animation: 'PublicSeo',
+      });
+      expect(route?.data?.['title']).toBeUndefined();
+      expect(routeData['title']).toBe(expectedRoute.title);
+      expect(routeData['description']).toContain(expectedRoute.descriptionText);
+      expect(routeData['keywords']).toBeUndefined();
       expect(page?.['h1']).toBe(expectedRoute.h1);
       expect(jsonLd?.['@type']).toBe('WebPage');
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
@@ -355,18 +418,24 @@ describe('AppRoutingModule routes', () => {
     }
   });
 
-  it('should define a public guides hub route without requiring auth', () => {
+  it('should define a public guides hub route without requiring auth', async () => {
     const route = routes.find(candidate => candidate.path === PUBLIC_GUIDE_PATHS.hub);
-    const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+    const routeData = await resolvedRouteData(route);
+    const jsonLd = routeData['jsonLd'] as Record<string, unknown> | undefined;
     const mainEntity = jsonLd?.['mainEntity'] as Record<string, unknown>[] | undefined;
-    const page = route?.data?.['publicSeoPage'] as Record<string, unknown> | undefined;
+    const page = routeData['publicSeoPage'] as Record<string, unknown> | undefined;
 
     expect(route).toBeTruthy();
     expect(route?.canMatch).toBeUndefined();
     expect(route?.loadComponent).toBeTypeOf('function');
-    expect(route?.data?.['title']).toBe('Training Data Sync Guides');
-    expect(route?.data?.['description']).toContain('Garmin to Suunto activity sync');
-    expect(route?.data?.['keywords']).toBeUndefined();
+    expect(route?.data).toMatchObject({
+      preload: true,
+      animation: 'PublicSeo',
+    });
+    expect(route?.data?.['title']).toBeUndefined();
+    expect(routeData['title']).toBe('Training Data Sync Guides');
+    expect(routeData['description']).toContain('Garmin to Suunto activity sync');
+    expect(routeData['keywords']).toBeUndefined();
     expect(route?.pathMatch).toBe('full');
     expect(page?.['h1']).toBe('Training data sync guides');
     expect(jsonLd?.['@type']).toBe('WebPage');
@@ -374,7 +443,7 @@ describe('AppRoutingModule routes', () => {
     expect(mainEntity?.some(entity => entity['@type'] === 'HowTo')).toBe(false);
   });
 
-  it('should define public guide SEO routes with HowTo JSON-LD', () => {
+  it('should define public guide SEO routes with lazily resolved HowTo JSON-LD', async () => {
     const expectedRoutes = [
       {
         path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
@@ -408,14 +477,20 @@ describe('AppRoutingModule routes', () => {
 
     for (const expectedRoute of expectedRoutes) {
       const route = routes.find(candidate => candidate.path === expectedRoute.path);
-      const jsonLd = route?.data?.['jsonLd'] as Record<string, unknown> | undefined;
+      const routeData = await resolvedRouteData(route);
+      const jsonLd = routeData['jsonLd'] as Record<string, unknown> | undefined;
       const mainEntity = jsonLd?.['mainEntity'] as Record<string, unknown>[] | undefined;
-      const page = route?.data?.['publicSeoPage'] as Record<string, unknown> | undefined;
+      const page = routeData['publicSeoPage'] as Record<string, unknown> | undefined;
 
       expect(route).toBeTruthy();
       expect(route?.canMatch).toBeUndefined();
       expect(route?.loadComponent).toBeTypeOf('function');
-      expect(route?.data?.['keywords']).toBeUndefined();
+      expect(route?.data).toMatchObject({
+        preload: true,
+        animation: 'PublicSeo',
+      });
+      expect(route?.data?.['title']).toBeUndefined();
+      expect(routeData['keywords']).toBeUndefined();
       expect(page?.['h1']).toBe(expectedRoute.h1);
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
       expect(mainEntity?.some(entity => entity['@type'] === 'HowTo')).toBe(true);

@@ -1,11 +1,17 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule, DOCUMENT } from '@angular/common';
+import { DOCUMENT } from '@angular/common';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
-import { RouterModule } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { SafeHtml } from '@angular/platform-browser';
-import { MaterialModule } from '../../modules/material.module';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
 import { MarkdownPipe } from '../../helpers/markdown.pipe';
 import { searchHelpSections } from '../../helpers/help-search.helper';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpAction, HelpSection, HelpSectionId } from '../../shared/help.content';
@@ -32,7 +38,16 @@ const POPULAR_SECTION_IDS: readonly HelpSectionId[] = [
 @Component({
   selector: 'app-help-page',
   standalone: true,
-  imports: [CommonModule, RouterModule, MaterialModule],
+  imports: [
+    RouterLink,
+    MatButtonModule,
+    MatCardModule,
+    MatDividerModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatInputModule,
+    MatListModule,
+  ],
   providers: [MarkdownPipe],
   templateUrl: './help-page.component.html',
   styleUrls: ['./help-page.component.scss'],

@@ -72,7 +72,7 @@ describe('UploadActivitiesComponent', () => {
     snackBarMock = { open: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [UploadActivitiesComponent],
+      imports: [UploadActivitiesComponent],
       providers: [
         { provide: AppAuthService, useValue: authServiceMock },
         { provide: AppEventService, useValue: eventServiceMock },

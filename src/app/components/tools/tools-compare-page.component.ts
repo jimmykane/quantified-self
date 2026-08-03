@@ -1,12 +1,25 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { SelectionModel } from '@angular/cdk/collections';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
-import { PageEvent } from '@angular/material/paginator';
-import { Sort, SortDirection } from '@angular/material/sort';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
+import { MatSortModule, Sort, SortDirection } from '@angular/material/sort';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTableModule } from '@angular/material/table';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   ActivityInterface,
   ActivityTypes,
@@ -27,8 +40,9 @@ import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { firstValueFrom } from 'rxjs';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
-import { SharedModule } from '../../modules/shared.module';
+import { ActivityTypeIconComponent } from '../activity-type-icon/activity-type-icon.component';
+import type { ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
+import { DataTypeIconComponent } from '../data-type-icon/data-type-icon.component';
 import {
   AppAnalyticsService,
   ToolCompareCreateAnalytics,
@@ -57,11 +71,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { AppEventSharingService } from '../../services/app.event-sharing.service';
-import {
-  DeviceColorPreferenceDialogDevice,
-  DeviceColorPreferencesDialogComponent,
-} from './device-color-preferences-dialog.component';
-import { BenchmarkReviewTagsDialogComponent } from '../benchmark/benchmark-review-tags-dialog.component';
+import type { DeviceColorPreferenceDialogDevice } from './device-color-preferences-dialog.component';
 import {
   resolveBenchmarkStreamMeanDeviation,
   resolveBenchmarkStreamMetrics,
@@ -195,7 +205,27 @@ const PASSIVE_TABLE_TOOLTIP_MEDIA_QUERIES = ['(pointer: coarse)', '(hover: none)
 @Component({
   selector: 'app-tools-compare-page',
   standalone: true,
-  imports: [SharedModule],
+  imports: [
+    DatePipe,
+    NgTemplateOutlet,
+    RouterLink,
+    MatButtonModule,
+    MatCardModule,
+    MatCheckboxModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatInputModule,
+    MatListModule,
+    MatMenuModule,
+    MatPaginatorModule,
+    MatProgressSpinnerModule,
+    MatSelectModule,
+    MatSortModule,
+    MatTableModule,
+    MatTooltipModule,
+    ActivityTypeIconComponent,
+    DataTypeIconComponent,
+  ],
   templateUrl: './tools-compare-page.component.html',
   styleUrls: ['./tools-compare-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -957,16 +987,13 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.hapticsService.selection();
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Share comparison publicly?',
-        message: 'Anyone with the link will be able to view this comparison, its benchmark report, activities, and every source-file object stored under this event folder while sharing is enabled.',
-        confirmLabel: 'Share',
-        cancelLabel: 'Cancel',
-        confirmColor: 'primary',
-      } as ConfirmationDialogData,
+    const confirmed = await this.confirmComparisonAction({
+      title: 'Share comparison publicly?',
+      message: 'Anyone with the link will be able to view this comparison, its benchmark report, activities, and every source-file object stored under this event folder while sharing is enabled.',
+      confirmLabel: 'Share',
+      cancelLabel: 'Cancel',
+      confirmColor: 'primary',
     });
-    const confirmed = await firstValueFrom(dialogRef.afterClosed());
     if (!confirmed) {
       return;
     }
@@ -999,21 +1026,33 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.hapticsService.selection();
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Stop sharing this comparison?',
-        message: 'The public comparison and event links will stop working. The comparison remains available to you.',
-        confirmLabel: 'Stop sharing',
-        cancelLabel: 'Cancel',
-        confirmColor: 'warn',
-      } as ConfirmationDialogData,
+    const confirmed = await this.confirmComparisonAction({
+      title: 'Stop sharing this comparison?',
+      message: 'The public comparison and event links will stop working. The comparison remains available to you.',
+      confirmLabel: 'Stop sharing',
+      cancelLabel: 'Cancel',
+      confirmColor: 'warn',
     });
-    const confirmed = await firstValueFrom(dialogRef.afterClosed());
     if (!confirmed) {
       return;
     }
 
     await this.updateComparisonSharing(item, user, false, false);
+  }
+
+  private async confirmComparisonAction(data: ConfirmationDialogData): Promise<boolean> {
+    try {
+      const { ConfirmationDialogComponent } = await import(
+        '../confirmation-dialog/confirmation-dialog.component'
+      );
+      const dialogRef = this.dialog.open(ConfirmationDialogComponent, { data });
+      return !!await firstValueFrom(dialogRef.afterClosed());
+    } catch (error) {
+      this.logger.error('[ToolsComparePageComponent] Failed to open confirmation dialog', error);
+      this.snackBar.open('Could not open confirmation dialog.', undefined, { duration: 3000 });
+      this.hapticsService.error();
+      return false;
+    }
   }
 
   private async updateComparisonSharing(
@@ -1263,16 +1302,13 @@ export class ToolsComparePageComponent implements OnInit {
 
     this.hapticsService.selection();
     const comparisonLabel = selectedItems.length === 1 ? 'comparison' : 'comparisons';
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: `Delete ${selectedItems.length} selected ${comparisonLabel}?`,
-        message: `This removes ${selectedItems.length} selected saved benchmark ${comparisonLabel} and their source files.`,
-        confirmLabel: 'Delete',
-        cancelLabel: 'Cancel',
-        confirmColor: 'warn',
-      } as ConfirmationDialogData,
+    const confirmed = await this.confirmComparisonAction({
+      title: `Delete ${selectedItems.length} selected ${comparisonLabel}?`,
+      message: `This removes ${selectedItems.length} selected saved benchmark ${comparisonLabel} and their source files.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      confirmColor: 'warn',
     });
-    const confirmed = await firstValueFrom(dialogRef.afterClosed());
     if (!confirmed) {
       return;
     }
@@ -1379,16 +1415,13 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.hapticsService.selection();
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Delete comparison?',
-        message: 'This removes the saved benchmark event and its source files.',
-        confirmLabel: 'Delete',
-        cancelLabel: 'Cancel',
-        confirmColor: 'warn',
-      } as ConfirmationDialogData,
+    const confirmed = await this.confirmComparisonAction({
+      title: 'Delete comparison?',
+      message: 'This removes the saved benchmark event and its source files.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      confirmColor: 'warn',
     });
-    const confirmed = await firstValueFrom(dialogRef.afterClosed());
     if (!confirmed) {
       return;
     }
@@ -1418,7 +1451,7 @@ export class ToolsComparePageComponent implements OnInit {
     }
   }
 
-  openDeviceColorPreferencesDialog(initialDeviceKey?: string | null): void {
+  async openDeviceColorPreferencesDialog(initialDeviceKey?: string | null): Promise<void> {
     if (this.bulkActionInProgress()) {
       return;
     }
@@ -1429,14 +1462,23 @@ export class ToolsComparePageComponent implements OnInit {
     }
 
     this.hapticsService.selection();
-    this.dialog.open(DeviceColorPreferencesDialogComponent, {
-      width: 'min(40rem, calc(100vw - 32px))',
-      maxWidth: 'calc(100vw - 32px)',
-      data: {
-        devices,
-        initialDeviceKey: initialDeviceKey || null,
-      },
-    });
+    try {
+      const { DeviceColorPreferencesDialogComponent } = await import(
+        './device-color-preferences-dialog.component'
+      );
+      this.dialog.open(DeviceColorPreferencesDialogComponent, {
+        width: 'min(40rem, calc(100vw - 32px))',
+        maxWidth: 'calc(100vw - 32px)',
+        data: {
+          devices,
+          initialDeviceKey: initialDeviceKey || null,
+        },
+      });
+    } catch (error) {
+      this.logger.error('[ToolsComparePageComponent] Failed to open device color preferences', error);
+      this.snackBar.open('Could not open device color preferences.', undefined, { duration: 3000 });
+      this.hapticsService.error();
+    }
   }
 
   async openBenchmarkReviewTagsDialog(item: ComparisonListItem): Promise<void> {
@@ -1456,36 +1498,45 @@ export class ToolsComparePageComponent implements OnInit {
     }));
     const originalTags = [...item.benchmarkReviewTags];
 
-    const dialogRef = this.dialog.open(BenchmarkReviewTagsDialogComponent, {
-      width: 'min(34rem, calc(100vw - 32px))',
-      maxWidth: 'calc(100vw - 32px)',
-      data: {
-        title: 'Comparison tags',
-        tags: originalTags,
-        suggestions: this.comparisonTagFilterOptions().map(option => option.label),
-        save: async (tags: string[]) => {
-          const savedTags = await this.benchmarkReviewService.saveEventTags(user, item.event, tags, originalTags);
-          this.updateComparisonEventInLoadedRows(item.id, (event) => {
-            event.tags = savedTags;
-            delete event.benchmarkReviewTags;
-            return event;
-          });
-          return savedTags;
+    try {
+      const { BenchmarkReviewTagsDialogComponent } = await import(
+        '../benchmark/benchmark-review-tags-dialog.component'
+      );
+      const dialogRef = this.dialog.open(BenchmarkReviewTagsDialogComponent, {
+        width: 'min(34rem, calc(100vw - 32px))',
+        maxWidth: 'calc(100vw - 32px)',
+        data: {
+          title: 'Comparison tags',
+          tags: originalTags,
+          suggestions: this.comparisonTagFilterOptions().map(option => option.label),
+          save: async (tags: string[]) => {
+            const savedTags = await this.benchmarkReviewService.saveEventTags(user, item.event, tags, originalTags);
+            this.updateComparisonEventInLoadedRows(item.id, (event) => {
+              event.tags = savedTags;
+              delete event.benchmarkReviewTags;
+              return event;
+            });
+            return savedTags;
+          },
         },
-      },
-    });
+      });
 
-    const savedTags = await firstValueFrom(dialogRef.afterClosed());
-    if (!Array.isArray(savedTags)) {
-      return;
+      const savedTags = await firstValueFrom(dialogRef.afterClosed());
+      if (!Array.isArray(savedTags)) {
+        return;
+      }
+
+      this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
+      this.hapticsService.success();
+      this.analyticsService.logToolCompareSavedAction('tags_save', this.getComparisonSavedActionAnalytics(item, {
+        status: 'success',
+        tagCount: savedTags.length,
+      }));
+    } catch (error) {
+      this.logger.error('[ToolsComparePageComponent] Failed to open comparison tags editor', error);
+      this.snackBar.open('Could not open comparison tags.', undefined, { duration: 3000 });
+      this.hapticsService.error();
     }
-
-    this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
-    this.hapticsService.success();
-    this.analyticsService.logToolCompareSavedAction('tags_save', this.getComparisonSavedActionAnalytics(item, {
-      status: 'success',
-      tagCount: savedTags.length,
-    }));
   }
 
   async signIn(redirectUrl = '/tools/compare', source: ToolCompareSignInSource = 'guest_cta'): Promise<void> {

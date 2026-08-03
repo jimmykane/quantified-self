@@ -2,7 +2,8 @@ import { Injectable, Injector, computed, inject, signal } from '@angular/core';
 import { Firestore, collection, collectionData, query, orderBy, where, Timestamp, addDoc, doc, updateDoc, deleteDoc } from 'app/firebase/firestore';
 import { AppWhatsNewLocalStorageService } from './storage/app.whats-new.local.storage.service';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { filter, map, shareReplay, switchMap, take } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from './logger.service';
@@ -57,6 +58,11 @@ export interface ChangelogPost {
     type: 'major' | 'minor' | 'patch' | 'announcement';
 }
 
+interface ChangelogLoadState {
+    loaded: boolean;
+    changelogs: ChangelogPost[];
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -69,13 +75,20 @@ export class AppWhatsNewService {
     private injector = inject(Injector);
 
     private readonly changelogsCollection = collection(this.firestore, 'changelogs');
+    private readonly user = toSignal(this.authService.user$, { initialValue: null });
+    private readonly hasAuthenticatedUser = computed(() => !!this.user());
 
     private _isAdminMode = signal(false);
     private _adminModeRequestCount = signal(0);
+    private _changelogsRequested = signal(false);
     public readonly isAdminMode = computed(() => this._isAdminMode() || this._adminModeRequestCount() > 0);
 
     // Derived query that changes based on admin mode.
     private changelogsQuery = computed(() => {
+        if (!this.hasAuthenticatedUser() && !this.isAdminMode() && !this._changelogsRequested()) {
+            return null;
+        }
+
         if (this.isAdminMode()) {
             // Admin mode: Show all, ordered by date
             return query(this.changelogsCollection, orderBy('date', 'desc'));
@@ -85,16 +98,38 @@ export class AppWhatsNewService {
         }
     });
 
-    // Re-create observable stream based on the computed query
-    public changelogs$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
-        switchMap(q => collectionData(q, { idField: 'id' })),
-        map(changelogs => changelogs as ChangelogPost[]),
-        shareReplay(1)
+    // Keep the idle placeholder distinct from a real, successfully loaded empty collection.
+    private readonly changelogLoadState$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
+        switchMap(q => q
+            ? collectionData(q, { idField: 'id' }).pipe(
+                map(changelogs => ({
+                    loaded: true,
+                    changelogs: changelogs as ChangelogPost[],
+                })),
+            )
+            : of<ChangelogLoadState>({ loaded: false, changelogs: [] })
+        ),
+        shareReplay({ bufferSize: 1, refCount: true })
     );
 
+    public readonly changelogs$ = this.changelogLoadState$.pipe(
+        map(state => state.changelogs),
+    );
     public readonly changelogs = toSignal(this.changelogs$, { initialValue: [] });
-    private readonly user = toSignal(this.authService.user$, { initialValue: null });
     private _localStorageTrigger = signal(0);
+
+    public ensureChangelogsLoaded(): void {
+        this._changelogsRequested.set(true);
+    }
+
+    public getChangelogsOnceLoaded(): Observable<ChangelogPost[]> {
+        this.ensureChangelogsLoaded();
+        return this.changelogLoadState$.pipe(
+            filter(state => state.loaded),
+            map(state => state.changelogs),
+            take(1),
+        );
+    }
 
     // Get the current user's last seen date from appSettings
     // defaulting to account creation for first-time users

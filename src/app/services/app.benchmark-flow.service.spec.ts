@@ -95,7 +95,7 @@ describe('AppBenchmarkFlowService', () => {
     await service.openBenchmarkReport({ event, result });
 
     expect(bottomSheet.open).toHaveBeenCalledTimes(1);
-    expect(dialog.open).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(dialog.open).toHaveBeenCalledTimes(1));
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
@@ -116,6 +116,28 @@ describe('AppBenchmarkFlowService', () => {
       }),
     );
     expect(dialog.open).not.toHaveBeenCalled();
+  });
+
+  it('reports a lazy selection failure when rerunning from an open report', async () => {
+    const event = createEvent();
+    const result = createResult();
+    const loadError = new Error('selection chunk unavailable');
+    bottomSheet.open.mockReturnValueOnce({ afterDismissed: () => of({ rerun: true }) });
+    vi.spyOn(service, 'openBenchmarkSelectionDialog').mockRejectedValueOnce(loadError);
+
+    await service.openBenchmarkReport({ event, result });
+
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith(
+        '[AppBenchmarkFlowService] Failed to reopen benchmark selection',
+        loadError,
+      );
+    });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Could not open benchmark selection',
+      undefined,
+      { duration: 3000 },
+    );
   });
 
   it('passes user brandText to benchmark bottom sheet data', async () => {
@@ -196,19 +218,20 @@ describe('AppBenchmarkFlowService', () => {
       resolved = true;
     });
 
-    await Promise.resolve();
+    await vi.waitFor(() => expect(dialog.open).toHaveBeenCalledTimes(1));
     expect(resolved).toBe(false);
 
     afterClosed.next({ activities: [activityA, activityB], options });
     afterClosed.complete();
-    await Promise.resolve();
 
-    expect(service.generateAndOpenReport).toHaveBeenCalledWith(expect.objectContaining({
-      event,
-      ref: activityA,
-      test: activityB,
-      options,
-    }));
+    await vi.waitFor(() => {
+      expect(service.generateAndOpenReport).toHaveBeenCalledWith(expect.objectContaining({
+        event,
+        ref: activityA,
+        test: activityB,
+        options,
+      }));
+    });
     expect(resolved).toBe(false);
 
     resolveGeneration?.();

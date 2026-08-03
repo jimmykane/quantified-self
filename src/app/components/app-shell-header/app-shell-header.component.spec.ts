@@ -1,15 +1,24 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { NgComponentOutlet } from '@angular/common';
 import { describe, beforeEach, it, expect, vi } from 'vitest';
 import { AppShellHeaderComponent } from './app-shell-header.component';
+import { DashboardHeaderUploadComponent } from '../dashboard/dashboard-header-upload/dashboard-header-upload.component';
 
 describe('AppShellHeaderComponent', () => {
   let component: AppShellHeaderComponent;
   let fixture: ComponentFixture<AppShellHeaderComponent>;
 
   beforeEach(async () => {
+    TestBed.overrideComponent(DashboardHeaderUploadComponent, {
+      set: {
+        imports: [],
+        template: '',
+      },
+    });
     await TestBed.configureTestingModule({
       declarations: [AppShellHeaderComponent],
+      imports: [NgComponentOutlet],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
@@ -64,5 +73,18 @@ describe('AppShellHeaderComponent', () => {
     expect(desktopActionButton?.textContent?.trim()).toBe('Dashboard');
     expect(mobileActionButton?.getAttribute('aria-label')).toBe('Dashboard');
     expect(mobileIcon?.textContent?.trim()).toBe('dashboard');
+  });
+
+  it('only creates the dashboard upload host when the dashboard upload action is visible', async () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-dashboard-header-upload')).toBeNull();
+
+    component.showUploadActivities = true;
+    fixture.detectChanges();
+    await component['dashboardHeaderUploadLoad'];
+    fixture.detectChanges();
+
+    expect(component.dashboardHeaderUploadComponent()).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('app-dashboard-header-upload')).toBeTruthy();
   });
 });

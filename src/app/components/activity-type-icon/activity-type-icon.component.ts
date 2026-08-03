@@ -1,4 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { NgStyle } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivityInterface, ActivityTypes, ActivityTypesHelper, EventInterface } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupIcons } from '../../services/color/app.activity-type-group.icons';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -55,7 +58,8 @@ const ACTIVITY_TYPE_ICON_OVERRIDES: Readonly<Record<string, string>> = {
     templateUrl: './activity-type-icon.component.html',
     styleUrls: ['./activity-type-icon.component.css'],
     changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+    standalone: true,
+    imports: [NgStyle, MatIconModule, MatTooltipModule],
 })
 export class ActivityTypeIconComponent {
     constructor(private eventColorService?: AppEventColorService) {}

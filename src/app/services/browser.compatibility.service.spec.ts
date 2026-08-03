@@ -77,7 +77,7 @@ describe('BrowserCompatibilityService', () => {
             expect(dialog.open).not.toHaveBeenCalled();
         });
 
-        it('should return false and open dialog if APIs are missing and showDialog is true', () => {
+        it('should return false and open dialog if APIs are missing and showDialog is true', async () => {
             // @ts-ignore
             globalThis.CompressionStream = undefined;
             // @ts-ignore
@@ -85,7 +85,9 @@ describe('BrowserCompatibilityService', () => {
 
             const result = service.checkCompressionSupport(true);
             expect(result).toBe(false);
-            expect(dialog.open).toHaveBeenCalledWith(BrowserUpgradeDialogComponent, expect.any(Object));
+            await vi.waitFor(() => {
+                expect(dialog.open).toHaveBeenCalledWith(BrowserUpgradeDialogComponent, expect.any(Object));
+            });
         });
 
         it('should return false if only one API is missing', () => {

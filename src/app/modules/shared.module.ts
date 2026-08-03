@@ -33,10 +33,8 @@ import { MyTracksMapLayersControlComponent } from '../components/map/my-tracks-m
 import { MapLayersMenuPanelComponent } from '../components/map/shared/map-layers-menu-panel.component';
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { MenuRadioListComponent } from '../components/shared/menu-radio-list/menu-radio-list.component';
-import { TypedPromptRotatorComponent } from '../components/shared/typed-prompt-rotator/typed-prompt-rotator.component';
 import { HapticTapDirective } from '../directives/haptic-tap.directive';
 import { TooltipTapDirective } from '../directives/tooltip-tap.directive';
-import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 import { EventCardChartPanelComponent } from '../components/event/chart/panel/event.card.chart.panel.component';
 import { DashboardActionPromptComponent } from '../components/dashboard/dashboard-action-prompt/dashboard-action-prompt.component';
 import { WorkspaceSectionNavigationComponent } from '../components/shared/workspace-section-navigation/workspace-section-navigation.component';
@@ -48,22 +46,22 @@ import { DurabilityReadingGuideComponent } from '../components/shared/durability
         MaterialModule,
         RouterModule,
         ReactiveFormsModule,
-        FormsModule
+        FormsModule,
+        ServiceSourceIconComponent,
+        DataTypeIconComponent,
+        ActivityTypeIconComponent,
     ],
     declarations: [
         ShadeComponent,
         PrivacyIconComponent,
         EventActionsComponent,
         ConfirmationDialogComponent,
-        DataTypeIconComponent,
         EventSearchComponent,
         ActivityTypesFilterMenuComponent,
         ActivityTypesMultiSelectComponent,
-        ActivityTypeIconComponent,
         AppSkeletonComponent,
         AppLoadingOverlayComponent,
         ServiceSyncingStateComponent,
-        ServiceSourceIconComponent,
         StatusInfoComponent,
         BottomSheetHeaderComponent,
         PeekPanelComponent,
@@ -78,10 +76,8 @@ import { DurabilityReadingGuideComponent } from '../components/shared/durability
         MapLayersMenuPanelComponent,
         EventIntensityZonesComponent,
         MenuRadioListComponent,
-        TypedPromptRotatorComponent,
         HapticTapDirective,
         TooltipTapDirective,
-        UploadActivitiesComponent,
         EventCardChartPanelComponent,
         DashboardActionPromptComponent,
         WorkspaceSectionNavigationComponent,
@@ -119,10 +115,8 @@ import { DurabilityReadingGuideComponent } from '../components/shared/durability
         MapLayersActionsComponent,
         EventIntensityZonesComponent,
         MenuRadioListComponent,
-        TypedPromptRotatorComponent,
         HapticTapDirective,
         TooltipTapDirective,
-        UploadActivitiesComponent,
         EventCardChartPanelComponent,
         DashboardActionPromptComponent,
         WorkspaceSectionNavigationComponent,

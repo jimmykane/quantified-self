@@ -1770,7 +1770,7 @@ describe('ToolsComparePageComponent', () => {
     ]);
   });
 
-  it('opens the device color editor from the page header and device dot', () => {
+  it('opens the device color editor from the page header and device dot', async () => {
     const user = new User('user-1');
     eventColorServiceMock.getActivityColor.mockImplementation((_activities, activity) =>
       activity?.getID?.() === 'activity-1' ? '#FF00FF' : '#16B4EA',
@@ -1800,38 +1800,42 @@ describe('ToolsComparePageComponent', () => {
     expect(colorButton?.closest('.comparison-table-controls')).toBeNull();
     colorButton?.dispatchEvent(new Event('click'));
 
-    expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
-      width: 'min(40rem, calc(100vw - 32px))',
-      maxWidth: 'calc(100vw - 32px)',
-      data: {
-        devices: [
-          {
-            key: 'garmin edge',
-            label: 'Garmin Edge 3129',
-            automaticColor: '#123456',
-          },
-        ],
-        initialDeviceKey: null,
-      },
+    await vi.waitFor(() => {
+      expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
+        width: 'min(40rem, calc(100vw - 32px))',
+        maxWidth: 'calc(100vw - 32px)',
+        data: {
+          devices: [
+            {
+              key: 'garmin edge',
+              label: 'Garmin Edge 3129',
+              automaticColor: '#123456',
+            },
+          ],
+          initialDeviceKey: null,
+        },
+      });
     });
 
     dialogOpenSpy.mockClear();
     const deviceDotButton = (fixture.nativeElement as HTMLElement).querySelector('.device-color-trigger') as HTMLButtonElement;
     deviceDotButton.click();
 
-    expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
-      width: 'min(40rem, calc(100vw - 32px))',
-      maxWidth: 'calc(100vw - 32px)',
-      data: {
-        devices: [
-          {
-            key: 'garmin edge',
-            label: 'Garmin Edge 3129',
-            automaticColor: '#123456',
-          },
-        ],
-        initialDeviceKey: 'garmin edge',
-      },
+    await vi.waitFor(() => {
+      expect(dialogOpenSpy).toHaveBeenCalledWith(DeviceColorPreferencesDialogComponent, {
+        width: 'min(40rem, calc(100vw - 32px))',
+        maxWidth: 'calc(100vw - 32px)',
+        data: {
+          devices: [
+            {
+              key: 'garmin edge',
+              label: 'Garmin Edge 3129',
+              automaticColor: '#123456',
+            },
+          ],
+          initialDeviceKey: 'garmin edge',
+        },
+      });
     });
     expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
   });
@@ -1884,6 +1888,7 @@ describe('ToolsComparePageComponent', () => {
     });
 
     const editPromise = component.openBenchmarkReviewTagsDialog(component.comparisonItems()[0]);
+    await vi.waitFor(() => expect(dialogData).toBeTruthy());
     const savedTags = await dialogData.save([' review ']);
     afterClosed$.next(savedTags);
     afterClosed$.complete();
@@ -2421,6 +2426,38 @@ describe('ToolsComparePageComponent', () => {
     }));
     expect(eventSharingServiceMock.setEventSharing).not.toHaveBeenCalled();
     expect(eventSharingServiceMock.copyShareUrl).not.toHaveBeenCalled();
+    expect(component.comparisonItems()[0].event.privacy).toBe('private');
+  });
+
+  it('handles a lazy confirmation dialog failure without changing sharing', async () => {
+    const user = new User('user-1');
+    const dialogError = new Error('confirmation chunk unavailable');
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    (component as any).dialog = {
+      open: vi.fn(() => {
+        throw dialogError;
+      }),
+    };
+    const snackBarOpen = vi.spyOn((component as any).snackBar, 'open');
+    component.comparisons.set([
+      makeComparisonEvent('comparison-1', { privacy: 'private' }),
+    ]);
+
+    await component.shareComparisonLink(component.comparisonItems()[0]);
+
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      '[ToolsComparePageComponent] Failed to open confirmation dialog',
+      dialogError,
+    );
+    expect(snackBarOpen).toHaveBeenCalledWith(
+      'Could not open confirmation dialog.',
+      undefined,
+      { duration: 3000 },
+    );
+    expect(hapticsServiceMock.error).toHaveBeenCalled();
+    expect(eventSharingServiceMock.setEventSharing).not.toHaveBeenCalled();
     expect(component.comparisonItems()[0].event.privacy).toBe('private');
   });
 

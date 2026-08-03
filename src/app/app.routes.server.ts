@@ -1,6 +1,6 @@
 import { RenderMode, ServerRoute } from '@angular/ssr';
-import { WORKOUT_DATA_COMPARISON_PATH } from './components/features/workout-data-comparison-page.content';
-import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.content';
+import { WORKOUT_DATA_COMPARISON_PATH } from './components/features/workout-data-comparison-page.paths';
+import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
 
 export const PRERENDERED_INTEGRATION_ROUTES = [
   'integrations',
