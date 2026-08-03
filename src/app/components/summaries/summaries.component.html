@@ -1,10 +1,25 @@
-@if (tiles.length || showActions || showTodaySummary) {
+@if (tiles.length || showActions || showTodaySummary || derivedMetricsBanner) {
 <section class="pie">
-  @if (showTodaySummary || showActions) {
-  <div class="dashboard-section-header dashboard-summary-header" [class.dashboard-summary-header-actions-only]="!showTodaySummary"
-    [attr.aria-labelledby]="showTodaySummary ? 'dashboard-today-title' : null"
-    [attr.aria-label]="showTodaySummary ? null : 'Dashboard controls'">
-    @if (showTodaySummary) {
+  @if (showTodaySummary || showActions || derivedMetricsBanner) {
+  <div class="dashboard-section-header dashboard-summary-header" [class.dashboard-summary-header-actions-only]="!showTodaySummary && !derivedMetricsBanner"
+    [attr.aria-labelledby]="derivedMetricsBanner ? 'dashboard-derived-metrics-status-title' : (showTodaySummary ? 'dashboard-today-title' : null)"
+    [attr.aria-label]="showTodaySummary || derivedMetricsBanner ? null : 'Dashboard controls'">
+    @if (derivedMetricsBanner) {
+    <div
+      class="dashboard-section-title-block dashboard-derived-metrics-status"
+      [class.warning]="derivedMetricsBanner.type === 'warning'"
+      [attr.role]="derivedMetricsBanner.type === 'warning' ? 'alert' : 'status'">
+      @if (derivedMetricsBanner.type === 'pending') {
+      <mat-icon aria-hidden="true">sync</mat-icon>
+      } @else {
+      <mat-icon aria-hidden="true">error_outline</mat-icon>
+      }
+      <div class="dashboard-section-title-copy">
+        <h2 id="dashboard-derived-metrics-status-title">{{ derivedMetricsBanner.title }}</h2>
+        <div class="dashboard-section-subtitle">{{ derivedMetricsBanner.description }}</div>
+      </div>
+    </div>
+    } @else if (showTodaySummary) {
     <div class="dashboard-section-title-block">
       <mat-icon aria-hidden="true">today</mat-icon>
       <div class="dashboard-section-title-copy">
@@ -15,8 +30,16 @@
       </div>
     </div>
     }
-    @if (showActions) {
+    @if (showActions || derivedMetricsBanner?.showRetry) {
     <div class="dashboard-section-actions">
+      @if (derivedMetricsBanner?.showRetry) {
+      <button mat-stroked-button type="button" class="dashboard-derived-metrics-retry" appHapticTap
+        (click)="retryDerivedMetricsRebuild()">
+        <mat-icon aria-hidden="true">refresh</mat-icon>
+        <span>Retry</span>
+      </button>
+      }
+      @if (showActions) {
       <a mat-stroked-button class="dashboard-training-link" routerLink="/training" aria-label="Open Training workspace">
         <mat-icon aria-hidden="true">monitoring</mat-icon>
         <span>Open Training</span>
@@ -30,6 +53,7 @@
         (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen" aria-label="Dashboard manager">
         <mat-icon>add_chart</mat-icon>
       </button>
+      }
     </div>
     }
   </div>
@@ -60,18 +84,6 @@
       <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><small>vs baseline · lower supports</small></div>
     </dl>
   </section>
-  }
-  @if (derivedMetricsBanner) {
-  <div class="derived-metrics-banner" [class.pending]="derivedMetricsBanner.type === 'pending'"
-    [class.warning]="derivedMetricsBanner.type === 'warning'">
-    <div class="derived-metrics-banner-content">
-      <div class="derived-metrics-banner-title">{{derivedMetricsBanner.title}}</div>
-      <div class="derived-metrics-banner-description">{{derivedMetricsBanner.description}}</div>
-    </div>
-    @if (derivedMetricsBanner.showRetry) {
-    <button type="button" class="derived-metrics-banner-action" appHapticTap (click)="retryDerivedMetricsRebuild()">Retry</button>
-    }
-  </div>
   }
   @if (kpiLaneTiles.length) {
   <section class="dashboard-kpi-section">

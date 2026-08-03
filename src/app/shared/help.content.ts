@@ -53,6 +53,7 @@ const GITHUB_ISSUES_URL = 'https://github.com/jimmykane/quantified-self/issues';
 const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
 - **Training** is a fixed analytical workspace rather than a set of draggable dashboard tiles. It brings together a **28-day status** compared with your usual training, **Readiness today**, **What drove this**, **Load trajectory**, **Training mix**, **Durability**, and **Settings vs recent evidence**, plus **Power systems** where it is available to your account.
+- While visible Training snapshots are building or refreshing, the compact line above the **Training** title shows that state before any analytical values. It uses the existing header space, so content does not shift when the state changes. A refresh can keep the last completed values visible, but the header identifies them as such; a failed update adds **Retry** there.
 - Use **Sports shown** to personalize the Running, Cycling, and Swimming detail cards. Until you save a choice, Training selects sports automatically from activities in the latest 28 days and any saved sport benchmark; if none qualifies, all three stay visible. A saved choice remains fixed until you change it, and **Use automatic selection** restores the automatic behavior.
 
 ## Sports and multisport activities
@@ -240,7 +241,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Opening the dashboard also runs a freshness check against your latest events and requeues a rebuild automatically if snapshots are behind.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - If a stale/building state is stuck for too long, the dashboard switches to a retryable failed state so you can trigger a rebuild immediately.
-- While rebuilding, the dashboard shows a small training-metrics status notice above tiles.
+- While rebuilding, the dashboard uses the existing top summary-header slot for the derived-metrics status before **Today** and the tiles. This keeps the page in place while making it clear that visible values are from the last completed calculation; a failed update adds **Retry** in that same header.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,
   - **Building fitness** while carrying meaningful load,

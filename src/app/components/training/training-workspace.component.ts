@@ -63,7 +63,10 @@ import {
   buildTrainingBodyWeightViewModel,
   type TrainingBodyWeightViewModel,
 } from '../../helpers/training-body-weight.helper';
-import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
+import {
+  isDerivedMetricPendingStatus,
+  resolveDerivedMetricsRefreshPhase,
+} from '../../helpers/derived-metric-status.helper';
 import {
   buildTrainingAnalysis,
   type TrainingAnalysis,
@@ -171,6 +174,13 @@ interface TrainingLoadMetricsViewModel {
   strainText: string;
   freshnessNowText: string;
   freshnessPlusSevenDaysText: string;
+}
+
+interface TrainingDerivedMetricsRouteStatus {
+  type: 'pending' | 'warning';
+  title: string;
+  description: string;
+  showRetry: boolean;
 }
 
 type TrainingBuildCardState = 'not-configured' | 'updating' | 'invalid' | 'unavailable' | 'ready';
@@ -290,6 +300,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public hasTrainingPowerSystemsAccess = false;
   public trainingStatus = createEmptyTrainingStatusViewModel();
   public trainingComparisonState: TrainingComparisonState = 'preparing';
+  public derivedMetricsRouteStatus: TrainingDerivedMetricsRouteStatus | null = {
+    type: 'pending',
+    title: 'Building derived metrics',
+    description: 'Some Training insights are still being prepared.',
+    showRetry: false,
+  };
   public loadMetrics = createEmptyTrainingLoadMetricsViewModel();
   public trainingLoadGuidance = buildTrainingLoadGuidance(null, null);
   public readonly loadTrajectoryInfoTooltip = resolveDashboardChartInfoTooltip(DASHBOARD_FORM_CHART_TYPE);
@@ -433,6 +449,17 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.trainingRecoveryHistoryExpanded = !this.trainingRecoveryHistoryExpanded;
   }
 
+  public retryDerivedMetricsRebuild(): void {
+    const uid = this.currentUserUID;
+    if (!uid) {
+      return;
+    }
+    this.derivedMetricsService.ensureForDashboard({ uid }, this.derivedState, {
+      force: true,
+      metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
+    });
+  }
+
   public openTrainingStateDetailsDialog(event: MouseEvent): void {
     event.stopPropagation();
     if (!this.trainingStateDetailsDialogTemplate || this.trainingStateDetailsDialogRef) {
@@ -515,6 +542,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.selectedTrainingPowerSystems = null;
     this.trainingStatus = createEmptyTrainingStatusViewModel();
     this.trainingComparisonState = 'preparing';
+    this.derivedMetricsRouteStatus = {
+      type: 'pending',
+      title: 'Building derived metrics',
+      description: 'Some Training insights are still being prepared.',
+      showRetry: false,
+    };
     this.loadMetrics = createEmptyTrainingLoadMetricsViewModel();
     this.trainingLoadGuidance = buildTrainingLoadGuidance(null, null);
     this.trainingMixDisciplines = [];
@@ -634,6 +667,62 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.visibleDisciplines,
     );
     this.refreshTrainingBuildCards();
+    this.refreshDerivedMetricsRouteStatus();
+  }
+
+  private refreshDerivedMetricsRouteStatus(): void {
+    const statuses = [
+      this.derivedState.formStatus,
+      this.derivedState.recoveryNowStatus,
+      this.derivedState.acwrStatus,
+      this.derivedState.rampRateStatus,
+      this.derivedState.monotonyStrainStatus,
+      this.derivedState.formNowStatus,
+      this.derivedState.formPlus7dStatus,
+      this.derivedState.freshnessForecastStatus,
+      this.derivedState.intensityDistributionStatus,
+      this.derivedState.trainingSummaryStatus,
+      this.derivedState.trainingBuildComparisonStatus,
+      this.derivedState.trainingExplanationStatus,
+      this.derivedState.trainingDurabilityStatus,
+      this.derivedState.trainingReadinessStatus,
+      this.derivedState.bodyWeightTrendStatus,
+    ];
+    if (this.hasPowerCapacityVisible) {
+      statuses.push(
+        this.derivedState.trainingCapacityStatus,
+        this.derivedState.powerCurveStatus,
+      );
+    }
+    if (this.isSwimmingVisible) {
+      statuses.push(this.derivedState.trainingSwimPerformanceStatus);
+    }
+    if (this.hasTrainingPowerSystemsAccess) {
+      statuses.push(this.derivedState.trainingPowerSystemsStatus);
+    }
+
+    const refreshPhase = resolveDerivedMetricsRefreshPhase(statuses);
+    if (refreshPhase === 'failed') {
+      this.derivedMetricsRouteStatus = {
+        type: 'warning',
+        title: 'Derived metrics update failed',
+        description: 'Some Training values may be out of date.',
+        showRetry: true,
+      };
+      return;
+    }
+    if (refreshPhase === 'refreshing' || refreshPhase === 'building') {
+      this.derivedMetricsRouteStatus = {
+        type: 'pending',
+        title: refreshPhase === 'refreshing' ? 'Refreshing derived metrics' : 'Building derived metrics',
+        description: refreshPhase === 'refreshing'
+          ? 'Showing last completed Training values while the update finishes.'
+          : 'Some Training insights are still being prepared.',
+        showRetry: false,
+      };
+      return;
+    }
+    this.derivedMetricsRouteStatus = null;
   }
 
   private refreshTrainingSportVisibility(): void {

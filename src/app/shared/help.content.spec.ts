@@ -191,6 +191,9 @@ describe('help.content', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
     expect(trainingSection?.content).toContain('What drove this');
+    expect(trainingSection?.content).toContain('compact line above the **Training** title');
+    expect(trainingSection?.content).toContain('content does not shift');
+    expect(trainingSection?.content).toContain('failed update adds **Retry**');
     expect(trainingSection?.content).toContain('neutral higher/lower language');
     expect(trainingSection?.content).toContain('plots a readable 12-week durability trend');
     expect(trainingSection?.content).toContain('**Body-weight trend**');
@@ -425,7 +428,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Latest workout TSS');
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
-    expect(gettingStartedSection?.content).toContain('status notice');
+    expect(gettingStartedSection?.content).toContain('top summary-header slot');
+    expect(gettingStartedSection?.content).toContain('before **Today** and the tiles');
   });
 
   it('should document new derived KPI rows and curated charts', () => {

@@ -504,6 +504,16 @@ Failures mark affected snapshots failed, preserve an error, and are rethrown so 
 The workspace subscribes to the authenticated user and resets all state when the UID changes. It never allows a previous
 user's dialogs or view models to survive an account switch.
 
+The route header owns one fixed-height status line above the `Training` title. While any snapshot that backs a visible
+Training surface is missing, queued, processing, building, or stale, that line replaces the normal `28-day training
+analysis` eyebrow instead of inserting a banner into the analytical content. A stale snapshot says that the last
+completed Training values remain visible while the replacement finishes. A failed visible snapshot takes precedence,
+uses the same line, and adds a Material Retry action that force-requests the complete Training metric scope. When the
+visible scope is healthy, the normal eyebrow returns. The status scope follows visible disciplines and the account-gated
+Power systems surface, so hidden presentation-only metrics do not keep the route header in an updating state. Dashboard
+uses the same continuity rule in its existing top summary-header slot before Today and the tiles. These fixed header
+slots prevent derived status changes from moving the value cards or initially presenting stale values without context.
+
 Sport visibility has two modes:
 
 - **Automatic:** use any discipline with current 28-day activity or a saved benchmark. If nothing qualifies, show all
@@ -1285,6 +1295,9 @@ UI principles:
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.
+- Dashboard and Training surface a route-level derived status before any retained values, using existing fixed-height
+  header slots rather than conditionally inserting a content banner. The status distinguishes building from refreshing
+  retained values, and failed refreshes expose Retry in the same header.
 - A chart with no previous payload is not mounted while its snapshot builds. Training shows a compact, bounded status card
   instead, so chart minimum heights and overlays cannot stretch or bleed during the initial load.
 - A valid payload with zero eligible data shows a domain-specific empty state, not a spinner.

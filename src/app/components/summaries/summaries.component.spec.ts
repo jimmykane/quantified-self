@@ -97,21 +97,21 @@ describe('SummariesComponent', () => {
         efficiencyTrend: null,
         trainingCapacity: null,
         trainingDurability: null,
-        formStatus: 'missing',
-        recoveryNowStatus: 'missing',
-        acwrStatus: 'missing',
-        rampRateStatus: 'missing',
-        monotonyStrainStatus: 'missing',
-        formNowStatus: 'missing',
-        formPlus7dStatus: 'missing',
-        easyPercentStatus: 'missing',
-        hardPercentStatus: 'missing',
-        efficiencyDelta4wStatus: 'missing',
-        freshnessForecastStatus: 'missing',
-        intensityDistributionStatus: 'missing',
-        efficiencyTrendStatus: 'missing',
-        trainingCapacityStatus: 'missing',
-        trainingDurabilityStatus: 'missing',
+        formStatus: 'ready',
+        recoveryNowStatus: 'ready',
+        acwrStatus: 'ready',
+        rampRateStatus: 'ready',
+        monotonyStrainStatus: 'ready',
+        formNowStatus: 'ready',
+        formPlus7dStatus: 'ready',
+        easyPercentStatus: 'ready',
+        hardPercentStatus: 'ready',
+        efficiencyDelta4wStatus: 'ready',
+        freshnessForecastStatus: 'ready',
+        intensityDistributionStatus: 'ready',
+        efficiencyTrendStatus: 'ready',
+        trainingCapacityStatus: 'ready',
+        trainingDurabilityStatus: 'ready',
       })),
       ensureForDashboard: vi.fn(),
     };
@@ -2157,7 +2157,6 @@ describe('SummariesComponent', () => {
   });
 
   it('should show a pending banner while derived metrics are stale', () => {
-    vi.useFakeTimers();
     component.user = {
       settings: {
         dashboardSettings: {
@@ -2178,14 +2177,22 @@ describe('SummariesComponent', () => {
     (component as any).derivedRecoveryNowStatus = 'ready';
     (component as any).refreshDerivedMetricsBannerState();
 
-    expect(component.derivedMetricsBanner).toBeNull();
-    vi.advanceTimersByTime(250);
     expect(component.derivedMetricsBanner?.type).toBe('pending');
-    expect(component.derivedMetricsBanner?.title).toContain('Refreshing');
+    expect(component.derivedMetricsBanner?.title).toBe('Refreshing derived metrics');
+    expect(component.derivedMetricsBanner?.description).toContain('last completed dashboard values');
     expect(component.derivedMetricsBanner?.showRetry).toBe(false);
+
+    fixture.detectChanges();
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const status = nativeElement.querySelector('.dashboard-derived-metrics-status');
+    const statusHeader = status?.closest('.dashboard-summary-header');
+    const today = nativeElement.querySelector('.dashboard-current-state-row');
+    expect(status).not.toBeNull();
+    expect(statusHeader?.nextElementSibling).toBe(today);
+    expect(nativeElement.querySelector('.derived-metrics-banner')).toBeNull();
   });
 
-  it('should suppress derived banner until first derived state hydration completes', () => {
+  it('should show building status in the stable header before first derived hydration completes', () => {
     component.user = {
       settings: {
         dashboardSettings: {
@@ -2205,7 +2212,8 @@ describe('SummariesComponent', () => {
     (component as any).derivedFormStatus = 'missing';
     (component as any).refreshDerivedMetricsBannerState();
 
-    expect(component.derivedMetricsBanner).toBeNull();
+    expect(component.derivedMetricsBanner?.type).toBe('pending');
+    expect(component.derivedMetricsBanner?.title).toBe('Building derived metrics');
   });
 
   it('should remove tiles that are no longer returned by the tile builder', async () => {
@@ -2394,6 +2402,8 @@ describe('SummariesComponent', () => {
       },
     } as any;
     component.showActions = true;
+    (component as any).refreshDerivedMetricsBannerState();
+    expect(component.derivedMetricsBanner?.title).toBe('Building derived metrics');
     const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
     mockDialog.open.mockReturnValueOnce({
       afterClosed: () => afterClosedSubject.asObservable(),
@@ -2411,8 +2421,13 @@ describe('SummariesComponent', () => {
 
     expect(component.showTodaySummary).toBe(false);
     expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(false);
+    expect(component.derivedMetricsBanner).toBeNull();
     expect(fixture.nativeElement.querySelector('#dashboard-today-title')).toBeNull();
 
+    (component as any).derivedFormStatus = 'ready';
+    (component as any).derivedRecoveryNowStatus = 'ready';
+    (component as any).derivedFormNowStatus = 'ready';
+    (component as any).derivedRampRateStatus = 'ready';
     (component.user as any).settings.dashboardSettings.showTodaySummary = true;
     previewTodaySummaryVisibility(true);
     fixture.detectChanges();

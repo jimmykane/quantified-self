@@ -631,6 +631,8 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(fixture.componentInstance.isLoading).toBe(false);
     expect(fixture.nativeElement.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
+    expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
+      .toContain('Building derived metrics');
     expect(fixture.nativeElement.textContent).toContain('Reading your recent running, cycling/MTB, and swimming workouts.');
     expect(fixture.nativeElement.querySelectorAll('[role="status"]').length).toBeGreaterThanOrEqual(3);
     expect(fixture.nativeElement.textContent).toContain('Preparing training drivers');
@@ -1685,6 +1687,33 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.derivedState.formNow?.value).toBe(8.5);
     expect(fixture.componentInstance.trainingComparisonState).toBe('updating');
+    const routeStatus = fixture.nativeElement.querySelector('.training-derived-metrics-status') as HTMLElement | null;
+    const pageHeader = routeStatus?.closest('.training-page-header');
+    const firstSection = fixture.nativeElement.querySelector('.training-section');
+    expect(routeStatus?.textContent).toContain('Refreshing derived metrics');
+    expect(routeStatus?.textContent).toContain('last completed Training values');
+    expect(pageHeader?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
+
+    derivedState$.next({
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'failed',
+      trainingSummary: {
+        asOfDayMs: 0,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [],
+      },
+    });
+    fixture.detectChanges();
+    const retryButton = fixture.nativeElement.querySelector('.training-derived-metrics-retry') as HTMLButtonElement;
+    expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
+      .toContain('Derived metrics update failed');
+    retryButton.click();
+    expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
+      { uid: 'user-1' },
+      expect.objectContaining({ trainingSummaryStatus: 'failed' }),
+      { force: true, metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS },
+    );
   });
 });

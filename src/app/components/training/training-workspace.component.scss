@@ -18,6 +18,12 @@
 .training-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .training-page-actions mat-icon { margin-right: 4px; }
 .training-eyebrow, .training-section-heading p { margin: 0 0 4px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); font-weight: 650; letter-spacing: 0; text-transform: uppercase; }
+.training-page-kicker { display: flex; align-items: center; min-height: 17px; max-width: min(70vw, 760px); margin-bottom: 4px; }
+.training-page-kicker .training-eyebrow { margin: 0; }
+.training-derived-metrics-status { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--mat-sys-primary); font-size: var(--training-inter-caption-font-size); line-height: 1.2; }
+.training-derived-metrics-status > mat-icon { flex: 0 0 auto; width: 16px; height: 16px; font-size: 16px; line-height: 16px; }
+.training-derived-metrics-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.training-derived-metrics-status.warning { color: var(--mat-sys-error); }
 h1, h2, h3, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: 32px; line-height: 1.1; }
 h2 { margin-bottom: 0; font-size: 22px; line-height: 1.2; }
