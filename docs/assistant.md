@@ -91,6 +91,16 @@ System instructions require clear missing-data handling, separation of facts fro
 or workout prescription, and no chain-of-thought disclosure. They are defense in depth; authorization, schema
 validation, budgets, and data projections enforce the actual boundary.
 
+The published examples are executable contracts, not disconnected marketing copy. `shared/assistant.prompts.ts` owns
+the prompt text, supported tool workflow, and a narrow routing hint for every example shown on the Assistant page,
+composer, or public home page. An exact case- and whitespace-insensitive match adds that repository-owned workflow to
+the model's system instructions, while the user's message remains untrusted. The runtime fails closed if a workflow
+tool is absent. Tests execute every current example through every declared mocked MCP workflow tool and verify each
+workflow against the production MCP tool registry. The separately retained legacy AI Insights catalog is also normalized
+exhaustively, including catalog entries that are not currently rendered, so rollback examples cannot silently escape
+coverage. Each model generation phase receives fresh dynamic Genkit action objects so their request-local registries do
+not produce duplicate-registration errors during discovery-and-answer workflows.
+
 ## Grounded evidence
 
 The model writes only the answer. Evidence shown in the UI is generated deterministically from validated tool results,

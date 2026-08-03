@@ -4,6 +4,10 @@ import {
   type AssistantEvidence,
   type AssistantMessage,
 } from '../../../shared/assistant.types';
+import {
+  findAssistantPromptExample,
+  type AssistantPublishedPromptExample,
+} from '../../../shared/assistant.prompts';
 import { aiInsightsGenkit } from '../ai/insights/genkit';
 import {
   buildAssistantEvidenceList,
@@ -47,6 +51,7 @@ export interface AssistantModelGenerationInput {
   history: AssistantMessage[];
   mcpInstructions: string;
   tools: AssistantRuntimeTool[];
+  publishedExample: AssistantPublishedPromptExample | null;
 }
 
 export interface AssistantRuntimeResult {
@@ -187,7 +192,7 @@ function assertAnswerDoesNotEchoToolSecrets(
 }
 
 export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generateAnswer'] = async (input) => {
-  const tools = input.tools.map(tool => aiInsightsGenkit.dynamicTool({
+  const createGenkitTools = () => input.tools.map(tool => aiInsightsGenkit.dynamicTool({
     name: tool.name,
     description: tool.description,
     inputJsonSchema: tool.inputJsonSchema,
@@ -196,7 +201,19 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     role: message.role === 'assistant' ? 'model' as const : 'user' as const,
     content: [{ text: message.text }],
   }));
-  const system = `${ASSISTANT_SYSTEM_INSTRUCTIONS} ${input.mcpInstructions} ${ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS}`;
+  const publishedExampleInstructions = input.publishedExample
+    ? [
+      `The current question exactly matches the published ${input.publishedExample.id} example.`,
+      `Follow its supported tool workflow: ${input.publishedExample.toolWorkflow.join(' then ')}.`,
+      input.publishedExample.routingHint,
+    ].join(' ')
+    : '';
+  const system = [
+    ASSISTANT_SYSTEM_INSTRUCTIONS,
+    input.mcpInstructions,
+    ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
+    publishedExampleInstructions,
+  ].filter(Boolean).join(' ');
   const initialResponse = await aiInsightsGenkit.generate({
     system,
     messages,
@@ -205,7 +222,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       timeZone: input.timeZone,
       userMessage: input.prompt,
     }),
-    tools,
+    tools: createGenkitTools(),
     toolChoice: 'required',
     returnToolRequests: true,
     config: {
@@ -240,7 +257,10 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       ...initialResponse.messages.filter(message => message.role !== 'system'),
       { role: 'tool' as const, content: toolResponses },
     ],
-    tools,
+    // Dynamic Genkit actions are attached to a request-local registry. Reusing
+    // the first-call action objects would attach them twice and emit false
+    // "already registered" errors for every grounded Assistant response.
+    tools: createGenkitTools(),
     toolChoice: 'auto',
     maxTurns: ASSISTANT_MAX_MODEL_TURNS_AFTER_INITIAL,
     config: {
@@ -285,6 +305,20 @@ export function createAssistantRuntime(
       let toolCallCount = 0;
       let cumulativeToolOutputBytes = 0;
       try {
+        const publishedExample = findAssistantPromptExample(input.prompt);
+        if (publishedExample) {
+          const availableToolNames = new Set<string>(
+            session.tools.map(tool => tool.name),
+          );
+          const missingToolNames = publishedExample.toolWorkflow.filter(
+            toolName => !availableToolNames.has(toolName),
+          );
+          if (missingToolNames.length > 0) {
+            throw new Error(
+              `Assistant example tools are unavailable: ${missingToolNames.join(', ')}`,
+            );
+          }
+        }
         const tools: AssistantRuntimeTool[] = session.tools.map(tool => ({
           name: tool.name,
           description: `${tool.title}. ${tool.description}`,
@@ -326,6 +360,7 @@ export function createAssistantRuntime(
           history: input.history,
           mcpInstructions: session.instructions,
           tools,
+          publishedExample,
         });
         if (invocations.length === 0) {
           throw new Error('The Assistant response was not grounded in current account data.');

@@ -4,6 +4,10 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
+import {
+  ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
+  ASSISTANT_STARTER_PROMPTS,
+} from '@shared/assistant.prompts';
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import {
   AssistantError,
@@ -106,6 +110,15 @@ describe('AssistantPageComponent', () => {
     expect(fixture.nativeElement.querySelector('mat-chip')?.textContent.trim()).toBe('Beta');
     expect(fixture.nativeElement.querySelector('.assistant-welcome')?.classList)
       .toContain('qs-glass-card-panel');
+    const renderedPromptButtons = Array.from(
+      fixture.nativeElement.querySelectorAll('.starter-prompts button'),
+    ) as HTMLElement[];
+    expect(renderedPromptButtons).toHaveLength(ASSISTANT_STARTER_PROMPTS.length);
+    ASSISTANT_STARTER_PROMPTS.forEach((prompt, index) => {
+      expect(renderedPromptButtons[index].textContent).toContain(prompt);
+    });
+    expect(fixture.nativeElement.querySelector('textarea')?.placeholder)
+      .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
   });
 
   it('sends a starter prompt and renders the grounded response evidence', async () => {

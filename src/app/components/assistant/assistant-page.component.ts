@@ -18,7 +18,10 @@ import {
   type AssistantMessage,
 } from '@shared/assistant.types';
 import type { AiInsightsQuotaStatus } from '@shared/ai-insights.types';
-import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
+import {
+  ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
+  ASSISTANT_STARTER_PROMPTS,
+} from '@shared/assistant.prompts';
 import { MaterialModule } from '../../modules/material.module';
 import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
 import {
@@ -46,6 +49,7 @@ export class AssistantPageComponent implements OnInit {
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
   readonly starterPrompts = ASSISTANT_STARTER_PROMPTS;
+  readonly composerPlaceholder = `For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`;
   readonly promptControl = new FormControl('', {
     nonNullable: true,
     validators: [

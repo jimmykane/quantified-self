@@ -145,7 +145,7 @@
         <mat-label>Ask about your data</mat-label>
         <textarea matInput rows="2" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
           (keydown)="handleComposerKeydown($event)"
-          placeholder="For example: How has my overnight HRV changed this week?"></textarea>
+          [placeholder]="composerPlaceholder"></textarea>
         <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
       </mat-form-field>
       <button mat-flat-button type="submit" [disabled]="loadingConversation() || sending() || quotaBlocked() || promptControl.invalid" aria-label="Send message">

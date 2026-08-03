@@ -38,6 +38,38 @@ function toComparableMetricKey(
 }
 
 describe('normalizeInsightQuery sample prompts', () => {
+  it('normalizes every retained legacy prompt-catalog example', async () => {
+    const normalizeQueryApi = createNormalizeQuery({
+      now: () => new Date('2026-03-22T12:00:00.000Z'),
+    });
+    const promptEntries: readonly AiInsightsPromptDefinition[] = [
+      ...AI_INSIGHTS_CURATED_PROMPT_CATALOG,
+      ...AI_INSIGHTS_PROMPT_CATALOG,
+    ];
+    const failures: string[] = [];
+
+    for (const promptEntry of promptEntries) {
+      const result = await normalizeQueryApi.normalizeInsightQuery({
+        prompt: promptEntry.prompt,
+        clientTimezone: 'UTC',
+      });
+      if (result.status !== 'ok') {
+        failures.push(`${promptEntry.id}: status=${result.status} reason=${result.reasonCode}`);
+        continue;
+      }
+
+      if (promptEntry.metricKey && result.metricKey) {
+        const expectedMetricKey = toComparableMetricKey(promptEntry.metricKey);
+        const actualMetricKey = toComparableMetricKey(result.metricKey);
+        if (expectedMetricKey !== actualMetricKey) {
+          failures.push(`${promptEntry.id}: expected metricKey=${expectedMetricKey} but received ${actualMetricKey}`);
+        }
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
+
   it('normalizes default picker prompts successfully', async () => {
     const normalizeQueryApi = createNormalizeQuery({
       now: () => new Date('2026-03-22T12:00:00.000Z'),

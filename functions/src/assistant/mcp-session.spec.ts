@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
+import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
 import {
   ASSISTANT_MCP_TOOL_NAMES,
   createAssistantMcpSession,
@@ -46,6 +47,15 @@ describe('Assistant MCP session', () => {
 
     try {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES);
+      const productionToolNames = new Set(session.tools.map(tool => tool.name));
+      for (const example of ASSISTANT_PROMPT_EXAMPLES) {
+        expect(
+          example.toolWorkflow.filter(toolName => !productionToolNames.has(
+            toolName as typeof ASSISTANT_MCP_TOOL_NAMES[number],
+          )),
+          `published Assistant example ${example.id} has an unavailable workflow`,
+        ).toEqual([]);
+      }
       expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
       expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_chart_data');
       expect(session.tools.map(tool => tool.name)).not.toContain(

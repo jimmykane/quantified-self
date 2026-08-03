@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
 import { aiInsightsGenkit } from '../ai/insights/genkit';
 import {
   createAssistantRuntime,
@@ -7,7 +8,10 @@ import {
   generateAssistantModelAnswer,
   type AssistantRuntimeTool,
 } from './runtime';
-import type { AssistantMcpSession } from './mcp-session';
+import type {
+  AssistantMcpSession,
+  AssistantMcpToolName,
+} from './mcp-session';
 
 function createSession() {
   const close = vi.fn().mockResolvedValue(undefined);
@@ -63,6 +67,19 @@ describe('Assistant runtime', () => {
     );
   });
 
+  it('keeps published example ids, prompts, and tool workflows valid', () => {
+    const ids = ASSISTANT_PROMPT_EXAMPLES.map(example => example.id);
+    const prompts = ASSISTANT_PROMPT_EXAMPLES.map(example => example.prompt);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(prompts).size).toBe(prompts.length);
+    expect(ASSISTANT_PROMPT_EXAMPLES.every(
+      example => example.prompt.trim() === example.prompt
+        && example.toolWorkflow.length > 0
+        && example.routingHint.trim().length > 0,
+    )).toBe(true);
+  });
+
   it('requires an initial tool request and then permits a final model answer', async () => {
     const tool: AssistantRuntimeTool = {
       name: 'get_daily_report',
@@ -101,13 +118,17 @@ describe('Assistant runtime', () => {
     await expect(generateAssistantModelAnswer({
       currentTime: '2026-08-03T12:00:00.000Z',
       timeZone: 'Europe/Helsinki',
-      prompt: 'How am I today?',
+      prompt: ASSISTANT_PROMPT_EXAMPLES[0].prompt,
       history: [],
       mcpInstructions: 'Use current data.',
       tools: [tool],
+      publishedExample: ASSISTANT_PROMPT_EXAMPLES[0],
     })).resolves.toBe('Your readiness is 72 today.');
 
     expect(generate).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      system: expect.stringContaining(
+        'Follow its supported tool workflow: get_daily_report.',
+      ),
       toolChoice: 'required',
       returnToolRequests: true,
       config: { maxOutputTokens: 1_024 },
@@ -129,6 +150,90 @@ describe('Assistant runtime', () => {
     }));
     const secondRequest = generate.mock.calls[1][0] as { messages: Array<{ role: string }> };
     expect(secondRequest.messages.some(message => message.role === 'system')).toBe(false);
+    const firstTools = (generate.mock.calls[0][0] as { tools: unknown[] }).tools;
+    const secondTools = (generate.mock.calls[1][0] as { tools: unknown[] }).tools;
+    expect(secondTools[0]).not.toBe(firstTools[0]);
+  });
+
+  it.each(ASSISTANT_PROMPT_EXAMPLES)(
+    'grounds the published $id example through every declared workflow tool',
+    async (example) => {
+      const callTool = vi.fn().mockImplementation(async (
+        name: AssistantMcpToolName,
+      ) => ({
+        structuredContent: {
+          exampleId: example.id,
+          source: name,
+        },
+      }));
+      const close = vi.fn().mockResolvedValue(undefined);
+      const session: AssistantMcpSession = {
+        instructions: 'Use current account facts only.',
+        tools: example.toolWorkflow.map(toolName => ({
+          name: toolName as AssistantMcpToolName,
+          title: `Title ${toolName}`,
+          description: `Description ${toolName}`,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              timeZone: { type: 'string' },
+            },
+          },
+        })),
+        callTool,
+        close,
+      };
+      const runtime = createAssistantRuntime({
+        createMcpSession: vi.fn().mockResolvedValue(session),
+        now: () => new Date('2026-08-03T12:00:00.000Z'),
+        generateAnswer: async (input) => {
+          expect(input.publishedExample).toEqual(example);
+          for (const toolName of example.toolWorkflow) {
+            const tool = input.tools.find(candidate => candidate.name === toolName);
+            expect(tool, `missing ${toolName} for ${example.id}`).toBeDefined();
+            if (!tool) {
+              throw new Error(`Missing ${toolName} for ${example.id}.`);
+            }
+            await tool.execute({});
+          }
+          return `Grounded answer for ${example.id}.`;
+        },
+      });
+
+      const result = await runtime.answer({
+        uid: 'user-1',
+        appBaseUrl: 'https://quantified-self.io',
+        prompt: `  ${example.prompt.toUpperCase()}  `,
+        timeZone: 'Europe/Helsinki',
+        history: [],
+      });
+
+      expect(result.toolNames).toEqual(example.toolWorkflow);
+      expect(callTool.mock.calls.map(([toolName]) => toolName))
+        .toEqual(example.toolWorkflow);
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('fails closed when a published example workflow is unavailable', async () => {
+    const { session, close } = createSession();
+    const generateAnswer = vi.fn();
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer,
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: ASSISTANT_PROMPT_EXAMPLES[3].prompt,
+      timeZone: 'UTC',
+      history: [],
+    })).rejects.toThrow(
+      'Assistant example tools are unavailable: list_measurement_types, query_measurements',
+    );
+    expect(generateAnswer).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('grounds the answer in the in-process MCP result and returns deterministic evidence', async () => {
