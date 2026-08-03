@@ -406,6 +406,13 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'calendar',
+    loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
+      .then(module => module.CalendarPageComponent),
+    data: { title: 'Calendar', animation: 'Calendar', preload: true, robots: 'noindex, follow' },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'training',
     loadChildren: () => import('./modules/training.module').then(module => module.TrainingModule),
     data: {

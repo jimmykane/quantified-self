@@ -1,0 +1,264 @@
+:host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.activity-calendar {
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+}
+
+.activity-calendar-months {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+.activity-calendar--year .activity-calendar-months {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.activity-calendar-month {
+  min-width: 0;
+}
+
+.activity-calendar--year .activity-calendar-month {
+  padding: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 6px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.activity-calendar-month h2 {
+  margin: 0 0 10px;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-medium);
+  letter-spacing: 0;
+}
+
+.activity-calendar-weekdays,
+.activity-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.activity-calendar-weekdays {
+  min-height: 28px;
+  align-items: center;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.activity-calendar-weekdays span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  letter-spacing: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-calendar-day {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  min-width: 0;
+  min-height: clamp(70px, 8vw, 106px);
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 7px 4px 5px;
+  overflow: hidden;
+  border: 0;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.activity-calendar-day:nth-child(7n) {
+  border-right: 0;
+}
+
+.activity-calendar-day-button {
+  cursor: pointer;
+}
+
+.activity-calendar-day-button:hover,
+.activity-calendar-day-button:focus-visible {
+  background: var(--mat-sys-surface-container-high);
+}
+
+.activity-calendar-day-button:focus-visible {
+  z-index: 5;
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: -2px;
+}
+
+.activity-calendar-day--outside {
+  color: var(--mat-sys-on-surface-variant);
+  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 62%, transparent);
+}
+
+.activity-calendar-day--blank {
+  background: transparent;
+}
+
+.activity-calendar-day-number {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font: var(--mat-sys-label-large);
+  letter-spacing: 0;
+}
+
+.activity-calendar-day--today .activity-calendar-day-number {
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+}
+
+.activity-calendar-marker-stage {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.activity-calendar-marker {
+  display: block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+
+.activity-calendar-marker-stage--concentric {
+  width: 32px;
+  flex: 0 0 32px;
+}
+
+.activity-calendar-marker-stage--concentric .activity-calendar-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid var(--mat-sys-surface);
+  transform: translate(-50%, -50%);
+}
+
+.activity-calendar-marker-overflow {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0;
+}
+
+.activity-calendar--year .activity-calendar-weekdays {
+  min-height: 22px;
+}
+
+.activity-calendar--year .activity-calendar-weekdays span {
+  font: var(--mat-sys-label-small);
+}
+
+.activity-calendar--year .activity-calendar-day,
+.activity-calendar--compact .activity-calendar-day {
+  min-height: 34px;
+  gap: 0;
+  padding: 2px 1px;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.activity-calendar--year .activity-calendar-day-number,
+.activity-calendar--compact .activity-calendar-day-number {
+  width: 18px;
+  height: 16px;
+  flex-basis: 16px;
+  font: var(--mat-sys-label-small);
+}
+
+.activity-calendar--year .activity-calendar-marker-stage,
+.activity-calendar--compact .activity-calendar-marker-stage {
+  width: 20px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.activity-calendar--year .activity-calendar-marker-overflow,
+.activity-calendar--compact .activity-calendar-marker-overflow {
+  right: -5px;
+  bottom: -2px;
+  font-size: 9px;
+  line-height: 10px;
+}
+
+.activity-calendar--week .activity-calendar-day {
+  min-height: clamp(130px, 20vw, 250px);
+  padding-top: 12px;
+}
+
+@container (max-width: 700px) {
+  .activity-calendar:not(.activity-calendar--year):not(.activity-calendar--compact) .activity-calendar-day {
+    min-height: 76px;
+    gap: 2px;
+    padding: 4px 1px;
+  }
+
+  .activity-calendar:not(.activity-calendar--year):not(.activity-calendar--compact) .activity-calendar-marker-stage {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+  }
+
+  .activity-calendar:not(.activity-calendar--year):not(.activity-calendar--compact) .activity-calendar-marker {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border: 1px solid var(--mat-sys-surface);
+    transform: translate(-50%, -50%);
+  }
+
+  .activity-calendar-weekdays span {
+    font: var(--mat-sys-label-small);
+  }
+}
+
+@media (max-width: 1100px) {
+  .activity-calendar--year .activity-calendar-months {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .activity-calendar--year .activity-calendar-months {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .activity-calendar--year .activity-calendar-months {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-calendar-day-button {
+    scroll-behavior: auto;
+  }
+}

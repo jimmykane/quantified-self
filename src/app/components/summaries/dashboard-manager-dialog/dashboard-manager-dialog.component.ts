@@ -54,6 +54,7 @@ import type {
 } from '../../../models/app-user.interface';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -152,6 +153,7 @@ import {
   type DashboardAutoTileDescriptor,
   type DashboardDefaultCuratedChartType,
 } from '../../../helpers/dashboard-auto-tile.helper';
+import { buildDashboardActivityCalendarTile } from '../../../helpers/dashboard-activity-calendar.helper';
 import {
   getDashboardPowerCurveScopeDefinitions,
   isDashboardPowerCurveTileForScope,
@@ -328,6 +330,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public readonly presetDefinitions = getDashboardManagerPresetDefinitions();
   public readonly curatedChartIconByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'health_and_safety',
+    [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'calendar_month',
     [DASHBOARD_FORM_CHART_TYPE]: 'insights',
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'trending_up',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'bar_chart',
@@ -337,6 +340,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   };
   public readonly curatedChartDescriptionByType: Record<DashboardCuratedChartType, string> = {
     [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left vs elapsed recovery.',
+    [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'Current-month activity duration by sport family.',
     [DASHBOARD_FORM_CHART_TYPE]: 'Fitness/fatigue/form trend from derived training stress.',
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: '7-day projected freshness from current CTL/ATL decay.',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard intensity split (Power or HR fallback).',
@@ -1418,7 +1422,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     existingTile: TileSettingsInterface | null,
   ): TileChartSettingsInterface {
     let tile: TileChartSettingsInterface;
-    if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
+    if (chartType === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE) {
+      tile = buildDashboardActivityCalendarTile(order, size);
+    } else if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
       tile = buildDashboardSleepTrendAutoTile(order, size);
     } else if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
       const existingScope = resolveDashboardPowerCurveTileScope(existingTile);

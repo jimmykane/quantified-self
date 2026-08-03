@@ -19,6 +19,7 @@ import {
 } from '../models/app-user.interface';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
@@ -72,7 +73,10 @@ export const DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE = 'route-preview';
 export const DASHBOARD_AUTO_TILE_CURATED_SOURCE = 'default-curated';
 export const DASHBOARD_AUTO_TILE_KPI_SOURCE = 'default-kpi';
 
-export type DashboardDefaultCuratedChartType = Exclude<DashboardCuratedChartType, typeof DASHBOARD_SLEEP_TREND_CHART_TYPE>;
+export type DashboardDefaultCuratedChartType = Exclude<
+  DashboardCuratedChartType,
+  typeof DASHBOARD_SLEEP_TREND_CHART_TYPE | typeof DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE
+>;
 export type DashboardDefaultCuratedAutoChartType = Exclude<DashboardDefaultCuratedChartType, typeof DASHBOARD_POWER_CURVE_CHART_TYPE>;
 
 export const DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE: Record<DashboardDefaultCuratedChartType, AppDashboardAutoTileId> = {

@@ -22,6 +22,7 @@ import {
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from '../../../helpers/dashboard-form.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -264,6 +265,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component).toBeTruthy();
     expect(component.curatedChartDefinitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
       DASHBOARD_FORM_CHART_TYPE,
       DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
@@ -1002,10 +1004,12 @@ describe('DashboardManagerDialogComponent', () => {
     expect(template).toContain('class="dashboard-manager-error" role="alert"');
   });
 
-  it('starts a new dashboard clean rather than adding default training tiles', () => {
+  it('keeps an explicitly empty saved dashboard empty while defaults include the calendar', () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
 
-    expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([]);
+    expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([
+      expect.objectContaining({ chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE }),
+    ]);
     expect(component.dashboardTiles).toEqual([]);
     expect(component.isAddAllDisabled).toBe(false);
     expect(component.isRemoveAllDisabled).toBe(false);

@@ -152,11 +152,16 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Map** tiles can use activity events or saved route previews');
     expect(gettingStartedSection?.content).toContain('Routes** map tiles show recent saved routes from lightweight route previews');
     expect(gettingStartedSection?.content).toContain('derived tiles stay independent from event table filters and custom/map tile filters');
-    expect(gettingStartedSection?.content).toContain('New dashboards start clean');
+    expect(gettingStartedSection?.content).toContain('New dashboards start with the Activity Calendar tile');
     expect(gettingStartedSection?.content).toContain('Open Training');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
-    expect(gettingStartedSection?.content).toContain('does not automatically add sleep, KPI, curated training, or power-curve tiles');
+    expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
+    expect(gettingStartedSection?.content).toContain('Week, Month, and Year views');
+    expect(gettingStartedSection?.content).toContain('compact tiles, narrow layouts, and Year view place them concentrically');
+    expect(gettingStartedSection?.content).toContain('scale by recorded duration');
+    expect(gettingStartedSection?.content).toContain('calendar owns a visible-period activity query');
+    expect(gettingStartedSection?.content).toContain('independent from the dashboard event table');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
     expect(gettingStartedSection?.content).toContain('**Reset to default**');
     expect(gettingStartedSection?.content).toContain('replaces the current dashboard tiles');

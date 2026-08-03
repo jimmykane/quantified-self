@@ -1,6 +1,7 @@
 import { ChartTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
@@ -8,6 +9,7 @@ import {
 import {
   cloneDashboardTileDefaultSize,
   DASHBOARD_DEFAULT_TILE_SIZE,
+  DASHBOARD_LARGE_TILE_SIZE,
   DASHBOARD_WIDE_TILE_SIZE,
   getDefaultDashboardChartTileSizeForChartType,
   getDefaultDashboardMapTileSizeForSource,
@@ -23,6 +25,11 @@ describe('dashboard-tile-default-size.helper', () => {
     expect(getDefaultDashboardChartTileSizeForChartType(ChartTypes.ColumnsHorizontal)).toEqual(DASHBOARD_DEFAULT_TILE_SIZE);
     expect(getDefaultDashboardChartTileSizeForChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toEqual(DASHBOARD_DEFAULT_TILE_SIZE);
     expect(getDefaultDashboardChartTileSizeForChartType(null)).toEqual(DASHBOARD_DEFAULT_TILE_SIZE);
+  });
+
+  it('defaults the activity calendar to a large two-row tile', () => {
+    expect(getDefaultDashboardChartTileSizeForChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE))
+      .toEqual(DASHBOARD_LARGE_TILE_SIZE);
   });
 
   it('defaults route maps to wide one-row tiles and event maps to compact tiles', () => {

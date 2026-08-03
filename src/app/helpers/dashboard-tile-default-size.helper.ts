@@ -1,6 +1,7 @@
 import type { ChartTypes } from '@sports-alliance/sports-lib';
 import type { AppDashboardMapTileSource } from '../models/app-user.interface';
 import {
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
 } from './dashboard-special-chart-types';
@@ -12,11 +13,15 @@ export interface DashboardTileDefaultSize {
 
 export const DASHBOARD_DEFAULT_TILE_SIZE: DashboardTileDefaultSize = { columns: 1, rows: 1 };
 export const DASHBOARD_WIDE_TILE_SIZE: DashboardTileDefaultSize = { columns: 2, rows: 1 };
+export const DASHBOARD_LARGE_TILE_SIZE: DashboardTileDefaultSize = { columns: 2, rows: 2 };
 
 export function getDefaultDashboardChartTileSizeForChartType(
   chartType: ChartTypes | string | null | undefined,
 ): DashboardTileDefaultSize {
   const normalizedChartType = `${chartType || ''}`;
+  if (normalizedChartType === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE) {
+    return cloneDashboardTileDefaultSize(DASHBOARD_LARGE_TILE_SIZE);
+  }
   if (
     normalizedChartType === DASHBOARD_FORM_CHART_TYPE
     || normalizedChartType === DASHBOARD_POWER_CURVE_CHART_TYPE

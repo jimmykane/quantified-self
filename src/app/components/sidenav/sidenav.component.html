@@ -45,6 +45,11 @@
     <span>Dashboard</span>
   </mat-list-item>
 
+  <mat-list-item routerLinkActive="active" routerLink="/calendar" (click)="closeSideNav()">
+    <mat-icon>calendar_month</mat-icon>
+    <span>Calendar</span>
+  </mat-list-item>
+
   <mat-list-item routerLinkActive="active" routerLink="/training" (click)="closeSideNav()">
     <mat-icon>monitoring</mat-icon>
     <span>Training</span>

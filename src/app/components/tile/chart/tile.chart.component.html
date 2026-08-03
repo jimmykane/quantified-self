@@ -50,6 +50,12 @@
       </button>
     </div>
     }
+    @if (showCalendarRouteAction) {
+    <a mat-icon-button class="calendar-route-action" appHapticTap routerLink="/calendar"
+      matTooltip="Open calendar" aria-label="Open full activity calendar">
+      <mat-icon>open_in_full</mat-icon>
+    </a>
+    }
     @if (showActions) {
     <div class="actions">
     @if (enableDesktopDrag) {
@@ -67,6 +73,9 @@
     </div>
     }
   </div>
+  }
+  @if (chartType === activityCalendarChartType) {
+  <app-activity-calendar-tile [user]="user"></app-activity-calendar-tile>
   }
   @if (chartType === recoveryNowChartType) {
   <app-pie-chart [isLoading]="isLoading || isTileActionSaving" [data]="data" [darkTheme]="darkTheme" [chartDataType]="dataType"

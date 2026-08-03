@@ -82,6 +82,7 @@ import {
 } from './dashboard-tile-event-filters.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -105,6 +106,7 @@ import {
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
   isDashboardAcwrKpiChartType,
+  isDashboardActivityCalendarChartType,
   isDashboardAerobicCapacityKpiChartType,
   isDashboardAerobicDurabilityKpiChartType,
   isDashboardEasyPercentKpiChartType,
@@ -345,6 +347,15 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
     const requestedTimeInterval = resolveDashboardCustomChartRequestedTimeInterval(chartTile);
+    if (isDashboardActivityCalendarChartType(chartTile.chartType)) {
+      viewModels.push({
+        ...chartTile,
+        chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE as unknown as ChartTypes,
+        timeInterval: TimeIntervals.Daily,
+        data: [],
+      });
+      return viewModels;
+    }
     if (isDashboardFormChartType(chartTile.chartType)) {
       const fullFormPoints = derivedFormPoints || [];
       viewModels.push({
