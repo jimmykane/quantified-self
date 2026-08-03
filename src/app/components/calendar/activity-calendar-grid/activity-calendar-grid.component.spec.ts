@@ -55,6 +55,16 @@ describe('ActivityCalendarGridComponent', () => {
 
     expect(styles).not.toContain('surface-container-low');
   });
+
+  it('keeps activity days free of tooltips so touch scrolling remains native', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.html'),
+      'utf8',
+    );
+
+    expect(template).not.toContain('matTooltip');
+    expect(template).not.toContain('[attr.title]');
+  });
 });
 
 async function renderGrid(

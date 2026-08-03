@@ -173,7 +173,7 @@ describe('activity-calendar helper', () => {
     expect(day?.visibleFamilies).toHaveLength(3);
     expect(day?.overflowFamilyCount).toBe(1);
     expect(day?.families.some(family => family.hasUnknownDuration)).toBe(true);
-    expect(day?.tooltip).toContain('Duration unavailable');
+    expect(day?.ariaLabel).toContain('Duration unavailable');
   });
 
   it('builds twelve fixed month calendars for the yearly view', () => {

@@ -25,8 +25,6 @@
             [class.activity-calendar-day--outside]="!day.inPrimaryPeriod"
             [class.activity-calendar-day--today]="day.isToday"
             [attr.aria-label]="day.ariaLabel"
-            [matTooltip]="day.tooltip"
-            matTooltipClass="qs-calendar-tooltip"
             matRipple
             (click)="selectDay(day)">
             <span class="activity-calendar-day-number">{{ day.dayNumber }}</span>
@@ -37,8 +35,7 @@
                 [style.background-color]="family.color"
                 [style.--calendar-marker-diameter]="family.diameterPx + 'px'"
                 [style.--calendar-marker-compact-diameter]="family.compactDiameterPx + 'px'"
-                [style.z-index]="$index + 1"
-                [attr.title]="family.label + ': ' + family.durationLabel"></span>
+                [style.z-index]="$index + 1"></span>
               }
               @if (day.overflowFamilyCount) {
               <span class="activity-calendar-marker-overflow">+{{ day.overflowFamilyCount }}</span>

@@ -50,7 +50,6 @@ export interface ActivityCalendarDayViewModel {
   visibleFamilies: ActivityCalendarFamilySummary[];
   overflowFamilyCount: number;
   events: EventInterface[];
-  tooltip: string;
   ariaLabel: string;
 }
 
@@ -387,7 +386,6 @@ function buildDayViewModel(
   const activitySummary = events.length
     ? `${events.length} ${events.length === 1 ? 'activity' : 'activities'}, ${durationLabel}`
     : 'No activities';
-  const tooltip = familySummary ? `${dateLabel}\n${familySummary}` : `${dateLabel}\nNo activities`;
 
   return {
     date,
@@ -402,7 +400,6 @@ function buildDayViewModel(
     visibleFamilies: families.slice(0, MAX_VISIBLE_FAMILIES),
     overflowFamilyCount: Math.max(0, families.length - MAX_VISIBLE_FAMILIES),
     events,
-    tooltip,
     ariaLabel: `${dateLabel}. ${activitySummary}${familySummary ? `. ${familySummary}` : ''}`,
   };
 }
