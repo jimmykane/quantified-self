@@ -32,6 +32,7 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.detectChanges();
 
     expect(watchEvents).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile-progress')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar--compact')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar-marker-stage--concentric')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Activity calendar');

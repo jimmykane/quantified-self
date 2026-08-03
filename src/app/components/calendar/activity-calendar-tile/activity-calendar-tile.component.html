@@ -6,9 +6,11 @@
     </div>
   </header>
 
-  @if (isLoading()) {
-  <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
-  }
+  <div class="activity-calendar-tile-progress">
+    @if (isLoading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
+    }
+  </div>
 
   @if (hasError()) {
   <div class="activity-calendar-tile-status activity-calendar-tile-status--error" role="alert">

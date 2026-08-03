@@ -47,6 +47,7 @@ describe('CalendarPageComponent', () => {
 
     expect(watchEvents).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('#calendar-page-title')?.textContent).toContain('Calendar');
+    expect(fixture.nativeElement.querySelector('.calendar-progress-slot')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
     expect(fixture.nativeElement.textContent).toContain('August 2026');
   });
@@ -111,6 +112,8 @@ describe('CalendarPageComponent', () => {
 
     expect(fixture.componentInstance.hasEvents()).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('No activities in August 2026');
+    expect(fixture.nativeElement.querySelector('.calendar-status-announcement')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-status:not(.calendar-status--error)')).toBeNull();
   });
 
   it('refreshes the today marker when the window regains focus', () => {

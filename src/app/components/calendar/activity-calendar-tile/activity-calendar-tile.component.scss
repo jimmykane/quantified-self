@@ -36,9 +36,13 @@
   letter-spacing: 0;
 }
 
-mat-progress-bar {
+.activity-calendar-tile-progress {
   height: 3px;
   margin-bottom: 3px;
+}
+
+.activity-calendar-tile-progress mat-progress-bar {
+  margin: 0;
 }
 
 app-activity-calendar-grid {

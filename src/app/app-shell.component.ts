@@ -140,10 +140,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly themeOverlayClassSignal = signal('');
   private themeOverlayApplyTimeout: ReturnType<typeof setTimeout> | null = null;
   private themeOverlayResetTimeout: ReturnType<typeof setTimeout> | null = null;
-  private initialLoaderTimeout: ReturnType<typeof setTimeout> | null = null;
   private initialAuthResolved = false;
-  private readonly initialLoaderStartedAt = Date.now();
-  private readonly minimumLoaderDurationMs = this.resolveMinimumLoaderDuration();
 
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
@@ -291,6 +288,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
         }
         this.currentUser = user;
         this.updateOnboardingState();
+        if (!this.initialAuthResolved) {
+          this.initialAuthResolved = true;
+          this.hideInitialLoader();
+        }
         // Check admin status when user is authenticated
         if (user) {
           try {
@@ -305,10 +306,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
           this.whatsNewService.setAdminMode(false);
         }
 
-        if (!this.initialAuthResolved) {
-          this.initialAuthResolved = true;
-          this.scheduleInitialLoaderHide();
-        }
       });
 
     this.shellNavigationEffectsService.navigationEnd$
@@ -604,35 +601,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
   }
 
-  private scheduleInitialLoaderHide(): void {
-    const elapsed = Date.now() - this.initialLoaderStartedAt;
-    const remaining = Math.max(0, this.minimumLoaderDurationMs - elapsed);
-
-    if (remaining === 0) {
-      this.hideInitialLoader();
-      return;
-    }
-
-    this.initialLoaderTimeout = setTimeout(() => {
-      this.initialLoaderTimeout = null;
-      this.hideInitialLoader();
-    }, remaining);
-  }
-
   private hideInitialLoader(): void {
     if (!this.showInitialLoader) {
       return;
     }
 
     this.showInitialLoader = false;
-  }
-
-  private resolveMinimumLoaderDuration(): number {
-    if (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('jsdom')) {
-      return 0;
-    }
-
-    return 950;
   }
 
   private shouldUsePublicStartupState(): boolean {
@@ -665,10 +639,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearThemeOverlayTimeouts();
-    if (this.initialLoaderTimeout) {
-      clearTimeout(this.initialLoaderTimeout);
-      this.initialLoaderTimeout = null;
-    }
     if (this.shellScrollSubscription) {
       this.shellScrollSubscription.unsubscribe();
       this.shellScrollSubscription = null;

@@ -35,9 +35,11 @@
     </button>
   </nav>
 
-  @if (isLoading()) {
-  <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
-  }
+  <div class="calendar-progress-slot">
+    @if (isLoading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
+    }
+  </div>
 
   @if (hasError()) {
   <section class="calendar-status calendar-status--error" role="alert">
@@ -50,10 +52,7 @@
   </section>
   } @else {
     @if (!isLoading() && !hasEvents()) {
-    <div class="calendar-status" role="status">
-      <mat-icon aria-hidden="true">event_busy</mat-icon>
-      <span>{{ emptyStateLabel() }}</span>
-    </div>
+    <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
     <app-activity-calendar-grid [model]="calendarModel()" (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
