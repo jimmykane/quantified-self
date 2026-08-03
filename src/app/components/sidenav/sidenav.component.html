@@ -74,8 +74,8 @@
 
   <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
     (click)="closeSideNav()">
-    <mat-icon>insights</mat-icon>
-    <span>AI Insights</span>
+    <mat-icon>auto_awesome</mat-icon>
+    <span>Assistant</span>
     <span class="fill-space"></span>
     @if (!hasAiInsightsAccess) {
     <mat-icon class="lock-icon">lock</mat-icon>

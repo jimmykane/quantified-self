@@ -212,14 +212,14 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
-  it('should protect ai insights behind auth, onboarding, and pro access', () => {
+  it('should protect the Assistant behind auth, onboarding, and configured quota access', () => {
     const aiInsightsRoute = routes.find(route => route.path === 'ai-insights');
 
     expect(aiInsightsRoute).toBeTruthy();
     expect(aiInsightsRoute?.canMatch).toEqual([authGuard, onboardingGuard, aiInsightsGuard]);
     expect(aiInsightsRoute?.loadComponent).toBeTypeOf('function');
     expect(aiInsightsRoute?.data).toMatchObject({
-      title: 'AI Insights',
+      title: 'Assistant',
       preload: true,
       animation: 'AIInsights',
     });
@@ -376,9 +376,9 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.aiInsights,
-        title: 'AI Insights for Endurance Training Data',
-        h1: 'AI insights for endurance training data',
-        descriptionText: 'chart-backed AI insights',
+        title: 'AI Training Assistant Grounded in Your Fitness Data',
+        h1: 'A fitness-data Assistant grounded in your own history',
+        descriptionText: 'grounded in read-only Quantified Self tools',
       },
       {
         path: PUBLIC_FEATURE_PATHS.workoutFileComparison,

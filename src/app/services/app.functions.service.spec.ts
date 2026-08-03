@@ -56,6 +56,19 @@ vi.mock('@shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: {
         'aiInsights': { name: 'aiInsights', region: 'europe-west2' },
         'getAiInsightsQuotaStatus': { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
+        'assistantChat': {
+            name: 'assistantChat',
+            region: 'europe-west2',
+            clientTimeoutMs: 190_000,
+        },
+        'getAssistantConversation': {
+            name: 'getAssistantConversation',
+            region: 'europe-west2',
+        },
+        'resetAssistantConversation': {
+            name: 'resetAssistantConversation',
+            region: 'europe-west2',
+        },
         'defaultRegionFunc': {
             name: 'func1',
             region: 'europe-west2',
@@ -114,7 +127,7 @@ describe('AppFunctionsService', () => {
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west2');
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
         expect(getFunctions).toHaveBeenCalledTimes(2);
-        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(4);
+        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(7);
         expect(httpsCallable).toHaveBeenCalledWith(
             expect.anything(),
             'func1',
@@ -131,6 +144,15 @@ describe('AppFunctionsService', () => {
         expect(actualManifest.FUNCTIONS_MANIFEST.mergeEvents.clientTimeoutMs)
             .toBe(actualManifest.MERGE_EVENTS_CLIENT_TIMEOUT_MS);
         expect(actualManifest.MERGE_EVENTS_CLIENT_TIMEOUT_MS).toBeGreaterThan(60 * 60 * 1000);
+    });
+
+    it('should keep the Assistant client deadline beyond its server runtime budget', async () => {
+        const actualManifest = await vi.importActual<typeof import('@shared/functions-manifest')>(
+            '@shared/functions-manifest',
+        );
+
+        expect(actualManifest.FUNCTIONS_MANIFEST.assistantChat.clientTimeoutMs)
+            .toBeGreaterThan(180_000);
     });
 
     it('should call the pre-initialized callable', async () => {
@@ -242,6 +264,13 @@ describe('AppFunctionsService', () => {
         expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'getAiInsightsQuotaStatus');
         expect(httpsCallable).toHaveBeenCalledWith(
             expect.anything(),
+            'assistantChat',
+            { timeout: 190_000 },
+        );
+        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'getAssistantConversation');
+        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'resetAssistantConversation');
+        expect(httpsCallable).toHaveBeenCalledWith(
+            expect.anything(),
             'func1',
             { timeout: 3_660_000 },
         );
@@ -261,7 +290,7 @@ describe('AppFunctionsService', () => {
 
         expect(getFunctions).toHaveBeenCalledTimes(2);
         expect(connectFunctionsEmulator).not.toHaveBeenCalled();
-        expect(httpsCallable).toHaveBeenCalledTimes(4);
+        expect(httpsCallable).toHaveBeenCalledTimes(7);
         expect(localProdFunctionsService).toBeTruthy();
     });
 });

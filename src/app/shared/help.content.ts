@@ -412,93 +412,76 @@ export const HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'ai-insights',
-    icon: 'insights',
-    title: 'AI Insights',
-    summary: 'How prompt execution, result types, quotas, and restore behavior work in the AI Insights page.',
+    icon: 'auto_awesome',
+    title: 'Assistant',
+    summary: 'How grounded chat, evidence, quotas, short retention, and external MCP differ.',
     content: `## Access and quota
 
-- AI Insights is available for **Free**, **Basic**, and **Pro** accounts.
-- Prompts are currently **English only**.
-- The public [AI Insights for Endurance Training Data](/features/ai-insights) page explains the search-facing version of this feature.
-- For AI Insights, we do **not** share your raw activities, routes, or uploaded files with AI providers.
-- We only send the minimum derived stats needed to generate answers.
-- **Why do I get the same answer for the same prompt?**
-  - AI Insights is mostly deterministic for the same prompt and same data scope.
-  - Answers change when the underlying stats change, like new activities, a different date range, or a changed prompt.
+- The Assistant is available for **Free**, **Basic**, and **Pro** accounts.
+- It is the zero-setup choice inside Quantified Self. You do not need to install an MCP client.
+- The public [Quantified Self Assistant](/features/ai-insights) page explains the feature before sign-in.
 - Request limits:
   - Free: up to **${AI_INSIGHTS_REQUEST_LIMITS.free}** requests per calendar month
   - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests per billing period
   - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests per billing period
-- The prompt card always shows your live remaining requests and reset timing.
+- The composer shows your live remaining allowance.
+- A request consumes one allowance once grounded-answer processing begins. Loading or resetting the saved conversation does not.
 
-## Prompt flow and execution
+## How chat works
 
-- Type a prompt and press **Ask AI** to execute.
-- Hero rotating examples at the top now **fill the input only**. They do not run automatically.
-- **Browse prompts** opens the prompt picker dialog. Selecting a prompt there runs it immediately.
-- If your prompt does not include a date range, AI Insights defaults to **current year to date**.
-- Mention an optional location directly in your prompt, such as a city, region, country, or latitude/longitude coordinates.
-- You can also mention a radius in the prompt, for example \`within 20 km of Athens\`.
-- AI Insights tries to infer a location from the prompt when it can do so deterministically.
-- The backend geocodes locations with **Mapbox** and, if needed, makes one AI fallback attempt to repair an unresolved location string.
-- Country and region requests use Mapbox's returned **bounding box** as a best-effort scope, not an exact border polygon.
-- City, locality, and place requests use the resolved center point plus your chosen **radius**.
-- Event-backed AI Insights results can show a **map** below the result when surfaced events have recorded start positions.
-- When a location is resolved, the map also draws the resolved search scope: a **radius** circle for point-based places or a **bbox** region for country/region matches, and camera framing includes both scope and surfaced event starts.
-- Add **all time** to query your full history.
-- For power-curve prompts, **excluding cycling** removes the whole cycling family (Cycling, Indoor Cycling, Virtual Cycling, and E-Biking).
+- Ask a question and press **Send**. Press **Shift + Enter** for a new line.
+- Starter prompts fill the composer; they do not send automatically.
+- Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
+- Every current answer must use at least one read-only Quantified Self result. Expand **grounded sources** below an answer to inspect compact facts and app links produced from actual tool results.
+- Use **New chat** to clear the stored messages and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
-## Supported result modes
+## What the Assistant can read
 
-- **Aggregate**: narrative + summary cards + chart, with optional ranked event links.
-- **Compare delta explanation**: compare-mode aggregate results include deterministic period deltas with likely contributor series, and deterministic event evidence remains available in the expandable evidence panel.
-- **Event lookup**: best matching event plus top-ranked matching events.
-- **Latest event**: most recent matching event in scope (single primary event card).
-- **Multi-metric aggregate**: combined chart for multiple metrics with merged summary cards.
-- **Digest narrative**: ask for a weekly, monthly, or yearly digest to get deterministic period-by-period summaries with explicit no-data periods.
-- **Advisory**: metric-generic deterministic advisory payloads with structured fields (\`semanticKind\`, \`estimate\`, \`interval\`, \`observed\`, \`confidence\`, \`method\`, and \`evidence\`).
-  - For max-heart-rate advisory, \`semanticKind\` can be **current ceiling** (current achievable max based on observed tail) or **potential ceiling** (deterministic potential estimate constrained by observed evidence quality).
-  - Current-ceiling max-heart-rate output anchors the point estimate to the strongest observed max-heart-rate sample in scope after deterministic quality filtering.
-  - Potential-ceiling max-heart-rate output can estimate above observed max when deterministic headroom is justified by tail/coverage/recency signals.
-  - Max-heart-rate advisory requires enough effort-quality signal (at least 8 valid sessions across at least 3 training weeks, plus tail-quality checks near observed max).
-  - Low-intensity-only scopes (for example hiking, walking, or yoga), sparse samples, stale recency, or weak tail signal return **insufficient data** with an explicit reason code and a suggested executable fallback query.
-  - Confidence includes both a deterministic tier and score, and method metadata includes an explicit deterministic method id/version.
-- **Anomaly callouts**: deterministic spike/drop/activity-mix shift callouts for aggregate and date-grouped multi-metric results.
-- **Confidence & evidence chips**: compact chips under supported AI result narratives and callouts that show confidence tier and linked deterministic evidence.
-- **Interpreted badge**: shown when query synthesis rewrites your prompt and the synthesized prompt passes score-gated deterministic validation.
-- **Empty**: the request shape is valid but no matching data was found in scope.
-- **Unsupported**: the request could not be mapped confidently; suggested prompts are returned.
+- **Today and recovery:** daily report, current readiness, sleep duration and stages, aggregate/overnight HRV, sleeping heart rate, SpO2, respiration, and bounded sleep trends.
+- **Training:** ready Training metric catalog, current values, Form, ramp, load, volume, intensity, current-versus-usual context, and missing or rebuilding states.
+- **Measurements:** first-class measurement discovery and bounded history, including body weight when recorded.
+- **Activities:** activity types, recent or bounded activity lists, activity metrics, rankings, laps, MTB jumps with coordinates redacted, and swim lengths.
+- **Activity metrics:** one or several bounded aggregate metric queries through the canonical MCP metric catalog.
 
-## Supported metric highlights
+## Privacy boundaries
 
-- Power profiling includes **FTP**, **Critical Power**, and **Power-to-Weight (W/kg)** prompts.
-- Running dynamics includes **Ground Contact Time**, **Vertical Oscillation**, **Vertical Ratio**, and **Leg Stiffness** prompts.
-- Zone prompts support deterministic aggregate trends such as **time in Heart Rate Zone 2**, **Power Zone 2**, and **Speed Zone 2** over time.
+- The built-in Assistant has no access to exact activity locations, route summaries, route geometry, waypoints, raw chart streams, original files, write tools, or dashboard settings.
+- Gemini receives the bounded, validated read-only tool results selected for the current question. Raw FIT, TCX, GPX, JSON, and SML files are not sent.
+- Evidence rendering removes opaque references, cursors, provider, device, source, owner, token, and identifier fields again before display.
+- The Assistant is fitness information, not medical advice. Verify important health and Training decisions.
 
-## Confidence and anomaly guardrails
+## Retention and control
 
-- Confidence tiers are deterministic and based on coverage, sample size, and signal strength.
-- Evidence chips only render when deterministic references exist (for example buckets, series, or event IDs).
-- Low-signal ranges suppress anomaly callouts so weak/noisy ranges do not produce alerts.
+- Quantified Self stores one active conversation per user, with at most the latest six completed turns.
+- The active conversation becomes unavailable after **seven days**. Firestore TTL then deletes its expired record asynchronously; account deletion removes it directly.
+- Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
+- **New chat** immediately replaces the stored conversation and removes its prior message content.
 
-## Saved latest result behavior
+## Built-in Assistant or external MCP?
 
-- The latest completed AI result is restored automatically when you open the page.
-- Restored results are marked with a **Restored** chip and saved-date metadata.
-- Invalid latest snapshots are automatically cleared and ignored.
-- **Refresh with latest data & dates** reruns the current result prompt with fresh data.
+- Use the **Assistant** for a zero-setup, app-funded conversation with the conservative non-location tool set above.
+- Use [Connections -> MCP](/services?serviceName=mcp) when you prefer ChatGPT or another compatible client, want separately approved route or location scopes, or want usage billed by that external client.
+- External MCP calls do not consume the in-app Assistant allowance. External clients have their own privacy and retention practices.
 
 ## Troubleshooting quick checks
 
 - **App verification failed**: refresh and retry.
-- **Invalid request**: include one metric, an activity/sport, and a date scope.
-- **Location could not be resolved**: try a clearer city, region, country, or coordinate pair.
-- **Permission denied**: ensure your account has Basic or Pro access.
-- **Quota reached**: wait for reset or upgrade.
-- If you need a metric that is not currently supported, contact support.`,
+- **Conversation changed**: another tab or New chat replaced the active conversation; reload and retry.
+- **Another response is in progress**: wait for the current turn to finish. A stale turn lock expires automatically.
+- **Quota reached**: wait for reset, upgrade, or use your own compatible AI client through MCP.
+- **No data found**: ask which measurement, sleep vital, Training metric, activity type, or activity metric is available before assuming it is unsupported.
+- For location or saved-route questions, use an external MCP client and explicitly approve the related permission.`,
     links: [
-      { label: 'AI Insights', icon: 'insights', kind: 'route', target: '/ai-insights' },
-      { label: 'AI Insights Overview', icon: 'query_stats', kind: 'route', target: '/features/ai-insights' },
+      { label: 'Assistant', icon: 'auto_awesome', kind: 'route', target: '/ai-insights' },
+      { label: 'Assistant Overview', icon: 'travel_explore', kind: 'route', target: '/features/ai-insights' },
+      {
+        label: 'MCP Connections',
+        icon: 'devices',
+        kind: 'route',
+        target: '/services',
+        queryParams: { serviceName: 'mcp' },
+      },
+      { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
@@ -846,8 +829,8 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 - Public links do not expire automatically and are marked noindex, but anyone with the URL can open them.
 - Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
-- For AI Insights, we do **not** share your raw activity data with AI providers.
-- Only the minimum derived stats required to answer your prompt are sent.
+- The built-in Assistant sends Gemini your message, bounded recent conversation context, and only the validated read-only Quantified Self results selected for that question.
+- The Assistant cannot access or send raw activity files, saved routes, exact locations, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable after seven days, and is then deleted asynchronously by Firestore TTL.
 - The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 - The dedicated [Privacy Policy](/privacy) and [Terms of Service](/terms) pages are public and readable without signing in.
 

@@ -125,6 +125,12 @@ service cloud.firestore {
          allow write: if false;
       }
 
+      // Assistant conversations contain private prompts and grounded replies.
+      // They are available only through authenticated App Check callables.
+      match /assistantConversations/{conversationID} {
+         allow read, write: if false;
+      }
+
       // Event merge operations contain server-owned idempotency and lease state.
       match /eventMergeOperations/{operationID} {
          allow read, write: if false;

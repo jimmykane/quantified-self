@@ -272,11 +272,11 @@ function getRouteLimitLabel(role: PublicPlanRole): string {
 function getAiInsightsLimitLabel(role: PublicPlanRole): string {
     const limit = getAiInsightsRequestLimitForRole(role);
     if (limit <= 0) {
-        return 'AI Insights not included';
+        return 'Assistant not included';
     }
 
     const period = role === 'free' ? 'calendar month' : 'billing period';
-    return `AI Insights up to ${limit} requests per ${period}`;
+    return `Assistant up to ${limit} requests per ${period}`;
 }
 
 function getRecurringCadence(price: StripePrice): RecurringCadence | null {

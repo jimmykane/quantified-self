@@ -457,15 +457,15 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             const limit = getAiInsightsRequestLimitForRole(resolvedRole);
             if (limit <= 0) {
-                return 'AI Insights not included';
+                return 'Assistant not included';
             }
             if (resolvedRole === 'free') {
-                return `AI Insights up to ${limit} requests per calendar month`;
+                return `Assistant up to ${limit} requests per calendar month`;
             }
-            return `AI Insights up to ${limit} requests per billing period`;
+            return `Assistant up to ${limit} requests per billing period`;
         } catch (error) {
             this.logger.error(`Unsupported pricing role '${resolvedRole}' in AI insights pricing UI`, error);
-            return 'AI Insights limits unavailable';
+            return 'Assistant limits unavailable';
         }
     }
 

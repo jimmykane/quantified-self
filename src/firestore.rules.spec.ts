@@ -613,6 +613,33 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Assistant conversations (users/{uid}/assistantConversations/active)', () => {
+            const assistantPath = `users/${userId}/assistantConversations/active`;
+
+            beforeEach(async () => {
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(assistantPath).set({
+                        version: 1,
+                        conversationId: 'conversation-1',
+                        messages: [],
+                        expireAt: new Date('2026-08-10T00:00:00.000Z'),
+                    });
+                });
+            });
+
+            it('should deny direct owner reads, writes, and deletes', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.doc(assistantPath).get());
+                await assertFails(db.doc(assistantPath).set({ messages: [] }));
+                await assertFails(db.doc(assistantPath).delete());
+            });
+
+            it('should deny other users from reading the conversation', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await assertFails(db.doc(assistantPath).get());
+            });
+        });
+
         describe('Event MetaData (users/{uid}/events/{eventId}/metaData)', () => {
             it('should deny owner writing processing metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();

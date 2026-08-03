@@ -196,7 +196,7 @@ const topLevelRoutes: Routes = [
         },
         "about": [
           "Training analysis",
-          "AI Insights",
+          "Assistant",
           "Account setup",
           "Manual uploads",
           "Membership and billing",
@@ -500,13 +500,13 @@ const topLevelRoutes: Routes = [
   },
   {
     path: 'ai-insights',
-    loadComponent: () => import('./components/ai-insights/ai-insights-page.component').then(m => m.AiInsightsPageComponent),
+    loadComponent: () => import('./components/assistant/assistant-page.component').then(m => m.AssistantPageComponent),
     canMatch: [authGuard, onboardingGuard, aiInsightsGuard],
     data: {
-      title: 'AI Insights',
+      title: 'Assistant',
       preload: true,
       animation: 'AIInsights',
-      description: 'Ask focused questions about your training data and get one AI summary with one chart built from your persisted event statistics.',
+      description: 'Chat with the built-in Assistant grounded in read-only Quantified Self tools for sleep, readiness, Training, measurements, and activities.',
     }
   },
   {

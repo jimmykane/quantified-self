@@ -81,9 +81,9 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     label: 'Garmin',
     serviceName: ServiceNames.GarminAPI,
     h1: 'Garmin Integration and Private Training Dashboard',
-    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities in a private training dashboard, send saved or selected GPX/FIT routes to Garmin Connect, sync new Garmin activities to Suunto, and bring Garmin, Suunto, and COROS workouts into one view with AI insights.',
+    heroCopy: 'Connect Garmin to Quantified Self to keep Garmin activities in a private training dashboard, send saved or selected GPX/FIT routes to Garmin Connect, sync new Garmin activities to Suunto, and bring Garmin, Suunto, and COROS workouts into one view with grounded Assistant answers.',
     providerSources: ALL_PROVIDER_SOURCES,
-    summary: 'Use Quantified Self as a private dashboard for Garmin data, with Garmin history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, AI insights, and multi-service workout history.',
+    summary: 'Use Quantified Self as a private dashboard for Garmin data, with Garmin history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, grounded Assistant answers, and multi-service workout history.',
     highlights: [
       'Private Garmin training dashboard',
       'Send saved routes to Garmin Connect',
@@ -147,8 +147,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'insights',
-        title: 'AI insights for Garmin data',
-        copy: 'Ask focused questions about Garmin activity statistics and get chart-backed answers grounded in your stored training history.',
+        title: 'Grounded Assistant for Garmin data',
+        copy: 'Ask focused questions about Garmin activity statistics and get conversational answers with compact evidence grounded in your stored training history.',
       },
     ],
     dashboardEyebrow: 'Training Dashboard',
@@ -174,7 +174,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     faqItems: [
       {
         question: 'What makes Quantified Self a private training dashboard for Garmin data?',
-        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard with original files, maps, load metrics, AI insights, exports, and optional Suunto or COROS workouts.',
+        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard with original files, maps, load metrics, grounded Assistant answers, exports, and optional Suunto or COROS workouts.',
       },
       {
         question: 'Can Garmin workouts sync to Suunto automatically?',
@@ -284,7 +284,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     ],
     dashboardEyebrow: 'Training Dashboard',
     dashboardTitle: 'Centralize Garmin, Suunto, and COROS workout data',
-    dashboardCopy: 'The Suunto integration works with the rest of Quantified Self, so Garmin files, Suunto history, Suunto route imports, COROS workouts, FIT uploads, GPX route sends, metrics, AI insights, and export workflows stay connected in one private dashboard.',
+    dashboardCopy: 'The Suunto integration works with the rest of Quantified Self, so Garmin files, Suunto history, Suunto route imports, COROS workouts, FIT uploads, GPX route sends, metrics, grounded Assistant answers, and export workflows stay connected in one private dashboard.',
     dashboardPoints: [
       {
         icon: 'dashboard_customize',
@@ -293,8 +293,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'insights',
-        title: 'AI insights for endurance training data',
-        copy: 'Ask focused questions about your stored activity statistics and get chart-backed answers for trends, latest activities, and training summaries.',
+        title: 'Grounded Assistant for endurance training data',
+        copy: 'Ask focused questions about your stored activity statistics and get conversational answers with compact evidence for trends, latest activities, and Training summaries.',
       },
       {
         icon: 'security',
@@ -305,7 +305,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     faqItems: [
       {
         question: 'Is Quantified Self a private training dashboard for Garmin data?',
-        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard that keeps original files, maps, load metrics, AI insights, and connected Suunto or COROS workflows under their own account.',
+        answer: 'Quantified Self is built for athletes who want a private Garmin training dashboard that keeps original files, maps, load metrics, grounded Assistant answers, and connected Suunto or COROS workflows under their own account.',
       },
       {
         question: 'Can I centralize Garmin, Suunto, and COROS workout data?',
@@ -394,8 +394,8 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         icon: 'insights',
-        title: 'AI insights for endurance training data',
-        copy: 'Ask questions across COROS, Garmin, and Suunto statistics and get chart-backed answers for training summaries and trends.',
+        title: 'Grounded Assistant for endurance training data',
+        copy: 'Ask questions across COROS, Garmin, and Suunto statistics and get conversational answers with compact evidence for Training summaries and trends.',
       },
       {
         icon: 'security',
@@ -410,7 +410,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
       },
       {
         question: 'Can I centralize COROS with Garmin and Suunto?',
-        answer: 'Yes. Quantified Self can centralize Garmin, Suunto, and COROS workout data so COROS activities, Garmin files, Suunto history, routes, and AI insights stay in one dashboard.',
+        answer: 'Yes. Quantified Self can centralize Garmin, Suunto, and COROS workout data so COROS activities, Garmin files, Suunto history, routes, and grounded Assistant answers stay in one dashboard.',
       },
       {
         question: 'How much COROS history can I import?',
@@ -649,7 +649,7 @@ function providerWebPageJsonLd(page: ProviderIntegrationPage, metadataDescriptio
     about: [
       ...page.highlights,
       page.dashboardTitle,
-      'AI insights for endurance training data',
+      'Grounded Assistant for endurance training data',
       'Private training dashboard',
     ],
     mainEntity: [
@@ -704,10 +704,10 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     title: 'Private Garmin Training Dashboard',
     preload: true,
     animation: 'Integrations',
-    description: 'Use Quantified Self as a private Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, and AI insights.',
+    description: 'Use Quantified Self as a private Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, and grounded Assistant answers.',
     jsonLd: providerWebPageJsonLd(
       PROVIDER_INTEGRATION_PAGES.garmin,
-      'Use Quantified Self as a private Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, and AI insights.'
+      'Use Quantified Self as a private Garmin training dashboard with history imports, direct and saved GPX/FIT routes sent to Garmin Connect, Garmin to Suunto activity sync, and grounded Assistant answers.'
     ),
   },
   suunto: {

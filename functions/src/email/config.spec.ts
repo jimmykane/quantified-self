@@ -8,9 +8,9 @@ import {
 
 describe('email config', () => {
     it.each([
-        ['free', 'Up to 100 activities', 'Up to 10 saved routes', '20 AI Insights requests per calendar month', ''],
-        ['basic', 'Up to 1,000 activities', 'Up to 100 saved routes', '50 AI Insights requests per billing period', ''],
-        ['pro', 'Unlimited activities', 'Unlimited saved routes', '100 AI Insights requests per billing period', 'Device sync with Garmin, Suunto, and COROS'],
+        ['free', 'Up to 100 activities', 'Up to 10 saved routes', '20 Assistant requests per calendar month', ''],
+        ['basic', 'Up to 1,000 activities', 'Up to 100 saved routes', '50 Assistant requests per billing period', ''],
+        ['pro', 'Unlimited activities', 'Unlimited saved routes', '100 Assistant requests per billing period', 'Device sync with Garmin, Suunto, and COROS'],
     ])('builds centralized plan descriptions for %s', (role, activities, routes, aiInsights, deviceSync) => {
         expect(buildEmailPlanDetails(role)).toEqual({
             plan_details_available: true,

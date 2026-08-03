@@ -35,7 +35,8 @@ for collection in \
     mcpOAuthAccessTokens \
     mcpOAuthRefreshTokens \
     mcpOAuthRateLimits \
-    mcpConnections
+    mcpConnections \
+    assistantConversations
 do
     if ! grep -q "Processing collection: $collection" "$OutputFile"; then
         echo "Expected $collection to be included in TTL setup output."

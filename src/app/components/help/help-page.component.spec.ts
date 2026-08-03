@@ -117,7 +117,7 @@ describe('HelpPageComponent', () => {
     expect(fixture.debugElement.query(By.css('.topic-grid'))).toBeTruthy();
   });
 
-  it('renders deterministic AI FAQ guidance in the AI Insights article', async () => {
+  it('renders grounded chat and privacy guidance in the Assistant article', async () => {
     component.openSection('ai-insights');
     for (let attempt = 0; attempt < 20; attempt += 1) {
       fixture.detectChanges();
@@ -128,10 +128,11 @@ describe('HelpPageComponent', () => {
     }
 
     const sectionCopy = fixture.debugElement.query(By.css('#help-section-content .section-copy'))?.nativeElement as HTMLElement | undefined;
-    expect(sectionCopy?.innerHTML).toContain('Why do I get the same answer for the same prompt?');
-    expect(sectionCopy?.innerHTML).toContain('mostly deterministic');
-    expect(sectionCopy?.innerHTML).toContain('new activities');
-    expect(sectionCopy?.innerHTML).toContain('deterministic period deltas with likely contributor series');
+    expect(sectionCopy?.innerHTML).toContain('Every current answer must use at least one read-only Quantified Self result');
+    expect(sectionCopy?.innerHTML).toContain('latest six completed turns');
+    expect(sectionCopy?.innerHTML).toContain('no access to exact activity locations');
+    expect(sectionCopy?.innerHTML).toContain('becomes unavailable after <strong>seven days</strong>');
+    expect(sectionCopy?.innerHTML).toContain('deletes its expired record asynchronously');
   });
 
   it('renders internal links without target blank and external links with target blank', () => {

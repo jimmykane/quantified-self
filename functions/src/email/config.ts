@@ -70,7 +70,7 @@ export function buildEmailPlanDetails(role: string): EmailPlanDetails {
         plan_details_available: true,
         activity_description: formatLimit(getUsageLimitForRole(role), 'activities'),
         route_description: formatLimit(getRouteUsageLimitForRole(role), 'saved routes'),
-        ai_insights_description: `${NUMBER_FORMATTER.format(aiInsightsLimit)} AI Insights requests per ${aiInsightsPeriod}`,
+        ai_insights_description: `${NUMBER_FORMATTER.format(aiInsightsLimit)} Assistant requests per ${aiInsightsPeriod}`,
         device_sync_description: isDeviceSyncEnabledForRole(role)
             ? 'Device sync with Garmin, Suunto, and COROS'
             : '',

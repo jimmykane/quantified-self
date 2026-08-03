@@ -293,10 +293,10 @@ describe('PricingComponent', () => {
         expect(component.getRouteLimitLabel('pro')).toBe('Unlimited saved routes');
     });
 
-    it('should derive AI insights limit labels by plan role', () => {
-        expect(component.getAiInsightsLimitLabel('free')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.free} requests per calendar month`);
-        expect(component.getAiInsightsLimitLabel('basic')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.basic} requests per billing period`);
-        expect(component.getAiInsightsLimitLabel('pro')).toBe(`AI Insights up to ${AI_INSIGHTS_REQUEST_LIMITS.pro} requests per billing period`);
+    it('should derive Assistant limit labels by plan role', () => {
+        expect(component.getAiInsightsLimitLabel('free')).toBe(`Assistant up to ${AI_INSIGHTS_REQUEST_LIMITS.free} requests per calendar month`);
+        expect(component.getAiInsightsLimitLabel('basic')).toBe(`Assistant up to ${AI_INSIGHTS_REQUEST_LIMITS.basic} requests per billing period`);
+        expect(component.getAiInsightsLimitLabel('pro')).toBe(`Assistant up to ${AI_INSIGHTS_REQUEST_LIMITS.pro} requests per billing period`);
     });
 
     it('should show cross-device sync in the Pro plan feature list without service names', async () => {

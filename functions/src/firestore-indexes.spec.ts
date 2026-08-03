@@ -193,6 +193,32 @@ describe('firestore indexes', () => {
         }
     });
 
+    it('keeps private Assistant conversations short-lived and unindexed', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'assistantConversations',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+        for (const fieldPath of [
+            'version',
+            'conversationId',
+            'messages',
+            'pendingTurn',
+            'createdAt',
+            'updatedAt',
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup: 'assistantConversations',
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
+    });
+
     it('keeps event merge operation TTL deployable without an automatic index', () => {
         const config = loadFirestoreIndexes();
 

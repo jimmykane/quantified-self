@@ -56,12 +56,12 @@ export interface ConnectedServicesPolicySection {
 export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection = {
     id: POLICIES_CONNECTED_SERVICES_FRAGMENT,
     title: 'Connected Services, AI & Third-Party Processing',
-    summary: 'Disclosures for connected fitness services, user-authorized MCP clients, AI Insights, infrastructure, payments, and analytics.',
+    summary: 'Disclosures for connected fitness services, user-authorized MCP clients, the built-in Assistant, infrastructure, payments, and analytics.',
     content: [
         '<strong>What this section covers:</strong> This page explains what connected-service data Quantified Self collects, how it is used inside the product, what may be stored for exports, reprocessing, and sync tools, and which third parties process that data.',
         '<strong>Storage location:</strong> Imported provider data, saved route metadata, source-file references, and related processing metadata are stored in Quantified Self infrastructure on Google Cloud in the EU region.',
         '<strong>User-initiated sharing:</strong> When you use features such as history import, FIT/GPX uploads, sending routes, or activity sync to Suunto or Wahoo, Quantified Self must send the activity, route, or related data needed by the destination provider.',
-        '<strong>AI scope:</strong> Connected-service data is not forwarded wholesale to AI providers. AI Insights uses only the minimum derived stats needed to answer the prompt you submit, and does not send your raw activities, raw routes, or uploaded source files to the AI provider.',
+        '<strong>AI scope:</strong> Connected-service data is not forwarded wholesale to AI providers. The built-in Assistant sends Gemini the message you submit, bounded recent conversation context, and bounded validated non-location results selected through Quantified Self\'s read-only MCP tools. Saved routes, exact locations, write capabilities, dashboard settings, and original uploaded source files are unavailable to the Assistant.',
     ],
     navLinks: [
         { id: POLICIES_CONNECTED_SERVICES_FRAGMENT, label: 'Overview', icon: 'hub' },
@@ -152,8 +152,8 @@ export const CONNECTED_SERVICES_POLICY_SECTION: ConnectedServicesPolicySection =
                 '<strong>Google Cloud:</strong> Quantified Self stores application data, connected-service metadata, and processing state on Google Cloud in the EU region.',
                 '<strong>Stripe:</strong> Stripe processes subscription and billing data needed to charge, renew, and manage your plan.',
                 '<strong>Google Analytics:</strong> If you consent to analytics cookies, Google Analytics receives anonymized usage analytics used to improve the service. Analytics is optional and can be withdrawn in Settings.',
-                '<strong>Mapbox:</strong> When you use location-based AI Insights queries or authorize an MCP client that searches by place name, Mapbox is used to resolve the supplied place text and geographic scope. Direct-coordinate MCP searches do not call Mapbox.',
-                '<strong>Google GenAI / Gemini:</strong> AI Insights currently uses Google\'s Gemini models through Google GenAI. Quantified Self sends only the minimum derived statistics needed to answer the prompt you explicitly submit. Raw activities, raw routes, uploaded FIT/GPX/TCX/JSON/SML files, and saved route source files are not sent to the AI provider.',
+                '<strong>Mapbox:</strong> When an authorized MCP client searches by place name, Mapbox is used to resolve the supplied place text and geographic scope. Direct-coordinate MCP searches do not call Mapbox. The built-in Assistant has no location or saved-route tools and does not use Mapbox.',
+                '<strong>Google GenAI / Gemini:</strong> The built-in Assistant uses Google\'s Gemini models through Google GenAI. Quantified Self sends the message you submit, at most the latest six completed conversation turns, and bounded validated results from the non-location read-only tools chosen for the question. Original FIT/GPX/TCX/JSON/SML files, saved routes, exact locations, write capabilities, and dashboard settings are unavailable to the Assistant. One server-owned active conversation becomes unavailable seven days after its latest turn or reset and is then deleted asynchronously by Firestore TTL. New chat clears it immediately; account deletion removes it directly.',
                 '<strong>No hidden provider forwarding:</strong> Connected Garmin, Suunto, COROS, and Wahoo data is only sent to destination providers when you explicitly use the related import, upload, delivery, or sync feature. Wahoo delivery is limited to the explicit FIT activity, GPX/FIT course/route, opt-in Suunto saved-route, and Garmin/COROS/Suunto-to-Wahoo activity workflows described above.',
             ],
         },
@@ -170,9 +170,9 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Encryption:</strong> Your data are stored and held encrypted by Google (Google Cloud).',
             '<strong>Control:</strong> Profile and activity visibility is managed by platform policy and is not configurable in the app UI.',
             '<strong>Default Privacy:</strong> Visibility defaults to private and is only seen by your account unless platform policy changes.',
-            '<strong>No Data Sales:</strong> We do not sell your data. Data is sent outside Quantified Self only when needed for a feature you explicitly use or authorize, such as connected-provider delivery, an approved MCP client, or the minimum derived AI Insights context described below.',
+            '<strong>No Data Sales:</strong> We do not sell your data. Data is sent outside Quantified Self only when needed for a feature you explicitly use or authorize, such as connected-provider delivery, an approved MCP client, or the bounded Assistant context described below.',
             '<strong>Legal Basis:</strong> We process your data based on: (a) your consent for optional features like analytics, (b) contractual necessity to provide the service you subscribed to, and (c) our legitimate interest in maintaining service security.',
-            '<strong>Third-Party Processors and Recipients:</strong> Your data may be processed by Google Cloud (hosting and storage in the EU region), Stripe (payments), Google Analytics (only with consent), Mapbox (place resolution for location-based AI queries and MCP place-name searches), Google GenAI / Gemini (AI Insights using minimum derived stats only), connected fitness services you explicitly use, and MCP clients you explicitly authorize. See <a href="#connected-services-data">Connected Services, AI &amp; Third-Party Processing</a> below for details.'
+            '<strong>Third-Party Processors and Recipients:</strong> Your data may be processed by Google Cloud (hosting and storage in the EU region), Stripe (payments), Google Analytics (only with consent), Mapbox (place resolution for MCP place-name searches), Google GenAI / Gemini (the built-in Assistant using bounded prompts, recent conversation context, and validated non-location read-only results), connected fitness services you explicitly use, and MCP clients you explicitly authorize. See <a href="#connected-services-data">Connected Services, AI &amp; Third-Party Processing</a> below for details.'
         ],
         checkboxLabel: 'I have read and agree to the Privacy Policy and acknowledge my data ownership rights.',
         formControlName: POLICY_CONSENT_FORM_CONTROL_NAMES.privacy

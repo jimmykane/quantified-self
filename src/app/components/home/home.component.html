@@ -450,12 +450,12 @@
     </div>
   </section>
 
-  <!-- 4. AI Insights Launch Section -->
+  <!-- 4. Assistant Launch Section -->
   <section class="features-section ai-insights-section public-below-fold">
     <div class="ai-insights-header animate-on-scroll">
-      <h2 class="section-title">AI Insights</h2>
+      <h2 class="section-title">Quantified Self Assistant</h2>
       <p class="section-subtitle">
-        Turn focused training questions into chart-backed answers grounded in your stored activity data.
+        Ask follow-up questions and get answers grounded in read-only sleep, readiness, Training, measurement, and activity tools.
       </p>
     </div>
 
@@ -465,34 +465,34 @@
           <div mat-card-avatar class="feature-icon-container">
             <mat-icon>chat</mat-icon>
           </div>
-          <mat-card-title>Ask Focused Questions</mat-card-title>
+          <mat-card-title>Ask Naturally</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Specify a metric, activity type, and date range to keep each answer precise and directly usable in training decisions.</p>
+          <p>Start with today, a trend, or a recent workout, then follow up without rebuilding the context from scratch.</p>
         </mat-card-content>
       </mat-card>
 
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>auto_graph</mat-icon>
+            <mat-icon>hub</mat-icon>
           </div>
-          <mat-card-title>Get the Right Result Mode</mat-card-title>
+          <mat-card-title>Use the Right Read-only Tools</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Receive aggregate trends, multi-metric summaries, activity lookups, or latest-activity answers that match your prompt intent.</p>
+          <p>The Assistant chooses bounded MCP-backed tools for sleep and HRV, readiness, Training, body measurements, or activities.</p>
         </mat-card-content>
       </mat-card>
 
       <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
           <div mat-card-avatar class="feature-icon-container">
-            <mat-icon>tips_and_updates</mat-icon>
+            <mat-icon>fact_check</mat-icon>
           </div>
-          <mat-card-title>Refine Prompts Faster</mat-card-title>
+          <mat-card-title>See What Grounded the Answer</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>If a request is unsupported, AI Insights suggests better prompt paths so you can quickly land on a supported query.</p>
+          <p>Each answer must use current account data and includes compact evidence cards, while raw files, routes, and locations stay out.</p>
         </mat-card-content>
       </mat-card>
     </div>
@@ -500,17 +500,17 @@
     <div class="ai-insights-examples animate-on-scroll">
       <p class="examples-label">What you can ask</p>
       <div class="example-prompts">
-        <app-typed-prompt-rotator [prompts]="aiPromptExamples"></app-typed-prompt-rotator>
+        <app-typed-prompt-rotator [prompts]="assistantPromptExamples"></app-typed-prompt-rotator>
       </div>
     </div>
 
     <div class="ai-insights-actions animate-on-scroll">
       <a mat-stroked-button routerLink="/features/ai-insights">
-        Explore AI Insights
+        Explore the Assistant
       </a>
     </div>
 
-    <p class="ai-insights-cta-note animate-on-scroll">Your activity questions, chart-backed answers.</p>
+    <p class="ai-insights-cta-note animate-on-scroll">Your data, current evidence, conversational answers.</p>
   </section>
 
   <!-- 5. See Your Footprint (MyTracks Highlight) -->

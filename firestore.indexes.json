@@ -1487,6 +1487,48 @@
       "indexes": []
     },
     {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "version",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "conversationId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "messages",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "pendingTurn",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "createdAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "fieldPath": "updatedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,

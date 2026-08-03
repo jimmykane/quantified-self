@@ -1,0 +1,179 @@
+<main class="assistant-page">
+  <header class="assistant-header">
+    <div class="assistant-heading">
+      <span class="assistant-heading-icon" aria-hidden="true">
+        <mat-icon>auto_awesome</mat-icon>
+      </span>
+      <div>
+        <div class="assistant-title-row">
+          <h1>Assistant</h1>
+          <span class="assistant-beta-label">BETA</span>
+        </div>
+        <p>Ask about your sleep, readiness, Training, measurements, or activities.</p>
+      </div>
+    </div>
+    <div class="assistant-header-actions">
+      <a mat-button routerLink="/help" fragment="ai-insights">
+        <mat-icon>help_outline</mat-icon>
+        Help
+      </a>
+      <button mat-stroked-button type="button" [disabled]="loadingConversation() || sending() || resetting()" (click)="resetConversation()">
+        @if (resetting()) {
+          <mat-spinner diameter="18"></mat-spinner>
+        } @else {
+          <mat-icon>add_comment</mat-icon>
+        }
+        New chat
+      </button>
+    </div>
+  </header>
+
+  <section class="assistant-trust-row" aria-label="Assistant privacy and data source">
+    <span><mat-icon>verified_user</mat-icon> Every Assistant call requires Auth and App Check</span>
+    <span><mat-icon>hub</mat-icon> Grounded in the same read-only MCP tools</span>
+    <span><mat-icon>location_off</mat-icon> Location and routes are not available to this Assistant</span>
+  </section>
+
+  @if (loadingConversation()) {
+    <section class="assistant-loading" aria-live="polite">
+      <mat-spinner diameter="30"></mat-spinner>
+      <span>Loading your conversation…</span>
+    </section>
+  } @else {
+    <section class="conversation" aria-label="Assistant conversation">
+      @if (isEmpty()) {
+        <mat-card class="assistant-welcome qs-glass-card-panel">
+          <mat-card-content>
+            <div class="welcome-copy">
+              <span class="welcome-icon" aria-hidden="true"><mat-icon>forum</mat-icon></span>
+              <div>
+                <h2>What would you like to understand?</h2>
+                <p>The Assistant chooses the relevant read-only tools, checks your current data, and shows which results grounded the answer.</p>
+              </div>
+            </div>
+            <div class="starter-prompts" aria-label="Suggested questions">
+              @for (prompt of starterPrompts; track prompt) {
+                <button mat-stroked-button type="button" (click)="useStarterPrompt(prompt)">
+                  <mat-icon>north_west</mat-icon>
+                  <span>{{ prompt }}</span>
+                </button>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      @for (message of messages(); track message.id) {
+        <article class="message" [class.message-user]="message.role === 'user'" [class.message-assistant]="message.role === 'assistant'">
+          <div class="message-role">
+            <mat-icon aria-hidden="true">{{ message.role === 'assistant' ? 'auto_awesome' : 'person' }}</mat-icon>
+            <span>{{ message.role === 'assistant' ? 'Assistant' : 'You' }}</span>
+          </div>
+          <p class="message-text">{{ message.text }}</p>
+
+          @if (message.evidence?.length) {
+            <details class="evidence-panel">
+              <summary>
+                <mat-icon>fact_check</mat-icon>
+                {{ message.evidence?.length }} grounded {{ message.evidence?.length === 1 ? 'source' : 'sources' }}
+              </summary>
+              <div class="evidence-list">
+                @for (evidence of message.evidence; track $index) {
+                  <section class="evidence-item">
+                    <header>
+                      <strong>{{ evidence.title }}</strong>
+                      <span>{{ evidence.summary }}</span>
+                    </header>
+                    @if (evidence.facts.length) {
+                      <dl>
+                        @for (fact of evidence.facts; track fact.label) {
+                          <div>
+                            <dt>{{ fact.label }}</dt>
+                            <dd>{{ fact.value }}</dd>
+                          </div>
+                        }
+                      </dl>
+                    }
+                    @if (evidence.links.length) {
+                      <div class="evidence-links">
+                        @for (link of evidence.links; track link.url) {
+                          <a mat-button [href]="link.url">
+                            <mat-icon>open_in_new</mat-icon>
+                            {{ link.label }}
+                          </a>
+                        }
+                      </div>
+                    }
+                  </section>
+                }
+              </div>
+            </details>
+          }
+        </article>
+      }
+
+      @if (sending()) {
+        <article class="message message-assistant assistant-thinking" aria-live="polite">
+          <div class="message-role">
+            <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+            <span>Assistant</span>
+          </div>
+          <div class="thinking-content">
+            <mat-spinner diameter="22"></mat-spinner>
+            <span>Checking the relevant Quantified Self data…</span>
+          </div>
+        </article>
+      }
+
+      <span #conversationEnd class="conversation-end" aria-hidden="true"></span>
+    </section>
+  }
+
+  @if (errorMessage()) {
+    <section class="assistant-error" role="alert">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage() }}</span>
+      <button mat-button type="button" (click)="errorMessage.set(null)">Dismiss</button>
+    </section>
+  }
+
+  <section class="composer-shell qs-glass-card-panel">
+    <form class="composer" (ngSubmit)="sendMessage()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Ask about your data</mat-label>
+        <textarea matInput rows="2" [maxlength]="maxMessageChars" [formControl]="promptControl"
+          (keydown)="handleComposerKeydown($event)"
+          placeholder="For example: How has my overnight HRV changed this week?"></textarea>
+        <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
+      </mat-form-field>
+      <button mat-flat-button type="submit" [disabled]="loadingConversation() || sending() || quotaBlocked() || promptControl.invalid" aria-label="Send message">
+        @if (sending()) {
+          <mat-spinner diameter="20"></mat-spinner>
+        } @else {
+          <mat-icon>arrow_upward</mat-icon>
+        }
+        <span>Send</span>
+      </button>
+    </form>
+    <footer class="composer-footer">
+      <span>{{ quotaText() || 'Assistant allowance is loading' }}</span>
+      <span>Answers can be wrong. Verify important health or Training decisions.</span>
+    </footer>
+  </section>
+
+  <mat-card class="external-mcp-card qs-glass-card-panel">
+    <mat-card-content>
+      <div>
+        <mat-icon>extension</mat-icon>
+        <span>
+          <strong>Prefer ChatGPT or another compatible client?</strong>
+          Connect through MCP for a bring-your-own-AI experience that does not use your in-app Assistant allowance.
+        </span>
+      </div>
+      <a mat-stroked-button routerLink="/services" [queryParams]="{ serviceName: 'mcp' }">
+        MCP connections
+        <mat-icon>arrow_forward</mat-icon>
+      </a>
+    </mat-card-content>
+  </mat-card>
+</main>
