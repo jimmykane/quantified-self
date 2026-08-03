@@ -29,11 +29,11 @@ describe('ActivityCalendarService', () => {
     expect(getEventsBy).toHaveBeenCalledWith(user, [{
       fieldPath: 'startDate',
       opStr: '>=',
-      value: new Date(startMs),
+      value: startMs,
     }, {
       fieldPath: 'startDate',
       opStr: '<',
-      value: new Date(endExclusiveMs),
+      value: endExclusiveMs,
     }], 'startDate', true, 0);
   });
 

@@ -26,11 +26,11 @@ export class ActivityCalendarService {
     return this.eventService.getEventsBy(user, [{
       fieldPath: 'startDate',
       opStr: '>=',
-      value: new Date(window.startMs),
+      value: window.startMs,
     }, {
       fieldPath: 'startDate',
       opStr: '<',
-      value: new Date(window.endExclusiveMs),
+      value: window.endExclusiveMs,
     }], 'startDate', true, 0).pipe(
       map(events => [...(events || [])]
         .filter(event => !isMergeOrBenchmarkEvent(event))
