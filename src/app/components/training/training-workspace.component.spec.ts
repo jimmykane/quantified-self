@@ -169,10 +169,10 @@ describe('TrainingWorkspaceComponent', () => {
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps every route-header action compact throughout narrow phone widths', () => {
+  it('keeps every route-header action in one compact row through tablet widths', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
-    const compactActionsStart = styles.indexOf('@media (max-width: 600px)');
+    const compactActionsStart = styles.indexOf('@media (max-width: 800px)');
     const extraSmallLayoutStart = styles.indexOf('@media (max-width: 400px)', compactActionsStart);
     const compactActionsStyles = styles.slice(compactActionsStart, extraSmallLayoutStart);
 
@@ -181,6 +181,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
     expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
     expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
+    expect(compactActionsStyles).toContain('flex-wrap: nowrap;');
     expect(compactActionsStyles).toContain('width: 48px;');
   });
 
