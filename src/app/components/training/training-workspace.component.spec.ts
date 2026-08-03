@@ -30,6 +30,33 @@ function createSleepService(sessions: readonly SleepSession[] = []) {
   };
 }
 
+function createRouteReadyDerivedState(
+  overrides: Partial<DashboardDerivedMetricsState> = {},
+): DashboardDerivedMetricsState {
+  return {
+    ...createDashboardDerivedMetricsMissingState(),
+    formStatus: 'ready',
+    recoveryNowStatus: 'ready',
+    acwrStatus: 'ready',
+    rampRateStatus: 'ready',
+    monotonyStrainStatus: 'ready',
+    formNowStatus: 'ready',
+    formPlus7dStatus: 'ready',
+    freshnessForecastStatus: 'ready',
+    intensityDistributionStatus: 'ready',
+    trainingSummaryStatus: 'ready',
+    trainingBuildComparisonStatus: 'ready',
+    trainingCapacityStatus: 'ready',
+    trainingExplanationStatus: 'ready',
+    trainingDurabilityStatus: 'ready',
+    trainingReadinessStatus: 'ready',
+    bodyWeightTrendStatus: 'ready',
+    powerCurveStatus: 'ready',
+    trainingSwimPerformanceStatus: 'ready',
+    ...overrides,
+  };
+}
+
 describe('TrainingWorkspaceComponent', () => {
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
 
@@ -1691,7 +1718,7 @@ describe('TrainingWorkspaceComponent', () => {
     const pageHeader = routeStatus?.closest('.training-page-header');
     const firstSection = fixture.nativeElement.querySelector('.training-section');
     expect(routeStatus?.textContent).toContain('Refreshing derived metrics');
-    expect(routeStatus?.textContent).toContain('last completed Training values');
+    expect(routeStatus?.textContent).toContain('Available last completed values');
     expect(pageHeader?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
 
@@ -1715,5 +1742,32 @@ describe('TrainingWorkspaceComponent', () => {
       expect.objectContaining({ trainingSummaryStatus: 'failed' }),
       { force: true, metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS },
     );
+  });
+
+  it('ignores the optional recovery status unless an active estimate is visible', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    component.derivedState = createRouteReadyDerivedState({ recoveryNowStatus: 'failed' });
+
+    (component as any).refreshTrainingRecoveryEstimate();
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+
+    component.derivedState = createRouteReadyDerivedState({
+      recoveryNowStatus: 'failed',
+      recoveryNow: { totalSeconds: 3_600, endTimeMs: nowMs },
+    });
+    (component as any).refreshTrainingRecoveryEstimate();
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
   });
 });

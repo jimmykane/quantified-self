@@ -2179,7 +2179,7 @@ describe('SummariesComponent', () => {
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
     expect(component.derivedMetricsBanner?.title).toBe('Refreshing derived metrics');
-    expect(component.derivedMetricsBanner?.description).toContain('last completed dashboard values');
+    expect(component.derivedMetricsBanner?.description).toContain('Available last completed values');
     expect(component.derivedMetricsBanner?.showRetry).toBe(false);
 
     fixture.detectChanges();
@@ -2214,6 +2214,42 @@ describe('SummariesComponent', () => {
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
     expect(component.derivedMetricsBanner?.title).toBe('Building derived metrics');
+  });
+
+  it('ignores the optional recovery status unless Today is showing an active estimate', () => {
+    const nowMs = Date.UTC(2026, 6, 18, 12);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowMs));
+    component.user = {
+      settings: { dashboardSettings: { tiles: [], showTodaySummary: true } },
+    } as any;
+    component.showTodaySummary = true;
+    (component as any).derivedFormStatus = 'ready';
+    (component as any).derivedFormNowStatus = 'ready';
+    (component as any).derivedRampRateStatus = 'ready';
+    (component as any).derivedRecoveryNowStatus = 'failed';
+
+    (component as any).refreshDerivedMetricsBannerState();
+    expect(component.derivedMetricsBanner).toBeNull();
+
+    (component.user as any).settings.dashboardSettings.tiles = [{
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+    }];
+    (component as any).refreshDerivedMetricsBannerState();
+    expect(component.derivedMetricsBanner?.type).toBe('warning');
+
+    (component.user as any).settings.dashboardSettings.tiles = [];
+    (component as any).derivedRecoveryNowContext = {
+      totalSeconds: 3_600,
+      endTimeMs: nowMs - 7_200_000,
+    };
+    (component as any).refreshDerivedMetricsBannerState();
+    expect(component.derivedMetricsBanner).toBeNull();
+
+    (component as any).derivedRecoveryNowContext = { totalSeconds: 3_600, endTimeMs: nowMs };
+    (component as any).refreshDerivedMetricsBannerState();
+    expect(component.derivedMetricsBanner?.type).toBe('warning');
   });
 
   it('should remove tiles that are no longer returned by the tile builder', async () => {

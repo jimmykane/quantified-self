@@ -1725,6 +1725,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.recoveryRefreshIntervalHandle = setInterval(() => {
       this.refreshDashboardTodaySignals();
       this.updateRecoveryRefreshTimer();
+      this.refreshDerivedMetricsBannerState();
       this.changeDetector.markForCheck();
     }, RECOVERY_NOW_REFRESH_INTERVAL_MS);
   }
@@ -2336,8 +2337,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       .filter((status): status is DashboardDerivedMetricStatus => !!status);
 
     if (this.showTodaySummary) {
-      relevantStatuses.push(this.derivedFormStatus, this.derivedRecoveryNowStatus);
       const nowMs = Date.now();
+      relevantStatuses.push(this.derivedFormStatus);
+      const remainingRecoverySeconds = resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs);
+      if (remainingRecoverySeconds !== null && remainingRecoverySeconds > 0) {
+        relevantStatuses.push(this.derivedRecoveryNowStatus);
+      }
       if (!resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)) {
         relevantStatuses.push(this.derivedFormNowStatus);
       }
@@ -2362,7 +2367,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         type: 'pending',
         title: refreshPhase === 'refreshing' ? 'Refreshing derived metrics' : 'Building derived metrics',
         description: refreshPhase === 'refreshing'
-          ? 'Showing last completed dashboard values while the update finishes.'
+          ? 'Available last completed values stay visible while the update finishes.'
           : 'Some dashboard insights are still being prepared.',
         showRetry: false,
       };

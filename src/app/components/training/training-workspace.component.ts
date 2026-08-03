@@ -374,6 +374,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       const recoveryRefreshTimer = globalThis.setInterval(() => {
         this.ngZone?.run(() => {
           this.refreshTrainingRecoveryEstimate();
+          this.refreshDerivedMetricsRouteStatus();
           this.changeDetector.markForCheck();
         });
       }, RECOVERY_NOW_REFRESH_INTERVAL_MS);
@@ -673,7 +674,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   private refreshDerivedMetricsRouteStatus(): void {
     const statuses = [
       this.derivedState.formStatus,
-      this.derivedState.recoveryNowStatus,
       this.derivedState.acwrStatus,
       this.derivedState.rampRateStatus,
       this.derivedState.monotonyStrainStatus,
@@ -688,6 +688,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       this.derivedState.trainingReadinessStatus,
       this.derivedState.bodyWeightTrendStatus,
     ];
+    if (this.trainingRecoveryEstimate) {
+      statuses.push(this.derivedState.recoveryNowStatus);
+    }
     if (this.hasPowerCapacityVisible) {
       statuses.push(
         this.derivedState.trainingCapacityStatus,
@@ -716,7 +719,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         type: 'pending',
         title: refreshPhase === 'refreshing' ? 'Refreshing derived metrics' : 'Building derived metrics',
         description: refreshPhase === 'refreshing'
-          ? 'Showing last completed Training values while the update finishes.'
+          ? 'Available last completed values stay visible while the update finishes.'
           : 'Some Training insights are still being prepared.',
         showRetry: false,
       };
