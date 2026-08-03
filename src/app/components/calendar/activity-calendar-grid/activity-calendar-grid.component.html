@@ -1,0 +1,62 @@
+@if (model) {
+<section class="activity-calendar"
+  [class.activity-calendar--year]="model.view === 'year'"
+  [class.activity-calendar--week]="model.view === 'week'"
+  [class.activity-calendar--compact]="compact">
+  <div class="activity-calendar-months">
+    @for (month of model.months; track month.id) {
+    <section class="activity-calendar-month" [attr.aria-label]="month.label">
+      @if (model.view === 'year') {
+      <h2>{{ month.label }}</h2>
+      }
+      <div class="activity-calendar-weekdays" aria-hidden="true">
+        @for (weekday of month.weekdayLabels; track $index) {
+        <span>{{ weekday }}</span>
+        }
+      </div>
+      <div class="activity-calendar-days">
+        @for (day of month.days; track day.dateKey) {
+        @if (day.inPrimaryPeriod || (!hideOutsideDays && model.view !== 'year')) {
+          @if (day.eventCount) {
+          <button type="button" class="activity-calendar-day activity-calendar-day-button"
+            [class.activity-calendar-day--outside]="!day.inPrimaryPeriod"
+            [class.activity-calendar-day--today]="day.isToday"
+            [attr.aria-label]="day.ariaLabel"
+            [matTooltip]="day.tooltip"
+            matTooltipClass="qs-calendar-tooltip"
+            matRipple
+            (click)="selectDay(day)">
+            <span class="activity-calendar-day-number">{{ day.dayNumber }}</span>
+            <span class="activity-calendar-marker-stage"
+              [class.activity-calendar-marker-stage--concentric]="compact || model.view === 'year'">
+              @for (family of day.visibleFamilies; track family.id) {
+              <span class="activity-calendar-marker"
+                [style.background-color]="family.color"
+                [style.--calendar-marker-diameter]="family.diameterPx + 'px'"
+                [style.--calendar-marker-compact-diameter]="family.compactDiameterPx + 'px'"
+                [style.z-index]="$index + 1"
+                [attr.title]="family.label + ': ' + family.durationLabel"></span>
+              }
+              @if (day.overflowFamilyCount) {
+              <span class="activity-calendar-marker-overflow">+{{ day.overflowFamilyCount }}</span>
+              }
+            </span>
+          </button>
+          } @else {
+          <div class="activity-calendar-day"
+            [class.activity-calendar-day--outside]="!day.inPrimaryPeriod"
+            [class.activity-calendar-day--today]="day.isToday"
+            [attr.aria-label]="day.ariaLabel">
+            <span class="activity-calendar-day-number">{{ day.dayNumber }}</span>
+          </div>
+          }
+        } @else {
+        <div class="activity-calendar-day activity-calendar-day--blank" aria-hidden="true"></div>
+        }
+        }
+      </div>
+    </section>
+    }
+  </div>
+</section>
+}

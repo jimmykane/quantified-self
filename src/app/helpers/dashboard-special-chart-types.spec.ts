@@ -2,6 +2,7 @@ import { ChartTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -30,6 +31,7 @@ import {
   getDashboardCuratedChartDefinitions,
   getDashboardKpiChartDefinitions,
   isDashboardCuratedChartType,
+  isDashboardActivityCalendarChartType,
   isDashboardFormChartType,
   isDashboardEventBackedSpecialChartType,
   isDashboardKpiChartType,
@@ -43,11 +45,13 @@ import {
 describe('dashboard-special-chart-types', () => {
   it('identifies recovery and form chart types as curated', () => {
     expect(isDashboardRecoveryNowChartType(DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
+    expect(isDashboardActivityCalendarChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE)).toBe(true);
     expect(isDashboardFormChartType(DASHBOARD_FORM_CHART_TYPE)).toBe(true);
     expect(isDashboardCuratedChartType(DASHBOARD_RECOVERY_NOW_CHART_TYPE)).toBe(true);
     expect(isDashboardCuratedChartType(DASHBOARD_FORM_CHART_TYPE)).toBe(true);
     expect(isDashboardCuratedChartType(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
     expect(isDashboardCuratedChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe(true);
+    expect(isDashboardCuratedChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE)).toBe(true);
   });
 
   it('classifies curated and custom chart types into categories', () => {
@@ -55,6 +59,7 @@ describe('dashboard-special-chart-types', () => {
     expect(resolveDashboardChartCategory(DASHBOARD_FORM_CHART_TYPE)).toBe('curated');
     expect(resolveDashboardChartCategory(DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe('curated');
     expect(resolveDashboardChartCategory(DASHBOARD_POWER_CURVE_CHART_TYPE)).toBe('curated');
+    expect(resolveDashboardChartCategory(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE)).toBe('curated');
     expect(resolveDashboardChartCategory(DASHBOARD_ACWR_KPI_CHART_TYPE)).toBe('kpi');
     expect(resolveDashboardChartCategory(ChartTypes.ColumnsVertical)).toBe('custom');
   });
@@ -64,6 +69,7 @@ describe('dashboard-special-chart-types', () => {
 
     expect(definitions.map(definition => definition.chartType)).toEqual([
       DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+      DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
       DASHBOARD_FORM_CHART_TYPE,
       DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,

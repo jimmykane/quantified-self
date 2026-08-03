@@ -231,6 +231,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/training",
           "destination": "/index.csr.html"
         },
@@ -487,6 +491,10 @@
         },
         {
           "source": "/dashboard",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/calendar",
           "destination": "/index.csr.html"
         },
         {

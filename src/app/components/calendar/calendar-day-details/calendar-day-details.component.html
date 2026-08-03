@@ -1,0 +1,53 @@
+<section class="calendar-day-details" [attr.aria-label]="title">
+  <app-bottom-sheet-header [title]="title" icon="calendar_month">
+    <button mat-icon-button type="button" aria-label="Close day details" matTooltip="Close" (click)="dismiss()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+
+  <div class="calendar-day-details-content">
+    <div class="calendar-day-total" aria-label="Day total">
+      <span>{{ data.day.eventCount }} {{ data.day.eventCount === 1 ? 'activity' : 'activities' }}</span>
+      <strong>{{ data.day.durationLabel }}</strong>
+    </div>
+
+    <section aria-labelledby="calendar-day-family-title">
+      <h3 id="calendar-day-family-title">Sport families</h3>
+      <div class="calendar-day-family-list">
+        @for (family of data.day.families; track family.id) {
+        <div class="calendar-day-family-row">
+          <span class="calendar-day-family-icon" [style.--calendar-family-color]="family.color">
+            <mat-icon aria-hidden="true">{{ familyIcons[family.activityTypeGroup] }}</mat-icon>
+          </span>
+          <span>{{ family.label }}</span>
+          <strong>{{ family.durationLabel }}</strong>
+        </div>
+        }
+      </div>
+    </section>
+
+    <mat-divider></mat-divider>
+
+    <section aria-labelledby="calendar-day-activities-title">
+      <h3 id="calendar-day-activities-title">Activities</h3>
+      <mat-nav-list>
+        @for (event of eventRows; track event.id) {
+          @if (event.route) {
+          <a mat-list-item [routerLink]="event.route" (click)="dismiss()">
+            <mat-icon matListItemIcon aria-hidden="true">exercise</mat-icon>
+            <span matListItemTitle>{{ event.label }}</span>
+            <span matListItemLine>{{ event.detailLabel }}</span>
+            <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+          </a>
+          } @else {
+          <div mat-list-item>
+            <mat-icon matListItemIcon aria-hidden="true">exercise</mat-icon>
+            <span matListItemTitle>{{ event.label }}</span>
+            <span matListItemLine>{{ event.detailLabel }}</span>
+          </div>
+          }
+        }
+      </mat-nav-list>
+    </section>
+  </div>
+</section>

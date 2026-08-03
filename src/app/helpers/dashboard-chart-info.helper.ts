@@ -1,5 +1,6 @@
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -30,6 +31,7 @@ import {
 
 const DASHBOARD_CHART_INFO_COPY: Record<DashboardSpecialChartType, string> = {
   [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Recovery left shows remaining recovery from active recovery windows. Left now drops toward zero over time, while elapsed is the completed part of the same active total.',
+  [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'Activity Calendar groups each day by sport family. Circle size scales with recorded duration; compact layouts place sport-family circles concentrically. Its visible-month query is independent from dashboard event and custom-tile filters.',
   [DASHBOARD_FORM_CHART_TYPE]: 'Form uses TSS-derived CTL (42-day EMA) and ATL (7-day EMA). CTL updates as previous CTL + (today TSS - previous CTL) / 42; ATL uses the same calculation with / 7. Current TSB is same-day CTL minus ATL. Current CTL/ATL/TSB decay through today with zero load after your latest workout; latest workout TSS stays anchored to the last real workout. Form is deliberately training-load only: recorded sleep, HRV, overnight heart rate, and imported recovery do not change it. Today Readiness adds those available recovery signals separately.',
   [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'Freshness Forecast projects Form (TSB) for the next 7 days with zero new load. Rising values suggest recovery and freshness; lower values indicate accumulated fatigue. Like Form, the forecast is training-load only; recorded sleep, HRV, overnight heart rate, and imported recovery stay separate in Today Readiness.',
   [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Intensity Distribution groups weekly training into Easy (Z1-2), Moderate (Z3-4), and Hard (Z5-7). Power zones are used first; heart-rate zones are the fallback when power is missing.',

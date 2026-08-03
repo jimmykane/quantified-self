@@ -15,6 +15,7 @@ import { TileChartComponent } from './tile.chart.component';
 import type { DashboardRecoveryNowContext } from '../../../helpers/dashboard-recovery-now.helper';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
   DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
@@ -993,6 +994,18 @@ describe('TileChartComponent', () => {
     fixture.detectChanges();
 
     expect(component.chartInfoTooltip).toBeNull();
+  });
+
+  it('should render the activity calendar with only its full-page action', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.showActions = false;
+    fixture.detectChanges();
+
+    expect(component.showCalendarRouteAction).toBe(true);
+    expect(component.showEventFilters).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-activity-calendar-tile')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.tile-event-filter-controls')).toBeNull();
   });
 
   it('should render a visible drag handle button for desktop drag mode', () => {

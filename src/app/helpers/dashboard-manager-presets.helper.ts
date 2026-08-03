@@ -18,6 +18,7 @@ import {
 import type { MapStyleName } from '../services/map/map-style.types';
 import {
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
   DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
   DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
@@ -55,10 +56,12 @@ import type {
 } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { buildDashboardPowerCurveAutoTile } from './dashboard-auto-tile.helper';
+import { buildDashboardActivityCalendarTile } from './dashboard-activity-calendar.helper';
 import type { DashboardPowerCurveScope } from './dashboard-power-curve-scope.helper';
 
 export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_RECOVERY: 'curated-recovery',
+  CURATED_ACTIVITY_CALENDAR: 'curated-activity-calendar',
   CURATED_FORM: 'curated-form',
   CURATED_FRESHNESS_FORECAST: 'curated-freshness-forecast',
   CURATED_INTENSITY_DISTRIBUTION: 'curated-intensity-distribution',
@@ -180,6 +183,17 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     icon: 'health_and_safety',
     category: 'curated',
     curatedChartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_ACTIVITY_CALENDAR,
+    label: 'Activity Calendar',
+    tileName: 'Activity calendar',
+    description: 'Current-month activity duration by sport family.',
+    icon: 'calendar_month',
+    category: 'curated',
+    curatedChartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+    recommended: true,
+    eligibility: 'activity-history',
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_FORM,
@@ -627,6 +641,9 @@ export function buildDashboardManagerPresetTile(
   }
 
   if (definition.category === 'curated') {
+    if (definition.curatedChartType === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE) {
+      return buildDashboardActivityCalendarTile(input.order, input.size);
+    }
     if (definition.curatedChartType === DASHBOARD_FORM_CHART_TYPE) {
       const formTile: AppDashboardChartTileSettingsInterface = {
         name: definition.tileName,

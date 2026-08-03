@@ -1,0 +1,61 @@
+<main class="calendar-page" aria-labelledby="calendar-page-title">
+  <header class="calendar-page-header">
+    <div class="calendar-page-heading">
+      <mat-icon aria-hidden="true">calendar_month</mat-icon>
+      <h1 id="calendar-page-title">Calendar</h1>
+    </div>
+
+    <mat-button-toggle-group class="calendar-view-toggle" aria-label="Calendar view"
+      hideSingleSelectionIndicator [value]="routeState().view"
+      (change)="selectView($event.value)">
+      @for (option of viewOptions; track option.value) {
+      <mat-button-toggle [value]="option.value">
+        <span class="calendar-view-option">
+          <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
+          <span>{{ option.label }}</span>
+        </span>
+      </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+  </header>
+
+  <nav class="calendar-period-navigation" aria-label="Calendar period navigation">
+    <button mat-icon-button type="button" appHapticTap matTooltip="Previous {{ routeState().view }}"
+      [attr.aria-label]="'Previous ' + routeState().view" (click)="navigatePeriod(-1)">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <h2 aria-live="polite">{{ calendarModel().periodLabel }}</h2>
+    <button mat-stroked-button type="button" appHapticTap (click)="goToToday()">
+      <mat-icon aria-hidden="true">today</mat-icon>
+      <span>Today</span>
+    </button>
+    <button mat-icon-button type="button" appHapticTap matTooltip="Next {{ routeState().view }}"
+      [attr.aria-label]="'Next ' + routeState().view" (click)="navigatePeriod(1)">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+  </nav>
+
+  @if (isLoading()) {
+  <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>
+  }
+
+  @if (hasError()) {
+  <section class="calendar-status calendar-status--error" role="alert">
+    <mat-icon aria-hidden="true">error_outline</mat-icon>
+    <span>Calendar activities could not be loaded.</span>
+    <button mat-stroked-button type="button" (click)="retry()">
+      <mat-icon aria-hidden="true">refresh</mat-icon>
+      <span>Retry</span>
+    </button>
+  </section>
+  } @else {
+    @if (!isLoading() && !hasEvents()) {
+    <div class="calendar-status" role="status">
+      <mat-icon aria-hidden="true">event_busy</mat-icon>
+      <span>{{ emptyStateLabel() }}</span>
+    </div>
+    }
+    <app-activity-calendar-grid [model]="calendarModel()" (daySelected)="openDay($event)">
+    </app-activity-calendar-grid>
+  }
+</main>

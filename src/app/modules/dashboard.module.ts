@@ -26,6 +26,7 @@ import { DashboardTileBoardComponent } from '../components/summaries/dashboard-t
 import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
 import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
 import { RoutePreviewMapComponent } from '../components/routes/route-preview-map/route-preview-map.component';
+import { ActivityCalendarTileComponent } from '../components/calendar/activity-calendar-tile/activity-calendar-tile.component';
 
 @NgModule({
     imports: [
@@ -38,6 +39,7 @@ import { RoutePreviewMapComponent } from '../components/routes/route-preview-map
         DashboardRoutingModule,
         EventsMapComponent,
         RoutePreviewMapComponent,
+        ActivityCalendarTileComponent,
     ],
     exports: [],
     declarations: [
