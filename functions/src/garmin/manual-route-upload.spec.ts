@@ -104,24 +104,44 @@ describe('importRouteToGarminAPI', () => {
     expect(mocks.uploadManualRouteToGarminConnect).not.toHaveBeenCalled();
   });
 
-  it('maps a typed Garmin HTTP 408 route failure to a retryable callable error', async () => {
+  it('maps an ambiguous Garmin create failure to a fail-closed callable error', async () => {
     mocks.uploadManualRouteToGarminConnect.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.GarminAPI,
-      operation: 'route_upload',
-      disposition: 'retryable',
-      retryMode: 'restart',
-      code: 'unavailable',
-      message: 'Garmin Connect is temporarily unavailable. Please retry.',
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created. Check Garmin Connect before trying again.',
       statusCode: 408,
-      dlqContext: 'GARMIN_ROUTE_DELIVERY_RETRY_EXHAUSTED',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
     }));
 
     await expect(importRouteToGarminAPI(request({
       file: 'cm91dGUtc291cmNl',
       filename: 'route.gpx',
     }) as never)).rejects.toMatchObject({
-      code: 'unavailable',
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created. Check Garmin Connect before trying again.',
+    });
+  });
+
+  it('preserves typed Garmin rate limits as resource-exhausted callable errors', async () => {
+    mocks.uploadManualRouteToGarminConnect.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'resource-exhausted',
       message: 'Garmin Connect is temporarily unavailable. Please retry.',
+      statusCode: 429,
+      dlqContext: 'GARMIN_ROUTE_CREATE_RETRY_EXHAUSTED',
+    }));
+
+    await expect(importRouteToGarminAPI(request({
+      file: 'cm91dGUtc291cmNl',
+      filename: 'route.gpx',
+    }) as never)).rejects.toMatchObject({
+      code: 'resource-exhausted',
     });
   });
 });

@@ -22,6 +22,7 @@ const {
   mockToActivitySyncMetadataError,
   mockUploadActivityFileToSuunto,
   mockGetSuuntoActivityUploadStatus,
+  mockResumeSuuntoActivityBlobUpload,
   mockRecordSuccessfulSuuntoActivityUploadForQueueItem,
   mockUploadActivityFileToWahoo,
   mockGetWahooActivityUploadStatus,
@@ -56,6 +57,7 @@ const {
     })),
     mockUploadActivityFileToSuunto: vi.fn(),
     mockGetSuuntoActivityUploadStatus: vi.fn(),
+    mockResumeSuuntoActivityBlobUpload: vi.fn(),
     mockRecordSuccessfulSuuntoActivityUploadForQueueItem: vi.fn(),
     mockUploadActivityFileToWahoo: vi.fn(),
     mockGetWahooActivityUploadStatus: vi.fn(),
@@ -129,6 +131,7 @@ vi.mock('./metadata', () => ({
 vi.mock('../suunto/activities', () => ({
   uploadActivityFileToSuunto: mockUploadActivityFileToSuunto,
   getSuuntoActivityUploadStatus: mockGetSuuntoActivityUploadStatus,
+  resumeSuuntoActivityBlobUpload: mockResumeSuuntoActivityBlobUpload,
   recordSuccessfulSuuntoActivityUploadForQueueItem: mockRecordSuccessfulSuuntoActivityUploadForQueueItem,
   SuuntoActivityUploadStatePersistenceSkippedError: class SuuntoActivityUploadStatePersistenceSkippedError extends Error {},
 }));
@@ -197,6 +200,7 @@ describe('activity-sync/process-queue-item', () => {
     delete baseQueueItem.destinationInfoCode;
     delete baseQueueItem.destinationUploadCountedID;
     delete baseQueueItem.destinationUploadCountedAt;
+    delete baseQueueItem.destinationUploadContinuation;
     mockGetActivitySyncRouteAllowlistConfigError.mockReturnValue(null);
     mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(true);
     mockHasProAccess.mockResolvedValue(true);
@@ -212,6 +216,13 @@ describe('activity-sync/process-queue-item', () => {
       workoutKey: 'workout-1',
     });
     mockGetSuuntoActivityUploadStatus.mockResolvedValue({
+      status: 'success',
+      message: 'ok',
+      uploadId: 'upload-1',
+      providerUserId: 'suunto-user-1',
+      workoutKey: 'workout-1',
+    });
+    mockResumeSuuntoActivityBlobUpload.mockResolvedValue({
       status: 'success',
       message: 'ok',
       uploadId: 'upload-1',
@@ -283,6 +294,10 @@ describe('activity-sync/process-queue-item', () => {
       const persisted = await options.persistUploadStateBeforeBlob({
         uploadId: 'pre-blob-upload',
         providerUserId: 'suunto-user-1',
+        blobContinuation: {
+          uploadUrl: 'https://storage.suunto.com/pre-blob-upload?signed=true',
+          uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
+        },
       });
       expect(persisted).toBe(true);
       expect(baseQueueItem.destinationUploadID).toBe('pre-blob-upload');
@@ -299,8 +314,60 @@ describe('activity-sync/process-queue-item', () => {
 
     expect(result).toBe(QueueResult.Processed);
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(1);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      updateData: expect.objectContaining({
+        destinationUploadContinuation: {
+          type: 'suunto_blob_put_v1',
+          uploadUrl: 'https://storage.suunto.com/pre-blob-upload?signed=true',
+          uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
+        },
+      }),
+    }));
     expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
       destinationUploadID: 'pre-blob-upload',
+    }));
+  });
+
+  it('replays the persisted Suunto signed PUT when a worker stops before blob delivery', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      destinationUploadID: 'persisted-upload-id',
+      destinationProviderUserID: 'suunto-user-1',
+      destinationUploadContinuation: {
+        type: 'suunto_blob_put_v1',
+        uploadUrl: 'https://storage.suunto.com/persisted-upload?signed=true',
+        uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
+      },
+      ref: {} as any,
+    };
+    mockResumeSuuntoActivityBlobUpload.mockResolvedValueOnce({
+      status: 'success',
+      message: 'ok',
+      uploadId: 'persisted-upload-id',
+      providerUserId: 'suunto-user-1',
+      workoutKey: 'workout-1',
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockGetSuuntoActivityUploadStatus).not.toHaveBeenCalled();
+    expect(mockResumeSuuntoActivityBlobUpload).toHaveBeenCalledWith(
+      'user-1',
+      Buffer.from('FITDATA'),
+      {
+        uploadId: 'persisted-upload-id',
+        providerUserId: 'suunto-user-1',
+        blobContinuation: {
+          uploadUrl: 'https://storage.suunto.com/persisted-upload?signed=true',
+          uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
+        },
+      },
+    );
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({
+      destinationUploadContinuation: null,
     }));
   });
 
@@ -575,6 +642,29 @@ describe('activity-sync/process-queue-item', () => {
     );
   });
 
+  it('acknowledges an accepted Wahoo upload when both resume-state and DLQ persistence fail', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      ref: {} as any,
+    };
+    mockUploadActivityFileToWahoo.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'processing',
+      uploadId: 'wahoo-accepted-without-durable-state',
+    });
+    mockUpdateQueueItemIfUserActive.mockRejectedValueOnce(new Error('Firestore unavailable'));
+    mockMoveToDeadLetterQueue.mockResolvedValueOnce(QueueResult.Failed);
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Skipped);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledTimes(1);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
   it('persists a resumable Suunto provider error before incrementing retry state', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -603,6 +693,34 @@ describe('activity-sync/process-queue-item', () => {
     }));
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
     expect(mockDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks a normalized terminal Suunto auth failure as reconnect-required work instead of DLQ', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+    };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_init',
+      disposition: 'auth_required',
+      retryMode: 'none',
+      code: 'unauthenticated',
+      message: 'Authentication failed. Please re-connect your Suunto account.',
+      providerUserId: 'suunto-user-1',
+      dlqContext: 'AUTH_RECONNECT_REQUIRED',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(queueItem, undefined, expect.objectContaining({
+      skippedReason: 'destination_auth_failed',
+      destinationUploadContinuation: null,
+      resultStatus: 'skipped',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
   it('moves partial persisted Suunto resume state to DLQ without downloading or reposting the FIT file', async () => {
@@ -798,6 +916,7 @@ describe('activity-sync/process-queue-item', () => {
         destinationProviderUserID: null,
         destinationWorkoutKey: null,
         destinationInfoCode: null,
+        destinationUploadContinuation: null,
       },
     }));
     expect(queueItem.destinationUploadID).toBeNull();
@@ -831,6 +950,7 @@ describe('activity-sync/process-queue-item', () => {
         destinationProviderUserID: null,
         destinationWorkoutKey: null,
         destinationInfoCode: null,
+        destinationUploadContinuation: null,
       },
     }));
     expect(queueItem.destinationWorkoutKey).toBeUndefined();

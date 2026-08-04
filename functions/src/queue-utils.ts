@@ -50,6 +50,9 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
         // Remove ref from payload
         ref: undefined
     });
+    // Signed provider continuation URLs are short-lived credentials. They are
+    // needed only while the live queue item can retry the exact same request.
+    delete (failedItem as unknown as Record<string, unknown>).destinationUploadContinuation;
 
     const failedDocRef = admin.firestore().collection('failed_jobs').doc(queueItem.id);
 

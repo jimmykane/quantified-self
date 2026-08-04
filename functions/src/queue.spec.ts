@@ -381,6 +381,11 @@ describe('queue', () => {
                 processed: false,
                 dateCreated: Date.now(),
                 dispatchedToCloudTask: null,
+                destinationUploadContinuation: {
+                    type: 'suunto_blob_put_v1',
+                    uploadUrl: 'https://storage.suunto.com/upload?signed=secret',
+                    uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
+                },
             };
 
             await increaseRetryCountForQueueItem(queueItem, new Error('Test error'));
@@ -389,6 +394,11 @@ describe('queue', () => {
             expect(queueItem.totalRetryCount).toBe(1);
             expect(queueItem.errors).toHaveLength(1);
             expect(queueItem.errors![0].error).toBe('Test error');
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                destinationUploadContinuation: expect.objectContaining({
+                    uploadUrl: 'https://storage.suunto.com/upload?signed=secret',
+                }),
+            }));
         });
 
         it('should move to DLQ if max retries reached', async () => {
@@ -409,6 +419,11 @@ describe('queue', () => {
                 processed: false,
                 dateCreated: Date.now(),
                 dispatchedToCloudTask: null,
+                destinationUploadContinuation: {
+                    type: 'suunto_blob_put_v1',
+                    uploadUrl: 'https://blob.example/upload?sensitive=1',
+                    uploadHeaders: { Authorization: 'signed-value' },
+                },
             };
 
             // 10 is max retry count
@@ -420,6 +435,7 @@ describe('queue', () => {
             // Should verify batch delete and set (DLQ logic)
             expect(batch.delete).toHaveBeenCalledWith(mockRef);
             expect(batch.set).toHaveBeenCalled();
+            expect((batch.set as any).mock.calls[0][1]).not.toHaveProperty('destinationUploadContinuation');
             expect(batch.commit).toHaveBeenCalled();
         });
 
@@ -573,6 +589,11 @@ describe('queue', () => {
                 processed: false,
                 dateCreated: Date.now(),
                 dispatchedToCloudTask: null,
+                destinationUploadContinuation: {
+                    type: 'suunto_blob_put_v1',
+                    uploadUrl: 'https://blob.example/upload?sensitive=1',
+                    uploadHeaders: { Authorization: 'signed-value' },
+                },
             };
 
             await moveToDeadLetterQueue(queueItem, new Error('Fatal error'));
@@ -581,6 +602,7 @@ describe('queue', () => {
 
             // Verify explicit expiration date calculation
             const calledArg = (batch.set as any).mock.calls[0][1];
+            expect(calledArg).not.toHaveProperty('destinationUploadContinuation');
             // Allow small delta for execution time difference if not mocking system time
             const expectedExpiry = Date.now() + TTL_CONFIG.QUEUE_ITEM_IN_DAYS * 24 * 60 * 60 * 1000;
             // The mock Timestamp implementation returns the date object directly in toDate or we can check logic

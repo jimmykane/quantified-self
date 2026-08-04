@@ -396,7 +396,7 @@ describe('garmin route sending', () => {
       context,
     )).rejects.toMatchObject({
       statusCode: 429,
-      code: 'unavailable',
+      code: 'resource-exhausted',
       disposition: 'retryable',
       operation: 'route_create',
     });
@@ -421,14 +421,14 @@ describe('garmin route sending', () => {
       context,
     )).rejects.toMatchObject({
       statusCode: 429,
-      code: 'unavailable',
+      code: 'resource-exhausted',
       disposition: 'retryable',
       operation: 'route_update',
       providerOperationId: 'course-42',
     });
   });
 
-  it('normalizes Garmin create 5xx failures as retryable provider operations', async () => {
+  it('fails closed when a Garmin create 5xx response has an ambiguous outcome', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),
     ]);
@@ -445,15 +445,15 @@ describe('garmin route sending', () => {
       name: 'ProviderOperationError',
       serviceName: ServiceNames.GarminAPI,
       operation: 'route_create',
-      disposition: 'retryable',
-      retryMode: 'restart',
+      disposition: 'permanent',
+      retryMode: 'none',
       statusCode: 503,
       providerUserId: 'garmin-user-1',
-      dlqContext: 'GARMIN_ROUTE_CREATE_RETRY_EXHAUSTED',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
     });
   });
 
-  it('normalizes Garmin status-less transport failures as retryable provider operations', async () => {
+  it('fails closed when a Garmin create transport failure has an ambiguous outcome', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),
     ]);
@@ -472,11 +472,90 @@ describe('garmin route sending', () => {
     )).rejects.toMatchObject({
       name: 'ProviderOperationError',
       operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      providerUserId: 'garmin-user-1',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+  });
+
+  it('keeps a Garmin update transport failure retryable', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+    });
+    requestHelperMocks.put.mockRejectedValueOnce(Object.assign(
+      new Error('socket closed before a response'),
+      { code: 'ECONNRESET' },
+    ));
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      name: 'ProviderOperationError',
+      operation: 'route_update',
       disposition: 'retryable',
       retryMode: 'restart',
       code: 'unavailable',
-      providerUserId: 'garmin-user-1',
-      dlqContext: 'GARMIN_ROUTE_CREATE_RETRY_EXHAUSTED',
+      providerOperationId: 'course-42',
+      dlqContext: 'GARMIN_ROUTE_UPDATE_RETRY_EXHAUSTED',
+    });
+  });
+
+  it('keeps a Garmin update 5xx response retryable', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    routeDeliveryMetadataByKey.set(`user-1:route-1:${ServiceNames.GarminAPI}:garmin-user-1`, {
+      providerRouteId: 'course-42',
+    });
+    requestHelperMocks.put.mockRejectedValueOnce({ statusCode: 503 });
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      operation: 'route_update',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      statusCode: 503,
+      providerOperationId: 'course-42',
+      dlqContext: 'GARMIN_ROUTE_UPDATE_RETRY_EXHAUSTED',
+    });
+  });
+
+  it('fails closed when a Garmin create request times out ambiguously', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockRejectedValueOnce({ statusCode: 408 });
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      statusCode: 408,
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
     });
   });
 

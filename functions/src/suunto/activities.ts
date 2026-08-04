@@ -43,6 +43,12 @@ const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
 const SUUNTO_STATUS_POLL_DELAY_MS = 2000;
 const SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS = 10;
 const SUUNTO_DIRECT_UPLOAD_COUNT_IDEMPOTENCY_WINDOW = 100;
+const SUUNTO_UPLOAD_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
+const SUUNTO_PROVIDER_USER_ID_MAX_LENGTH = 200;
+const SUUNTO_BLOB_UPLOAD_URL_MAX_LENGTH = 8000;
+const SUUNTO_BLOB_HEADER_NAME_PATTERN = /^[A-Za-z0-9-]{1,100}$/;
+const SUUNTO_BLOB_HEADER_VALUE_MAX_LENGTH = 2000;
+const SUUNTO_BLOB_HEADER_LIMIT = 50;
 const SUUNTO_EXPLICIT_CONTENT_REJECTION_PATTERNS = [
   /\bunsupported\s+(?:activity|file|fit|payload|workout)\b/i,
   /\b(?:activity|file|fit|payload|workout)\s+(?:is\s+)?unsupported\b/i,
@@ -79,6 +85,56 @@ function getSuuntoErrorMessage(error: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function normalizeSuuntoUploadId(value: unknown): string | null {
+  const uploadId = `${value || ''}`.trim();
+  return SUUNTO_UPLOAD_ID_PATTERN.test(uploadId) ? uploadId : null;
+}
+
+function normalizeSuuntoProviderUserId(value: unknown): string | null {
+  const providerUserId = `${value || ''}`.trim();
+  return providerUserId
+    && providerUserId.length <= SUUNTO_PROVIDER_USER_ID_MAX_LENGTH
+    && !providerUserId.includes('/')
+    ? providerUserId
+    : null;
+}
+
+function normalizeSuuntoBlobUploadUrl(value: unknown): string | null {
+  const rawUrl = `${value || ''}`.trim();
+  if (!rawUrl || rawUrl.length > SUUNTO_BLOB_UPLOAD_URL_MAX_LENGTH) {
+    return null;
+  }
+  try {
+    const parsedUrl = new URL(rawUrl);
+    return parsedUrl.protocol === 'https:' && !parsedUrl.username && !parsedUrl.password
+      ? rawUrl
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSuuntoBlobHeaders(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalizedHeaders: Record<string, string> = {};
+  for (const [name, rawValue] of Object.entries(value).slice(0, SUUNTO_BLOB_HEADER_LIMIT)) {
+    if (!SUUNTO_BLOB_HEADER_NAME_PATTERN.test(name)) {
+      continue;
+    }
+    if (typeof rawValue !== 'string' && typeof rawValue !== 'number' && typeof rawValue !== 'boolean') {
+      continue;
+    }
+    const headerValue = `${rawValue}`.trim();
+    if (headerValue && headerValue.length <= SUUNTO_BLOB_HEADER_VALUE_MAX_LENGTH) {
+      normalizedHeaders[name] = headerValue;
+    }
+  }
+  return normalizedHeaders;
 }
 
 function isLikelyPermanentSuunto500(error: unknown): boolean {
@@ -263,9 +319,18 @@ export interface SuuntoActivityUploadResult {
   providerUserId?: string;
 }
 
-export interface SuuntoActivityUploadInitializationState {
+export interface SuuntoActivityBlobContinuation {
+  uploadUrl: string;
+  uploadHeaders: Record<string, string>;
+}
+
+export interface SuuntoActivityUploadResumeIdentifiers {
   uploadId: string;
   providerUserId: string;
+}
+
+export interface SuuntoActivityUploadInitializationState extends SuuntoActivityUploadResumeIdentifiers {
+  blobContinuation: SuuntoActivityBlobContinuation;
 }
 
 export interface SuuntoActivityUploadOptions {
@@ -316,14 +381,23 @@ interface SuuntoProviderErrorContext {
 
 function shouldPreserveServiceLifecycleError(error: unknown): boolean {
   return error instanceof Error && (
-    error.name === 'TerminalServiceAuthError'
-    || error.name === 'TokenRefreshSkippedForDeletedUserError'
+    error.name === 'TokenRefreshSkippedForDeletedUserError'
     || error.name === 'TokenUseSkippedForPendingDisconnectError'
     || error.name === 'UserDeletionGuardReadError'
     || error.name === 'SuuntoActivityUploadSkippedForDeletedUserError'
     || error.name === 'SuuntoActivityUploadStatePersistenceSkippedError'
     || error.name === 'SuuntoActivityUploadStatePersistenceError'
   );
+}
+
+function isTerminalServiceAuthError(error: unknown): error is Error & {
+  statusCode?: number | null;
+  providerErrorCode?: string | null;
+  providerErrorMessage?: string | null;
+  providerUserId?: string;
+  dlqContext?: string;
+} {
+  return error instanceof Error && error.name === 'TerminalServiceAuthError';
 }
 
 function toSuuntoProviderOperationError(
@@ -334,7 +408,8 @@ function toSuuntoProviderOperationError(
     return error;
   }
 
-  const statusCode = getStatusCode(error);
+  const terminalAuthError = isTerminalServiceAuthError(error) ? error : null;
+  const statusCode = getStatusCode(error) ?? terminalAuthError?.statusCode ?? undefined;
   const refreshFailure = extractRefreshFailureDetails(error);
   const isTemporarilyRetryableAuthFailure = refreshFailure.isTerminalAuthFailure
     && !isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, refreshFailure);
@@ -343,10 +418,24 @@ function toSuuntoProviderOperationError(
   const common = {
     serviceName: ServiceNames.SuuntoApp,
     operation: context.operation,
-    providerUserId: context.providerUserId,
+    providerUserId: terminalAuthError?.providerUserId || context.providerUserId,
     providerOperationId: context.uploadId,
     statusCode,
   } as const;
+
+  if (terminalAuthError) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'auth_required',
+      retryMode: 'none',
+      code: 'unauthenticated',
+      message: terminalAuthError.providerErrorMessage
+        ? `Authentication failed: ${terminalAuthError.providerErrorMessage}`
+        : 'Authentication failed. Please re-connect your Suunto account.',
+      providerCode: terminalAuthError.providerErrorCode || undefined,
+      dlqContext: terminalAuthError.dlqContext || 'SUUNTO_AUTH_REQUIRED',
+    });
+  }
 
   if (statusCode === 401) {
     return new ProviderOperationError({
@@ -481,7 +570,7 @@ async function pollSuuntoActivityUploadStatus(
               'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
             },
             json: true,
-            url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
+            url: `https://cloudapi.suunto.com/v2/upload/${encodeURIComponent(uploadId)}`,
           });
         },
         maxStatusRequestRetries,
@@ -613,25 +702,106 @@ function logSuuntoActivityProviderFailure(userID: string, error: ProviderOperati
   }
 }
 
-export async function getSuuntoActivityUploadStatus(
+function getValidatedSuuntoBlobContinuation(
+  continuation: SuuntoActivityBlobContinuation,
+  providerUserId: string,
+  uploadId: string,
+): SuuntoActivityBlobContinuation {
+  const uploadUrl = normalizeSuuntoBlobUploadUrl(continuation?.uploadUrl);
+  const uploadHeaders = normalizeSuuntoBlobHeaders(continuation?.uploadHeaders);
+  if (!uploadUrl) {
+    throw new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_blob',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Suunto upload continuation is missing a valid HTTPS blob URL.',
+      providerUserId,
+      providerOperationId: uploadId,
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_CONTINUATION',
+    });
+  }
+  return { uploadUrl, uploadHeaders };
+}
+
+async function putSuuntoActivityBlob(
+  userID: string,
+  fileBuffer: Buffer,
+  state: SuuntoActivityUploadInitializationState,
+): Promise<void> {
+  const continuation = getValidatedSuuntoBlobContinuation(
+    state.blobContinuation,
+    state.providerUserId,
+    state.uploadId,
+  );
+  await assertSuuntoActivityUploadUserActive(userID, 'before_blob_upload');
+  try {
+    await withSuuntoTransientRetry(
+      `Upload activity blob ${state.uploadId} for provider user ${state.providerUserId}`,
+      async () => requestPromise.put({
+        headers: { ...continuation.uploadHeaders },
+        json: false,
+        url: continuation.uploadUrl,
+        body: fileBuffer,
+      }),
+      SUUNTO_MAX_TRANSIENT_RETRIES,
+      true,
+    );
+    logger.info('Suunto activity blob upload completed.', {
+      userID,
+      providerUserId: state.providerUserId,
+      uploadId: state.uploadId,
+    });
+  } catch (error: unknown) {
+    throw toSuuntoProviderOperationError(error, {
+      operation: 'activity_upload_blob',
+      // Retrying this exact signed PUT is idempotent. Never initialize a new
+      // provider job when acceptance of this request is ambiguous.
+      retryMode: 'resume',
+      providerUserId: state.providerUserId,
+      uploadId: state.uploadId,
+    });
+  }
+}
+
+export async function resumeSuuntoActivityBlobUpload(
+  userID: string,
+  fileBuffer: Buffer,
+  state: SuuntoActivityUploadInitializationState,
+): Promise<SuuntoActivityUploadResult> {
+  const uploadId = normalizeSuuntoUploadId(state.uploadId);
+  const providerUserId = normalizeSuuntoProviderUserId(state.providerUserId);
+  if (!uploadId || !providerUserId) {
+    throw new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_blob',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Suunto upload continuation has invalid resume identifiers.',
+      providerUserId: providerUserId || undefined,
+      providerOperationId: uploadId || undefined,
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_CONTINUATION',
+    });
+  }
+  const normalizedState: SuuntoActivityUploadInitializationState = {
+    uploadId,
+    providerUserId,
+    blobContinuation: getValidatedSuuntoBlobContinuation(state.blobContinuation, providerUserId, uploadId),
+  };
+  await putSuuntoActivityBlob(userID, fileBuffer, normalizedState);
+  return getSuuntoActivityUploadStatus(userID, uploadId, providerUserId);
+}
+
+async function pollSuuntoActivityUploadStatusWithToken(
   userID: string,
   uploadId: string,
   providerUserId: string,
+  tokenSnapshot: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
 ): Promise<SuuntoActivityUploadResult> {
-  await assertSuuntoActivityUploadUserActive(userID, 'before_token_lookup');
-  const tokenSnapshot = await admin.firestore()
-    .collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(userID)
-    .collection('tokens')
-    .doc(providerUserId)
-    .get();
-
-  if (!tokenSnapshot.exists) {
-    throw new HttpsError('unauthenticated', 'No connected Suunto account found.');
-  }
-
   try {
-    const result = await executeWithTokenRetry(
+    return await executeWithTokenRetry(
       tokenSnapshot,
       async (accessToken) => pollSuuntoActivityUploadStatus(
         userID,
@@ -641,7 +811,6 @@ export async function getSuuntoActivityUploadStatus(
       ),
       `Check activity upload ${uploadId} for user ${userID}`,
     );
-    return result;
   } catch (error: unknown) {
     if (shouldPreserveServiceLifecycleError(error) || error instanceof HttpsError) {
       throw error;
@@ -655,6 +824,37 @@ export async function getSuuntoActivityUploadStatus(
     logSuuntoActivityProviderFailure(userID, normalizedError);
     throw normalizedError;
   }
+}
+
+export async function getSuuntoActivityUploadStatus(
+  userID: string,
+  uploadId: string,
+  providerUserId: string,
+): Promise<SuuntoActivityUploadResult> {
+  const normalizedUploadId = normalizeSuuntoUploadId(uploadId);
+  const normalizedProviderUserId = normalizeSuuntoProviderUserId(providerUserId);
+  if (!normalizedUploadId || !normalizedProviderUserId) {
+    throw new HttpsError('invalid-argument', 'Invalid Suunto upload resume identifiers.');
+  }
+
+  await assertSuuntoActivityUploadUserActive(userID, 'before_token_lookup');
+  const tokenSnapshot = await admin.firestore()
+    .collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME)
+    .doc(userID)
+    .collection('tokens')
+    .doc(normalizedProviderUserId)
+    .get();
+
+  if (!tokenSnapshot.exists) {
+    throw new HttpsError('unauthenticated', 'No connected Suunto account found.');
+  }
+
+  return pollSuuntoActivityUploadStatusWithToken(
+    userID,
+    normalizedUploadId,
+    normalizedProviderUserId,
+    tokenSnapshot,
+  );
 }
 
 export async function uploadActivityFileToSuunto(
@@ -707,7 +907,10 @@ export async function uploadActivityFileToSuunto(
         `Initialize activity upload for user ${userID}`
       );
 
-      if (!initializedUpload || !initializedUpload.url || !initializedUpload.id) {
+      const uploadId = normalizeSuuntoUploadId(initializedUpload?.id);
+      const providerUserIdForUpload = normalizeSuuntoProviderUserId(providerUserId);
+      const uploadUrl = normalizeSuuntoBlobUploadUrl(initializedUpload?.url);
+      if (!uploadId || !providerUserIdForUpload || !uploadUrl) {
         throw new ProviderOperationError({
           serviceName: ServiceNames.SuuntoApp,
           operation: 'activity_upload_init',
@@ -720,22 +923,24 @@ export async function uploadActivityFileToSuunto(
         });
       }
 
-      const url = `${initializedUpload.url}`;
-      const uploadId = `${initializedUpload.id}`;
-      const blobHeaders = { ...(initializedUpload.headers || {}) };
+      const uploadState: SuuntoActivityUploadInitializationState = {
+        uploadId,
+        providerUserId: providerUserIdForUpload,
+        blobContinuation: {
+          uploadUrl,
+          uploadHeaders: normalizeSuuntoBlobHeaders(initializedUpload.headers),
+        },
+      };
       logger.info('Suunto activity upload initialized.', {
         userID,
-        providerUserId,
+        providerUserId: providerUserIdForUpload,
         uploadId,
       });
 
       if (options.persistUploadStateBeforeBlob) {
         let persisted: boolean;
         try {
-          persisted = await options.persistUploadStateBeforeBlob({
-            uploadId,
-            providerUserId,
-          });
+          persisted = await options.persistUploadStateBeforeBlob(uploadState);
         } catch (error: unknown) {
           throw new SuuntoActivityUploadStatePersistenceError(error);
         }
@@ -744,42 +949,15 @@ export async function uploadActivityFileToSuunto(
         }
       }
 
-      await assertSuuntoActivityUploadUserActive(userID, 'before_blob_upload');
-      try {
-        await withSuuntoTransientRetry(
-          `Upload activity blob for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`,
-          async () => requestPromise.put({
-            headers: { ...blobHeaders },
-            json: false,
-            url,
-            body: fileBuffer,
-          }),
-          SUUNTO_MAX_TRANSIENT_RETRIES,
-          true
-        );
-        logger.info('Suunto activity blob upload completed.', {
-          userID,
-          providerUserId,
-          uploadId,
-        });
-      } catch (error: unknown) {
-        throw toSuuntoProviderOperationError(error, {
-          operation: 'activity_upload_blob',
-          // Once Suunto issues an upload ID, an HTTP/transport failure does
-          // not prove that the blob PUT was rejected. Resume by polling the
-          // existing job instead of creating a second provider upload.
-          retryMode: 'resume',
-          providerUserId,
-          uploadId,
-        });
-      }
+      await putSuuntoActivityBlob(userID, fileBuffer, uploadState);
 
       // Token refresh may repeat status polling, but must never repeat upload
       // initialization or blob delivery after Suunto has issued an upload ID.
-      return executeWithTokenRetry(
+      return pollSuuntoActivityUploadStatusWithToken(
+        userID,
+        uploadId,
+        providerUserIdForUpload,
         tokenQueryDocumentSnapshot,
-        accessToken => pollSuuntoActivityUploadStatus(userID, providerUserId, uploadId, accessToken),
-        `Check activity upload ${uploadId} for user ${userID}`,
       );
     } catch (error: unknown) {
       if (shouldPreserveServiceLifecycleError(error)) {
@@ -824,7 +1002,7 @@ function toSuuntoActivityCallableError(error: ProviderOperationError): HttpsErro
   }
 }
 
-function getSuuntoActivityCallableResumeState(data: unknown): SuuntoActivityUploadInitializationState | null {
+function getSuuntoActivityCallableResumeState(data: unknown): SuuntoActivityUploadResumeIdentifiers | null {
   const requestData = data as {
     resumeUploadId?: unknown;
     resumeProviderUserId?: unknown;
@@ -843,12 +1021,8 @@ function getSuuntoActivityCallableResumeState(data: unknown): SuuntoActivityUplo
     return null;
   }
   if (
-    !uploadId
-    || !providerUserId
-    || uploadId.length > 200
-    || providerUserId.length > 200
-    || uploadId.includes('/')
-    || providerUserId.includes('/')
+    !normalizeSuuntoUploadId(uploadId)
+    || !normalizeSuuntoProviderUserId(providerUserId)
   ) {
     throw new HttpsError('invalid-argument', 'Both Suunto resume identifiers are required.');
   }

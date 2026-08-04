@@ -117,7 +117,10 @@ export const importRouteToGarminAPI = onCall({
       throw new HttpsError('resource-exhausted', 'Garmin is rate-limiting course uploads. Please retry shortly.');
     }
     if (statusCode === 408 || (statusCode !== null && statusCode >= 500)) {
-      throw new HttpsError('unavailable', 'Garmin is temporarily unavailable. Please retry.');
+      throw new HttpsError(
+        'failed-precondition',
+        'Garmin did not confirm whether the course was created. Check Garmin Connect before trying again.',
+      );
     }
     if (statusCode !== null) {
       throw new HttpsError('failed-precondition', 'Garmin rejected the route upload.');

@@ -71,6 +71,12 @@ export interface ActivitySyncOriginalFileMetadata {
   extension?: string;
 }
 
+export interface ActivitySyncUploadContinuation {
+  type: 'suunto_blob_put_v1';
+  uploadUrl: string;
+  uploadHeaders: Record<string, string>;
+}
+
 export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   routeId: ActivitySyncRouteId;
   sourceServiceName: ServiceNames;
@@ -87,6 +93,7 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   destinationInfoCode?: string | null;
   destinationUploadCountedID?: string | null;
   destinationUploadCountedAt?: number;
+  destinationUploadContinuation?: ActivitySyncUploadContinuation | null;
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {

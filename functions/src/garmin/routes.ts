@@ -146,10 +146,30 @@ function toGarminRouteProviderError(
   }
 
   const statusCode = getGarminStatusCode(error) ?? undefined;
+  const transientTransportFailure = statusCode === undefined && isTransientProviderTransportError(error);
+  const ambiguousCreate = operation === 'route_create'
+    && (
+      statusCode === 408
+      || (statusCode !== undefined && statusCode >= 500)
+      || transientTransportFailure
+    );
+  if (ambiguousCreate) {
+    return new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation,
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created. Check Garmin Connect before trying again.',
+      statusCode,
+      providerUserId,
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+  }
   const retryable = statusCode === 408
     || statusCode === 429
     || (statusCode !== undefined && statusCode >= 500)
-    || (statusCode === undefined && isTransientProviderTransportError(error));
+    || transientTransportFailure;
   const message = retryable
     ? 'Garmin Connect is temporarily unavailable. Please retry.'
     : error instanceof Error
@@ -160,7 +180,11 @@ function toGarminRouteProviderError(
     operation,
     disposition: retryable ? 'retryable' : 'permanent',
     retryMode: retryable ? 'restart' : 'none',
-    code: retryable ? 'unavailable' : 'failed-precondition',
+    code: statusCode === 429
+      ? 'resource-exhausted'
+      : retryable
+        ? 'unavailable'
+        : 'failed-precondition',
     message,
     statusCode,
     providerUserId,

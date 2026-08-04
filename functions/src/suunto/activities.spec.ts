@@ -168,6 +168,7 @@ import {
     getSuuntoActivityUploadStatus,
     importActivityToSuuntoApp,
     recordSuccessfulSuuntoActivityUploadForQueueItem,
+    resumeSuuntoActivityBlobUpload,
     uploadActivityFileToSuunto,
 } from './activities';
 import { ProviderOperationError } from '../shared/provider-operation-error';
@@ -629,6 +630,10 @@ describe('importActivityToSuuntoApp', () => {
                 expect(persistUploadStateBeforeBlob).toHaveBeenCalledWith({
                     uploadId: 'pre-blob-state-upload-id',
                     providerUserId: 'token1',
+                    blobContinuation: {
+                        uploadUrl: 'https://storage.suunto.com/pre-blob-state-upload-url',
+                        uploadHeaders: {},
+                    },
                 });
                 return {};
             });
@@ -681,6 +686,118 @@ describe('importActivityToSuuntoApp', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('should resume the exact persisted signed blob PUT before polling its existing upload', async () => {
+        vi.useFakeTimers();
+        try {
+            const admin = await import('firebase-admin');
+            const tokenDocumentGet = (admin.firestore() as any)
+                .collection('suuntoAppAccessTokens')
+                .doc('test-user-id')
+                .collection('tokens')
+                .doc('token1')
+                .get;
+            tokenDocumentGet.mockResolvedValueOnce({
+                exists: true,
+                id: 'token1',
+                data: () => ({}),
+            });
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+            requestMocks.put.mockResolvedValue({});
+            requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'resumed-workout-key' });
+
+            const uploadPromise = resumeSuuntoActivityBlobUpload('test-user-id', Buffer.from('data'), {
+                uploadId: 'persisted-upload-id',
+                providerUserId: 'token1',
+                blobContinuation: {
+                    uploadUrl: 'https://storage.suunto.com/persisted-upload?signature=keep%2Bexact',
+                    uploadHeaders: { 'x-ms-blob-type': 'BlockBlob' },
+                },
+            });
+            await vi.runAllTimersAsync();
+            await expect(uploadPromise).resolves.toMatchObject({
+                status: 'success',
+                uploadId: 'persisted-upload-id',
+            });
+
+            expect(requestMocks.post).not.toHaveBeenCalled();
+            expect(requestMocks.put).toHaveBeenCalledWith({
+                headers: { 'x-ms-blob-type': 'BlockBlob' },
+                json: false,
+                url: 'https://storage.suunto.com/persisted-upload?signature=keep%2Bexact',
+                body: Buffer.from('data'),
+            });
+            expect(requestMocks.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: 'https://cloudapi.suunto.com/v2/upload/persisted-upload-id',
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should preserve status resume identifiers when forced token refresh hits temporary invalid_grant', async () => {
+        vi.useFakeTimers();
+        try {
+            const temporaryInvalidGrant = Object.assign(new Error('invalid_grant during Suunto outage'), {
+                statusCode: 400,
+                error: {
+                    error: 'invalid_grant',
+                    error_description: 'Temporary provider outage',
+                },
+            });
+            tokensMocks.getTokenData
+                .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
+                .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
+                .mockRejectedValueOnce(temporaryInvalidGrant);
+            requestMocks.post.mockResolvedValue({
+                id: 'post-blob-refresh-upload-id',
+                url: 'https://storage.suunto.com/post-blob-refresh-upload',
+                headers: {},
+            });
+            requestMocks.put.mockResolvedValue({});
+            requestMocks.get.mockRejectedValueOnce(createStatusCodeError('Unauthorized', 401));
+
+            const uploadPromise = uploadActivityFileToSuunto('test-user-id', Buffer.from('data'))
+                .catch(error => error);
+            await vi.runAllTimersAsync();
+            await expect(uploadPromise).resolves.toMatchObject({
+                name: 'ProviderOperationError',
+                operation: 'activity_upload_status',
+                disposition: 'retryable',
+                retryMode: 'resume',
+                providerOperationId: 'post-blob-refresh-upload-id',
+                providerUserId: 'token1',
+            });
+
+            expect(requestMocks.post).toHaveBeenCalledTimes(1);
+            expect(requestMocks.put).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should normalize terminal token refresh cleanup as auth required', async () => {
+        const terminalAuthError = Object.assign(new Error('Suunto connection requires reconnect'), {
+            name: 'TerminalServiceAuthError',
+            statusCode: 401,
+            providerErrorCode: 'invalid_token',
+            providerErrorMessage: 'Refresh token revoked',
+            providerUserId: 'token1',
+            dlqContext: 'AUTH_RECONNECT_REQUIRED',
+        });
+        tokensMocks.getTokenData.mockRejectedValueOnce(terminalAuthError);
+        const request = createMockRequest({
+            data: { file: Buffer.from('terminal-auth-data').toString('base64') },
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'unauthenticated',
+            details: { retryMode: 'none' },
+        });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
     });
 
     it('should not send the activity blob when issued upload identifiers cannot be persisted', async () => {
@@ -800,6 +917,24 @@ describe('importActivityToSuuntoApp', () => {
             data: {
                 file: Buffer.from('direct-resume-data').toString('base64'),
                 resumeUploadId: 'direct-resume-upload-id',
+            },
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
+    it.each(['..\\routes', '../routes', 'upload%2Froutes'])('should reject unsafe Suunto upload identifier %s', async (resumeUploadId) => {
+        const request = createMockRequest({
+            data: {
+                file: Buffer.from('direct-resume-data').toString('base64'),
+                resumeUploadId,
+                resumeProviderUserId: 'token1',
             },
         });
 
