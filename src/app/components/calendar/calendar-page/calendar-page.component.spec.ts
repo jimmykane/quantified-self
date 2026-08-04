@@ -86,13 +86,15 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-month')).toHaveLength(12);
   });
 
-  it('switches sport-family volume bars across duration, distance, ascent, and descent', async () => {
+  it('renders duration-based family bars with all positive recorded totals', async () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelectorAll('.calendar-volume-toggle mat-button-toggle')).toHaveLength(4);
+    expect(fixture.nativeElement.querySelector('.calendar-volume-toggle')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-heading')?.textContent)
+      .toContain('volume by duration');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim())
       .toBe('Running');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
@@ -106,11 +108,8 @@ describe('CalendarPageComponent', () => {
       'Ascent 450 m',
       'Descent 420 m',
     ]);
-
-    fixture.componentInstance.selectVolumeMetric('descent');
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('420 m');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-stat--bar-metric')
+      ?.getAttribute('aria-label')).toBe('Duration 1h');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('role'))
       .toBe('progressbar');
   });
@@ -135,7 +134,7 @@ describe('CalendarPageComponent', () => {
     expect(recordedTotals).toEqual(['Duration 1h']);
   });
 
-  it('marks ascent as not applicable while retaining alpine-ski descent', async () => {
+  it('omits alpine-ski ascent while retaining its recorded descent', async () => {
     watchEvents.mockReturnValue(of([createEvent(new Date(2026, 7, 3, 8), ActivityTypes.AlpineSki)]));
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
@@ -148,18 +147,10 @@ describe('CalendarPageComponent', () => {
       'Distance 10.00 Km',
       'Descent 420 m',
     ]);
-
-    fixture.componentInstance.selectVolumeMetric('ascent');
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('N/A');
-    expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('role')).toBeNull();
-
-    fixture.componentInstance.selectVolumeMetric('descent');
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('420 m');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
   });
 
-  it('applies the user summary exclusions to family elevation bars', async () => {
+  it('applies the user summary exclusions to family elevation details', async () => {
     watchEvents.mockReturnValue(of([createEvent(new Date(2026, 7, 3, 8), ActivityTypes.Cycling)]));
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
@@ -171,14 +162,6 @@ describe('CalendarPageComponent', () => {
       'Duration 1h',
       'Distance 10.00 Km',
     ]);
-
-    fixture.componentInstance.selectVolumeMetric('ascent');
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('N/A');
-
-    fixture.componentInstance.selectVolumeMetric('descent');
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('N/A');
   });
 
   it('pages by the selected view and keeps state in query parameters', () => {

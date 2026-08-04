@@ -162,7 +162,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('scale by recorded duration');
     expect(gettingStartedSection?.content).toContain('total distance, duration, and ascent');
     expect(gettingStartedSection?.content).toContain('Month totals exclude adjacent dates');
-    expect(gettingStartedSection?.content).toContain('**Duration**, **Distance**, **Ascent**, or **Descent**');
+    expect(gettingStartedSection?.content).toContain('compares the selected period by recorded duration');
     expect(gettingStartedSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
     expect(gettingStartedSection?.content).toContain('do not add ascent but do contribute descent');
     expect(gettingStartedSection?.content).toContain('summary exclusions in **Settings** also apply');

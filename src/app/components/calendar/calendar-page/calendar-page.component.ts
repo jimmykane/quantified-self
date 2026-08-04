@@ -57,7 +57,7 @@ interface CalendarFamilyVolumeStat {
   metric: ActivityCalendarVolumeMetric;
   icon: string;
   valueLabel: string;
-  isSelected: boolean;
+  isBarMetric: boolean;
   ariaLabel: string;
 }
 
@@ -76,13 +76,6 @@ interface CalendarFamilyVolumeRow {
   ariaLabel: string;
   stats: CalendarFamilyVolumeStat[];
 }
-
-const VALID_CALENDAR_VOLUME_METRICS = new Set<ActivityCalendarVolumeMetric>([
-  'duration',
-  'distance',
-  'ascent',
-  'descent',
-]);
 
 @Component({
   selector: 'app-calendar-page',
@@ -116,13 +109,12 @@ export class CalendarPageComponent {
     { value: 'month', label: 'Month', icon: 'calendar_view_month' },
     { value: 'year', label: 'Year', icon: 'calendar_month' },
   ];
-  readonly volumeMetricOptions: ReadonlyArray<CalendarVolumeMetricOption> = [
+  private readonly familyVolumeMetricOptions: ReadonlyArray<CalendarVolumeMetricOption> = [
     { value: 'duration', label: 'Duration', icon: 'schedule', dataType: null },
     { value: 'distance', label: 'Distance', icon: 'route', dataType: DataDistance.type },
     { value: 'ascent', label: 'Ascent', icon: 'trending_up', dataType: DataAscent.type },
     { value: 'descent', label: 'Descent', icon: 'trending_down', dataType: DataDescent.type },
   ];
-  readonly selectedVolumeMetric = signal<ActivityCalendarVolumeMetric>('duration');
   readonly routeState = toSignal(this.routeState$, { initialValue: this.initialRouteState });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly eventState = toSignal(combineLatest([
@@ -188,17 +180,13 @@ export class CalendarPageComponent {
       },
     ];
   });
-  readonly selectedVolumeMetricOption = computed(() => (
-    this.volumeMetricOptions.find(option => option.value === this.selectedVolumeMetric())
-    || this.volumeMetricOptions[0]
-  ));
   readonly familyVolumeRows = computed<CalendarFamilyVolumeRow[]>(() => {
     if (this.eventState().status !== 'ready') {
       return [];
     }
 
-    const selectedMetric = this.selectedVolumeMetricOption();
-    const metric = selectedMetric.value;
+    const barMetric = this.familyVolumeMetricOptions[0];
+    const metric = barMetric.value;
     const families = this.calendarModel().summary.families;
     const maximumValue = families.reduce((maximum, family) => {
       const aggregate = family.metrics[metric];
@@ -217,18 +205,11 @@ export class CalendarPageComponent {
     return families.map((family) => {
       const aggregate = family.metrics[metric];
       const hasData = aggregate.recordedEventCount > 0;
-      const isApplicable = aggregate.eligibleEventCount > 0;
-      const valueLabel = !isApplicable
-        ? 'N/A'
-        : !hasData
-          ? '--'
-          : formatMetricValue(selectedMetric, aggregate.value);
-      const metricStatus = !isApplicable
-        ? `${selectedMetric.label} not applicable`
-        : !hasData
-          ? `${selectedMetric.label} unavailable`
-          : `${selectedMetric.label} ${valueLabel}`;
-      const stats = this.volumeMetricOptions.flatMap((option): CalendarFamilyVolumeStat[] => {
+      const valueLabel = hasData ? formatMetricValue(barMetric, aggregate.value) : '--';
+      const metricStatus = hasData
+        ? `${barMetric.label} ${valueLabel}`
+        : `${barMetric.label} unavailable`;
+      const stats = this.familyVolumeMetricOptions.flatMap((option): CalendarFamilyVolumeStat[] => {
         const metricAggregate = family.metrics[option.value];
         if (metricAggregate.recordedEventCount <= 0 || metricAggregate.value <= 0) {
           return [];
@@ -239,7 +220,7 @@ export class CalendarPageComponent {
           metric: option.value,
           icon: option.icon,
           valueLabel: metricValueLabel,
-          isSelected: option.value === metric,
+          isBarMetric: option.value === metric,
           ariaLabel: `${option.label} ${metricValueLabel}`,
         }];
       });
@@ -257,7 +238,7 @@ export class CalendarPageComponent {
           ? aggregate.value / maximumValue * 100
           : 0,
         hasData,
-        progressLabel: `${family.label} ${selectedMetric.label}`,
+        progressLabel: `${family.label} ${barMetric.label}`,
         ariaLabel: `${family.label}, ${family.eventCount} ${family.eventCount === 1 ? 'activity' : 'activities'}, ${metricStatus}`,
         stats,
       };
@@ -285,13 +266,6 @@ export class CalendarPageComponent {
       return;
     }
     this.navigateToState({ ...this.routeState(), view });
-  }
-
-  selectVolumeMetric(value: unknown): void {
-    const metric = `${value || ''}` as ActivityCalendarVolumeMetric;
-    if (VALID_CALENDAR_VOLUME_METRICS.has(metric)) {
-      this.selectedVolumeMetric.set(metric);
-    }
   }
 
   navigatePeriod(direction: -1 | 1): void {
