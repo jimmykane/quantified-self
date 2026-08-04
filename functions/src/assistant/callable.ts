@@ -6,6 +6,7 @@ import {
   ASSISTANT_MAX_MESSAGE_CHARS,
   type AssistantChatRequest,
   type AssistantChatResponse,
+  type AssistantConversation,
   type AssistantMessage,
   type AssistantQuotaStatusResponse,
   type GetAssistantConversationResponse,
@@ -27,6 +28,7 @@ import {
   assistantConversationStore,
   type AssistantConversationStore,
   type BegunAssistantTurn,
+  type ReplayedAssistantTurn,
 } from './conversation-store';
 import { assistantRuntime, type AssistantRuntimeResult } from './runtime';
 
@@ -265,6 +267,63 @@ function mapAssistantError(error: unknown): HttpsError {
   );
 }
 
+function findCompletedRequest(
+  conversation: AssistantConversation | null,
+  input: AssistantChatRequest,
+): ReplayedAssistantTurn | null {
+  if (!conversation
+    || (input.conversationId
+      && input.conversationId !== conversation.conversationId)) {
+    return null;
+  }
+  const matchingMessage = conversation.messages.find(
+    message => message.id === input.requestId,
+  );
+  if (!matchingMessage) {
+    return null;
+  }
+  if (matchingMessage.role !== 'user') {
+    throw new AssistantConversationStoreError(
+      'request_id_conflict',
+      'The Assistant request identifier conflicts with a saved message.',
+    );
+  }
+  return {
+    kind: 'replayed',
+    conversation,
+    requestText: matchingMessage.text,
+  };
+}
+
+function assertReplayMatchesInput(
+  replayedTurn: ReplayedAssistantTurn,
+  input: AssistantChatRequest,
+): void {
+  if (replayedTurn.requestText !== input.message) {
+    throw new HttpsError(
+      'invalid-argument',
+      'requestId was already used for a different Assistant message.',
+    );
+  }
+}
+
+async function buildReplayResponse(
+  uid: string,
+  input: AssistantChatRequest,
+  replayedTurn: ReplayedAssistantTurn,
+  quotaRoleContext: AssistantUserRoleContext | null,
+  dependencies: AssistantCallableDependencies,
+): Promise<AssistantChatResponse> {
+  assertReplayMatchesInput(replayedTurn, input);
+  const quota = quotaRoleContext
+    ? await dependencies.getQuotaStatus(uid, quotaRoleContext)
+    : await dependencies.getQuotaStatus(uid);
+  return {
+    conversation: replayedTurn.conversation,
+    quota,
+  };
+}
+
 export async function runAssistantChat(
   value: unknown,
   context: AssistantCallableContext | undefined,
@@ -278,30 +337,58 @@ export async function runAssistantChat(
   try {
     await dependencies.assertLegalAccess(uid);
     const quotaRoleContext = resolveCallableQuotaRoleContext(context);
+    const completedRequest = findCompletedRequest(
+      await dependencies.conversationStore.getActiveConversation(uid),
+      input,
+    );
+    if (completedRequest) {
+      const replayResponse = await buildReplayResponse(
+        uid,
+        input,
+        completedRequest,
+        quotaRoleContext,
+        dependencies,
+      );
+      return replayResponse;
+    }
+    try {
+      reservation = quotaRoleContext
+        ? await dependencies.reserveQuota(uid, quotaRoleContext)
+        : await dependencies.reserveQuota(uid);
+    } catch (error) {
+      if (error instanceof HttpsError && error.code === 'resource-exhausted') {
+        const requestCompletedWhileReserving = findCompletedRequest(
+          await dependencies.conversationStore.getActiveConversation(uid),
+          input,
+        );
+        if (requestCompletedWhileReserving) {
+          const replayResponse = await buildReplayResponse(
+            uid,
+            input,
+            requestCompletedWhileReserving,
+            quotaRoleContext,
+            dependencies,
+          );
+          return replayResponse;
+        }
+      }
+      throw error;
+    }
     const turnStart = await dependencies.conversationStore.beginTurn(
       uid,
       input.conversationId,
       input.requestId,
     );
     if (turnStart.kind === 'replayed') {
-      if (turnStart.requestText !== input.message) {
-        throw new HttpsError(
-          'invalid-argument',
-          'requestId was already used for a different Assistant message.',
-        );
-      }
-      const quota = quotaRoleContext
-        ? await dependencies.getQuotaStatus(uid, quotaRoleContext)
-        : await dependencies.getQuotaStatus(uid);
+      assertReplayMatchesInput(turnStart, input);
+      const quota = await dependencies.releaseQuota(reservation);
+      reservation = null;
       return {
         conversation: turnStart.conversation,
         quota,
       };
     }
     begunTurn = turnStart;
-    reservation = quotaRoleContext
-      ? await dependencies.reserveQuota(uid, quotaRoleContext)
-      : await dependencies.reserveQuota(uid);
     const quota = await dependencies.finalizeQuota(reservation);
     reservation = null;
     const result = await dependencies.answer({

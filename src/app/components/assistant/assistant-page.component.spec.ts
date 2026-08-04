@@ -353,18 +353,44 @@ describe('AssistantPageComponent', () => {
     expect(requests[2].requestId).not.toBe(requests[0].requestId);
   });
 
-  it('preserves the first request identifier when reconciliation discovers its conversation', async () => {
+  it('retries the first request after it consumed the final quota slot', async () => {
     const createdConversation = {
       ...chatResponse.conversation,
       messages: [],
     };
+    const exhaustedQuota = {
+      ...chatResponse.quota,
+      successfulRequestCount: chatResponse.quota.limit,
+      remainingCount: 0,
+      blockedReason: 'limit_reached' as const,
+    };
     assistantService.sendMessage
       .mockRejectedValueOnce(new Error('network unavailable'))
-      .mockResolvedValueOnce(chatResponse);
+      .mockResolvedValueOnce({
+        ...chatResponse,
+        quota: exhaustedQuota,
+      });
     assistantService.getConversation.mockResolvedValueOnce(createdConversation);
+    quotaService.loadQuotaStatus.mockResolvedValueOnce(exhaustedQuota);
     component.promptControl.setValue('How am I today?');
 
     await component.sendMessage();
+    fixture.detectChanges();
+
+    expect(component.quota()?.remainingCount).toBe(0);
+    expect(fixture.nativeElement.querySelector('button[type="submit"]')?.disabled)
+      .toBe(false);
+
+    component.promptControl.setValue('Ask a different question');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button[type="submit"]')?.disabled)
+      .toBe(true);
+
+    component.promptControl.setValue('How am I today?');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button[type="submit"]')?.disabled)
+      .toBe(false);
+
     await component.sendMessage();
 
     const requests = assistantService.sendMessage.mock.calls.map(([request]) => request);

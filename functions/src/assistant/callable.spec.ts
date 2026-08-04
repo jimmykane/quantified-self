@@ -251,8 +251,8 @@ describe('Assistant callable', () => {
     expect(store.beginTurn).not.toHaveBeenCalled();
   });
 
-  it('does not reserve quota when the conversation is busy', async () => {
-    const { dependencies, store } = createDependencies();
+  it('releases an unused quota reservation when the conversation is busy', async () => {
+    const { dependencies, store, reservation } = createDependencies();
     vi.mocked(store.beginTurn).mockRejectedValue(new AssistantConversationStoreError(
       'turn_in_progress',
       'Another Assistant response is still in progress.',
@@ -266,12 +266,12 @@ describe('Assistant callable', () => {
       code: 'aborted',
       details: { reason: 'turn_in_progress' },
     });
-    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
-    expect(dependencies.releaseQuota).not.toHaveBeenCalled();
+    expect(dependencies.reserveQuota).toHaveBeenCalledWith('user-1');
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
   });
 
-  it('releases the turn lock when quota cannot be reserved', async () => {
+  it('does not acquire a turn lock when quota cannot be reserved', async () => {
     const { dependencies, store } = createDependencies();
     vi.mocked(dependencies.reserveQuota).mockRejectedValue(new HttpsError(
       'resource-exhausted',
@@ -284,10 +284,8 @@ describe('Assistant callable', () => {
       timeZone: 'UTC',
     }, context, dependencies)).rejects.toMatchObject({ code: 'resource-exhausted' });
 
-    expect(store.releaseTurn).toHaveBeenCalledWith(
-      'user-1',
-      expect.objectContaining({ turnId: 'turn-1' }),
-    );
+    expect(store.beginTurn).not.toHaveBeenCalled();
+    expect(store.releaseTurn).not.toHaveBeenCalled();
     expect(dependencies.releaseQuota).not.toHaveBeenCalled();
     expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
   });
@@ -346,6 +344,13 @@ describe('Assistant callable', () => {
 
   it('replays a completed request after it consumed the final quota slot', async () => {
     const { dependencies, store, conversation } = createDependencies();
+    const completedConversation = {
+      ...conversation,
+      messages: [
+        { ...conversation.messages[0], id: REQUEST_ID },
+        conversation.messages[1],
+      ],
+    };
     const exhaustedQuota = {
       ...quota,
       successfulRequestCount: quota.limit,
@@ -353,6 +358,68 @@ describe('Assistant callable', () => {
       blockedReason: 'limit_reached' as const,
     };
     vi.mocked(dependencies.getQuotaStatus).mockResolvedValue(exhaustedQuota);
+    vi.mocked(store.getActiveConversation).mockResolvedValue(completedConversation);
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).resolves.toEqual({
+      conversation: completedConversation,
+      quota: exhaustedQuota,
+    });
+
+    expect(dependencies.getQuotaStatus).toHaveBeenCalledWith('user-1');
+    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
+    expect(dependencies.releaseQuota).not.toHaveBeenCalled();
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.answer).not.toHaveBeenCalled();
+    expect(store.beginTurn).not.toHaveBeenCalled();
+    expect(store.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('rechecks replay when the final quota slot completes during reservation', async () => {
+    const { dependencies, store, conversation } = createDependencies();
+    const completedConversation = {
+      ...conversation,
+      messages: [
+        { ...conversation.messages[0], id: REQUEST_ID },
+        conversation.messages[1],
+      ],
+    };
+    const exhaustedQuota = {
+      ...quota,
+      successfulRequestCount: quota.limit,
+      remainingCount: 0,
+      blockedReason: 'limit_reached' as const,
+    };
+    vi.mocked(store.getActiveConversation)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(completedConversation);
+    vi.mocked(dependencies.reserveQuota).mockRejectedValue(new HttpsError(
+      'resource-exhausted',
+      'Assistant limit reached for this billing period.',
+    ));
+    vi.mocked(dependencies.getQuotaStatus).mockResolvedValue(exhaustedQuota);
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).resolves.toEqual({
+      conversation: completedConversation,
+      quota: exhaustedQuota,
+    });
+
+    expect(store.getActiveConversation).toHaveBeenCalledTimes(2);
+    expect(store.beginTurn).not.toHaveBeenCalled();
+    expect(dependencies.releaseQuota).not.toHaveBeenCalled();
+    expect(dependencies.answer).not.toHaveBeenCalled();
+  });
+
+  it('releases a reservation when the request completes before turn acquisition', async () => {
+    const { dependencies, store, reservation, conversation } = createDependencies();
     vi.mocked(store.beginTurn).mockResolvedValue({
       kind: 'replayed',
       conversation,
@@ -363,26 +430,53 @@ describe('Assistant callable', () => {
       requestId: REQUEST_ID,
       message: 'How am I today?',
       timeZone: 'UTC',
-      conversationId: 'conversation-1',
-    }, context, dependencies)).resolves.toEqual({
-      conversation,
-      quota: exhaustedQuota,
-    });
+    }, context, dependencies)).resolves.toEqual({ conversation, quota });
 
-    expect(dependencies.getQuotaStatus).toHaveBeenCalledWith('user-1');
-    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
-    expect(dependencies.releaseQuota).not.toHaveBeenCalled();
+    expect(dependencies.reserveQuota).toHaveBeenCalledWith('user-1');
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(dependencies.getQuotaStatus).not.toHaveBeenCalled();
     expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
     expect(dependencies.answer).not.toHaveBeenCalled();
-    expect(store.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('maps a completed-request quota refresh failure to a safe error', async () => {
+    const { dependencies, store, conversation } = createDependencies();
+    vi.mocked(store.getActiveConversation).mockResolvedValue({
+      ...conversation,
+      messages: [
+        { ...conversation.messages[0], id: REQUEST_ID },
+        conversation.messages[1],
+      ],
+    });
+    vi.mocked(dependencies.getQuotaStatus).mockRejectedValue(
+      new Error('firestore quota detail'),
+    );
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({
+      code: 'unavailable',
+      message: 'The Assistant could not answer right now. Please try again.',
+    });
+
+    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
+    expect(store.beginTurn).not.toHaveBeenCalled();
   });
 
   it('rejects reuse of a completed request identifier for different text', async () => {
     const { dependencies, store, conversation } = createDependencies();
-    vi.mocked(store.beginTurn).mockResolvedValue({
-      kind: 'replayed',
-      conversation,
-      requestText: 'Original question',
+    vi.mocked(store.getActiveConversation).mockResolvedValue({
+      ...conversation,
+      messages: [
+        {
+          ...conversation.messages[0],
+          id: REQUEST_ID,
+          text: 'Original question',
+        },
+        conversation.messages[1],
+      ],
     });
 
     await expect(runAssistantChat({
@@ -396,14 +490,18 @@ describe('Assistant callable', () => {
     expect(dependencies.releaseQuota).not.toHaveBeenCalled();
     expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
     expect(dependencies.answer).not.toHaveBeenCalled();
+    expect(store.beginTurn).not.toHaveBeenCalled();
   });
 
   it('rejects a request identifier collision before model work', async () => {
-    const { dependencies, store } = createDependencies();
-    vi.mocked(store.beginTurn).mockRejectedValue(new AssistantConversationStoreError(
-      'request_id_conflict',
-      'The Assistant request identifier conflicts with a saved message.',
-    ));
+    const { dependencies, store, conversation } = createDependencies();
+    vi.mocked(store.getActiveConversation).mockResolvedValue({
+      ...conversation,
+      messages: [
+        conversation.messages[0],
+        { ...conversation.messages[1], id: REQUEST_ID },
+      ],
+    });
 
     await expect(runAssistantChat({
       requestId: REQUEST_ID,
@@ -415,6 +513,7 @@ describe('Assistant callable', () => {
     expect(dependencies.releaseQuota).not.toHaveBeenCalled();
     expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
     expect(dependencies.answer).not.toHaveBeenCalled();
+    expect(store.beginTurn).not.toHaveBeenCalled();
   });
 
   it('requires authentication', async () => {

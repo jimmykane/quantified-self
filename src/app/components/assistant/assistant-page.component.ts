@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterModule } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
   type AssistantConversation,
@@ -45,7 +46,7 @@ export class AssistantPageComponent implements OnInit {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
-  private retryRequest: { message: string; requestId: string } | null = null;
+  private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
   readonly starterPrompts = ASSISTANT_STARTER_PROMPTS;
@@ -57,6 +58,9 @@ export class AssistantPageComponent implements OnInit {
       Validators.pattern(/\S/),
       Validators.maxLength(ASSISTANT_MAX_MESSAGE_CHARS),
     ],
+  });
+  private readonly promptValue = toSignal(this.promptControl.valueChanges, {
+    initialValue: this.promptControl.value,
   });
   readonly conversation = signal<AssistantConversation | null>(null);
   readonly pendingUserMessage = signal<AssistantMessage | null>(null);
@@ -77,6 +81,11 @@ export class AssistantPageComponent implements OnInit {
     const status = this.quota();
     return status !== null
       && (!status.isEligible || status.remainingCount <= 0);
+  });
+  readonly quotaPreventsSend = computed(() => {
+    const retryRequest = this.retryRequest();
+    return this.quotaBlocked()
+      && retryRequest?.message !== this.promptValue().trim();
   });
   readonly quotaText = computed(() => {
     const status = this.quota();
@@ -113,7 +122,7 @@ export class AssistantPageComponent implements OnInit {
   async sendMessage(): Promise<void> {
     if (this.loadingConversation()
       || this.sending()
-      || this.quotaBlocked()
+      || this.quotaPreventsSend()
       || this.promptControl.invalid) {
       this.promptControl.markAsTouched();
       return;
@@ -124,13 +133,14 @@ export class AssistantPageComponent implements OnInit {
     }
     this.errorMessage.set(null);
     this.sending.set(true);
-    const request = this.retryRequest?.message === text
-      ? this.retryRequest
+    const retryRequest = this.retryRequest();
+    const request = retryRequest?.message === text
+      ? retryRequest
       : {
         message: text,
         requestId: globalThis.crypto.randomUUID(),
       };
-    this.retryRequest = request;
+    this.retryRequest.set(request);
     this.pendingUserMessage.set({
       id: request.requestId,
       role: 'user',
@@ -151,7 +161,7 @@ export class AssistantPageComponent implements OnInit {
       });
       this.conversation.set(response.conversation);
       this.quota.set(response.quota);
-      this.retryRequest = null;
+      this.retryRequest.set(null);
     } catch (error) {
       let refreshedConversation: AssistantConversation | null | undefined;
       try {
@@ -167,13 +177,13 @@ export class AssistantPageComponent implements OnInit {
       )) {
         this.conversation.set(refreshedConversation);
         this.errorMessage.set(null);
-        this.retryRequest = null;
+        this.retryRequest.set(null);
       } else {
         if (activeConversation !== null
           && refreshedConversation !== undefined
           && refreshedConversation?.conversationId
             !== activeConversation.conversationId) {
-          this.retryRequest = null;
+          this.retryRequest.set(null);
         }
         if (refreshedConversation !== undefined) {
           this.conversation.set(refreshedConversation);
@@ -209,7 +219,7 @@ export class AssistantPageComponent implements OnInit {
     this.errorMessage.set(null);
     try {
       this.conversation.set(await this.assistantService.resetConversation());
-      this.retryRequest = null;
+      this.retryRequest.set(null);
       this.promptControl.setValue('');
     } catch (error) {
       this.errorMessage.set(this.assistantService.getErrorMessage(error));

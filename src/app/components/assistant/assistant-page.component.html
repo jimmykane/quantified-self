@@ -148,7 +148,7 @@
           [placeholder]="composerPlaceholder"></textarea>
         <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
       </mat-form-field>
-      <button mat-flat-button type="submit" [disabled]="loadingConversation() || sending() || quotaBlocked() || promptControl.invalid" aria-label="Send message">
+      <button mat-flat-button type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
         @if (sending()) {
           <mat-spinner diameter="20"></mat-spinner>
         } @else {
