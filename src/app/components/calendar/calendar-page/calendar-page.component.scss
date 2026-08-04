@@ -243,16 +243,19 @@
 
 .calendar-family-volume-row {
   display: grid;
-  min-height: 64px;
+  min-height: 76px;
   grid-template-columns: minmax(180px, 280px) minmax(88px, auto) minmax(180px, 1fr);
   align-items: center;
-  gap: 18px;
-  padding: 8px 4px;
+  column-gap: 18px;
+  row-gap: 7px;
+  padding: 10px 4px;
 }
 
 .calendar-family-volume-identity {
   display: flex;
   min-width: 0;
+  grid-column: 1;
+  grid-row: 1 / span 2;
   align-items: center;
   gap: 10px;
 }
@@ -291,6 +294,8 @@
 
 .calendar-family-volume-value {
   min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
   overflow: hidden;
   color: var(--mat-sys-on-surface);
   font-family: 'Barlow Condensed', sans-serif;
@@ -306,6 +311,8 @@
 .calendar-family-volume-track {
   position: relative;
   height: 8px;
+  grid-column: 3;
+  grid-row: 1;
   overflow: hidden;
   border-radius: 4px;
   background: var(--mat-sys-surface-container-highest);
@@ -315,6 +322,48 @@
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: inherit;
+}
+
+.calendar-family-volume-stats {
+  display: flex;
+  min-width: 0;
+  grid-column: 3;
+  grid-row: 2;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.calendar-family-volume-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+.calendar-family-volume-stat mat-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  font-size: 15px;
+  line-height: 15px;
+}
+
+.calendar-family-volume-stat-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.calendar-family-volume-stat--selected {
+  color: var(--mat-sys-on-surface);
+}
+
+.calendar-family-volume-stat--selected .calendar-family-volume-stat-value {
+  font-weight: 600;
 }
 
 @media (max-width: 720px) {
@@ -383,14 +432,31 @@
   }
 
   .calendar-family-volume-row {
-    min-height: 72px;
+    min-height: 92px;
     grid-template-columns: minmax(0, 1fr) minmax(72px, auto);
     gap: 8px 12px;
     padding: 10px 2px;
   }
 
+  .calendar-family-volume-identity {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .calendar-family-volume-value {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
   .calendar-family-volume-track {
     grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .calendar-family-volume-stats {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    column-gap: 12px;
   }
 
   .calendar-today-button--desktop {

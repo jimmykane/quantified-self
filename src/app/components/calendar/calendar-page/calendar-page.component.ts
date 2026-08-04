@@ -53,6 +53,14 @@ interface CalendarVolumeMetricOption {
   dataType: string | null;
 }
 
+interface CalendarFamilyVolumeStat {
+  metric: ActivityCalendarVolumeMetric;
+  icon: string;
+  valueLabel: string;
+  isSelected: boolean;
+  ariaLabel: string;
+}
+
 interface CalendarFamilyVolumeRow {
   id: string;
   label: string;
@@ -66,6 +74,7 @@ interface CalendarFamilyVolumeRow {
   hasData: boolean;
   progressLabel: string;
   ariaLabel: string;
+  stats: CalendarFamilyVolumeStat[];
 }
 
 const VALID_CALENDAR_VOLUME_METRICS = new Set<ActivityCalendarVolumeMetric>([
@@ -196,6 +205,14 @@ export class CalendarPageComponent {
       return aggregate.recordedEventCount > 0 ? Math.max(maximum, aggregate.value) : maximum;
     }, 0);
     const unitSettings = this.currentUser()?.settings?.unitSettings ?? null;
+    const formatMetricValue = (option: CalendarVolumeMetricOption, value: number): string => (
+      option.value === 'duration'
+        ? formatActivityCalendarDuration(value)
+        : formatUnitAwareDataValue(option.dataType || undefined, value, unitSettings, {
+          stripRepeatedUnit: true,
+          locale: this.locale,
+        }) || `${value}`
+    );
 
     return families.map((family) => {
       const aggregate = family.metrics[metric];
@@ -205,17 +222,27 @@ export class CalendarPageComponent {
         ? 'N/A'
         : !hasData
           ? '--'
-          : metric === 'duration'
-            ? formatActivityCalendarDuration(aggregate.value)
-            : formatUnitAwareDataValue(selectedMetric.dataType || undefined, aggregate.value, unitSettings, {
-              stripRepeatedUnit: true,
-              locale: this.locale,
-            }) || `${aggregate.value}`;
+          : formatMetricValue(selectedMetric, aggregate.value);
       const metricStatus = !isApplicable
         ? `${selectedMetric.label} not applicable`
         : !hasData
           ? `${selectedMetric.label} unavailable`
           : `${selectedMetric.label} ${valueLabel}`;
+      const stats = this.volumeMetricOptions.flatMap((option): CalendarFamilyVolumeStat[] => {
+        const metricAggregate = family.metrics[option.value];
+        if (metricAggregate.recordedEventCount <= 0 || metricAggregate.value <= 0) {
+          return [];
+        }
+
+        const metricValueLabel = formatMetricValue(option, metricAggregate.value);
+        return [{
+          metric: option.value,
+          icon: option.icon,
+          valueLabel: metricValueLabel,
+          isSelected: option.value === metric,
+          ariaLabel: `${option.label} ${metricValueLabel}`,
+        }];
+      });
 
       return {
         id: family.id,
@@ -232,6 +259,7 @@ export class CalendarPageComponent {
         hasData,
         progressLabel: `${family.label} ${selectedMetric.label}`,
         ariaLabel: `${family.label}, ${family.eventCount} ${family.eventCount === 1 ? 'activity' : 'activities'}, ${metricStatus}`,
+        stats,
       };
     }).sort((left, right) => (
       Number(right.hasData) - Number(left.hasData)

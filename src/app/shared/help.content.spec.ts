@@ -166,6 +166,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
     expect(gettingStartedSection?.content).toContain('do not add ascent but do contribute descent');
     expect(gettingStartedSection?.content).toContain('summary exclusions in **Settings** also apply');
+    expect(gettingStartedSection?.content).toContain('totals appear with icons beneath each bar');
     expect(gettingStartedSection?.content).toContain('calendar owns a visible-period activity query');
     expect(gettingStartedSection?.content).toContain('independent from the dashboard event table');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');

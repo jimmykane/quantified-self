@@ -98,6 +98,14 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
     expect((fixture.nativeElement.querySelector('.calendar-family-volume-fill') as HTMLElement)?.style.width)
       .toBe('100%');
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+      .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
+    expect(recordedTotals).toEqual([
+      'Duration 1h',
+      'Distance 10.00 Km',
+      'Ascent 450 m',
+      'Descent 420 m',
+    ]);
 
     fixture.componentInstance.selectVolumeMetric('descent');
     fixture.detectChanges();
@@ -107,11 +115,39 @@ describe('CalendarPageComponent', () => {
       .toBe('progressbar');
   });
 
+  it('shows only positive recorded totals beneath each sport-family bar', async () => {
+    watchEvents.mockReturnValue(of([createEvent(
+      new Date(2026, 7, 3, 8),
+      ActivityTypes.Running,
+      {
+        [DataDistance.type]: null,
+        [DataAscent.type]: 0,
+        [DataDescent.type]: null,
+      },
+    )]));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+      .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
+    expect(recordedTotals).toEqual(['Duration 1h']);
+  });
+
   it('marks ascent as not applicable while retaining alpine-ski descent', async () => {
     watchEvents.mockReturnValue(of([createEvent(new Date(2026, 7, 3, 8), ActivityTypes.AlpineSki)]));
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+      .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
+    expect(recordedTotals).toEqual([
+      'Duration 1h',
+      'Distance 10.00 Km',
+      'Descent 420 m',
+    ]);
 
     fixture.componentInstance.selectVolumeMetric('ascent');
     fixture.detectChanges();
@@ -128,6 +164,13 @@ describe('CalendarPageComponent', () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+
+    const recordedTotals = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+      .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
+    expect(recordedTotals).toEqual([
+      'Duration 1h',
+      'Distance 10.00 Km',
+    ]);
 
     fixture.componentInstance.selectVolumeMetric('ascent');
     fixture.detectChanges();
@@ -231,12 +274,14 @@ describe('CalendarPageComponent', () => {
 function createEvent(
   startDate = new Date(2026, 7, 3, 8),
   activityType = ActivityTypes.Running,
+  statOverrides: Partial<Record<string, number | null>> = {},
 ): EventInterface {
-  const statValues: Record<string, number> = {
+  const statValues: Record<string, number | null> = {
     [DataDuration.type]: 3600,
     [DataDistance.type]: 10_000,
     [DataAscent.type]: 450,
     [DataDescent.type]: 420,
+    ...statOverrides,
   };
   return {
     name: 'Morning run',
@@ -244,7 +289,7 @@ function createEvent(
     getID: () => 'event-1',
     getActivityTypesAsArray: () => [activityType],
     getActivityTypesAsString: () => activityType,
-    getStat: (type: string) => statValues[type] === undefined
+    getStat: (type: string) => statValues[type] === undefined || statValues[type] === null
       ? null
       : { getValue: () => statValues[type] },
   } as unknown as EventInterface;
