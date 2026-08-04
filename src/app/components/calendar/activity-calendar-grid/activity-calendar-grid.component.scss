@@ -113,6 +113,7 @@
 }
 
 .activity-calendar-day-number {
+  box-sizing: border-box;
   display: inline-flex;
   width: 26px;
   height: 26px;
@@ -125,6 +126,8 @@
 }
 
 .activity-calendar-day--today .activity-calendar-day-number {
+  /* Inter's proportional numerals sit slightly right inside the circular marker. */
+  padding-right: 1px;
   background: var(--mat-sys-primary);
   color: var(--mat-sys-on-primary);
 }
