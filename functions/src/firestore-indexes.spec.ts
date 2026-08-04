@@ -33,56 +33,90 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
-    it('keeps Wahoo token cleanup and duplicate-account queries deployable', () => {
+    it('keeps exactly the Wahoo indexes required by token lookup, disconnect retry, queue operations, and TTL', () => {
         const config = loadFirestoreIndexes();
 
-        expect(config.indexes).toContainEqual({
+        const wahooIndexes = config.indexes.filter(index => (
+            index.collectionGroup.startsWith('wahooAPI')
+            || index.fields.some(field => field.fieldPath === 'wahooUserID')
+        ));
+        expect(wahooIndexes).toHaveLength(6);
+        expect(wahooIndexes).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'tokens',
+                queryScope: 'COLLECTION_GROUP',
+                fields: [
+                    { fieldPath: 'wahooUserID', order: 'ASCENDING' },
+                    { fieldPath: 'serviceName', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'wahooAPIAccessTokens',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'disconnectManualReviewRequired', order: 'ASCENDING' },
+                    { fieldPath: 'disconnectState', order: 'ASCENDING' },
+                    { fieldPath: 'disconnectNextAttemptAt', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'wahooAPIWorkoutQueue',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'dispatchedToCloudTask', order: 'ASCENDING' },
+                    { fieldPath: 'processed', order: 'ASCENDING' },
+                    { fieldPath: 'retryCount', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'wahooAPIWorkoutQueue',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'processed', order: 'ASCENDING' },
+                    { fieldPath: 'dateCreated', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'wahooAPIWorkoutQueue',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'processed', order: 'ASCENDING' },
+                    { fieldPath: 'processedAt', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'wahooAPIWorkoutQueue',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'processed', order: 'ASCENDING' },
+                    { fieldPath: 'retryCount', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+        ]));
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'wahooAPIWorkoutQueue',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+        expect(config.fieldOverrides).not.toContainEqual(expect.objectContaining({
             collectionGroup: 'tokens',
-            queryScope: 'COLLECTION_GROUP',
-            fields: [
-                {
-                    fieldPath: 'wahooUserID',
-                    order: 'ASCENDING',
-                },
-                {
-                    fieldPath: 'serviceName',
-                    order: 'ASCENDING',
-                },
-                {
-                    fieldPath: '__name__',
-                    order: 'ASCENDING',
-                },
-            ],
-            density: 'SPARSE_ALL',
-        });
-    });
-
-    it('keeps Wahoo pending-disconnect retries deployable', () => {
-        const config = loadFirestoreIndexes();
-
-        expect(config.indexes).toContainEqual({
-            collectionGroup: 'wahooAPIAccessTokens',
-            queryScope: 'COLLECTION',
-            fields: [
-                {
-                    fieldPath: 'disconnectManualReviewRequired',
-                    order: 'ASCENDING',
-                },
-                {
-                    fieldPath: 'disconnectState',
-                    order: 'ASCENDING',
-                },
-                {
-                    fieldPath: 'disconnectNextAttemptAt',
-                    order: 'ASCENDING',
-                },
-                {
-                    fieldPath: '__name__',
-                    order: 'ASCENDING',
-                },
-            ],
-            density: 'SPARSE_ALL',
-        });
+            fieldPath: 'wahooUserID',
+        }));
+        expect(config.indexes.some(index => index.collectionGroup === 'wahooAPIUserMappings')).toBe(false);
+        expect(config.fieldOverrides.some(index => index.collectionGroup === 'wahooAPIUserMappings')).toBe(false);
     });
 
     it('keeps scoped dashboard Power Curve auto-tile eligibility query deployable', () => {

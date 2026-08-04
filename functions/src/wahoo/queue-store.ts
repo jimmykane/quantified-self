@@ -9,6 +9,10 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { MAX_RETRY_COUNT } from '../shared/queue-config';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 import {
+  isServiceDisconnectPendingData,
+  type PendingServiceDisconnectRootData,
+} from '../service-disconnect-pending-state';
+import {
   markQueueItemDeletedForUserCleanup,
   QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
@@ -290,10 +294,10 @@ export async function cleanupWahooPartialEventPersistence(
 }
 
 /**
- * Every event/activity document write verifies the exact server-side token
- * and the claimed queue revision in its own transaction. Token deletion or a
- * newer Wahoo summary therefore conflicts with in-flight persistence instead
- * of racing after a read-only precheck.
+ * Every event/activity document write verifies the server-side connection and
+ * claimed queue revision in its own transaction. Token deletion, a pending
+ * disconnect, or a newer Wahoo summary therefore conflicts with in-flight
+ * persistence instead of racing after a read-only precheck.
  */
 export function createWahooEventWriteConnectionGuard(
   queueItem: WahooAPIWorkoutQueueItemInterface,
@@ -306,17 +310,24 @@ export function createWahooEventWriteConnectionGuard(
     return async () => false;
   }
 
-  const tokenRef = admin.firestore()
+  const tokenRootRef = admin.firestore()
     .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(firebaseUserID)
+    .doc(firebaseUserID);
+  const tokenRef = tokenRootRef
     .collection('tokens')
     .doc(wahooUserID);
   return async (transaction) => {
-    const [tokenSnapshot, queueSnapshot] = await Promise.all([
+    const [tokenRootSnapshot, tokenSnapshot, queueSnapshot] = await Promise.all([
+      transaction.get(tokenRootRef),
       transaction.get(tokenRef),
       transaction.get(queueItemRef),
     ]);
     if (!tokenSnapshot.exists || !queueSnapshot.exists) return false;
+    if (tokenRootSnapshot.exists && isServiceDisconnectPendingData(
+      tokenRootSnapshot.data() as PendingServiceDisconnectRootData,
+    )) {
+      return false;
+    }
     const token = tokenSnapshot.data();
     const currentQueueItem = queueSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
     return token?.serviceName === SERVICE_NAME

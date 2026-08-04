@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => {
   const transactionDelete = vi.fn();
   const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1' };
   const tokenRef = { id: 'wahoo-1', path: 'wahooAPIAccessTokens/firebase-1/tokens/wahoo-1' };
+  const tokenRootRef = {
+    id: 'firebase-1',
+    path: 'wahooAPIAccessTokens/firebase-1',
+    collection: () => ({ doc: () => tokenRef }),
+  };
   const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
   const eventRef = { id: 'event-1', path: 'users/firebase-1/events/event-1' };
   const activityRefOne = { id: 'activity-1', path: 'users/firebase-1/activities/activity-1' };
@@ -23,6 +28,7 @@ const mocks = vi.hoisted(() => {
     transactionDelete,
     ref,
     tokenRef,
+    tokenRootRef,
     failedRef,
     eventRef,
     activityRefOne,
@@ -64,9 +70,7 @@ vi.mock('firebase-admin', () => ({
       }
       if (name === 'wahooAPIAccessTokens') {
         return {
-          doc: () => ({
-            collection: () => ({ doc: () => mocks.tokenRef }),
-          }),
+          doc: () => mocks.tokenRootRef,
         };
       }
       return { doc: () => {
@@ -296,6 +300,9 @@ describe('upsertWahooWorkoutQueueItem', () => {
     );
     const transaction = {
       get: vi.fn((ref: unknown) => {
+        if (ref === mocks.tokenRootRef) {
+          return Promise.resolve({ exists: true, data: () => ({}) });
+        }
         if (ref === mocks.tokenRef) {
           return Promise.resolve({
             exists: true,
@@ -310,8 +317,38 @@ describe('upsertWahooWorkoutQueueItem', () => {
     } as unknown as admin.firestore.Transaction;
 
     await expect(guard(transaction)).resolves.toBe(true);
+    expect(transaction.get).toHaveBeenCalledWith(mocks.tokenRootRef);
     expect(transaction.get).toHaveBeenCalledWith(mocks.tokenRef);
     expect(transaction.get).toHaveBeenCalledWith(mocks.ref);
+  });
+
+  it('rejects event writes when disconnect becomes pending during persistence', async () => {
+    const guard = createWahooEventWriteConnectionGuard(
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
+      'worker-1',
+    );
+    const transaction = {
+      get: vi.fn((ref: unknown) => {
+        if (ref === mocks.tokenRootRef) {
+          return Promise.resolve({
+            exists: true,
+            data: () => ({ disconnectState: 'disconnect_pending' }),
+          });
+        }
+        if (ref === mocks.tokenRef) {
+          return Promise.resolve({
+            exists: true,
+            data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
+          });
+        }
+        return Promise.resolve({
+          exists: true,
+          data: () => ({ ...input, processingOwner: 'worker-1' }),
+        });
+      }),
+    } as unknown as admin.firestore.Transaction;
+
+    await expect(guard(transaction)).resolves.toBe(false);
   });
 
   it('rejects event writes after the Wahoo token disappears or the queue revision is superseded', async () => {
@@ -320,27 +357,37 @@ describe('upsertWahooWorkoutQueueItem', () => {
       'worker-1',
     );
     const transaction = {
-      get: vi.fn((ref: unknown) => Promise.resolve(ref === mocks.tokenRef
-        ? { exists: false }
-        : { exists: true, data: () => ({ ...input, processingOwner: 'worker-1' }) })),
+      get: vi.fn((ref: unknown) => {
+        if (ref === mocks.tokenRootRef) {
+          return Promise.resolve({ exists: true, data: () => ({}) });
+        }
+        return Promise.resolve(ref === mocks.tokenRef
+          ? { exists: false }
+          : { exists: true, data: () => ({ ...input, processingOwner: 'worker-1' }) });
+      }),
     } as unknown as admin.firestore.Transaction;
 
     await expect(guard(transaction)).resolves.toBe(false);
 
-    vi.mocked(transaction.get).mockImplementation((ref: unknown) => Promise.resolve(ref === mocks.tokenRef
-      ? {
-        exists: true,
-        data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
+    vi.mocked(transaction.get).mockImplementation((ref: unknown) => {
+      if (ref === mocks.tokenRootRef) {
+        return Promise.resolve({ exists: true, data: () => ({}) }) as never;
       }
-      : {
-        exists: true,
-        data: () => ({
-          ...input,
-          workoutSummaryID: 'summary-2',
-          summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
-          processingOwner: 'worker-2',
-        }),
-      }) as never);
+      return Promise.resolve(ref === mocks.tokenRef
+        ? {
+          exists: true,
+          data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
+        }
+        : {
+          exists: true,
+          data: () => ({
+            ...input,
+            workoutSummaryID: 'summary-2',
+            summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+            processingOwner: 'worker-2',
+          }),
+        }) as never;
+    });
     await expect(guard(transaction)).resolves.toBe(false);
   });
 

@@ -555,6 +555,7 @@ async function hasConnectedTokenForProviderLookup(
 ): Promise<boolean> {
     const snapshot = await db.collectionGroup('tokens')
         .where(lookup.tokenField, '==', lookup.providerUserID)
+        .where('serviceName', '==', lookup.serviceName)
         .get();
     return getSnapshotDocs(snapshot).some((doc) => {
         if (!tokenSnapshotHasServiceName(doc, lookup.serviceName)) {

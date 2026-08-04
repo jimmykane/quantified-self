@@ -1108,7 +1108,7 @@ describe('cleanupUserAccounts', () => {
 
         expect(collectionGroupMock).toHaveBeenCalledWith('tokens');
         expect(collectionGroupWhereMock).toHaveBeenCalledWith('userName', '==', 'legacy-suunto-provider');
-        expect(collectionGroupWhereMock).not.toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
+        expect(collectionGroupWhereMock).toHaveBeenCalledWith('serviceName', '==', ServiceNames.SuuntoApp);
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({
             path: 'sleepSyncQueue/legacy-provider-only-sleep',
         }));
