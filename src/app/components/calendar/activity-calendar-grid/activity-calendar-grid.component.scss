@@ -6,6 +6,11 @@
 
 .activity-calendar {
   --activity-calendar-weekend-tint: 4%;
+  --activity-calendar-weekend-background: color-mix(
+    in srgb,
+    var(--mat-sys-primary) var(--activity-calendar-weekend-tint),
+    transparent
+  );
 
   container-type: inline-size;
   width: 100%;
@@ -32,7 +37,9 @@
 }
 
 .activity-calendar-month--surface {
-  padding: clamp(12px, 1.8vw, 20px);
+  --activity-calendar-month-padding: clamp(12px, 1.8vw, 20px);
+
+  padding: var(--activity-calendar-month-padding);
   overflow: hidden;
 }
 
@@ -76,11 +83,14 @@
 }
 
 .activity-calendar-weekday--weekend {
-  background: color-mix(
-    in srgb,
-    var(--mat-sys-primary) var(--activity-calendar-weekend-tint),
-    transparent
-  );
+  background: var(--activity-calendar-weekend-background);
+}
+
+.activity-calendar:not(.activity-calendar--year)
+  .activity-calendar-month--surface
+  .activity-calendar-weekday--weekend {
+  box-shadow: 0 calc(-1 * var(--activity-calendar-month-padding)) 0
+    var(--activity-calendar-weekend-background);
 }
 
 .activity-calendar-weekdays .activity-calendar-weekday--weekend {
@@ -155,11 +165,7 @@
 }
 
 .activity-calendar-day--weekend {
-  background: color-mix(
-    in srgb,
-    var(--mat-sys-primary) var(--activity-calendar-weekend-tint),
-    transparent
-  );
+  background: var(--activity-calendar-weekend-background);
 }
 
 .activity-calendar-day-number {
