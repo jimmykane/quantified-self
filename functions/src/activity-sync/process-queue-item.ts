@@ -29,6 +29,7 @@ import {
 import {
     getSuuntoActivityUploadStatus,
     recordSuccessfulSuuntoActivityUploadForQueueItem,
+    SuuntoActivityUploadStatePersistenceSkippedError,
     uploadActivityFileToSuunto,
 } from '../suunto/activities';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
@@ -286,7 +287,14 @@ async function uploadToDestination(
             if (!fileBuffer) {
                 throw new Error('Suunto activity upload is missing its source file.');
             }
-            return uploadActivityFileToSuunto(queueItem.userID, fileBuffer);
+            return uploadActivityFileToSuunto(queueItem.userID, fileBuffer, {
+                persistUploadStateBeforeBlob: state => persistDestinationUploadState(queueItem, {
+                    status: 'pending',
+                    message: 'Suunto activity upload initialized.',
+                    uploadId: state.uploadId,
+                    providerUserId: state.providerUserId,
+                }),
+            });
         case ServiceNames.WahooAPI:
             if (queueItem.destinationUploadID) {
                 return getWahooActivityUploadStatus(queueItem.userID, queueItem.destinationUploadID);
@@ -307,6 +315,18 @@ function hasPersistedDestinationUpload(queueItem: ActivitySyncQueueItemInterface
         return !!queueItem.destinationUploadID && !!queueItem.destinationProviderUserID;
     }
     return !!queueItem.destinationUploadID;
+}
+
+function hasMatchingPersistedDestinationUpload(
+    queueItem: ActivitySyncQueueItemInterface,
+    uploadId: string,
+    providerUserId?: string,
+): boolean {
+    return queueItem.destinationUploadID === uploadId
+        && (
+            queueItem.destinationServiceName !== ServiceNames.SuuntoApp
+            || queueItem.destinationProviderUserID === providerUserId
+        );
 }
 
 function hasIncompleteSuuntoDestinationUpload(queueItem: ActivitySyncQueueItemInterface): boolean {
@@ -829,6 +849,12 @@ export async function processActivitySyncQueueItem(
             successProcessedAt: Date.now(),
         });
     } catch (error) {
+        if (error instanceof SuuntoActivityUploadStatePersistenceSkippedError) {
+            // The guarded persistence path already tombstoned and removed the
+            // queue item when deletion started. No provider blob was sent.
+            return QueueResult.Processed;
+        }
+
         if (duringDestinationUpload && isProviderOperationError(error) && error.disposition === 'auth_required') {
             logProviderFailureDecision(queueItem, error, 'skip');
             await safelyWriteMetadata(() => setActivitySyncSkippedMetadata({
@@ -933,20 +959,22 @@ export async function processActivitySyncQueueItem(
                     uploadId: providerOperationId,
                     providerUserId,
                 } satisfies UploadActivityFileResult;
-                let persisted: boolean;
-                try {
-                    persisted = await persistDestinationUploadState(queueItem, pendingUploadState);
-                } catch (persistenceError) {
-                    return moveUploadStatePersistenceFailureToDlq(
-                        queueItem,
-                        pendingUploadState,
-                        persistenceError,
-                        bulkWriter,
-                        routeMeta,
-                    );
-                }
-                if (!persisted) {
-                    return QueueResult.Processed;
+                if (!hasMatchingPersistedDestinationUpload(queueItem, providerOperationId, providerUserId)) {
+                    let persisted: boolean;
+                    try {
+                        persisted = await persistDestinationUploadState(queueItem, pendingUploadState);
+                    } catch (persistenceError) {
+                        return moveUploadStatePersistenceFailureToDlq(
+                            queueItem,
+                            pendingUploadState,
+                            persistenceError,
+                            bulkWriter,
+                            routeMeta,
+                        );
+                    }
+                    if (!persisted) {
+                        return QueueResult.Processed;
+                    }
                 }
             } else if (error.retryMode === 'restart') {
                 const cleared = await clearPendingDestinationUploadForRestart(queueItem);

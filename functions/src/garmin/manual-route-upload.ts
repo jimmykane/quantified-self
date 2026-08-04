@@ -21,6 +21,7 @@ import {
   uploadManualRouteToGarminConnect,
 } from './routes';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { isProviderOperationError } from '../shared/provider-operation-error';
 
 function getStatusCode(error: unknown): number | null {
   const directStatusCode = (error as { statusCode?: unknown } | null)?.statusCode;
@@ -86,6 +87,22 @@ export const importRouteToGarminAPI = onCall({
       logger.error('[importRouteToGarminAPI] Could not verify account deletion state', { userID, error });
       throw new HttpsError('unavailable', 'Could not verify account state. Please retry.');
     }
+    if (isProviderOperationError(error)) {
+      switch (error.disposition) {
+        case 'retryable':
+          throw new HttpsError(
+            error.code === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable',
+            error.message,
+          );
+        case 'auth_required':
+          throw new HttpsError('unauthenticated', error.message);
+        case 'permission_required':
+          throw new HttpsError('failed-precondition', error.message);
+        case 'permanent':
+        default:
+          throw new HttpsError('failed-precondition', error.message);
+      }
+    }
 
     const statusCode = getStatusCode(error);
     logger.warn('[importRouteToGarminAPI] Route upload failed', {
@@ -99,7 +116,7 @@ export const importRouteToGarminAPI = onCall({
     if (statusCode === 429) {
       throw new HttpsError('resource-exhausted', 'Garmin is rate-limiting course uploads. Please retry shortly.');
     }
-    if (statusCode !== null && statusCode >= 500) {
+    if (statusCode === 408 || (statusCode !== null && statusCode >= 500)) {
       throw new HttpsError('unavailable', 'Garmin is temporarily unavailable. Please retry.');
     }
     if (statusCode !== null) {

@@ -130,6 +130,7 @@ vi.mock('../suunto/activities', () => ({
   uploadActivityFileToSuunto: mockUploadActivityFileToSuunto,
   getSuuntoActivityUploadStatus: mockGetSuuntoActivityUploadStatus,
   recordSuccessfulSuuntoActivityUploadForQueueItem: mockRecordSuccessfulSuuntoActivityUploadForQueueItem,
+  SuuntoActivityUploadStatePersistenceSkippedError: class SuuntoActivityUploadStatePersistenceSkippedError extends Error {},
 }));
 
 vi.mock('../wahoo/activities', () => ({
@@ -244,7 +245,11 @@ describe('activity-sync/process-queue-item', () => {
 
     expect(result).toBe(QueueResult.Processed);
     expect(mockSetActivitySyncProcessingMetadata).toHaveBeenCalled();
-    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith(
+      'user-1',
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ persistUploadStateBeforeBlob: expect.any(Function) }),
+    );
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
       phase: 'before_activity_sync_suunto_upload_state_persist',
       updateData: expect.objectContaining({
@@ -270,6 +275,49 @@ describe('activity-sync/process-queue-item', () => {
       baseQueueItem.ref,
       'upload-1',
     );
+  });
+
+  it('persists a fresh Suunto upload ID through the guarded queue write before blob delivery continues', async () => {
+    mockUploadActivityFileToSuunto.mockImplementationOnce(async (_userID, _fileBuffer, options) => {
+      expect(baseQueueItem.destinationUploadID).toBeUndefined();
+      const persisted = await options.persistUploadStateBeforeBlob({
+        uploadId: 'pre-blob-upload',
+        providerUserId: 'suunto-user-1',
+      });
+      expect(persisted).toBe(true);
+      expect(baseQueueItem.destinationUploadID).toBe('pre-blob-upload');
+      return {
+        status: 'success',
+        message: 'ok',
+        uploadId: 'pre-blob-upload',
+        providerUserId: 'suunto-user-1',
+        workoutKey: 'workout-1',
+      };
+    });
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(1);
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationUploadID: 'pre-blob-upload',
+    }));
+  });
+
+  it('retries a transient pre-blob state persistence failure without relying on a DLQ write', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(Object.assign(
+      new Error('Could not persist Suunto activity upload state before sending the activity blob.'),
+      {
+        name: 'SuuntoActivityUploadStatePersistenceError',
+        code: 'unavailable',
+      },
+    ));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
   });
 
   it('moves a successful Suunto upload to DLQ when its resume identifiers cannot be persisted', async () => {
@@ -374,7 +422,11 @@ describe('activity-sync/process-queue-item', () => {
 
     expect(result).toBe(QueueResult.Processed);
     expect(mockDownload).toHaveBeenCalledTimes(1);
-    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith(
+      'user-1',
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ persistUploadStateBeforeBlob: expect.any(Function) }),
+    );
     expect(mockGetSuuntoActivityUploadStatus).not.toHaveBeenCalled();
   });
 
@@ -624,12 +676,7 @@ describe('activity-sync/process-queue-item', () => {
     const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.RetryIncremented);
-    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
-      updateData: expect.objectContaining({
-        destinationUploadID: 'suunto-existing-upload',
-        destinationProviderUserID: 'suunto-existing-user',
-      }),
-    }));
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
     expect(mockDownload).not.toHaveBeenCalled();
   });
@@ -1154,7 +1201,11 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
       skippedReason: 'route_disabled',
     }));
-    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith(
+      'user-1',
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ persistUploadStateBeforeBlob: expect.any(Function) }),
+    );
     expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
   });
 

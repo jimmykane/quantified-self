@@ -114,9 +114,11 @@ vi.mock('firebase-functions/v2/https', () => {
         },
         HttpsError: class HttpsError extends Error {
             code: string;
-            constructor(code: string, message: string) {
+            details: unknown;
+            constructor(code: string, message: string, details?: unknown) {
                 super(message);
                 this.code = code;
+                this.details = details;
                 this.name = 'HttpsError';
             }
         }
@@ -224,7 +226,13 @@ describe('importActivityToSuuntoApp', () => {
             .doc('SuuntoApp')
             .set;
         (admin.firestore() as any).runTransaction.mockImplementation(
-            async (runner: (transaction: { set: (...args: any[]) => unknown }) => unknown) => runner({ set: setMock }),
+            async (runner: (transaction: {
+                get: (...args: any[]) => unknown;
+                set: (...args: any[]) => unknown;
+            }) => unknown) => runner({
+                get: vi.fn(async () => ({ exists: true, data: () => ({}) })),
+                set: setMock,
+            }),
         );
     });
 
@@ -607,6 +615,203 @@ describe('importActivityToSuuntoApp', () => {
         }
     });
 
+    it('should persist issued upload identifiers before sending the activity blob', async () => {
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+            requestMocks.post.mockResolvedValue({
+                id: 'pre-blob-state-upload-id',
+                url: 'https://storage.suunto.com/pre-blob-state-upload-url',
+                headers: {},
+            });
+            const persistUploadStateBeforeBlob = vi.fn().mockResolvedValue(true);
+            requestMocks.put.mockImplementation(async () => {
+                expect(persistUploadStateBeforeBlob).toHaveBeenCalledWith({
+                    uploadId: 'pre-blob-state-upload-id',
+                    providerUserId: 'token1',
+                });
+                return {};
+            });
+            requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'workout-key' });
+
+            const uploadPromise = uploadActivityFileToSuunto('test-user-id', Buffer.from('data'), {
+                persistUploadStateBeforeBlob,
+            });
+            await vi.runAllTimersAsync();
+            await expect(uploadPromise).resolves.toMatchObject({
+                status: 'success',
+                uploadId: 'pre-blob-state-upload-id',
+            });
+
+            expect(persistUploadStateBeforeBlob).toHaveBeenCalledTimes(1);
+            expect(requestMocks.put).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should refresh only the status poll after a 401 without initializing or sending the blob again', async () => {
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData
+                .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
+                .mockResolvedValueOnce({ accessToken: 'initial-access-token' })
+                .mockResolvedValueOnce({ accessToken: 'refreshed-access-token' });
+            requestMocks.post.mockResolvedValue({
+                id: 'status-refresh-upload-id',
+                url: 'https://storage.suunto.com/status-refresh-upload-url',
+                headers: {},
+            });
+            requestMocks.put.mockResolvedValue({});
+            requestMocks.get
+                .mockRejectedValueOnce(createStatusCodeError('Unauthorized', 401))
+                .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'workout-key' });
+
+            const uploadPromise = uploadActivityFileToSuunto('test-user-id', Buffer.from('data'));
+            await vi.runAllTimersAsync();
+            await expect(uploadPromise).resolves.toMatchObject({
+                status: 'success',
+                uploadId: 'status-refresh-upload-id',
+            });
+
+            expect(requestMocks.post).toHaveBeenCalledTimes(1);
+            expect(requestMocks.put).toHaveBeenCalledTimes(1);
+            expect(requestMocks.get).toHaveBeenCalledTimes(2);
+            expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(3, expect.anything(), 'suuntoApp', true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should not send the activity blob when issued upload identifiers cannot be persisted', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({
+            id: 'unpersisted-upload-id',
+            url: 'https://storage.suunto.com/unpersisted-upload-url',
+            headers: {},
+        });
+        const persistenceError = Object.assign(new Error('Firestore unavailable'), { code: 'unavailable' });
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data'), {
+            persistUploadStateBeforeBlob: vi.fn().mockRejectedValue(persistenceError),
+        })).rejects.toMatchObject({
+            name: 'SuuntoActivityUploadStatePersistenceError',
+            code: 'unavailable',
+        });
+
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
+    it('should stop before the activity blob when guarded upload-state persistence removes the queue item', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({
+            id: 'deleted-user-upload-id',
+            url: 'https://storage.suunto.com/deleted-user-upload-url',
+            headers: {},
+        });
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data'), {
+            persistUploadStateBeforeBlob: vi.fn().mockResolvedValue(false),
+        })).rejects.toMatchObject({
+            name: 'SuuntoActivityUploadStatePersistenceSkippedError',
+            code: 'user_deleted_or_deleting',
+            uploadId: 'deleted-user-upload-id',
+        });
+
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
+    it('should return resumable identifiers when a direct blob upload has an ambiguous outcome', async () => {
+        vi.useFakeTimers();
+        try {
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+            requestMocks.post.mockResolvedValue({
+                id: 'direct-resume-upload-id',
+                url: 'https://storage.suunto.com/direct-resume-upload-url',
+                headers: {},
+            });
+            requestMocks.put.mockRejectedValue(createStatusCodeError('Gateway Timeout', 504));
+            const request = createMockRequest({
+                data: { file: Buffer.from('direct-resume-data').toString('base64') },
+            });
+
+            const rejection = expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+                code: 'unavailable',
+                details: {
+                    retryMode: 'resume',
+                    resumeUploadId: 'direct-resume-upload-id',
+                    resumeProviderUserId: 'token1',
+                },
+            });
+            await vi.runAllTimersAsync();
+            await rejection;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should resume a direct upload from callable identifiers without initializing or sending the blob again', async () => {
+        vi.useFakeTimers();
+        try {
+            const admin = await import('firebase-admin');
+            const tokenDocumentGet = (admin.firestore() as any)
+                .collection('suuntoAppAccessTokens')
+                .doc('test-user-id')
+                .collection('tokens')
+                .doc('token1')
+                .get;
+            tokenDocumentGet.mockResolvedValueOnce({
+                exists: true,
+                id: 'token1',
+                data: () => ({}),
+            });
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+            requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'resumed-workout-key' });
+            const request = createMockRequest({
+                data: {
+                    file: Buffer.from('direct-resume-data').toString('base64'),
+                    resumeUploadId: 'direct-resume-upload-id',
+                    resumeProviderUserId: 'token1',
+                },
+            });
+
+            const uploadPromise = importActivityToSuuntoApp(request as any);
+            await vi.runAllTimersAsync();
+            await expect(uploadPromise).resolves.toMatchObject({
+                status: 'success',
+                uploadId: 'direct-resume-upload-id',
+                workoutKey: 'resumed-workout-key',
+            });
+
+            expect(requestMocks.post).not.toHaveBeenCalled();
+            expect(requestMocks.put).not.toHaveBeenCalled();
+            expect(requestMocks.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: 'https://cloudapi.suunto.com/v2/upload/direct-resume-upload-id',
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should reject incomplete direct-upload resume identifiers before any provider request', async () => {
+        const request = createMockRequest({
+            data: {
+                file: Buffer.from('direct-resume-data').toString('base64'),
+                resumeUploadId: 'direct-resume-upload-id',
+            },
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toMatchObject({
+            code: 'invalid-argument',
+        });
+
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(requestMocks.get).not.toHaveBeenCalled();
+    });
+
     it('should keep the temporary Suunto invalid_grant outage failure retryable', async () => {
         const refreshError: any = new Error('Response Error: 400 Bad Request');
         refreshError.statusCode = 400;
@@ -843,6 +1048,65 @@ describe('importActivityToSuuntoApp', () => {
             destinationUploadCountedID: 'existing-upload-id',
             destinationUploadCountedAt: expect.any(Number),
         }));
+    });
+
+    it('should count a resumed direct upload only once for the same upload ID', async () => {
+        vi.useFakeTimers();
+        try {
+            const admin = await import('firebase-admin');
+            const tokenDocumentGet = (admin.firestore() as any)
+                .collection('suuntoAppAccessTokens')
+                .doc('test-user-id')
+                .collection('tokens')
+                .doc('token1')
+                .get;
+            const tokenDocumentSnapshot = {
+                exists: true,
+                id: 'token1',
+                data: () => ({}),
+            };
+            tokenDocumentGet
+                .mockResolvedValueOnce(tokenDocumentSnapshot)
+                .mockResolvedValueOnce(tokenDocumentSnapshot);
+            tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+            requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'resumed-workout-key' });
+
+            const serviceMetaData: Record<string, unknown> = {};
+            const transaction = {
+                get: vi.fn(async () => ({
+                    exists: true,
+                    data: () => ({ ...serviceMetaData }),
+                })),
+                set: vi.fn((_ref: unknown, updateData: Record<string, unknown>) => {
+                    Object.assign(serviceMetaData, updateData);
+                }),
+            };
+            (admin.firestore() as any).runTransaction.mockImplementation(
+                async (runner: (transactionArg: typeof transaction) => unknown) => runner(transaction),
+            );
+            const request = createMockRequest({
+                data: {
+                    file: Buffer.from('direct-resume-data').toString('base64'),
+                    resumeUploadId: 'direct-resume-upload-id',
+                    resumeProviderUserId: 'token1',
+                },
+            });
+
+            const firstUpload = importActivityToSuuntoApp(request as any);
+            await vi.runAllTimersAsync();
+            await firstUpload;
+            const secondUpload = importActivityToSuuntoApp(request as any);
+            await vi.runAllTimersAsync();
+            await secondUpload;
+
+            expect(transaction.set).toHaveBeenCalledTimes(1);
+            expect(transaction.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                recentDirectActivityUploadCountedIDs: ['direct-resume-upload-id'],
+                uploadedActivitiesCount: expect.any(Object),
+            }), { merge: true });
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('should block unauthenticated requests', async () => {

@@ -40,6 +40,12 @@ interface ServiceUploadRow {
   message: string | null;
   jobId?: string;
   uploadId?: string;
+  providerUserId?: string;
+}
+
+interface SuuntoUploadResumeState {
+  uploadId: string;
+  providerUserId: string;
 }
 
 interface ServiceUploadResult {
@@ -264,7 +270,10 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     this.uploadRows.set([]);
   }
 
-  async processAndUploadFile(file: FileInterface): Promise<ServiceUploadResult> {
+  async processAndUploadFile(
+    file: FileInterface,
+    suuntoResumeState?: SuuntoUploadResumeState,
+  ): Promise<ServiceUploadResult> {
     this.analyticsService.logEvent('upload_activity_to_service', { service: this.serviceName });
 
     if (file.extension !== 'fit') {
@@ -297,7 +306,15 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           filename: file.name,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }
-        : { file: base64String }
+        : {
+          file: base64String,
+          ...(this.serviceName === ServiceNames.SuuntoApp && suuntoResumeState
+            ? {
+              resumeUploadId: suuntoResumeState.uploadId,
+              resumeProviderUserId: suuntoResumeState.providerUserId,
+            }
+            : {}),
+        }
     );
 
     if (file.jobId) {
@@ -369,7 +386,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     this.processingService.updateJob(jobId, { status: 'processing', progress: 0 });
 
     try {
-      const result = await this.processAndUploadFile(this.toFileItem(row, jobId));
+      const result = await this.processAndUploadFile(
+        this.toFileItem(row, jobId),
+        row.uploadId && row.providerUserId
+          ? { uploadId: row.uploadId, providerUserId: row.providerUserId }
+          : undefined,
+      );
       const completedRow = this.findRow(rowId);
       if (!completedRow) {
         return true;
@@ -410,10 +432,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     } catch (error: unknown) {
       this.logger.error(error);
       const message = this.getErrorMessage(error);
+      const resumeStateUpdate = this.getSuuntoResumeStateUpdate(error);
       this.updateRow(row.id, {
         status: 'failed',
         progress: 0,
         message,
+        ...resumeStateUpdate,
       });
       this.processingService.failJob(jobId, message);
       return true;
@@ -737,6 +761,28 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     const message = (error as { message?: unknown; error?: unknown } | null)?.message
       || (error as { error?: unknown } | null)?.error;
     return typeof message === 'string' ? message : 'Unknown error';
+  }
+
+  private getSuuntoResumeStateUpdate(
+    error: unknown,
+  ): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'> | Record<string, never> {
+    if (this.serviceName !== ServiceNames.SuuntoApp) {
+      return {};
+    }
+    const details = (error as { details?: unknown } | null)?.details;
+    if (!details || typeof details !== 'object') {
+      return {};
+    }
+    const retryMode = `${(details as { retryMode?: unknown }).retryMode || ''}`.trim();
+    const uploadId = `${(details as { resumeUploadId?: unknown }).resumeUploadId || ''}`.trim();
+    const providerUserId = `${(details as { resumeProviderUserId?: unknown }).resumeProviderUserId || ''}`.trim();
+    if (retryMode === 'resume' && uploadId && providerUserId) {
+      return { uploadId, providerUserId };
+    }
+    if (retryMode && retryMode !== 'resume') {
+      return { uploadId: undefined, providerUserId: undefined };
+    }
+    return {};
   }
 
   private toServiceUploadResult(response: ServiceUploadCallableResponse | undefined): ServiceUploadResult {

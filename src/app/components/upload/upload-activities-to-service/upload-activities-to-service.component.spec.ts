@@ -689,6 +689,71 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(mockProcessingService.completeJob).toHaveBeenCalledWith('job-2', 'Uploaded to Suunto App');
     });
 
+    it('should retain Suunto resume identifiers from a callable error and reuse them on retry', async () => {
+        const file = new File(['a'], 'resume.fit', { type: 'application/octet-stream' });
+        const event: any = {
+            stopPropagation: vi.fn(),
+            preventDefault: vi.fn(),
+            target: {
+                files: [file],
+                value: 'pending-upload'
+            }
+        };
+        const resumeError = Object.assign(new Error('Suunto is temporarily unavailable.'), {
+            details: {
+                retryMode: 'resume',
+                resumeUploadId: 'suunto-upload-1',
+                resumeProviderUserId: 'suunto-user-1',
+            },
+        });
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile')
+            .mockRejectedValueOnce(resumeError)
+            .mockResolvedValueOnce({ success: true, duplicate: false, message: 'Uploaded to Suunto App' } as any);
+
+        await component.getFiles(event);
+
+        const failedRow = component.uploadRows()[0];
+        expect(failedRow).toMatchObject({
+            status: 'failed',
+            uploadId: 'suunto-upload-1',
+            providerUserId: 'suunto-user-1',
+        });
+
+        await component.retryUpload(failedRow);
+
+        expect(uploadSpy).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ name: 'resume.fit' }),
+            {
+                uploadId: 'suunto-upload-1',
+                providerUserId: 'suunto-user-1',
+            },
+        );
+    });
+
+    it('should send Suunto resume identifiers back to the callable', async () => {
+        const file = {
+            file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1'
+        };
+
+        await component.processAndUploadFile(file, {
+            uploadId: 'suunto-upload-1',
+            providerUserId: 'suunto-user-1',
+        });
+
+        expect(mockFunctionsService.call).toHaveBeenCalledWith('importActivityToSuuntoApp', expect.objectContaining({
+            resumeUploadId: 'suunto-upload-1',
+            resumeProviderUserId: 'suunto-user-1',
+        }));
+    });
+
     it('retryFailedUploads should retry only failed rows', async () => {
         const fileA = new File(['a'], 'failed.fit', { type: 'application/octet-stream' });
         const fileB = new File(['b'], 'done.fit', { type: 'application/octet-stream' });

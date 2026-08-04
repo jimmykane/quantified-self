@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ProviderOperationError } from '../shared/provider-operation-error';
 
 const mocks = vi.hoisted(() => ({
   hasProAccess: vi.fn(),
@@ -100,5 +102,26 @@ describe('importRouteToGarminAPI', () => {
     expect(mocks.decodeManualRouteUpload).not.toHaveBeenCalled();
     expect(mocks.parseManualRouteUpload).not.toHaveBeenCalled();
     expect(mocks.uploadManualRouteToGarminConnect).not.toHaveBeenCalled();
+  });
+
+  it('maps a typed Garmin HTTP 408 route failure to a retryable callable error', async () => {
+    mocks.uploadManualRouteToGarminConnect.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_upload',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      message: 'Garmin Connect is temporarily unavailable. Please retry.',
+      statusCode: 408,
+      dlqContext: 'GARMIN_ROUTE_DELIVERY_RETRY_EXHAUSTED',
+    }));
+
+    await expect(importRouteToGarminAPI(request({
+      file: 'cm91dGUtc291cmNl',
+      filename: 'route.gpx',
+    }) as never)).rejects.toMatchObject({
+      code: 'unavailable',
+      message: 'Garmin Connect is temporarily unavailable. Please retry.',
+    });
   });
 });
