@@ -71,6 +71,8 @@ describe('ActivityCalendarGridComponent', () => {
     );
 
     expect(styles).not.toContain('surface-container-low');
+    expect(styles).not.toContain('mat-sys-tertiary');
+    expect(styles).toContain('var(--mat-sys-primary) var(--activity-calendar-weekend-tint)');
   });
 
   it('keeps activity days free of tooltips so touch scrolling remains native', () => {
