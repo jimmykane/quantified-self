@@ -595,6 +595,15 @@ export async function finalizeAiInsightsQuotaReservation(
     dependencies,
     async (transaction, docRef, usageDoc, _nowMs, nowIso) => {
       const reservationMap = { ...usageDoc.reservationMap };
+      if (!Object.prototype.hasOwnProperty.call(
+        reservationMap,
+        reservation.reservationID,
+      )) {
+        throw new HttpsError(
+          'unavailable',
+          'The AI request quota reservation expired. Please try again.',
+        );
+      }
       delete reservationMap[reservation.reservationID];
       const successfulRequestCount = usageDoc.successfulRequestCount + 1;
 
@@ -634,6 +643,19 @@ export async function releaseAiInsightsQuotaReservation(
     dependencies,
     async (transaction, docRef, usageDoc) => {
       const reservationMap = { ...usageDoc.reservationMap };
+      if (!Object.prototype.hasOwnProperty.call(
+        reservationMap,
+        reservation.reservationID,
+      )) {
+        return {
+          status: buildQuotaStatus(
+            reservationStatus,
+            usageDoc.successfulRequestCount,
+            Object.keys(reservationMap).length,
+          ),
+          released: false,
+        };
+      }
       delete reservationMap[reservation.reservationID];
 
       transaction.set(
@@ -648,15 +670,24 @@ export async function releaseAiInsightsQuotaReservation(
         { merge: true },
       );
 
-      return buildQuotaStatus(reservationStatus, usageDoc.successfulRequestCount, Object.keys(reservationMap).length);
+      return {
+        status: buildQuotaStatus(
+          reservationStatus,
+          usageDoc.successfulRequestCount,
+          Object.keys(reservationMap).length,
+        ),
+        released: true,
+      };
     },
   );
 
-  logger.info('[aiInsightsQuota] Released quota reservation', {
-    periodDocId: reservation.periodDocId,
-  });
+  if (result.released) {
+    logger.info('[aiInsightsQuota] Released quota reservation', {
+      periodDocId: reservation.periodDocId,
+    });
+  }
 
-  return result;
+  return result.status;
 }
 
 export function createAiInsightsQuota(

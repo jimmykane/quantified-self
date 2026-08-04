@@ -40,6 +40,7 @@ export interface AssistantConversation {
 }
 
 export interface AssistantChatRequest {
+  requestId: string;
   message: string;
   timeZone: string;
   conversationId?: string;

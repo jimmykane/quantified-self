@@ -134,6 +134,13 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   const data = asRecord(value);
+  if (typeof data.requestId !== 'string'
+    || !/^[A-Za-z0-9_-]{16,120}$/.test(data.requestId)) {
+    throw new HttpsError(
+      'invalid-argument',
+      'requestId must be an opaque identifier containing 16 to 120 letters, numbers, hyphens, or underscores.',
+    );
+  }
   if (typeof data.message !== 'string') {
     throw new HttpsError('invalid-argument', 'message is required.');
   }
@@ -168,6 +175,7 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
     );
   }
   return {
+    requestId: data.requestId,
     message,
     timeZone,
     ...(conversationId
@@ -182,6 +190,9 @@ function mapConversationStoreError(error: AssistantConversationStoreError): Http
   }
   if (error.code === 'turn_in_progress') {
     return new HttpsError('aborted', error.message, { reason: error.code });
+  }
+  if (error.code === 'request_id_conflict') {
+    return new HttpsError('invalid-argument', error.message);
   }
   return new HttpsError(
     'aborted',
@@ -216,10 +227,26 @@ export async function runAssistantChat(
   try {
     await dependencies.assertLegalAccess(uid);
     reservation = await dependencies.reserveQuota(uid);
-    begunTurn = await dependencies.conversationStore.beginTurn(
+    const turnStart = await dependencies.conversationStore.beginTurn(
       uid,
       input.conversationId,
+      input.requestId,
     );
+    if (turnStart.kind === 'replayed') {
+      if (turnStart.requestText !== input.message) {
+        throw new HttpsError(
+          'invalid-argument',
+          'requestId was already used for a different Assistant message.',
+        );
+      }
+      const quota = await dependencies.releaseQuota(reservation);
+      reservation = null;
+      return {
+        conversation: turnStart.conversation,
+        quota,
+      };
+    }
+    begunTurn = turnStart;
     const quota = await dependencies.finalizeQuota(reservation);
     reservation = null;
     const result = await dependencies.answer({
@@ -231,7 +258,7 @@ export async function runAssistantChat(
     });
     const createdAt = dependencies.now().toISOString();
     const userMessage: AssistantMessage = {
-      id: dependencies.createId(),
+      id: input.requestId,
       role: 'user',
       text: input.message,
       createdAt,

@@ -39,6 +39,7 @@ const response: AssistantChatResponse = {
     blockedReason: null,
   },
 };
+const requestId = 'assistant-request-0001';
 
 describe('AssistantService', () => {
   const functionsService = { call: vi.fn() };
@@ -59,10 +60,12 @@ describe('AssistantService', () => {
     functionsService.call.mockResolvedValue({ data: response });
 
     await expect(service.sendMessage({
+      requestId,
       message: 'How am I today?',
       timeZone: 'Europe/Helsinki',
     })).resolves.toEqual(response);
     expect(functionsService.call).toHaveBeenCalledWith('assistantChat', {
+      requestId,
       message: 'How am I today?',
       timeZone: 'Europe/Helsinki',
     });
@@ -80,6 +83,7 @@ describe('AssistantService', () => {
     });
 
     await expect(service.sendMessage({
+      requestId,
       message: 'How am I today?',
       timeZone: 'UTC',
     })).rejects.toMatchObject({ code: 'INTERNAL' });
@@ -93,6 +97,7 @@ describe('AssistantService', () => {
     });
 
     await expect(service.sendMessage({
+      requestId,
       message: 'How am I today?',
       timeZone: 'UTC',
     })).rejects.toMatchObject({ code: 'TURN_IN_PROGRESS' });

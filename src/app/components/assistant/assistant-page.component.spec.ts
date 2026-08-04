@@ -128,6 +128,7 @@ describe('AssistantPageComponent', () => {
 
     expect(assistantService.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       message: "Give me today's sleep, readiness, and Training report.",
+      requestId: expect.stringMatching(/^[A-Za-z0-9_-]{16,120}$/),
     }));
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Your readiness is 72 today.');
@@ -205,13 +206,26 @@ describe('AssistantPageComponent', () => {
   });
 
   it('recovers a turn committed before the callable response was lost', async () => {
-    assistantService.sendMessage.mockRejectedValueOnce(new Error('network response lost'));
-    assistantService.getConversation.mockResolvedValueOnce(chatResponse.conversation);
+    let recoveredConversation = chatResponse.conversation;
+    assistantService.sendMessage.mockImplementationOnce(async request => {
+      recoveredConversation = {
+        ...chatResponse.conversation,
+        messages: [
+          {
+            ...chatResponse.conversation.messages[0],
+            id: request.requestId,
+          },
+          chatResponse.conversation.messages[1],
+        ],
+      };
+      assistantService.getConversation.mockResolvedValueOnce(recoveredConversation);
+      throw new Error('network response lost');
+    });
     component.promptControl.setValue('How am I today?');
 
     await component.sendMessage();
 
-    expect(component.conversation()).toEqual(chatResponse.conversation);
+    expect(component.conversation()).toEqual(recoveredConversation);
     expect(component.promptControl.value).toBe('');
     expect(component.errorMessage()).toBeNull();
     expect(quotaService.loadQuotaStatus).toHaveBeenCalledTimes(2);
@@ -237,35 +251,106 @@ describe('AssistantPageComponent', () => {
       ...chatResponse.conversation,
       messages: previousMessages,
     };
-    const refreshedConversation = {
-      ...previousConversation,
-      messages: [
-        ...previousMessages.slice(2),
-        {
-          id: 'new-user',
-          role: 'user' as const,
-          text: 'One more question',
-          createdAt: '2026-08-03T12:05:00.000Z',
-        },
-        {
-          id: 'new-assistant',
-          role: 'assistant' as const,
-          text: 'One more answer',
-          createdAt: '2026-08-03T12:05:00.000Z',
-          evidence: [],
-        },
-      ],
-    };
+    let refreshedConversation = previousConversation;
     component.conversation.set(previousConversation);
     component.promptControl.setValue('One more question');
-    assistantService.sendMessage.mockRejectedValueOnce(new Error('network response lost'));
-    assistantService.getConversation.mockResolvedValueOnce(refreshedConversation);
+    assistantService.sendMessage.mockImplementationOnce(async request => {
+      refreshedConversation = {
+        ...previousConversation,
+        messages: [
+          ...previousMessages.slice(2),
+          {
+            id: request.requestId,
+            role: 'user' as const,
+            text: 'One more question',
+            createdAt: '2026-08-03T12:05:00.000Z',
+          },
+          {
+            id: 'new-assistant',
+            role: 'assistant' as const,
+            text: 'One more answer',
+            createdAt: '2026-08-03T12:05:00.000Z',
+            evidence: [],
+          },
+        ],
+      };
+      assistantService.getConversation.mockResolvedValueOnce(refreshedConversation);
+      throw new Error('network response lost');
+    });
 
     await component.sendMessage();
 
     expect(component.conversation()).toEqual(refreshedConversation);
     expect(component.promptControl.value).toBe('');
     expect(component.errorMessage()).toBeNull();
+  });
+
+  it('does not mistake another completed turn with the same text for its own response', async () => {
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('network response lost'));
+    assistantService.getConversation.mockResolvedValueOnce(chatResponse.conversation);
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+
+    expect(component.conversation()).toEqual(chatResponse.conversation);
+    expect(component.promptControl.value).toBe('How am I today?');
+    expect(component.errorMessage()).toBe('Friendly error');
+  });
+
+  it('recovers its exact turn when another tab committed a later turn', async () => {
+    let refreshedConversation = chatResponse.conversation;
+    assistantService.sendMessage.mockImplementationOnce(async request => {
+      refreshedConversation = {
+        ...chatResponse.conversation,
+        messages: [
+          {
+            id: request.requestId,
+            role: 'user' as const,
+            text: 'How am I today?',
+            createdAt: '2026-08-03T12:00:00.000Z',
+          },
+          chatResponse.conversation.messages[1],
+          {
+            id: 'other-user',
+            role: 'user' as const,
+            text: 'What happened later?',
+            createdAt: '2026-08-03T12:01:00.000Z',
+          },
+          {
+            id: 'other-assistant',
+            role: 'assistant' as const,
+            text: 'A later answer.',
+            createdAt: '2026-08-03T12:01:00.000Z',
+            evidence: [],
+          },
+        ],
+      };
+      assistantService.getConversation.mockResolvedValueOnce(refreshedConversation);
+      throw new Error('network response lost');
+    });
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+
+    expect(component.conversation()).toEqual(refreshedConversation);
+    expect(component.promptControl.value).toBe('');
+    expect(component.errorMessage()).toBeNull();
+  });
+
+  it('reuses one request identifier for an ambiguous retry and replaces it for new text', async () => {
+    assistantService.sendMessage.mockRejectedValue(new Error('network unavailable'));
+    assistantService.getConversation.mockRejectedValue(new Error('reconciliation unavailable'));
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+    await component.sendMessage();
+    component.promptControl.setValue('How was my sleep?');
+    await component.sendMessage();
+
+    const requests = assistantService.sendMessage.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(3);
+    expect(requests[0].requestId).toBe(requests[1].requestId);
+    expect(requests[2].requestId).not.toBe(requests[0].requestId);
   });
 
   it('reloads a conversation generation changed by another tab', async () => {

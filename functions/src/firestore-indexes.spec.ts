@@ -219,6 +219,34 @@ describe('firestore indexes', () => {
         }
     });
 
+    it('indexes only the AI usage field used by an ordered admin fallback', () => {
+        const config = loadFirestoreIndexes();
+
+        for (const fieldPath of [
+            'version',
+            'role',
+            'limit',
+            'periodStart',
+            'periodKind',
+            'successfulRequestCount',
+            'reservationMap',
+            'lastSuccessfulRequestAt',
+            'updatedAt',
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({
+                collectionGroup: 'aiInsightsUsage',
+                fieldPath,
+                ttl: false,
+                indexes: [],
+            });
+        }
+
+        expect(config.fieldOverrides).not.toContainEqual(expect.objectContaining({
+            collectionGroup: 'aiInsightsUsage',
+            fieldPath: 'periodEnd',
+        }));
+    });
+
     it('keeps event merge operation TTL deployable without an automatic index', () => {
         const config = loadFirestoreIndexes();
 

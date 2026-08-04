@@ -13,7 +13,6 @@ import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import {
   ASSISTANT_MAX_MESSAGE_CHARS,
-  ASSISTANT_MAX_STORED_MESSAGES,
   type AssistantConversation,
   type AssistantMessage,
 } from '@shared/assistant.types';
@@ -46,6 +45,7 @@ export class AssistantPageComponent implements OnInit {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AiInsightsQuotaService);
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
+  private retryRequest: { message: string; requestId: string } | null = null;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
   readonly starterPrompts = ASSISTANT_STARTER_PROMPTS;
@@ -124,8 +124,15 @@ export class AssistantPageComponent implements OnInit {
     }
     this.errorMessage.set(null);
     this.sending.set(true);
+    const request = this.retryRequest?.message === text
+      ? this.retryRequest
+      : {
+        message: text,
+        requestId: globalThis.crypto.randomUUID(),
+      };
+    this.retryRequest = request;
     this.pendingUserMessage.set({
-      id: 'pending-user-message',
+      id: request.requestId,
       role: 'user',
       text,
       createdAt: new Date().toISOString(),
@@ -135,6 +142,7 @@ export class AssistantPageComponent implements OnInit {
     const activeConversation = this.conversation();
     try {
       const response = await this.assistantService.sendMessage({
+        requestId: request.requestId,
         message: text,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         ...(activeConversation?.conversationId
@@ -143,6 +151,7 @@ export class AssistantPageComponent implements OnInit {
       });
       this.conversation.set(response.conversation);
       this.quota.set(response.quota);
+      this.retryRequest = null;
     } catch (error) {
       let refreshedConversation: AssistantConversation | null | undefined;
       try {
@@ -150,10 +159,21 @@ export class AssistantPageComponent implements OnInit {
       } catch {
         // Preserve the original send failure when reconciliation is unavailable.
       }
-      if (this.isCompletedTurnRecovery(activeConversation, refreshedConversation, text)) {
+      if (refreshedConversation && this.isCompletedTurnRecovery(
+        activeConversation,
+        refreshedConversation,
+        request.requestId,
+        text,
+      )) {
         this.conversation.set(refreshedConversation);
         this.errorMessage.set(null);
+        this.retryRequest = null;
       } else {
+        if (refreshedConversation !== undefined
+          && refreshedConversation?.conversationId
+            !== activeConversation?.conversationId) {
+          this.retryRequest = null;
+        }
         if (refreshedConversation !== undefined) {
           this.conversation.set(refreshedConversation);
         }
@@ -188,6 +208,7 @@ export class AssistantPageComponent implements OnInit {
     this.errorMessage.set(null);
     try {
       this.conversation.set(await this.assistantService.resetConversation());
+      this.retryRequest = null;
       this.promptControl.setValue('');
     } catch (error) {
       this.errorMessage.set(this.assistantService.getErrorMessage(error));
@@ -219,23 +240,24 @@ export class AssistantPageComponent implements OnInit {
 
   private isCompletedTurnRecovery(
     previousConversation: AssistantConversation | null,
-    refreshedConversation: AssistantConversation | null | undefined,
+    refreshedConversation: AssistantConversation,
+    requestId: string,
     sentText: string,
-  ): refreshedConversation is AssistantConversation {
-    if (!refreshedConversation
-      || (previousConversation
-        && refreshedConversation.conversationId !== previousConversation.conversationId)) {
+  ): boolean {
+    if (previousConversation
+      && refreshedConversation.conversationId !== previousConversation.conversationId) {
       return false;
     }
     const previousMessages = previousConversation?.messages ?? [];
     const previousMessageIds = new Set(previousMessages.map(message => message.id));
-    const userMessage = refreshedConversation.messages.at(-2);
-    const assistantMessage = refreshedConversation.messages.at(-1);
-    return refreshedConversation.messages.length === Math.min(
-      previousMessages.length + 2,
-      ASSISTANT_MAX_STORED_MESSAGES,
-    )
+    const userMessageIndex = refreshedConversation.messages.findIndex(
+      message => message.id === requestId,
+    );
+    const userMessage = refreshedConversation.messages[userMessageIndex];
+    const assistantMessage = refreshedConversation.messages[userMessageIndex + 1];
+    return userMessageIndex >= 0
       && userMessage?.role === 'user'
+      && userMessage.id === requestId
       && userMessage.text === sentText
       && !previousMessageIds.has(userMessage.id)
       && assistantMessage?.role === 'assistant'

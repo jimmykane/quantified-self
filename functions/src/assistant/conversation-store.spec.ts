@@ -3,6 +3,8 @@ import type { AssistantMessage } from '../../../shared/assistant.types';
 import {
   AssistantConversationStoreError,
   createAssistantConversationStore,
+  type AssistantTurnStart,
+  type BegunAssistantTurn,
 } from './conversation-store';
 
 interface FakeDocumentReference {
@@ -61,6 +63,14 @@ function message(
   };
 }
 
+function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
+  expect(turn.kind).toBe('started');
+  if (turn.kind !== 'started') {
+    throw new Error('Expected a newly started Assistant turn.');
+  }
+  return turn;
+}
+
 describe('Assistant conversation store', () => {
   it('serializes turns and persists only a bounded completed history', async () => {
     const harness = createFirestoreHarness();
@@ -78,7 +88,10 @@ describe('Assistant conversation store', () => {
 
     let expectedConversationId: string | undefined;
     for (let index = 0; index < 7; index += 1) {
-      const begun = await store.beginTurn('user-1', expectedConversationId);
+      const begun = requireStartedTurn(await store.beginTurn(
+        'user-1',
+        expectedConversationId,
+      ));
       expectedConversationId = begun.conversationId;
       await expect(store.beginTurn('user-1', expectedConversationId))
         .rejects.toMatchObject({ code: 'turn_in_progress' });
@@ -96,6 +109,79 @@ describe('Assistant conversation store', () => {
     expect(conversation?.messages.at(-1)?.text).toBe('Answer 6');
   });
 
+  it('replays a completed client request without creating another turn lock', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00.000Z'),
+      createId: () => `id-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const requestId = 'assistant-request-replay-0001';
+    const begun = requireStartedTurn(await store.beginTurn(
+      'user-1',
+      undefined,
+      requestId,
+    ));
+    const completed = await store.completeTurn(
+      'user-1',
+      begun,
+      message(requestId, 'user', 'Question once'),
+      message('assistant-once', 'assistant', 'Answer once'),
+    );
+
+    const replayed = await store.beginTurn(
+      'user-1',
+      completed.conversationId,
+      requestId,
+    );
+
+    expect(replayed).toEqual({
+      kind: 'replayed',
+      conversation: completed,
+      requestText: 'Question once',
+    });
+    expect(harness.documents.get(
+      'users/user-1/assistantConversations/active',
+    )?.pendingTurn).toBeNull();
+  });
+
+  it('rejects a request identifier that collides with a saved assistant message', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00.000Z'),
+      createId: () => `id-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const begun = requireStartedTurn(await store.beginTurn('user-1'));
+    const completed = await store.completeTurn(
+      'user-1',
+      begun,
+      message('assistant-request-original-0001', 'user', 'Question once'),
+      message('assistant-response-original-0001', 'assistant', 'Answer once'),
+    );
+
+    await expect(store.beginTurn(
+      'user-1',
+      completed.conversationId,
+      'assistant-response-original-0001',
+    )).rejects.toMatchObject({ code: 'request_id_conflict' });
+    expect(harness.documents.get(
+      'users/user-1/assistantConversations/active',
+    )?.pendingTurn).toBeNull();
+  });
+
   it('does not let an old in-flight response resurrect a reset conversation', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;
@@ -109,7 +195,7 @@ describe('Assistant conversation store', () => {
         shouldSkip: false,
       }),
     });
-    const begun = await store.beginTurn('user-1');
+    const begun = requireStartedTurn(await store.beginTurn('user-1'));
     const reset = await store.resetConversation('user-1');
 
     await expect(store.completeTurn(
@@ -141,12 +227,18 @@ describe('Assistant conversation store', () => {
     const originalExpiry = reset.expiresAt;
 
     now = new Date('2026-08-02T12:00:00.000Z');
-    const releasedTurn = await store.beginTurn('user-1', reset.conversationId);
+    const releasedTurn = requireStartedTurn(await store.beginTurn(
+      'user-1',
+      reset.conversationId,
+    ));
     await store.releaseTurn('user-1', releasedTurn);
     expect((await store.getActiveConversation('user-1'))?.expiresAt)
       .toBe(originalExpiry);
 
-    const completedTurn = await store.beginTurn('user-1', reset.conversationId);
+    const completedTurn = requireStartedTurn(await store.beginTurn(
+      'user-1',
+      reset.conversationId,
+    ));
     const completed = await store.completeTurn(
       'user-1',
       completedTurn,
@@ -173,7 +265,10 @@ describe('Assistant conversation store', () => {
     const reset = await store.resetConversation('user-1');
 
     now = new Date('2026-08-08T11:59:00.000Z');
-    const begun = await store.beginTurn('user-1', reset.conversationId);
+    const begun = requireStartedTurn(await store.beginTurn(
+      'user-1',
+      reset.conversationId,
+    ));
     expect((await store.getActiveConversation('user-1'))?.expiresAt)
       .toBe('2026-08-08T12:03:00.000Z');
 
@@ -243,7 +338,7 @@ describe('Assistant conversation store', () => {
         shouldSkip: deletionStarted,
       }),
     });
-    const begun = await store.beginTurn('user-1');
+    const begun = requireStartedTurn(await store.beginTurn('user-1'));
     const storedBeforeRelease = harness.documents.get(
       'users/user-1/assistantConversations/active',
     );

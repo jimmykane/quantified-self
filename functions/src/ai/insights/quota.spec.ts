@@ -221,6 +221,36 @@ describe('ai insights quota', () => {
     expect(quotaStatus.remainingCount).toBe(99);
   });
 
+  it('does not consume quota twice when a reservation is finalized again', async () => {
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+
+    await finalizeAiInsightsQuotaReservation(reservation);
+    await expect(finalizeAiInsightsQuotaReservation(reservation))
+      .rejects.toMatchObject<HttpsError>({ code: 'unavailable' });
+
+    const storedDoc = fakeDb.getDocument(
+      `users/user-1/aiInsightsUsage/${reservation.periodDocId}`,
+    );
+    expect(storedDoc?.successfulRequestCount).toBe(1);
+    expect(storedDoc?.reservationMap).toEqual({});
+  });
+
+  it('does not consume quota after a reservation expires', async () => {
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const usagePath = `users/user-1/aiInsightsUsage/${reservation.periodDocId}`;
+    fakeDb.seedDocument(usagePath, {
+      ...fakeDb.getDocument(usagePath),
+      reservationMap: {
+        [reservation.reservationID]: Date.parse('2026-03-19T11:59:59.999Z'),
+      },
+    });
+
+    await expect(finalizeAiInsightsQuotaReservation(reservation))
+      .rejects.toMatchObject<HttpsError>({ code: 'unavailable' });
+
+    expect(fakeDb.getDocument(usagePath)?.successfulRequestCount).toBe(0);
+  });
+
   it('scopes quota dependency overrides and restores previous test dependencies', async () => {
     const scopedReservation = await withAiInsightsQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
@@ -270,6 +300,18 @@ describe('ai insights quota', () => {
     expect(releasedStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
     expect(quotaStatus.successfulRequestCount).toBe(0);
     expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
+  });
+
+  it('treats release as an idempotent no-op once a reservation is gone', async () => {
+    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    await releaseAiInsightsQuotaReservation(reservation);
+    const writesAfterFirstRelease = fakeDb.getWriteCount();
+
+    const releasedAgain = await releaseAiInsightsQuotaReservation(reservation);
+
+    expect(releasedAgain.successfulRequestCount).toBe(0);
+    expect(releasedAgain.activeRequestCount).toBe(0);
+    expect(fakeDb.getWriteCount()).toBe(writesAfterFirstRelease);
   });
 
   it('does not create or update quota state after account deletion starts', async () => {

@@ -27,6 +27,7 @@ const quota = {
   isEligible: true,
   blockedReason: null,
 };
+const REQUEST_ID = 'assistant-request-0001';
 
 function createDependencies() {
   const conversation = {
@@ -52,6 +53,7 @@ function createDependencies() {
   const store: AssistantConversationStore = {
     getActiveConversation: vi.fn().mockResolvedValue(null),
     beginTurn: vi.fn().mockResolvedValue({
+      kind: 'started',
       conversationId: 'conversation-1',
       turnId: 'turn-1',
       history: [],
@@ -83,9 +85,7 @@ function createDependencies() {
       evidence: [],
       toolNames: ['get_daily_report'],
     }),
-    createId: vi.fn()
-      .mockReturnValueOnce('user-message')
-      .mockReturnValueOnce('assistant-message'),
+    createId: vi.fn().mockReturnValue('assistant-message'),
     now: () => new Date('2026-08-03T12:00:00.000Z'),
   };
   return { dependencies, store, reservation, conversation };
@@ -153,6 +153,7 @@ describe('Assistant callable', () => {
     const { dependencies, store, reservation, conversation } = createDependencies();
 
     await expect(runAssistantChat({
+      requestId: REQUEST_ID,
       message: '  How am I today?  ',
       timeZone: 'Europe/Helsinki',
       conversationId: 'conversation-1',
@@ -163,7 +164,11 @@ describe('Assistant callable', () => {
 
     expect(dependencies.assertLegalAccess).toHaveBeenCalledWith('user-1');
     expect(dependencies.reserveQuota).toHaveBeenCalledWith('user-1');
-    expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1');
+    expect(store.beginTurn).toHaveBeenCalledWith(
+      'user-1',
+      'conversation-1',
+      REQUEST_ID,
+    );
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith({
       uid: 'user-1',
@@ -175,7 +180,11 @@ describe('Assistant callable', () => {
     expect(store.completeTurn).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({ turnId: 'turn-1' }),
-      expect.objectContaining({ role: 'user', text: 'How am I today?' }),
+      expect.objectContaining({
+        id: REQUEST_ID,
+        role: 'user',
+        text: 'How am I today?',
+      }),
       expect.objectContaining({ role: 'assistant', text: 'Your readiness is 72 today.' }),
     );
   });
@@ -188,6 +197,7 @@ describe('Assistant callable', () => {
     ));
 
     await expect(runAssistantChat({
+      requestId: REQUEST_ID,
       message: 'How am I today?',
       timeZone: 'UTC',
     }, context, dependencies)).rejects.toMatchObject({ code: 'permission-denied' });
@@ -203,6 +213,7 @@ describe('Assistant callable', () => {
     ));
 
     await expect(runAssistantChat({
+      requestId: REQUEST_ID,
       message: 'How am I today?',
       timeZone: 'UTC',
     }, context, dependencies)).rejects.toMatchObject({
@@ -218,6 +229,7 @@ describe('Assistant callable', () => {
     vi.mocked(dependencies.answer).mockRejectedValue(new Error('model unavailable'));
 
     await expect(runAssistantChat({
+      requestId: REQUEST_ID,
       message: 'How am I today?',
       timeZone: 'UTC',
     }, context, dependencies)).rejects.toMatchObject({ code: 'unavailable' });
@@ -232,10 +244,12 @@ describe('Assistant callable', () => {
     const { dependencies } = createDependencies();
 
     await expect(runAssistantChat({
+      requestId: REQUEST_ID,
       message: '   ',
       timeZone: 'UTC',
     }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
     await expect(runAssistantChat({
+      requestId: REQUEST_ID,
       message: 'How am I today?',
       timeZone: 'UTC',
       conversationId: '   ',
@@ -244,10 +258,87 @@ describe('Assistant callable', () => {
     expect(dependencies.reserveQuota).not.toHaveBeenCalled();
   });
 
+  it('rejects a missing or malformed request identifier before backend work', async () => {
+    const { dependencies, store } = createDependencies();
+
+    await expect(runAssistantChat({
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(runAssistantChat({
+      requestId: 'too short',
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    expect(dependencies.assertLegalAccess).not.toHaveBeenCalled();
+    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
+    expect(store.beginTurn).not.toHaveBeenCalled();
+  });
+
+  it('returns an already completed request without another model attempt', async () => {
+    const { dependencies, store, reservation, conversation } = createDependencies();
+    vi.mocked(store.beginTurn).mockResolvedValue({
+      kind: 'replayed',
+      conversation,
+      requestText: 'How am I today?',
+    });
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+      conversationId: 'conversation-1',
+    }, context, dependencies)).resolves.toEqual({ conversation, quota });
+
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.answer).not.toHaveBeenCalled();
+    expect(store.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('rejects reuse of a completed request identifier for different text', async () => {
+    const { dependencies, store, reservation, conversation } = createDependencies();
+    vi.mocked(store.beginTurn).mockResolvedValue({
+      kind: 'replayed',
+      conversation,
+      requestText: 'Original question',
+    });
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'Different question',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.answer).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request identifier collision before model work', async () => {
+    const { dependencies, store, reservation } = createDependencies();
+    vi.mocked(store.beginTurn).mockRejectedValue(new AssistantConversationStoreError(
+      'request_id_conflict',
+      'The Assistant request identifier conflicts with a saved message.',
+    ));
+
+    await expect(runAssistantChat({
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+    }, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.answer).not.toHaveBeenCalled();
+  });
+
   it('requires authentication', async () => {
     const { dependencies } = createDependencies();
 
     await expect(runAssistantChat({
+      requestId: REQUEST_ID,
       message: 'How am I today?',
       timeZone: 'UTC',
     }, { app: { appId: 'app-1' } }, dependencies))

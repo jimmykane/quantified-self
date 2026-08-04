@@ -236,6 +236,73 @@ describe('Assistant runtime', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it('fails closed when generation skips part of a published workflow', async () => {
+    const example = ASSISTANT_PROMPT_EXAMPLES[3];
+    const close = vi.fn().mockResolvedValue(undefined);
+    const session: AssistantMcpSession = {
+      instructions: 'Discover measurement types before querying measurements.',
+      tools: example.toolWorkflow.map(toolName => ({
+        name: toolName as AssistantMcpToolName,
+        title: `Title ${toolName}`,
+        description: `Description ${toolName}`,
+        inputSchema: { type: 'object', properties: {} },
+      })),
+      callTool: vi.fn().mockResolvedValue({
+        structuredContent: { measurementTypes: ['body_weight'] },
+      }),
+      close,
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[0].execute({});
+        return 'An incomplete body-weight answer.';
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: example.prompt,
+      timeZone: 'UTC',
+      history: [],
+    })).rejects.toThrow(`did not complete the published ${example.id} workflow`);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when generation reverses a published discovery workflow', async () => {
+    const example = ASSISTANT_PROMPT_EXAMPLES[2];
+    const close = vi.fn().mockResolvedValue(undefined);
+    const session: AssistantMcpSession = {
+      instructions: 'Discover Training metrics before reading one.',
+      tools: example.toolWorkflow.map(toolName => ({
+        name: toolName as AssistantMcpToolName,
+        title: `Title ${toolName}`,
+        description: `Description ${toolName}`,
+        inputSchema: { type: 'object', properties: {} },
+      })),
+      callTool: vi.fn().mockResolvedValue({ structuredContent: { ready: true } }),
+      close,
+    };
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockResolvedValue(session),
+      generateAnswer: async (input) => {
+        await input.tools[1].execute({});
+        await input.tools[0].execute({});
+        return 'An out-of-order Training answer.';
+      },
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: example.prompt,
+      timeZone: 'UTC',
+      history: [],
+    })).rejects.toThrow(`did not complete the published ${example.id} workflow`);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('grounds the answer in the in-process MCP result and returns deterministic evidence', async () => {
     const { session, callTool, close } = createSession();
     const createMcpSession = vi.fn().mockResolvedValue(session);

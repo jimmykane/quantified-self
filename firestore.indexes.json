@@ -1487,6 +1487,60 @@
       "indexes": []
     },
     {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "version",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "role",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "limit",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "periodStart",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "periodKind",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "successfulRequestCount",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "reservationMap",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "lastSuccessfulRequestAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "aiInsightsUsage",
+      "fieldPath": "updatedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "assistantConversations",
       "fieldPath": "expireAt",
       "ttl": true,

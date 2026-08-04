@@ -191,6 +191,26 @@ function assertAnswerDoesNotEchoToolSecrets(
   }
 }
 
+function assertPublishedExampleWorkflowCompleted(
+  publishedExample: AssistantPublishedPromptExample | null,
+  invocations: readonly AssistantToolInvocation[],
+): void {
+  if (!publishedExample) {
+    return;
+  }
+  let workflowIndex = 0;
+  for (const invocation of invocations) {
+    if (invocation.name === publishedExample.toolWorkflow[workflowIndex]) {
+      workflowIndex += 1;
+    }
+  }
+  if (workflowIndex !== publishedExample.toolWorkflow.length) {
+    throw new Error(
+      `The Assistant did not complete the published ${publishedExample.id} workflow.`,
+    );
+  }
+}
+
 export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generateAnswer'] = async (input) => {
   const createGenkitTools = () => input.tools.map(tool => aiInsightsGenkit.dynamicTool({
     name: tool.name,
@@ -365,6 +385,7 @@ export function createAssistantRuntime(
         if (invocations.length === 0) {
           throw new Error('The Assistant response was not grounded in current account data.');
         }
+        assertPublishedExampleWorkflowCompleted(publishedExample, invocations);
         assertAnswerDoesNotEchoToolSecrets(answer, invocations);
         return {
           answer: AssistantModelOutputSchema.parse({ answer }).answer,

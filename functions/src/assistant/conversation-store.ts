@@ -33,14 +33,24 @@ interface StoredAssistantConversation {
 }
 
 export interface BegunAssistantTurn {
+  kind: 'started';
   conversationId: string;
   turnId: string;
   history: AssistantMessage[];
 }
 
+export interface ReplayedAssistantTurn {
+  kind: 'replayed';
+  conversation: AssistantConversation;
+  requestText: string;
+}
+
+export type AssistantTurnStart = BegunAssistantTurn | ReplayedAssistantTurn;
+
 export type AssistantConversationStoreErrorCode =
   | 'user_deleted'
   | 'conversation_changed'
+  | 'request_id_conflict'
   | 'turn_in_progress'
   | 'turn_lost';
 
@@ -59,7 +69,8 @@ export interface AssistantConversationStore {
   beginTurn: (
     uid: string,
     expectedConversationId?: string,
-  ) => Promise<BegunAssistantTurn>;
+    requestId?: string,
+  ) => Promise<AssistantTurnStart>;
   completeTurn: (
     uid: string,
     begunTurn: BegunAssistantTurn,
@@ -236,7 +247,7 @@ export function createAssistantConversationStore(
       });
     },
 
-    beginTurn: async (uid, expectedConversationId) => {
+    beginTurn: async (uid, expectedConversationId, requestId) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
       return db.runTransaction(async (transaction) => {
@@ -258,6 +269,24 @@ export function createAssistantConversationStore(
             'conversation_changed',
             'The active Assistant conversation changed. Reload it before sending another message.',
           );
+        }
+        if (requestId) {
+          const matchingMessage = conversation.messages.find(
+            message => message.id === requestId,
+          );
+          if (matchingMessage?.role === 'user') {
+            return {
+              kind: 'replayed',
+              conversation: toPublicConversation(conversation),
+              requestText: matchingMessage.text,
+            };
+          }
+          if (matchingMessage) {
+            throw new AssistantConversationStoreError(
+              'request_id_conflict',
+              'The Assistant request identifier conflicts with a saved message.',
+            );
+          }
         }
         if (conversation.pendingTurn
           && conversation.pendingTurn.expiresAtMs > nowMs) {
@@ -281,6 +310,7 @@ export function createAssistantConversationStore(
         };
         transaction.set(conversationRef, updatedConversation);
         return {
+          kind: 'started',
           conversationId: updatedConversation.conversationId,
           turnId,
           history: [...updatedConversation.messages],

@@ -37,8 +37,8 @@ or Beta caller origin (or loopback while running the Functions emulator), with t
 
 The callable surface consists of:
 
-- `assistantChat`: validates the prompt and IANA timezone, consumes quota when grounded-answer processing begins, invokes the grounded
-  runtime, and commits one completed user/assistant turn.
+- `assistantChat`: validates the prompt, client-generated request ID, and IANA timezone; consumes quota when
+  grounded-answer processing begins; invokes the grounded runtime; and commits one completed user/assistant turn.
 - `getAssistantConversation`: reads the current server-owned conversation for the signed-in user.
 - `resetAssistantConversation`: replaces the active conversation generation so an older in-flight response cannot
   restore cleared content.
@@ -95,8 +95,9 @@ The published examples are executable contracts, not disconnected marketing copy
 the prompt text, supported tool workflow, and a narrow routing hint for every example shown on the Assistant page,
 composer, or public home page. An exact case- and whitespace-insensitive match adds that repository-owned workflow to
 the model's system instructions, while the user's message remains untrusted. The runtime fails closed if a workflow
-tool is absent. Tests execute every current example through every declared mocked MCP workflow tool and verify each
-workflow against the production MCP tool registry. The separately retained legacy AI Insights catalog is also normalized
+tool is absent or generation does not invoke the declared tools in order. Tests execute every current example through
+every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
+separately retained legacy AI Insights catalog is also normalized
 exhaustively, including catalog entries that are not currently rendered, so rollback examples cannot silently escape
 coverage. Each model generation phase receives fresh dynamic Genkit action objects so their request-local registries do
 not produce duplicate-registration errors during discovery-and-answer workflows.
@@ -123,6 +124,13 @@ There is one active document at `users/{uid}/assistantConversations/active`:
 - an opaque conversation generation ID;
 - one four-minute pending-turn lease to serialize requests.
 
+Each browser send also carries a client-generated opaque request ID. That ID becomes the stored user-message ID, so a
+retry after a lost callable response can return the already committed conversation without invoking Gemini or consuming
+another request. Reusing an ID with different text is rejected. The page retains the ID only while the outcome is
+ambiguous, clears it after a confirmed completion or authoritative conversation-generation change, and requires an
+exact ID match when reconciling a response that may have been lost. This prevents another tab's same-text turn from
+being mistaken for the current request.
+
 Each completed turn refreshes `expireAt` to seven days. Starting a turn never renews that seven-day retention, but it
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a
 valid response is still being generated. A failed attempt can therefore retain an otherwise expiring conversation for
@@ -134,7 +142,10 @@ after deletion starts.
 
 The Assistant reuses the existing AI request ledger and role limits. A reservation is released if no model attempt
 starts, such as when another turn owns the conversation lease. Once the reservation is finalized, a failed model or
-tool attempt still consumes the request. Loading or resetting a conversation does not consume quota.
+tool attempt still consumes the request. Loading or resetting a conversation does not consume quota. Usage documents
+are read directly by period ID, so their server-only fields and dynamic reservation map are exempt from automatic
+single-field indexing. `periodEnd` deliberately remains indexed because the admin fallback orders historical usage by
+that field when no current subscription period is available.
 
 ## Operations, rollout, and rollback
 
