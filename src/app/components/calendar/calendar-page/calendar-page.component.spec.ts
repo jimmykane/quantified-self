@@ -93,6 +93,8 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.calendar-volume-toggle')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#calendar-family-volume-title')?.textContent?.trim())
+      .toBe('Activities');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-heading')?.textContent)
       .toContain('volume by duration');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim())
