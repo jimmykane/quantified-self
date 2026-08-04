@@ -148,6 +148,15 @@ describe('AppRoutingModule routes', () => {
     expect(trainingRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
+  it('should keep the activity calendar authenticated and noindexed', () => {
+    const calendarRoute = routes.find(route => route.path === 'calendar');
+
+    expect(calendarRoute).toBeTruthy();
+    expect(calendarRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(calendarRoute?.data?.['description']).toContain('Private Week, Month, and Year activity calendar');
+    expect(calendarRoute?.data?.['robots']).toBe('noindex, follow');
+  });
+
   it('should keep the private routes library authenticated and noindexed', () => {
     const routesRoute = routes.find(route => route.path === 'routes');
 
@@ -348,6 +357,12 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'sports watch benchmark reports',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.activityCalendar,
+        title: 'Activity Calendar for Endurance Training',
+        h1: 'Activity calendar for endurance training',
+        descriptionText: 'Week, Month, and Year calendar views',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
         title: 'Training Analysis for Endurance Athletes',
         h1: 'Training analysis for endurance athletes',
@@ -513,6 +528,7 @@ describe('AppRoutingModule routes', () => {
       '@type': 'SoftwareApplication',
       name: 'Quantified Self',
     });
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Week, Month, and Year activity calendar with duration-scaled activity groups');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Automatic Wahoo to Suunto activity sync');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Activity and route delivery to Wahoo');

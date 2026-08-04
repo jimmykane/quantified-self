@@ -1,5 +1,6 @@
 export type PublicSeoPageKey =
   | 'featuresHub'
+  | 'activityCalendar'
   | 'trainingAnalysis'
   | 'mcpServer'
   | 'aiInsights'
@@ -18,6 +19,7 @@ export type PublicSeoPageKey =
 
 export const PUBLIC_FEATURE_PATHS = {
   hub: 'features',
+  activityCalendar: 'features/activity-calendar',
   trainingAnalysis: 'features/training-analysis',
   mcpServer: 'features/mcp-server',
   aiInsights: 'features/ai-insights',

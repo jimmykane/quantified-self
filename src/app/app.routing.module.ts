@@ -354,6 +354,15 @@ const topLevelRoutes: Routes = [
     pathMatch: 'full'
   },
   {
+    path: PUBLIC_FEATURE_PATHS.activityCalendar,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('activityCalendar'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('trainingAnalysis'),
@@ -540,7 +549,13 @@ const topLevelRoutes: Routes = [
     path: 'calendar',
     loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
       .then(module => module.CalendarPageComponent),
-    data: { title: 'Calendar', animation: 'Calendar', preload: true, robots: 'noindex, follow' },
+    data: {
+      title: 'Calendar',
+      animation: 'Calendar',
+      preload: true,
+      description: 'Private Week, Month, and Year activity calendar with duration-scaled activity groups and period totals.',
+      robots: 'noindex, follow',
+    },
     canMatch: [authGuard, onboardingGuard]
   },
   {
@@ -688,6 +703,7 @@ const topLevelRoutes: Routes = [
         "operatingSystem": "Web",
         "description": HOME_SEO_DESCRIPTION,
         "featureList": [
+          "Week, Month, and Year activity calendar with duration-scaled activity groups",
           "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
           "Automatic Garmin to Suunto activity sync",
           "Automatic COROS to Suunto activity sync",

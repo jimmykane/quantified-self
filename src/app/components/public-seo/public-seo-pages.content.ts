@@ -89,12 +89,13 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore training analysis, read-only MCP access, AI Insights, workout file comparison, FIT/GPX/TCX tools, sports watch benchmark reports, and a private dashboard.',
+    description: 'Explore an activity calendar, training analysis, read-only MCP access, AI Insights, workout file comparison, FIT/GPX/TCX tools, and sports watch benchmark reports.',
     h1: 'Features for endurance training data',
-    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, analyze training context, compare recordings, benchmark devices, and ask questions through AI Insights or an MCP client you explicitly authorize.',
-    chips: ['Training analysis', 'MCP server', 'AI Insights', 'Workout comparison', 'Route files', 'Benchmarks'],
+    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through AI Insights or an MCP client you explicitly authorize.',
+    chips: ['Activity calendar', 'Training analysis', 'MCP server', 'AI Insights', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('Activity Calendar', '/features/activity-calendar'),
       routeAction('MCP Server', '/features/mcp-server'),
       routeAction('AI Insights', '/features/ai-insights'),
       routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
@@ -109,6 +110,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         title: 'Turn scattered training data into usable analysis',
         copy: 'The feature pages cover the workflows people search for after their data is spread across watches, services, and exported activity files.',
         items: [
+          {
+            icon: 'calendar_month',
+            title: 'Activity calendar',
+            copy: 'Scan Week, Month, and Year views with duration-scaled activity circles, period totals, activity-group bars, and day details.',
+          },
           {
             icon: 'monitoring',
             title: 'Training analysis',
@@ -176,7 +182,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'What Quantified Self features should I start with?',
-        answer: 'Start with integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, AI Insights for built-in chart-backed answers, or the MCP server when you want to use a compatible external client with explicitly approved read-only data.',
+        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, AI Insights for built-in chart-backed answers, or the MCP server for explicitly approved read-only access.',
       },
       {
         question: 'Can I compare custom files and provider data?',
@@ -188,10 +194,96 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Choose the feature that matches the data problem',
-    closingCopy: 'Use the hub when you are deciding between curated training analysis, built-in AI analysis, read-only MCP access, file comparison, device benchmarks, provider sync, and centralized workout history.',
+    closingCopy: 'Use the hub when you are deciding between a visual activity calendar, curated training analysis, built-in AI analysis, read-only MCP access, file comparison, device benchmarks, provider sync, and centralized workout history.',
     closingActions: [
       routeAction('Explore Integrations', '/integrations', 'flat', 'arrow_forward'),
       routeAction('Training Guides', '/guides'),
+    ],
+  },
+  activityCalendar: {
+    key: 'activityCalendar',
+    path: PUBLIC_FEATURE_PATHS.activityCalendar,
+    eyebrow: 'Activity Calendar',
+    title: 'Activity Calendar for Endurance Training',
+    description: 'Review running, cycling, swimming, skiing, and other workouts in Week, Month, and Year calendar views with duration-scaled circles and period totals.',
+    h1: 'Activity calendar for endurance training',
+    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a private visual calendar. Move between Week, Month, and Year views, scan duration-scaled activity groups, and open any active day for its recorded workouts.',
+    chips: ['Week view', 'Month view', 'Year view', 'Duration circles', 'Distance and ascent', 'Private activity data'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Open Calendar', '/calendar', 'stroked', 'calendar_month'),
+      routeAction('Calendar Help', '/help', 'stroked', undefined, 'activity-calendar'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Visual History',
+        title: 'Scan training days at the scale you need',
+        copy: 'The calendar keeps the same activity-group language from the dashboard while adapting its layout to the available space.',
+        items: [
+          {
+            icon: 'date_range',
+            title: 'Week, Month, and Year views',
+            copy: 'Move one week, month, or year at a time, return to today, and keep the selected view and date in the URL.',
+          },
+          {
+            icon: 'bubble_chart',
+            title: 'Duration-scaled activity circles',
+            copy: 'Colors identify activity groups and circle size reflects recorded duration. Compact calendars place multiple groups concentrically around one center.',
+          },
+          {
+            icon: 'event_note',
+            title: 'Day activity details',
+            copy: 'Select an active day to review its total duration, activity-group totals, and individual workouts without leaving calendar context.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Period Context',
+        title: 'Read totals and activity mix below the calendar',
+        copy: 'The selected period has its own summary and duration comparison, independent from dashboard event-search filters and custom tile ranges.',
+        items: [
+          {
+            icon: 'analytics',
+            title: 'Distance, duration, and ascent',
+            copy: 'Read selected-period totals above the calendar in your preferred units. Adjacent dates shown only to complete a month grid do not change month totals.',
+          },
+          {
+            icon: 'bar_chart',
+            title: 'Activity-group duration bars',
+            copy: 'Each bar compares one group with the longest recorded group in the period. Available duration, distance, ascent, and descent totals appear beneath it.',
+          },
+          {
+            icon: 'tune',
+            title: 'Your week and summary settings',
+            copy: 'Weekday order follows the configured start of week, units follow account preferences, and ascent or descent exclusions also apply to calendar summaries.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'Which activities appear in the calendar?',
+        answer: 'The calendar uses normal activity events already imported or uploaded to your private Quantified Self account. Merge and benchmark records are excluded so comparison artifacts do not inflate training days or totals.',
+      },
+      {
+        question: 'What do the calendar circle colors and sizes mean?',
+        answer: 'Color identifies the activity group, such as Running, Cycling, Mountain Biking, Swimming, or Indoor Sports. Size reflects recorded duration, with a bounded scale so long activities remain readable.',
+      },
+      {
+        question: 'Does the activity calendar follow the dashboard event search?',
+        answer: 'No. The full calendar queries its visible week, month, or year independently. The dashboard calendar tile also loads its own current-month window rather than reusing event-table search results.',
+      },
+      {
+        question: 'Can I change the first day of the week and measurement units?',
+        answer: 'Yes. Start of week and unit preferences come from Settings. Weekend columns remain identifiable, and the selected start day is marked in the weekday header.',
+      },
+    ],
+    closingTitle: 'See the rhythm behind the activity list',
+    closingCopy: 'Start with the current month, open a day for individual workouts, then move to Week or Year when you need a tighter or broader view of training consistency.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Open Calendar', '/calendar', 'stroked', 'calendar_month'),
+      routeAction('Training Analysis', '/features/training-analysis'),
     ],
   },
   trainingAnalysis: {
@@ -1692,6 +1784,7 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
 
 export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData> = {
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
+  activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),
   aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),

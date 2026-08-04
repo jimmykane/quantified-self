@@ -93,6 +93,18 @@ describe('HelpPageComponent', () => {
     expect(component.selectedSection().title).toBe('Training Analysis');
   });
 
+  it('opens the Activity Calendar guide from search', () => {
+    component.onSearchQueryChange('duration-scaled activity circles');
+    fixture.detectChanges();
+
+    expect(component.searchResults().map(section => section.id)).toContain('activity-calendar');
+
+    component.openSection('activity-calendar');
+    fixture.detectChanges();
+
+    expect(component.selectedSection().title).toBe('Activity Calendar');
+  });
+
   it('clears an active search when returning to all documentation', () => {
     component.openSection('plans-and-billing');
     component.onSearchQueryChange('billing');

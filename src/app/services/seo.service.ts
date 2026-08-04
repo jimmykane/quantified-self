@@ -173,6 +173,7 @@ export class SeoService implements OnDestroy {
                 "operatingSystem": "Web",
                 "description": "Analyze Garmin, Suunto, COROS, and Wahoo training in one private dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.",
                 "featureList": [
+                    "Week, Month, and Year activity calendar with duration-scaled activity groups",
                     "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
                     "Automatic Garmin to Suunto activity sync",
                     "Automatic COROS to Suunto activity sync",

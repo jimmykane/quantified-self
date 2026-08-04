@@ -32,7 +32,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/help</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-04</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -74,6 +74,11 @@
     <loc>https://quantified-self.io/features</loc>
     <lastmod>2026-07-26</lastmod>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/features/activity-calendar</loc>
+    <lastmod>2026-08-04</lastmod>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/workout-data-comparison</loc>

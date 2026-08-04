@@ -12,6 +12,7 @@ import {
 
 export type HelpSectionId =
   | 'getting-started'
+  | 'activity-calendar'
   | 'training-analysis'
   | 'ai-insights'
   | 'plans-and-billing'
@@ -98,6 +99,33 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 - Missing or unreliable inputs remain explicit. Training does not infer LT1/LT2, race readiness, a universal athlete score, or workout-execution scoring.
 - Training power-profile callouts compare the best 90-day curve with the best one-year curve at 5 seconds, 1 minute, 5 minutes, 20 minutes, and 1 hour. They use bounded reciprocal-duration interpolation, never bridge duration brackets wider than 1.25×, show both activity counts, and call out the strongest retained duration and clearest gap. Missing comparable anchors stay explicit.`;
 
+const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
+
+- New dashboards start with a 2 x 2 **Activity Calendar** tile showing the current month. Select its open action to move to the full [Calendar](/calendar).
+- The full Calendar has **Week**, **Month**, and **Year** views. The previous and next controls move by the selected view's period, and **Today** returns to the current period without taking a separate row on smaller screens.
+- The selected view and date are kept in the URL, so refreshing or sharing the authenticated route preserves the same calendar position.
+
+## Read activity days
+
+- A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
+- Week and Month views separate activity-group circles when space allows. Narrow layouts, the dashboard tile, and Year view place multiple circles concentrically around the same center so a day stays readable in a compact cell.
+- Select a day with activity to open its details sheet. It shows the day's total duration, totals by activity group, and individual activities.
+- Calendar dates intentionally have no hover or touch tooltip. This keeps native vertical scrolling responsive on phones; day details remain available by selecting a date.
+
+## Understand period totals and activity bars
+
+- The summary above the full calendar shows recorded **Distance**, **Duration**, and **Ascent** for the selected week, month, or year. Month totals exclude adjacent dates shown only to complete the calendar grid.
+- Below the calendar, **Activities** compares activity groups by recorded duration. Each bar uses the same color as its circles and is scaled against the longest-duration group in the selected period. The info control beside the heading explains this comparison.
+- Available duration, distance, ascent, and descent totals appear with icons beneath each bar. A metric is omitted when no positive recorded value exists, and **--** beside an activity group means duration was not recorded.
+- Lift-served downhill activities such as alpine skiing, snowboarding, and downhill cycling do not add ascent but do contribute descent. Ascent and descent summary exclusions configured in **Settings** also apply.
+
+## Preferences and data scope
+
+- Weekday order follows **Settings -> Dashboard -> Start of the Week**. The configured first day is identified in the header, and Saturday and Sunday remain identifiable as weekend days.
+- Distance, ascent, and descent use the units selected in **Settings -> Units**.
+- The full Calendar owns a visible-period activity query that is independent from the dashboard event table, custom-chart ranges, and map-tile filters. The dashboard tile independently loads its current-month window.
+- Normal activity events are included. Merge and benchmark records are excluded so comparison artifacts do not create calendar days or inflate totals.`;
+
 export const HELP_ACTIONS: HelpAction[] = [
   {
     id: 'email-support',
@@ -144,7 +172,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 ## Where things live
 
 - **Dashboard** is your main activity overview.
-- **Calendar** shows activities in Week, Month, and Year views.
+- **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters.
 - **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
@@ -166,11 +194,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
-- **Activity Calendar** is the default 2 x 2 dashboard tile. It shows the current month and opens the full [Calendar](/calendar), where the arrow controls move by week, month, or year to match the selected **Week**, **Month**, or **Year** view.
-- Calendar circles group activities by sport family and scale by recorded duration. Month and Week views separate the family circles when space allows; compact tiles, narrow layouts, and Year view place them concentrically around the same center. Weekday order follows **Settings -> Dashboard -> Start of the Week**, and Saturday and Sunday are identified as weekend days. Select an activity day to see its family totals and events.
-- The full Calendar summary shows total distance, duration, and ascent for the selected week, month, or year. Month totals exclude adjacent dates shown only to complete the calendar grid, and measurement units follow **Settings -> Units**.
-- Below the full calendar, **Activities** compares the selected period by recorded duration, grouped by sport family. Each family uses the same color as its calendar circles, and its bar is scaled against the largest recorded family duration. Positive recorded duration, distance, ascent, and descent totals appear with icons beneath each bar. Lift-served downhill activities such as alpine skiing, snowboarding, and downhill cycling do not add ascent but do contribute descent, and your ascent/descent summary exclusions in **Settings** also apply. **--** beside a family means its duration was not recorded.
-- The calendar owns a visible-period activity query. It stays independent from the dashboard event table, custom-chart ranges, and map-tile filters.
+- **Activity Calendar** is the default 2 x 2 dashboard tile. It shows the current month and opens the full [Calendar](/calendar); the [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
 - New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header begins with the same TSS-only **Training state** shown in Training, then shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, Overnight HR, and an **Open Training** action. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
@@ -351,11 +375,26 @@ export const HELP_SECTIONS: HelpSection[] = [
     links: [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
+      { label: 'Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
+      { label: 'Activity Calendar guide', icon: 'school', kind: 'route', target: '/help', fragment: 'activity-calendar' },
+      { label: 'Activity Calendar Overview', icon: 'travel_explore', kind: 'route', target: '/features/activity-calendar' },
       { label: 'Training', icon: 'monitoring', kind: 'route', target: '/training' },
       { label: 'Training analysis guide', icon: 'school', kind: 'route', target: '/help', fragment: 'training-analysis' },
       { label: 'Training Analysis Overview', icon: 'monitoring', kind: 'route', target: '/features/training-analysis' },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
+    ],
+  },
+  {
+    id: 'activity-calendar',
+    icon: 'calendar_month',
+    title: 'Activity Calendar',
+    summary: 'Use Week, Month, and Year views, duration-scaled activity circles, period totals, and activity-group comparisons.',
+    content: ACTIVITY_CALENDAR_HELP_CONTENT,
+    links: [
+      { label: 'Open Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
+      { label: 'Activity Calendar Overview', icon: 'travel_explore', kind: 'route', target: '/features/activity-calendar' },
+      { label: 'Calendar Settings', icon: 'tune', kind: 'route', target: '/settings' },
     ],
   },
   {

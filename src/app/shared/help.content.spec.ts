@@ -15,6 +15,7 @@ describe('help.content', () => {
   it('should expose the expected ordered section ids', () => {
     expect(HELP_SECTIONS.map(section => section.id)).toEqual<HelpSectionId[]>([
       'getting-started',
+      'activity-calendar',
       'training-analysis',
       'ai-insights',
       'plans-and-billing',
@@ -25,8 +26,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define eight unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(8);
+  it('should define nine unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(9);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -157,20 +158,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
-    expect(gettingStartedSection?.content).toContain('Week, Month, and Year views');
-    expect(gettingStartedSection?.content).toContain('compact tiles, narrow layouts, and Year view place them concentrically');
-    expect(gettingStartedSection?.content).toContain('scale by recorded duration');
-    expect(gettingStartedSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
-    expect(gettingStartedSection?.content).toContain('Saturday and Sunday are identified as weekend days');
-    expect(gettingStartedSection?.content).toContain('total distance, duration, and ascent');
-    expect(gettingStartedSection?.content).toContain('Month totals exclude adjacent dates');
-    expect(gettingStartedSection?.content).toContain('compares the selected period by recorded duration');
-    expect(gettingStartedSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
-    expect(gettingStartedSection?.content).toContain('do not add ascent but do contribute descent');
-    expect(gettingStartedSection?.content).toContain('summary exclusions in **Settings** also apply');
-    expect(gettingStartedSection?.content).toContain('totals appear with icons beneath each bar');
-    expect(gettingStartedSection?.content).toContain('calendar owns a visible-period activity query');
-    expect(gettingStartedSection?.content).toContain('independent from the dashboard event table');
+    expect(gettingStartedSection?.content).toContain('[Activity Calendar guide](/help#activity-calendar)');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
     expect(gettingStartedSection?.content).toContain('**Reset to default**');
     expect(gettingStartedSection?.content).toContain('replaces the current dashboard tiles');
@@ -188,6 +176,39 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
     expect(gettingStartedSection?.content).toContain('defaults to **1y**');
     expect(gettingStartedSection?.content).toContain('latest activity or a saved recent-best comparison window');
+  });
+
+  it('should provide a dedicated Activity Calendar guide', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const calendarSection = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
+
+    expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
+    expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
+    expect(calendarSection?.content).toContain('size reflects recorded duration');
+    expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
+    expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
+    expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');
+    expect(calendarSection?.content).toContain('scaled against the longest-duration group');
+    expect(calendarSection?.content).toContain('alpine skiing, snowboarding, and downhill cycling');
+    expect(calendarSection?.content).toContain('do not add ascent but do contribute descent');
+    expect(calendarSection?.content).toContain('summary exclusions configured in **Settings** also apply');
+    expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(calendarSection?.content).toContain('visible-period activity query');
+    expect(calendarSection?.content).toContain('independent from the dashboard event table');
+    expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
+    expect(calendarSection?.links).toContainEqual({
+      label: 'Activity Calendar Overview',
+      icon: 'travel_explore',
+      kind: 'route',
+      target: '/features/activity-calendar',
+    });
+    expect(gettingStartedSection?.links).toContainEqual({
+      label: 'Activity Calendar guide',
+      icon: 'school',
+      kind: 'route',
+      target: '/help',
+      fragment: 'activity-calendar',
+    });
   });
 
   it('should document safe event merge retry and recovery behavior', () => {
