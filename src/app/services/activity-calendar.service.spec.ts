@@ -3,6 +3,7 @@ import {
   ActivityTypes,
   DataActivityTypes,
   DataAscent,
+  DataDescent,
   DataDistance,
   DataDuration,
   type User,
@@ -61,6 +62,7 @@ describe('ActivityCalendarService', () => {
     expect(events[0].getStat(DataDuration.type)?.getValue()).toBe(3600);
     expect(events[0].getStat(DataDistance.type)?.getValue()).toBe(10_000);
     expect(events[0].getStat(DataAscent.type)?.getValue()).toBe(450);
+    expect(events[0].getStat(DataDescent.type)?.getValue()).toBe(420);
     expect(events[0].getActivityTypesAsArray()).toEqual([ActivityTypes.Running]);
     expect(events[0].getActivityTypesAsString()).toBe('Running');
   });
@@ -127,6 +129,7 @@ function eventAt(id: string, startDate: Date) {
       [DataDuration.type]: 3600,
       [DataDistance.type]: 10_000,
       [DataAscent.type]: 450,
+      [DataDescent.type]: 420,
       [DataActivityTypes.type]: [ActivityTypes.Running],
     },
   };

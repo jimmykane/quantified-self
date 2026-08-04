@@ -5,6 +5,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angul
 import {
   ActivityTypes,
   DataAscent,
+  DataDescent,
   DataDistance,
   DataDuration,
   DaysOfTheWeek,
@@ -77,6 +78,43 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-month')).toHaveLength(12);
+  });
+
+  it('switches sport-family volume bars across duration, distance, ascent, and descent', async () => {
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('.calendar-volume-toggle mat-button-toggle')).toHaveLength(4);
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim())
+      .toBe('Running');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
+    expect((fixture.nativeElement.querySelector('.calendar-family-volume-fill') as HTMLElement)?.style.width)
+      .toBe('100%');
+
+    fixture.componentInstance.selectVolumeMetric('descent');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('420 m');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('role'))
+      .toBe('progressbar');
+  });
+
+  it('marks ascent as not applicable while retaining alpine-ski descent', async () => {
+    watchEvents.mockReturnValue(of([createEvent(new Date(2026, 7, 3, 8), ActivityTypes.AlpineSki)]));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    fixture.componentInstance.selectVolumeMetric('ascent');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('N/A');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('role')).toBeNull();
+
+    fixture.componentInstance.selectVolumeMetric('descent');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('420 m');
   });
 
   it('pages by the selected view and keeps state in query parameters', () => {
@@ -169,18 +207,22 @@ describe('CalendarPageComponent', () => {
   });
 });
 
-function createEvent(startDate = new Date(2026, 7, 3, 8)): EventInterface {
+function createEvent(
+  startDate = new Date(2026, 7, 3, 8),
+  activityType = ActivityTypes.Running,
+): EventInterface {
   const statValues: Record<string, number> = {
     [DataDuration.type]: 3600,
     [DataDistance.type]: 10_000,
     [DataAscent.type]: 450,
+    [DataDescent.type]: 420,
   };
   return {
     name: 'Morning run',
     startDate,
     getID: () => 'event-1',
-    getActivityTypesAsArray: () => [ActivityTypes.Running],
-    getActivityTypesAsString: () => 'Running',
+    getActivityTypesAsArray: () => [activityType],
+    getActivityTypesAsString: () => activityType,
     getStat: (type: string) => statValues[type] === undefined
       ? null
       : { getValue: () => statValues[type] },

@@ -3,6 +3,7 @@ import {
   ActivityTypeGroups,
   ActivityTypes,
   DataAscent,
+  DataDescent,
   DataDistance,
   DataDuration,
   DaysOfTheWeek,
@@ -24,12 +25,17 @@ function createEvent(
   startDate: Date,
   activityTypes: ActivityTypes[],
   durationSeconds: number | null,
-  metrics: { distanceMeters?: number | null; ascentMeters?: number | null } = {},
+  metrics: {
+    distanceMeters?: number | null;
+    ascentMeters?: number | null;
+    descentMeters?: number | null;
+  } = {},
 ): EventInterface {
   const statValues: Record<string, number | null | undefined> = {
     [DataDuration.type]: durationSeconds,
     [DataDistance.type]: metrics.distanceMeters,
     [DataAscent.type]: metrics.ascentMeters,
+    [DataDescent.type]: metrics.descentMeters,
   };
   return {
     startDate,
@@ -129,23 +135,27 @@ describe('activity-calendar helper', () => {
     expect(day?.totalDurationSeconds).toBe(5400);
   });
 
-  it('summarizes distance, duration, and ascent only inside the primary period', () => {
+  it('summarizes family volume only inside the primary period', () => {
     const model = buildActivityCalendarViewModel([
       createEvent('inside-1', new Date(2026, 7, 3, 8), [ActivityTypes.Running], 3600, {
         distanceMeters: 10_000,
         ascentMeters: 500,
+        descentMeters: 450,
       }),
       createEvent('inside-2', new Date(2026, 7, 20, 8), [ActivityTypes.Cycling], 1800, {
         distanceMeters: 5000,
         ascentMeters: 250,
+        descentMeters: 200,
       }),
       createEvent('leading-grid-day', new Date(2026, 6, 31, 8), [ActivityTypes.Cycling], 7200, {
         distanceMeters: 50_000,
         ascentMeters: 1500,
+        descentMeters: 1400,
       }),
       createEvent('trailing-grid-day', new Date(2026, 8, 1, 8), [ActivityTypes.Running], 5400, {
         distanceMeters: 15_000,
         ascentMeters: 800,
+        descentMeters: 700,
       }),
     ], {
       view: 'month',
@@ -154,11 +164,80 @@ describe('activity-calendar helper', () => {
       locale: 'en-US',
     });
 
-    expect(model.summary).toEqual({
+    expect(model.summary).toMatchObject({
       totalDurationSeconds: 5400,
       totalDistanceMeters: 15_000,
       totalAscentMeters: 750,
+      totalDescentMeters: 650,
     });
+    expect(model.summary.families.map(family => ({
+      id: family.id,
+      duration: family.metrics.duration.value,
+      distance: family.metrics.distance.value,
+    }))).toEqual([
+      { id: ActivityTypeGroups.RunningGroup, duration: 3600, distance: 10_000 },
+      { id: ActivityTypeGroups.CyclingGroup, duration: 1800, distance: 5000 },
+    ]);
+  });
+
+  it('excludes lift-served ascent while retaining descent for downhill sports', () => {
+    const model = buildActivityCalendarViewModel([
+      createEvent('downhill-mtb', new Date(2026, 7, 3, 8), [ActivityTypes.DownhillCycling], 3600, {
+        ascentMeters: 900,
+        descentMeters: 1200,
+      }),
+      createEvent('trail-mtb', new Date(2026, 7, 4, 8), [ActivityTypes.MountainBiking], 3600, {
+        ascentMeters: 450,
+        descentMeters: 500,
+      }),
+      createEvent('alpine', new Date(2026, 7, 5, 8), [ActivityTypes.AlpineSki], 3600, {
+        ascentMeters: 700,
+        descentMeters: 800,
+      }),
+      createEvent('snowboard', new Date(2026, 7, 6, 8), [ActivityTypes.Snowboard], 3600, {
+        ascentMeters: 650,
+        descentMeters: 700,
+      }),
+      createEvent('ski-tour', new Date(2026, 7, 7, 8), [ActivityTypes.SkiTouring], 3600, {
+        ascentMeters: 600,
+        descentMeters: 650,
+      }),
+      createEvent('swim', new Date(2026, 7, 8, 8), [ActivityTypes.Swimming], 3600, {
+        ascentMeters: 30,
+        descentMeters: 30,
+      }),
+    ], {
+      view: 'month',
+      anchorDate: new Date(2026, 7, 15),
+      startOfWeek: DaysOfTheWeek.Monday,
+      locale: 'en-US',
+    });
+    const mountainBiking = model.summary.families.find(family => (
+      family.activityTypeGroup === ActivityTypeGroups.MountainBikingGroup
+    ));
+    const winterSports = model.summary.families.find(family => (
+      family.activityTypeGroup === ActivityTypeGroups.WinterSportsGroup
+    ));
+    const swimming = model.summary.families.find(family => (
+      family.activityTypeGroup === ActivityTypeGroups.SwimmingGroup
+    ));
+
+    expect(model.summary.totalAscentMeters).toBe(1050);
+    expect(model.summary.totalDescentMeters).toBe(3850);
+    expect(mountainBiking?.metrics.ascent).toEqual({
+      value: 450,
+      eligibleEventCount: 1,
+      recordedEventCount: 1,
+    });
+    expect(mountainBiking?.metrics.descent.value).toBe(1700);
+    expect(winterSports?.metrics.ascent).toEqual({
+      value: 600,
+      eligibleEventCount: 1,
+      recordedEventCount: 1,
+    });
+    expect(winterSports?.metrics.descent.value).toBe(2150);
+    expect(swimming?.metrics.ascent.eligibleEventCount).toBe(0);
+    expect(swimming?.metrics.descent.eligibleEventCount).toBe(0);
   });
 
   it('keeps equal durations equal in separated layouts while nesting compact markers', () => {

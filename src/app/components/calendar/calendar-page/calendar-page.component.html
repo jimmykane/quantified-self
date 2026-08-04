@@ -78,5 +78,58 @@
     }
     <app-activity-calendar-grid [model]="calendarModel()" (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
+
+    @if (!isLoading() && familyVolumeRows().length) {
+    <section class="calendar-family-volume" aria-labelledby="calendar-family-volume-title">
+      <header class="calendar-family-volume-header">
+        <div class="calendar-family-volume-heading">
+          <h2 id="calendar-family-volume-title">Sport families</h2>
+          <span>{{ calendarModel().periodLabel }} volume</span>
+        </div>
+
+        <mat-button-toggle-group class="calendar-volume-toggle" aria-label="Sport family volume metric"
+          hideSingleSelectionIndicator [value]="selectedVolumeMetric()"
+          (change)="selectVolumeMetric($event.value)">
+          @for (option of volumeMetricOptions; track option.value) {
+          <mat-button-toggle [value]="option.value">
+            <span class="calendar-volume-option">
+              <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
+              <span>{{ option.label }}</span>
+            </span>
+          </mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+      </header>
+
+      <div class="calendar-family-volume-list">
+        @for (family of familyVolumeRows(); track family.id) {
+        <div class="calendar-family-volume-row" role="group" [attr.aria-label]="family.ariaLabel">
+          <div class="calendar-family-volume-identity">
+            <mat-icon aria-hidden="true" [style.color]="family.color">{{ family.icon }}</mat-icon>
+            <span class="calendar-family-volume-copy">
+              <strong>{{ family.label }}</strong>
+              <span>{{ family.eventCountLabel }}</span>
+            </span>
+          </div>
+          <strong class="calendar-family-volume-value">{{ family.valueLabel }}</strong>
+          <div class="calendar-family-volume-track"
+            [attr.role]="family.hasData ? 'progressbar' : null"
+            [attr.aria-label]="family.hasData ? family.progressLabel : null"
+            [attr.aria-valuemin]="family.hasData ? 0 : null"
+            [attr.aria-valuemax]="family.hasData ? family.maximumValue : null"
+            [attr.aria-valuenow]="family.hasData ? family.value : null"
+            [attr.aria-valuetext]="family.hasData ? family.valueLabel : null">
+            <span class="calendar-family-volume-fill"
+              [style.width.%]="family.barPercent"
+              [style.background-color]="family.color"></span>
+          </div>
+        </div>
+        @if (!$last) {
+        <mat-divider></mat-divider>
+        }
+        }
+      </div>
+    </section>
+    }
   }
 </main>

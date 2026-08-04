@@ -3,6 +3,7 @@ import {
   ActivityTypesHelper,
   DataActivityTypes,
   DataAscent,
+  DataDescent,
   DataDistance,
   DataDuration,
   type ActivityTypes,
@@ -98,6 +99,7 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
     [DataDuration.type]: resolveNonNegativeStatValue(stats[DataDuration.type]),
     [DataDistance.type]: resolveNonNegativeStatValue(stats[DataDistance.type]),
     [DataAscent.type]: resolveNonNegativeStatValue(stats[DataAscent.type]),
+    [DataDescent.type]: resolveNonNegativeStatValue(stats[DataDescent.type]),
   };
   const activityTypes = resolveActivityTypes(stats[DataActivityTypes.type]);
   const name = typeof document.name === 'string' ? document.name : '';

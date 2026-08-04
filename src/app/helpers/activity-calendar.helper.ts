@@ -4,6 +4,7 @@ import {
   ActivityTypes,
   ActivityTypesHelper,
   DataAscent,
+  DataDescent,
   DataDistance,
   DataDuration,
   DaysOfTheWeek,
@@ -11,9 +12,11 @@ import {
 } from '@sports-alliance/sports-lib';
 import { getActivityTypeGroupLabel } from '@shared/activity-type-group.metadata';
 import { AppActivityTypeGroupColors } from '../services/color/app.activity-type-group.colors';
+import { AppEventUtilities } from '../utils/app.event.utilities';
 import { resolveTrainingEventDisplayLabel } from './training-event-label.helper';
 
 export type ActivityCalendarView = 'week' | 'month' | 'year';
+export type ActivityCalendarVolumeMetric = 'duration' | 'distance' | 'ascent' | 'descent';
 
 export interface ActivityCalendarRouteState {
   view: ActivityCalendarView;
@@ -62,10 +65,27 @@ export interface ActivityCalendarMonthViewModel {
   days: ActivityCalendarDayViewModel[];
 }
 
+export interface ActivityCalendarMetricAggregate {
+  value: number;
+  eligibleEventCount: number;
+  recordedEventCount: number;
+}
+
+export interface ActivityCalendarPeriodFamilySummary {
+  id: string;
+  activityTypeGroup: ActivityTypeGroup;
+  label: string;
+  color: string;
+  eventCount: number;
+  metrics: Record<ActivityCalendarVolumeMetric, ActivityCalendarMetricAggregate>;
+}
+
 export interface ActivityCalendarPeriodSummary {
   totalDurationSeconds: number;
   totalDistanceMeters: number;
   totalAscentMeters: number;
+  totalDescentMeters: number;
+  families: ActivityCalendarPeriodFamilySummary[];
 }
 
 export interface ActivityCalendarViewModel {
@@ -94,6 +114,11 @@ interface ActivityCalendarFamilyAccumulator extends ActivityCalendarFamilyIdenti
   durationSeconds: number;
   eventCount: number;
   hasUnknownDuration: boolean;
+}
+
+interface ActivityCalendarPeriodFamilyAccumulator extends ActivityCalendarFamilyIdentity {
+  eventCount: number;
+  metrics: Record<ActivityCalendarVolumeMetric, ActivityCalendarMetricAggregate>;
 }
 
 const VALID_CALENDAR_VIEWS = new Set<ActivityCalendarView>(['week', 'month', 'year']);
@@ -426,11 +451,8 @@ function buildDayViewModel(
 function buildActivityCalendarPeriodSummary(
   months: ActivityCalendarMonthViewModel[],
 ): ActivityCalendarPeriodSummary {
-  const summary: ActivityCalendarPeriodSummary = {
-    totalDurationSeconds: 0,
-    totalDistanceMeters: 0,
-    totalAscentMeters: 0,
-  };
+  const periodMetrics = createActivityCalendarMetricAggregates();
+  const familyAccumulators = new Map<string, ActivityCalendarPeriodFamilyAccumulator>();
 
   months.forEach((month) => {
     month.days.forEach((day) => {
@@ -438,14 +460,98 @@ function buildActivityCalendarPeriodSummary(
         return;
       }
       day.events.forEach((event) => {
-        summary.totalDurationSeconds += resolveActivityCalendarEventDurationSeconds(event) || 0;
-        summary.totalDistanceMeters += resolveActivityCalendarEventStatValue(event, DataDistance.type) || 0;
-        summary.totalAscentMeters += resolveActivityCalendarEventStatValue(event, DataAscent.type) || 0;
+        const family = resolveEventFamilyIdentity(event);
+        const accumulator = familyAccumulators.get(family.id) || {
+          ...family,
+          eventCount: 0,
+          metrics: createActivityCalendarMetricAggregates(),
+        };
+        const metricValues: Record<ActivityCalendarVolumeMetric, number | null> = {
+          duration: resolveActivityCalendarEventDurationSeconds(event),
+          distance: resolveActivityCalendarEventStatValue(event, DataDistance.type),
+          ascent: resolveActivityCalendarEventStatValue(event, DataAscent.type),
+          descent: resolveActivityCalendarEventStatValue(event, DataDescent.type),
+        };
+        const metricEligibility: Record<ActivityCalendarVolumeMetric, boolean> = {
+          duration: true,
+          distance: true,
+          ascent: isActivityCalendarElevationMetricEligible(event, 'ascent'),
+          descent: isActivityCalendarElevationMetricEligible(event, 'descent'),
+        };
+
+        accumulator.eventCount += 1;
+        (Object.keys(metricValues) as ActivityCalendarVolumeMetric[]).forEach((metric) => {
+          addActivityCalendarMetricValue(accumulator.metrics[metric], metricValues[metric], metricEligibility[metric]);
+          addActivityCalendarMetricValue(periodMetrics[metric], metricValues[metric], metricEligibility[metric]);
+        });
+        familyAccumulators.set(family.id, accumulator);
       });
     });
   });
 
-  return summary;
+  const families = [...familyAccumulators.values()].sort((left, right) => (
+    right.metrics.duration.value - left.metrics.duration.value
+    || right.eventCount - left.eventCount
+    || left.label.localeCompare(right.label)
+  ));
+
+  return {
+    totalDurationSeconds: periodMetrics.duration.value,
+    totalDistanceMeters: periodMetrics.distance.value,
+    totalAscentMeters: periodMetrics.ascent.value,
+    totalDescentMeters: periodMetrics.descent.value,
+    families,
+  };
+}
+
+function createActivityCalendarMetricAggregates(): Record<
+  ActivityCalendarVolumeMetric,
+  ActivityCalendarMetricAggregate
+> {
+  return {
+    duration: createActivityCalendarMetricAggregate(),
+    distance: createActivityCalendarMetricAggregate(),
+    ascent: createActivityCalendarMetricAggregate(),
+    descent: createActivityCalendarMetricAggregate(),
+  };
+}
+
+function createActivityCalendarMetricAggregate(): ActivityCalendarMetricAggregate {
+  return {
+    value: 0,
+    eligibleEventCount: 0,
+    recordedEventCount: 0,
+  };
+}
+
+function addActivityCalendarMetricValue(
+  aggregate: ActivityCalendarMetricAggregate,
+  value: number | null,
+  eligible: boolean,
+): void {
+  if (!eligible) {
+    return;
+  }
+  aggregate.eligibleEventCount += 1;
+  if (value === null) {
+    return;
+  }
+  aggregate.recordedEventCount += 1;
+  aggregate.value += value;
+}
+
+function isActivityCalendarElevationMetricEligible(
+  event: EventInterface,
+  metric: 'ascent' | 'descent',
+): boolean {
+  const activityTypes = resolveEventActivityTypes(event);
+  if (!activityTypes.length) {
+    return true;
+  }
+
+  return metric === 'ascent'
+    ? !AppEventUtilities.shouldExcludeAscent(activityTypes)
+    : !AppEventUtilities.shouldExcludeDescent(activityTypes);
 }
 
 function groupEventsByLocalDay(events: EventInterface[]): Map<string, EventInterface[]> {
@@ -479,9 +585,7 @@ function resolveEventStartDate(event: EventInterface): Date | null {
 
 function resolveEventFamilyIdentity(event: EventInterface): ActivityCalendarFamilyIdentity {
   const groups = new Set<ActivityTypeGroup>();
-  const activityTypes = Array.isArray(event?.getActivityTypesAsArray?.())
-    ? event.getActivityTypesAsArray()
-    : [];
+  const activityTypes = resolveEventActivityTypes(event);
   activityTypes.forEach((activityType) => {
     const group = resolveActivityTypeGroup(activityType);
     if (group) {
@@ -505,6 +609,16 @@ function resolveEventFamilyIdentity(event: EventInterface): ActivityCalendarFami
     label: getActivityTypeGroupLabel(group),
     color: AppActivityTypeGroupColors[group],
   };
+}
+
+function resolveEventActivityTypes(event: EventInterface): ActivityTypes[] {
+  const activityTypes = event?.getActivityTypesAsArray?.();
+  if (!Array.isArray(activityTypes)) {
+    return [];
+  }
+  return activityTypes
+    .map(activityType => ActivityTypesHelper.resolveActivityType(activityType))
+    .filter((activityType): activityType is ActivityTypes => !!activityType);
 }
 
 function resolveActivityTypeGroup(activityType: unknown): ActivityTypeGroup | null {
