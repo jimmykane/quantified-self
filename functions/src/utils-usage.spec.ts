@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedByTransactionGuardError, EventWriteSkippedForDeletedUserError } from './utils';
+import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
@@ -284,83 +284,6 @@ describe('utils higher-level helpers', () => {
             expect(hoisted.transactionSet).not.toHaveBeenCalled();
         });
 
-        it('does not set event documents when their transaction authorization guard is rejected', async () => {
-            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
-            const transactionGuard = vi.fn().mockResolvedValue(false);
-
-            await expect(setEventDocumentIfUserActive(
-                'user-1',
-                'wahoo_event_write',
-                docRef as any,
-                { ready: true },
-                undefined,
-                undefined,
-                transactionGuard,
-            )).rejects.toBeInstanceOf(EventWriteSkippedByTransactionGuardError);
-
-            expect(transactionGuard).toHaveBeenCalledWith(expect.objectContaining({
-                get: expect.any(Function),
-                set: expect.any(Function),
-            }));
-            expect(hoisted.transactionSet).not.toHaveBeenCalled();
-        });
-
-        it('sets event documents when their transaction authorization guard remains current', async () => {
-            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
-            const transactionGuard = vi.fn().mockResolvedValue(true);
-
-            await setEventDocumentIfUserActive(
-                'user-1',
-                'wahoo_event_write',
-                docRef as any,
-                { ready: true },
-                undefined,
-                undefined,
-                transactionGuard,
-            );
-
-            expect(transactionGuard).toHaveBeenCalledTimes(1);
-            expect(hoisted.transactionSet).toHaveBeenCalledWith(docRef, { ready: true });
-        });
-
-        it('records a created document only after its guarded transaction commits', async () => {
-            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
-            const onDocumentCreated = vi.fn();
-            hoisted.transactionGet.mockResolvedValueOnce({ exists: false });
-
-            await setEventDocumentIfUserActive(
-                'user-1',
-                'wahoo_event_write',
-                docRef as any,
-                { ready: true },
-                undefined,
-                undefined,
-                undefined,
-                onDocumentCreated,
-            );
-
-            expect(onDocumentCreated).toHaveBeenCalledTimes(1);
-        });
-
-        it('does not record a pre-existing deterministic document as attempt-created', async () => {
-            const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
-            const onDocumentCreated = vi.fn();
-            hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ id: 'event-1' }) });
-
-            await setEventDocumentIfUserActive(
-                'user-1',
-                'wahoo_event_write',
-                docRef as any,
-                { ready: true },
-                undefined,
-                undefined,
-                undefined,
-                onDocumentCreated,
-            );
-
-            expect(onDocumentCreated).not.toHaveBeenCalled();
-        });
-
         it('can preserve existing event tags inside the guarded write transaction', async () => {
             const docRef = hoisted.firestore().doc('users/user-1/events/event-1');
             hoisted.transactionGet.mockResolvedValueOnce({
@@ -458,8 +381,6 @@ describe('utils higher-level helpers', () => {
         it('promotes a staged original file only after all guarded writes succeed', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
-            const transactionGuard = vi.fn().mockResolvedValue(true);
-            const createdDocumentPaths: string[][] = [];
             const event = {
                 getID: () => 'event-1',
                 setID: vi.fn(),
@@ -491,11 +412,7 @@ describe('utils higher-level helpers', () => {
                 undefined,
                 undefined,
                 undefined,
-                {
-                    transactionGuard,
-                    stageOriginalFilesUntilEventWrite: true,
-                    onDocumentCreated: (path) => createdDocumentPaths.push([...path]),
-                },
+                { stageOriginalFilesUntilEventWrite: true },
             );
 
             const stagingPath = hoisted.bucketFile.mock.calls
@@ -508,22 +425,25 @@ describe('utils higher-level helpers', () => {
                 expect.objectContaining({ path: 'users/user-1/events/event-1/original.fit' }),
             );
             expect(hoisted.bucketDelete).toHaveBeenCalledWith(stagingPath, { ignoreNotFound: true });
-            expect(createdDocumentPaths).toEqual(expect.arrayContaining([
-                ['users', 'user-1', 'events', 'event-1'],
-                ['users', 'user-1', 'events', 'event-1', 'metaData', 'processing'],
-                ['users', 'user-1', 'events', 'event-1', 'metaData', 'WAHOOAPI'],
-            ]));
-            expect(transactionGuard).toHaveBeenCalledTimes(4);
         });
 
-        it('removes the staged original file when a later ownership guard rejects', async () => {
+        it('removes the staged original file when account deletion starts before promotion', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
             hoisted.transactionGet.mockResolvedValue({ exists: false, data: () => undefined });
-            const transactionGuard = vi.fn()
-                .mockResolvedValueOnce(true)
-                .mockResolvedValueOnce(true)
-                .mockResolvedValueOnce(true)
-                .mockResolvedValueOnce(false);
+            const activeDeletionGuard = {
+                userExists: true,
+                deletionInProgress: false,
+                shouldSkip: false,
+            };
+            hoisted.getUserDeletionGuardStateInTransaction
+                .mockResolvedValueOnce(activeDeletionGuard)
+                .mockResolvedValueOnce(activeDeletionGuard)
+                .mockResolvedValueOnce(activeDeletionGuard)
+                .mockResolvedValueOnce({
+                    userExists: true,
+                    deletionInProgress: true,
+                    shouldSkip: true,
+                });
             const event = {
                 getID: () => 'event-1',
                 setID: vi.fn(),
@@ -555,8 +475,8 @@ describe('utils higher-level helpers', () => {
                 undefined,
                 undefined,
                 undefined,
-                { transactionGuard, stageOriginalFilesUntilEventWrite: true },
-            )).rejects.toBeInstanceOf(EventWriteSkippedByTransactionGuardError);
+                { stageOriginalFilesUntilEventWrite: true },
+            )).rejects.toBeInstanceOf(EventWriteSkippedForDeletedUserError);
 
             const stagingPath = hoisted.bucketFile.mock.calls
                 .map(([path]: [string]) => path)

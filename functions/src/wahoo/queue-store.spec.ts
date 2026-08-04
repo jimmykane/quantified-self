@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
@@ -8,32 +7,18 @@ const mocks = vi.hoisted(() => {
   const transactionSet = vi.fn();
   const transactionUpdate = vi.fn();
   const transactionDelete = vi.fn();
-  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1' };
-  const tokenRef = { id: 'wahoo-1', path: 'wahooAPIAccessTokens/firebase-1/tokens/wahoo-1' };
-  const tokenRootRef = {
-    id: 'firebase-1',
-    path: 'wahooAPIAccessTokens/firebase-1',
-    collection: () => ({ doc: () => tokenRef }),
-  };
+  const refGet = vi.fn();
+  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', get: refGet };
   const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
-  const eventRef = { id: 'event-1', path: 'users/firebase-1/events/event-1' };
-  const activityRefOne = { id: 'activity-1', path: 'users/firebase-1/activities/activity-1' };
-  const activityRefTwo = { id: 'activity-2', path: 'users/firebase-1/activities/activity-2' };
-  const processingMetaRef = { id: 'processing', path: 'users/firebase-1/events/event-1/metaData/processing' };
   const activityQueryGet = vi.fn();
   return {
     transactionGet,
     transactionSet,
     transactionUpdate,
     transactionDelete,
+    refGet,
     ref,
-    tokenRef,
-    tokenRootRef,
     failedRef,
-    eventRef,
-    activityRefOne,
-    activityRefTwo,
-    processingMetaRef,
     activityQueryGet,
     recursiveDelete: vi.fn().mockResolvedValue(undefined),
     runTransaction: vi.fn(async (runner: any) => runner({
@@ -68,23 +53,12 @@ vi.mock('firebase-admin', () => ({
           }),
         };
       }
-      if (name === 'wahooAPIAccessTokens') {
-        return {
-          doc: () => mocks.tokenRootRef,
-        };
-      }
       return { doc: () => {
         if (name === 'failed_jobs') return mocks.failedRef;
         return mocks.ref;
       } };
     },
-    doc: (path: string) => {
-      if (path === mocks.eventRef.path) return mocks.eventRef;
-      if (path === mocks.activityRefOne.path) return mocks.activityRefOne;
-      if (path === mocks.activityRefTwo.path) return mocks.activityRefTwo;
-      if (path === mocks.processingMetaRef.path) return mocks.processingMetaRef;
-      return mocks.ref;
-    },
+    doc: () => mocks.ref,
     runTransaction: mocks.runTransaction,
     recursiveDelete: mocks.recursiveDelete,
   }),
@@ -117,10 +91,9 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 
 import {
   claimWahooWorkoutQueueRevision,
-  cleanupWahooPartialEventPersistence,
   completeWahooWorkoutQueueRevision,
-  createWahooEventWriteConnectionGuard,
   failWahooWorkoutQueueRevision,
+  isClaimedWahooWorkoutQueueRevisionCurrent,
   upsertWahooWorkoutQueueItem,
 } from './queue-store';
 
@@ -145,6 +118,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
     mocks.recursiveDelete.mockResolvedValue(undefined);
     mocks.markQueueItemDeletedForUserCleanup.mockResolvedValue(true);
     mocks.activityQueryGet.mockResolvedValue({ docs: [] });
+    mocks.refGet.mockResolvedValue({ exists: false });
   });
 
   it('queues a new revision and dispatches immediate webhook work', async () => {
@@ -212,7 +186,8 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalledWith(mocks.ref, { FITFileURI: input.FITFileURI });
   });
 
-  it('invalidates an older worker lease when a newer summary arrives', async () => {
+  it('preserves an active older worker lease when a newer summary arrives', async () => {
+    const processingLeaseExpiresAt = Date.now() + 60_000;
     mocks.transactionGet.mockResolvedValue({
       exists: true,
       data: () => ({
@@ -220,7 +195,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
         summaryUpdatedAt: '2026-07-18T09:00:00.000Z',
         processingOwner: 'older-worker',
         processingRevision: '2026-07-18T09:00:00.000Z',
-        processingLeaseExpiresAt: Date.now() + 60_000,
+        processingLeaseExpiresAt,
       }),
     });
 
@@ -229,7 +204,27 @@ describe('upsertWahooWorkoutQueueItem', () => {
     const queuePayload = mocks.transactionSet.mock.calls[0][1];
     expect(queuePayload).toEqual(expect.objectContaining({
       summaryUpdatedAt: input.summaryUpdatedAt,
+      processingOwner: 'older-worker',
+      processingRevision: '2026-07-18T09:00:00.000Z',
+      processingLeaseExpiresAt,
     }));
+  });
+
+  it('does not preserve an expired worker lease when a newer summary arrives', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        summaryUpdatedAt: '2026-07-18T09:00:00.000Z',
+        processingOwner: 'expired-worker',
+        processingRevision: '2026-07-18T09:00:00.000Z',
+        processingLeaseExpiresAt: Date.now() - 1,
+      }),
+    });
+
+    await upsertWahooWorkoutQueueItem(input, 'deferred');
+
+    const queuePayload = mocks.transactionSet.mock.calls[0][1];
     expect(queuePayload).not.toHaveProperty('processingOwner');
     expect(queuePayload).not.toHaveProperty('processingRevision');
     expect(queuePayload).not.toHaveProperty('processingLeaseExpiresAt');
@@ -293,134 +288,49 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
   });
 
-  it('permits event writes only while the exact Wahoo token and claimed revision remain current', async () => {
-    const guard = createWahooEventWriteConnectionGuard(
-      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
-      'worker-1',
-    );
-    const transaction = {
-      get: vi.fn((ref: unknown) => {
-        if (ref === mocks.tokenRootRef) {
-          return Promise.resolve({ exists: true, data: () => ({}) });
-        }
-        if (ref === mocks.tokenRef) {
-          return Promise.resolve({
-            exists: true,
-            data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
-          });
-        }
-        return Promise.resolve({
-          exists: true,
-          data: () => ({ ...input, processingOwner: 'worker-1' }),
-        });
+  it('keeps an older claimed revision current while a newer summary waits behind its lease', async () => {
+    mocks.refGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        workoutSummaryID: 'summary-2',
+        summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+        processingOwner: 'worker-1',
+        processingRevision: input.summaryUpdatedAt,
+        processingLeaseExpiresAt: Date.now() + 60_000,
       }),
-    } as unknown as admin.firestore.Transaction;
-
-    await expect(guard(transaction)).resolves.toBe(true);
-    expect(transaction.get).toHaveBeenCalledWith(mocks.tokenRootRef);
-    expect(transaction.get).toHaveBeenCalledWith(mocks.tokenRef);
-    expect(transaction.get).toHaveBeenCalledWith(mocks.ref);
-  });
-
-  it('rejects event writes when disconnect becomes pending during persistence', async () => {
-    const guard = createWahooEventWriteConnectionGuard(
-      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
-      'worker-1',
-    );
-    const transaction = {
-      get: vi.fn((ref: unknown) => {
-        if (ref === mocks.tokenRootRef) {
-          return Promise.resolve({
-            exists: true,
-            data: () => ({ disconnectState: 'disconnect_pending' }),
-          });
-        }
-        if (ref === mocks.tokenRef) {
-          return Promise.resolve({
-            exists: true,
-            data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
-          });
-        }
-        return Promise.resolve({
-          exists: true,
-          data: () => ({ ...input, processingOwner: 'worker-1' }),
-        });
-      }),
-    } as unknown as admin.firestore.Transaction;
-
-    await expect(guard(transaction)).resolves.toBe(false);
-  });
-
-  it('rejects event writes after the Wahoo token disappears or the queue revision is superseded', async () => {
-    const guard = createWahooEventWriteConnectionGuard(
-      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
-      'worker-1',
-    );
-    const transaction = {
-      get: vi.fn((ref: unknown) => {
-        if (ref === mocks.tokenRootRef) {
-          return Promise.resolve({ exists: true, data: () => ({}) });
-        }
-        return Promise.resolve(ref === mocks.tokenRef
-          ? { exists: false }
-          : { exists: true, data: () => ({ ...input, processingOwner: 'worker-1' }) });
-      }),
-    } as unknown as admin.firestore.Transaction;
-
-    await expect(guard(transaction)).resolves.toBe(false);
-
-    vi.mocked(transaction.get).mockImplementation((ref: unknown) => {
-      if (ref === mocks.tokenRootRef) {
-        return Promise.resolve({ exists: true, data: () => ({}) }) as never;
-      }
-      return Promise.resolve(ref === mocks.tokenRef
-        ? {
-          exists: true,
-          data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
-        }
-        : {
-          exists: true,
-          data: () => ({
-            ...input,
-            workoutSummaryID: 'summary-2',
-            summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
-            processingOwner: 'worker-2',
-          }),
-        }) as never;
     });
-    await expect(guard(transaction)).resolves.toBe(false);
+
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
+      'worker-1',
+    )).resolves.toBe(true);
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
+      'worker-2',
+    )).resolves.toBe(false);
+
+    mocks.refGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        processingOwner: 'worker-1',
+        processingRevision: input.summaryUpdatedAt,
+        processingLeaseExpiresAt: Date.now() - 1,
+      }),
+    });
+    await expect(isClaimedWahooWorkoutQueueRevisionCurrent(
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
+      'worker-1',
+    )).resolves.toBe(false);
   });
 
-  it('recursively removes only roots created by a rejected attempt, preserving older deterministic revisions', async () => {
-    await cleanupWahooPartialEventPersistence('firebase-1', 'event-1', [
-      mocks.activityRefTwo.path,
-      mocks.processingMetaRef.path,
-    ]);
-
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.activityRefTwo);
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.processingMetaRef);
-    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.eventRef);
-    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.activityRefOne);
-  });
-
-  it('uses the created event root as the sole recursive cleanup root for its newly created metadata subtree', async () => {
-    await cleanupWahooPartialEventPersistence('firebase-1', 'event-1', [
-      mocks.eventRef.path,
-      mocks.processingMetaRef.path,
-      mocks.activityRefTwo.path,
-    ]);
-
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.eventRef);
-    expect(mocks.recursiveDelete).toHaveBeenCalledWith(mocks.activityRefTwo);
-    expect(mocks.recursiveDelete).not.toHaveBeenCalledWith(mocks.processingMetaRef);
-  });
-
-  it('lets the latest revision claim immediately after replacing an older worker lease', async () => {
+  it('makes the latest revision wait until the older worker releases its lease', async () => {
     const latestRevision = {
       ...input,
       workoutSummaryID: 'summary-2',
       summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
     };
+    const activeLeaseExpiresAt = Date.now() + 60_000;
     mocks.transactionGet
       .mockResolvedValueOnce({
         exists: true,
@@ -428,25 +338,36 @@ describe('upsertWahooWorkoutQueueItem', () => {
           ...input,
           processed: false,
           processingOwner: 'older-worker',
-          processingLeaseExpiresAt: Date.now() + 60_000,
+          processingRevision: input.summaryUpdatedAt,
+          processingLeaseExpiresAt: activeLeaseExpiresAt,
         }),
       })
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ ...latestRevision, processed: false, dispatchedToCloudTask: null }),
+        data: () => ({
+          ...latestRevision,
+          processed: false,
+          dispatchedToCloudTask: null,
+          processingOwner: 'older-worker',
+          processingRevision: input.summaryUpdatedAt,
+          processingLeaseExpiresAt: activeLeaseExpiresAt,
+        }),
       });
 
     await upsertWahooWorkoutQueueItem(latestRevision, 'deferred');
     await expect(claimWahooWorkoutQueueRevision({ ...latestRevision, ref: mocks.ref } as any, 'latest-worker'))
-      .resolves.toBe('claimed');
+      .resolves.toBe('busy');
 
     const latestPayload = mocks.transactionSet.mock.calls[0][1];
-    expect(latestPayload).not.toHaveProperty('processingOwner');
-    expect(latestPayload).not.toHaveProperty('processingLeaseExpiresAt');
-    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
-      processingOwner: 'latest-worker',
-      processingRevision: latestRevision.summaryUpdatedAt,
+    expect(latestPayload).toEqual(expect.objectContaining({
+      processingOwner: 'older-worker',
+      processingRevision: input.summaryUpdatedAt,
+      processingLeaseExpiresAt: activeLeaseExpiresAt,
     }));
+    expect(mocks.transactionUpdate).not.toHaveBeenCalledWith(
+      mocks.ref,
+      expect.objectContaining({ processingOwner: 'latest-worker' }),
+    );
   });
 
   it('releases an older worker lease without completing a newer revision', async () => {

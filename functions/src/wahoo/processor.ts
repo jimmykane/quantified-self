@@ -12,11 +12,7 @@ import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
-import {
-  EventWriteSkippedByTransactionGuardError,
-  hasProAccess,
-  setEvent,
-} from '../utils';
+import { hasProAccess, setEvent } from '../utils';
 import { enqueueActivitySyncAfterEventPersistence } from '../activity-sync/enqueue-after-event-persistence';
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
@@ -24,10 +20,9 @@ import { downloadWahooFITFile } from './file-download';
 import { getWahooErrorLogDetails, getWahooRetryError } from './error-details';
 import {
   claimWahooWorkoutQueueRevision,
-  cleanupWahooPartialEventPersistence,
   completeWahooWorkoutQueueRevision,
-  createWahooEventWriteConnectionGuard,
   failWahooWorkoutQueueRevision,
+  isClaimedWahooWorkoutQueueRevisionCurrent,
   type WahooQueueClaimResult,
 } from './queue-store';
 
@@ -56,8 +51,6 @@ export async function processWahooWorkoutQueueItem(
     });
     return QueueResult.Processed;
   }
-  let eventID: string | undefined;
-  const createdDocumentPaths = new Set<string>();
   try {
     if (!(await hasProAccess(userID))) {
       return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
@@ -87,7 +80,10 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'user_deleted_or_deleting',
       });
     }
-    eventID = await resolveProviderImportEventID({
+    if (!(await isClaimedWahooWorkoutQueueRevisionCurrent(queueItem, processingOwner))) {
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
+    }
+    const eventID = await resolveProviderImportEventID({
       userID,
       startDate: event.startDate,
       serviceName: ServiceNames.WahooAPI,
@@ -116,11 +112,7 @@ export async function processWahooWorkoutQueueItem(
       undefined,
       undefined,
       undefined,
-      {
-        transactionGuard: createWahooEventWriteConnectionGuard(queueItem, processingOwner),
-        stageOriginalFilesUntilEventWrite: true,
-        onDocumentCreated: (path) => createdDocumentPaths.add(path.join('/')),
-      },
+      { stageOriginalFilesUntilEventWrite: true },
     );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,
@@ -137,28 +129,6 @@ export async function processWahooWorkoutQueueItem(
     }
     return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
   } catch (error) {
-    if (error instanceof EventWriteSkippedByTransactionGuardError) {
-      if (eventID) {
-        try {
-          await cleanupWahooPartialEventPersistence(userID, eventID, [...createdDocumentPaths]);
-        } catch (cleanupError) {
-          logger.error('Failed to clean up partially written Wahoo activity after its connection or queue revision changed', {
-            queueItemId: queueItem.id,
-            eventID,
-            error: getWahooErrorLogDetails(cleanupError),
-          });
-          return failWahooWorkoutQueueRevision(queueItem, processingOwner, getWahooRetryError(cleanupError));
-        }
-      }
-      logger.info('Skipped Wahoo activity persistence because its connection or queue revision changed during processing', {
-        queueItemId: queueItem.id,
-        wahooUserID: queueItem.wahooUserID,
-      });
-      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
-        resultStatus: 'skipped',
-        skippedReason: 'connection_or_revision_changed',
-      });
-    }
     logger.error('Wahoo activity processing failed', {
       queueItemId: queueItem.id,
       error: getWahooErrorLogDetails(error),

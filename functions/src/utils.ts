@@ -182,54 +182,15 @@ export class EventWriteSkippedForDeletedUserError extends Error {
   }
 }
 
-/**
- * Optional authorization condition evaluated in the same transaction as each
- * event or activity document write. The condition must return false rather
- * than throwing when authorization has been superseded; operational failures
- * should still throw so callers can retry them.
- */
-export type EventWriteTransactionGuard = (
-  transaction: admin.firestore.Transaction,
-) => Promise<boolean>;
-
-/**
- * Records Firestore document roots that did not exist before a successful
- * event-write transaction. Callers that need to compensate a rejected
- * authorization fence must only remove these roots: provider revisions reuse
- * deterministic event and activity IDs, so an ID alone is not evidence that
- * this attempt created the document.
- */
-export type EventWriteDocumentCreatedCallback = (path: readonly string[]) => void;
-
 export interface SetEventWriteOptions {
-  transactionGuard?: EventWriteTransactionGuard;
-  /**
-   * Invoked after a guarded document write commits only when that document did
-   * not exist before this write attempt. This is an internal server-side hook
-   * for precise compensation after an authorization change.
-   */
-  onDocumentCreated?: EventWriteDocumentCreatedCallback;
   /**
    * Keep original files outside user-readable Storage paths until every
-   * deletion and authorization-guarded Firestore write has succeeded.
+   * deletion-guarded Firestore write has succeeded.
    *
-   * This is for imports whose authorization can change while they are being
-   * processed (for example, a transferred provider account). It is opt-in so
-   * existing provider imports retain their established Storage behavior.
+   * It is opt-in so existing provider imports retain their established
+   * Storage behavior.
    */
   stageOriginalFilesUntilEventWrite?: boolean;
-}
-
-export class EventWriteSkippedByTransactionGuardError extends Error {
-  public readonly name = 'EventWriteSkippedByTransactionGuardError';
-  public readonly code = 'event_write_guard_rejected';
-
-  constructor(
-    public readonly userID: string,
-    public readonly phase: string,
-  ) {
-    super(`Skipping event write for user ${userID} during ${phase} because its write authorization is no longer current.`);
-  }
 }
 
 export async function assertEventWriteUserActive(userID: string, phase: string): Promise<void> {
@@ -253,7 +214,6 @@ async function assertEventWriteAuthorizationInTransaction(
   transaction: admin.firestore.Transaction,
   userID: string,
   phase: string,
-  transactionGuard?: EventWriteTransactionGuard,
 ): Promise<void> {
   let deletionGuard;
   try {
@@ -266,21 +226,15 @@ async function assertEventWriteAuthorizationInTransaction(
     logger.warn(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because the user is missing or deletion is in progress.`);
     throw new EventWriteSkippedForDeletedUserError(userID, phase);
   }
-
-  if (transactionGuard && !(await transactionGuard(transaction))) {
-    logger.info(`[EventWrite] Skipping transactional write for user ${userID} during ${phase} because its write authorization is no longer current.`);
-    throw new EventWriteSkippedByTransactionGuardError(userID, phase);
-  }
 }
 
 async function assertEventWriteAuthorizationCurrent(
   userID: string,
   phase: string,
-  transactionGuard?: EventWriteTransactionGuard,
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
-    await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase, transactionGuard);
+    await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
   });
 }
 
@@ -294,25 +248,19 @@ export async function setEventDocumentIfUserActive(
     incomingData: admin.firestore.DocumentData,
     existingData: admin.firestore.DocumentData | null,
   ) => admin.firestore.DocumentData,
-  transactionGuard?: EventWriteTransactionGuard,
-  onDocumentCreated?: () => void,
 ): Promise<void> {
   const db = admin.firestore();
-  let documentCreated = false;
   await db.runTransaction(async (transaction) => {
-    await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase, transactionGuard);
+    await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
 
     const incomingData = data as admin.firestore.DocumentData;
     let resolvedData = incomingData;
-    if (transformExistingData || onDocumentCreated) {
+    if (transformExistingData) {
       const existingSnapshot = await transaction.get(docRef);
-      documentCreated = !existingSnapshot.exists;
-      if (transformExistingData) {
-        resolvedData = transformExistingData(
-          incomingData,
-          existingSnapshot.exists ? existingSnapshot.data() || null : null,
-        );
-      }
+      resolvedData = transformExistingData(
+        incomingData,
+        existingSnapshot.exists ? existingSnapshot.data() || null : null,
+      );
     }
 
     if (options) {
@@ -322,16 +270,10 @@ export async function setEventDocumentIfUserActive(
 
     transaction.set(docRef, resolvedData);
   });
-
-  if (documentCreated) {
-    onDocumentCreated?.();
-  }
 }
 
 export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData | WahooAPIEventMetaData, originalFile?: OriginalFile, _bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, writeOptions: SetEventWriteOptions = {}): Promise<SetEventResult> {
   await assertEventWriteUserActive(userID, 'event_write_start');
-  const transactionGuard = writeOptions.transactionGuard;
-  const onDocumentCreated = writeOptions.onDocumentCreated;
   const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true;
   const stagedOriginalFiles: { stagingPath: string; targetPath: string }[] = [];
   const stagingBucket = stageOriginalFilesUntilEventWrite ? admin.storage().bucket() : undefined;
@@ -345,7 +287,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       try {
         await stagingBucket.file(stagingPath).delete({ ignoreNotFound: true });
       } catch (cleanupError) {
-        // Do not turn an ownership/deletion rejection into a retried import.
+        // Do not turn a deletion rejection into a retried import.
         // The staged path is deliberately outside every client-readable path.
         logger.error('[EventWrite] Failed to clean up staged original file', {
           stagingPath,
@@ -414,8 +356,6 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         data,
         undefined,
         isEventDocument ? preserveEventTagsOnRewrite : undefined,
-        transactionGuard,
-        onDocumentCreated ? () => onDocumentCreated([...path]) : undefined,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -481,10 +421,6 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       processingMetaData,
       undefined,
       undefined,
-      transactionGuard,
-      onDocumentCreated ? () => onDocumentCreated([
-        'users', userID, 'events', <string>event.getID(), 'metaData', 'processing',
-      ]) : undefined,
     );
 
     // Write Metadata (not handled by EventWriter)
@@ -503,19 +439,14 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       metaData.toJSON(),
       undefined,
       undefined,
-      transactionGuard,
-      onDocumentCreated ? () => onDocumentCreated([
-        'users', userID, 'events', <string>event.getID(), 'metaData', metaData.serviceName,
-      ]) : undefined,
     );
 
     // Storage cannot join the Firestore transaction. Recheck immediately
     // before promotion, then only expose the user-readable copy after every
-    // guarded event write has committed.
+    // deletion-guarded event write has committed.
     await assertEventWriteAuthorizationCurrent(
       userID,
       'event_original_file_promotion',
-      transactionGuard,
     );
     await promoteStagedOriginalFiles();
 

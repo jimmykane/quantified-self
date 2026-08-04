@@ -458,27 +458,9 @@ describe('EventWriter', () => {
             expect(mockLogger.error).not.toHaveBeenCalled();
         });
 
-        it('should rethrow transaction-authorization write aborts without wrapping them', async () => {
-            const authorizationSkipError = Object.assign(new Error('ownership changed'), {
-                name: 'EventWriteSkippedByTransactionGuardError',
-            });
-            const failingAdapter: FirestoreAdapter = {
-                setDoc: vi.fn().mockRejectedValue(authorizationSkipError),
-                createBlob: vi.fn((data) => data),
-                generateID: vi.fn().mockReturnValue('generated-id'),
-            };
-
-            const writerWithFailingAdapter = new EventWriter(failingAdapter, undefined, undefined, mockLogger);
-
-            await expect(writerWithFailingAdapter.writeAllEventData('user-1', eventMock))
-                .rejects.toBe(authorizationSkipError);
-
-            expect(mockLogger.error).not.toHaveBeenCalled();
-        });
-
-        it('waits for sibling writes to settle before surfacing a guarded-write rejection', async () => {
-            const authorizationSkipError = Object.assign(new Error('ownership changed'), {
-                name: 'EventWriteSkippedByTransactionGuardError',
+        it('waits for sibling writes to settle before surfacing a deletion-guard rejection', async () => {
+            const deletionSkipError = Object.assign(new Error('deletion started'), {
+                name: 'EventWriteSkippedForDeletedUserError',
             });
             let resolveActivityWrite: (() => void) | undefined;
             const activityWrite = new Promise<void>((resolve) => {
@@ -488,7 +470,7 @@ describe('EventWriter', () => {
                 setDoc: vi.fn((path: string[]) => (
                     path[2] === 'activities'
                         ? activityWrite
-                        : Promise.reject(authorizationSkipError)
+                        : Promise.reject(deletionSkipError)
                 )),
                 createBlob: vi.fn((data) => data),
                 generateID: vi.fn().mockReturnValue('generated-id'),
@@ -511,7 +493,7 @@ describe('EventWriter', () => {
             expect(settled).toBe(false);
 
             resolveActivityWrite?.();
-            await expect(writePromise).rejects.toBe(authorizationSkipError);
+            await expect(writePromise).rejects.toBe(deletionSkipError);
         });
 
         it('should warn with document path and undefined fields when Firestore rejects undefined values', async () => {

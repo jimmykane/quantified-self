@@ -9,20 +9,14 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { MAX_RETRY_COUNT } from '../shared/queue-config';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 import {
-  isServiceDisconnectPendingData,
-  type PendingServiceDisconnectRootData,
-} from '../service-disconnect-pending-state';
-import {
   markQueueItemDeletedForUserCleanup,
   QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
 import { updateQueueItemIfUserActive, QueueItemUserGuardedUpdateResult } from '../queue/dispatch-marker';
 import { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { QueueResult } from '../queue-utils';
-import type { EventWriteTransactionGuard } from '../utils';
 import {
   SERVICE_NAME,
-  WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
   WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 } from './constants';
 
@@ -30,6 +24,11 @@ export type WahooQueueDispatchMode = 'immediate' | 'deferred';
 export type WahooQueueClaimResult = 'claimed' | 'superseded' | 'busy';
 
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
+
+type WahooProcessingLease = Required<Pick<
+  WahooAPIWorkoutQueueItemInterface,
+  'processingOwner' | 'processingRevision' | 'processingLeaseExpiresAt'
+>>;
 
 function revisionTime(value: unknown): number {
   const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -64,6 +63,23 @@ function clearProcessingLeaseUpdate(): Record<string, FieldValue> {
     processingOwner: FieldValue.delete(),
     processingRevision: FieldValue.delete(),
     processingLeaseExpiresAt: FieldValue.delete(),
+  };
+}
+
+function activeProcessingLease(
+  queueItem: Partial<WahooAPIWorkoutQueueItemInterface>,
+  now: number,
+): WahooProcessingLease | null {
+  const processingOwner = `${queueItem.processingOwner || ''}`.trim();
+  const processingRevision = `${queueItem.processingRevision || ''}`.trim();
+  const processingLeaseExpiresAt = Number(queueItem.processingLeaseExpiresAt || 0);
+  if (!processingOwner || !processingRevision || processingLeaseExpiresAt <= now) {
+    return null;
+  }
+  return {
+    processingOwner,
+    processingRevision,
+    processingLeaseExpiresAt,
   };
 }
 
@@ -173,9 +189,10 @@ export async function upsertWahooWorkoutQueueItem(
       return { queued: false, dateCreated: Number(existing.dateCreated || now) };
     }
 
-    // A newer summary supersedes any in-flight worker for the older revision.
-    // `set` replaces the document, intentionally clearing its processing lease
-    // so the task for this latest revision can claim it immediately.
+    // Keep an active worker lease while recording the latest revision. The
+    // worker runtime is capped below the lease duration, so the older revision
+    // can finish one internally consistent event write before the latest
+    // revision becomes dispatchable.
     transaction.set(ref, {
       ...input,
       dateCreated: now,
@@ -184,6 +201,7 @@ export async function upsertWahooWorkoutQueueItem(
       totalRetryCount: 0,
       dispatchedToCloudTask: null,
       expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+      ...(existing ? activeProcessingLease(existing, now) || {} : {}),
     });
     return { queued: true, dateCreated: now };
   });
@@ -260,81 +278,17 @@ export async function claimWahooWorkoutQueueRevision(
   });
 }
 
-/**
- * Removes only document roots that were created by the rejected Wahoo write
- * attempt. Wahoo revision imports deliberately reuse deterministic event and
- * activity IDs, so deleting by event ID would erase an already-imported
- * workout when a later revision is interrupted by disconnect or superseded
- * queue work.
- */
-export async function cleanupWahooPartialEventPersistence(
-  userID: string,
-  eventID: string,
-  createdDocumentPaths: readonly string[],
-): Promise<void> {
-  if (createdDocumentPaths.length === 0) return;
-  const db = admin.firestore();
-  const eventRootPath = `users/${userID}/events/${eventID}`;
-  const activityRootPrefix = `users/${userID}/activities/`;
-  const createdPaths = [...new Set(createdDocumentPaths)]
-    .filter((path) => {
-      const normalized = `${path || ''}`.trim();
-      const pathSegments = normalized.split('/');
-      const isDocumentPath = pathSegments.length > 0 && pathSegments.length % 2 === 0;
-      return isDocumentPath
-        && (normalized === eventRootPath
-          || normalized.startsWith(`${eventRootPath}/`)
-          || (normalized.startsWith(activityRootPrefix) && pathSegments.length === 4));
-    });
-  const cleanupRoots = createdPaths.filter((path) => !createdPaths.some(
-    (otherPath) => otherPath !== path && path.startsWith(`${otherPath}/`),
-  ));
-
-  await Promise.all(cleanupRoots.map((path) => db.recursiveDelete(db.doc(path))));
-}
-
-/**
- * Every event/activity document write verifies the server-side connection and
- * claimed queue revision in its own transaction. Token deletion, a pending
- * disconnect, or a newer Wahoo summary therefore conflicts with in-flight
- * persistence instead of racing after a read-only precheck.
- */
-export function createWahooEventWriteConnectionGuard(
+export async function isClaimedWahooWorkoutQueueRevisionCurrent(
   queueItem: WahooAPIWorkoutQueueItemInterface,
   processingOwner: string,
-): EventWriteTransactionGuard {
-  const firebaseUserID = `${queueItem.firebaseUserID || ''}`.trim();
-  const wahooUserID = `${queueItem.wahooUserID || ''}`.trim();
-  const queueItemRef = queueItem.ref;
-  if (!firebaseUserID || !wahooUserID || !queueItemRef) {
-    return async () => false;
-  }
-
-  const tokenRootRef = admin.firestore()
-    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
-    .doc(firebaseUserID);
-  const tokenRef = tokenRootRef
-    .collection('tokens')
-    .doc(wahooUserID);
-  return async (transaction) => {
-    const [tokenRootSnapshot, tokenSnapshot, queueSnapshot] = await Promise.all([
-      transaction.get(tokenRootRef),
-      transaction.get(tokenRef),
-      transaction.get(queueItemRef),
-    ]);
-    if (!tokenSnapshot.exists || !queueSnapshot.exists) return false;
-    if (tokenRootSnapshot.exists && isServiceDisconnectPendingData(
-      tokenRootSnapshot.data() as PendingServiceDisconnectRootData,
-    )) {
-      return false;
-    }
-    const token = tokenSnapshot.data();
-    const currentQueueItem = queueSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
-    return token?.serviceName === SERVICE_NAME
-      && `${token?.wahooUserID || ''}`.trim() === wahooUserID
-      && hasSameRevision(currentQueueItem, queueItem)
-      && currentQueueItem.processingOwner === processingOwner;
-  };
+): Promise<boolean> {
+  if (!queueItem.ref) return false;
+  const snapshot = await queueItem.ref.get();
+  if (!snapshot.exists) return false;
+  const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
+  return current.processingOwner === processingOwner
+    && current.processingRevision === queueItem.summaryUpdatedAt
+    && Number(current.processingLeaseExpiresAt || 0) > Date.now();
 }
 
 export async function completeWahooWorkoutQueueRevision(
