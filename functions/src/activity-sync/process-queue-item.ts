@@ -133,6 +133,19 @@ function isTransientActivitySyncError(error: unknown): boolean {
     return statusCode !== null && TRANSIENT_ACTIVITY_SYNC_STATUS_CODES.has(statusCode);
 }
 
+function isRetryableSuuntoActivitySyncError(queueItem: ActivitySyncQueueItemInterface, error: unknown): boolean {
+    if (queueItem.destinationServiceName !== ServiceNames.SuuntoApp) {
+        return false;
+    }
+
+    const errorLike = asErrorLike(error);
+    const message = `${errorLike.message || (error instanceof Error ? error.message : '')}`
+        .trim()
+        .toLowerCase();
+
+    return message === 'suunto processing failed: internal error';
+}
+
 function isSkippableAuthenticationError(error: unknown): boolean {
     const errorLike = asErrorLike(error);
     const httpsCode = `${errorLike.code || ''}`.trim().toLowerCase();
@@ -553,7 +566,7 @@ export async function processActivitySyncQueueItem(
         const normalizedError = toError(error);
         const metadataError = toActivitySyncMetadataError(normalizedError);
 
-        if (isTransientActivitySyncError(error)) {
+        if (isTransientActivitySyncError(error) || isRetryableSuuntoActivitySyncError(queueItem, error)) {
             await safelyWriteMetadata(() => setActivitySyncRetryingMetadata({
                 ...routeMeta,
                 error: metadataError,

@@ -607,6 +607,31 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
   });
 
+  it('increments retry for Suunto upload status internal errors instead of moving directly to DLQ', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValue(Object.assign(
+      new Error('Suunto processing failed: Internal error'),
+      { code: 'internal' },
+    ));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      destinationServiceName: ServiceNames.SuuntoApp,
+    }));
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      baseQueueItem,
+      expect.objectContaining({
+        message: 'Suunto processing failed: Internal error',
+      }),
+      1,
+      undefined,
+    );
+    expect(mockSetActivitySyncFailedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
   it('marks processed as skipped when destination upload detects account deletion during token refresh', async () => {
     mockUploadActivityFileToSuunto.mockRejectedValueOnce(Object.assign(new Error('deleted'), {
       name: 'TokenRefreshSkippedForDeletedUserError',
