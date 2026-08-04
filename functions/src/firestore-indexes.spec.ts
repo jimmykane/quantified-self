@@ -143,6 +143,30 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('does not retain the retired AI Insights activity-type date index', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).not.toContainEqual({
+            collectionGroup: 'events',
+            queryScope: 'COLLECTION',
+            fields: [
+                {
+                    fieldPath: 'stats.`Activity Types`',
+                    arrayConfig: 'CONTAINS',
+                },
+                {
+                    fieldPath: 'startDate',
+                    order: 'ASCENDING',
+                },
+                {
+                    fieldPath: '__name__',
+                    order: 'ASCENDING',
+                },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps route reparse job failure query and TTL config deployable', () => {
         const config = loadFirestoreIndexes();
 
@@ -219,7 +243,7 @@ describe('firestore indexes', () => {
         }
     });
 
-    it('indexes only the AI usage field used by an ordered admin fallback', () => {
+    it('indexes only the Assistant usage field used by an ordered admin fallback', () => {
         const config = loadFirestoreIndexes();
 
         for (const fieldPath of [
@@ -245,6 +269,17 @@ describe('firestore indexes', () => {
             collectionGroup: 'aiInsightsUsage',
             fieldPath: 'periodEnd',
         }));
+    });
+
+    it('keeps the cleanup TTL active while retired prompt-repair records drain', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'aiInsightsPromptRepairs',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
     });
 
     it('keeps event merge operation TTL deployable without an automatic index', () => {

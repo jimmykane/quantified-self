@@ -72,12 +72,12 @@
     <span>Compare Files</span>
   </mat-list-item>
 
-  <mat-list-item [routerLinkActive]="hasAiInsightsAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="aiInsightsRoute"
+  <mat-list-item [routerLinkActive]="hasAssistantAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="assistantRoute"
     (click)="closeSideNav()">
     <mat-icon>auto_awesome</mat-icon>
     <span>Assistant</span>
     <span class="fill-space"></span>
-    @if (!hasAiInsightsAccess) {
+    @if (!hasAssistantAccess) {
     <mat-icon class="lock-icon">lock</mat-icon>
     <span class="pro-badge">PAID</span>
     }

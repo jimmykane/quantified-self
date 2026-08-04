@@ -3,11 +3,11 @@ import { Router } from '@angular/router';
 import { BehaviorSubject, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppAuthService } from './app.auth.service';
-import { aiInsightsGuard } from './ai-insights.guard';
+import { assistantGuard } from './assistant.guard';
 import { LoggerService } from '../services/logger.service';
 import { AppUserService } from '../services/app.user.service';
 
-describe('aiInsightsGuard', () => {
+describe('assistantGuard', () => {
   let authServiceStub: Partial<AppAuthService>;
   let router: Router;
   let profileReadStateSubject: BehaviorSubject<any>;
@@ -53,7 +53,7 @@ describe('aiInsightsGuard', () => {
       acceptedDiagnosticsPolicy: true,
     } as any);
 
-    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+    const result = await TestBed.runInInjectionContext(() => assistantGuard({} as any, [] as any));
 
     expect(result).toBe(true);
   });
@@ -70,7 +70,7 @@ describe('aiInsightsGuard', () => {
       acceptedDiagnosticsPolicy: true,
     } as any);
 
-    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+    const result = await TestBed.runInInjectionContext(() => assistantGuard({} as any, [] as any));
 
     expect(result).toBe(true);
   });
@@ -87,7 +87,7 @@ describe('aiInsightsGuard', () => {
       acceptedDiagnosticsPolicy: true,
     } as any);
 
-    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+    const result = await TestBed.runInInjectionContext(() => assistantGuard({} as any, [] as any));
 
     expect(result).toBe(true);
   });
@@ -104,7 +104,7 @@ describe('aiInsightsGuard', () => {
       acceptedDiagnosticsPolicy: true,
     } as any);
 
-    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+    const result = await TestBed.runInInjectionContext(() => assistantGuard({} as any, [] as any));
 
     expect(result).toBe(true);
   });
@@ -122,7 +122,7 @@ describe('aiInsightsGuard', () => {
       acceptedDiagnosticsPolicy: true,
     } as any);
 
-    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+    const result = await TestBed.runInInjectionContext(() => assistantGuard({} as any, [] as any));
 
     expect(result).toBe(true);
   });
@@ -139,7 +139,7 @@ describe('aiInsightsGuard', () => {
       acceptedDiagnosticsPolicy: true,
     } as any);
 
-    const result = await TestBed.runInInjectionContext(() => aiInsightsGuard({} as any, [] as any));
+    const result = await TestBed.runInInjectionContext(() => assistantGuard({} as any, [] as any));
 
     expect(result).toBe(false);
   });
@@ -150,7 +150,7 @@ describe('aiInsightsGuard', () => {
     userServiceStub.hasIncompleteProfileReads.mockReturnValue(true);
     profileReadStateSubject.next({ status: 'loading', uid: 'current-user' });
 
-    const resultPromise = TestBed.runInInjectionContext(() => aiInsightsGuard(
+    const resultPromise = TestBed.runInInjectionContext(() => assistantGuard(
       {} as any,
       [{ path: 'ai-insights' }] as any
     ));

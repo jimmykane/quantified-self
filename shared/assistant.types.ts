@@ -1,10 +1,41 @@
-import type { AiInsightsQuotaStatus } from './ai-insights.types';
-
 export const ASSISTANT_CONVERSATION_VERSION = 1 as const;
 export const ASSISTANT_MAX_MESSAGE_CHARS = 1_000;
 export const ASSISTANT_MAX_RESPONSE_CHARS = 4_000;
 export const ASSISTANT_MAX_STORED_MESSAGES = 12;
 export const ASSISTANT_MAX_EVIDENCE_ITEMS = 6;
+
+export type AssistantQuotaPeriodKind =
+  | 'subscription'
+  | 'grace_hold'
+  | 'calendar_month'
+  | 'no_billing_period';
+
+export type AssistantQuotaResetMode =
+  | 'date'
+  | 'next_successful_payment';
+
+export type AssistantQuotaBlockedReason =
+  | 'requires_pro'
+  | 'limit_reached'
+  | null;
+
+export interface AssistantQuotaStatus {
+  role: 'free' | 'basic' | 'pro';
+  limit: number;
+  successfulRequestCount: number;
+  activeRequestCount: number;
+  remainingCount: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  periodKind: AssistantQuotaPeriodKind;
+  resetMode: AssistantQuotaResetMode;
+  isEligible: boolean;
+  blockedReason: AssistantQuotaBlockedReason;
+}
+
+export type AssistantQuotaStatusRequest = Record<string, never>;
+
+export type AssistantQuotaStatusResponse = AssistantQuotaStatus;
 
 export interface AssistantEvidenceFact {
   label: string;
@@ -48,7 +79,7 @@ export interface AssistantChatRequest {
 
 export interface AssistantChatResponse {
   conversation: AssistantConversation;
-  quota: AiInsightsQuotaStatus;
+  quota: AssistantQuotaStatus;
 }
 
 export type GetAssistantConversationRequest = Record<string, never>;

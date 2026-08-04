@@ -37,7 +37,8 @@ describe('Built-in Assistant policy', () => {
     expect(content).toContain('at most four extra minutes');
     expect(content).toContain('Firestore TTL then deletes it asynchronously');
     expect(content).toContain('built-in Assistant has no location or saved-route tools');
-    expect(content).toContain('older AI Insights endpoint retained temporarily for rollback');
+    expect(content).not.toContain('AI Insights');
+    expect(content).not.toContain('rollback');
   });
 });
 

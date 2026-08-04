@@ -3,7 +3,7 @@ import { RouterModule } from '@angular/router';
 import type { ResolveData, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
-import { aiInsightsGuard } from './authentication/ai-insights.guard';
+import { assistantGuard } from './authentication/assistant.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
@@ -381,9 +381,9 @@ const topLevelRoutes: Routes = [
     },
   },
   {
-    path: PUBLIC_FEATURE_PATHS.aiInsights,
+    path: PUBLIC_FEATURE_PATHS.assistant,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    resolve: publicSeoRouteData('aiInsights'),
+    resolve: publicSeoRouteData('assistant'),
     data: {
       preload: true,
       animation: 'PublicSeo',
@@ -501,11 +501,11 @@ const topLevelRoutes: Routes = [
   {
     path: 'ai-insights',
     loadComponent: () => import('./components/assistant/assistant-page.component').then(m => m.AssistantPageComponent),
-    canMatch: [authGuard, onboardingGuard, aiInsightsGuard],
+    canMatch: [authGuard, onboardingGuard, assistantGuard],
     data: {
       title: 'Assistant',
       preload: true,
-      animation: 'AIInsights',
+      animation: 'Assistant',
       description: 'Chat with the built-in Assistant grounded in read-only Quantified Self tools for sleep, readiness, Training, measurements, and activities.',
     }
   },

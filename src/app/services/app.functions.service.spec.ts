@@ -54,8 +54,7 @@ vi.mock('../../environments/environment', () => ({
 // Mock the manifest
 vi.mock('@shared/functions-manifest', () => ({
     FUNCTIONS_MANIFEST: {
-        'aiInsights': { name: 'aiInsights', region: 'europe-west2' },
-        'getAiInsightsQuotaStatus': { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
+        'getAssistantQuotaStatus': { name: 'getAssistantQuotaStatus', region: 'europe-west2' },
         'assistantChat': {
             name: 'assistantChat',
             region: 'europe-west2',
@@ -127,7 +126,7 @@ describe('AppFunctionsService', () => {
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west2');
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
         expect(getFunctions).toHaveBeenCalledTimes(2);
-        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(7);
+        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(6);
         expect(httpsCallable).toHaveBeenCalledWith(
             expect.anything(),
             'func1',
@@ -260,8 +259,7 @@ describe('AppFunctionsService', () => {
         expect(connectFunctionsEmulator).toHaveBeenCalledTimes(2);
         expect(connectFunctionsEmulator).toHaveBeenCalledWith(europeWest2Functions, '127.0.0.1', 5001);
         expect(connectFunctionsEmulator).toHaveBeenCalledWith(europeWest3Functions, '127.0.0.1', 5001);
-        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'aiInsights');
-        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'getAiInsightsQuotaStatus');
+        expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), 'getAssistantQuotaStatus');
         expect(httpsCallable).toHaveBeenCalledWith(
             expect.anything(),
             'assistantChat',
@@ -290,7 +288,7 @@ describe('AppFunctionsService', () => {
 
         expect(getFunctions).toHaveBeenCalledTimes(2);
         expect(connectFunctionsEmulator).not.toHaveBeenCalled();
-        expect(httpsCallable).toHaveBeenCalledTimes(7);
+        expect(httpsCallable).toHaveBeenCalledTimes(6);
         expect(localProdFunctionsService).toBeTruthy();
     });
 });

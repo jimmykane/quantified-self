@@ -39,11 +39,13 @@ The callable surface consists of:
 
 - `assistantChat`: validates the prompt, client-generated request ID, and IANA timezone; consumes quota when
   grounded-answer processing begins; invokes the grounded runtime; and commits one completed user/assistant turn.
+- `getAssistantQuotaStatus`: returns the signed-in user's current Assistant allowance without exposing the server-owned
+  usage ledger.
 - `getAssistantConversation`: reads the current server-owned conversation for the signed-in user.
 - `resetAssistantConversation`: replaces the active conversation generation so an older in-flight response cannot
   restore cleared content.
 
-All three require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
+All four require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
 the backend also verifies the required privacy, data, and Terms agreements in the server-authoritative legal document.
 Firestore rules deny browser access to `users/{uid}/assistantConversations/active`.
 
@@ -97,10 +99,9 @@ composer, or public home page. An exact case- and whitespace-insensitive match a
 the model's system instructions, while the user's message remains untrusted. The runtime fails closed if a workflow
 tool is absent or generation does not invoke the declared tools in order. Tests execute every current example through
 every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
-separately retained legacy AI Insights catalog is also normalized
-exhaustively, including catalog entries that are not currently rendered, so rollback examples cannot silently escape
-coverage. Each model generation phase receives fresh dynamic Genkit action objects so their request-local registries do
-not produce duplicate-registration errors during discovery-and-answer workflows.
+Assistant examples are therefore the only conversational prompt catalog that needs maintenance. Each model generation
+phase receives fresh dynamic Genkit action objects so their request-local registries do not produce
+duplicate-registration errors during discovery-and-answer workflows.
 
 ## Grounded evidence
 
@@ -140,19 +141,26 @@ Account deletion recursively removes the user document and all Assistant subcoll
 write, including failure cleanup, checks the shared user-deletion guard so an in-flight request cannot recreate data
 after deletion starts.
 
-The Assistant reuses the existing AI request ledger and role limits. A reservation is released if no model attempt
+The Assistant reuses the existing request ledger and role limits. A reservation is released if no model attempt
 starts, such as when another turn owns the conversation lease. Once the reservation is finalized, a failed model or
 tool attempt still consumes the request. Loading or resetting a conversation does not consume quota. Usage documents
 are read directly by period ID, so their server-only fields and dynamic reservation map are exempt from automatic
 single-field indexing. `periodEnd` deliberately remains indexed because the admin fallback orders historical usage by
 that field when no current subscription period is available.
 
-## Operations, rollout, and rollback
+## Operations and rollout
 
-Deploy the Firestore rules and single-field index exemptions before exposing the feature, then roll out the three
-backend callables before the frontend route. A frontend rollback can point `/ai-insights` back to the previous component
-while leaving the new server-owned documents to expire. A backend rollback must leave the shared quota ledger compatible
-and must not relax Firestore rules for Assistant documents.
+Deploy the Firestore rules and single-field index exemptions before exposing the feature, then roll out the four
+Assistant backend callables before the frontend route. The legacy AI Insights callable, deterministic prompt parser,
+snapshot UI, chart pipeline, and prompt-repair writer have been removed; `/ai-insights` is now permanently owned by the
+Assistant. The existing `aiInsightsUsage` Firestore collection name is retained only as a storage-compatibility key so
+current billing-period request counts are not reset.
+
+The retired `aiInsightsPromptRepairs` collection has no remaining writer. Its `expireAt` TTL policy is intentionally
+kept as cleanup-only infrastructure until every historical record has drained, after which its field override and
+README retention row can be removed. Legacy `users/*/aiInsightsRequests/latest` documents are no longer client-readable
+or writable; account deletion still removes them recursively, and operators may bulk-delete that collection group if
+an immediate historical purge is required.
 
 Do not log prompts, conversation text, tool arguments, tool output, coordinates, or user IDs from the Assistant path.
 Operational logs should contain only safe error classes and lifecycle outcomes. Monitor callable errors, quota failures,

@@ -8,7 +8,7 @@ import {
   findAssistantPromptExample,
   type AssistantPublishedPromptExample,
 } from '../../../shared/assistant.prompts';
-import { aiInsightsGenkit } from '../ai/insights/genkit';
+import { assistantGenkit } from './model';
 import {
   buildAssistantEvidenceList,
   type AssistantToolInvocation,
@@ -212,7 +212,7 @@ function assertPublishedExampleWorkflowCompleted(
 }
 
 export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generateAnswer'] = async (input) => {
-  const createGenkitTools = () => input.tools.map(tool => aiInsightsGenkit.dynamicTool({
+  const createGenkitTools = () => input.tools.map(tool => assistantGenkit.dynamicTool({
     name: tool.name,
     description: tool.description,
     inputJsonSchema: tool.inputJsonSchema,
@@ -234,7 +234,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
     publishedExampleInstructions,
   ].filter(Boolean).join(' ');
-  const initialResponse = await aiInsightsGenkit.generate({
+  const initialResponse = await assistantGenkit.generate({
     system,
     messages,
     prompt: JSON.stringify({
@@ -271,7 +271,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
       },
     });
   }
-  const { output } = await aiInsightsGenkit.generate({
+  const { output } = await assistantGenkit.generate({
     system,
     messages: [
       ...initialResponse.messages.filter(message => message.role !== 'system'),

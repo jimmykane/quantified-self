@@ -188,9 +188,9 @@ export { reprocessEvent } from './events/reprocess-event';
 export { setEventSharing } from './events/set-event-sharing';
 export { reprocessRoute } from './routes/reprocess-route';
 export { mergeEvents } from './events/merge-events';
-export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
 export {
   assistantChat,
+  getAssistantQuotaStatus,
   getAssistantConversation,
   resetAssistantConversation,
 } from './assistant/callable';

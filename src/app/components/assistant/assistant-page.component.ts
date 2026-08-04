@@ -16,13 +16,13 @@ import {
   type AssistantConversation,
   type AssistantMessage,
 } from '@shared/assistant.types';
-import type { AiInsightsQuotaStatus } from '@shared/ai-insights.types';
+import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import {
   ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
   ASSISTANT_STARTER_PROMPTS,
 } from '@shared/assistant.prompts';
 import { MaterialModule } from '../../modules/material.module';
-import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
+import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import {
   AssistantError,
   AssistantService,
@@ -43,7 +43,7 @@ import {
 })
 export class AssistantPageComponent implements OnInit {
   private readonly assistantService = inject(AssistantService);
-  private readonly quotaService = inject(AiInsightsQuotaService);
+  private readonly quotaService = inject(AssistantQuotaService);
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
   private retryRequest: { message: string; requestId: string } | null = null;
 
@@ -60,7 +60,7 @@ export class AssistantPageComponent implements OnInit {
   });
   readonly conversation = signal<AssistantConversation | null>(null);
   readonly pendingUserMessage = signal<AssistantMessage | null>(null);
-  readonly quota = signal<AiInsightsQuotaStatus | null>(null);
+  readonly quota = signal<AssistantQuotaStatus | null>(null);
   readonly loadingConversation = signal(true);
   readonly sending = signal(false);
   readonly resetting = signal(false);

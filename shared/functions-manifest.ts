@@ -93,8 +93,6 @@ export const FUNCTIONS_MANIFEST = {
         region: 'europe-west2',
         clientTimeoutMs: MERGE_EVENTS_CLIENT_TIMEOUT_MS,
     },
-    aiInsights: { name: 'aiInsights', region: 'europe-west2' },
-    getAiInsightsQuotaStatus: { name: 'getAiInsightsQuotaStatus', region: 'europe-west2' },
     // Grounded turns can use several bounded MCP tool calls before generation.
     // Keep the client deadline just beyond the callable's 180-second budget.
     assistantChat: {
@@ -102,6 +100,7 @@ export const FUNCTIONS_MANIFEST = {
         region: 'europe-west2',
         clientTimeoutMs: 190_000,
     },
+    getAssistantQuotaStatus: { name: 'getAssistantQuotaStatus', region: 'europe-west2' },
     getAssistantConversation: { name: 'getAssistantConversation', region: 'europe-west2' },
     resetAssistantConversation: { name: 'resetAssistantConversation', region: 'europe-west2' },
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },

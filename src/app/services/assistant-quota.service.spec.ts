@@ -1,11 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
-import type { AiInsightsQuotaStatusResponse } from '@shared/ai-insights.types';
+import type { AssistantQuotaStatusResponse } from '@shared/assistant.types';
 import { AppFunctionsService } from './app.functions.service';
-import { AiInsightsQuotaService } from './ai-insights-quota.service';
+import { AssistantQuotaService } from './assistant-quota.service';
 import { LoggerService } from './logger.service';
 
-describe('AiInsightsQuotaService', () => {
+describe('AssistantQuotaService', () => {
   const functionsServiceMock = {
     call: vi.fn(),
   };
@@ -13,7 +13,7 @@ describe('AiInsightsQuotaService', () => {
     warn: vi.fn(),
   };
 
-  let service: AiInsightsQuotaService;
+  let service: AssistantQuotaService;
 
   beforeEach(() => {
     functionsServiceMock.call.mockReset();
@@ -21,17 +21,17 @@ describe('AiInsightsQuotaService', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        AiInsightsQuotaService,
+        AssistantQuotaService,
         { provide: AppFunctionsService, useValue: functionsServiceMock },
         { provide: LoggerService, useValue: loggerMock },
       ],
     });
 
-    service = TestBed.inject(AiInsightsQuotaService);
+    service = TestBed.inject(AssistantQuotaService);
   });
 
   it('should call the quota status callable and unwrap the response payload', async () => {
-    const quotaStatus: AiInsightsQuotaStatusResponse = {
+    const quotaStatus: AssistantQuotaStatusResponse = {
       role: 'pro',
       limit: 100,
       successfulRequestCount: 12,
@@ -48,7 +48,7 @@ describe('AiInsightsQuotaService', () => {
 
     const result = await service.loadQuotaStatus();
 
-    expect(functionsServiceMock.call).toHaveBeenCalledWith('getAiInsightsQuotaStatus');
+    expect(functionsServiceMock.call).toHaveBeenCalledWith('getAssistantQuotaStatus');
     expect(result).toEqual(quotaStatus);
   });
 
@@ -59,6 +59,6 @@ describe('AiInsightsQuotaService', () => {
     const result = await service.loadQuotaStatus();
 
     expect(result).toBeNull();
-    expect(loggerMock.warn).toHaveBeenCalledWith('[AiInsightsQuotaService] Failed to load AI Insights quota status.', error);
+    expect(loggerMock.warn).toHaveBeenCalledWith('[AssistantQuotaService] Failed to load Assistant quota status.', error);
   });
 });

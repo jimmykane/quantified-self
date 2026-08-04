@@ -24,7 +24,7 @@ import { environment } from '../../../environments/environment';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
-import { getAiInsightsRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
+import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -451,11 +451,11 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
     }
 
-    getAiInsightsLimitLabel(role: string | null | undefined): string {
+    getAssistantLimitLabel(role: string | null | undefined): string {
         const resolvedRole = role ?? 'free';
 
         try {
-            const limit = getAiInsightsRequestLimitForRole(resolvedRole);
+            const limit = getAssistantRequestLimitForRole(resolvedRole);
             if (limit <= 0) {
                 return 'Assistant not included';
             }
@@ -464,7 +464,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             }
             return `Assistant up to ${limit} requests per billing period`;
         } catch (error) {
-            this.logger.error(`Unsupported pricing role '${resolvedRole}' in AI insights pricing UI`, error);
+            this.logger.error(`Unsupported pricing role '${resolvedRole}' in Assistant pricing UI`, error);
             return 'Assistant limits unavailable';
         }
     }

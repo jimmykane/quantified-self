@@ -8,7 +8,7 @@ import {
   ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
   ASSISTANT_STARTER_PROMPTS,
 } from '@shared/assistant.prompts';
-import { AiInsightsQuotaService } from '../../services/ai-insights-quota.service';
+import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import {
   AssistantError,
   AssistantService,
@@ -89,7 +89,7 @@ describe('AssistantPageComponent', () => {
       ],
       providers: [
         { provide: AssistantService, useValue: assistantService },
-        { provide: AiInsightsQuotaService, useValue: quotaService },
+        { provide: AssistantQuotaService, useValue: quotaService },
       ],
     }).compileComponents();
 

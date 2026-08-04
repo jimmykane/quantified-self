@@ -10,7 +10,7 @@ export const ROUTE_USAGE_LIMITS = {
     basic: 100,
 } as const satisfies Record<LimitedSubscriptionRole, number>;
 
-export const AI_INSIGHTS_REQUEST_LIMITS = {
+export const ASSISTANT_REQUEST_LIMITS = {
     free: 20,
     basic: 50,
     pro: 100,
@@ -48,12 +48,12 @@ export function getRouteUsageLimitForRole(role: string): number | null {
     throw new Error(`Unsupported subscription role '${role}' for route usage limits.`);
 }
 
-export function getAiInsightsRequestLimitForRole(role: string): number {
+export function getAssistantRequestLimitForRole(role: string): number {
     if (role === 'free' || role === 'basic' || role === 'pro') {
-        return AI_INSIGHTS_REQUEST_LIMITS[role];
+        return ASSISTANT_REQUEST_LIMITS[role];
     }
 
-    throw new Error(`Unsupported subscription role '${role}' for AI insights request limits.`);
+    throw new Error(`Unsupported subscription role '${role}' for Assistant request limits.`);
 }
 
 export function isDeviceSyncEnabledForRole(role: string): boolean {

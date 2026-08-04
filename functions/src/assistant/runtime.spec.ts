@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ASSISTANT_PROMPT_EXAMPLES } from '../../../shared/assistant.prompts';
-import { aiInsightsGenkit } from '../ai/insights/genkit';
+import { assistantGenkit } from './model';
 import {
   createAssistantRuntime,
   ASSISTANT_SYSTEM_INSTRUCTIONS,
@@ -87,7 +87,7 @@ describe('Assistant runtime', () => {
       inputJsonSchema: { type: 'object', properties: {} },
       execute: vi.fn().mockResolvedValue({ readiness: { score: 72 } }),
     };
-    const generate = vi.spyOn(aiInsightsGenkit, 'generate')
+    const generate = vi.spyOn(assistantGenkit, 'generate')
       .mockResolvedValueOnce({
         toolRequests: [{
           toolRequest: {

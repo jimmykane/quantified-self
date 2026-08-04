@@ -1,5 +1,5 @@
 import { environment } from '../../environments/environment';
-import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
@@ -421,9 +421,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - It is the zero-setup choice inside Quantified Self. You do not need to install an MCP client.
 - The public [Quantified Self Assistant](/features/ai-insights) page explains the feature before sign-in.
 - Request limits:
-  - Free: up to **${AI_INSIGHTS_REQUEST_LIMITS.free}** requests per calendar month
-  - Basic: up to **${AI_INSIGHTS_REQUEST_LIMITS.basic}** requests per billing period
-  - Pro: up to **${AI_INSIGHTS_REQUEST_LIMITS.pro}** requests per billing period
+  - Free: up to **${ASSISTANT_REQUEST_LIMITS.free}** requests per calendar month
+  - Basic: up to **${ASSISTANT_REQUEST_LIMITS.basic}** requests per billing period
+  - Pro: up to **${ASSISTANT_REQUEST_LIMITS.pro}** requests per billing period
 - The composer shows your live remaining allowance.
 - A request consumes one allowance once grounded-answer processing begins. Loading or resetting the saved conversation does not.
 

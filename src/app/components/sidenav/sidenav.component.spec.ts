@@ -290,7 +290,7 @@ describe('SideNavComponent', () => {
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
-        const aiInsightsItem = navigationItems.find(item => item.nativeElement.textContent.includes('Assistant'));
+        const assistantItem = navigationItems.find(item => item.nativeElement.textContent.includes('Assistant'));
         const compareFilesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Compare Files'));
 
         expect(dashboardItem).toBeTruthy();
@@ -298,7 +298,7 @@ describe('SideNavComponent', () => {
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
         expect(myTracksItem).toBeTruthy();
-        expect(aiInsightsItem).toBeTruthy();
+        expect(assistantItem).toBeTruthy();
         expect(compareFilesItem).toBeTruthy();
         const dashboardIndex = navigationItems.indexOf(dashboardItem!);
         expect([
@@ -308,7 +308,7 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
             navigationItems.indexOf(compareFilesItem!),
-            navigationItems.indexOf(aiInsightsItem!),
+            navigationItems.indexOf(assistantItem!),
         ]).toEqual([
             dashboardIndex,
             dashboardIndex + 1,
@@ -318,10 +318,9 @@ describe('SideNavComponent', () => {
             dashboardIndex + 5,
             dashboardIndex + 6,
         ]);
-        expect(aiInsightsItem?.nativeElement.textContent).toContain('Assistant');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Going away');
-        expect(aiInsightsItem?.nativeElement.classList.contains('ai-insights-retiring')).toBe(false);
-        expect(aiInsightsItem?.nativeElement.getAttribute('aria-label')).toBeNull();
+        expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');
+        expect(assistantItem?.nativeElement.getAttribute('aria-label')).toBeNull();
 
         const template = readFileSync(resolve(process.cwd(), 'src/app/components/sidenav/sidenav.component.html'), 'utf8');
         expect(template).not.toMatch(/beta/i);
@@ -451,14 +450,14 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
 
-        const aiInsightsItem = fixture.debugElement
+        const assistantItem = fixture.debugElement
             .queryAll(By.css('mat-list-item'))
             .find(item => item.nativeElement.textContent.includes('Assistant'));
 
-        expect(aiInsightsItem).toBeTruthy();
-        expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PRO');
+        expect(assistantItem).toBeTruthy();
+        expect(component.assistantRoute).toBe('/ai-insights');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('Beta');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('PRO');
     });
 
     it('should link Assistant directly for grace users', () => {
@@ -476,7 +475,7 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
 
-        expect(component.aiInsightsRoute).toBe('/ai-insights');
+        expect(component.assistantRoute).toBe('/ai-insights');
     });
 
     it('should link free users directly to Assistant without paid lock state', () => {
@@ -492,13 +491,13 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
 
-        const aiInsightsItem = fixture.debugElement
+        const assistantItem = fixture.debugElement
             .queryAll(By.css('mat-list-item'))
             .find(item => item.nativeElement.textContent.includes('Assistant'));
 
-        expect(aiInsightsItem).toBeTruthy();
-        expect(component.aiInsightsRoute).toBe('/ai-insights');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('Beta');
-        expect(aiInsightsItem?.nativeElement.textContent).not.toContain('PAID');
+        expect(assistantItem).toBeTruthy();
+        expect(component.assistantRoute).toBe('/ai-insights');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('Beta');
+        expect(assistantItem?.nativeElement.textContent).not.toContain('PAID');
     });
 });

@@ -6,12 +6,12 @@ import { AppAuthService } from './app.auth.service';
 import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LoggerService } from '../services/logger.service';
 import { AppUserUtilities } from '../utils/app.user.utilities';
-import { getAiInsightsRequestLimitForRole } from '@shared/limits';
+import { getAssistantRequestLimitForRole } from '@shared/limits';
 
 @Injectable({
   providedIn: 'root'
 })
-class AiInsightsPermissionsService {
+class AssistantPermissionsService {
   private readonly router = inject(Router);
   private readonly authService = inject(AppAuthService);
   private readonly userService = inject(AppUserService);
@@ -19,7 +19,7 @@ class AiInsightsPermissionsService {
 
   async canMatch(segments: UrlSegment[]): Promise<boolean | import('@angular/router').UrlTree> {
     try {
-      this.logger.log('[AiInsightsGuard] Checking access...');
+      this.logger.log('[AssistantGuard] Checking access...');
       const [firebaseUser, user, profileReadState] = await firstValueFrom(
         combineLatest([
           this.authService.authState$,
@@ -56,7 +56,7 @@ class AiInsightsPermissionsService {
       }
 
       if (!firebaseUser || !user) {
-        this.logger.log('[AiInsightsGuard] No user found, allowing (authGuard will handle)');
+        this.logger.log('[AssistantGuard] No user found, allowing (authGuard will handle)');
         return true;
       }
 
@@ -67,48 +67,48 @@ class AiInsightsPermissionsService {
       const explicitlyCompleted = (user as any).onboardingCompleted === true;
       const onboardingCompleted = termsAccepted && (hasSubscribedOnce || explicitlyCompleted);
       const isAdmin = (user as any).admin === true;
-      const hasPaidAiInsightsAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+      const hasPaidAssistantAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
       const stripeRole = `${(user as any).stripeRole || 'free'}`;
-      let hasConfiguredAiInsightsAccess = false;
+      let hasConfiguredAssistantAccess = false;
       try {
-        hasConfiguredAiInsightsAccess = getAiInsightsRequestLimitForRole(stripeRole) > 0;
+        hasConfiguredAssistantAccess = getAssistantRequestLimitForRole(stripeRole) > 0;
       } catch (error) {
-        this.logger.error('[AiInsightsGuard] Unsupported role while checking AI Insights access', error);
+        this.logger.error('[AssistantGuard] Unsupported role while checking Assistant access', error);
       }
 
-      this.logger.log('[AiInsightsGuard] Status:', {
+      this.logger.log('[AssistantGuard] Status:', {
         stripeRole: (user as any).stripeRole,
         isAdmin,
-        hasPaidAiInsightsAccess,
-        hasConfiguredAiInsightsAccess,
+        hasPaidAssistantAccess,
+        hasConfiguredAssistantAccess,
         termsAccepted,
         hasSubscribedOnce,
         explicitlyCompleted,
         onboardingCompleted,
       });
 
-      if (hasPaidAiInsightsAccess) {
-        this.logger.log('[AiInsightsGuard] Access GRANTED (Paid/Admin/Grace)');
+      if (hasPaidAssistantAccess) {
+        this.logger.log('[AssistantGuard] Access GRANTED (Paid/Admin/Grace)');
         return true;
       }
 
-      if (hasConfiguredAiInsightsAccess && onboardingCompleted) {
-        this.logger.log('[AiInsightsGuard] Access GRANTED (Configured quota)');
+      if (hasConfiguredAssistantAccess && onboardingCompleted) {
+        this.logger.log('[AssistantGuard] Access GRANTED (Configured quota)');
         return true;
       }
 
       if (!onboardingCompleted) {
-        this.logger.log('[AiInsightsGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
+        this.logger.log('[AssistantGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
         return false;
       }
 
-      this.logger.log('[AiInsightsGuard] Access DENIED. Redirecting to /subscriptions');
+      this.logger.log('[AssistantGuard] Access DENIED. Redirecting to /subscriptions');
       return this.router.createUrlTree(['/subscriptions']);
     } catch (error) {
-      this.logger.error('[AiInsightsGuard] Error', error);
+      this.logger.error('[AssistantGuard] Error', error);
       return this.router.createUrlTree(['/subscriptions']);
     }
   }
 }
 
-export const aiInsightsGuard: CanMatchFn = (route, segments) => inject(AiInsightsPermissionsService).canMatch(segments);
+export const assistantGuard: CanMatchFn = (route, segments) => inject(AssistantPermissionsService).canMatch(segments);

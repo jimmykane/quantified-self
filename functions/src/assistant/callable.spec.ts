@@ -11,6 +11,7 @@ import {
   resolveAssistantAppBaseUrl,
   runAssistantChat,
   runGetAssistantConversation,
+  runGetAssistantQuotaStatus,
   runResetAssistantConversation,
 } from './callable';
 
@@ -102,6 +103,50 @@ const context = {
 };
 
 describe('Assistant callable', () => {
+  it('returns Assistant quota status using Firestore role resolution in hosted mode', async () => {
+    const getQuotaStatus = vi.fn().mockResolvedValue(quota);
+
+    await expect(runGetAssistantQuotaStatus({
+      auth: {
+        uid: 'user-1',
+        token: { stripeRole: 'basic' },
+      },
+      app: { appId: 'app-1' },
+    }, getQuotaStatus)).resolves.toEqual(quota);
+
+    expect(getQuotaStatus).toHaveBeenCalledWith('user-1');
+  });
+
+  it('uses callable role claims only in explicit Functions emulator mode', async () => {
+    const originalFunctionsEmulator = process.env.FUNCTIONS_EMULATOR;
+    process.env.FUNCTIONS_EMULATOR = 'true';
+    const getQuotaStatus = vi.fn().mockResolvedValue(quota);
+
+    try {
+      await expect(runGetAssistantQuotaStatus({
+        auth: {
+          uid: 'user-1',
+          token: {
+            stripeRole: 'basic',
+            gracePeriodUntil: '1775237359811',
+          },
+        },
+        app: { appId: 'app-1' },
+      }, getQuotaStatus)).resolves.toEqual(quota);
+
+      expect(getQuotaStatus).toHaveBeenCalledWith('user-1', {
+        role: 'basic',
+        gracePeriodUntil: 1775237359811,
+      });
+    } finally {
+      if (originalFunctionsEmulator === undefined) {
+        delete process.env.FUNCTIONS_EMULATOR;
+      } else {
+        process.env.FUNCTIONS_EMULATOR = originalFunctionsEmulator;
+      }
+    }
+  });
+
   it('checks the server-authoritative required legal agreements', async () => {
     const get = vi.fn()
       .mockResolvedValueOnce({

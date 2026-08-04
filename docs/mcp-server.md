@@ -354,11 +354,6 @@ bindings implement UI event handlers instead of inline event attributes.
 The narrower `wasm-unsafe-eval` source is present because the app uses Mapbox Standard Style WebAssembly; it does not
 permit JavaScript string evaluation.
 
-In browsers, the shared legacy AI Insights response contract configures Zod with `jitless: true` before constructing
-its first object schema. Zod v4 otherwise probes JavaScript string evaluation when object schemas initialize. Keep
-that browser configuration before schema construction, or remove the dependency on the probe, rather than adding general
-`unsafe-eval` permission. Server-side validation retains its existing JIT behavior.
-
 Production and beta builds keep Angular's `optimization.styles.inlineCritical` disabled. The optimizer otherwise emits
 an inline stylesheet `onload` handler into `index.csr.html`, which is incompatible with `script-src-attr 'none'`.
 If that build setting changes, inspect the generated shell and preserve strict-script compatibility without adding
@@ -784,9 +779,7 @@ The preferred nearby-search tools accept either `{ latitudeDegrees, longitudeDeg
 500,000 metres. Direct coordinates are validated and used entirely inside Quantified Self. Place text is normalized,
 limited to 20 words and 200 characters, and sent to the Mapbox Geocoding v6 forward endpoint with autocomplete disabled,
 one result, and temporary (uncached) use. MCP never invokes an AI model to repair or reinterpret a failed place lookup.
-The built-in Assistant does not receive location tools and does not use Mapbox. The older AI Insights implementation
-still shares the deterministic Mapbox adapter while it remains available as a rollback path; its explicitly metered AI
-fallback is isolated from both the built-in Assistant and MCP nearby search behavior.
+The built-in Assistant does not receive location tools and does not use Mapbox.
 
 Mapbox responses have a 5-second timeout and 64 KiB body limit. Only the resolved label, feature type, center, and valid
 bounding box enter the application. Authentication, rate-limit, timeout, malformed-response, and provider failures map

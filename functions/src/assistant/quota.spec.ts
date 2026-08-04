@@ -2,27 +2,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
-  createAiInsightsQuota,
+  createAssistantQuota,
   normalizeUsageDocRole,
-  type AiInsightsQuotaApi,
-  type AiInsightsQuotaDependencies,
+  type AssistantQuotaApi,
+  type AssistantQuotaDependencies,
 } from './quota';
-import { AI_INSIGHTS_REQUEST_LIMITS } from '../../../../shared/limits';
+import { ASSISTANT_REQUEST_LIMITS } from '../../../shared/limits';
 
-let quotaSubject = createAiInsightsQuota();
+let quotaSubject = createAssistantQuota();
 
-function setAiInsightsQuotaDependenciesForTesting(
-  dependencies: Partial<AiInsightsQuotaDependencies> = {},
+function setAssistantQuotaDependenciesForTesting(
+  dependencies: Partial<AssistantQuotaDependencies> = {},
 ): void {
-  quotaSubject = createAiInsightsQuota(dependencies);
+  quotaSubject = createAssistantQuota(dependencies);
 }
 
-async function withAiInsightsQuotaDependenciesForTesting<T>(
-  dependencies: Partial<AiInsightsQuotaDependencies>,
+async function withAssistantQuotaDependenciesForTesting<T>(
+  dependencies: Partial<AssistantQuotaDependencies>,
   run: () => Promise<T> | T,
 ): Promise<T> {
   const previousSubject = quotaSubject;
-  quotaSubject = createAiInsightsQuota(dependencies);
+  quotaSubject = createAssistantQuota(dependencies);
   try {
     return await run();
   } finally {
@@ -30,28 +30,28 @@ async function withAiInsightsQuotaDependenciesForTesting<T>(
   }
 }
 
-function getAiInsightsQuotaStatus(
-  ...args: Parameters<AiInsightsQuotaApi['getAiInsightsQuotaStatus']>
-): ReturnType<AiInsightsQuotaApi['getAiInsightsQuotaStatus']> {
-  return quotaSubject.getAiInsightsQuotaStatus(...args);
+function getAssistantQuotaStatus(
+  ...args: Parameters<AssistantQuotaApi['getAssistantQuotaStatus']>
+): ReturnType<AssistantQuotaApi['getAssistantQuotaStatus']> {
+  return quotaSubject.getAssistantQuotaStatus(...args);
 }
 
-function reserveAiInsightsQuotaForRequest(
-  ...args: Parameters<AiInsightsQuotaApi['reserveAiInsightsQuotaForRequest']>
-): ReturnType<AiInsightsQuotaApi['reserveAiInsightsQuotaForRequest']> {
-  return quotaSubject.reserveAiInsightsQuotaForRequest(...args);
+function reserveAssistantQuotaForRequest(
+  ...args: Parameters<AssistantQuotaApi['reserveAssistantQuotaForRequest']>
+): ReturnType<AssistantQuotaApi['reserveAssistantQuotaForRequest']> {
+  return quotaSubject.reserveAssistantQuotaForRequest(...args);
 }
 
-function finalizeAiInsightsQuotaReservation(
-  ...args: Parameters<AiInsightsQuotaApi['finalizeAiInsightsQuotaReservation']>
-): ReturnType<AiInsightsQuotaApi['finalizeAiInsightsQuotaReservation']> {
-  return quotaSubject.finalizeAiInsightsQuotaReservation(...args);
+function finalizeAssistantQuotaReservation(
+  ...args: Parameters<AssistantQuotaApi['finalizeAssistantQuotaReservation']>
+): ReturnType<AssistantQuotaApi['finalizeAssistantQuotaReservation']> {
+  return quotaSubject.finalizeAssistantQuotaReservation(...args);
 }
 
-function releaseAiInsightsQuotaReservation(
-  ...args: Parameters<AiInsightsQuotaApi['releaseAiInsightsQuotaReservation']>
-): ReturnType<AiInsightsQuotaApi['releaseAiInsightsQuotaReservation']> {
-  return quotaSubject.releaseAiInsightsQuotaReservation(...args);
+function releaseAssistantQuotaReservation(
+  ...args: Parameters<AssistantQuotaApi['releaseAssistantQuotaReservation']>
+): ReturnType<AssistantQuotaApi['releaseAssistantQuotaReservation']> {
+  return quotaSubject.releaseAssistantQuotaReservation(...args);
 }
 
 const FIXED_NOW_ISO = '2026-03-19T12:00:00.000Z';
@@ -152,7 +152,7 @@ function buildUsageDoc(overrides: Partial<Record<string, unknown>> = {}): Record
   return {
     version: 1,
     role: 'pro',
-    limit: AI_INSIGHTS_REQUEST_LIMITS.pro,
+    limit: ASSISTANT_REQUEST_LIMITS.pro,
     periodStart: PERIOD_START,
     periodEnd: PERIOD_END,
     periodKind: 'subscription',
@@ -162,7 +162,7 @@ function buildUsageDoc(overrides: Partial<Record<string, unknown>> = {}): Record
   };
 }
 
-describe('ai insights quota', () => {
+describe('Assistant quota', () => {
   let fakeDb: FakeFirestore;
   let reservationCounter: number;
 
@@ -172,7 +172,7 @@ describe('ai insights quota', () => {
     fakeDb.seedDocument('users/user-2', {});
     reservationCounter = 0;
 
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => {
         reservationCounter += 1;
@@ -195,7 +195,7 @@ describe('ai insights quota', () => {
   });
 
   afterEach(() => {
-    setAiInsightsQuotaDependenciesForTesting();
+    setAssistantQuotaDependenciesForTesting();
     vi.restoreAllMocks();
   });
 
@@ -209,9 +209,9 @@ describe('ai insights quota', () => {
   });
 
   it('increments quota only after a successful Genkit finalization', async () => {
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
-    const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
+    const finalizedStatus = await finalizeAssistantQuotaReservation(reservation);
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(reservation.periodDocId).toBe(PERIOD_DOC_ID);
     expect(finalizedStatus.successfulRequestCount).toBe(1);
@@ -222,10 +222,10 @@ describe('ai insights quota', () => {
   });
 
   it('does not consume quota twice when a reservation is finalized again', async () => {
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
 
-    await finalizeAiInsightsQuotaReservation(reservation);
-    await expect(finalizeAiInsightsQuotaReservation(reservation))
+    await finalizeAssistantQuotaReservation(reservation);
+    await expect(finalizeAssistantQuotaReservation(reservation))
       .rejects.toMatchObject<HttpsError>({ code: 'unavailable' });
 
     const storedDoc = fakeDb.getDocument(
@@ -236,7 +236,7 @@ describe('ai insights quota', () => {
   });
 
   it('does not consume quota after a reservation expires', async () => {
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
     const usagePath = `users/user-1/aiInsightsUsage/${reservation.periodDocId}`;
     fakeDb.seedDocument(usagePath, {
       ...fakeDb.getDocument(usagePath),
@@ -245,14 +245,14 @@ describe('ai insights quota', () => {
       },
     });
 
-    await expect(finalizeAiInsightsQuotaReservation(reservation))
+    await expect(finalizeAssistantQuotaReservation(reservation))
       .rejects.toMatchObject<HttpsError>({ code: 'unavailable' });
 
     expect(fakeDb.getDocument(usagePath)?.successfulRequestCount).toBe(0);
   });
 
   it('scopes quota dependency overrides and restores previous test dependencies', async () => {
-    const scopedReservation = await withAiInsightsQuotaDependenciesForTesting({
+    const scopedReservation = await withAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'scoped-reservation',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -268,9 +268,9 @@ describe('ai insights quota', () => {
         startDate: PERIOD_START,
         endDate: PERIOD_END,
       }),
-    }, async () => reserveAiInsightsQuotaForRequest('user-1'));
+    }, async () => reserveAssistantQuotaForRequest('user-1'));
 
-    const restoredReservation = await reserveAiInsightsQuotaForRequest('user-2');
+    const restoredReservation = await reserveAssistantQuotaForRequest('user-2');
 
     expect(scopedReservation.reservationID).toBe('scoped-reservation');
     expect(restoredReservation.reservationID).toBe('reservation-1');
@@ -281,7 +281,7 @@ describe('ai insights quota', () => {
     (admin.firestore as typeof admin.firestore & { FieldValue?: unknown }).FieldValue = undefined;
 
     try {
-      const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+      const reservation = await reserveAssistantQuotaForRequest('user-1');
       const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${reservation.periodDocId}`);
 
       expect(storedDoc?.updatedAt).toBe(FIXED_NOW_ISO);
@@ -291,23 +291,23 @@ describe('ai insights quota', () => {
   });
 
   it('releases fallback reservations without consuming quota', async () => {
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
-    const releasedStatus = await releaseAiInsightsQuotaReservation(reservation);
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
+    const releasedStatus = await releaseAssistantQuotaReservation(reservation);
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(releasedStatus.successfulRequestCount).toBe(0);
     expect(releasedStatus.activeRequestCount).toBe(0);
-    expect(releasedStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
+    expect(releasedStatus.remainingCount).toBe(ASSISTANT_REQUEST_LIMITS.pro);
     expect(quotaStatus.successfulRequestCount).toBe(0);
-    expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
+    expect(quotaStatus.remainingCount).toBe(ASSISTANT_REQUEST_LIMITS.pro);
   });
 
   it('treats release as an idempotent no-op once a reservation is gone', async () => {
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
-    await releaseAiInsightsQuotaReservation(reservation);
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
+    await releaseAssistantQuotaReservation(reservation);
     const writesAfterFirstRelease = fakeDb.getWriteCount();
 
-    const releasedAgain = await releaseAiInsightsQuotaReservation(reservation);
+    const releasedAgain = await releaseAssistantQuotaReservation(reservation);
 
     expect(releasedAgain.successfulRequestCount).toBe(0);
     expect(releasedAgain.activeRequestCount).toBe(0);
@@ -319,7 +319,7 @@ describe('ai insights quota', () => {
       expireAt: new Date('2026-03-20T12:00:00.000Z'),
     });
 
-    await expect(reserveAiInsightsQuotaForRequest('user-1'))
+    await expect(reserveAssistantQuotaForRequest('user-1'))
       .rejects.toMatchObject<HttpsError>({ code: 'permission-denied' });
     expect(fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`))
       .toBeUndefined();
@@ -327,7 +327,7 @@ describe('ai insights quota', () => {
   });
 
   it('does not finalize or release an existing reservation after deletion starts', async () => {
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
     const usagePath = `users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`;
     const storedBeforeDeletion = fakeDb.getDocument(usagePath);
     const writesBeforeDeletion = fakeDb.getWriteCount();
@@ -335,18 +335,18 @@ describe('ai insights quota', () => {
       expireAt: new Date('2026-03-20T12:00:00.000Z'),
     });
 
-    await expect(finalizeAiInsightsQuotaReservation(reservation))
+    await expect(finalizeAssistantQuotaReservation(reservation))
       .rejects.toMatchObject<HttpsError>({ code: 'permission-denied' });
-    await expect(releaseAiInsightsQuotaReservation(reservation))
+    await expect(releaseAssistantQuotaReservation(reservation))
       .rejects.toMatchObject<HttpsError>({ code: 'permission-denied' });
     expect(fakeDb.getDocument(usagePath)).toEqual(storedBeforeDeletion);
     expect(fakeDb.getWriteCount()).toBe(writesBeforeDeletion);
   });
 
   it('finalizes an existing reservation even if the user becomes ineligible afterward', async () => {
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
 
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-2',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -356,18 +356,18 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod: async () => null,
     });
 
-    const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
+    const finalizedStatus = await finalizeAssistantQuotaReservation(reservation);
     const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`);
 
     expect(finalizedStatus.successfulRequestCount).toBe(1);
     expect(finalizedStatus.activeRequestCount).toBe(0);
-    expect(finalizedStatus.limit).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
+    expect(finalizedStatus.limit).toBe(ASSISTANT_REQUEST_LIMITS.pro);
     expect(storedDoc?.successfulRequestCount).toBe(1);
     expect(storedDoc?.reservationMap).toEqual({});
   });
 
   it('pins grace users to the last paid pro period when there is no active subscription', async () => {
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -381,7 +381,7 @@ describe('ai insights quota', () => {
       }),
     });
 
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(quotaStatus.isEligible).toBe(true);
     expect(quotaStatus.periodKind).toBe('grace_hold');
@@ -391,7 +391,7 @@ describe('ai insights quota', () => {
   });
 
   it('pins grace users to the last paid basic period and limit when there is no active subscription', async () => {
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -405,11 +405,11 @@ describe('ai insights quota', () => {
       }),
     });
 
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(quotaStatus.role).toBe('basic');
-    expect(quotaStatus.limit).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
-    expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
+    expect(quotaStatus.limit).toBe(ASSISTANT_REQUEST_LIMITS.basic);
+    expect(quotaStatus.remainingCount).toBe(ASSISTANT_REQUEST_LIMITS.basic);
     expect(quotaStatus.periodKind).toBe('grace_hold');
     expect(quotaStatus.resetMode).toBe('next_successful_payment');
   });
@@ -422,7 +422,7 @@ describe('ai insights quota', () => {
       },
     }));
 
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
     const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`);
 
     expect(quotaStatus.successfulRequestCount).toBe(5);
@@ -442,7 +442,7 @@ describe('ai insights quota', () => {
       },
     }));
 
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(quotaStatus.successfulRequestCount).toBe(12);
     expect(quotaStatus.activeRequestCount).toBe(1);
@@ -455,9 +455,9 @@ describe('ai insights quota', () => {
       successfulRequestCount: 99,
     }));
 
-    const firstReservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const firstReservation = await reserveAssistantQuotaForRequest('user-1');
 
-    await expect(reserveAiInsightsQuotaForRequest('user-1')).rejects.toMatchObject<HttpsError>({
+    await expect(reserveAssistantQuotaForRequest('user-1')).rejects.toMatchObject<HttpsError>({
       code: 'resource-exhausted',
     });
 
@@ -477,7 +477,7 @@ describe('ai insights quota', () => {
       endDate: PERIOD_END,
     }));
 
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -487,7 +487,7 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod,
     });
 
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
 
     expect(reservation.periodDocId).toBe(PERIOD_DOC_ID);
     expect(getUserRoleAndGracePeriod).toHaveBeenCalledTimes(1);
@@ -496,7 +496,7 @@ describe('ai insights quota', () => {
   });
 
   it('returns an eligible active basic period with the configured basic request limit', async () => {
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -510,17 +510,17 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod: async () => null,
     });
 
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(quotaStatus.role).toBe('basic');
-    expect(quotaStatus.limit).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
-    expect(quotaStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
+    expect(quotaStatus.limit).toBe(ASSISTANT_REQUEST_LIMITS.basic);
+    expect(quotaStatus.remainingCount).toBe(ASSISTANT_REQUEST_LIMITS.basic);
     expect(quotaStatus.isEligible).toBe(true);
     expect(quotaStatus.periodKind).toBe('subscription');
   });
 
   it('returns an eligible calendar-month quota for free users without a billing period', async () => {
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -530,14 +530,14 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod: async () => null,
     });
 
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(quotaStatus).toEqual({
       role: 'free',
-      limit: AI_INSIGHTS_REQUEST_LIMITS.free,
+      limit: ASSISTANT_REQUEST_LIMITS.free,
       successfulRequestCount: 0,
       activeRequestCount: 0,
-      remainingCount: AI_INSIGHTS_REQUEST_LIMITS.free,
+      remainingCount: ASSISTANT_REQUEST_LIMITS.free,
       periodStart: PERIOD_START,
       periodEnd: PERIOD_END,
       periodKind: 'calendar_month',
@@ -548,7 +548,7 @@ describe('ai insights quota', () => {
   });
 
   it('reserves and finalizes free user quota in the calendar-month window', async () => {
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -558,23 +558,23 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod: async () => null,
     });
 
-    const reservation = await reserveAiInsightsQuotaForRequest('user-1');
-    const finalizedStatus = await finalizeAiInsightsQuotaReservation(reservation);
+    const reservation = await reserveAssistantQuotaForRequest('user-1');
+    const finalizedStatus = await finalizeAssistantQuotaReservation(reservation);
 
     expect(reservation).toMatchObject({
       role: 'free',
-      limit: AI_INSIGHTS_REQUEST_LIMITS.free,
+      limit: ASSISTANT_REQUEST_LIMITS.free,
       periodDocId: PERIOD_DOC_ID,
       periodKind: 'calendar_month',
       resetMode: 'date',
       isEligible: true,
     });
     expect(finalizedStatus.successfulRequestCount).toBe(1);
-    expect(finalizedStatus.remainingCount).toBe(AI_INSIGHTS_REQUEST_LIMITS.free - 1);
+    expect(finalizedStatus.remainingCount).toBe(ASSISTANT_REQUEST_LIMITS.free - 1);
   });
 
   it('returns an ineligible status for paid users when no billing window can be resolved', async () => {
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -584,11 +584,11 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod: async () => null,
     });
 
-    const quotaStatus = await getAiInsightsQuotaStatus('user-1');
+    const quotaStatus = await getAssistantQuotaStatus('user-1');
 
     expect(quotaStatus).toEqual({
       role: 'basic',
-      limit: AI_INSIGHTS_REQUEST_LIMITS.basic,
+      limit: ASSISTANT_REQUEST_LIMITS.basic,
       successfulRequestCount: 0,
       activeRequestCount: 0,
       remainingCount: 0,
@@ -602,7 +602,7 @@ describe('ai insights quota', () => {
   });
 
   it('rejects reservation for paid users without a resolvable billing window before internal failures', async () => {
-    setAiInsightsQuotaDependenciesForTesting({
+    setAssistantQuotaDependenciesForTesting({
       now: () => new Date(FIXED_NOW_ISO),
       createReservationId: () => 'reservation-1',
       db: () => fakeDb as unknown as FirebaseFirestore.Firestore,
@@ -612,9 +612,9 @@ describe('ai insights quota', () => {
       getLatestPaidSubscriptionPeriod: async () => null,
     });
 
-    await expect(reserveAiInsightsQuotaForRequest('user-1')).rejects.toMatchObject<HttpsError>({
+    await expect(reserveAssistantQuotaForRequest('user-1')).rejects.toMatchObject<HttpsError>({
       code: 'permission-denied',
-      message: 'AI Insights is unavailable for this account.',
+      message: 'Assistant is unavailable for this account.',
     });
   });
 });

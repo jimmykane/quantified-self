@@ -53,7 +53,7 @@ export interface AdminUser {
         connectedAt?: { seconds: number; nanoseconds: number } | string | number | null;
     }[];
     hasSubscribedOnce?: boolean;
-    aiCreditsConsumed?: number;
+    assistantRequestsUsed?: number;
     eventStats?: EventCountStats;
     routeStats?: RouteCountStats;
 }

@@ -7,18 +7,21 @@ import {
   type AssistantChatRequest,
   type AssistantChatResponse,
   type AssistantMessage,
+  type AssistantQuotaStatusResponse,
   type GetAssistantConversationResponse,
   type ResetAssistantConversationResponse,
 } from '../../../shared/assistant.types';
+import { isValidIanaTimeZone } from '../../../shared/event-stat-aggregation';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import {
-  reserveAiInsightsQuotaForRequest,
-  finalizeAiInsightsQuotaReservation,
-  releaseAiInsightsQuotaReservation,
-  type AiInsightsQuotaReservation,
-} from '../ai/insights/quota';
-import { assertValidTimeZone } from '../ai/insights/insight-presentation';
+  finalizeAssistantQuotaReservation,
+  getAssistantQuotaStatus as getAssistantQuotaStatusForUser,
+  releaseAssistantQuotaReservation,
+  reserveAssistantQuotaForRequest,
+  type AssistantQuotaReservation,
+  type AssistantUserRoleContext,
+} from './quota';
 import {
   AssistantConversationStoreError,
   assistantConversationStore,
@@ -28,7 +31,10 @@ import {
 import { assistantRuntime, type AssistantRuntimeResult } from './runtime';
 
 interface AssistantCallableContext {
-  auth?: { uid: string } | null;
+  auth?: {
+    uid: string;
+    token?: Record<string, unknown>;
+  } | null;
   app?: unknown;
   rawRequest?: {
     get: (name: string) => string | undefined;
@@ -43,9 +49,9 @@ const ASSISTANT_HOSTED_APP_ORIGINS = new Set([
 
 export interface AssistantCallableDependencies {
   assertLegalAccess: (uid: string) => Promise<void>;
-  reserveQuota: typeof reserveAiInsightsQuotaForRequest;
-  finalizeQuota: typeof finalizeAiInsightsQuotaReservation;
-  releaseQuota: typeof releaseAiInsightsQuotaReservation;
+  reserveQuota: typeof reserveAssistantQuotaForRequest;
+  finalizeQuota: typeof finalizeAssistantQuotaReservation;
+  releaseQuota: typeof releaseAssistantQuotaReservation;
   conversationStore: AssistantConversationStore;
   answer: (input: {
     uid: string;
@@ -77,9 +83,9 @@ export async function assertAssistantLegalAccess(
 
 const defaultDependencies: AssistantCallableDependencies = {
   assertLegalAccess: assertAssistantLegalAccess,
-  reserveQuota: reserveAiInsightsQuotaForRequest,
-  finalizeQuota: finalizeAiInsightsQuotaReservation,
-  releaseQuota: releaseAiInsightsQuotaReservation,
+  reserveQuota: reserveAssistantQuotaForRequest,
+  finalizeQuota: finalizeAssistantQuotaReservation,
+  releaseQuota: releaseAssistantQuotaReservation,
   conversationStore: assistantConversationStore,
   answer: input => assistantRuntime.answer(input),
   createId: () => randomUUID(),
@@ -95,6 +101,44 @@ function requireAuthenticatedUid(context: AssistantCallableContext | undefined):
   }
   enforceAppCheck(context);
   return context.auth.uid;
+}
+
+function shouldUseCallableTokenForQuotaRoleContext(): boolean {
+  // Hosted calls always resolve roles from Firestore. Explicit Functions emulator
+  // mode may use local Auth claims so local accounts can exercise each plan.
+  return process.env.FUNCTIONS_EMULATOR === 'true';
+}
+
+function parseGracePeriodUntilClaim(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsedValue = Number(value);
+    return Number.isFinite(parsedValue) ? parsedValue : undefined;
+  }
+  return undefined;
+}
+
+function buildQuotaRoleContextFromCallableAuth(
+  auth: AssistantCallableContext['auth'],
+): AssistantUserRoleContext | null {
+  const role = auth?.token?.stripeRole;
+  if (typeof role !== 'string' || !role.trim()) {
+    return null;
+  }
+  const gracePeriodUntil = parseGracePeriodUntilClaim(auth?.token?.gracePeriodUntil);
+  return gracePeriodUntil === undefined
+    ? { role }
+    : { role, gracePeriodUntil };
+}
+
+function resolveCallableQuotaRoleContext(
+  context: AssistantCallableContext | undefined,
+): AssistantUserRoleContext | null {
+  return shouldUseCallableTokenForQuotaRoleContext()
+    ? buildQuotaRoleContextFromCallableAuth(context?.auth)
+    : null;
 }
 
 export function resolveAssistantAppBaseUrl(
@@ -161,7 +205,12 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
       'timeZone must be a valid IANA time zone of at most 80 characters.',
     );
   }
-  assertValidTimeZone(timeZone);
+  if (!isValidIanaTimeZone(timeZone)) {
+    throw new HttpsError(
+      'invalid-argument',
+      'timeZone must be a valid IANA time zone of at most 80 characters.',
+    );
+  }
   const conversationId = typeof data.conversationId === 'string'
     ? data.conversationId.trim()
     : data.conversationId;
@@ -222,11 +271,14 @@ export async function runAssistantChat(
   const uid = requireAuthenticatedUid(context);
   const input = parseAssistantChatRequest(value);
 
-  let reservation: AiInsightsQuotaReservation | null = null;
+  let reservation: AssistantQuotaReservation | null = null;
   let begunTurn: BegunAssistantTurn | null = null;
   try {
     await dependencies.assertLegalAccess(uid);
-    reservation = await dependencies.reserveQuota(uid);
+    const quotaRoleContext = resolveCallableQuotaRoleContext(context);
+    reservation = quotaRoleContext
+      ? await dependencies.reserveQuota(uid, quotaRoleContext)
+      : await dependencies.reserveQuota(uid);
     const turnStart = await dependencies.conversationStore.beginTurn(
       uid,
       input.conversationId,
@@ -307,6 +359,17 @@ export async function runAssistantChat(
   }
 }
 
+export async function runGetAssistantQuotaStatus(
+  context: AssistantCallableContext | undefined,
+  getQuotaStatus: typeof getAssistantQuotaStatusForUser = getAssistantQuotaStatusForUser,
+): Promise<AssistantQuotaStatusResponse> {
+  const uid = requireAuthenticatedUid(context);
+  const quotaRoleContext = resolveCallableQuotaRoleContext(context);
+  return quotaRoleContext
+    ? getQuotaStatus(uid, quotaRoleContext)
+    : getQuotaStatus(uid);
+}
+
 export async function runGetAssistantConversation(
   context: AssistantCallableContext | undefined,
   conversationStore: AssistantConversationStore = assistantConversationStore,
@@ -349,6 +412,12 @@ export const assistantChat = onCall(
   ASSISTANT_CALLABLE_OPTIONS,
   request => runAssistantChat(request.data, request),
 );
+
+export const getAssistantQuotaStatus = onCall({
+  region: FUNCTIONS_MANIFEST.getAssistantQuotaStatus.region,
+  cors: ALLOWED_CORS_ORIGINS,
+  enforceAppCheck: true,
+}, request => runGetAssistantQuotaStatus(request));
 
 export const getAssistantConversation = onCall({
   region: FUNCTIONS_MANIFEST.getAssistantConversation.region,

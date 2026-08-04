@@ -22,9 +22,9 @@ vi.mock('@genkit-ai/google-genai', () => ({
   }),
 }));
 
-import { aiInsightsGenkit } from './genkit';
+import { assistantGenkit } from './model';
 
-describe('genkit config', () => {
+describe('Assistant model config', () => {
   const originalGeminiApiKey = process.env.GEMINI_API_KEY;
 
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe('genkit config', () => {
   it('configures googleAI without a custom apiKey override', () => {
     expect(hoisted.googleAIPlugin).toHaveBeenCalledWith();
     expect(hoisted.googleAIModel).toHaveBeenCalledWith('gemini-3.1-flash-lite');
-    expect(aiInsightsGenkit).toEqual({ mocked: true });
+    expect(assistantGenkit).toEqual({ mocked: true });
   });
 
   it('does not inject a custom apiKey into the googleAI plugin config', () => {

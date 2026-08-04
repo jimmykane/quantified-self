@@ -1,24 +1,24 @@
 import { Injectable, inject } from '@angular/core';
 import type {
-  AiInsightsQuotaStatus,
-  AiInsightsQuotaStatusResponse,
-} from '@shared/ai-insights.types';
+  AssistantQuotaStatus,
+  AssistantQuotaStatusResponse,
+} from '@shared/assistant.types';
 import { AppFunctionsService } from './app.functions.service';
 import { LoggerService } from './logger.service';
 
 @Injectable({
   providedIn: 'root',
 })
-export class AiInsightsQuotaService {
+export class AssistantQuotaService {
   private readonly functionsService = inject(AppFunctionsService);
   private readonly logger = inject(LoggerService);
 
-  async loadQuotaStatus(): Promise<AiInsightsQuotaStatus | null> {
+  async loadQuotaStatus(): Promise<AssistantQuotaStatus | null> {
     try {
-      const response = await this.functionsService.call<void, AiInsightsQuotaStatusResponse>('getAiInsightsQuotaStatus');
+      const response = await this.functionsService.call<void, AssistantQuotaStatusResponse>('getAssistantQuotaStatus');
       return response.data;
     } catch (error) {
-      this.logger.warn('[AiInsightsQuotaService] Failed to load AI Insights quota status.', error);
+      this.logger.warn('[AssistantQuotaService] Failed to load Assistant quota status.', error);
       return null;
     }
   }

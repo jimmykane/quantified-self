@@ -11,12 +11,12 @@ describe('email config', () => {
         ['free', 'Up to 100 activities', 'Up to 10 saved routes', '20 Assistant requests per calendar month', ''],
         ['basic', 'Up to 1,000 activities', 'Up to 100 saved routes', '50 Assistant requests per billing period', ''],
         ['pro', 'Unlimited activities', 'Unlimited saved routes', '100 Assistant requests per billing period', 'Device sync with Garmin, Suunto, and COROS'],
-    ])('builds centralized plan descriptions for %s', (role, activities, routes, aiInsights, deviceSync) => {
+    ])('builds centralized plan descriptions for %s', (role, activities, routes, assistant, deviceSync) => {
         expect(buildEmailPlanDetails(role)).toEqual({
             plan_details_available: true,
             activity_description: activities,
             route_description: routes,
-            ai_insights_description: aiInsights,
+            ai_insights_description: assistant,
             device_sync_description: deviceSync,
         });
     });

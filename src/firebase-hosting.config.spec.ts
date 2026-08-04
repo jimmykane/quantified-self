@@ -360,10 +360,6 @@ describe('Firebase Hosting configuration', () => {
 
   it('keeps executable scripts and event handlers compatible with a strict script policy', () => {
     const indexHtml = readFileSync(resolve(__dirname, 'index.html'), 'utf8');
-    const aiInsightsContract = readFileSync(
-      resolve(__dirname, '../shared/ai-insights-response.contract.ts'),
-      'utf8'
-    );
     const appHtmlFiles = findHtmlFiles(resolve(__dirname, 'app'));
     const filesWithInlineHandlers = appHtmlFiles.filter(filePath => (
       /\son[a-z]+\s*=/i.test(readFileSync(filePath, 'utf8'))
@@ -371,11 +367,6 @@ describe('Firebase Hosting configuration', () => {
 
     expect(indexHtml).toContain('<script src="assets/theme-init.js"></script>');
     expect(indexHtml).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/i);
-    expect(aiInsightsContract).toContain("if (typeof window !== 'undefined')");
-    expect(aiInsightsContract.indexOf('z.config({ jitless: true });')).toBeGreaterThan(-1);
-    expect(aiInsightsContract.indexOf('z.config({ jitless: true });')).toBeLessThan(
-      aiInsightsContract.indexOf('z.object({')
-    );
     expect(filesWithInlineHandlers).toEqual([]);
 
     for (const configurationName of ['production', 'beta']) {

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-    AI_INSIGHTS_REQUEST_LIMITS,
+    ASSISTANT_REQUEST_LIMITS,
     DEVICE_SYNC_ENABLED_ROLES,
-    getAiInsightsRequestLimitForRole,
+    getAssistantRequestLimitForRole,
     getRouteUsageLimitForRole,
     getUsageLimitForRole,
     isDeviceSyncEnabledForRole,
@@ -51,17 +51,17 @@ describe('USAGE_LIMITS', () => {
         expect(() => getRouteUsageLimitForRole('enterprise')).toThrow("Unsupported subscription role 'enterprise'");
     });
 
-    it('should resolve AI insights limits explicitly for supported roles', () => {
-        expect(AI_INSIGHTS_REQUEST_LIMITS).toEqual({
+    it('should resolve Assistant limits explicitly for supported roles', () => {
+        expect(ASSISTANT_REQUEST_LIMITS).toEqual({
             free: 20,
             basic: 50,
             pro: 100,
         });
-        expect(getAiInsightsRequestLimitForRole('free')).toBe(AI_INSIGHTS_REQUEST_LIMITS.free);
-        expect(getAiInsightsRequestLimitForRole('basic')).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
-        expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
-        expect(getAiInsightsRequestLimitForRole('basic')).toBe(AI_INSIGHTS_REQUEST_LIMITS.basic);
-        expect(getAiInsightsRequestLimitForRole('pro')).toBe(AI_INSIGHTS_REQUEST_LIMITS.pro);
+        expect(getAssistantRequestLimitForRole('free')).toBe(ASSISTANT_REQUEST_LIMITS.free);
+        expect(getAssistantRequestLimitForRole('basic')).toBe(ASSISTANT_REQUEST_LIMITS.basic);
+        expect(getAssistantRequestLimitForRole('pro')).toBe(ASSISTANT_REQUEST_LIMITS.pro);
+        expect(getAssistantRequestLimitForRole('basic')).toBe(ASSISTANT_REQUEST_LIMITS.basic);
+        expect(getAssistantRequestLimitForRole('pro')).toBe(ASSISTANT_REQUEST_LIMITS.pro);
     });
 
     it('should define device sync entitlement from the shared plan contract', () => {

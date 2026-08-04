@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Route } from '@angular/router';
 import { routes as appRoutes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
-import { aiInsightsGuard } from './authentication/ai-insights.guard';
+import { assistantGuard } from './authentication/assistant.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
@@ -213,15 +213,15 @@ describe('AppRoutingModule routes', () => {
   });
 
   it('should protect the Assistant behind auth, onboarding, and configured quota access', () => {
-    const aiInsightsRoute = routes.find(route => route.path === 'ai-insights');
+    const assistantRoute = routes.find(route => route.path === 'ai-insights');
 
-    expect(aiInsightsRoute).toBeTruthy();
-    expect(aiInsightsRoute?.canMatch).toEqual([authGuard, onboardingGuard, aiInsightsGuard]);
-    expect(aiInsightsRoute?.loadComponent).toBeTypeOf('function');
-    expect(aiInsightsRoute?.data).toMatchObject({
+    expect(assistantRoute).toBeTruthy();
+    expect(assistantRoute?.canMatch).toEqual([authGuard, onboardingGuard, assistantGuard]);
+    expect(assistantRoute?.loadComponent).toBeTypeOf('function');
+    expect(assistantRoute?.data).toMatchObject({
       title: 'Assistant',
       preload: true,
-      animation: 'AIInsights',
+      animation: 'Assistant',
     });
   });
 
@@ -375,7 +375,7 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'read-only MCP',
       },
       {
-        path: PUBLIC_FEATURE_PATHS.aiInsights,
+        path: PUBLIC_FEATURE_PATHS.assistant,
         title: 'AI Training Assistant Grounded in Your Fitness Data',
         h1: 'A fitness-data Assistant grounded in your own history',
         descriptionText: 'grounded in read-only Quantified Self tools',

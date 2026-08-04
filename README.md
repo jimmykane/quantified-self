@@ -13,7 +13,7 @@ Try the hosted app at [quantified-self.io](https://www.quantified-self.io/).
 - Explore configurable dashboards, training readiness, load trends, power curves, intensity zones, laps, and durability metrics.
 - View activities and saved routes with Mapbox-powered maps and route tools.
 - Compare recordings from multiple devices, share selected activities, and export your data.
-- Generate optional AI-assisted activity insights.
+- Ask grounded fitness-data questions through the built-in Assistant.
 
 ## Technology and repository layout
 
@@ -182,7 +182,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | Collection | Retention | TTL field | Purpose |
 | --- | --- | --- | --- |
 | `mail` | About 90 days | `expireAt` | Transactional email records |
-| `aiInsightsPromptRepairs` | About 90 days | `expireAt` | AI prompt-repair backlog |
+| `aiInsightsPromptRepairs` | Up to 90 days after legacy retirement | `expireAt` | Cleanup-only TTL drain for historical prompt-repair records; there are no active writers |
 | `failed_jobs` | 7 days | `expireAt` | Failed background-job records |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items |
 | `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |

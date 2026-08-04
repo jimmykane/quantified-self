@@ -1,4 +1,4 @@
-import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import {
   PUBLIC_FEATURE_PATHS,
   PUBLIC_GUIDE_PATHS,
@@ -67,7 +67,7 @@ export interface PublicSeoRouteData {
 const SITE_ORIGIN = 'https://quantified-self.io';
 const STARTER_ACTIVITY_LIMIT = USAGE_LIMITS.free;
 const STARTER_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
-const FREE_AI_REQUEST_LIMIT = AI_INSIGHTS_REQUEST_LIMITS.free;
+const FREE_ASSISTANT_REQUEST_LIMIT = ASSISTANT_REQUEST_LIMITS.free;
 
 function pageUrl(path: string): string {
   return `${SITE_ORIGIN}/${path}`;
@@ -123,7 +123,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'auto_awesome',
             title: 'Grounded Assistant',
-            copy: `Ask follow-up questions about sleep, readiness, Training, measurements, and activities through the same validated read-only tools used by MCP. Free accounts include ${FREE_AI_REQUEST_LIMIT} requests per calendar month.`,
+            copy: `Ask follow-up questions about sleep, readiness, Training, measurements, and activities through the same validated read-only tools used by MCP. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
           },
           {
             icon: 'devices',
@@ -190,7 +190,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which features are available on the free plan?',
-        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_AI_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
+        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
       },
     ],
     closingTitle: 'Choose the feature that matches the data problem',
@@ -494,14 +494,14 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('MCP Client Policy', '/policies', 'stroked', undefined, 'mcp-clients'),
     ],
   },
-  aiInsights: {
-    key: 'aiInsights',
-    path: PUBLIC_FEATURE_PATHS.aiInsights,
+  assistant: {
+    key: 'assistant',
+    path: PUBLIC_FEATURE_PATHS.assistant,
     eyebrow: 'Quantified Self Assistant',
     title: 'AI Training Assistant Grounded in Your Fitness Data',
-    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, and activities. Free accounts include ${FREE_AI_REQUEST_LIMIT} requests per calendar month.`,
+    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, and activities. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
     h1: 'A fitness-data Assistant grounded in your own history',
-    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, or recent activities. The Assistant chooses bounded read-only tools and shows the results that grounded each answer. Free accounts include ${FREE_AI_REQUEST_LIMIT} requests per calendar month.`,
+    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, or recent activities. The Assistant chooses bounded read-only tools and shows the results that grounded each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
     chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities'],
     actions: [
       routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
@@ -565,7 +565,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Is the Assistant available on the free plan?',
-        answer: `Yes. Free accounts include up to ${FREE_AI_REQUEST_LIMIT} Assistant requests per calendar month. Basic and Pro increase the request limits.`,
+        answer: `Yes. Free accounts include up to ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month. Basic and Pro increase the request limits.`,
       },
       {
         question: 'Can I still use ChatGPT through MCP?',
@@ -1792,7 +1792,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),
-  aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),
+  assistant: buildRouteData(PUBLIC_SEO_PAGES.assistant),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
   fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),
   routeFiles: buildRouteData(PUBLIC_SEO_PAGES.routeFiles),
