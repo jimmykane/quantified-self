@@ -222,8 +222,14 @@
   padding: 0;
   color: var(--mat-sys-on-surface-variant);
 
-  --mat-icon-button-icon-size: 18px;
   --mat-icon-button-state-layer-size: 32px;
+}
+
+.calendar-family-volume-info-button mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
 }
 
 .calendar-family-volume-heading > span {
