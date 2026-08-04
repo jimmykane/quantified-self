@@ -74,6 +74,18 @@ describe('CalendarPageComponent', () => {
     }));
   });
 
+  it('provides compact and labeled Material actions for returning to today', () => {
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+
+    const desktopButton = fixture.nativeElement.querySelector('.calendar-today-button--desktop');
+    const mobileButton = fixture.nativeElement.querySelector('.calendar-today-button--mobile');
+
+    expect(desktopButton?.textContent).toContain('Today');
+    expect(mobileButton?.getAttribute('aria-label')).toBe('Go to today');
+    expect(mobileButton?.querySelector('mat-icon')?.textContent).toContain('today');
+  });
+
   it('opens Material day details for an activity day', async () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();

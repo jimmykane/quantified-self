@@ -25,9 +25,14 @@
       <mat-icon>chevron_left</mat-icon>
     </button>
     <h2 aria-live="polite">{{ calendarModel().periodLabel }}</h2>
-    <button mat-stroked-button type="button" appHapticTap (click)="goToToday()">
+    <button class="calendar-today-button--desktop" mat-stroked-button type="button" appHapticTap
+      (click)="goToToday()">
       <mat-icon aria-hidden="true">today</mat-icon>
       <span>Today</span>
+    </button>
+    <button class="calendar-today-button--mobile" mat-icon-button type="button" appHapticTap
+      aria-label="Go to today" (click)="goToToday()">
+      <mat-icon aria-hidden="true">today</mat-icon>
     </button>
     <button mat-icon-button type="button" appHapticTap matTooltip="Next {{ routeState().view }}"
       [attr.aria-label]="'Next ' + routeState().view" (click)="navigatePeriod(1)">

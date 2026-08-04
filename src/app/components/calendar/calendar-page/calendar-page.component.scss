@@ -78,6 +78,10 @@
   white-space: nowrap;
 }
 
+.calendar-today-button--mobile {
+  display: none;
+}
+
 .calendar-progress-slot {
   height: 4px;
   margin-bottom: 8px;
@@ -141,24 +145,20 @@
   }
 
   .calendar-period-navigation {
-    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    grid-template-columns: 42px minmax(0, 1fr) 42px 42px;
     gap: 4px;
-    padding: 6px 0;
   }
 
   .calendar-period-navigation h2 {
     font: var(--mat-sys-title-medium);
   }
 
-  .calendar-period-navigation > button:nth-of-type(2) {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: center;
+  .calendar-today-button--desktop {
+    display: none;
   }
 
-  .calendar-period-navigation > button:last-child {
-    grid-column: 3;
-    grid-row: 1;
+  .calendar-today-button--mobile {
+    display: inline-flex;
   }
 }
 
