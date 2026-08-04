@@ -14,9 +14,6 @@ const mocks = vi.hoisted(() => {
   };
   const firestoreCollection = vi.fn(() => rootCollection);
   const firestore = vi.fn(() => ({ collection: firestoreCollection }));
-  class WahooOwnershipTransferBlockedByEventPublicationError extends Error {
-    public readonly name = 'WahooOwnershipTransferBlockedByEventPublicationError';
-  }
   return {
     enforceAppCheck: vi.fn(),
     hasServiceOAuthConnectAccess: vi.fn(),
@@ -30,7 +27,6 @@ const mocks = vi.hoisted(() => {
     firestoreCollection,
     firestore,
     setServiceConnectionProviderUserId: vi.fn(),
-    WahooOwnershipTransferBlockedByEventPublicationError,
   };
 });
 
@@ -72,11 +68,6 @@ vi.mock('../../OAuth2', () => ({
 
 vi.mock('../../service-connection-meta', () => ({
   setServiceConnectionProviderUserId: mocks.setServiceConnectionProviderUserId,
-}));
-
-vi.mock('./adapter', () => ({
-  WahooOwnershipTransferBlockedByEventPublicationError:
-    mocks.WahooOwnershipTransferBlockedByEventPublicationError,
 }));
 
 import {
@@ -137,10 +128,8 @@ describe('Wahoo Auth Wrapper', () => {
     expect(mocks.tokenQueryGet).not.toHaveBeenCalled();
   });
 
-  it('asks the user to reconnect shortly when event publication temporarily blocks an ownership transfer', async () => {
-    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue(
-      new mocks.WahooOwnershipTransferBlockedByEventPublicationError('wahoo-user-1'),
-    );
+  it('reports retryable Wahoo authorization failures as temporarily unavailable', async () => {
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue({ statusCode: 503 });
 
     await expect(requestAndSetWahooAPIAccessToken({
       auth: { uid: 'user-1' },
@@ -152,7 +141,7 @@ describe('Wahoo Auth Wrapper', () => {
       },
     } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
       code: 'unavailable',
-      message: 'Wahoo is still finishing an activity import. Please reconnect again shortly.',
+      message: 'Wahoo is temporarily unavailable.',
     });
   });
 });

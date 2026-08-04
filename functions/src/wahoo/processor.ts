@@ -26,12 +26,8 @@ import {
   claimWahooWorkoutQueueRevision,
   cleanupWahooPartialEventPersistence,
   completeWahooWorkoutQueueRevision,
-  acquireWahooEventPublicationLease,
-  createWahooEventWriteOwnershipGuard,
+  createWahooEventWriteConnectionGuard,
   failWahooWorkoutQueueRevision,
-  getClaimedWahooWorkoutQueueRevisionEventWriteFence,
-  releaseWahooEventPublicationLease,
-  type WahooEventPublicationFence,
   type WahooQueueClaimResult,
 } from './queue-store';
 
@@ -61,7 +57,6 @@ export async function processWahooWorkoutQueueItem(
     return QueueResult.Processed;
   }
   let eventID: string | undefined;
-  let eventPublicationFence: WahooEventPublicationFence | undefined;
   const createdDocumentPaths = new Set<string>();
   try {
     if (!(await hasProAccess(userID))) {
@@ -92,13 +87,6 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'user_deleted_or_deleting',
       });
     }
-    const eventWriteOwnershipFence = await getClaimedWahooWorkoutQueueRevisionEventWriteFence(
-      queueItem,
-      processingOwner,
-    );
-    if (!eventWriteOwnershipFence) {
-      return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
-    }
     eventID = await resolveProviderImportEventID({
       userID,
       startDate: event.startDate,
@@ -119,13 +107,6 @@ export async function processWahooWorkoutQueueItem(
       queueItem.edited,
       queueItem.fitnessAppID,
     );
-    eventPublicationFence = await acquireWahooEventPublicationLease(eventWriteOwnershipFence) || undefined;
-    if (!eventPublicationFence) {
-      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
-        resultStatus: 'skipped',
-        skippedReason: 'wahoo_ownership_changed',
-      });
-    }
     const setEventResult = await setEvent(
       userID,
       eventID,
@@ -136,7 +117,7 @@ export async function processWahooWorkoutQueueItem(
       undefined,
       undefined,
       {
-        transactionGuard: createWahooEventWriteOwnershipGuard(eventPublicationFence),
+        transactionGuard: createWahooEventWriteConnectionGuard(queueItem, processingOwner),
         stageOriginalFilesUntilEventWrite: true,
         onDocumentCreated: (path) => createdDocumentPaths.add(path.join('/')),
       },
@@ -161,7 +142,7 @@ export async function processWahooWorkoutQueueItem(
         try {
           await cleanupWahooPartialEventPersistence(userID, eventID, [...createdDocumentPaths]);
         } catch (cleanupError) {
-          logger.error('Failed to clean up partially written Wahoo activity after ownership changed', {
+          logger.error('Failed to clean up partially written Wahoo activity after its connection or queue revision changed', {
             queueItemId: queueItem.id,
             eventID,
             error: getWahooErrorLogDetails(cleanupError),
@@ -169,13 +150,13 @@ export async function processWahooWorkoutQueueItem(
           return failWahooWorkoutQueueRevision(queueItem, processingOwner, getWahooRetryError(cleanupError));
         }
       }
-      logger.info('Skipped Wahoo activity persistence because ownership changed during processing', {
+      logger.info('Skipped Wahoo activity persistence because its connection or queue revision changed during processing', {
         queueItemId: queueItem.id,
         wahooUserID: queueItem.wahooUserID,
       });
       return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
         resultStatus: 'skipped',
-        skippedReason: 'wahoo_ownership_changed',
+        skippedReason: 'connection_or_revision_changed',
       });
     }
     logger.error('Wahoo activity processing failed', {
@@ -183,17 +164,5 @@ export async function processWahooWorkoutQueueItem(
       error: getWahooErrorLogDetails(error),
     });
     return failWahooWorkoutQueueRevision(queueItem, processingOwner, getWahooRetryError(error));
-  } finally {
-    if (eventPublicationFence) {
-      try {
-        await releaseWahooEventPublicationLease(eventPublicationFence);
-      } catch (releaseError) {
-        logger.error('Failed to release Wahoo event publication lease', {
-          queueItemId: queueItem.id,
-          eventID,
-          error: getWahooErrorLogDetails(releaseError),
-        });
-      }
-    }
   }
 }

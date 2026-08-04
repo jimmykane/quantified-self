@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
   const transactionUpdate = vi.fn();
   const transactionDelete = vi.fn();
   const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1' };
-  const mappingRef = { id: 'wahoo-1', path: 'wahooAPIUserMappings/wahoo-1' };
+  const tokenRef = { id: 'wahoo-1', path: 'wahooAPIAccessTokens/firebase-1/tokens/wahoo-1' };
   const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
   const eventRef = { id: 'event-1', path: 'users/firebase-1/events/event-1' };
   const activityRefOne = { id: 'activity-1', path: 'users/firebase-1/activities/activity-1' };
@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => {
     transactionUpdate,
     transactionDelete,
     ref,
-    mappingRef,
+    tokenRef,
     failedRef,
     eventRef,
     activityRefOne,
@@ -62,9 +62,15 @@ vi.mock('firebase-admin', () => ({
           }),
         };
       }
+      if (name === 'wahooAPIAccessTokens') {
+        return {
+          doc: () => ({
+            collection: () => ({ doc: () => mocks.tokenRef }),
+          }),
+        };
+      }
       return { doc: () => {
         if (name === 'failed_jobs') return mocks.failedRef;
-        if (name === 'wahooAPIUserMappings') return mocks.mappingRef;
         return mocks.ref;
       } };
     },
@@ -109,11 +115,8 @@ import {
   claimWahooWorkoutQueueRevision,
   cleanupWahooPartialEventPersistence,
   completeWahooWorkoutQueueRevision,
-  acquireWahooEventPublicationLease,
-  createWahooEventWriteOwnershipGuard,
+  createWahooEventWriteConnectionGuard,
   failWahooWorkoutQueueRevision,
-  getClaimedWahooWorkoutQueueRevisionEventWriteFence,
-  releaseWahooEventPublicationLease,
   upsertWahooWorkoutQueueItem,
 } from './queue-store';
 
@@ -286,131 +289,59 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.transactionUpdate).not.toHaveBeenCalled();
   });
 
-  it('does not create an event-write fence after Wahoo ownership transfers', async () => {
-    mocks.transactionGet.mockImplementation((ref: unknown) => {
-      if (ref === mocks.ref) {
-        return Promise.resolve({
-          exists: true,
-          data: () => ({ ...input, processingOwner: 'worker-1' }),
-        });
-      }
-      return Promise.resolve({
-        exists: true,
-        data: () => ({ firebaseUserID: 'new-firebase-owner' }),
-      });
-    });
-
-    await expect(getClaimedWahooWorkoutQueueRevisionEventWriteFence(
+  it('permits event writes only while the exact Wahoo token and claimed revision remain current', async () => {
+    const guard = createWahooEventWriteConnectionGuard(
       { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
       'worker-1',
-    )).resolves.toBeNull();
-    expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.ref);
-    expect(mocks.transactionGet).toHaveBeenCalledWith(mocks.mappingRef);
-  });
-
-  it('captures the Wahoo ownership version for a claimed current revision', async () => {
-    mocks.transactionGet.mockImplementation((ref: unknown) => {
-      if (ref === mocks.ref) {
-        return Promise.resolve({
-          exists: true,
-          data: () => ({ ...input, processingOwner: 'worker-1' }),
-        });
-      }
-      return Promise.resolve({
-        exists: true,
-        data: () => ({ firebaseUserID: input.firebaseUserID, ownershipVersion: 7 }),
-      });
-    });
-
-    await expect(getClaimedWahooWorkoutQueueRevisionEventWriteFence(
-      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
-      'worker-1',
-    )).resolves.toEqual({
-      firebaseUserID: input.firebaseUserID,
-      wahooUserID: input.wahooUserID,
-      ownershipVersion: 7,
-    });
-  });
-
-  it('rejects event writes when the captured Wahoo mapping version is superseded', async () => {
-    const publicationFence = {
-      firebaseUserID: input.firebaseUserID,
-      wahooUserID: input.wahooUserID,
-      ownershipVersion: 7,
-      publicationLease: {
-        leaseID: 'publication-lease-1',
-        expiresAt: Date.now() + 60_000,
-      },
-    };
-    const guard = createWahooEventWriteOwnershipGuard(publicationFence);
+    );
     const transaction = {
-      get: vi.fn().mockResolvedValue({
-        exists: true,
-        data: () => ({ firebaseUserID: 'new-firebase-owner', ownershipVersion: 8 }),
+      get: vi.fn((ref: unknown) => {
+        if (ref === mocks.tokenRef) {
+          return Promise.resolve({
+            exists: true,
+            data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
+          });
+        }
+        return Promise.resolve({
+          exists: true,
+          data: () => ({ ...input, processingOwner: 'worker-1' }),
+        });
       }),
     } as unknown as admin.firestore.Transaction;
 
-    await expect(guard(transaction)).resolves.toBe(false);
-    expect(transaction.get).toHaveBeenCalledWith(mocks.mappingRef);
-
-    transaction.get.mockResolvedValue({
-      exists: true,
-      data: () => ({
-        firebaseUserID: input.firebaseUserID,
-        ownershipVersion: 7,
-        eventPublicationLeases: [publicationFence.publicationLease],
-      }),
-    });
     await expect(guard(transaction)).resolves.toBe(true);
+    expect(transaction.get).toHaveBeenCalledWith(mocks.tokenRef);
+    expect(transaction.get).toHaveBeenCalledWith(mocks.ref);
   });
 
-  it('leases publication on the ownership mapping and releases only its own lease', async () => {
-    const otherPublicationLease = {
-      leaseID: 'publication-lease-other',
-      expiresAt: Date.now() + 60_000,
-    };
-    mocks.transactionGet.mockResolvedValue({
-      exists: true,
-      data: () => ({
-        firebaseUserID: input.firebaseUserID,
-        ownershipVersion: 7,
-        eventPublicationLeases: [otherPublicationLease],
-      }),
-    });
-    const ownershipFence = {
-      firebaseUserID: input.firebaseUserID,
-      wahooUserID: input.wahooUserID,
-      ownershipVersion: 7,
-    };
+  it('rejects event writes after the Wahoo token disappears or the queue revision is superseded', async () => {
+    const guard = createWahooEventWriteConnectionGuard(
+      { ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface,
+      'worker-1',
+    );
+    const transaction = {
+      get: vi.fn((ref: unknown) => Promise.resolve(ref === mocks.tokenRef
+        ? { exists: false }
+        : { exists: true, data: () => ({ ...input, processingOwner: 'worker-1' }) })),
+    } as unknown as admin.firestore.Transaction;
 
-    const publicationFence = await acquireWahooEventPublicationLease(ownershipFence);
+    await expect(guard(transaction)).resolves.toBe(false);
 
-    expect(publicationFence).toEqual(expect.objectContaining({
-      ...ownershipFence,
-      publicationLease: expect.objectContaining({
-        leaseID: expect.any(String),
-        expiresAt: expect.any(Number),
-      }),
-    }));
-    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.mappingRef, {
-      eventPublicationLeases: [
-        otherPublicationLease,
-        expect.objectContaining({ leaseID: expect.any(String) }),
-      ],
-    });
-
-    mocks.transactionGet.mockResolvedValue({
-      exists: true,
-      data: () => ({
-        firebaseUserID: input.firebaseUserID,
-        ownershipVersion: 7,
-        eventPublicationLeases: [publicationFence!.publicationLease, otherPublicationLease],
-      }),
-    });
-    await releaseWahooEventPublicationLease(publicationFence!);
-    expect(mocks.transactionUpdate).toHaveBeenLastCalledWith(mocks.mappingRef, {
-      eventPublicationLeases: [otherPublicationLease],
-    });
+    vi.mocked(transaction.get).mockImplementation((ref: unknown) => Promise.resolve(ref === mocks.tokenRef
+      ? {
+        exists: true,
+        data: () => ({ serviceName: ServiceNames.WahooAPI, wahooUserID: input.wahooUserID }),
+      }
+      : {
+        exists: true,
+        data: () => ({
+          ...input,
+          workoutSummaryID: 'summary-2',
+          summaryUpdatedAt: '2026-07-18T11:00:00.000Z',
+          processingOwner: 'worker-2',
+        }),
+      }) as never);
+    await expect(guard(transaction)).resolves.toBe(false);
   });
 
   it('recursively removes only roots created by a rejected attempt, preserving older deterministic revisions', async () => {

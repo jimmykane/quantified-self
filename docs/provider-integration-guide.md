@@ -85,9 +85,9 @@ OAuth is a server-owned integration. The browser starts and completes the user e
 ### Identity rules
 
 - Prefer a stable provider user ID over a display name, email, or mutable device identifier.
-- If one provider account may belong to only one Quantified Self account, enforce the mapping atomically in a Firestore transaction.
-- Store the mapping separately from credentials when webhook resolution needs it. Verify current ownership before deleting a mapping; another connection may have claimed it while cleanup was in flight.
-- When an imported original file is published into a user-readable Storage path, serialize that publication with a transferable provider identity. A mapping-backed publication lease must be acquired before event writes, honored by the OAuth transfer transaction, and held through final file publication. If an ownership fence rejects after partial persistence, recursively remove the event root and every linked activity tree before releasing the lease.
+- If one provider account may belong to only one Quantified Self account, use the shared duplicate-token query and cleanup lifecycle unless the provider requires stronger atomic transfer semantics.
+- Prefer resolving webhook identity from indexed, server-only token documents when the stable provider ID is stored with the credential. Require exactly one structurally valid match and fail closed on ambiguity. Add a separate mapping only when token-index resolution is insufficient; if a mapping is transferable, verify current ownership before cleanup.
+- When an imported original file is published into a user-readable Storage path, transactionally recheck the current connection and queue revision for every event/activity write and immediately before file promotion. Stage the file outside user-readable paths until those checks succeed. If a guard rejects after partial persistence, recursively remove only document roots created by that attempt. Providers that truly need atomic identity transfer may add a mapping-backed publication lease, but it is not the default model.
 - Use the shared `getServiceAdapter()` factory and `ServiceAuthAdapter` lifecycle. Do not create a provider-specific token refresh path that bypasses shared deauthorization, cleanup, or safe metadata behavior.
 - Refresh access tokens only when a provider request needs one, persist rotation safely, and never log token values or signed authorization URLs.
 
@@ -105,7 +105,7 @@ Separate state by trust boundary.
 | State                            | Typical location                            | Browser access                                                     |
 | -------------------------------- | ------------------------------------------- | ------------------------------------------------------------------ |
 | OAuth access/refresh tokens      | Provider token root and token subcollection | Never readable or writable                                         |
-| Provider-to-Firebase mapping     | Server-owned top-level mapping collection   | Never readable or writable                                         |
+| Optional provider-to-Firebase mapping | Server-owned top-level collection when token-index lookup is insufficient | Never readable or writable                              |
 | Safe connection status           | `users/{uid}/meta/<Provider>`               | Owner may read the limited projection; client does not write it    |
 | Queue and failed jobs            | Server-owned queue and DLQ collections      | No client writes; admin read only where the Rules model permits it |
 | Imported event and original file | Existing event/file model                   | Follow the established event and Storage access model              |
@@ -115,7 +115,7 @@ For every new persistent write path:
 - Use the shared Firestore write sanitizer for event/activity documents. Never persist `streams` or top-level `activities` in an event document.
 - Validate external payloads defensively. Treat every field as optional or untrusted until normalized.
 - Keep provider credentials and signed download URLs out of safe metadata, events, error text, analytics, logs, and admin responses.
-- Add Firestore Rules tests proving browser denial for token roots, mappings, queues, and backend-owned connection fields, plus owner read access for the safe projection.
+- Add Firestore Rules tests proving browser denial for token roots, optional mappings, queues, and backend-owned connection fields, plus owner read access for the safe projection.
 - Add indexes deliberately for scheduled scans, queue status, pending disconnect retries, and history leases. Check the emulator and deployed index requirements before launch.
 
 ## 6. Ingestion: webhooks, history, and idempotent queues
@@ -123,7 +123,7 @@ For every new persistent write path:
 ### Webhooks
 
 - Verify the provider's documented authentication or shared secret before accepting work. Reject malformed, unrelated, unknown, disconnected, deletion-pending, and non-entitled payloads before queueing.
-- Resolve the provider identity through the server-owned mapping, not browser-visible metadata.
+- Resolve provider identity through server-owned credentials or an optional server-owned mapping, never browser-visible metadata. Token-index lookup must validate the expected collection path and reject ambiguous matches.
 - Treat webhook delivery as at-least-once. Duplicate, delayed, and out-of-order deliveries must not create duplicate events.
 - If provider revisions exist, persist a revision timestamp or version. A newer revision should safely supersede an older queued one; an older delivery must not reopen or overwrite newer work.
 - Return quickly. Queue a compact, validated work reference rather than doing file download, parsing, or event persistence in the webhook handler.
@@ -219,7 +219,7 @@ Every new provider needs a lifecycle plan before it is enabled.
 2. If the partner call fails transiently, record the shared disconnect-pending state and pause new work rather than pretending the connection is gone.
 3. Keep disconnect available even when a formerly-Pro user no longer has entitlement.
 4. Use the scheduled pending-disconnect retry workflow; add the provider token root to its collection configuration.
-5. When cleanup runs, recursively remove provider token subtrees and feature-owned operational state, including queues, mappings, history leases, and pending disconnect state.
+5. When cleanup runs, recursively remove provider token subtrees and feature-owned operational state, including queues, optional mappings, history leases, and pending disconnect state.
 
 ### Subscription enforcement
 
@@ -227,7 +227,7 @@ If a provider is Pro-only, add it to the scheduled entitlement scan and its toke
 
 ### Account deletion
 
-Account deletion is not merely token deletion. Add provider identity discovery and recursive cleanup for all feature-owned top-level state, including queue items, DLQ records, mappings, leases, and scheduler cursor/checkpoint documents when keyed by user. The deletion tombstone is the durable signal; missing user roots alone are not enough.
+Account deletion is not merely token deletion. Add provider identity discovery and recursive cleanup for all feature-owned top-level state, including queue items, DLQ records, optional mappings, leases, and scheduler cursor/checkpoint documents when keyed by user. The deletion tombstone is the durable signal; missing user roots alone are not enough.
 
 Existing imported events are product-policy decisions. State explicitly whether disconnect, entitlement expiry, and account deletion each retain or remove them. Wahoo retains imported events on disconnect but removes account-associated data on account deletion.
 
@@ -262,7 +262,7 @@ The current admin UI is aggregate observability. It does not provide provider-sp
 
 ### What to monitor after release
 
-- OAuth starts, callback failures, provider denial/cancel rates, identity-mapping conflicts, and token-refresh failures;
+- OAuth starts, callback failures, provider denial/cancel rates, duplicate or ambiguous provider identities, and token-refresh failures;
 - webhook authentication failures, accepted/skipped payloads, duplicate/superseded revisions, and history lease collisions;
 - queue depth, age/lag, retries, stuck work, DLQ growth, and Cloud Task dispatch failures;
 - provider 429s, pagination errors, signed-file download rejects, timeouts, parsing failures, and original-file retention failures;
@@ -277,12 +277,12 @@ Add deterministic tests next to the code being changed. The minimum set for an a
 | Area             | Required assertions                                                                                                                                                                             |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Shared contracts | Service enum/metadata, provider presentation, source icon, function manifest, and required configuration validation (plus any explicitly approved rollout gate).                                  |
-| OAuth            | State binding, approved redirect, explicit provider denial, incomplete callback, token refresh/rotation, stable identity, mapping conflict, and disconnect after entitlement expiry.            |
+| OAuth            | State binding, approved redirect, explicit provider denial, incomplete callback, token refresh/rotation, stable identity, duplicate handling, and disconnect after entitlement expiry.             |
 | API boundary     | Request timeout, input normalization, pagination, rate-limit mapping, secret redaction, and no unsafe retry behavior.                                                                           |
 | Webhook/history  | Authentication, entitlement/connection/deletion rejection, deterministic IDs, duplicate delivery, out-of-order or newer revision, date boundaries, skip rules, and lease contention.            |
 | File worker      | Allowed host/redirect checks, unsafe URL rejection, size/type/FIT validation, timeout, retry/DLQ behavior, and original-file persistence.                                                       |
 | Lifecycle        | Disconnect pending/retry, entitlement enforcement, cleanup ownership races, recursive deletion, and account deletion guards before every write.                                                 |
-| Rules            | Token/mapping/queue client denial and safe owner metadata read.                                                                                                                                 |
+| Rules            | Token/queue client denial, optional-mapping denial, and safe owner metadata read.                                                                                                               |
 | Frontend         | Provider navigation, query selection, connection states, focused tool dialog, Pro and keyboard-accessible upsell behavior, help, policies, integration page, route metadata, sitemap, and logo. |
 | Admin            | Queue stats inclusion, user filter/enrichment, labels/logos, and existing admin authorization.                                                                                                  |
 
@@ -329,7 +329,7 @@ Run commands from the appropriate checked-out worktree. Do not deploy, publish, 
 - **Checking account deletion only at ingress.** Deletion can begin during download or parsing. Guard before enqueue, processing, persistence, and transactional follow-up writes.
 - **Deleting a root document non-recursively.** Token roots and feature state can have subcollections. Use `recursiveDelete` for subtree-capable cleanup.
 - **Making disconnect dependent on Pro.** Users must be able to revoke access after their plan changes. Separate connect/import authorization from disconnect authorization.
-- **Giving the client access to useful-looking operational fields.** Token roots, mappings, queues, retry state, and disconnect controls are backend-owned even when the browser shows a connection badge.
+- **Giving the client access to useful-looking operational fields.** Token roots, optional mappings, queues, retry state, and disconnect controls are backend-owned even when the browser shows a connection badge.
 - **Adding only the service card.** A provider is incomplete without help, policies, integration page/SEO where appropriate, attribution, Rules, admin visibility, cleanup, and tests.
 - **Adding an admin action without an operation model.** Aggregate monitoring is safe by default. Manual retry/replay must define authorization, idempotency, deletion checks, auditability, rate limits, and cross-provider parity.
 - **Forgetting deployment order.** A released app must not depend on an unpublished sports-lib version, missing Cloud Task queue, missing index, missing Rules deployment, or unregistered webhook/redirect URI.

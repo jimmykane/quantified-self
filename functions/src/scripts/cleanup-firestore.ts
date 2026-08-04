@@ -6,7 +6,6 @@ import * as readline from 'readline';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 import {
     WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
-    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
     WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 } from '../wahoo/constants';
 
@@ -34,7 +33,6 @@ const COLLECTION_GROUPS = [
     "suuntoAppWorkoutQueue",
     "COROSAPIWorkoutQueue",
     WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
-    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
     "system",
     "config",
     "failed_jobs"

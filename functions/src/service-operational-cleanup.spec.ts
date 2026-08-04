@@ -10,22 +10,14 @@ interface FirestoreDocMock {
 const {
   mockCollection,
   mockCollectionGroup,
-  mockCollectionGroupWhere,
   mockRecursiveDelete,
-  mockMappingDelete,
-  mockRunTransaction,
   mockMarkQueueItemDeletedForUserCleanup,
   queryDocsByKey,
   activeTokenDocs,
-  mappingDataById,
-  mappingTransferOnFirstTransactionAttempt,
 } = vi.hoisted(() => {
   const queryDocsByKey = new Map<string, FirestoreDocMock[]>();
   const activeTokenDocs: FirestoreDocMock[] = [];
-  const mappingDataById = new Map<string, Record<string, unknown>>();
-  const mappingTransferOnFirstTransactionAttempt = new Map<string, Record<string, unknown>>();
   const mockRecursiveDelete = vi.fn().mockResolvedValue(undefined);
-  const mockMappingDelete = vi.fn().mockResolvedValue(undefined);
   const mockMarkQueueItemDeletedForUserCleanup = vi.fn().mockResolvedValue(true);
 
   const buildSnapshot = (docs: FirestoreDocMock[]) => ({
@@ -43,53 +35,10 @@ const {
     doc: vi.fn((id: string) => ({ path: `${collectionName}/${id}` })),
   }));
 
-  const mockRunTransaction = vi.fn(async (handler: (transaction: {
-    get: (ref: { path: string }) => Promise<{ exists: boolean; data: () => Record<string, unknown> | undefined }>;
-    delete: (ref: { path: string }) => void;
-  }) => Promise<boolean>) => {
-    const executeAttempt = async () => {
-      const pendingDeletes: Array<{ path: string }> = [];
-      const result = await handler({
-        get: async (ref) => {
-          const key = ref.path.replace('/', ':');
-          return {
-            exists: mappingDataById.has(key),
-            data: () => mappingDataById.get(key),
-          };
-        },
-        delete: (ref) => pendingDeletes.push(ref),
-      });
-      return { pendingDeletes, result };
-    };
-
-    const firstAttempt = await executeAttempt();
-    const transferredMapping = firstAttempt.pendingDeletes
-      .map((ref) => ({ ref, data: mappingTransferOnFirstTransactionAttempt.get(ref.path.replace('/', ':')) }))
-      .find(({ data }) => !!data);
-    if (transferredMapping?.data) {
-      mappingDataById.set(transferredMapping.ref.path.replace('/', ':'), transferredMapping.data);
-      mappingTransferOnFirstTransactionAttempt.delete(transferredMapping.ref.path.replace('/', ':'));
-      const retry = await executeAttempt();
-      for (const ref of retry.pendingDeletes) {
-        mappingDataById.delete(ref.path.replace('/', ':'));
-        mockMappingDelete(ref);
-      }
-      return retry.result;
-    }
-
-    for (const ref of firstAttempt.pendingDeletes) {
-      mappingDataById.delete(ref.path.replace('/', ':'));
-      mockMappingDelete(ref);
-    }
-    return firstAttempt.result;
-  });
-
-  const mockCollectionGroupWhere = vi.fn();
   const mockCollectionGroup = vi.fn(() => {
     const predicates: Array<{ fieldName: string; value: string }> = [];
     const query = {
       where: (fieldName: string, _operator: string, value: string) => {
-        mockCollectionGroupWhere(fieldName, _operator, value);
         predicates.push({ fieldName, value });
         return query;
       },
@@ -104,15 +53,10 @@ const {
   return {
     mockCollection,
     mockCollectionGroup,
-    mockCollectionGroupWhere,
     mockRecursiveDelete,
-    mockMappingDelete,
-    mockRunTransaction,
     mockMarkQueueItemDeletedForUserCleanup,
     queryDocsByKey,
     activeTokenDocs,
-    mappingDataById,
-    mappingTransferOnFirstTransactionAttempt,
   };
 });
 
@@ -121,7 +65,6 @@ vi.mock('firebase-admin', () => {
     collection: mockCollection,
     collectionGroup: mockCollectionGroup,
     recursiveDelete: mockRecursiveDelete,
-    runTransaction: mockRunTransaction,
   }), {});
 
   return {
@@ -158,8 +101,6 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
     vi.clearAllMocks();
     queryDocsByKey.clear();
     activeTokenDocs.length = 0;
-    mappingDataById.clear();
-    mappingTransferOnFirstTransactionAttempt.clear();
   });
 
   it('deletes provider-keyed queue and DLQ docs while the service token still exposes the provider id', async () => {
@@ -393,65 +334,4 @@ describe('cleanupProviderOperationalDocsForServiceToken', () => {
     expect(mockRecursiveDelete).not.toHaveBeenCalled();
   });
 
-  it('deletes a disconnected Wahoo user mapping owned by the Firebase user', async () => {
-    mappingDataById.set('wahooAPIUserMappings:wahoo-user', {
-      firebaseUserID: 'firebase-user-123',
-      wahooUserID: 'wahoo-user',
-    });
-
-    const result = await cleanupProviderOperationalDocsForServiceToken(
-      'firebase-user-123',
-      ServiceNames.WahooAPI,
-      {
-        serviceName: ServiceNames.WahooAPI,
-        wahooUserID: 'wahoo-user',
-      },
-    );
-
-    expect(result).toMatchObject({
-      providerUserId: 'wahoo-user',
-      deletedDocCount: 1,
-      skippedForActiveConnection: false,
-    });
-    expect(mockMappingDelete).toHaveBeenCalledOnce();
-    expect(mockCollectionGroupWhere).toHaveBeenNthCalledWith(
-      1,
-      'wahooUserID',
-      '==',
-      'wahoo-user',
-    );
-    expect(mockCollectionGroupWhere).toHaveBeenNthCalledWith(
-      2,
-      'serviceName',
-      '==',
-      ServiceNames.WahooAPI,
-    );
-  });
-
-  it('preserves a Wahoo mapping transferred to another Firebase user while cleanup is in flight', async () => {
-    mappingDataById.set('wahooAPIUserMappings:wahoo-user', {
-      firebaseUserID: 'firebase-user-123',
-      wahooUserID: 'wahoo-user',
-    });
-    mappingTransferOnFirstTransactionAttempt.set('wahooAPIUserMappings:wahoo-user', {
-      firebaseUserID: 'new-firebase-user',
-      wahooUserID: 'wahoo-user',
-    });
-
-    const result = await cleanupProviderOperationalDocsForServiceToken(
-      'firebase-user-123',
-      ServiceNames.WahooAPI,
-      {
-        serviceName: ServiceNames.WahooAPI,
-        wahooUserID: 'wahoo-user',
-      },
-    );
-
-    expect(result.deletedDocCount).toBe(0);
-    expect(mockRunTransaction).toHaveBeenCalledOnce();
-    expect(mockMappingDelete).not.toHaveBeenCalled();
-    expect(mappingDataById.get('wahooAPIUserMappings:wahoo-user')).toMatchObject({
-      firebaseUserID: 'new-firebase-user',
-    });
-  });
 });

@@ -14,7 +14,6 @@ import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import {
     WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
-    WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
     WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 } from '../wahoo/constants';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
@@ -363,50 +362,6 @@ async function recursiveDeleteQueryResults(
             }
         } catch (error) {
             logger.error(`[Cleanup] Failed to recursively delete ${label} docs for user ${uid} from ${collectionName} where ${fieldName} == ${value}`, error);
-        }
-    }
-}
-
-async function deleteWahooUserMappingsOwnedByUser(
-    db: admin.firestore.Firestore,
-    uid: string,
-    values: Iterable<string>,
-    deletedRefKeys: Set<string>,
-): Promise<void> {
-    for (const value of new Set([...values].map((candidate) => `${candidate || ''}`.trim()).filter(Boolean))) {
-        try {
-            const snapshot = await db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME)
-                .where('firebaseUserID', '==', value)
-                .get();
-            let deletedDocCount = 0;
-            for (const doc of getSnapshotDocs(snapshot)) {
-                const refKey = getRefDeduplicationKey(doc.ref);
-                if (deletedRefKeys.has(refKey)) {
-                    continue;
-                }
-
-                const mappingDeleted = await db.runTransaction(async (transaction) => {
-                    const latestSnapshot = await transaction.get(doc.ref);
-                    if (!latestSnapshot.exists || asNonEmptyString(latestSnapshot.data()?.firebaseUserID) !== uid) {
-                        return false;
-                    }
-
-                    // Mapping documents cannot have descendants by design, so a transactional document delete is sufficient.
-                    transaction.delete(doc.ref);
-                    return true;
-                });
-                if (!mappingDeleted) {
-                    continue;
-                }
-
-                deletedRefKeys.add(refKey);
-                deletedDocCount += 1;
-            }
-            if (deletedDocCount > 0) {
-                logger.info(`[Cleanup] Transactionally deleted ${deletedDocCount} Wahoo user mapping docs for user ${uid}`);
-            }
-        } catch (error) {
-            logger.error(`[Cleanup] Failed to transactionally delete Wahoo user mappings for user ${uid}`, error);
         }
     }
 }
@@ -930,7 +885,6 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
     await recursiveDeleteQueryResults(db, uid, 'Garmin workout queue', GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter(GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME));
     await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'Wahoo workout queue', WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME, 'wahooUserID', wahooValues, deletedRefKeys, providerKeyedDeleteFilter(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME));
-    await deleteWahooUserMappingsOwnedByUser(db, uid, firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', firebaseUIDValues, deletedRefKeys, failedJobFirebaseUidDeleteFilter);
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'userID', garminValues, deletedRefKeys, providerKeyedDeleteFilter('failed_jobs'));
     await recursiveDeleteQueryResults(db, uid, 'failed job', 'failed_jobs', 'firebaseUserID', firebaseUIDValues, deletedRefKeys);

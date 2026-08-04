@@ -175,20 +175,17 @@ describe('Firestore Security Rules', () => {
     describe('Wahoo server-owned integration state', () => {
         const userId = 'wahoo_user';
 
-        it('denies browser reads and writes for Wahoo OAuth credentials and mappings', async () => {
+        it('denies browser reads and writes for Wahoo OAuth credentials', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc(`wahooAPIAccessTokens/${userId}/tokens/42`).set({
                     accessToken: 'secret',
                     refreshToken: 'rotating-secret',
                     wahooUserID: '42',
                 });
-                await context.firestore().doc('wahooAPIUserMappings/42').set({ firebaseUserID: userId });
             });
             const db = testEnv.authenticatedContext(userId).firestore();
             await assertFails(db.doc(`wahooAPIAccessTokens/${userId}/tokens/42`).get());
             await assertFails(db.doc(`wahooAPIAccessTokens/${userId}/tokens/42`).set({ accessToken: 'forged' }));
-            await assertFails(db.doc('wahooAPIUserMappings/42').get());
-            await assertFails(db.doc('wahooAPIUserMappings/42').set({ firebaseUserID: userId }));
         });
 
         it('allows the owner to read only the safe Wahoo connection metadata projection', async () => {

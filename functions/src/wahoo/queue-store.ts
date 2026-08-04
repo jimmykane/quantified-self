@@ -1,6 +1,5 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import {
   enqueueWorkoutTaskWithDispatchRecovery,
@@ -19,62 +18,18 @@ import { QueueResult } from '../queue-utils';
 import type { EventWriteTransactionGuard } from '../utils';
 import {
   SERVICE_NAME,
-  WAHOO_API_USER_MAPPINGS_COLLECTION_NAME,
+  WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
   WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
 } from './constants';
 
 export type WahooQueueDispatchMode = 'immediate' | 'deferred';
 export type WahooQueueClaimResult = 'claimed' | 'superseded' | 'busy';
 
-export interface WahooEventWriteOwnershipFence {
-  firebaseUserID: string;
-  wahooUserID: string;
-  ownershipVersion: number;
-}
-
-interface WahooEventPublicationLease {
-  leaseID: string;
-  expiresAt: number;
-}
-
-export interface WahooEventPublicationFence extends WahooEventWriteOwnershipFence {
-  publicationLease: WahooEventPublicationLease;
-}
-
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
-// The task worker is limited to nine minutes. Keep the publication lease
-// longer so an ownership transfer cannot overtake a still-running worker.
-const EVENT_PUBLICATION_LEASE_MS = 10 * 60 * 1000;
 
 function revisionTime(value: unknown): number {
   const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function ownershipVersion(value: unknown): number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : 0;
-}
-
-function getActiveEventPublicationLeases(
-  value: unknown,
-  now: number = Date.now(),
-): WahooEventPublicationLease[] {
-  if (!Array.isArray(value)) return [];
-
-  const leaseIDs = new Set<string>();
-  return value.flatMap((candidate): WahooEventPublicationLease[] => {
-    if (!candidate || typeof candidate !== 'object') return [];
-    const record = candidate as Record<string, unknown>;
-    const leaseID = `${record.leaseID || ''}`.trim();
-    const expiresAt = Number(record.expiresAt);
-    if (!leaseID || !Number.isFinite(expiresAt) || expiresAt <= now || leaseIDs.has(leaseID)) {
-      return [];
-    }
-    leaseIDs.add(leaseID);
-    return [{ leaseID, expiresAt }];
-  });
 }
 
 function hasSameRevision(
@@ -301,104 +256,12 @@ export async function claimWahooWorkoutQueueRevision(
   });
 }
 
-export async function getClaimedWahooWorkoutQueueRevisionEventWriteFence(
-  queueItem: WahooAPIWorkoutQueueItemInterface,
-  processingOwner: string,
-): Promise<WahooEventWriteOwnershipFence | null> {
-  if (!queueItem.ref) return null;
-  const db = admin.firestore();
-  const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(queueItem.wahooUserID);
-  return db.runTransaction(async (transaction) => {
-    const [snapshot, mappingSnapshot] = await Promise.all([
-      transaction.get(queueItem.ref!),
-      transaction.get(mappingRef),
-    ]);
-    if (!snapshot.exists || !mappingSnapshot.exists) return null;
-    const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
-    const currentOwner = `${mappingSnapshot.data()?.firebaseUserID || ''}`.trim();
-    const firebaseUserID = `${queueItem.firebaseUserID || ''}`.trim();
-    if (!hasSameRevision(current, queueItem)
-      || current.processingOwner !== processingOwner
-      || currentOwner !== firebaseUserID) {
-      return null;
-    }
-    return {
-      firebaseUserID,
-      wahooUserID: queueItem.wahooUserID,
-      ownershipVersion: ownershipVersion(mappingSnapshot.data()?.ownershipVersion),
-    };
-  });
-}
-
-/**
- * Makes a Wahoo event publication mutually exclusive with an ownership
- * transfer. OAuth transfers read and honor the same mapping document, so the
- * transaction that creates this lease conflicts with a competing transfer.
- */
-export async function acquireWahooEventPublicationLease(
-  fence: WahooEventWriteOwnershipFence,
-): Promise<WahooEventPublicationFence | null> {
-  const db = admin.firestore();
-  const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(fence.wahooUserID);
-  const now = Date.now();
-  const publicationLease: WahooEventPublicationLease = {
-    leaseID: crypto.randomUUID(),
-    expiresAt: now + EVENT_PUBLICATION_LEASE_MS,
-  };
-
-  return db.runTransaction(async (transaction) => {
-    const mappingSnapshot = await transaction.get(mappingRef);
-    if (!mappingSnapshot.exists) return null;
-
-    const currentMapping = mappingSnapshot.data();
-    const isCurrentOwner = `${currentMapping?.firebaseUserID || ''}`.trim() === fence.firebaseUserID
-      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion;
-    if (!isCurrentOwner) return null;
-
-    const activeLeases = getActiveEventPublicationLeases(
-      currentMapping?.eventPublicationLeases,
-      now,
-    );
-    transaction.update(mappingRef, {
-      eventPublicationLeases: [...activeLeases, publicationLease],
-    });
-    return {
-      ...fence,
-      publicationLease,
-    };
-  });
-}
-
-export async function releaseWahooEventPublicationLease(
-  fence: WahooEventPublicationFence,
-): Promise<void> {
-  const db = admin.firestore();
-  const mappingRef = db.collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME).doc(fence.wahooUserID);
-  await db.runTransaction(async (transaction) => {
-    const mappingSnapshot = await transaction.get(mappingRef);
-    if (!mappingSnapshot.exists) return;
-
-    const currentMapping = mappingSnapshot.data();
-    const isCurrentOwner = `${currentMapping?.firebaseUserID || ''}`.trim() === fence.firebaseUserID
-      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion;
-    if (!isCurrentOwner) return;
-
-    const remainingLeases = getActiveEventPublicationLeases(currentMapping?.eventPublicationLeases)
-      .filter(({ leaseID }) => leaseID !== fence.publicationLease.leaseID);
-    transaction.update(mappingRef, {
-      eventPublicationLeases: remainingLeases.length > 0
-        ? remainingLeases
-        : FieldValue.delete(),
-    });
-  });
-}
-
 /**
  * Removes only document roots that were created by the rejected Wahoo write
  * attempt. Wahoo revision imports deliberately reuse deterministic event and
  * activity IDs, so deleting by event ID would erase an already-imported
- * workout when a later revision is interrupted by disconnect or ownership
- * loss.
+ * workout when a later revision is interrupted by disconnect or superseded
+ * queue work.
  */
 export async function cleanupWahooPartialEventPersistence(
   userID: string,
@@ -427,25 +290,39 @@ export async function cleanupWahooPartialEventPersistence(
 }
 
 /**
- * Every event/activity document write reads this same mapping in its own
- * write transaction. A concurrent OAuth ownership transfer writes the mapping
- * and therefore conflicts with that transaction rather than racing after a
- * read-only precheck.
+ * Every event/activity document write verifies the exact server-side token
+ * and the claimed queue revision in its own transaction. Token deletion or a
+ * newer Wahoo summary therefore conflicts with in-flight persistence instead
+ * of racing after a read-only precheck.
  */
-export function createWahooEventWriteOwnershipGuard(
-  fence: WahooEventPublicationFence,
+export function createWahooEventWriteConnectionGuard(
+  queueItem: WahooAPIWorkoutQueueItemInterface,
+  processingOwner: string,
 ): EventWriteTransactionGuard {
-  const mappingRef = admin.firestore()
-    .collection(WAHOO_API_USER_MAPPINGS_COLLECTION_NAME)
-    .doc(fence.wahooUserID);
+  const firebaseUserID = `${queueItem.firebaseUserID || ''}`.trim();
+  const wahooUserID = `${queueItem.wahooUserID || ''}`.trim();
+  const queueItemRef = queueItem.ref;
+  if (!firebaseUserID || !wahooUserID || !queueItemRef) {
+    return async () => false;
+  }
+
+  const tokenRef = admin.firestore()
+    .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
+    .doc(firebaseUserID)
+    .collection('tokens')
+    .doc(wahooUserID);
   return async (transaction) => {
-    const mappingSnapshot = await transaction.get(mappingRef);
-    if (!mappingSnapshot.exists) return false;
-    const currentMapping = mappingSnapshot.data();
-    return `${currentMapping?.firebaseUserID || ''}`.trim() === fence.firebaseUserID
-      && ownershipVersion(currentMapping?.ownershipVersion) === fence.ownershipVersion
-      && getActiveEventPublicationLeases(currentMapping?.eventPublicationLeases)
-        .some(({ leaseID }) => leaseID === fence.publicationLease.leaseID);
+    const [tokenSnapshot, queueSnapshot] = await Promise.all([
+      transaction.get(tokenRef),
+      transaction.get(queueItemRef),
+    ]);
+    if (!tokenSnapshot.exists || !queueSnapshot.exists) return false;
+    const token = tokenSnapshot.data();
+    const currentQueueItem = queueSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
+    return token?.serviceName === SERVICE_NAME
+      && `${token?.wahooUserID || ''}`.trim() === wahooUserID
+      && hasSameRevision(currentQueueItem, queueItem)
+      && currentQueueItem.processingOwner === processingOwner;
   };
 }
 
