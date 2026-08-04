@@ -19,7 +19,13 @@ import { CalendarPageComponent } from './calendar-page.component';
 describe('CalendarPageComponent', () => {
   const user = {
     uid: 'user-1',
-    settings: { unitSettings: { startOfTheWeek: DaysOfTheWeek.Monday } },
+    settings: {
+      unitSettings: { startOfTheWeek: DaysOfTheWeek.Monday },
+      summariesSettings: {
+        removeAscentForEventTypes: [ActivityTypes.Cycling],
+        removeDescentForEventTypes: [ActivityTypes.Cycling],
+      },
+    },
   };
   let queryParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
   let navigate: ReturnType<typeof vi.fn>;
@@ -115,6 +121,21 @@ describe('CalendarPageComponent', () => {
     fixture.componentInstance.selectVolumeMetric('descent');
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('420 m');
+  });
+
+  it('applies the user summary exclusions to family elevation bars', async () => {
+    watchEvents.mockReturnValue(of([createEvent(new Date(2026, 7, 3, 8), ActivityTypes.Cycling)]));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    fixture.componentInstance.selectVolumeMetric('ascent');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('N/A');
+
+    fixture.componentInstance.selectVolumeMetric('descent');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('N/A');
   });
 
   it('pages by the selected view and keeps state in query parameters', () => {

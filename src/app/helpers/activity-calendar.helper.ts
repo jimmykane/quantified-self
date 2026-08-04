@@ -13,6 +13,7 @@ import {
 import { getActivityTypeGroupLabel } from '@shared/activity-type-group.metadata';
 import { AppActivityTypeGroupColors } from '../services/color/app.activity-type-group.colors';
 import { AppEventUtilities } from '../utils/app.event.utilities';
+import type { SummaryStatsSettingsLike } from './summary-stats.helper';
 import { resolveTrainingEventDisplayLabel } from './training-event-label.helper';
 
 export type ActivityCalendarView = 'week' | 'month' | 'year';
@@ -99,6 +100,7 @@ export interface BuildActivityCalendarViewModelOptions {
   view: ActivityCalendarView;
   anchorDate: Date;
   startOfWeek?: DaysOfTheWeek | number | null;
+  summariesSettings?: SummaryStatsSettingsLike | null;
   locale?: string;
   now?: Date;
 }
@@ -119,6 +121,11 @@ interface ActivityCalendarFamilyAccumulator extends ActivityCalendarFamilyIdenti
 interface ActivityCalendarPeriodFamilyAccumulator extends ActivityCalendarFamilyIdentity {
   eventCount: number;
   metrics: Record<ActivityCalendarVolumeMetric, ActivityCalendarMetricAggregate>;
+}
+
+interface ActivityCalendarElevationExclusions {
+  ascent: ReadonlySet<ActivityTypes>;
+  descent: ReadonlySet<ActivityTypes>;
 }
 
 const VALID_CALENDAR_VIEWS = new Set<ActivityCalendarView>(['week', 'month', 'year']);
@@ -247,7 +254,7 @@ export function buildActivityCalendarViewModel(
       view,
       periodLabel: `${year}`,
       months,
-      summary: buildActivityCalendarPeriodSummary(months),
+      summary: buildActivityCalendarPeriodSummary(months, options.summariesSettings),
     };
   }
 
@@ -270,7 +277,7 @@ export function buildActivityCalendarViewModel(
       view,
       periodLabel: formatWeekRange(weekStart, addLocalDays(weekStart, 6), locale),
       months,
-      summary: buildActivityCalendarPeriodSummary(months),
+      summary: buildActivityCalendarPeriodSummary(months, options.summariesSettings),
     };
   }
 
@@ -287,7 +294,7 @@ export function buildActivityCalendarViewModel(
     view,
     periodLabel: formatMonthLabel(monthStart, locale),
     months,
-    summary: buildActivityCalendarPeriodSummary(months),
+    summary: buildActivityCalendarPeriodSummary(months, options.summariesSettings),
   };
 }
 
@@ -450,9 +457,11 @@ function buildDayViewModel(
 
 function buildActivityCalendarPeriodSummary(
   months: ActivityCalendarMonthViewModel[],
+  summariesSettings?: SummaryStatsSettingsLike | null,
 ): ActivityCalendarPeriodSummary {
   const periodMetrics = createActivityCalendarMetricAggregates();
   const familyAccumulators = new Map<string, ActivityCalendarPeriodFamilyAccumulator>();
+  const elevationExclusions = resolveActivityCalendarElevationExclusions(summariesSettings);
 
   months.forEach((month) => {
     month.days.forEach((day) => {
@@ -472,11 +481,12 @@ function buildActivityCalendarPeriodSummary(
           ascent: resolveActivityCalendarEventStatValue(event, DataAscent.type),
           descent: resolveActivityCalendarEventStatValue(event, DataDescent.type),
         };
+        const elevationEligibility = resolveActivityCalendarElevationEligibility(event, elevationExclusions);
         const metricEligibility: Record<ActivityCalendarVolumeMetric, boolean> = {
           duration: true,
           distance: true,
-          ascent: isActivityCalendarElevationMetricEligible(event, 'ascent'),
-          descent: isActivityCalendarElevationMetricEligible(event, 'descent'),
+          ascent: elevationEligibility.ascent,
+          descent: elevationEligibility.descent,
         };
 
         accumulator.eventCount += 1;
@@ -540,18 +550,36 @@ function addActivityCalendarMetricValue(
   aggregate.value += value;
 }
 
-function isActivityCalendarElevationMetricEligible(
+function resolveActivityCalendarElevationEligibility(
   event: EventInterface,
-  metric: 'ascent' | 'descent',
-): boolean {
+  exclusions: ActivityCalendarElevationExclusions,
+): Pick<Record<ActivityCalendarVolumeMetric, boolean>, 'ascent' | 'descent'> {
   const activityTypes = resolveEventActivityTypes(event);
   if (!activityTypes.length) {
-    return true;
+    return { ascent: true, descent: true };
   }
 
-  return metric === 'ascent'
-    ? !AppEventUtilities.shouldExcludeAscent(activityTypes)
-    : !AppEventUtilities.shouldExcludeDescent(activityTypes);
+  return {
+    ascent: !AppEventUtilities.shouldExcludeAscent(activityTypes)
+      && !activityTypes.some(activityType => exclusions.ascent.has(activityType)),
+    descent: !AppEventUtilities.shouldExcludeDescent(activityTypes)
+      && !activityTypes.some(activityType => exclusions.descent.has(activityType)),
+  };
+}
+
+function resolveActivityCalendarElevationExclusions(
+  summariesSettings?: SummaryStatsSettingsLike | null,
+): ActivityCalendarElevationExclusions {
+  return {
+    ascent: resolveConfiguredActivityTypes(summariesSettings?.removeAscentForEventTypes),
+    descent: resolveConfiguredActivityTypes(summariesSettings?.removeDescentForEventTypes),
+  };
+}
+
+function resolveConfiguredActivityTypes(values: string[] | null | undefined): ReadonlySet<ActivityTypes> {
+  return new Set((values || [])
+    .map(value => ActivityTypesHelper.resolveActivityType(value))
+    .filter((activityType): activityType is ActivityTypes => !!activityType));
 }
 
 function groupEventsByLocalDay(events: EventInterface[]): Map<string, EventInterface[]> {

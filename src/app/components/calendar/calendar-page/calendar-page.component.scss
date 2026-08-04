@@ -402,6 +402,16 @@
   }
 }
 
+@media (max-width: 480px) {
+  .calendar-volume-option {
+    gap: 0;
+  }
+
+  .calendar-volume-option mat-icon {
+    display: none;
+  }
+}
+
 @media (max-width: 420px) {
   .calendar-view-option {
     gap: 4px;
@@ -410,12 +420,11 @@
   .calendar-view-option mat-icon {
     display: none;
   }
+}
 
+@media (max-width: 360px) {
   .calendar-volume-option {
-    gap: 0;
-  }
-
-  .calendar-volume-option mat-icon {
-    display: none;
+    font: var(--mat-sys-label-medium);
+    letter-spacing: 0;
   }
 }

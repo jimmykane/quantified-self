@@ -240,6 +240,41 @@ describe('activity-calendar helper', () => {
     expect(swimming?.metrics.descent.eligibleEventCount).toBe(0);
   });
 
+  it('honors normalized user-configured ascent and descent summary exclusions', () => {
+    const model = buildActivityCalendarViewModel([
+      createEvent('run', new Date(2026, 7, 3, 8), [ActivityTypes.Running], 3600, {
+        ascentMeters: 100,
+        descentMeters: 90,
+      }),
+      createEvent('ride', new Date(2026, 7, 4, 8), [ActivityTypes.Cycling], 3600, {
+        ascentMeters: 200,
+        descentMeters: 180,
+      }),
+    ], {
+      view: 'month',
+      anchorDate: new Date(2026, 7, 15),
+      startOfWeek: DaysOfTheWeek.Monday,
+      summariesSettings: {
+        removeAscentForEventTypes: [' running '],
+        removeDescentForEventTypes: ['CYCLING'],
+      },
+      locale: 'en-US',
+    });
+    const running = model.summary.families.find(family => (
+      family.activityTypeGroup === ActivityTypeGroups.RunningGroup
+    ));
+    const cycling = model.summary.families.find(family => (
+      family.activityTypeGroup === ActivityTypeGroups.CyclingGroup
+    ));
+
+    expect(model.summary.totalAscentMeters).toBe(200);
+    expect(model.summary.totalDescentMeters).toBe(90);
+    expect(running?.metrics.ascent.eligibleEventCount).toBe(0);
+    expect(running?.metrics.descent.value).toBe(90);
+    expect(cycling?.metrics.ascent.value).toBe(200);
+    expect(cycling?.metrics.descent.eligibleEventCount).toBe(0);
+  });
+
   it('keeps equal durations equal in separated layouts while nesting compact markers', () => {
     const model = buildActivityCalendarViewModel([
       createEvent('run-1', new Date(2026, 7, 8, 8), [ActivityTypes.Running], 3600),

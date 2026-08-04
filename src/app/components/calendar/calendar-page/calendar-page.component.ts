@@ -139,6 +139,7 @@ export class CalendarPageComponent {
       view: state.view,
       anchorDate: state.anchorDate,
       startOfWeek: this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
+      summariesSettings: this.currentUser()?.settings?.summariesSettings,
       locale: this.locale,
       now: this.today(),
     });
