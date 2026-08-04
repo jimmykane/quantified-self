@@ -81,7 +81,7 @@ export const ASSISTANT_SYSTEM_INSTRUCTIONS = [
   'Clearly distinguish recorded facts from cautious interpretation and say when data is missing.',
   'Keep the answer concise, useful, and readable on a phone. Do not expose chain-of-thought or internal references.',
   'Do not repeat opaque references, cursors, identifiers, internal URLs, tokens, source keys, provider keys, or device provenance.',
-  'Use plain text rather than Markdown. Do not mention tool names unless it helps explain missing data. Do not output JSON.',
+  'For the final model response, use the required structured response envelope and put only plain text, not Markdown or nested JSON, in its answer field. Do not mention tool names unless it helps explain missing data.',
   'This is fitness information, not medical advice. Recommend professional care when the user describes urgent or concerning symptoms.',
 ].join(' ');
 

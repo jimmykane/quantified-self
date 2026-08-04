@@ -62,6 +62,13 @@ describe('Assistant runtime', () => {
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
       'Do not repeat opaque references',
     );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'use the required structured response envelope',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain(
+      'plain text, not Markdown or nested JSON, in its answer field',
+    );
+    expect(ASSISTANT_SYSTEM_INSTRUCTIONS).not.toContain('Do not output JSON');
     expect(ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS).toContain(
       'Location searches, coordinates, routes',
     );
@@ -134,9 +141,12 @@ describe('Assistant runtime', () => {
       config: { maxOutputTokens: 1_024 },
     }));
     expect(generate).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      system: expect.stringContaining('first-party Quantified Self Assistant'),
+      system: expect.stringContaining(
+        'plain text, not Markdown or nested JSON, in its answer field',
+      ),
       toolChoice: 'auto',
       config: { maxOutputTokens: 2_048 },
+      output: { schema: expect.anything() },
       messages: expect.arrayContaining([{
         role: 'tool',
         content: [{

@@ -49,6 +49,7 @@
     "cleanup-queue": "ts-node src/scripts/cleanup-queue.ts",
     "export-users": "ts-node src/scripts/export-users.ts",
     "cleanup-firestore": "ts-node -r dotenv/config src/scripts/cleanup-firestore.ts",
+    "purge-legacy-ai-insights-snapshots": "ts-node -r dotenv/config src/scripts/purge-legacy-ai-insights-snapshots.ts",
     "cleanup-orphaned-users": "ts-node -r dotenv/config src/scripts/cleanup-orphaned-users.ts",
     "recover-suunto-outage": "ts-node -r dotenv/config src/scripts/recover-suunto-outage.ts",
     "reparse-sports-lib-events": "ts-node -r dotenv/config src/scripts/reparse-sports-lib-events.ts",

@@ -158,9 +158,20 @@ current billing-period request counts are not reset.
 
 The retired `aiInsightsPromptRepairs` collection has no remaining writer. Its `expireAt` TTL policy is intentionally
 kept as cleanup-only infrastructure until every historical record has drained, after which its field override and
-README retention row can be removed. Legacy `users/*/aiInsightsRequests/latest` documents are no longer client-readable
-or writable; account deletion still removes them recursively, and operators may bulk-delete that collection group if
-an immediate historical purge is required.
+README retention row can be removed. Legacy `users/*/aiInsightsRequests/latest` documents contain prompts and complete
+responses but predate TTL fields, so draining them is a mandatory rollout step rather than optional retention. Run the
+dedicated migration first in its default count-only mode, then execute its bounded recursive purge with explicit
+project targeting:
+
+```bash
+npm --prefix functions run purge-legacy-ai-insights-snapshots -- --project=quantified-self-io
+npm --prefix functions run purge-legacy-ai-insights-snapshots -- --project=quantified-self-io --execute
+```
+
+The execution is idempotent, processes at most 100 roots per batch by default, recursively deletes any unexpected
+descendants, and fails unless the final collection-group count is zero. Keep the client deny rule in place throughout;
+the Admin SDK migration does not require restoring browser access. Account deletion remains the defense-in-depth path
+for any user root removed while rollout is in progress.
 
 Do not log prompts, conversation text, tool arguments, tool output, coordinates, or user IDs from the Assistant path.
 Operational logs should contain only safe error classes and lifecycle outcomes. Monitor callable errors, quota failures,
