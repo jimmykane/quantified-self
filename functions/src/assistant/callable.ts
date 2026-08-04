@@ -49,6 +49,7 @@ const ASSISTANT_HOSTED_APP_ORIGINS = new Set([
 
 export interface AssistantCallableDependencies {
   assertLegalAccess: (uid: string) => Promise<void>;
+  getQuotaStatus: typeof getAssistantQuotaStatusForUser;
   reserveQuota: typeof reserveAssistantQuotaForRequest;
   finalizeQuota: typeof finalizeAssistantQuotaReservation;
   releaseQuota: typeof releaseAssistantQuotaReservation;
@@ -83,6 +84,7 @@ export async function assertAssistantLegalAccess(
 
 const defaultDependencies: AssistantCallableDependencies = {
   assertLegalAccess: assertAssistantLegalAccess,
+  getQuotaStatus: getAssistantQuotaStatusForUser,
   reserveQuota: reserveAssistantQuotaForRequest,
   finalizeQuota: finalizeAssistantQuotaReservation,
   releaseQuota: releaseAssistantQuotaReservation,
@@ -276,9 +278,6 @@ export async function runAssistantChat(
   try {
     await dependencies.assertLegalAccess(uid);
     const quotaRoleContext = resolveCallableQuotaRoleContext(context);
-    reservation = quotaRoleContext
-      ? await dependencies.reserveQuota(uid, quotaRoleContext)
-      : await dependencies.reserveQuota(uid);
     const turnStart = await dependencies.conversationStore.beginTurn(
       uid,
       input.conversationId,
@@ -291,14 +290,18 @@ export async function runAssistantChat(
           'requestId was already used for a different Assistant message.',
         );
       }
-      const quota = await dependencies.releaseQuota(reservation);
-      reservation = null;
+      const quota = quotaRoleContext
+        ? await dependencies.getQuotaStatus(uid, quotaRoleContext)
+        : await dependencies.getQuotaStatus(uid);
       return {
         conversation: turnStart.conversation,
         quota,
       };
     }
     begunTurn = turnStart;
+    reservation = quotaRoleContext
+      ? await dependencies.reserveQuota(uid, quotaRoleContext)
+      : await dependencies.reserveQuota(uid);
     const quota = await dependencies.finalizeQuota(reservation);
     reservation = null;
     const result = await dependencies.answer({

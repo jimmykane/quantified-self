@@ -353,6 +353,27 @@ describe('AssistantPageComponent', () => {
     expect(requests[2].requestId).not.toBe(requests[0].requestId);
   });
 
+  it('preserves the first request identifier when reconciliation discovers its conversation', async () => {
+    const createdConversation = {
+      ...chatResponse.conversation,
+      messages: [],
+    };
+    assistantService.sendMessage
+      .mockRejectedValueOnce(new Error('network unavailable'))
+      .mockResolvedValueOnce(chatResponse);
+    assistantService.getConversation.mockResolvedValueOnce(createdConversation);
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+    await component.sendMessage();
+
+    const requests = assistantService.sendMessage.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(2);
+    expect(requests[0].conversationId).toBeUndefined();
+    expect(requests[1].conversationId).toBe(createdConversation.conversationId);
+    expect(requests[1].requestId).toBe(requests[0].requestId);
+  });
+
   it('reloads a conversation generation changed by another tab', async () => {
     const replacementConversation = {
       ...chatResponse.conversation,

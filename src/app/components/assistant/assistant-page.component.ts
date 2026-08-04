@@ -169,9 +169,10 @@ export class AssistantPageComponent implements OnInit {
         this.errorMessage.set(null);
         this.retryRequest = null;
       } else {
-        if (refreshedConversation !== undefined
+        if (activeConversation !== null
+          && refreshedConversation !== undefined
           && refreshedConversation?.conversationId
-            !== activeConversation?.conversationId) {
+            !== activeConversation.conversationId) {
           this.retryRequest = null;
         }
         if (refreshedConversation !== undefined) {

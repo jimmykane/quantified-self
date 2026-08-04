@@ -277,6 +277,28 @@ describe('Assistant conversation store', () => {
       .toBe('2026-08-08T12:03:00.000Z');
   });
 
+  it('preserves a valid turn lock when the reader clock trails the writer', async () => {
+    const harness = createFirestoreHarness();
+    let now = new Date('2026-08-03T12:00:01.000Z');
+    let sequence = 0;
+    const store = createAssistantConversationStore({
+      db: () => harness.db as never,
+      now: () => now,
+      createId: () => `id-${++sequence}`,
+      getDeletionGuard: async () => ({
+        userExists: true,
+        deletionInProgress: false,
+        shouldSkip: false,
+      }),
+    });
+    const begun = requireStartedTurn(await store.beginTurn('user-1'));
+
+    now = new Date('2026-08-03T12:00:00.000Z');
+
+    await expect(store.beginTurn('user-1', begun.conversationId))
+      .rejects.toMatchObject({ code: 'turn_in_progress' });
+  });
+
   it('does not let malformed or impossible persisted lease data lock the conversation', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;
@@ -297,7 +319,7 @@ describe('Assistant conversation store', () => {
       ...stored,
       pendingTurn: {
         id: 'malformed-turn',
-        expiresAtMs: Date.parse('2026-08-03T12:04:00.001Z'),
+        expiresAtMs: Date.parse('2026-08-03T12:04:30.001Z'),
       },
     });
 

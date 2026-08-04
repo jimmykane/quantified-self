@@ -16,6 +16,7 @@ const ASSISTANT_ACTIVE_CONVERSATION_DOC = 'active';
 const ASSISTANT_CONVERSATION_RETENTION_MS = TTL_CONFIG.ASSISTANT_CONVERSATIONS_IN_DAYS
   * 24 * 60 * 60 * 1_000;
 const ASSISTANT_PENDING_TURN_TTL_MS = 4 * 60 * 1_000;
+const ASSISTANT_PENDING_TURN_CLOCK_SKEW_MS = 30 * 1_000;
 
 interface AssistantPendingTurn {
   id: string;
@@ -137,7 +138,11 @@ function parseStoredConversation(
       && typeof data.pendingTurn.expiresAtMs === 'number'
       && Number.isSafeInteger(data.pendingTurn.expiresAtMs)
       && data.pendingTurn.expiresAtMs > 0
-      && data.pendingTurn.expiresAtMs <= nowMs + ASSISTANT_PENDING_TURN_TTL_MS
+      // Firestore may be read by an instance whose clock trails the writer.
+      // Keep the future bound, but tolerate a small, explicit amount of skew.
+      && data.pendingTurn.expiresAtMs <= nowMs
+        + ASSISTANT_PENDING_TURN_TTL_MS
+        + ASSISTANT_PENDING_TURN_CLOCK_SKEW_MS
       ? {
         id: data.pendingTurn.id,
         expiresAtMs: data.pendingTurn.expiresAtMs,
