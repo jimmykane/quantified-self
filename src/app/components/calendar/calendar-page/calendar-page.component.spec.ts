@@ -1,6 +1,8 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import {
   ActivityTypes,
@@ -95,6 +97,9 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-volume-toggle')).toBeNull();
     expect(fixture.nativeElement.querySelector('#calendar-family-volume-title')?.textContent?.trim())
       .toBe('Activities');
+    const infoButton = fixture.debugElement.query(By.css('.calendar-family-volume-info-button'));
+    expect(infoButton.nativeElement.getAttribute('aria-label')).toBe('How activity bars are calculated');
+    expect(infoButton.injector.get(MatTooltip).message).toBe(fixture.componentInstance.familyVolumeTooltip);
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-heading')?.textContent)
       .toContain('volume by duration');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim())

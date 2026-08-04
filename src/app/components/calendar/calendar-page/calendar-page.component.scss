@@ -200,10 +200,30 @@
   gap: 2px;
 }
 
-.calendar-family-volume-heading h2 {
+.calendar-family-volume-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.calendar-family-volume-title-row h2 {
   margin: 0;
   font: var(--mat-sys-title-large);
   letter-spacing: 0;
+}
+
+.calendar-family-volume-info-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  color: var(--mat-sys-on-surface-variant);
+
+  --mat-icon-button-icon-size: 18px;
+  --mat-icon-button-state-layer-size: 32px;
 }
 
 .calendar-family-volume-heading > span {

@@ -83,7 +83,14 @@
     <section class="calendar-family-volume" aria-labelledby="calendar-family-volume-title">
       <header class="calendar-family-volume-header">
         <div class="calendar-family-volume-heading">
-          <h2 id="calendar-family-volume-title">Activities</h2>
+          <div class="calendar-family-volume-title-row">
+            <h2 id="calendar-family-volume-title">Activities</h2>
+            <button mat-icon-button type="button" class="calendar-family-volume-info-button" appHapticTap
+              appTooltipTap [matTooltip]="familyVolumeTooltip" matTooltipPosition="below"
+              aria-label="How activity bars are calculated">
+              <mat-icon>info</mat-icon>
+            </button>
+          </div>
           <span>{{ calendarModel().periodLabel }} volume by duration</span>
         </div>
       </header>

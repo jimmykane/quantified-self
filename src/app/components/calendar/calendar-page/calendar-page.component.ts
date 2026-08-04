@@ -109,6 +109,7 @@ export class CalendarPageComponent {
     { value: 'month', label: 'Month', icon: 'calendar_view_month' },
     { value: 'year', label: 'Year', icon: 'calendar_month' },
   ];
+  readonly familyVolumeTooltip = 'Bar length compares recorded duration within this period. The longest activity group fills the track.';
   private readonly familyVolumeMetricOptions: ReadonlyArray<CalendarVolumeMetricOption> = [
     { value: 'duration', label: 'Duration', icon: 'schedule', dataType: null },
     { value: 'distance', label: 'Distance', icon: 'route', dataType: DataDistance.type },
