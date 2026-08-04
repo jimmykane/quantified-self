@@ -5,6 +5,7 @@ This document is the implementation and maintenance guide for the Activity Calen
 ## Product surfaces
 
 - The dashboard Activity Calendar tile shows the current month in a compact 2 x 2 tile and opens the full calendar.
+- New dashboards include the tile by default. An existing editable dashboard that does not contain it receives a one-time automatic addition with an Undo action.
 - The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and day details.
 - Selecting an active day opens an Angular Material bottom sheet with day totals, activity-group totals, and links to individual events.
 - The public `/features/activity-calendar` route explains the feature without reading or exposing user activity data.
@@ -18,6 +19,13 @@ This document is the implementation and maintenance guide for the Activity Calen
 - Year queries January 1 through the following January 1 and renders all 12 months.
 - The full route stores `view` and `date` in query parameters. Previous and next controls move by the selected view; Today changes the anchor to the current local date.
 - The dashboard tile owns its current-month query. The full calendar owns its visible-period query. Neither reuses the dashboard event table, custom-chart range, or map-tile filters.
+
+Dashboard migration state uses the shared automatic-tile framework:
+
+- `DashboardAutoTileService` treats Activity Calendar as always eligible when the signed-in user opens their own editable dashboard. Public, shared, and other read-only dashboards do not run this migration.
+- `settings.dashboardSettings.autoTiles.activityCalendar` records `added` or `dismissed` state. An existing tile or either state prevents duplicate automatic additions.
+- Undo, direct tile deletion, replacing the tile in Dashboard manager, and **Remove all** persist `dismissed`. Adding Activity Calendar manually after dismissal persists `added`.
+- Failed additions, Undo operations, and dashboard edits restore the previous tiles and automatic-tile metadata before reporting the error.
 
 `src/app/services/activity-calendar.service.ts` reads lightweight event summary documents by `startDate`. It excludes merge and benchmark documents, maps only calendar-required fields into `EventInterface` values, and sorts results by start time. Exact user and query-window results are cached for five minutes with at most 12 entries; a cached value is emitted immediately while the live listener supplies current data.
 
@@ -66,6 +74,7 @@ Keep these interaction contracts:
 
 - `src/app/helpers/activity-calendar.helper.spec.ts`: route state, date windows, grouping, marker sizing, period totals, and exclusions.
 - `src/app/services/activity-calendar.service.spec.ts`: summary queries, filtering, mapping, sorting, and cache behavior.
+- `src/app/helpers/dashboard-auto-tile.helper.spec.ts` and `src/app/services/dashboard-auto-tile.service.spec.ts`: Calendar identity, one-time dashboard migration, duplicate prevention, dismissal, Undo, and rollback behavior.
 - `src/app/components/calendar/**.spec.ts`: page, grid, tile, day details, responsive behavior, and Material interaction contracts.
 - `src/app/components/public-seo/public-seo-pages.content.spec.ts`: public page metadata, links, and structured data.
 - `src/app/app.routing.module.spec.ts`, `src/app/app.routes.server.spec.ts`, and `src/app/shared/public-startup-route.spec.ts`: public and authenticated route contracts.

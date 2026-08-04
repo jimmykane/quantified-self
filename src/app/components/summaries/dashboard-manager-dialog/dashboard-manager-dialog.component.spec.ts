@@ -71,6 +71,7 @@ import {
   DashboardDerivedMetricsService,
 } from '../../../services/dashboard-derived-metrics.service';
 import {
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
   DASHBOARD_AUTO_TILE_ROUTE_PREVIEW_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
@@ -531,6 +532,31 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
       state: 'added',
       source: 'sleep-sync',
+    });
+  });
+
+  it('marks Activity Calendar auto-tile state added when manually restoring it', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = {
+      activityCalendar: {
+        state: 'dismissed',
+        dismissedAt: 1_777_000_000_000,
+        source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+      },
+    };
+    component.mode = 'add';
+    component.category = 'curated';
+    component.curatedChartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE as any;
+
+    await component.save();
+
+    expect(dialogData.user.settings.dashboardSettings.tiles[1]).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 2, rows: 2 },
+    });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.activityCalendar).toMatchObject({
+      state: 'added',
+      source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
     });
   });
 
@@ -1426,6 +1452,10 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.tiles).toEqual([]);
     expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(false);
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.activityCalendar).toMatchObject({
+      state: 'dismissed',
+      source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend).toMatchObject({
       state: 'dismissed',
       source: 'sleep-sync',
