@@ -132,6 +132,8 @@ import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmat
 import { firstValueFrom, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
 import {
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
   DASHBOARD_AUTO_TILE_CURATED_ID_BY_CHART_TYPE,
   DASHBOARD_AUTO_TILE_CURATED_SOURCE,
   DASHBOARD_AUTO_TILE_KPI_ID_BY_CHART_TYPE,
@@ -1809,6 +1811,12 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     dashboardSettings: AppDashboardSettingsInterface,
     nowMs: number,
   ): void {
+    markDashboardAutoTileDismissed(
+      dashboardSettings,
+      DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+      DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+      nowMs,
+    );
     markDashboardAutoTileDismissed(
       dashboardSettings,
       DASHBOARD_AUTO_TILE_SLEEP_TREND_ID,

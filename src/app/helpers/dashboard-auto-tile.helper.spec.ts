@@ -8,8 +8,11 @@ import {
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
+import { buildDashboardActivityCalendarTile } from './dashboard-activity-calendar.helper';
 import { DASHBOARD_POWER_CURVE_CHART_TYPE } from './dashboard-special-chart-types';
 import {
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+  DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
   DASHBOARD_AUTO_TILE_POWER_CURVE_ID,
   DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_ID,
@@ -18,6 +21,13 @@ import {
 } from './dashboard-auto-tile.helper';
 
 describe('dashboard-auto-tile.helper', () => {
+  it('describes the Activity Calendar as its own automatic dashboard tile', () => {
+    expect(getDashboardAutoTileDescriptorForTile(buildDashboardActivityCalendarTile(0))).toEqual({
+      id: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
+      source: DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
+    });
+  });
+
   it('describes scoped Power Curve tiles by resolved sport scope', () => {
     expect(getDashboardAutoTileDescriptorForTile(makePowerCurveTile({
       eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] },
