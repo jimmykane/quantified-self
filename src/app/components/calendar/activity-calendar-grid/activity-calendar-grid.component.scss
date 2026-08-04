@@ -37,9 +37,7 @@
 }
 
 .activity-calendar-month--surface {
-  --activity-calendar-month-padding: clamp(12px, 1.8vw, 20px);
-
-  padding: var(--activity-calendar-month-padding);
+  padding: clamp(12px, 1.8vw, 20px);
   overflow: hidden;
 }
 
@@ -80,17 +78,6 @@
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.activity-calendar-weekday--weekend {
-  background: var(--activity-calendar-weekend-background);
-}
-
-.activity-calendar:not(.activity-calendar--year)
-  .activity-calendar-month--surface
-  .activity-calendar-weekday--weekend {
-  box-shadow: 0 calc(-1 * var(--activity-calendar-month-padding)) 0
-    var(--activity-calendar-weekend-background);
 }
 
 .activity-calendar-weekdays .activity-calendar-weekday--weekend {
