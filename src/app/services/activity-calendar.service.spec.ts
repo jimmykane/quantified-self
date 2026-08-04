@@ -1,5 +1,12 @@
 import { TestBed } from '@angular/core/testing';
-import { ActivityTypes, DataActivityTypes, DataDuration, type User } from '@sports-alliance/sports-lib';
+import {
+  ActivityTypes,
+  DataActivityTypes,
+  DataAscent,
+  DataDistance,
+  DataDuration,
+  type User,
+} from '@sports-alliance/sports-lib';
 import { firstValueFrom, of, Subject } from 'rxjs';
 import { ActivityCalendarService } from './activity-calendar.service';
 import { AppEventService } from './app.event.service';
@@ -52,6 +59,8 @@ describe('ActivityCalendarService', () => {
 
     expect(events.map(event => event.getID())).toEqual(['earlier', 'later']);
     expect(events[0].getStat(DataDuration.type)?.getValue()).toBe(3600);
+    expect(events[0].getStat(DataDistance.type)?.getValue()).toBe(10_000);
+    expect(events[0].getStat(DataAscent.type)?.getValue()).toBe(450);
     expect(events[0].getActivityTypesAsArray()).toEqual([ActivityTypes.Running]);
     expect(events[0].getActivityTypesAsString()).toBe('Running');
   });
@@ -116,6 +125,8 @@ function eventAt(id: string, startDate: Date) {
     description: null,
     stats: {
       [DataDuration.type]: 3600,
+      [DataDistance.type]: 10_000,
+      [DataAscent.type]: 450,
       [DataActivityTypes.type]: [ActivityTypes.Running],
     },
   };

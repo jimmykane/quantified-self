@@ -40,6 +40,23 @@
     </button>
   </nav>
 
+  <section class="calendar-period-summary"
+    [attr.aria-label]="calendarModel().periodLabel + ' activity totals'"
+    [attr.aria-busy]="isLoading()">
+    @for (metric of periodSummaryMetrics(); track metric.label) {
+    <div class="calendar-period-summary-metric">
+      <span class="calendar-period-summary-label">
+        <mat-icon aria-hidden="true">{{ metric.icon }}</mat-icon>
+        <span>{{ metric.label }}</span>
+      </span>
+      <strong class="calendar-period-summary-value">{{ metric.value }}</strong>
+    </div>
+    @if (!$last) {
+    <mat-divider [vertical]="true"></mat-divider>
+    }
+    }
+  </section>
+
   <div class="calendar-progress-slot">
     @if (isLoading()) {
     <mat-progress-bar mode="indeterminate" aria-label="Loading calendar activities"></mat-progress-bar>

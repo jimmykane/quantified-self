@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, 
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
-import type { EventInterface } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
@@ -14,6 +15,7 @@ import {
   type ActivityCalendarView,
   buildActivityCalendarViewModel,
   formatActivityCalendarDateParam,
+  formatActivityCalendarDuration,
   navigateActivityCalendarDate,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
@@ -34,6 +36,12 @@ interface CalendarViewOption {
   value: ActivityCalendarView;
   label: string;
   icon: string;
+}
+
+interface CalendarSummaryMetric {
+  label: string;
+  icon: string;
+  value: string;
 }
 
 @Component({
@@ -96,6 +104,41 @@ export class CalendarPageComponent {
       locale: this.locale,
       now: this.today(),
     });
+  });
+  readonly periodSummaryMetrics = computed<CalendarSummaryMetric[]>(() => {
+    if (this.eventState().status !== 'ready') {
+      return [
+        { label: 'Distance', icon: 'route', value: '--' },
+        { label: 'Duration', icon: 'schedule', value: '--' },
+        { label: 'Ascent', icon: 'landscape', value: '--' },
+      ];
+    }
+
+    const summary = this.calendarModel().summary;
+    const unitSettings = this.currentUser()?.settings?.unitSettings ?? null;
+    return [
+      {
+        label: 'Distance',
+        icon: 'route',
+        value: formatUnitAwareDataValue(DataDistance.type, summary.totalDistanceMeters, unitSettings, {
+          stripRepeatedUnit: true,
+          locale: this.locale,
+        }) || '0',
+      },
+      {
+        label: 'Duration',
+        icon: 'schedule',
+        value: formatActivityCalendarDuration(summary.totalDurationSeconds),
+      },
+      {
+        label: 'Ascent',
+        icon: 'landscape',
+        value: formatUnitAwareDataValue(DataAscent.type, summary.totalAscentMeters, unitSettings, {
+          stripRepeatedUnit: true,
+          locale: this.locale,
+        }) || '0',
+      },
+    ];
   });
   readonly isLoading = computed(() => this.eventState().status === 'loading');
   readonly hasError = computed(() => this.eventState().status === 'error');

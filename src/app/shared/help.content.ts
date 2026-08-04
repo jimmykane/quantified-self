@@ -168,6 +168,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Activity Calendar** is the default 2 x 2 dashboard tile. It shows the current month and opens the full [Calendar](/calendar), where the arrow controls move by week, month, or year to match the selected **Week**, **Month**, or **Year** view.
 - Calendar circles group activities by sport family and scale by recorded duration. Month and Week views separate the family circles when space allows; compact tiles, narrow layouts, and Year view place them concentrically around the same center. Select an activity day to see its family totals and events.
+- The full Calendar summary shows total distance, duration, and ascent for the selected week, month, or year. Month totals exclude adjacent dates shown only to complete the calendar grid, and measurement units follow **Settings -> Units**.
 - The calendar owns a visible-period activity query. It stays independent from the dashboard event table, custom-chart ranges, and map-tile filters.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.

@@ -2,6 +2,8 @@ import { inject, Injectable } from '@angular/core';
 import {
   ActivityTypesHelper,
   DataActivityTypes,
+  DataAscent,
+  DataDistance,
   DataDuration,
   type ActivityTypes,
   type EventInterface,
@@ -92,7 +94,11 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
   }
 
   const stats = isRecord(document.stats) ? document.stats : {};
-  const durationSeconds = resolveDurationSeconds(stats[DataDuration.type]);
+  const statValues: Record<string, number | null> = {
+    [DataDuration.type]: resolveNonNegativeStatValue(stats[DataDuration.type]),
+    [DataDistance.type]: resolveNonNegativeStatValue(stats[DataDistance.type]),
+    [DataAscent.type]: resolveNonNegativeStatValue(stats[DataAscent.type]),
+  };
   const activityTypes = resolveActivityTypes(stats[DataActivityTypes.type]);
   const name = typeof document.name === 'string' ? document.name : '';
   const description = typeof document.description === 'string' ? document.description : null;
@@ -102,9 +108,10 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
     description,
     startDate,
     getID: () => id,
-    getStat: type => type === DataDuration.type && durationSeconds !== null
-      ? { getValue: () => durationSeconds }
-      : null,
+    getStat: (type) => {
+      const value = statValues[type];
+      return value === null || value === undefined ? null : { getValue: () => value };
+    },
     getActivityTypesAsArray: () => activityTypes,
     getActivityTypesAsString: () => activityTypes.join(', '),
   } as EventInterface;
@@ -125,12 +132,12 @@ function resolveDate(value: unknown): Date | null {
   return null;
 }
 
-function resolveDurationSeconds(value: unknown): number | null {
+function resolveNonNegativeStatValue(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
   }
-  const durationSeconds = Number(value);
-  return Number.isFinite(durationSeconds) && durationSeconds >= 0 ? durationSeconds : null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : null;
 }
 
 function resolveActivityTypes(value: unknown): ActivityTypes[] {

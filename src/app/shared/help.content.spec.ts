@@ -160,6 +160,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Week, Month, and Year views');
     expect(gettingStartedSection?.content).toContain('compact tiles, narrow layouts, and Year view place them concentrically');
     expect(gettingStartedSection?.content).toContain('scale by recorded duration');
+    expect(gettingStartedSection?.content).toContain('total distance, duration, and ascent');
+    expect(gettingStartedSection?.content).toContain('Month totals exclude adjacent dates');
     expect(gettingStartedSection?.content).toContain('calendar owns a visible-period activity query');
     expect(gettingStartedSection?.content).toContain('independent from the dashboard event table');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');

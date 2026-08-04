@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ActivityTypeGroups,
   ActivityTypes,
+  DataAscent,
+  DataDistance,
   DataDuration,
   DaysOfTheWeek,
   type EventInterface,
@@ -22,15 +24,22 @@ function createEvent(
   startDate: Date,
   activityTypes: ActivityTypes[],
   durationSeconds: number | null,
+  metrics: { distanceMeters?: number | null; ascentMeters?: number | null } = {},
 ): EventInterface {
+  const statValues: Record<string, number | null | undefined> = {
+    [DataDuration.type]: durationSeconds,
+    [DataDistance.type]: metrics.distanceMeters,
+    [DataAscent.type]: metrics.ascentMeters,
+  };
   return {
     startDate,
     getID: () => id,
     getActivityTypesAsArray: () => activityTypes,
     getActivityTypesAsString: () => activityTypes.join(', '),
-    getStat: (type: string) => type === DataDuration.type && durationSeconds !== null
-      ? { getValue: () => durationSeconds }
-      : null,
+    getStat: (type: string) => {
+      const value = statValues[type];
+      return value === null || value === undefined ? null : { getValue: () => value };
+    },
   } as unknown as EventInterface;
 }
 
@@ -118,6 +127,38 @@ describe('activity-calendar helper', () => {
       durationSeconds: 5400,
     });
     expect(day?.totalDurationSeconds).toBe(5400);
+  });
+
+  it('summarizes distance, duration, and ascent only inside the primary period', () => {
+    const model = buildActivityCalendarViewModel([
+      createEvent('inside-1', new Date(2026, 7, 3, 8), [ActivityTypes.Running], 3600, {
+        distanceMeters: 10_000,
+        ascentMeters: 500,
+      }),
+      createEvent('inside-2', new Date(2026, 7, 20, 8), [ActivityTypes.Cycling], 1800, {
+        distanceMeters: 5000,
+        ascentMeters: 250,
+      }),
+      createEvent('leading-grid-day', new Date(2026, 6, 31, 8), [ActivityTypes.Cycling], 7200, {
+        distanceMeters: 50_000,
+        ascentMeters: 1500,
+      }),
+      createEvent('trailing-grid-day', new Date(2026, 8, 1, 8), [ActivityTypes.Running], 5400, {
+        distanceMeters: 15_000,
+        ascentMeters: 800,
+      }),
+    ], {
+      view: 'month',
+      anchorDate: new Date(2026, 7, 15),
+      startOfWeek: DaysOfTheWeek.Monday,
+      locale: 'en-US',
+    });
+
+    expect(model.summary).toEqual({
+      totalDurationSeconds: 5400,
+      totalDistanceMeters: 15_000,
+      totalAscentMeters: 750,
+    });
   });
 
   it('keeps equal durations equal in separated layouts while nesting compact markers', () => {

@@ -62,7 +62,7 @@
   min-height: 52px;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
   border-top: 1px solid var(--mat-sys-outline-variant);
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
@@ -80,6 +80,65 @@
 
 .calendar-today-button--mobile {
   display: none;
+}
+
+.calendar-period-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  height: 68px;
+  align-items: stretch;
+  margin-bottom: 8px;
+}
+
+.calendar-period-summary mat-divider {
+  height: 36px;
+  align-self: center;
+}
+
+.calendar-period-summary-metric {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px;
+  text-align: center;
+}
+
+.calendar-period-summary-label {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-period-summary-label mat-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.calendar-period-summary-value {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar-progress-slot {
@@ -151,6 +210,35 @@
 
   .calendar-period-navigation h2 {
     font: var(--mat-sys-title-medium);
+  }
+
+  .calendar-period-summary {
+    height: 60px;
+  }
+
+  .calendar-period-summary mat-divider {
+    height: 32px;
+  }
+
+  .calendar-period-summary-metric {
+    gap: 1px;
+    padding: 6px 4px;
+  }
+
+  .calendar-period-summary-label {
+    gap: 3px;
+  }
+
+  .calendar-period-summary-label mat-icon {
+    width: 15px;
+    height: 15px;
+    flex-basis: 15px;
+    font-size: 15px;
+    line-height: 15px;
+  }
+
+  .calendar-period-summary-value {
+    font-size: 20px;
   }
 
   .calendar-today-button--desktop {

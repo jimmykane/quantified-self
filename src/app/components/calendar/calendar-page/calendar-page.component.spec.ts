@@ -2,7 +2,14 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
-import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
+import {
+  ActivityTypes,
+  DataAscent,
+  DataDistance,
+  DataDuration,
+  DaysOfTheWeek,
+  type EventInterface,
+} from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, throwError } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
@@ -49,6 +56,16 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('#calendar-page-title')?.textContent).toContain('Calendar');
     expect(fixture.nativeElement.querySelector('.calendar-progress-slot')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
+    const summaryMetrics = [...fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')]
+      .map((metric: HTMLElement) => ({
+        label: metric.querySelector('.calendar-period-summary-label span')?.textContent?.trim(),
+        value: metric.querySelector('.calendar-period-summary-value')?.textContent?.trim(),
+      }));
+    expect(summaryMetrics).toEqual([
+      { label: 'Distance', value: '10.00 Km' },
+      { label: 'Duration', value: '1h' },
+      { label: 'Ascent', value: '450 m' },
+    ]);
     expect(fixture.nativeElement.textContent).toContain('August 2026');
   });
 
@@ -153,12 +170,19 @@ describe('CalendarPageComponent', () => {
 });
 
 function createEvent(startDate = new Date(2026, 7, 3, 8)): EventInterface {
+  const statValues: Record<string, number> = {
+    [DataDuration.type]: 3600,
+    [DataDistance.type]: 10_000,
+    [DataAscent.type]: 450,
+  };
   return {
     name: 'Morning run',
     startDate,
     getID: () => 'event-1',
     getActivityTypesAsArray: () => [ActivityTypes.Running],
     getActivityTypesAsString: () => 'Running',
-    getStat: (type: string) => type === DataDuration.type ? { getValue: () => 3600 } : null,
+    getStat: (type: string) => statValues[type] === undefined
+      ? null
+      : { getValue: () => statValues[type] },
   } as unknown as EventInterface;
 }

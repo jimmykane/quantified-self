@@ -3,6 +3,8 @@ import {
   ActivityTypeGroups,
   ActivityTypes,
   ActivityTypesHelper,
+  DataAscent,
+  DataDistance,
   DataDuration,
   DaysOfTheWeek,
   type ActivityTypeGroup,
@@ -60,10 +62,17 @@ export interface ActivityCalendarMonthViewModel {
   days: ActivityCalendarDayViewModel[];
 }
 
+export interface ActivityCalendarPeriodSummary {
+  totalDurationSeconds: number;
+  totalDistanceMeters: number;
+  totalAscentMeters: number;
+}
+
 export interface ActivityCalendarViewModel {
   view: ActivityCalendarView;
   periodLabel: string;
   months: ActivityCalendarMonthViewModel[];
+  summary: ActivityCalendarPeriodSummary;
 }
 
 export interface BuildActivityCalendarViewModelOptions {
@@ -201,17 +210,19 @@ export function buildActivityCalendarViewModel(
 
   if (view === 'year') {
     const year = anchorDate.getFullYear();
+    const months = Array.from({ length: 12 }, (_, monthIndex) => buildMonthViewModel(
+      new Date(year, monthIndex, 1),
+      eventsByDay,
+      weekdayLabels,
+      options.startOfWeek,
+      locale,
+      now,
+    ));
     return {
       view,
       periodLabel: `${year}`,
-      months: Array.from({ length: 12 }, (_, monthIndex) => buildMonthViewModel(
-        new Date(year, monthIndex, 1),
-        eventsByDay,
-        weekdayLabels,
-        options.startOfWeek,
-        locale,
-        now,
-      )),
+      months,
+      summary: buildActivityCalendarPeriodSummary(months),
     };
   }
 
@@ -224,30 +235,34 @@ export function buildActivityCalendarViewModel(
       locale,
       now,
     ));
+    const months = [{
+      id: `week-${formatActivityCalendarDateParam(weekStart)}`,
+      label: formatWeekRange(weekStart, addLocalDays(weekStart, 6), locale),
+      weekdayLabels,
+      days,
+    }];
     return {
       view,
       periodLabel: formatWeekRange(weekStart, addLocalDays(weekStart, 6), locale),
-      months: [{
-        id: `week-${formatActivityCalendarDateParam(weekStart)}`,
-        label: formatWeekRange(weekStart, addLocalDays(weekStart, 6), locale),
-        weekdayLabels,
-        days,
-      }],
+      months,
+      summary: buildActivityCalendarPeriodSummary(months),
     };
   }
 
   const monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  const months = [buildMonthViewModel(
+    monthStart,
+    eventsByDay,
+    weekdayLabels,
+    options.startOfWeek,
+    locale,
+    now,
+  )];
   return {
     view,
     periodLabel: formatMonthLabel(monthStart, locale),
-    months: [buildMonthViewModel(
-      monthStart,
-      eventsByDay,
-      weekdayLabels,
-      options.startOfWeek,
-      locale,
-      now,
-    )],
+    months,
+    summary: buildActivityCalendarPeriodSummary(months),
   };
 }
 
@@ -269,15 +284,19 @@ export function formatActivityCalendarDuration(durationSeconds: number, unknown 
 }
 
 export function resolveActivityCalendarEventDurationSeconds(event: EventInterface): number | null {
-  const durationStat = event?.getStat?.(DataDuration.type);
-  const rawValue = durationStat
-    ? (durationStat as { getValue?: () => unknown }).getValue?.()
+  return resolveActivityCalendarEventStatValue(event, DataDuration.type);
+}
+
+function resolveActivityCalendarEventStatValue(event: EventInterface, dataType: string): number | null {
+  const stat = event?.getStat?.(dataType);
+  const rawValue = stat
+    ? (stat as { getValue?: () => unknown }).getValue?.()
     : null;
   if (rawValue === null || rawValue === undefined || rawValue === '') {
     return null;
   }
-  const durationSeconds = Number(rawValue);
-  return Number.isFinite(durationSeconds) && durationSeconds >= 0 ? durationSeconds : null;
+  const numericValue = Number(rawValue);
+  return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : null;
 }
 
 export function resolveActivityCalendarEventLabel(event: EventInterface): string {
@@ -402,6 +421,31 @@ function buildDayViewModel(
     events,
     ariaLabel: `${dateLabel}. ${activitySummary}${familySummary ? `. ${familySummary}` : ''}`,
   };
+}
+
+function buildActivityCalendarPeriodSummary(
+  months: ActivityCalendarMonthViewModel[],
+): ActivityCalendarPeriodSummary {
+  const summary: ActivityCalendarPeriodSummary = {
+    totalDurationSeconds: 0,
+    totalDistanceMeters: 0,
+    totalAscentMeters: 0,
+  };
+
+  months.forEach((month) => {
+    month.days.forEach((day) => {
+      if (!day.inPrimaryPeriod) {
+        return;
+      }
+      day.events.forEach((event) => {
+        summary.totalDurationSeconds += resolveActivityCalendarEventDurationSeconds(event) || 0;
+        summary.totalDistanceMeters += resolveActivityCalendarEventStatValue(event, DataDistance.type) || 0;
+        summary.totalAscentMeters += resolveActivityCalendarEventStatValue(event, DataAscent.type) || 0;
+      });
+    });
+  });
+
+  return summary;
 }
 
 function groupEventsByLocalDay(events: EventInterface[]): Map<string, EventInterface[]> {
