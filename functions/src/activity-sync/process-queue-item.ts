@@ -257,9 +257,18 @@ interface UploadActivityFileResult {
     providerUserId?: string;
 }
 
+interface ActivitySyncRouteMeta {
+    routeId: ActivitySyncQueueItemInterface['routeId'];
+    userID: string;
+    eventID: string;
+    sourceServiceName: ServiceNames;
+    destinationServiceName: ServiceNames;
+    manual: boolean;
+}
+
 async function uploadToDestination(
     queueItem: ActivitySyncQueueItemInterface,
-    fileBuffer: Buffer,
+    fileBuffer?: Buffer,
 ): Promise<UploadActivityFileResult> {
     switch (queueItem.destinationServiceName) {
         case ServiceNames.SuuntoApp:
@@ -270,10 +279,16 @@ async function uploadToDestination(
                     queueItem.destinationProviderUserID,
                 );
             }
+            if (!fileBuffer) {
+                throw new Error('Suunto activity upload is missing its source file.');
+            }
             return uploadActivityFileToSuunto(queueItem.userID, fileBuffer);
         case ServiceNames.WahooAPI:
             if (queueItem.destinationUploadID) {
                 return getWahooActivityUploadStatus(queueItem.userID, queueItem.destinationUploadID);
+            }
+            if (!fileBuffer) {
+                throw new Error('Wahoo activity upload is missing its source file.');
             }
             return uploadActivityFileToWahoo(queueItem.userID, fileBuffer, {
                 filename: queueItem.originalFile.originalFilename || queueItem.originalFile.path.split('/').pop(),
@@ -281,6 +296,18 @@ async function uploadToDestination(
         default:
             throw new Error(`Unsupported destination service ${queueItem.destinationServiceName}`);
     }
+}
+
+function hasPersistedDestinationUpload(queueItem: ActivitySyncQueueItemInterface): boolean {
+    if (queueItem.destinationServiceName === ServiceNames.SuuntoApp) {
+        return !!queueItem.destinationUploadID && !!queueItem.destinationProviderUserID;
+    }
+    return !!queueItem.destinationUploadID;
+}
+
+function hasIncompleteSuuntoDestinationUpload(queueItem: ActivitySyncQueueItemInterface): boolean {
+    return queueItem.destinationServiceName === ServiceNames.SuuntoApp
+        && !!queueItem.destinationUploadID !== !!queueItem.destinationProviderUserID;
 }
 
 async function persistPendingDestinationUpload(
@@ -328,7 +355,12 @@ async function persistPendingDestinationUpload(
 async function clearPendingDestinationUploadForRestart(
     queueItem: ActivitySyncQueueItemInterface,
 ): Promise<boolean> {
-    if (!queueItem.destinationUploadID && !queueItem.destinationProviderUserID) {
+    if (
+        !queueItem.destinationUploadID
+        && !queueItem.destinationProviderUserID
+        && !queueItem.destinationWorkoutKey
+        && !queueItem.destinationInfoCode
+    ) {
         return true;
     }
     if (!queueItem.ref) {
@@ -343,6 +375,8 @@ async function clearPendingDestinationUploadForRestart(
         updateData: {
             destinationUploadID: null,
             destinationProviderUserID: null,
+            destinationWorkoutKey: null,
+            destinationInfoCode: null,
         },
         logPrefix: 'ActivitySync',
         actionDescription: 'pending destination upload restart',
@@ -353,6 +387,8 @@ async function clearPendingDestinationUploadForRestart(
 
     queueItem.destinationUploadID = null;
     queueItem.destinationProviderUserID = null;
+    queueItem.destinationWorkoutKey = undefined;
+    queueItem.destinationInfoCode = undefined;
     return true;
 }
 
@@ -361,6 +397,18 @@ function buildPendingDestinationUploadError(
     uploadResult: UploadActivityFileResult,
 ): Error {
     if (queueItem.destinationServiceName === ServiceNames.SuuntoApp) {
+        const persistedResumeState = hasPersistedDestinationUpload(queueItem);
+        const providerOperationId = uploadResult.uploadId
+            || (persistedResumeState ? queueItem.destinationUploadID || undefined : undefined);
+        const providerUserId = uploadResult.providerUserId
+            || (persistedResumeState ? queueItem.destinationProviderUserID || undefined : undefined);
+        if (!providerOperationId || !providerUserId) {
+            return buildInvalidProviderResumeStateError(
+                queueItem,
+                providerOperationId,
+                providerUserId,
+            );
+        }
         return new ProviderOperationError({
             serviceName: ServiceNames.SuuntoApp,
             operation: 'activity_upload_status',
@@ -368,8 +416,8 @@ function buildPendingDestinationUploadError(
             retryMode: 'resume',
             code: 'deadline-exceeded',
             message: uploadResult.message || 'Suunto is still processing the activity.',
-            providerUserId: uploadResult.providerUserId,
-            providerOperationId: uploadResult.uploadId,
+            providerUserId,
+            providerOperationId,
             dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
         });
     }
@@ -377,6 +425,64 @@ function buildPendingDestinationUploadError(
     return Object.assign(new Error('Wahoo is still processing the activity.'), {
         code: 'deadline-exceeded',
     });
+}
+
+function buildInvalidProviderResumeStateError(
+    queueItem: ActivitySyncQueueItemInterface,
+    providerOperationId?: string,
+    providerUserId?: string,
+): ProviderOperationError {
+    return new ProviderOperationError({
+        serviceName: queueItem.destinationServiceName,
+        operation: 'activity_upload_status',
+        disposition: 'permanent',
+        retryMode: 'none',
+        code: 'failed-precondition',
+        message: `${queueItem.destinationServiceName} returned an asynchronous upload state without the identifiers required to resume it safely.`,
+        providerOperationId,
+        providerUserId,
+        dlqContext: 'DESTINATION_PROVIDER_INVALID_RESUME_STATE',
+    });
+}
+
+async function movePendingUploadPersistenceFailureToDlq(
+    queueItem: ActivitySyncQueueItemInterface,
+    uploadResult: UploadActivityFileResult,
+    persistenceError: unknown,
+    bulkWriter: admin.firestore.BulkWriter | undefined,
+    routeMeta: ActivitySyncRouteMeta,
+): Promise<QueueResult.MovedToDLQ | QueueResult.Failed> {
+    const destinationUploadID = uploadResult.uploadId || queueItem.destinationUploadID || undefined;
+    const destinationProviderUserID = uploadResult.providerUserId || queueItem.destinationProviderUserID || undefined;
+    const stateError = Object.assign(
+        new Error(`Could not persist ${queueItem.destinationServiceName} asynchronous upload state safely.`),
+        {
+            code: 'internal',
+            dlqContext: 'DESTINATION_PROVIDER_RESUME_STATE_PERSIST_FAILED',
+        },
+    );
+    logger.error('[ActivitySync] Moving accepted asynchronous upload to DLQ because resume state could not be persisted.', {
+        queueItemId: queueItem.id,
+        userID: queueItem.userID,
+        destinationServiceName: queueItem.destinationServiceName,
+        providerOperationId: destinationUploadID,
+        providerUserId: destinationProviderUserID,
+        persistenceError: toError(persistenceError).message,
+        dlqContext: stateError.dlqContext,
+    });
+    await safelyWriteMetadata(() => setActivitySyncFailedMetadata({
+        ...routeMeta,
+        error: toActivitySyncMetadataError(stateError),
+    }));
+
+    const failedQueueItem: ActivitySyncQueueItemInterface = {
+        ...queueItem,
+        destinationUploadID: destinationUploadID || null,
+        destinationProviderUserID: destinationProviderUserID || null,
+        ...(uploadResult.workoutKey ? { destinationWorkoutKey: uploadResult.workoutKey } : {}),
+        ...(uploadResult.code ? { destinationInfoCode: uploadResult.code } : {}),
+    };
+    return moveToDeadLetterQueue(failedQueueItem, stateError, bulkWriter, stateError.dlqContext);
 }
 
 function logProviderFailureDecision(
@@ -397,6 +503,7 @@ function logProviderFailureDecision(
         statusCode: error.statusCode,
         providerUserId: error.providerUserId,
         providerOperationId: error.providerOperationId,
+        message: error.message,
         retryCount: queueItem.retryCount || 0,
         dlqContext: error.dlqContext,
         outcome,
@@ -426,14 +533,7 @@ function getDeadLetterContext(error: unknown): string {
 async function deferActivitySyncQueueItemForPendingDisconnect(
     queueItem: ActivitySyncQueueItemInterface,
     bulkWriter: admin.firestore.BulkWriter | undefined,
-    routeMeta: {
-        routeId: ActivitySyncQueueItemInterface['routeId'];
-        userID: string;
-        eventID: string;
-        sourceServiceName: ServiceNames;
-        destinationServiceName: ServiceNames;
-        manual: boolean;
-    },
+    routeMeta: ActivitySyncRouteMeta,
     serviceName: ServiceNames,
 ): Promise<QueueResult.Deferred | QueueResult.Failed> {
     const error = new Error(`${serviceName} disconnect is pending.`);
@@ -588,7 +688,17 @@ export async function processActivitySyncQueueItem(
             });
         }
 
-        const fileBuffer = await downloadOriginalFile(queueItem);
+        if (hasIncompleteSuuntoDestinationUpload(queueItem)) {
+            throw buildInvalidProviderResumeStateError(
+                queueItem,
+                queueItem.destinationUploadID || undefined,
+                queueItem.destinationProviderUserID || undefined,
+            );
+        }
+
+        const fileBuffer = hasPersistedDestinationUpload(queueItem)
+            ? undefined
+            : await downloadOriginalFile(queueItem);
         if (await shouldSkipQueueWorkForDeletedUser(
             queueItem.userID,
             queueItem.destinationServiceName,
@@ -607,7 +717,18 @@ export async function processActivitySyncQueueItem(
             if (isProviderOperationError(pendingError)) {
                 throw pendingError;
             }
-            const persisted = await persistPendingDestinationUpload(queueItem, uploadResult);
+            let persisted: boolean;
+            try {
+                persisted = await persistPendingDestinationUpload(queueItem, uploadResult);
+            } catch (persistenceError) {
+                return movePendingUploadPersistenceFailureToDlq(
+                    queueItem,
+                    uploadResult,
+                    persistenceError,
+                    bulkWriter,
+                    routeMeta,
+                );
+            }
             if (!persisted) {
                 return QueueResult.Processed;
             }
@@ -615,17 +736,25 @@ export async function processActivitySyncQueueItem(
         }
         duringDestinationUpload = false;
 
+        const hadPersistedDestinationUpload = hasPersistedDestinationUpload(queueItem);
+        const destinationUploadID = uploadResult.uploadId
+            || (hadPersistedDestinationUpload ? queueItem.destinationUploadID || undefined : undefined);
+        const destinationProviderUserID = uploadResult.providerUserId
+            || (hadPersistedDestinationUpload ? queueItem.destinationProviderUserID || undefined : undefined);
+        const destinationWorkoutKey = uploadResult.workoutKey
+            || (hadPersistedDestinationUpload ? queueItem.destinationWorkoutKey || undefined : undefined);
+
         await setActivitySyncSuccessMetadata({
             ...routeMeta,
-            destinationUploadID: uploadResult.uploadId || undefined,
-            workoutKey: uploadResult.workoutKey || undefined,
+            destinationUploadID,
+            workoutKey: destinationWorkoutKey,
             infoCode: uploadResult.code || undefined,
         });
 
         return updateToProcessed(queueItem, bulkWriter, {
-            destinationUploadID: uploadResult.uploadId || null,
-            destinationProviderUserID: uploadResult.providerUserId || null,
-            destinationWorkoutKey: uploadResult.workoutKey || null,
+            destinationUploadID: destinationUploadID || null,
+            destinationProviderUserID: destinationProviderUserID || null,
+            destinationWorkoutKey: destinationWorkoutKey || null,
             destinationInfoCode: uploadResult.code || null,
             resultStatus: 'success',
             successProcessedAt: Date.now(),
@@ -702,13 +831,51 @@ export async function processActivitySyncQueueItem(
         const metadataError = toActivitySyncMetadataError(normalizedError);
 
         if (duringDestinationUpload && isProviderOperationError(error) && error.disposition === 'retryable') {
-            if (error.retryMode === 'resume' && error.providerOperationId && error.providerUserId) {
-                const persisted = await persistPendingDestinationUpload(queueItem, {
+            if (error.retryMode === 'resume') {
+                const persistedResumeState = hasPersistedDestinationUpload(queueItem);
+                const providerOperationId = error.providerOperationId
+                    || (persistedResumeState ? queueItem.destinationUploadID || undefined : undefined);
+                const providerUserId = error.providerUserId
+                    || (persistedResumeState ? queueItem.destinationProviderUserID || undefined : undefined);
+                if (!providerOperationId || (
+                    queueItem.destinationServiceName === ServiceNames.SuuntoApp && !providerUserId
+                )) {
+                    const invalidResumeStateError = buildInvalidProviderResumeStateError(
+                        queueItem,
+                        providerOperationId,
+                        providerUserId,
+                    );
+                    const invalidResumeMetadataError = toActivitySyncMetadataError(invalidResumeStateError);
+                    logProviderFailureDecision(queueItem, invalidResumeStateError, 'dlq');
+                    await safelyWriteMetadata(() => setActivitySyncFailedMetadata({
+                        ...routeMeta,
+                        error: invalidResumeMetadataError,
+                    }));
+                    return moveToDeadLetterQueue(
+                        queueItem,
+                        invalidResumeStateError,
+                        bulkWriter,
+                        invalidResumeStateError.dlqContext,
+                    );
+                }
+                const pendingUploadState = {
                     status: 'pending',
                     message: error.message,
-                    uploadId: error.providerOperationId,
-                    providerUserId: error.providerUserId,
-                });
+                    uploadId: providerOperationId,
+                    providerUserId,
+                } satisfies UploadActivityFileResult;
+                let persisted: boolean;
+                try {
+                    persisted = await persistPendingDestinationUpload(queueItem, pendingUploadState);
+                } catch (persistenceError) {
+                    return movePendingUploadPersistenceFailureToDlq(
+                        queueItem,
+                        pendingUploadState,
+                        persistenceError,
+                        bulkWriter,
+                        routeMeta,
+                    );
+                }
                 if (!persisted) {
                     return QueueResult.Processed;
                 }

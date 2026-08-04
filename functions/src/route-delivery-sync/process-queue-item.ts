@@ -277,6 +277,7 @@ function logRouteProviderFailureDecision(
         statusCode: error.statusCode,
         providerUserId: error.providerUserId,
         providerOperationId: error.providerOperationId,
+        message: error.message,
         retryCount: queueItem.retryCount || 0,
         dlqContext: error.dlqContext,
         outcome,

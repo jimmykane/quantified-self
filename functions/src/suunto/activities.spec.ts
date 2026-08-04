@@ -1,6 +1,7 @@
 'use strict';
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock dependencies BEFORE importing the module under test
@@ -45,6 +46,41 @@ const tokensMocks = {
 
 vi.mock('../tokens', () => ({
     getTokenData: (...args: any[]) => tokensMocks.getTokenData(...args),
+}));
+
+vi.mock('../service-auth-lifecycle', () => ({
+    extractRefreshFailureDetails: (error: any) => {
+        const statusCode = error?.statusCode || error?.output?.statusCode || null;
+        const providerErrorCode = `${error?.data?.payload?.error || error?.data?.error || error?.error?.error || ''}`.trim();
+        const providerErrorMessage = `${
+            error?.data?.payload?.error_description
+            || error?.data?.payload?.message
+            || error?.data?.error_description
+            || error?.error?.error_description
+            || error?.message
+            || providerErrorCode
+            || ''
+        }`.trim();
+        const isInvalidGrant = [providerErrorCode, providerErrorMessage, `${error?.message || ''}`]
+            .some(value => value.toLowerCase().includes('invalid_grant'));
+        return {
+            statusCode,
+            providerErrorCode: providerErrorCode || null,
+            providerErrorMessage: providerErrorMessage || null,
+            isInvalidGrant,
+            isTerminalAuthFailure: statusCode === 401 || isInvalidGrant,
+            isTransientError: false,
+            logMessage: providerErrorMessage || providerErrorCode || 'Unknown token refresh failure',
+        };
+    },
+    isTerminalRefreshFailureForService: (serviceName: ServiceNames, failure: {
+        isInvalidGrant: boolean;
+        isTerminalAuthFailure: boolean;
+        statusCode: number | null;
+    }) => !(serviceName === ServiceNames.SuuntoApp
+        && failure.isInvalidGrant
+        && failure.statusCode !== 401)
+        && failure.isTerminalAuthFailure,
 }));
 
 const deletionGuardMocks = {
@@ -516,6 +552,47 @@ describe('importActivityToSuuntoApp', () => {
         });
     }, 30000);
 
+    it('should normalize a status-less transport failure as temporarily unavailable', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockRejectedValue(Object.assign(
+            new Error('socket closed before a response'),
+            { code: 'ECONNRESET' },
+        ));
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                disposition: 'retryable',
+                retryMode: 'restart',
+                code: 'unavailable',
+                dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+            } satisfies Partial<ProviderOperationError>);
+        expect(requestMocks.post).toHaveBeenCalledTimes(3);
+    });
+
+    it('should keep the temporary Suunto invalid_grant outage failure retryable', async () => {
+        const refreshError: any = new Error('Response Error: 400 Bad Request');
+        refreshError.statusCode = 400;
+        refreshError.data = {
+            payload: {
+                error: 'invalid_grant',
+                error_description: 'User no longer active/connected with the partner',
+            },
+        };
+        tokensMocks.getTokenData.mockRejectedValue(refreshError);
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                disposition: 'retryable',
+                retryMode: 'restart',
+                code: 'unavailable',
+                statusCode: 400,
+                dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+            } satisfies Partial<ProviderOperationError>);
+        expect(requestMocks.post).not.toHaveBeenCalled();
+    });
+
     it('should throw internal error if initialization response is missing url or id', async () => {
         // Setup Mocks
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
@@ -635,6 +712,26 @@ describe('importActivityToSuuntoApp', () => {
                 retryMode: 'none',
                 providerOperationId: 'permanent-error-upload-id',
                 dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_REJECTED',
+            } satisfies Partial<ProviderOperationError>);
+    });
+
+    it('should not treat an ambiguous invalid-token processing message as a permanent FIT rejection', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({
+            id: 'invalid-token-upload-id',
+            url: 'https://storage.suunto.com/invalid-token-upload-url',
+            headers: {},
+        });
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({ status: 'ERROR', message: 'Invalid token state' });
+
+        await expect(uploadActivityFileToSuunto('test-user-id', Buffer.from('data')))
+            .rejects.toMatchObject({
+                name: 'ProviderOperationError',
+                disposition: 'retryable',
+                retryMode: 'restart',
+                providerOperationId: 'invalid-token-upload-id',
+                dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
             } satisfies Partial<ProviderOperationError>);
     });
 

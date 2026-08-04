@@ -98,7 +98,7 @@ import {
   uploadFitRouteToWahoo,
   uploadRouteToWahoo,
 } from './routes';
-import { WahooAPIRequestError } from './auth/api';
+import { WahooAPIRequestError, WahooAPITransportError } from './auth/api';
 
 function routeFile(overrides: Partial<Record<string, unknown>> = {}) {
   const stats = new Map<string, number>([
@@ -397,6 +397,39 @@ describe('Wahoo route uploads', () => {
     mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPIRequestError(
       'Wahoo API GET /v1/routes failed with 503',
       503,
+    ));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'route_upload',
+        disposition: 'retryable',
+        retryMode: 'restart',
+        dlqContext: 'WAHOO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+      });
+  });
+
+  it('normalizes saved-route transport failures as retryable operations', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPITransportError(
+      'Wahoo API request timed out.',
+    ));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'route_upload',
+        disposition: 'retryable',
+        retryMode: 'restart',
+        dlqContext: 'WAHOO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+      });
+  });
+
+  it('normalizes saved-route HTTP request timeouts as retryable operations', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPIRequestError(
+      'Wahoo API GET /v1/routes failed with 408',
+      408,
     ));
 
     await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))

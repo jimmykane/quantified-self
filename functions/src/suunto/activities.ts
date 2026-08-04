@@ -26,25 +26,27 @@ import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES, MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
+  extractRefreshFailureDetails,
+  isTerminalRefreshFailureForService,
+} from '../service-auth-lifecycle';
+import {
   isProviderOperationError,
+  isTransientProviderTransportError,
   ProviderOperation,
   ProviderOperationError,
   ProviderRetryMode,
 } from '../shared/provider-operation-error';
 
-const SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES = new Set([502, 503, 504]);
+const SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES = new Set([408, 502, 503, 504]);
 const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
 const SUUNTO_TRANSIENT_BACKOFF_MS = 1000;
 const SUUNTO_STATUS_POLL_DELAY_MS = 2000;
 const SUUNTO_MAX_STATUS_REQUEST_ATTEMPTS = 10;
-const SUUNTO_PERMANENT_500_MESSAGE_PATTERNS = [
-  'unsupported',
-  'invalid',
-  'malformed',
-  'corrupt',
-  'format',
-  'payload',
-  'fit file',
+const SUUNTO_EXPLICIT_CONTENT_REJECTION_PATTERNS = [
+  /\bunsupported\s+(?:activity|file|fit|payload|workout)\b/i,
+  /\b(?:activity|file|fit|payload|workout)\s+(?:is\s+)?unsupported\b/i,
+  /\b(?:invalid|malformed|corrupt(?:ed)?)\s+(?:activity|file|fit|payload|workout)\b/i,
+  /\b(?:activity|file|fit|payload|workout)\s+(?:is\s+)?(?:invalid|malformed|corrupt(?:ed)?)\b/i,
 ];
 
 function getStatusCode(error: unknown): number | undefined {
@@ -84,23 +86,22 @@ function isLikelyPermanentSuunto500(error: unknown): boolean {
     return false;
   }
 
-  const message = getSuuntoErrorMessage(error)?.toLowerCase();
+  const message = getSuuntoErrorMessage(error);
   if (!message) {
     return false;
   }
 
-  return SUUNTO_PERMANENT_500_MESSAGE_PATTERNS.some((pattern) => message.includes(pattern));
+  return isExplicitSuuntoContentRejectionMessage(message);
 }
 
-function isLikelyPermanentSuuntoMessage(message: string): boolean {
-  const normalizedMessage = message.toLowerCase();
-  return SUUNTO_PERMANENT_500_MESSAGE_PATTERNS.some((pattern) => normalizedMessage.includes(pattern));
+function isExplicitSuuntoContentRejectionMessage(message: string): boolean {
+  return SUUNTO_EXPLICIT_CONTENT_REJECTION_PATTERNS.some((pattern) => pattern.test(message));
 }
 
 function isRetryableSuuntoTransientError(error: unknown, retryOnInternalServerError = false): boolean {
   const statusCode = getStatusCode(error);
   if (statusCode === undefined) {
-    return false;
+    return isTransientProviderTransportError(error);
   }
 
   if (SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES.has(statusCode)) {
@@ -230,6 +231,9 @@ function toSuuntoProviderOperationError(
   }
 
   const statusCode = getStatusCode(error);
+  const refreshFailure = extractRefreshFailureDetails(error);
+  const isTemporarilyRetryableAuthFailure = refreshFailure.isTerminalAuthFailure
+    && !isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, refreshFailure);
   const providerMessage = getSuuntoErrorMessage(error);
   const message = providerMessage || (error instanceof Error ? error.message : `${error || 'Suunto operation failed.'}`);
   const common = {
@@ -262,7 +266,13 @@ function toSuuntoProviderOperationError(
     });
   }
 
-  if (statusCode === 429 || (statusCode !== undefined && statusCode >= 500 && !isLikelyPermanentSuunto500(error))) {
+  if (
+    isTemporarilyRetryableAuthFailure
+    || statusCode === 408
+    || statusCode === 429
+    || (statusCode !== undefined && statusCode >= 500 && !isLikelyPermanentSuunto500(error))
+    || (statusCode === undefined && isTransientProviderTransportError(error))
+  ) {
     return new ProviderOperationError({
       ...common,
       disposition: 'retryable',
@@ -321,7 +331,7 @@ function toSuuntoProcessingStatusError(
   uploadId: string,
 ): ProviderOperationError {
   const message = `Suunto processing failed: ${providerMessage || 'Unknown provider error'}`;
-  const permanent = isLikelyPermanentSuuntoMessage(providerMessage);
+  const permanent = isExplicitSuuntoContentRejectionMessage(providerMessage);
   return new ProviderOperationError({
     serviceName: ServiceNames.SuuntoApp,
     operation: 'activity_upload_status',

@@ -25,6 +25,7 @@ import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import {
   isProviderOperationError,
+  isTransientProviderTransportError,
   ProviderOperationError,
 } from '../shared/provider-operation-error';
 
@@ -145,7 +146,10 @@ function toGarminRouteProviderError(
   }
 
   const statusCode = getGarminStatusCode(error) ?? undefined;
-  const retryable = statusCode === 429 || (statusCode !== undefined && statusCode >= 500);
+  const retryable = statusCode === 408
+    || statusCode === 429
+    || (statusCode !== undefined && statusCode >= 500)
+    || (statusCode === undefined && isTransientProviderTransportError(error));
   const message = retryable
     ? 'Garmin Connect is temporarily unavailable. Please retry.'
     : error instanceof Error

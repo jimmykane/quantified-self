@@ -32,12 +32,36 @@ export interface ProviderOperationErrorOptions {
 }
 
 const SAFE_TEXT_MAX_LENGTH = 500;
+const TRANSIENT_PROVIDER_TRANSPORT_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'EPIPE',
+  'ESOCKETTIMEDOUT',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+const TRANSIENT_PROVIDER_TRANSPORT_ERROR_NAMES = new Set([
+  'AbortError',
+  'FetchError',
+  'RequestError',
+  'TimeoutError',
+  'WahooAPITransportError',
+]);
 
 function normalizeOptionalString(value: unknown, maxLength = SAFE_TEXT_MAX_LENGTH): string | undefined {
   const normalized = `${value || ''}`
+    .replace(
+      /["']?\b(access_token|refresh_token|id_token|client_secret|authorization|token|api[_-]?key|x-sig|signature|sig)["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|(?:Bearer|Basic)\s+[^&,\s}\]]+|[^&,\s}\]]+)/gi,
+      '$1=[redacted]',
+    )
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\b(access_token|refresh_token|id_token|client_secret|authorization|token|api[_-]?key|x-sig|signature|sig)=([^&\s]+)/gi, '$1=[redacted]')
-    .replace(/\b(access_token|refresh_token|id_token|client_secret|authorization|token|api[_-]?key|x-sig|signature|sig)["']?\s*:\s*["'][^"']+["']/gi, '$1: "[redacted]"')
     .replace(/https?:\/\/[^\s]+/gi, '[url]')
     .replace(/\s+/g, ' ')
     .trim()
@@ -73,7 +97,9 @@ export class ProviderOperationError extends Error {
     this.serviceName = options.serviceName;
     this.operation = options.operation;
     this.disposition = options.disposition;
-    this.retryMode = options.retryMode || (options.disposition === 'retryable' ? 'restart' : 'none');
+    this.retryMode = options.disposition === 'retryable'
+      ? options.retryMode === 'resume' ? 'resume' : 'restart'
+      : 'none';
     this.code = normalizeOptionalString(options.code, 100) || 'provider_operation_failed';
     this.statusCode = normalizeFiniteNonNegativeNumber(options.statusCode);
     this.providerCode = normalizeOptionalString(options.providerCode, 100);
@@ -86,4 +112,35 @@ export class ProviderOperationError extends Error {
 
 export function isProviderOperationError(error: unknown): error is ProviderOperationError {
   return error instanceof ProviderOperationError;
+}
+
+/**
+ * Recognizes transport failures that have no HTTP response. Keep this list
+ * explicit so validation and programming errors are never retried by accident.
+ */
+export function isTransientProviderTransportError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const errorLike = error as {
+    code?: unknown;
+    errno?: unknown;
+    name?: unknown;
+    cause?: { code?: unknown; errno?: unknown; name?: unknown } | null;
+  };
+  const candidates = [
+    errorLike.code,
+    errorLike.errno,
+    errorLike.cause?.code,
+    errorLike.cause?.errno,
+  ].map(value => `${value || ''}`.trim().toUpperCase()).filter(Boolean);
+  if (candidates.some(code => TRANSIENT_PROVIDER_TRANSPORT_CODES.has(code))) {
+    return true;
+  }
+
+  const names = [errorLike.name, errorLike.cause?.name]
+    .map(value => `${value || ''}`.trim())
+    .filter(Boolean);
+  return names.some(name => TRANSIENT_PROVIDER_TRANSPORT_ERROR_NAMES.has(name));
 }

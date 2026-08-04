@@ -225,4 +225,14 @@ describe('Wahoo activity uploads', () => {
     await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
       .rejects.toMatchObject({ code: 'unavailable' });
   });
+
+  it('returns a retryable error when Wahoo responds with request timeout', async () => {
+    mocks.requestWahooAPI.mockRejectedValue(new WahooAPIRequestError(
+      'Wahoo API POST /v1/workout_file_uploads failed with 408',
+      408,
+    ));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'unavailable' });
+  });
 });

@@ -64,6 +64,25 @@ export interface TerminalAuthFailureInput {
   providerErrorMessage: string | null;
 }
 
+/**
+ * Applies provider-specific policy after the provider payload has been
+ * normalized. Keep temporary outage exceptions here so token refresh and
+ * downstream provider operations make the same terminal-auth decision.
+ */
+export function isTerminalRefreshFailureForService(
+  serviceName: ServiceNames,
+  failure: Pick<RefreshFailureDetails, 'isInvalidGrant' | 'isTerminalAuthFailure' | 'statusCode'>,
+): boolean {
+  // Temporary Suunto policy: during the July 2026 outage Suunto returned false
+  // 400 invalid_grant responses, then accepted the same refresh token later.
+  // TODO: Revert this provider-specific downgrade once Suunto patches this.
+  if (serviceName === ServiceNames.SuuntoApp && failure.isInvalidGrant && failure.statusCode !== 401) {
+    return false;
+  }
+
+  return failure.isTerminalAuthFailure;
+}
+
 export interface ServiceAuthCleanupOutcome {
   reason: ServiceAuthCleanupReason;
   tokenCount: number;

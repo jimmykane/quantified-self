@@ -246,6 +246,23 @@ describe('activity-sync/process-queue-item', () => {
     }));
   });
 
+  it('treats a persisted cleared provider state as a fresh upload', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      destinationUploadID: null,
+      destinationProviderUserID: null,
+      destinationWorkoutKey: null,
+      destinationInfoCode: null,
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'));
+    expect(mockGetSuuntoActivityUploadStatus).not.toHaveBeenCalled();
+  });
+
   it('persists a pending Wahoo upload token and retries status checks without posting the FIT file again', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -282,6 +299,7 @@ describe('activity-sync/process-queue-item', () => {
     await processActivitySyncQueueItem(queueItem);
 
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1');
+    expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
   });
 
@@ -330,7 +348,64 @@ describe('activity-sync/process-queue-item', () => {
       'suunto-pending-1',
       'suunto-user-1',
     );
+    expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToSuunto).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves an accepted Suunto upload to DLQ with resume identifiers when state persistence fails', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+    };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'Suunto is still processing the activity.',
+      uploadId: 'suunto-pending-persist-failure',
+      providerUserId: 'suunto-user-1',
+    });
+    mockUpdateQueueItemIfUserActive.mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationUploadID: 'suunto-pending-persist-failure',
+        destinationProviderUserID: 'suunto-user-1',
+      }),
+      expect.objectContaining({ code: 'internal' }),
+      undefined,
+      'DESTINATION_PROVIDER_RESUME_STATE_PERSIST_FAILED',
+    );
+  });
+
+  it('moves an accepted Wahoo upload to DLQ with its resume identifier when state persistence fails', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      ref: {} as any,
+    };
+    mockUploadActivityFileToWahoo.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'processing',
+      uploadId: 'wahoo-pending-persist-failure',
+    });
+    mockUpdateQueueItemIfUserActive.mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationUploadID: 'wahoo-pending-persist-failure',
+      }),
+      expect.objectContaining({ code: 'internal' }),
+      undefined,
+      'DESTINATION_PROVIDER_RESUME_STATE_PERSIST_FAILED',
+    );
   });
 
   it('persists a resumable Suunto provider error before incrementing retry state', async () => {
@@ -360,6 +435,174 @@ describe('activity-sync/process-queue-item', () => {
       }),
     }));
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves partial persisted Suunto resume state to DLQ without downloading or reposting the FIT file', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      destinationUploadID: 'suunto-upload-without-user',
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockGetSuuntoActivityUploadStatus).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({
+        disposition: 'permanent',
+        providerOperationId: 'suunto-upload-without-user',
+      }),
+      undefined,
+      'DESTINATION_PROVIDER_INVALID_RESUME_STATE',
+    );
+  });
+
+  it('moves a pending Suunto response without resumable identifiers directly to DLQ', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+    };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'Suunto is still processing the activity.',
+      uploadId: 'suunto-pending-without-user',
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({
+        disposition: 'permanent',
+        providerOperationId: 'suunto-pending-without-user',
+      }),
+      undefined,
+      'DESTINATION_PROVIDER_INVALID_RESUME_STATE',
+    );
+  });
+
+  it('uses persisted Suunto identifiers when a resumable status error omits them', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      destinationUploadID: 'suunto-existing-upload',
+      destinationProviderUserID: 'suunto-existing-user',
+    };
+    mockGetSuuntoActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_status',
+      disposition: 'retryable',
+      retryMode: 'resume',
+      code: 'unavailable',
+      message: 'Suunto status is temporarily unavailable.',
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      updateData: expect.objectContaining({
+        destinationUploadID: 'suunto-existing-upload',
+        destinationProviderUserID: 'suunto-existing-user',
+      }),
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('preserves persisted Suunto identifiers when a successful status response omits them', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      destinationUploadID: 'suunto-existing-upload',
+      destinationProviderUserID: 'suunto-existing-user',
+      destinationWorkoutKey: 'suunto-existing-workout',
+    };
+    mockGetSuuntoActivityUploadStatus.mockResolvedValueOnce({
+      status: 'success',
+      message: 'Activity uploaded to Suunto',
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationUploadID: 'suunto-existing-upload',
+      workoutKey: 'suunto-existing-workout',
+    }));
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(
+      queueItem,
+      undefined,
+      expect.objectContaining({
+        destinationUploadID: 'suunto-existing-upload',
+        destinationProviderUserID: 'suunto-existing-user',
+        destinationWorkoutKey: 'suunto-existing-workout',
+      }),
+    );
+  });
+
+  it('does not carry stale job metadata into a fresh successful upload', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      destinationWorkoutKey: 'stale-workout',
+      destinationInfoCode: 'PROCESSING',
+    };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'success',
+      message: 'Activity uploaded to Suunto',
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationUploadID: undefined,
+      workoutKey: undefined,
+    }));
+    expect(mockUpdateToProcessed).toHaveBeenCalledWith(
+      queueItem,
+      undefined,
+      expect.objectContaining({
+        destinationUploadID: null,
+        destinationProviderUserID: null,
+        destinationWorkoutKey: null,
+        destinationInfoCode: null,
+      }),
+    );
+  });
+
+  it('moves a resumable Suunto error without current or persisted identifiers directly to DLQ', async () => {
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_status',
+      disposition: 'retryable',
+      retryMode: 'resume',
+      code: 'unavailable',
+      message: 'Suunto status is temporarily unavailable.',
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    }));
+
+    const result = await processActivitySyncQueueItem(baseQueueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      baseQueueItem,
+      expect.objectContaining({ disposition: 'permanent' }),
+      undefined,
+      'DESTINATION_PROVIDER_INVALID_RESUME_STATE',
+    );
   });
 
   it('clears an errored Suunto upload before restarting it on the next retry', async () => {
@@ -389,10 +632,45 @@ describe('activity-sync/process-queue-item', () => {
       updateData: {
         destinationUploadID: null,
         destinationProviderUserID: null,
+        destinationWorkoutKey: null,
+        destinationInfoCode: null,
       },
     }));
     expect(queueItem.destinationUploadID).toBeNull();
     expect(queueItem.destinationProviderUserID).toBeNull();
+  });
+
+  it('clears stale job metadata before restart even when upload identifiers are absent', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      destinationWorkoutKey: 'stale-workout',
+      destinationInfoCode: 'PROCESSING',
+    };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_init',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      message: 'Suunto is temporarily unavailable.',
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_pending_upload_restart',
+      updateData: {
+        destinationUploadID: null,
+        destinationProviderUserID: null,
+        destinationWorkoutKey: null,
+        destinationInfoCode: null,
+      },
+    }));
+    expect(queueItem.destinationWorkoutKey).toBeUndefined();
+    expect(queueItem.destinationInfoCode).toBeUndefined();
   });
 
   it('moves an explicitly permanent Suunto provider failure directly to DLQ', async () => {

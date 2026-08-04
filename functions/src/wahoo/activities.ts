@@ -184,7 +184,7 @@ function toWahooHttpsError(error: unknown): never {
       retryAfterSeconds: error.resetAfterSeconds,
     });
   }
-  if (error.statusCode >= 500) {
+  if (error.statusCode === 408 || error.statusCode >= 500) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
   }
   const providerMessage = getWahooProviderErrorMessage(error);

@@ -453,6 +453,33 @@ describe('garmin route sending', () => {
     });
   });
 
+  it('normalizes Garmin status-less transport failures as retryable provider operations', async () => {
+    garminTokenDocsByUser.set('garminAPITokens:user-1', [
+      createTokenSnapshot('token-1', 'garmin-user-1'),
+    ]);
+    requestHelperMocks.post.mockRejectedValueOnce(Object.assign(
+      new Error('socket closed before a response'),
+      { code: 'ECONNRESET' },
+    ));
+    const context = await createGarminRouteSendContext('user-1');
+
+    await expect(sendRouteToGarminConnect(
+      'user-1',
+      'route-1',
+      { id: 'route-1', name: 'QS Route Name', activityTypes: ['Cycling'] } as any,
+      createRouteFile(),
+      context,
+    )).rejects.toMatchObject({
+      name: 'ProviderOperationError',
+      operation: 'route_create',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      providerUserId: 'garmin-user-1',
+      dlqContext: 'GARMIN_ROUTE_CREATE_RETRY_EXHAUSTED',
+    });
+  });
+
   it('normalizes explicit Garmin create rejection as permanent', async () => {
     garminTokenDocsByUser.set('garminAPITokens:user-1', [
       createTokenSnapshot('token-1', 'garmin-user-1'),

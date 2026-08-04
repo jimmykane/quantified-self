@@ -83,8 +83,8 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   successProcessedAt?: number;
   destinationUploadID?: string | null;
   destinationProviderUserID?: string | null;
-  destinationWorkoutKey?: string;
-  destinationInfoCode?: string;
+  destinationWorkoutKey?: string | null;
+  destinationInfoCode?: string | null;
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {
