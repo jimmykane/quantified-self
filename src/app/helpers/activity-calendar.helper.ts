@@ -49,6 +49,7 @@ export interface ActivityCalendarDayViewModel {
   dayNumber: number;
   inPrimaryPeriod: boolean;
   isToday: boolean;
+  isWeekend: boolean;
   eventCount: number;
   totalDurationSeconds: number;
   durationLabel: string;
@@ -59,10 +60,17 @@ export interface ActivityCalendarDayViewModel {
   ariaLabel: string;
 }
 
+export interface ActivityCalendarWeekdayViewModel {
+  label: string;
+  dayOfWeek: number;
+  isWeekend: boolean;
+  isWeekStart: boolean;
+}
+
 export interface ActivityCalendarMonthViewModel {
   id: string;
   label: string;
-  weekdayLabels: string[];
+  weekdays: ActivityCalendarWeekdayViewModel[];
   days: ActivityCalendarDayViewModel[];
 }
 
@@ -238,14 +246,14 @@ export function buildActivityCalendarViewModel(
   const locale = options.locale;
   const now = startOfLocalDay(options.now && isValidDate(options.now) ? options.now : new Date());
   const eventsByDay = groupEventsByLocalDay(events || []);
-  const weekdayLabels = buildWeekdayLabels(options.startOfWeek, locale);
+  const weekdays = buildWeekdays(options.startOfWeek, locale);
 
   if (view === 'year') {
     const year = anchorDate.getFullYear();
     const months = Array.from({ length: 12 }, (_, monthIndex) => buildMonthViewModel(
       new Date(year, monthIndex, 1),
       eventsByDay,
-      weekdayLabels,
+      weekdays,
       options.startOfWeek,
       locale,
       now,
@@ -270,7 +278,7 @@ export function buildActivityCalendarViewModel(
     const months = [{
       id: `week-${formatActivityCalendarDateParam(weekStart)}`,
       label: formatWeekRange(weekStart, addLocalDays(weekStart, 6), locale),
-      weekdayLabels,
+      weekdays,
       days,
     }];
     return {
@@ -285,7 +293,7 @@ export function buildActivityCalendarViewModel(
   const months = [buildMonthViewModel(
     monthStart,
     eventsByDay,
-    weekdayLabels,
+    weekdays,
     options.startOfWeek,
     locale,
     now,
@@ -348,7 +356,7 @@ export function resolveActivityCalendarEventLabel(event: EventInterface): string
 function buildMonthViewModel(
   monthStart: Date,
   eventsByDay: Map<string, EventInterface[]>,
-  weekdayLabels: string[],
+  weekdays: ActivityCalendarWeekdayViewModel[],
   startOfWeek: DaysOfTheWeek | number | null | undefined,
   locale: string | undefined,
   now: Date,
@@ -357,7 +365,7 @@ function buildMonthViewModel(
   return {
     id: `${monthStart.getFullYear()}-${`${monthStart.getMonth() + 1}`.padStart(2, '0')}`,
     label: formatMonthLabel(monthStart, locale),
-    weekdayLabels,
+    weekdays,
     days: Array.from({ length: CALENDAR_MONTH_GRID_DAYS }, (_, dayIndex) => {
       const date = addLocalDays(gridStart, dayIndex);
       return buildDayViewModel(
@@ -444,6 +452,7 @@ function buildDayViewModel(
     dayNumber: date.getDate(),
     inPrimaryPeriod,
     isToday: date.getTime() === now.getTime(),
+    isWeekend: isWeekendDay(date.getDay()),
     eventCount: events.length,
     totalDurationSeconds,
     durationLabel,
@@ -669,16 +678,26 @@ function calculateMarkerSizePercent(durationSeconds: number): number {
   return MIN_MARKER_SIZE_PERCENT + ((100 - MIN_MARKER_SIZE_PERCENT) * ratio);
 }
 
-function buildWeekdayLabels(
+function buildWeekdays(
   startOfWeek: DaysOfTheWeek | number | null | undefined,
   locale: string | undefined,
-): string[] {
+): ActivityCalendarWeekdayViewModel[] {
   const normalizedStart = normalizeStartOfWeek(startOfWeek);
   const referenceSunday = new Date(2024, 0, 7);
   const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
-  return Array.from({ length: 7 }, (_, index) => (
-    formatter.format(addLocalDays(referenceSunday, (normalizedStart + index) % 7))
-  ));
+  return Array.from({ length: 7 }, (_, index) => {
+    const dayOfWeek = (normalizedStart + index) % 7;
+    return {
+      label: formatter.format(addLocalDays(referenceSunday, dayOfWeek)),
+      dayOfWeek,
+      isWeekend: isWeekendDay(dayOfWeek),
+      isWeekStart: index === 0,
+    };
+  });
+}
+
+function isWeekendDay(dayOfWeek: number): boolean {
+  return dayOfWeek === 0 || dayOfWeek === 6;
 }
 
 function formatMonthLabel(date: Date, locale?: string): string {

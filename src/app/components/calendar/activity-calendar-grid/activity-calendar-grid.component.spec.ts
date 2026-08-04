@@ -47,6 +47,23 @@ describe('ActivityCalendarGridComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar')?.classList.contains('activity-calendar--year')).toBe(true);
   });
 
+  it('marks the configured week start and actual weekend columns', async () => {
+    const fixture = await renderGrid('month', false, [], DaysOfTheWeek.Sunday);
+    const weekdays = [...fixture.nativeElement.querySelectorAll('.activity-calendar-weekdays span')] as HTMLElement[];
+    const firstWeek = [...fixture.nativeElement.querySelectorAll('.activity-calendar-day')].slice(0, 7) as HTMLElement[];
+
+    expect(weekdays.map(weekday => weekday.textContent?.trim())).toEqual([
+      'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat',
+    ]);
+    expect(weekdays[0].classList).toContain('activity-calendar-weekday--week-start');
+    expect(weekdays[0].classList).toContain('activity-calendar-weekday--weekend');
+    expect(weekdays[6].classList).toContain('activity-calendar-weekday--weekend');
+    expect(weekdays[1].classList).not.toContain('activity-calendar-weekday--weekend');
+    expect(firstWeek[0].classList).toContain('activity-calendar-day--weekend');
+    expect(firstWeek[6].classList).toContain('activity-calendar-day--weekend');
+    expect(firstWeek[1].classList).not.toContain('activity-calendar-day--weekend');
+  });
+
   it('does not use calendar-specific gray surface fills', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
@@ -71,6 +88,7 @@ async function renderGrid(
   view: 'week' | 'month' | 'year',
   compact: boolean,
   events: EventInterface[],
+  startOfWeek: DaysOfTheWeek | number = DaysOfTheWeek.Monday,
 ) {
   const fixture = await import('@angular/core/testing').then(async ({ TestBed }) => {
     await TestBed.configureTestingModule({ imports: [ActivityCalendarGridComponent] }).compileComponents();
@@ -79,7 +97,7 @@ async function renderGrid(
   fixture.componentRef.setInput('model', buildActivityCalendarViewModel(events, {
     view,
     anchorDate: new Date(2026, 7, 3),
-    startOfWeek: DaysOfTheWeek.Monday,
+    startOfWeek,
     locale: 'en-US',
     now: new Date(2026, 7, 3),
   }));

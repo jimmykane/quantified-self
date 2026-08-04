@@ -342,7 +342,50 @@ describe('activity-calendar helper', () => {
     expect(model.periodLabel).toBe('2026');
     expect(model.months).toHaveLength(12);
     expect(model.months.every(month => month.days.length === 42)).toBe(true);
-    expect(model.months[0].weekdayLabels[0]).toMatch(/^Sun/);
+    expect(model.months[0].weekdays[0].label).toMatch(/^Sun/);
+  });
+
+  it.each([
+    {
+      startOfWeek: DaysOfTheWeek.Monday,
+      orderedDays: [1, 2, 3, 4, 5, 6, 0],
+      weekendColumns: [5, 6],
+    },
+    {
+      startOfWeek: DaysOfTheWeek.Sunday,
+      orderedDays: [0, 1, 2, 3, 4, 5, 6],
+      weekendColumns: [0, 6],
+    },
+    {
+      startOfWeek: 2,
+      orderedDays: [2, 3, 4, 5, 6, 0, 1],
+      weekendColumns: [4, 5],
+    },
+    {
+      startOfWeek: 6,
+      orderedDays: [6, 0, 1, 2, 3, 4, 5],
+      weekendColumns: [0, 1],
+    },
+  ])('orders weekdays and weekends for start day $startOfWeek', ({
+    startOfWeek,
+    orderedDays,
+    weekendColumns,
+  }) => {
+    const model = buildActivityCalendarViewModel([], {
+      view: 'month',
+      anchorDate: new Date(2026, 7, 3),
+      startOfWeek,
+      locale: 'en-US',
+    });
+    const weekdays = model.months[0].weekdays;
+
+    expect(weekdays.map(weekday => weekday.dayOfWeek)).toEqual(orderedDays);
+    expect(weekdays.flatMap((weekday, index) => weekday.isWeekend ? [index] : []))
+      .toEqual(weekendColumns);
+    expect(weekdays.map(weekday => weekday.isWeekStart))
+      .toEqual([true, false, false, false, false, false, false]);
+    expect(model.months[0].days.find(day => day.dateKey === '2026-08-01')?.isWeekend).toBe(true);
+    expect(model.months[0].days.find(day => day.dateKey === '2026-08-03')?.isWeekend).toBe(false);
   });
 
   it('formats compact duration labels', () => {

@@ -5,6 +5,8 @@
 }
 
 .activity-calendar {
+  --activity-calendar-weekend-tint: 5%;
+
   container-type: inline-size;
   width: 100%;
   min-width: 0;
@@ -18,6 +20,11 @@
 
 .activity-calendar--year .activity-calendar-months {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.activity-calendar--year,
+.activity-calendar--compact {
+  --activity-calendar-weekend-tint: 3%;
 }
 
 .activity-calendar-month {
@@ -53,7 +60,12 @@
 }
 
 .activity-calendar-weekdays span {
+  position: relative;
+  display: flex;
   min-width: 0;
+  align-self: stretch;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-medium);
@@ -61,6 +73,36 @@
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.activity-calendar-weekday--weekend {
+  background: color-mix(
+    in srgb,
+    var(--mat-sys-tertiary) var(--activity-calendar-weekend-tint),
+    transparent
+  );
+}
+
+.activity-calendar-weekdays .activity-calendar-weekday--weekend {
+  color: var(--mat-sys-tertiary);
+  font-weight: 600;
+}
+
+.activity-calendar-weekdays .activity-calendar-weekday--week-start {
+  color: var(--mat-sys-primary);
+  font-weight: 600;
+}
+
+.activity-calendar-weekday--week-start::after {
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--mat-sys-primary);
+  content: '';
+  transform: translateX(-50%);
 }
 
 .activity-calendar-day {
@@ -110,6 +152,14 @@
 
 .activity-calendar-day--blank {
   background: transparent;
+}
+
+.activity-calendar-day--weekend {
+  background: color-mix(
+    in srgb,
+    var(--mat-sys-tertiary) var(--activity-calendar-weekend-tint),
+    transparent
+  );
 }
 
 .activity-calendar-day-number {

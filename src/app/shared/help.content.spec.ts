@@ -160,6 +160,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Week, Month, and Year views');
     expect(gettingStartedSection?.content).toContain('compact tiles, narrow layouts, and Year view place them concentrically');
     expect(gettingStartedSection?.content).toContain('scale by recorded duration');
+    expect(gettingStartedSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(gettingStartedSection?.content).toContain('Saturday and Sunday are identified as weekend days');
     expect(gettingStartedSection?.content).toContain('total distance, duration, and ascent');
     expect(gettingStartedSection?.content).toContain('Month totals exclude adjacent dates');
     expect(gettingStartedSection?.content).toContain('compares the selected period by recorded duration');
