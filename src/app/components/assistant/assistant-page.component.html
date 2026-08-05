@@ -1,4 +1,4 @@
-<main class="assistant-page">
+<main #assistantPage class="assistant-page">
   <header class="assistant-header">
     <div class="assistant-heading">
       <span class="assistant-heading-icon" aria-hidden="true">
@@ -138,14 +138,6 @@
     </section>
   }
 
-  @if (errorMessage()) {
-    <section class="assistant-error" role="alert">
-      <mat-icon>error_outline</mat-icon>
-      <span>{{ errorMessage() }}</span>
-      <button mat-button type="button" (click)="errorMessage.set(null)">Dismiss</button>
-    </section>
-  }
-
   <section class="composer-shell qs-glass-card-panel" [class.composer-shell-sticky]="!isEmpty()">
     <form class="composer" (submit)="handleComposerSubmit($event)">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -163,6 +155,13 @@
         }
       </button>
     </form>
+    @if (errorMessage()) {
+      <section class="assistant-error" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ errorMessage() }}</span>
+        <button mat-button type="button" (click)="errorMessage.set(null)">Dismiss</button>
+      </section>
+    }
     <footer class="composer-footer">
       <span>{{ quotaText() }}</span>
       <span>Answers can be wrong. Verify important health or Training decisions.</span>

@@ -11,9 +11,10 @@
 
 .assistant-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 18px;
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
 .assistant-heading,
@@ -297,7 +298,7 @@ h1 {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  margin: 8px 0 14px;
+  margin: 8px 0 4px;
   padding: 11px 13px;
   border: 1px solid color-mix(in srgb, var(--mat-sys-error) 32%, transparent);
   border-radius: 14px;
@@ -374,13 +375,8 @@ h1 {
     padding: 20px 14px calc(28px + env(safe-area-inset-bottom));
   }
 
-  .assistant-header {
-    display: grid;
-    gap: 15px;
-  }
-
-  .assistant-header-actions {
-    justify-content: flex-end;
+  .assistant-trust-row {
+    margin-bottom: 14px;
   }
 
   .message {
@@ -417,24 +413,26 @@ h1 {
 }
 
 @media (max-width: 480px) {
+  .assistant-heading p,
+  .welcome-copy p {
+    display: none;
+  }
+
+  .assistant-header-actions :is(a, button) {
+    min-width: 40px;
+  }
+
   .assistant-header-actions :is(a, button) span {
     display: none;
   }
 
   .assistant-welcome mat-card-content {
-    padding: 18px;
+    gap: 16px;
+    padding: 16px;
   }
 }
 
 @media (max-width: 430px) {
-  .assistant-welcome mat-card-content {
-    padding: 18px;
-  }
-
-  .welcome-copy {
-    display: grid;
-  }
-
   .evidence-item dl {
     grid-template-columns: 1fr;
   }

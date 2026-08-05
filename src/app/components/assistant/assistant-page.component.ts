@@ -45,6 +45,7 @@ import {
 export class AssistantPageComponent implements OnInit {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
+  private readonly assistantPage = viewChild<ElementRef<HTMLElement>>('assistantPage');
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
   private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
 
@@ -111,7 +112,9 @@ export class AssistantPageComponent implements OnInit {
       this.quota.set(quotaResult.value);
     }
     this.loadingConversation.set(false);
-    this.scrollToConversationEnd();
+    if (!this.isEmpty()) {
+      this.scrollToConversationEnd();
+    }
   }
 
   useStarterPrompt(prompt: string): void {
@@ -133,6 +136,8 @@ export class AssistantPageComponent implements OnInit {
     }
     this.errorMessage.set(null);
     this.sending.set(true);
+    const activeConversation = this.conversation();
+    const hadConversationMessages = this.messages().length > 0;
     const retryRequest = this.retryRequest();
     const request = retryRequest?.message === text
       ? retryRequest
@@ -148,8 +153,9 @@ export class AssistantPageComponent implements OnInit {
       createdAt: new Date().toISOString(),
     });
     this.promptControl.setValue('');
-    this.scrollToConversationEnd();
-    const activeConversation = this.conversation();
+    if (hadConversationMessages) {
+      this.scrollToConversationEnd();
+    }
     try {
       const response = await this.assistantService.sendMessage({
         requestId: request.requestId,
@@ -207,7 +213,11 @@ export class AssistantPageComponent implements OnInit {
     } finally {
       this.pendingUserMessage.set(null);
       this.sending.set(false);
-      this.scrollToConversationEnd();
+      if (this.isEmpty()) {
+        this.scrollToPageStart();
+      } else {
+        this.scrollToConversationEnd();
+      }
     }
   }
 
@@ -221,6 +231,7 @@ export class AssistantPageComponent implements OnInit {
       this.conversation.set(await this.assistantService.resetConversation());
       this.retryRequest.set(null);
       this.promptControl.setValue('');
+      this.scrollToPageStart();
     } catch (error) {
       this.errorMessage.set(this.assistantService.getErrorMessage(error));
     } finally {
@@ -250,6 +261,19 @@ export class AssistantPageComponent implements OnInit {
       element.scrollIntoView({
         behavior: 'smooth',
         block: 'end',
+      });
+    });
+  }
+
+  private scrollToPageStart(): void {
+    setTimeout(() => {
+      const element = this.assistantPage()?.nativeElement;
+      if (!element || typeof element.scrollIntoView !== 'function') {
+        return;
+      }
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
       });
     });
   }

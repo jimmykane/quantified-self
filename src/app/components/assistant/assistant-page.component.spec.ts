@@ -169,6 +169,53 @@ describe('AssistantPageComponent', () => {
     expect(assistantService.sendMessage).toHaveBeenCalledOnce();
   });
 
+  it('does not auto-scroll an empty initial conversation', async () => {
+    const scrollSpy = vi.spyOn(
+      component as unknown as { scrollToConversationEnd: () => void },
+      'scrollToConversationEnd',
+    );
+    assistantService.getConversation.mockResolvedValueOnce(null);
+
+    await component.ngOnInit();
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+
+    assistantService.getConversation.mockResolvedValueOnce(chatResponse.conversation);
+    await component.ngOnInit();
+
+    expect(scrollSpy).toHaveBeenCalledOnce();
+  });
+
+  it('returns an empty first-turn failure to the page start', async () => {
+    const scrollEndSpy = vi.spyOn(
+      component as unknown as { scrollToConversationEnd: () => void },
+      'scrollToConversationEnd',
+    );
+    const scrollStartSpy = vi.spyOn(
+      component as unknown as { scrollToPageStart: () => void },
+      'scrollToPageStart',
+    );
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('model unavailable'));
+    component.promptControl.setValue('How am I today?');
+
+    await component.sendMessage();
+
+    expect(scrollEndSpy).not.toHaveBeenCalled();
+    expect(scrollStartSpy).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a send error inside the composer after the input', () => {
+    component.errorMessage.set('Something went wrong while preparing the answer.');
+    fixture.detectChanges();
+    const composer = fixture.nativeElement.querySelector('.composer') as HTMLFormElement;
+    const error = fixture.nativeElement.querySelector('.assistant-error') as HTMLElement;
+
+    expect(error).toBeTruthy();
+    expect(error.parentElement?.classList).toContain('composer-shell');
+    expect(composer.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+  });
+
   it('sends a starter prompt and renders the grounded response evidence', async () => {
     component.useStarterPrompt("Give me today's sleep, readiness, and Training report.");
     await component.sendMessage();
