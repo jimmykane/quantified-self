@@ -37,8 +37,9 @@ or Beta caller origin (or loopback while running the Functions emulator), with t
 
 The callable surface consists of:
 
-- `assistantChat`: validates the prompt, client-generated request ID, and IANA timezone; consumes quota when
-  grounded-answer processing begins; invokes the grounded runtime; and commits one completed user/assistant turn.
+- `assistantChat`: validates the prompt, client-generated request ID, and IANA timezone; reserves quota while it
+  prepares the grounded runtime; consumes it immediately before the first Gemini or MCP tool attempt; and commits one
+  completed user/assistant turn.
 - `getAssistantQuotaStatus`: returns the signed-in user's current Assistant allowance without exposing the server-owned
   usage ledger.
 - `getAssistantConversation`: reads the current server-owned conversation for the signed-in user.
@@ -149,12 +150,14 @@ Account deletion recursively removes the user document and all Assistant subcoll
 write, including failure cleanup, checks the shared user-deletion guard so an in-flight request cannot recreate data
 after deletion starts.
 
-The Assistant reuses the existing request ledger and role limits. A reservation is released if no model attempt
-starts, such as when another turn owns the conversation lease. Once the reservation is finalized, a failed model or
-tool attempt still consumes the request. Loading or resetting a conversation does not consume quota. Usage documents
-are read directly by period ID, so their server-only fields and dynamic reservation map are exempt from automatic
-single-field indexing. `periodEnd` deliberately remains indexed because the admin fallback orders historical usage by
-that field when no current subscription period is available.
+The Assistant reuses the existing request ledger and role limits. A reservation remains releasable while MCP session
+creation, tool discovery, and other non-billable setup runs. It is finalized immediately before the first Gemini model
+or MCP tool attempt; a defensive completion fallback prevents a grounded answer from being committed uncharged. A
+setup failure therefore releases the reservation, while a failed model or tool attempt still consumes the request.
+Loading or resetting a conversation does not consume quota. Usage documents are read directly by period ID, so their
+server-only fields and dynamic reservation map are exempt from automatic single-field indexing. `periodEnd`
+deliberately remains indexed because the admin fallback orders historical usage by that field when no current
+subscription period is available.
 
 ## Operations and rollout
 

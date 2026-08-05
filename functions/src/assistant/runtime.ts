@@ -52,6 +52,11 @@ export interface AssistantModelGenerationInput {
   mcpInstructions: string;
   tools: AssistantRuntimeTool[];
   publishedExample: AssistantPublishedPromptExample | null;
+  /**
+   * Marks the boundary immediately before work that can incur model or tool
+   * cost. The callable supplies an idempotent implementation.
+   */
+  onBillableAttempt: () => Promise<void>;
 }
 
 export interface AssistantRuntimeResult {
@@ -216,7 +221,10 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     name: tool.name,
     description: tool.description,
     inputJsonSchema: tool.inputJsonSchema,
-  }, toolInput => tool.execute(asToolInput(toolInput))));
+  }, async toolInput => {
+    await input.onBillableAttempt();
+    return tool.execute(asToolInput(toolInput));
+  }));
   const messages = input.history.map(message => ({
     role: message.role === 'assistant' ? 'model' as const : 'user' as const,
     content: [{ text: message.text }],
@@ -234,6 +242,7 @@ export const generateAssistantModelAnswer: AssistantRuntimeDependencies['generat
     ASSISTANT_INTERNAL_BOUNDARY_INSTRUCTIONS,
     publishedExampleInstructions,
   ].filter(Boolean).join(' ');
+  await input.onBillableAttempt();
   const initialResponse = await assistantGenkit.generate({
     system,
     messages,
@@ -316,6 +325,7 @@ export function createAssistantRuntime(
       prompt: string;
       timeZone: string;
       history: AssistantMessage[];
+      onBillableAttempt?: () => Promise<void>;
     }): Promise<AssistantRuntimeResult> => {
       const session: AssistantMcpSession = await dependencies.createMcpSession(
         input.uid,
@@ -356,6 +366,7 @@ export function createAssistantRuntime(
               toolInput,
               input.timeZone,
             );
+            await input.onBillableAttempt?.();
             const result = await session.callTool(tool.name, resolvedToolInput);
             cumulativeToolOutputBytes += Buffer.byteLength(
               JSON.stringify(result.structuredContent),
@@ -381,6 +392,7 @@ export function createAssistantRuntime(
           mcpInstructions: session.instructions,
           tools,
           publishedExample,
+          onBillableAttempt: input.onBillableAttempt ?? (async () => undefined),
         });
         if (invocations.length === 0) {
           throw new Error('The Assistant response was not grounded in current account data.');

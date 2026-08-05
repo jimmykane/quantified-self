@@ -62,6 +62,7 @@ export interface AssistantCallableDependencies {
     prompt: string;
     timeZone: string;
     history: AssistantMessage[];
+    onBillableAttempt: () => Promise<void>;
   }) => Promise<AssistantRuntimeResult>;
   createId: () => string;
   now: () => Date;
@@ -309,6 +310,25 @@ export async function runAssistantChat(
 
   let reservation: AssistantQuotaReservation | null = null;
   let begunTurn: BegunAssistantTurn | null = null;
+  let finalizedQuota: AssistantQuotaStatusResponse | null = null;
+  let finalizeQuotaPromise: Promise<AssistantQuotaStatusResponse> | null = null;
+  const finalizeQuotaForBillableAttempt = async (): Promise<void> => {
+    if (finalizedQuota) {
+      return;
+    }
+    if (!reservation) {
+      throw new Error('Assistant quota reservation was unavailable at the billable-work boundary.');
+    }
+    if (!finalizeQuotaPromise) {
+      const activeReservation = reservation;
+      finalizeQuotaPromise = dependencies.finalizeQuota(activeReservation).then(quota => {
+        finalizedQuota = quota;
+        reservation = null;
+        return quota;
+      });
+    }
+    await finalizeQuotaPromise;
+  };
   try {
     await dependencies.assertLegalAccess(uid);
     const quotaRoleContext = resolveCallableQuotaRoleContext(context);
@@ -366,15 +386,21 @@ export async function runAssistantChat(
       };
     }
     begunTurn = turnStart;
-    const quota = await dependencies.finalizeQuota(reservation);
-    reservation = null;
     const result = await dependencies.answer({
       uid,
       appBaseUrl: resolveAssistantAppBaseUrl(context),
       prompt: input.message,
       timeZone: input.timeZone,
       history: begunTurn.history,
+      onBillableAttempt: finalizeQuotaForBillableAttempt,
     });
+    // Production runtime calls this immediately before Gemini or an MCP tool.
+    // Retain a defensive completion fallback for injected runtimes: a grounded
+    // answer must never be committed without consuming its reserved allowance.
+    await finalizeQuotaForBillableAttempt();
+    if (!finalizedQuota) {
+      throw new Error('Assistant quota was not finalized for a completed answer.');
+    }
     const createdAt = dependencies.now().toISOString();
     const userMessage: AssistantMessage = {
       id: input.requestId,
@@ -396,7 +422,7 @@ export async function runAssistantChat(
       assistantMessage,
     );
     begunTurn = null;
-    return { conversation, quota };
+    return { conversation, quota: finalizedQuota };
   } catch (error) {
     if (begunTurn) {
       try {

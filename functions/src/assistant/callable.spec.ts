@@ -84,10 +84,15 @@ function createDependencies() {
     finalizeQuota: vi.fn().mockResolvedValue(quota),
     releaseQuota: vi.fn().mockResolvedValue(quota),
     conversationStore: store,
-    answer: vi.fn().mockResolvedValue({
-      answer: 'Your readiness is 72 today.',
-      evidence: [],
-      toolNames: ['get_daily_report'],
+    answer: vi.fn().mockImplementation(async (
+      input: Parameters<AssistantCallableDependencies['answer']>[0],
+    ) => {
+      await input.onBillableAttempt();
+      return {
+        answer: 'Your readiness is 72 today.',
+        evidence: [],
+        toolNames: ['get_daily_report'],
+      };
     }),
     createId: vi.fn().mockReturnValue('assistant-message'),
     now: () => new Date('2026-08-03T12:00:00.000Z'),
@@ -218,13 +223,14 @@ describe('Assistant callable', () => {
       REQUEST_ID,
     );
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
-    expect(dependencies.answer).toHaveBeenCalledWith({
+    expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       uid: 'user-1',
       appBaseUrl: 'https://beta.quantified-self.io',
       prompt: 'How am I today?',
       timeZone: 'Europe/Helsinki',
       history: [],
-    });
+      onBillableAttempt: expect.any(Function),
+    }));
     expect(store.completeTurn).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({ turnId: 'turn-1' }),
@@ -294,7 +300,10 @@ describe('Assistant callable', () => {
 
   it('clears a pending turn but does not refund a consumed model attempt', async () => {
     const { dependencies, store } = createDependencies();
-    vi.mocked(dependencies.answer).mockRejectedValue(new Error('model unavailable'));
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      await input.onBillableAttempt();
+      throw new Error('model unavailable');
+    });
 
     await expect(runAssistantChat({
       requestId: REQUEST_ID,
@@ -306,6 +315,36 @@ describe('Assistant callable', () => {
       expect.objectContaining({ turnId: 'turn-1' }),
     );
     expect(dependencies.releaseQuota).not.toHaveBeenCalled();
+  });
+
+  it('releases a quota reservation when runtime setup fails before billable work', async () => {
+    const { dependencies, store, reservation, conversation } = createDependencies();
+    vi.mocked(dependencies.answer).mockRejectedValueOnce(
+      new Error('MCP session setup unavailable'),
+    );
+
+    const request = {
+      requestId: REQUEST_ID,
+      message: 'How am I today?',
+      timeZone: 'UTC',
+      conversationId: 'conversation-1',
+    };
+    await expect(runAssistantChat(request, context, dependencies))
+      .rejects.toMatchObject({ code: 'unavailable' });
+
+    expect(dependencies.finalizeQuota).not.toHaveBeenCalled();
+    expect(dependencies.releaseQuota).toHaveBeenCalledWith(reservation);
+    expect(store.releaseTurn).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ turnId: 'turn-1' }),
+    );
+
+    await expect(runAssistantChat(request, context, dependencies)).resolves.toEqual({
+      conversation,
+      quota,
+    });
+    expect(dependencies.reserveQuota).toHaveBeenCalledTimes(2);
+    expect(dependencies.finalizeQuota).toHaveBeenCalledTimes(1);
   });
 
   it('rejects invalid input before reserving quota', async () => {

@@ -130,6 +130,7 @@ describe('Assistant runtime', () => {
       mcpInstructions: 'Use current data.',
       tools: [tool],
       publishedExample: ASSISTANT_PROMPT_EXAMPLES[0],
+      onBillableAttempt: vi.fn().mockResolvedValue(undefined),
     })).resolves.toBe('Your readiness is 72 today.');
 
     expect(generate).toHaveBeenNthCalledWith(1, expect.objectContaining({
@@ -163,6 +164,27 @@ describe('Assistant runtime', () => {
     const firstTools = (generate.mock.calls[0][0] as { tools: unknown[] }).tools;
     const secondTools = (generate.mock.calls[1][0] as { tools: unknown[] }).tools;
     expect(secondTools[0]).not.toBe(firstTools[0]);
+  });
+
+  it('does not mark a request billable when MCP session setup fails', async () => {
+    const onBillableAttempt = vi.fn().mockResolvedValue(undefined);
+    const runtime = createAssistantRuntime({
+      createMcpSession: vi.fn().mockRejectedValue(
+        new Error('MCP tool discovery unavailable'),
+      ),
+      generateAnswer: vi.fn(),
+    });
+
+    await expect(runtime.answer({
+      uid: 'user-1',
+      appBaseUrl: 'https://quantified-self.io',
+      prompt: 'How am I today?',
+      timeZone: 'UTC',
+      history: [],
+      onBillableAttempt,
+    })).rejects.toThrow('MCP tool discovery unavailable');
+
+    expect(onBillableAttempt).not.toHaveBeenCalled();
   });
 
   it.each(ASSISTANT_PROMPT_EXAMPLES)(
