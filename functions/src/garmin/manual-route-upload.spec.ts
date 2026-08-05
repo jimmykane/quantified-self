@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ProviderOperationError } from '../shared/provider-operation-error';
 
 const mocks = vi.hoisted(() => ({
   hasProAccess: vi.fn(),
@@ -100,5 +102,61 @@ describe('importRouteToGarminAPI', () => {
     expect(mocks.decodeManualRouteUpload).not.toHaveBeenCalled();
     expect(mocks.parseManualRouteUpload).not.toHaveBeenCalled();
     expect(mocks.uploadManualRouteToGarminConnect).not.toHaveBeenCalled();
+  });
+
+  it('maps an ambiguous Garmin create failure to a fail-closed callable error', async () => {
+    mocks.uploadManualRouteToGarminConnect.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created. Check Garmin Connect before trying again.',
+      statusCode: 408,
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    }));
+
+    await expect(importRouteToGarminAPI(request({
+      file: 'cm91dGUtc291cmNl',
+      filename: 'route.gpx',
+    }) as never)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created. Check Garmin Connect before trying again.',
+    });
+  });
+
+  it('preserves typed Garmin rate limits as resource-exhausted callable errors', async () => {
+    mocks.uploadManualRouteToGarminConnect.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'resource-exhausted',
+      message: 'Garmin Connect is temporarily unavailable. Please retry.',
+      statusCode: 429,
+      dlqContext: 'GARMIN_ROUTE_CREATE_RETRY_EXHAUSTED',
+    }));
+
+    await expect(importRouteToGarminAPI(request({
+      file: 'cm91dGUtc291cmNl',
+      filename: 'route.gpx',
+    }) as never)).rejects.toMatchObject({
+      code: 'resource-exhausted',
+    });
+  });
+
+  it('does not mistake a raw setup 503 for an ambiguous Garmin create', async () => {
+    mocks.uploadManualRouteToGarminConnect.mockRejectedValueOnce(Object.assign(
+      new Error('Firestore temporarily unavailable'),
+      { statusCode: 503 },
+    ));
+
+    await expect(importRouteToGarminAPI(request({
+      file: 'cm91dGUtc291cmNl',
+      filename: 'route.gpx',
+    }) as never)).rejects.toMatchObject({
+      code: 'unavailable',
+      message: 'Could not send route to Garmin. Please retry.',
+    });
   });
 });

@@ -7,6 +7,7 @@ import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 import { enqueueRouteDeliverySyncTask, getCloudTaskQueueDepthForQueue } from '../utils';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER } from '../queue-utils';
 import {
     markQueueItemDispatchedIfUserActive,
     QueueDispatchMarkerResult,
@@ -149,12 +150,22 @@ export async function reconcileRouteDeliverySyncQueueDispatches(nowMs = Date.now
             const data = doc.data() as Partial<RouteDeliverySyncQueueItemInterface>;
             const dispatchedToCloudTask = toDispatchTimestamp(data.dispatchedToCloudTask);
             const isUndispatched = dispatchedToCloudTask === null;
-            const isStale = !isUndispatched && (nowMs - dispatchedToCloudTask) >= ROUTE_DELIVERY_SYNC_REDISPATCH_STALE_MS;
+            const isProviderOperationClaim = dispatchedToCloudTask === PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER;
+            const providerOperationStartedAt = toDispatchTimestamp(data.providerOperationStartedAt);
+            const dispatchAgeTimestamp = isProviderOperationClaim
+                ? providerOperationStartedAt
+                : dispatchedToCloudTask;
+            const isStale = !isUndispatched && (
+                dispatchAgeTimestamp === null
+                || (nowMs - dispatchAgeTimestamp) >= ROUTE_DELIVERY_SYNC_REDISPATCH_STALE_MS
+            );
             return {
                 doc,
                 isUndispatched,
                 isStale,
+                isProviderOperationClaim,
                 dispatchedToCloudTask,
+                dispatchAgeTimestamp,
                 dateCreated: toDateCreatedTimestamp(data.dateCreated),
                 userID: toUserID(data.userID),
             };
@@ -166,7 +177,7 @@ export async function reconcileRouteDeliverySyncQueueDispatches(nowMs = Date.now
                 return leftPriority - rightPriority;
             }
 
-            return (left.dispatchedToCloudTask || 0) - (right.dispatchedToCloudTask || 0);
+            return (left.dispatchAgeTimestamp || 0) - (right.dispatchAgeTimestamp || 0);
         });
 
     let dispatched = 0;
@@ -196,6 +207,13 @@ export async function reconcileRouteDeliverySyncQueueDispatches(nowMs = Date.now
             if (!candidate.userID) {
                 continue;
             }
+            if (candidate.isProviderOperationClaim) {
+                // Preserve the claim so the worker resumes persisted provider
+                // state or fails closed; replacing it with a dispatch timestamp
+                // would allow the provider create/upload to run again.
+                dispatched += 1;
+                continue;
+            }
             const markerResult = await markQueueItemDispatchedIfUserActive({
                 queueItemDocument: candidate.doc.ref,
                 queueItemId: candidate.doc.id,
@@ -203,6 +221,9 @@ export async function reconcileRouteDeliverySyncQueueDispatches(nowMs = Date.now
                 phase: 'route_delivery_sync_dispatch_marker',
                 dispatchedAtMs: nowMs,
                 logPrefix: 'RouteDeliverySyncDispatcher',
+                isCurrent: currentQueueItem => currentQueueItem.processed !== true
+                    && toDateCreatedTimestamp(currentQueueItem.dateCreated) === candidate.dateCreated
+                    && toDispatchTimestamp(currentQueueItem.dispatchedToCloudTask) === candidate.dispatchedToCloudTask,
             });
             if (markerResult !== QueueDispatchMarkerResult.Marked) {
                 continue;

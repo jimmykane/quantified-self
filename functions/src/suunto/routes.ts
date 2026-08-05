@@ -39,6 +39,19 @@ import {
 } from '../routes/route-processing';
 import { MAX_ROUTE_UPLOAD_BYTES, ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS } from '../shared/route-processing-config';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import {
+  extractRefreshFailureDetails,
+  isTerminalRefreshFailureForService,
+} from '../service-auth-lifecycle';
+import {
+  isProviderOperationError,
+  isTerminalServiceAuthError,
+  isTransientProviderTransportError,
+  ProviderOperationError,
+} from '../shared/provider-operation-error';
+import { RouteProviderAcceptanceHandler } from '../routes/provider-acceptance';
+import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 
 export interface SuuntoRouteUploadTokenRef {
   id: string;
@@ -106,7 +119,11 @@ async function assertSuuntoRouteUploadUserActive(userID: string, phase: string):
 
   if (!deletionGuard.shouldSkip) {
     if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
-      throw new HttpsError('failed-precondition', 'Suunto disconnect is pending.');
+      throw new ProviderPendingDisconnectError(
+        userID,
+        ServiceNames.SuuntoApp,
+        phase,
+      );
     }
     return;
   }
@@ -162,6 +179,200 @@ function getStatusCode(error: unknown): number | undefined {
 
   const responseStatusCode = (error as any)?.response?.statusCode;
   return typeof responseStatusCode === 'number' ? responseStatusCode : undefined;
+}
+
+class SuuntoRouteProviderRequestError extends Error {
+  readonly statusCode?: number;
+  readonly response?: { statusCode?: unknown };
+  readonly error?: unknown;
+
+  constructor(readonly providerError: unknown) {
+    super(providerError instanceof Error ? providerError.message : 'Suunto route request failed.');
+    this.name = 'SuuntoRouteProviderRequestError';
+    this.statusCode = getStatusCode(providerError);
+    this.response = (providerError as { response?: { statusCode?: unknown } } | null)?.response;
+    this.error = (providerError as { error?: unknown } | null)?.error;
+  }
+}
+
+function shouldPreserveSuuntoRouteLifecycleError(error: unknown): boolean {
+  return isUserDeletionGuardReadError(error)
+    || error instanceof SuuntoRouteUploadSkippedForDeletedUserError
+    || (error instanceof Error && (
+      error.name === 'TokenRefreshSkippedForDeletedUserError'
+      || error.name === 'TokenUseSkippedForPendingDisconnectError'
+    ));
+}
+
+function toSuuntoRouteProviderOperationError(
+  error: unknown,
+  providerUserId: string,
+): ProviderOperationError | null {
+  if (isProviderOperationError(error)) {
+    return error;
+  }
+
+  const statusCode = getStatusCode(error);
+  const refreshFailure = extractRefreshFailureDetails(error);
+  const temporaryAuthFailure = refreshFailure.isTerminalAuthFailure
+    && !isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, refreshFailure);
+  const common = {
+    serviceName: ServiceNames.SuuntoApp,
+    operation: 'route_create' as const,
+    providerUserId,
+    statusCode,
+  };
+
+  if (isTerminalServiceAuthError(error) || statusCode === 401) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'auth_required',
+      retryMode: 'none',
+      code: 'unauthenticated',
+      message: 'Authentication failed. Please re-connect your Suunto account.',
+      providerCode: isTerminalServiceAuthError(error)
+        ? error.providerErrorCode || undefined
+        : refreshFailure.providerErrorCode || undefined,
+      dlqContext: isTerminalServiceAuthError(error)
+        ? error.dlqContext || 'SUUNTO_AUTH_REQUIRED'
+        : 'SUUNTO_AUTH_REQUIRED',
+    });
+  }
+
+  if (statusCode === 403) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permission_required',
+      retryMode: 'none',
+      code: 'permission-denied',
+      message: 'Suunto rejected the route upload because the connection lacks permission.',
+      dlqContext: 'SUUNTO_PERMISSION_REQUIRED',
+    });
+  }
+
+  if (temporaryAuthFailure || statusCode === 429) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: statusCode === 429 ? 'resource-exhausted' : 'unavailable',
+      message: 'Suunto route upload is temporarily unavailable. Please retry.',
+      dlqContext: 'SUUNTO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+    });
+  }
+
+  if (
+    statusCode === 408
+    || (statusCode !== undefined && statusCode >= 500)
+    || (statusCode === undefined && isTransientProviderTransportError(error))
+  ) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Suunto route creation had an ambiguous outcome and was not retried to avoid a duplicate route.',
+      dlqContext: 'SUUNTO_ROUTE_CREATE_AMBIGUOUS',
+    });
+  }
+
+  if (error instanceof HttpsError) {
+    if (error.code === 'unauthenticated') {
+      return new ProviderOperationError({
+        ...common,
+        disposition: 'auth_required',
+        retryMode: 'none',
+        code: 'unauthenticated',
+        message: error.message,
+        dlqContext: 'SUUNTO_AUTH_REQUIRED',
+      });
+    }
+    if (error.code === 'permission-denied') {
+      return new ProviderOperationError({
+        ...common,
+        disposition: 'permission_required',
+        retryMode: 'none',
+        code: 'permission-denied',
+        message: error.message,
+        dlqContext: 'SUUNTO_PERMISSION_REQUIRED',
+      });
+    }
+    if (error.code === 'unavailable' || error.code === 'resource-exhausted' || error.code === 'deadline-exceeded') {
+      return new ProviderOperationError({
+        ...common,
+        disposition: 'retryable',
+        retryMode: 'restart',
+        code: error.code,
+        message: error.message,
+        dlqContext: 'SUUNTO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+      });
+    }
+  }
+
+  if (statusCode !== undefined) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Suunto rejected the route upload.',
+      dlqContext: 'SUUNTO_ROUTE_UPLOAD_REJECTED',
+    });
+  }
+
+  return null;
+}
+
+function selectSuuntoRouteUploadFailure(failures: unknown[]): unknown {
+  const providerFailures = failures.filter(isProviderOperationError);
+  return providerFailures.find(error => error.dlqContext === 'SUUNTO_ROUTE_CREATE_AMBIGUOUS')
+    || failures.find(error => !isProviderOperationError(error))
+    || providerFailures.find(error => error.disposition === 'retryable')
+    || providerFailures.find(error => error.disposition === 'auth_required')
+    || providerFailures.find(error => error.disposition === 'permission_required')
+    || providerFailures[0]
+    || new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'route_create',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Suunto rejected the route upload.',
+      dlqContext: 'SUUNTO_ROUTE_UPLOAD_REJECTED',
+    });
+}
+
+function createSuuntoRoutePartialAcceptanceError(failures: unknown[]): ProviderOperationError {
+  const selectedFailure = selectSuuntoRouteUploadFailure(failures);
+  const selectedProviderFailure = isProviderOperationError(selectedFailure) ? selectedFailure : null;
+  return new ProviderOperationError({
+    serviceName: ServiceNames.SuuntoApp,
+    operation: 'route_create',
+    disposition: 'permanent',
+    retryMode: 'none',
+    code: 'failed-precondition',
+    message: 'Suunto accepted the route for at least one connected account but did not finish every account. The upload was not retried to avoid creating duplicate routes.',
+    statusCode: selectedProviderFailure?.statusCode,
+    providerCode: selectedProviderFailure?.providerCode,
+    providerUserId: selectedProviderFailure?.providerUserId,
+    dlqContext: 'SUUNTO_ROUTE_PARTIAL_ACCEPTANCE',
+  });
+}
+
+function toSuuntoRouteHttpsError(error: ProviderOperationError): HttpsError {
+  if (error.disposition === 'auth_required') {
+    return new HttpsError('unauthenticated', error.message);
+  }
+  if (error.disposition === 'permission_required') {
+    return new HttpsError('permission-denied', error.message);
+  }
+  if (error.disposition === 'retryable') {
+    return new HttpsError(
+      error.code === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable',
+      error.message,
+    );
+  }
+  return new HttpsError('failed-precondition', error.message);
 }
 
 function normalizeSuuntoProviderUserId(value: unknown): string | null {
@@ -423,6 +634,10 @@ export async function exportSuuntoRouteAsGPX(
     providerUserId?: string | null;
   } = {},
 ): Promise<string> {
+  const normalizedProviderRouteId = `${providerRouteId || ''}`.trim();
+  if (!normalizedProviderRouteId) {
+    throw new HttpsError('invalid-argument', 'Suunto route id is required.');
+  }
   const routeContext = options.context || await createSuuntoRouteUploadContext(userID);
   const result = await executeSuuntoRouteReadOperation(userID, routeContext, 'export_suunto_route', async (accessToken) => (
     requestPromise.get({
@@ -431,7 +646,7 @@ export async function exportSuuntoRouteAsGPX(
         'Authorization': toSuuntoAuthorizationHeader(accessToken),
         'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
       },
-      url: `https://cloudapi.suunto.com/v2/route/${providerRouteId}/export`,
+      url: `https://cloudapi.suunto.com/v2/route/${encodeURIComponent(normalizedProviderRouteId)}/export`,
     })
   ), options.providerUserId);
 
@@ -447,6 +662,7 @@ export async function uploadGPXRouteToSuuntoApp(
   userID: string,
   gpxContent: string,
   context?: SuuntoRouteUploadContext,
+  onProviderAccepted?: RouteProviderAcceptanceHandler,
 ): Promise<SuuntoRouteUploadResult> {
   if (!gpxContent.trim()) {
     throw new HttpsError('invalid-argument', 'File content is empty');
@@ -454,11 +670,11 @@ export async function uploadGPXRouteToSuuntoApp(
 
   const uploadContext = context || await createSuuntoRouteUploadContext(userID);
   let successCount = 0;
-  let authFailures = 0;
+  const failures: unknown[] = [];
   const providerRouteIds: string[] = [];
   const deliveries: Array<{ providerUserId: string; providerRouteId?: string | null }> = [];
 
-  for (const tokenRef of uploadContext.tokenRefs) {
+  for (const [tokenIndex, tokenRef] of uploadContext.tokenRefs.entries()) {
     let result: any;
     try {
       const latestTokenSnapshot = await getLatestSuuntoTokenSnapshot(tokenRef);
@@ -466,16 +682,19 @@ export async function uploadGPXRouteToSuuntoApp(
         latestTokenSnapshot,
         async (accessToken) => {
           await assertSuuntoRouteUploadUserActive(userID, 'before_provider_upload');
-          const postResult = await requestPromise.post({
-            headers: {
-              'Authorization': toSuuntoAuthorizationHeader(accessToken),
-              'Content-Type': 'application/gpx+xml',
-              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-            },
-            body: gpxContent,
-            url: 'https://cloudapi.suunto.com/v2/route/import',
-          });
-          return postResult;
+          try {
+            return await requestPromise.post({
+              headers: {
+                'Authorization': toSuuntoAuthorizationHeader(accessToken),
+                'Content-Type': 'application/gpx+xml',
+                'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+              },
+              body: gpxContent,
+              url: 'https://cloudapi.suunto.com/v2/route/import',
+            });
+          } catch (error) {
+            throw new SuuntoRouteProviderRequestError(error);
+          }
         },
         `Upload route for user ${userID}`
       );
@@ -500,28 +719,32 @@ export async function uploadGPXRouteToSuuntoApp(
         hasProviderError: !!(result as { error?: unknown } | null)?.error,
       });
     } catch (e: unknown) {
-      const error = e as Error;
-      if (isUserDeletionGuardReadError(error) || error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
-        throw error;
+      if (shouldPreserveSuuntoRouteLifecycleError(e)) {
+        throw e;
       }
-      if (error instanceof HttpsError && error.code === 'unauthenticated') {
-        authFailures++;
-        logger.warn(`Suunto token ${tokenRef.id} is no longer usable for user ${userID}`, {
-          message: error.message,
-        });
-        continue;
-      }
+
+      const isProviderRequestFailure = e instanceof SuuntoRouteProviderRequestError;
+      const providerRequestError = isProviderRequestFailure ? e.providerError : e;
+      const refreshFailure = extractRefreshFailureDetails(e);
+      const shouldNormalize = isProviderRequestFailure
+        || isProviderOperationError(e)
+        || isTerminalServiceAuthError(e)
+        || refreshFailure.isTerminalAuthFailure
+        || e instanceof HttpsError;
+      const normalizedError = shouldNormalize
+        ? toSuuntoRouteProviderOperationError(providerRequestError, tokenRef.providerUserId)
+        : null;
 
       logger.error('[SuuntoRoutes] Could not upload route for provider token.', {
         userID,
         providerUserId: tokenRef.providerUserId,
         tokenId: tokenRef.id,
-        statusCode: getStatusCode(error),
-        errorName: error instanceof Error ? error.name : typeof error,
+        statusCode: getStatusCode(providerRequestError),
+        errorName: e instanceof Error ? e.name : typeof e,
+        disposition: normalizedError?.disposition,
+        dlqContext: normalizedError?.dlqContext,
       });
-      if (getStatusCode(error) === 401) {
-        authFailures++;
-      }
+      failures.push(normalizedError || e);
       continue;
     }
 
@@ -531,6 +754,16 @@ export async function uploadGPXRouteToSuuntoApp(
         providerUserId: tokenRef.providerUserId,
         tokenId: tokenRef.id,
       });
+      failures.push(new ProviderOperationError({
+        serviceName: ServiceNames.SuuntoApp,
+        operation: 'route_create',
+        disposition: 'permanent',
+        retryMode: 'none',
+        code: 'failed-precondition',
+        message: 'Suunto rejected the route upload.',
+        providerUserId: tokenRef.providerUserId,
+        dlqContext: 'SUUNTO_ROUTE_UPLOAD_REJECTED',
+      }));
       continue;
     }
 
@@ -543,22 +776,38 @@ export async function uploadGPXRouteToSuuntoApp(
       providerUserId: tokenRef.providerUserId,
       providerRouteId: providerRouteId || null,
     });
+    if (tokenIndex < uploadContext.tokenRefs.length - 1) {
+      await onProviderAccepted?.({
+        providerRouteId: providerRouteIds[0],
+        complete: false,
+        deliveries: [...deliveries],
+      });
+    }
   }
 
   if (successCount > 0) {
+    const complete = failures.length === 0;
+    await onProviderAccepted?.({
+      providerRouteId: providerRouteIds[0],
+      // A successful account must remain durable, but another failed account
+      // means the provider batch cannot be finalized as a complete delivery.
+      complete,
+      deliveries: [...deliveries],
+    });
     try {
       await incrementUploadedRoutesCountIfUserActive(userID, successCount);
     } catch (e: unknown) {
       logger.error('Could not update uploadedRoutes count', e);
     }
-    return { status: 'success', successCount, providerRouteIds, deliveries };
+    if (complete) {
+      return { status: 'success', successCount, providerRouteIds, deliveries };
+    }
+    // A caller without a durable receipt (the direct route-upload callable)
+    // must never retry a batch after any account has accepted the route.
+    throw createSuuntoRoutePartialAcceptanceError(failures);
   }
 
-  if (authFailures > 0) {
-    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
-  }
-
-  throw new HttpsError('internal', 'Upload failed due to service errors.');
+  throw selectSuuntoRouteUploadFailure(failures);
 }
 
 /**
@@ -589,6 +838,9 @@ export const importRouteToSuuntoApp = onCall({
     await uploadGPXRouteToSuuntoApp(userID, gpxContent);
     return { status: 'success' };
   } catch (error) {
+    if (error instanceof Error && error.name === 'TokenUseSkippedForPendingDisconnectError') {
+      throw new HttpsError('failed-precondition', 'Suunto disconnect is pending.');
+    }
     if (error instanceof HttpsError) {
       throw error;
     }
@@ -598,6 +850,9 @@ export const importRouteToSuuntoApp = onCall({
     }
     if (error instanceof SuuntoRouteUploadSkippedForDeletedUserError) {
       throw new HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+    }
+    if (isProviderOperationError(error)) {
+      throw toSuuntoRouteHttpsError(error);
     }
 
     const statusCode = getStatusCode(error);

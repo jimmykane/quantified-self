@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 
@@ -112,8 +112,17 @@ vi.mock('../queue/cleanup-tombstone', () => ({
 import { buildActivitySyncQueueItemId, enqueueActivitySyncQueueItem } from './queue';
 
 describe('activity-sync/queue', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTransactionGet.mockReset();
+    mockTransactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+    });
     mockDoc.mockReturnValue({ parent: { id: 'activitySyncQueue' }, get: mockGet, set: mockSet, update: mockUpdate });
     mockRunTransaction.mockImplementation(async (runner: (transaction: {
       get: typeof mockTransactionGet;
@@ -155,7 +164,14 @@ describe('activity-sync/queue', () => {
   });
 
   it('enqueues a new activity sync queue item and dispatches cloud task', async () => {
-    mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    vi.useFakeTimers();
+    vi.setSystemTime(1700000000000);
+    mockTransactionGet
+      .mockResolvedValueOnce({ exists: false })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+      });
 
     const result = await enqueueActivitySyncQueueItem({
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
@@ -192,6 +208,36 @@ describe('activity-sync/queue', () => {
       expect.any(Number),
     );
     expect(mockUpdate).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+  });
+
+  it('does not overwrite a provider-operation claim when the worker starts before the dispatch marker is written', async () => {
+    mockTransactionGet
+      .mockResolvedValueOnce({ exists: false })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          processed: false,
+          dispatchedToCloudTask: Number.MAX_SAFE_INTEGER - 1,
+        }),
+      });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: true,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+    });
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledOnce();
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockTransactionGet).toHaveBeenCalledTimes(2);
   });
 
   it('returns already_pending when queue item exists and is not processed', async () => {
@@ -246,6 +292,68 @@ describe('activity-sync/queue', () => {
       1700000000000,
     );
     expect(mockUpdate).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+  });
+
+  it('keeps a successful redispatch when a fast worker claims the item first', async () => {
+    mockTransactionGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          processed: false,
+          dispatchedToCloudTask: Number.MAX_SAFE_INTEGER - 1,
+        }),
+      });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      reason: 'already_pending',
+      redispatched: true,
+    });
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not attach an old redispatch marker to a replaced queue revision', async () => {
+    mockTransactionGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000000 }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ processed: false, dispatchedToCloudTask: null, dateCreated: 1700000000001 }),
+      });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: false,
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      enqueued: false,
+      reason: 'already_pending',
+    }));
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledOnce();
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it('does not mark existing pending item as redispatched when Cloud Task already exists', async () => {
@@ -533,5 +641,34 @@ describe('activity-sync/queue', () => {
     expect(result.enqueued).toBe(true);
     expect(mockTransactionSet).toHaveBeenCalled();
     expect(mockEnqueueActivitySyncTask).toHaveBeenCalled();
+  });
+
+  it('does not let a manual backfill overwrite a fail-closed reconciliation marker', async () => {
+    mockTransactionGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        processed: true,
+        resultStatus: 'manual_reconciliation_required',
+        destinationUploadID: 'accepted-upload-1',
+      }),
+    });
+
+    const result = await enqueueActivitySyncQueueItem({
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp,
+      sourceServiceName: ServiceNames.GarminAPI,
+      destinationServiceName: ServiceNames.SuuntoApp,
+      userID: 'user-1',
+      eventID: 'event-1',
+      originalFile: { path: 'p.fit', extension: 'fit' },
+      manual: true,
+    });
+
+    expect(result).toEqual({
+      enqueued: false,
+      queueItemId: 'activitySync__GarminAPI_to_SuuntoApp__user-1__event-1',
+      reason: 'already_processed',
+    });
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
   });
 });

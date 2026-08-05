@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
-  GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+  getRouteDeliveryMetadataAbortMessage,
   SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS,
   SendRouteToServiceFailureReason,
   SendRouteToServiceItemResult,
@@ -16,6 +16,12 @@ export interface RouteSendProgress {
   chunkCount: number;
   processedRouteCount: number;
   routeCount: number;
+}
+
+export interface RouteSendOptions {
+  onProgress?: (progress: RouteSendProgress) => void;
+  /** Explicit user confirmation to create another Suunto copy. */
+  forceCopy?: boolean;
 }
 
 const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
@@ -131,7 +137,7 @@ export class AppRouteSendService {
   async sendRoutesToService(
     routeIds: string[],
     destinationServiceName: ServiceNames,
-    options: { onProgress?: (progress: RouteSendProgress) => void } = {},
+    options: RouteSendOptions = {},
   ): Promise<SendRoutesToServiceResponse> {
     const uniqueRouteIds = Array.from(new Set(routeIds.map(routeId => `${routeId || ''}`.trim()).filter(Boolean)));
     if (uniqueRouteIds.length === 0) {
@@ -150,6 +156,7 @@ export class AppRouteSendService {
           {
             routeIds: chunk,
             destinationServiceName,
+            ...(options.forceCopy === true ? { forceCopy: true } : {}),
           },
         );
         responses.push(response.data);
@@ -248,7 +255,7 @@ export class AppRouteSendService {
           destinationServiceName,
           status: 'failure',
           reason: 'SEND_REQUEST_FAILED',
-          message: GARMIN_DELIVERY_METADATA_ABORT_MESSAGE,
+          message: getRouteDeliveryMetadataAbortMessage(destinationServiceName),
         })),
       };
     }

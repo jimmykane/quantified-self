@@ -101,16 +101,20 @@ async function markRouteDeliverySyncQueueItemDispatchedIfUserActive(
     queueItemId: string,
     userID: string,
     phase: string,
-): Promise<boolean> {
-    const result = await markQueueItemDispatchedIfUserActive({
+    expectedDateCreated: number,
+): Promise<QueueDispatchMarkerResult> {
+    return markQueueItemDispatchedIfUserActive({
         queueItemDocument: queueDocRef,
         queueItemId,
         userID,
         phase,
         dispatchedAtMs: Date.now(),
         logPrefix: 'RouteDeliverySync',
+        isCurrent: currentQueueItem => currentQueueItem.processed !== true
+            && Number(currentQueueItem.dateCreated) === expectedDateCreated
+            && (currentQueueItem.dispatchedToCloudTask === null
+                || currentQueueItem.dispatchedToCloudTask === undefined),
     });
-    return result === QueueDispatchMarkerResult.Marked;
 }
 
 export async function buildRouteDeliverySyncQueueItemId(
@@ -164,6 +168,14 @@ export async function enqueueRouteDeliverySyncQueueItem(
                 };
             }
 
+            if (existingData.resultStatus === 'manual_reconciliation_required') {
+                return {
+                    enqueued: false,
+                    queueItemId,
+                    reason: 'already_processed',
+                };
+            }
+
             if (params.manual !== true) {
                 return {
                     enqueued: false,
@@ -212,7 +224,14 @@ export async function enqueueRouteDeliverySyncQueueItem(
         }
         const wasTaskEnqueued = await enqueueRouteDeliverySyncTask(queueItemId, decision.dateCreated || Date.now());
         if (wasTaskEnqueued) {
-            if (!(await markRouteDeliverySyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, userID, 'route_delivery_sync_queue_mark_new_dispatched'))) {
+            const markerResult = await markRouteDeliverySyncQueueItemDispatchedIfUserActive(
+                queueDocRef,
+                queueItemId,
+                userID,
+                'route_delivery_sync_queue_mark_new_dispatched',
+                decision.dateCreated || 0,
+            );
+            if (markerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 return {
                     enqueued: false,
                     queueItemId,
@@ -237,7 +256,14 @@ export async function enqueueRouteDeliverySyncQueueItem(
         }
         const wasTaskEnqueued = await enqueueRouteDeliverySyncTask(queueItemId, decision.dateCreated || Date.now());
         if (wasTaskEnqueued) {
-            if (!(await markRouteDeliverySyncQueueItemDispatchedIfUserActive(queueDocRef, queueItemId, userID, 'route_delivery_sync_queue_mark_existing_dispatched'))) {
+            const markerResult = await markRouteDeliverySyncQueueItemDispatchedIfUserActive(
+                queueDocRef,
+                queueItemId,
+                userID,
+                'route_delivery_sync_queue_mark_existing_dispatched',
+                decision.dateCreated || 0,
+            );
+            if (markerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 return {
                     enqueued: false,
                     queueItemId,

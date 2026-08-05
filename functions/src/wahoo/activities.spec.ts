@@ -68,6 +68,7 @@ vi.mock('./auth/api', () => ({
 
 import { getWahooActivityUploadStatus, uploadActivityFileToWahoo } from './activities';
 import { WahooAPIRequestError, WahooAPITransportError } from './auth/api';
+import { ProviderOperationError } from '../shared/provider-operation-error';
 
 describe('Wahoo activity uploads', () => {
   beforeEach(() => {
@@ -198,6 +199,62 @@ describe('Wahoo activity uploads', () => {
     );
   });
 
+  it('marks a definitive asynchronous processing failure as safe to restart', async () => {
+    mocks.requestWahooAPI.mockResolvedValue({
+      data: { token: 'upload-token', status: 'failed', error: 'FIT file is malformed' },
+    });
+
+    await expect(getWahooActivityUploadStatus('user-1', 'upload-token'))
+      .rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'Wahoo could not process this activity: FIT file is malformed',
+        details: {
+          retryMode: 'restart',
+          providerOperation: 'activity_upload_status',
+        },
+      });
+  });
+
+  it('rejects a completed upload response without the token required for safe reconciliation', async () => {
+    mocks.requestWahooAPI.mockResolvedValue({ data: { status: 'complete', workout_id: 123 } });
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        code: 'failed-precondition',
+        dlqContext: 'WAHOO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+      });
+  });
+
+  it.each(['../other-path', 'token with spaces'])('rejects malformed completed upload token %s', async (token) => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: {
+        status: 'complete',
+        token,
+      },
+    });
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        code: 'failed-precondition',
+        dlqContext: 'WAHOO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+      });
+  });
+
+  it('rejects a malformed pending upload token before it can be persisted', async () => {
+    mocks.requestWahooAPI.mockResolvedValueOnce({
+      data: {
+        status: 'processing',
+        token: '../other-path',
+      },
+    });
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        code: 'failed-precondition',
+        dlqContext: 'WAHOO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+      });
+  });
+
   it('requires the Wahoo workout write scope before sending a file', async () => {
     mocks.getTokenData.mockResolvedValue({
       serviceName: ServiceNames.WahooAPI,
@@ -210,6 +267,20 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
+  it('does not call Wahoo when disconnect begins during token resolution', async () => {
+    mocks.isDisconnectPendingForUser
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        name: 'TokenUseSkippedForPendingDisconnectError',
+        code: 'failed-precondition',
+      });
+    expect(mocks.getTokenData).toHaveBeenCalledTimes(1);
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
   it('rejects files larger than 20MB before sending to Wahoo', async () => {
     await expect(uploadActivityFileToWahoo('user-1', Buffer.alloc((20 * 1024 * 1024) + 1)))
       .rejects.toMatchObject({
@@ -219,10 +290,63 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 
-  it('returns a retryable error when Wahoo cannot be reached', async () => {
+  it('fails closed when Wahoo cannot confirm whether the activity POST was accepted', async () => {
     mocks.requestWahooAPI.mockRejectedValue(new WahooAPITransportError('Wahoo API request timed out.'));
 
     await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
-      .rejects.toMatchObject({ code: 'unavailable' });
+      .rejects.toMatchObject({
+        disposition: 'permanent',
+        retryMode: 'none',
+        dlqContext: 'WAHOO_ACTIVITY_UPLOAD_AMBIGUOUS',
+      });
+  });
+
+  it('fails closed when Wahoo responds with a request timeout after the activity POST', async () => {
+    mocks.requestWahooAPI.mockRejectedValue(new WahooAPIRequestError(
+      'Wahoo API POST /v1/workout_file_uploads failed with 408',
+      408,
+    ));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        disposition: 'permanent',
+        retryMode: 'none',
+        statusCode: 408,
+        dlqContext: 'WAHOO_ACTIVITY_UPLOAD_AMBIGUOUS',
+      });
+  });
+
+  it('keeps an explicit Wahoo rate-limit response retryable', async () => {
+    mocks.requestWahooAPI.mockRejectedValue(new WahooAPIRequestError(
+      'Wahoo API POST /v1/workout_file_uploads failed with 429',
+      429,
+    ));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({ code: 'resource-exhausted' });
+  });
+
+  it('exposes ambiguous upload failures through the canonical provider error type', async () => {
+    mocks.requestWahooAPI.mockRejectedValue(new WahooAPIRequestError(
+      'Wahoo API POST /v1/workout_file_uploads failed with 503',
+      503,
+    ));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toBeInstanceOf(ProviderOperationError);
+  });
+
+  it('normalizes terminal token refresh cleanup as reconnect-required auth failure', async () => {
+    mocks.getTokenData.mockRejectedValue(Object.assign(new Error('Refresh token revoked'), {
+      name: 'TerminalServiceAuthError',
+      providerErrorCode: 'invalid_grant',
+    }));
+
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT')))
+      .rejects.toMatchObject({
+        code: 'unauthenticated',
+        message: 'Reconnect Wahoo before sending activities.',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
   });
 });

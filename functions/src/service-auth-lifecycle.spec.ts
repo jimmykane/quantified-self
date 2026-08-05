@@ -118,7 +118,9 @@ vi.mock('./auth/factory', () => ({
 import {
   cleanupServiceConnectionForUser,
   cleanupServiceTokenById,
+  extractRefreshFailureDetails,
   handleTerminalServiceAuthFailure,
+  isTerminalRefreshFailureForService,
   SERVICE_AUTH_CLEANUP_REASONS,
 } from './service-auth-lifecycle';
 
@@ -134,6 +136,41 @@ function makeTimestamp(seconds: number, nanoseconds: number) {
     },
   };
 }
+
+describe('service-auth-lifecycle refresh failure policy', () => {
+  it('temporarily keeps only HTTP 400 Suunto invalid_grant failures retryable', () => {
+    const invalidGrant = {
+      isInvalidGrant: true,
+      isTerminalAuthFailure: true,
+      statusCode: 400,
+    };
+
+    expect(isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, invalidGrant)).toBe(false);
+    expect(isTerminalRefreshFailureForService(ServiceNames.GarminAPI, invalidGrant)).toBe(true);
+    expect(isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, {
+      ...invalidGrant,
+      statusCode: 401,
+    })).toBe(true);
+    expect(isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, {
+      ...invalidGrant,
+      statusCode: null,
+    })).toBe(true);
+    expect(isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, {
+      ...invalidGrant,
+      statusCode: 403,
+    })).toBe(true);
+  });
+
+  it('normalizes string HTTP status values before applying provider policy', () => {
+    const failure = extractRefreshFailureDetails({
+      statusCode: '400',
+      data: { error: 'invalid_grant' },
+    });
+
+    expect(failure.statusCode).toBe(400);
+    expect(isTerminalRefreshFailureForService(ServiceNames.SuuntoApp, failure)).toBe(false);
+  });
+});
 
 describe('service-auth-lifecycle terminal auth handling', () => {
   beforeEach(() => {

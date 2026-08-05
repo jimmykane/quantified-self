@@ -98,7 +98,7 @@ import {
   uploadFitRouteToWahoo,
   uploadRouteToWahoo,
 } from './routes';
-import { WahooAPIRequestError } from './auth/api';
+import { WahooAPIRequestError, WahooAPITransportError } from './auth/api';
 
 function routeFile(overrides: Partial<Record<string, unknown>> = {}) {
   const stats = new Map<string, number>([
@@ -391,6 +391,112 @@ describe('Wahoo route uploads', () => {
     expect(mocks.requestWahooAPI.mock.calls[3][1]).toBe('/v1/routes/44');
     expect(secondUploadRequest.method).toBe('PUT');
     expect(mocks.parseRoutePayload).not.toHaveBeenCalled();
+  });
+
+  it('normalizes saved-route provider outages as retryable operations', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPIRequestError(
+      'Wahoo API GET /v1/routes failed with 503',
+      503,
+    ));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'route_upload',
+        disposition: 'retryable',
+        retryMode: 'restart',
+        dlqContext: 'WAHOO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+      });
+  });
+
+  it('normalizes saved-route transport failures as retryable operations', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPITransportError(
+      'Wahoo API request timed out.',
+    ));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'route_upload',
+        disposition: 'retryable',
+        retryMode: 'restart',
+        dlqContext: 'WAHOO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+      });
+  });
+
+  it('preserves terminal token refresh cleanup as reconnect-required auth failure', async () => {
+    mocks.getTokenData.mockRejectedValue(Object.assign(new Error('Refresh token revoked'), {
+      name: 'TerminalServiceAuthError',
+      providerErrorCode: 'invalid_grant',
+    }));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        code: 'unauthenticated',
+        message: 'Reconnect Wahoo before sending routes.',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('preserves transient token setup failures for the route queue retry policy', async () => {
+    const firestoreError = Object.assign(new Error('Firestore unavailable'), { code: 14 });
+    mocks.getTokenData.mockRejectedValueOnce(firestoreError);
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toBe(firestoreError);
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('normalizes terminal token refresh cleanup during queued route context creation', async () => {
+    mocks.getTokenData.mockRejectedValue(Object.assign(new Error('Refresh token revoked'), {
+      name: 'TerminalServiceAuthError',
+      providerErrorCode: 'invalid_grant',
+    }));
+
+    await expect(createWahooRouteSendContext('user-1'))
+      .rejects.toMatchObject({
+        code: 'unauthenticated',
+        message: 'Reconnect Wahoo before sending routes.',
+      });
+    expect(mocks.requestWahooAPI).not.toHaveBeenCalled();
+  });
+
+  it('normalizes saved-route HTTP request timeouts as retryable operations', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPIRequestError(
+      'Wahoo API GET /v1/routes failed with 408',
+      408,
+    ));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'route_upload',
+        disposition: 'retryable',
+        retryMode: 'restart',
+        dlqContext: 'WAHOO_ROUTE_UPLOAD_RETRY_EXHAUSTED',
+      });
+  });
+
+  it('normalizes saved-route provider rejection as permanent', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(new WahooAPIRequestError(
+      'Wahoo API GET /v1/routes failed with 422',
+      422,
+      null,
+      { error: 'The route file is malformed' },
+    ));
+
+    await expect(sendSavedRouteToWahoo('user-1', 'saved-route-1', routeFile()))
+      .rejects.toMatchObject({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'route_upload',
+        disposition: 'permanent',
+        retryMode: 'none',
+        dlqContext: 'WAHOO_ROUTE_UPLOAD_REJECTED',
+      });
   });
 
   it('rejects an empty route before parsing or making a provider request', async () => {

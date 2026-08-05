@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER } from '../queue-utils';
 import { MAX_PENDING_TASKS } from '../shared/queue-config';
 
 const {
@@ -33,7 +34,17 @@ const {
   const mockQueueCollection = vi.fn();
   const mockRecursiveDelete = vi.fn();
   const mockMarkQueueItemDeletedForUserCleanup = vi.fn();
-  const mockRunTransaction = vi.fn(async (runner: (transaction: { update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void }) => unknown) => runner({
+  const mockRunTransaction = vi.fn(async (runner: (transaction: {
+    get: (ref: { currentData?: Record<string, unknown> }) => Promise<{
+      exists: boolean;
+      data: () => Record<string, unknown>;
+    }>;
+    update: (ref: { update?: (data: unknown) => Promise<void> }, data: unknown) => Promise<void> | void;
+  }) => unknown) => runner({
+    get: async ref => ({
+      exists: true,
+      data: () => ref.currentData || { processed: false, dispatchedToCloudTask: null },
+    }),
     update: (ref, data) => ref.update?.(data),
   }));
   const mockFirestore = vi.fn(() => ({
@@ -193,12 +204,22 @@ describe('activity-sync/dispatcher', () => {
         {
           id: 'undispatched-item',
           data: () => ({ dispatchedToCloudTask: null, dateCreated: 101, userID: 'undispatched-user' }),
-          ref: { update: updateUndispatched },
+          ref: {
+            update: updateUndispatched,
+            currentData: { processed: false, dispatchedToCloudTask: null, dateCreated: 101 },
+          },
         },
         {
           id: 'stale-item',
           data: () => ({ dispatchedToCloudTask: nowMs - (3 * 60 * 60 * 1000), dateCreated: 102, userID: 'stale-user' }),
-          ref: { update: updateStale },
+          ref: {
+            update: updateStale,
+            currentData: {
+              processed: false,
+              dispatchedToCloudTask: nowMs - (3 * 60 * 60 * 1000),
+              dateCreated: 102,
+            },
+          },
         },
       ],
     });
@@ -216,6 +237,79 @@ describe('activity-sync/dispatcher', () => {
     expect(updateUndispatched).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
     expect(updateStale).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
     expect(updateRecent).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a provider-operation claim after Cloud Task enqueue', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [{
+        id: 'claimed-after-enqueue',
+        data: () => ({ dispatchedToCloudTask: null, dateCreated: 100, userID: 'user-1' }),
+        ref: {
+          update,
+          currentData: {
+            processed: false,
+            dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+            dateCreated: 100,
+          },
+        },
+      }],
+    });
+
+    const result = await reconcileActivitySyncQueueDispatches(1_700_000_000_000);
+
+    expect(result).toEqual({ inspected: 1, dispatched: 0, skippedRecent: 0 });
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledOnce();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('does not redispatch an active provider operation claim', async () => {
+    const nowMs = 1_700_000_000_000;
+    const update = vi.fn().mockResolvedValue(undefined);
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [{
+        id: 'provider-operation-in-flight',
+        data: () => ({
+          dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+          providerOperationStartedAt: nowMs - (10 * 60 * 1000),
+          dateCreated: 100,
+          userID: 'user-1',
+        }),
+        ref: { update },
+      }],
+    });
+
+    const result = await reconcileActivitySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({ inspected: 1, dispatched: 0, skippedRecent: 1 });
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('redispatches a stale provider operation claim without replacing its resume marker', async () => {
+    const nowMs = 1_700_000_000_000;
+    const update = vi.fn().mockResolvedValue(undefined);
+    mockQueueGet.mockResolvedValue({
+      empty: false,
+      docs: [{
+        id: 'stale-provider-operation',
+        data: () => ({
+          dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+          providerOperationStartedAt: nowMs - (3 * 60 * 60 * 1000),
+          dateCreated: 100,
+          userID: 'user-1',
+        }),
+        ref: { update },
+      }],
+    });
+
+    const result = await reconcileActivitySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({ inspected: 1, dispatched: 1, skippedRecent: 0 });
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('stale-provider-operation', 100);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('continues processing other candidates when dispatching one item fails', async () => {
@@ -236,7 +330,10 @@ describe('activity-sync/dispatcher', () => {
         {
           id: 'second-item',
           data: () => ({ dispatchedToCloudTask: null, dateCreated: 202, userID: 'second-user' }),
-          ref: { update: updateSecond },
+          ref: {
+            update: updateSecond,
+            currentData: { processed: false, dispatchedToCloudTask: null, dateCreated: 202 },
+          },
         },
       ],
     });
@@ -330,7 +427,10 @@ describe('activity-sync/dispatcher', () => {
     const olderUndispatchedDoc = {
       id: 'older-undispatched-item',
       data: () => ({ dispatchedToCloudTask: null, dateCreated: 999, userID: 'older-undispatched-user' }),
-      ref: { update: updateOlderUndispatched },
+      ref: {
+        update: updateOlderUndispatched,
+        currentData: { processed: false, dispatchedToCloudTask: null, dateCreated: 999 },
+      },
     };
 
     mockQueueGet
@@ -486,7 +586,10 @@ describe('activity-sync/dispatcher', () => {
         {
           id: 'healthy-item',
           data: () => ({ dispatchedToCloudTask: null, dateCreated: 502, userID: 'healthy-user' }),
-          ref: { update: updateHealthy },
+          ref: {
+            update: updateHealthy,
+            currentData: { processed: false, dispatchedToCloudTask: null, dateCreated: 502 },
+          },
         },
       ],
     });

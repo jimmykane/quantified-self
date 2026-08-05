@@ -1719,7 +1719,11 @@ describe('RoutesPageComponent', () => {
 
         await component.sendRouteToSuunto(suuntoDeliveredRoute);
 
-        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.SuuntoApp);
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(
+            ['route-1'],
+            ServiceNames.SuuntoApp,
+            { forceCopy: true },
+        );
         expect(snackBarMock.open).toHaveBeenCalledWith('Route copy sent to Suunto.', undefined, { duration: 2500 });
         expect(component.sendingToServiceRouteID()).toBeNull();
     });
@@ -2063,6 +2067,32 @@ describe('RoutesPageComponent', () => {
         }));
         expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
         expect(component.bulkActionInProgress()).toBe(false);
+    });
+
+    it('forces confirmed Suunto copies during a bulk resend', async () => {
+        const suuntoDeliveredRoute: FirestoreRouteJSON = {
+            ...route,
+            deliverySummaries: [{
+                serviceName: ServiceNames.SuuntoApp,
+                providerUserIds: ['suunto-user-1'],
+                latestProviderUserId: 'suunto-user-1',
+            }],
+        };
+        routeServiceMock.getAllRoutes.mockReturnValue(of([suuntoDeliveredRoute]));
+        await component.ngOnInit();
+        await firstValueFrom(component.routes$!);
+        component.toggleVisibleRouteSelection(true);
+
+        await component.sendSelectedRoutesToSuunto();
+
+        expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(
+            ['route-1'],
+            ServiceNames.SuuntoApp,
+            expect.objectContaining({
+                forceCopy: true,
+                onProgress: expect.any(Function),
+            }),
+        );
     });
 
     it('reports skipped bulk Suunto rows as skipped instead of failed', async () => {

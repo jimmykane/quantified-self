@@ -18,8 +18,11 @@ export interface QueueItemInterface {
   processedAt?: number,
   expireAt?: Timestamp | Date,
   dispatchedToCloudTask: number | null,
+  providerOperationStartedAt?: number | null,
   firebaseUserID?: string,
-  resultStatus?: 'success' | 'skipped' | 'deferred',
+  resultStatus?: 'success' | 'skipped' | 'deferred' | 'manual_reconciliation_required',
+  manualReconciliationRequiredAt?: number,
+  manualReconciliationContext?: string,
   deferredReason?: string,
   deferredContext?: string,
   serviceDisconnectPendingDeferredAt?: number,
@@ -71,6 +74,12 @@ export interface ActivitySyncOriginalFileMetadata {
   extension?: string;
 }
 
+export interface ActivitySyncUploadContinuation {
+  type: 'suunto_blob_put_v1';
+  uploadUrl: string;
+  uploadHeaders: Record<string, string>;
+}
+
 export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   routeId: ActivitySyncRouteId;
   sourceServiceName: ServiceNames;
@@ -81,9 +90,13 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
   successProcessedAt?: number;
-  destinationUploadID?: string;
-  destinationWorkoutKey?: string;
-  destinationInfoCode?: string;
+  destinationUploadID?: string | null;
+  destinationProviderUserID?: string | null;
+  destinationWorkoutKey?: string | null;
+  destinationInfoCode?: string | null;
+  destinationUploadCountedID?: string | null;
+  destinationUploadCountedAt?: number;
+  destinationUploadContinuation?: ActivitySyncUploadContinuation | null;
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {
@@ -110,6 +123,17 @@ export interface RouteDeliverySyncQueueItemInterface extends QueueItemInterface 
   manual: boolean;
   skippedReason?: string;
   successProcessedAt?: number;
+  destinationDeliveryAcceptedAt?: number;
+  destinationDeliveryComplete?: boolean;
+  destinationProviderRouteId?: string | null;
+  /** Provider identity retained only for manual reconciliation of an ambiguous create. */
+  destinationProviderUserId?: string | null;
+  /** Typed provider operation that produced the manual-reconciliation record. */
+  destinationProviderOperation?: string | null;
+  destinationDeliveries?: Array<{
+    providerUserId: string | null;
+    providerRouteId: string | null;
+  }>;
 }
 
 export type SleepSyncQueueItemType =

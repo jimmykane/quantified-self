@@ -25,6 +25,12 @@ import {
   isWahooDuplicateMessage,
 } from './error-details';
 import { MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES, MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL } from '../shared/activity-processing-config';
+import {
+  isProviderOperationError,
+  isTerminalServiceAuthError,
+  ProviderOperationError,
+} from '../shared/provider-operation-error';
+import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 
 const MAX_BASE64_ACTIVITY_UPLOAD_LENGTH = Math.ceil(MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES / 3) * 4 + 4;
 const WAHOO_UPLOAD_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
@@ -75,6 +81,11 @@ function normalizeIdentifier(value: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function normalizeWahooUploadToken(value: unknown): string | undefined {
+  const token = normalizeIdentifier(value);
+  return token && WAHOO_UPLOAD_TOKEN_PATTERN.test(token) ? token : undefined;
+}
+
 function getStatus(payload: WahooWorkoutFileUploadPayload): string {
   return `${payload.status || ''}`.trim().toLowerCase();
 }
@@ -84,7 +95,7 @@ function toDuplicateWahooActivityUploadResult(payload: WahooWorkoutFileUploadPay
     status: 'duplicate',
     code: 'ALREADY_EXISTS',
     message: 'Activity already exists in Wahoo.',
-    uploadId: normalizeIdentifier(payload.token),
+    uploadId: normalizeWahooUploadToken(payload.token),
     workoutKey: normalizeIdentifier(payload.workout_id || payload.workout_summary_id),
   };
 }
@@ -94,10 +105,19 @@ function toWahooActivityUploadResult(
   operation: 'upload' | 'status',
 ): WahooActivityUploadResult {
   const status = getStatus(payload);
-  const uploadId = normalizeIdentifier(payload.token);
+  const uploadId = normalizeWahooUploadToken(payload.token);
   const workoutKey = normalizeIdentifier(payload.workout_id || payload.workout_summary_id);
 
   if (status === 'complete' || status === 'completed') {
+    if (!uploadId) {
+      throw Object.assign(
+        new HttpsError(
+          'failed-precondition',
+          'Wahoo completed the activity upload without returning the identifier required to reconcile it safely.',
+        ),
+        { dlqContext: 'WAHOO_ACTIVITY_UPLOAD_INVALID_RESPONSE' },
+      );
+    }
     return {
       status: 'success',
       message: 'Activity uploaded to Wahoo.',
@@ -125,11 +145,20 @@ function toWahooActivityUploadResult(
     const message = providerMessage
       ? `Wahoo could not process this activity: ${providerMessage}`
       : 'Wahoo could not process this activity.';
-    throw new HttpsError('failed-precondition', message);
+    throw new HttpsError('failed-precondition', message, {
+      retryMode: 'restart',
+      providerOperation: `activity_upload_${operation}`,
+    });
   }
 
   if (!uploadId) {
-    throw new HttpsError('internal', 'Wahoo did not return an upload identifier.');
+    throw Object.assign(
+      new HttpsError(
+        'failed-precondition',
+        'Wahoo did not return the upload identifier required to reconcile this activity safely.',
+      ),
+      { dlqContext: 'WAHOO_ACTIVITY_UPLOAD_INVALID_RESPONSE' },
+    );
   }
 
   return {
@@ -168,7 +197,17 @@ async function assertWahooActivityUploadUserActive(userID: string, phase: string
   throw new WahooActivityUploadSkippedForDeletedUserError(userID, phase);
 }
 
+async function assertWahooActivityUploadProviderActionAllowed(userID: string, phase: string): Promise<void> {
+  await assertWahooActivityUploadUserActive(userID, phase);
+  if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
+    throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, phase);
+  }
+}
+
 function toWahooHttpsError(error: unknown): never {
+  if (isTerminalServiceAuthError(error)) {
+    throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending activities.');
+  }
   if (error instanceof WahooAPITransportError) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
   }
@@ -184,7 +223,7 @@ function toWahooHttpsError(error: unknown): never {
       retryAfterSeconds: error.resetAfterSeconds,
     });
   }
-  if (error.statusCode >= 500) {
+  if (error.statusCode === 408 || error.statusCode >= 500) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
   }
   const providerMessage = getWahooProviderErrorMessage(error);
@@ -194,14 +233,33 @@ function toWahooHttpsError(error: unknown): never {
   );
 }
 
+function getAmbiguousWahooActivityUploadError(error: unknown): ProviderOperationError | null {
+  const statusCode = error instanceof WahooAPIRequestError ? error.statusCode : undefined;
+  if (
+    !(error instanceof WahooAPITransportError)
+    && statusCode !== 408
+    && !(statusCode !== undefined && statusCode >= 500)
+  ) {
+    return null;
+  }
+
+  return new ProviderOperationError({
+    serviceName: ServiceNames.WahooAPI,
+    operation: 'activity_upload_init',
+    disposition: 'permanent',
+    retryMode: 'none',
+    code: 'failed-precondition',
+    message: 'Wahoo did not confirm whether the activity upload was accepted. Check Wahoo before trying again.',
+    statusCode,
+    dlqContext: 'WAHOO_ACTIVITY_UPLOAD_AMBIGUOUS',
+  });
+}
+
 async function withWahooWorkoutWriteToken<T>(
   userID: string,
   operation: (accessToken: string) => Promise<T>,
 ): Promise<T> {
-  await assertWahooActivityUploadUserActive(userID, 'before_token_lookup');
-  if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
-    throw new HttpsError('failed-precondition', 'Wahoo disconnect is pending.');
-  }
+  await assertWahooActivityUploadProviderActionAllowed(userID, 'before_token_lookup');
 
   const initialTokenSnapshots = await admin.firestore()
     .collection(WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME)
@@ -227,7 +285,7 @@ async function withWahooWorkoutWriteToken<T>(
     if (!hasWahooWorkoutsWriteScope(token.scope)) {
       throw new WahooWorkoutWriteScopeRequiredError();
     }
-    await assertWahooActivityUploadUserActive(userID, 'before_provider_request');
+    await assertWahooActivityUploadProviderActionAllowed(userID, 'before_provider_request');
     return operation(token.accessToken);
   };
 
@@ -283,6 +341,10 @@ export async function uploadActivityFileToWahoo(
     if (isWahooDuplicateError(error)) {
       return toDuplicateWahooActivityUploadResult({});
     }
+    const ambiguousUploadError = getAmbiguousWahooActivityUploadError(error);
+    if (ambiguousUploadError) {
+      throw ambiguousUploadError;
+    }
     return toWahooHttpsError(error);
   }
 }
@@ -291,8 +353,8 @@ export async function getWahooActivityUploadStatus(
   userID: string,
   uploadId: unknown,
 ): Promise<WahooActivityUploadResult> {
-  const token = `${uploadId || ''}`.trim();
-  if (!WAHOO_UPLOAD_TOKEN_PATTERN.test(token)) {
+  const token = normalizeWahooUploadToken(uploadId);
+  if (!token) {
     throw new HttpsError('invalid-argument', 'Invalid Wahoo upload identifier.');
   }
 
@@ -343,10 +405,29 @@ export const importActivityToWahooAPI = onCall({
 }, async (request) => {
   const userID = await requireWahooActivityUploadAccess(request);
   const fileBuffer = toUploadBuffer(request.data?.file);
-  return uploadActivityFileToWahoo(userID, fileBuffer, {
-    filename: request.data?.filename,
-    timeZone: request.data?.timeZone,
-  });
+  try {
+    return await uploadActivityFileToWahoo(userID, fileBuffer, {
+      filename: request.data?.filename,
+      timeZone: request.data?.timeZone,
+    });
+  } catch (error) {
+    if (!isProviderOperationError(error)) {
+      throw error;
+    }
+    if (error.disposition === 'auth_required') {
+      throw new HttpsError('unauthenticated', error.message);
+    }
+    if (error.disposition === 'permission_required') {
+      throw new HttpsError('permission-denied', error.message);
+    }
+    if (error.disposition === 'retryable') {
+      throw new HttpsError(
+        error.code === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable',
+        error.message,
+      );
+    }
+    throw new HttpsError('failed-precondition', error.message);
+  }
 });
 
 export const getWahooAPIWorkoutFileUploadStatus = onCall({

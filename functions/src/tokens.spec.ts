@@ -122,6 +122,14 @@ vi.mock('./service-auth-lifecycle', () => {
                 logMessage: providerErrorMessage || providerErrorCode || 'Unknown token refresh failure',
             };
         }),
+        isTerminalRefreshFailureForService: vi.fn((serviceName: ServiceNames, failure: {
+            isInvalidGrant: boolean;
+            isTerminalAuthFailure: boolean;
+            statusCode: number | null;
+        }) => !(serviceName === ServiceNames.SuuntoApp
+            && failure.isInvalidGrant
+            && failure.statusCode === 400)
+            && failure.isTerminalAuthFailure),
         handleTerminalServiceAuthFailure: vi.fn(async (doc: any, serviceName: ServiceNames, serviceTokenData: any, failure: any, originalError: unknown) => ({
             kind: 'terminal_error',
             error: new MockTerminalServiceAuthError(

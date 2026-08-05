@@ -27,6 +27,11 @@ import {
   getUserDeletionGuardState,
   UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
+import {
+  isProviderOperationError,
+  isTerminalServiceAuthError,
+  ProviderOperationError,
+} from '../shared/provider-operation-error';
 import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import {
@@ -37,6 +42,7 @@ import {
 } from './constants';
 import { WahooAPIRequestError, WahooAPITransportError, requestWahooAPI } from './auth/api';
 import { getWahooErrorLogDetails, getWahooProviderErrorMessage, isWahooDuplicateError } from './error-details';
+import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
 
 const MAX_FILENAME_LENGTH = 200;
 const WAHOO_ROUTE_ALREADY_TAKEN_MESSAGE_PATTERN = /\balready\b.*\btaken\b/i;
@@ -127,7 +133,7 @@ async function assertWahooRouteUploadUserActive(userID: string, phase: string): 
 async function assertWahooRouteUploadProviderActionAllowed(userID: string, phase: string): Promise<void> {
   await assertWahooRouteUploadUserActive(userID, phase);
   if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
-    throw new HttpsError('failed-precondition', 'Wahoo disconnect is pending.');
+    throw new ProviderPendingDisconnectError(userID, ServiceNames.WahooAPI, phase);
   }
 }
 
@@ -344,6 +350,9 @@ async function updateWahooRoute(
 }
 
 function toWahooRouteHttpsError(error: unknown): never {
+  if (isTerminalServiceAuthError(error)) {
+    throw new HttpsError('unauthenticated', 'Reconnect Wahoo before sending routes.');
+  }
   if (error instanceof WahooAPITransportError) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
   }
@@ -359,7 +368,7 @@ function toWahooRouteHttpsError(error: unknown): never {
       retryAfterSeconds: error.resetAfterSeconds,
     });
   }
-  if (error.statusCode >= 500) {
+  if (error.statusCode === 408 || error.statusCode >= 500) {
     throw new HttpsError('unavailable', 'Wahoo is temporarily unavailable. Please retry.');
   }
   const providerMessage = getWahooProviderErrorMessage(error);
@@ -470,7 +479,11 @@ async function uploadWahooRoute(
  * missing connection or scope is reported as a skipped delivery, not a retry.
  */
 export async function createWahooRouteSendContext(userID: string): Promise<void> {
-  await withWahooRouteAccessToken(userID, async () => undefined);
+  try {
+    await withWahooRouteAccessToken(userID, async () => undefined);
+  } catch (error) {
+    return toWahooRouteHttpsError(error);
+  }
 }
 
 function createSavedRouteExternalId(userID: string, savedRouteID: string): string {
@@ -487,17 +500,58 @@ export async function sendSavedRouteToWahoo(
   savedRouteID: string,
   routeFile: RouteFileInterface,
 ): Promise<WahooRouteUploadResult> {
-  const fitBuffer = await convertWahooGpxRouteToFit(routeFile);
-  return uploadWahooRoute(
-    userID,
-    fitBuffer,
-    'fit',
-    `${savedRouteID}.fit`,
-    {
-      routeFile,
-      externalId: createSavedRouteExternalId(userID, savedRouteID),
-    },
-  );
+  try {
+    const fitBuffer = await convertWahooGpxRouteToFit(routeFile);
+    return await uploadWahooRoute(
+      userID,
+      fitBuffer,
+      'fit',
+      `${savedRouteID}.fit`,
+      {
+        routeFile,
+        externalId: createSavedRouteExternalId(userID, savedRouteID),
+      },
+    );
+  } catch (error) {
+    if (
+      isProviderOperationError(error)
+      || error instanceof WahooRouteWriteScopeRequiredError
+      || error instanceof WahooRouteUploadSkippedForDeletedUserError
+      || (error instanceof Error && (
+        error.name === 'TokenRefreshSkippedForDeletedUserError'
+        || error.name === 'TokenUseSkippedForPendingDisconnectError'
+        || error.name === 'UserDeletionGuardReadError'
+      ))
+      || (error instanceof HttpsError && error.code === 'unauthenticated')
+    ) {
+      throw error;
+    }
+
+    // Provider request failures are normalized to HttpsError by uploadWahooRoute.
+    // Preserve raw token/Firestore/setup failures for the queue's transient classifier.
+    if (!(error instanceof HttpsError)) {
+      throw error;
+    }
+
+    const code = error.code;
+    const retryable = code === 'unavailable'
+      || code === 'resource-exhausted'
+      || code === 'deadline-exceeded'
+      || code === 'aborted';
+    const retryAfterSeconds = Number((error as { details?: { retryAfterSeconds?: unknown } } | null)?.details?.retryAfterSeconds);
+    throw new ProviderOperationError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'route_upload',
+      disposition: retryable ? 'retryable' : 'permanent',
+      retryMode: retryable ? 'restart' : 'none',
+      code: retryable ? (code || 'unavailable') : 'failed-precondition',
+      message: error instanceof Error ? error.message : 'Wahoo rejected the route upload.',
+      retryAfterSeconds: Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
+      dlqContext: retryable
+        ? 'WAHOO_ROUTE_UPLOAD_RETRY_EXHAUSTED'
+        : 'WAHOO_ROUTE_UPLOAD_REJECTED',
+    });
+  }
 }
 
 /**
