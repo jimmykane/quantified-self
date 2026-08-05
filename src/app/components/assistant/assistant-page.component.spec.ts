@@ -112,14 +112,15 @@ describe('AssistantPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.assistant-welcome')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-trust-row')).toBeNull();
     expect(fixture.nativeElement.querySelector('.external-mcp-card')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.composer-shell')?.classList)
-      .not.toContain('composer-shell-sticky');
     const header = fixture.nativeElement.querySelector('.assistant-header') as HTMLElement;
+    const chat = fixture.nativeElement.querySelector('.assistant-chat') as HTMLElement;
     const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
     const explore = fixture.nativeElement.querySelector('.assistant-explore-trigger') as HTMLElement;
-    expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(header.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(composer.compareDocumentPosition(explore) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(chat.contains(explore)).toBe(true);
+    expect(chat.contains(composer)).toBe(true);
+    expect(explore.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
@@ -136,24 +137,32 @@ describe('AssistantPageComponent', () => {
     ]);
   });
 
-  it('makes the compact composer sticky only after a conversation starts', () => {
+  it('uses the full chat region for conversation content above the docked composer', () => {
     component.conversation.set(chatResponse.conversation);
     fixture.detectChanges();
+    const chat = fixture.nativeElement.querySelector('.assistant-chat') as HTMLElement;
+    const conversation = fixture.nativeElement.querySelector('.conversation') as HTMLElement;
+    const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
 
-    expect(fixture.nativeElement.querySelector('.composer-shell')?.classList)
-      .toContain('composer-shell-sticky');
+    expect(chat.contains(conversation)).toBe(true);
+    expect(chat.contains(composer)).toBe(true);
+    expect(conversation.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
   });
 
-  it('keeps the composer immediately below the header while the conversation loads', () => {
+  it('keeps loading state inside the full chat region above the composer', () => {
     component.loadingConversation.set(true);
     fixture.detectChanges();
     const header = fixture.nativeElement.querySelector('.assistant-header') as HTMLElement;
+    const chat = fixture.nativeElement.querySelector('.assistant-chat') as HTMLElement;
     const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
     const loading = fixture.nativeElement.querySelector('.assistant-loading') as HTMLElement;
 
-    expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(header.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(composer.compareDocumentPosition(loading) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(chat.contains(loading)).toBe(true);
+    expect(chat.contains(composer)).toBe(true);
+    expect(loading.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
   });
 

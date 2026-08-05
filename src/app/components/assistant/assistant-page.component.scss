@@ -1,12 +1,23 @@
 :host {
-  display: block;
+  display: flex;
+  min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
+}
+
+@supports (height: 100dvh) {
+  :host {
+    min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
+  }
 }
 
 .assistant-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   max-width: 920px;
   margin: 0 auto;
   padding: 28px 24px calc(40px + env(safe-area-inset-bottom));
   box-sizing: border-box;
+  min-height: 0;
 }
 
 .assistant-header,
@@ -81,26 +92,37 @@ h1 {
 
 .assistant-loading {
   display: grid;
+  flex: 1 1 auto;
+  align-content: center;
   justify-items: center;
   gap: 12px;
-  padding: 80px 20px;
+  min-height: 0;
+  padding: 20px;
+}
+
+.assistant-chat {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
 }
 
 .conversation {
   display: grid;
+  flex: 1 1 auto;
+  align-content: start;
   gap: 20px;
-  padding-bottom: 20px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 4px 20px;
 }
 
 .composer-shell {
   --qs-glass-panel-radius: 22px;
+  flex: 0 0 auto;
+  margin-top: auto;
   padding: 14px;
-}
-
-.composer-shell-sticky {
-  position: sticky;
-  z-index: 4;
-  bottom: 12px;
 }
 
 .composer {
@@ -123,7 +145,7 @@ h1 {
 .assistant-explore-trigger {
   display: flex;
   justify-content: center;
-  margin-top: 6px;
+  flex: 0 0 auto;
 }
 
 .assistant-explore-trigger button {
@@ -266,10 +288,6 @@ h1 {
   .message {
     width: 94%;
     padding: 14px;
-  }
-
-  .composer-shell-sticky {
-    bottom: max(8px, env(safe-area-inset-bottom));
   }
 
   .composer-shell {

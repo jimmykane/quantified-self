@@ -29,115 +29,115 @@
     </div>
   </header>
 
-  @if (!loadingConversation() && !isEmpty()) {
-    <section class="conversation" aria-label="Assistant conversation">
-      @for (message of messages(); track message.id) {
-        <article class="message" [class.message-user]="message.role === 'user'" [class.message-assistant]="message.role === 'assistant'">
-          <div class="message-role">
-            <mat-icon aria-hidden="true">{{ message.role === 'assistant' ? 'auto_awesome' : 'person' }}</mat-icon>
-            <span>{{ message.role === 'assistant' ? 'Assistant' : 'You' }}</span>
-          </div>
-          <p class="message-text">{{ message.text }}</p>
+  <section class="assistant-chat">
+    @if (!loadingConversation() && !isEmpty()) {
+      <section class="conversation" aria-label="Assistant conversation">
+        @for (message of messages(); track message.id) {
+          <article class="message" [class.message-user]="message.role === 'user'" [class.message-assistant]="message.role === 'assistant'">
+            <div class="message-role">
+              <mat-icon aria-hidden="true">{{ message.role === 'assistant' ? 'auto_awesome' : 'person' }}</mat-icon>
+              <span>{{ message.role === 'assistant' ? 'Assistant' : 'You' }}</span>
+            </div>
+            <p class="message-text">{{ message.text }}</p>
 
-          @if (message.evidence?.length) {
-            <details class="evidence-panel">
-              <summary>
-                <mat-icon>fact_check</mat-icon>
-                {{ message.evidence?.length }} grounded {{ message.evidence?.length === 1 ? 'result' : 'results' }}
-              </summary>
-              <div class="evidence-list">
-                @for (evidence of message.evidence; track $index) {
-                  <section class="evidence-item">
-                    <header>
-                      <strong>{{ evidence.title }}</strong>
-                      <span>{{ evidence.summary }}</span>
-                    </header>
-                    @if (evidence.facts.length) {
-                      <dl>
-                        @for (fact of evidence.facts; track fact.label) {
-                          <div>
-                            <dt>{{ fact.label }}</dt>
-                            <dd>{{ fact.value }}</dd>
-                          </div>
-                        }
-                      </dl>
-                    }
-                    @if (evidence.links.length) {
-                      <div class="evidence-links">
-                        @for (link of evidence.links; track link.url) {
-                          <a mat-button [href]="link.url" target="_blank" rel="noopener">
-                            <mat-icon>open_in_new</mat-icon>
-                            {{ link.label }}
-                          </a>
-                        }
-                      </div>
-                    }
-                  </section>
-                }
-              </div>
-            </details>
-          }
-        </article>
-      }
-
-      @if (sending()) {
-        <article class="message message-assistant assistant-thinking" aria-live="polite">
-          <div class="message-role">
-            <mat-icon aria-hidden="true">auto_awesome</mat-icon>
-            <span>Assistant</span>
-          </div>
-          <div class="thinking-content">
-            <mat-spinner diameter="22"></mat-spinner>
-            <span>Checking the relevant Quantified Self data…</span>
-          </div>
-        </article>
-      }
-
-      <span #conversationEnd class="conversation-end" aria-hidden="true"></span>
-    </section>
-  }
-
-  <section class="composer-shell qs-glass-card-panel" [class.composer-shell-sticky]="!isEmpty()">
-    <form class="composer" (submit)="handleComposerSubmit($event)">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Ask about your data</mat-label>
-        <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
-          (keydown)="handleComposerKeydown($event)"
-          [placeholder]="composerPlaceholder"></textarea>
-        <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
-      </mat-form-field>
-      <button mat-mini-fab type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
-        @if (sending()) {
-          <mat-spinner diameter="20"></mat-spinner>
-        } @else {
-          <mat-icon>arrow_upward</mat-icon>
+            @if (message.evidence?.length) {
+              <details class="evidence-panel">
+                <summary>
+                  <mat-icon>fact_check</mat-icon>
+                  {{ message.evidence?.length }} grounded {{ message.evidence?.length === 1 ? 'result' : 'results' }}
+                </summary>
+                <div class="evidence-list">
+                  @for (evidence of message.evidence; track $index) {
+                    <section class="evidence-item">
+                      <header>
+                        <strong>{{ evidence.title }}</strong>
+                        <span>{{ evidence.summary }}</span>
+                      </header>
+                      @if (evidence.facts.length) {
+                        <dl>
+                          @for (fact of evidence.facts; track fact.label) {
+                            <div>
+                              <dt>{{ fact.label }}</dt>
+                              <dd>{{ fact.value }}</dd>
+                            </div>
+                          }
+                        </dl>
+                      }
+                      @if (evidence.links.length) {
+                        <div class="evidence-links">
+                          @for (link of evidence.links; track link.url) {
+                            <a mat-button [href]="link.url" target="_blank" rel="noopener">
+                              <mat-icon>open_in_new</mat-icon>
+                              {{ link.label }}
+                            </a>
+                          }
+                        </div>
+                      }
+                    </section>
+                  }
+                </div>
+              </details>
+            }
+          </article>
         }
-      </button>
-    </form>
-    @if (errorMessage()) {
-      <section class="assistant-error" role="alert">
-        <mat-icon>error_outline</mat-icon>
-        <span>{{ errorMessage() }}</span>
-        <button mat-button type="button" (click)="errorMessage.set(null)">Dismiss</button>
-      </section>
-    }
-    <footer class="composer-footer">
-      <span>{{ quotaText() }}</span>
-      <span>Answers can be wrong. Verify important health or Training decisions.</span>
-    </footer>
-  </section>
 
-  @if (loadingConversation()) {
-    <section class="assistant-loading" aria-live="polite">
-      <mat-spinner diameter="24"></mat-spinner>
-      <span>Loading your conversation…</span>
+        @if (sending()) {
+          <article class="message message-assistant assistant-thinking" aria-live="polite">
+            <div class="message-role">
+              <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+              <span>Assistant</span>
+            </div>
+            <div class="thinking-content">
+              <mat-spinner diameter="22"></mat-spinner>
+              <span>Checking the relevant Quantified Self data…</span>
+            </div>
+          </article>
+        }
+
+        <span #conversationEnd class="conversation-end" aria-hidden="true"></span>
+      </section>
+    } @else if (loadingConversation()) {
+      <section class="assistant-loading" aria-live="polite">
+        <mat-spinner diameter="24"></mat-spinner>
+        <span>Loading your conversation…</span>
+      </section>
+    } @else {
+      <div class="assistant-explore-trigger">
+        <button mat-button type="button" (click)="openExploreSheet()">
+          <mat-icon>auto_awesome</mat-icon>
+          Examples &amp; data access
+        </button>
+      </div>
+    }
+
+    <section class="composer-shell qs-glass-card-panel">
+      <form class="composer" (submit)="handleComposerSubmit($event)">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Ask about your data</mat-label>
+          <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+            (keydown)="handleComposerKeydown($event)"
+            [placeholder]="composerPlaceholder"></textarea>
+          <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
+        </mat-form-field>
+        <button mat-mini-fab type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
+          @if (sending()) {
+            <mat-spinner diameter="20"></mat-spinner>
+          } @else {
+            <mat-icon>arrow_upward</mat-icon>
+          }
+        </button>
+      </form>
+      @if (errorMessage()) {
+        <section class="assistant-error" role="alert">
+          <mat-icon>error_outline</mat-icon>
+          <span>{{ errorMessage() }}</span>
+          <button mat-button type="button" (click)="errorMessage.set(null)">Dismiss</button>
+        </section>
+      }
+      <footer class="composer-footer">
+        <span>{{ quotaText() }}</span>
+        <span>Answers can be wrong. Verify important health or Training decisions.</span>
+      </footer>
     </section>
-  } @else if (isEmpty()) {
-    <div class="assistant-explore-trigger">
-      <button mat-button type="button" (click)="openExploreSheet()">
-        <mat-icon>auto_awesome</mat-icon>
-        Examples &amp; data access
-      </button>
-    </div>
-  }
+  </section>
 </main>
