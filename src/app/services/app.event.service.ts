@@ -2,7 +2,7 @@ import { inject, Injectable, OnDestroy } from '@angular/core';
 import { ActivityTypes, DataActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, documentId, FieldPath } from 'app/firebase/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer, FieldPath } from 'app/firebase/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -860,64 +860,6 @@ export class AppEventService implements OnDestroy {
       queryStart,
       warmServer,
     ));
-  }
-
-  /**
-   * One-shot event fetch by explicit event IDs for compact result surfaces such as AI Insights.
-   * Preserves the input ID ordering and does not fetch activities.
-   */
-  public getEventsOnceByIds(user: User, eventIDs: string[]): Observable<AppEventInterface[]> {
-    const normalizedEventIDs = Array.from(new Set(
-      (eventIDs || []).map(eventID => `${eventID || ''}`.trim()).filter(Boolean)
-    ));
-
-    if (!normalizedEventIDs.length) {
-      return of([]);
-    }
-
-    this.logger.log('[AppEventService] getEventsOnceByIds called', {
-      userID: user.uid,
-      eventIDs: normalizedEventIDs,
-      requestedCount: normalizedEventIDs.length,
-      queryChunkCount: Math.ceil(normalizedEventIDs.length / AppEventService.FIRESTORE_IN_QUERY_MAX_IDS),
-    });
-
-    const eventsCollection = collection(this.firestore, 'users', user.uid, 'events');
-    const eventIDChunks = this.chunkValues(
-      normalizedEventIDs,
-      AppEventService.FIRESTORE_IN_QUERY_MAX_IDS,
-    );
-
-    return from(Promise.all(eventIDChunks.map(async (eventIDChunk) => {
-      try {
-        const chunkQuery = query(eventsCollection, where(documentId(), 'in', eventIDChunk));
-        const querySnapshot = await getDocs(chunkQuery);
-        return querySnapshot.docs
-          .map((snapshot) => this.buildEventFromSnapshot(snapshot.data(), snapshot.id))
-          .filter((event): event is AppEventInterface => !!event);
-      } catch (error) {
-        this.logger.error('[AppEventService] Failed to fetch events by chunked IDs.', {
-          userID: user.uid,
-          eventIDs: eventIDChunk,
-          error,
-        });
-        return [];
-      }
-    }))).pipe(
-      map((chunkEvents) => {
-        const eventsByID = new Map<string, AppEventInterface>();
-        for (const event of chunkEvents.flat()) {
-          const eventID = event.getID();
-          if (eventID && !eventsByID.has(eventID)) {
-            eventsByID.set(eventID, event);
-          }
-        }
-
-        return normalizedEventIDs
-          .map((eventID) => eventsByID.get(eventID))
-          .filter((event): event is AppEventInterface => !!event);
-      }),
-    );
   }
 
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {

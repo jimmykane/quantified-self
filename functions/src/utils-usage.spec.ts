@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedForDeletedUserError } from './utils';
+import * as logger from 'firebase-functions/logger';
+import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, setEventDocumentIfUserActive, determineRedirectURI, setAccessControlHeadersOnResponse, EventWriteSkippedByTransactionGuardError, EventWriteSkippedForDeletedUserError } from './utils';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { USAGE_LIMITS } from '../../shared/limits';
 import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
@@ -257,6 +258,20 @@ describe('utils higher-level helpers', () => {
             hoisted.getUser.mockRejectedValue(err);
 
             await expect(getUserRoleAndGracePeriod('missing')).rejects.toThrow('User missing not found in Auth');
+        });
+
+        it('does not put the user identifier into role lookup failure logs', async () => {
+            const err: any = new Error('internal auth failure');
+            err.code = 'auth/internal-error';
+            hoisted.getUser.mockRejectedValue(err);
+
+            await expect(getUserRoleAndGracePeriod('private-user-id')).resolves.toEqual({ role: 'free' });
+
+            expect(logger.error).toHaveBeenCalledWith(
+                '[getUserRoleAndGracePeriod] Could not resolve role context.',
+                { errorName: 'Error', errorCode: 'auth/internal-error' },
+            );
+            expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('private-user-id');
         });
     });
 

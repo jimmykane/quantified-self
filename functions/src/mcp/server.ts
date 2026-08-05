@@ -204,7 +204,7 @@ const MCP_SLEEP_PROVIDER_SCHEMA = z.enum([
 ]);
 const MCP_MEASUREMENT_TYPE_SCHEMA = z.enum(MCP_MEASUREMENT_TYPE_IDS);
 
-interface AuthenticatedMcpRequest {
+export interface AuthenticatedMcpRequest {
   uid: string;
   clientId: string;
   connectionId: string;

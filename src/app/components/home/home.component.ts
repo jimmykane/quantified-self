@@ -8,7 +8,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { getAiInsightsHeroPrompts } from '@shared/ai-insights-prompts';
+import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
 
 @Component({
@@ -29,7 +29,7 @@ import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/type
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private observer: IntersectionObserver | undefined;
-  public readonly aiPromptExamples: readonly string[] = getAiInsightsHeroPrompts();
+  public readonly assistantPromptExamples: readonly string[] = ASSISTANT_STARTER_PROMPTS;
   private readonly destroyRef = inject(DestroyRef);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly isBrowser = isPlatformBrowser(this.platformId);

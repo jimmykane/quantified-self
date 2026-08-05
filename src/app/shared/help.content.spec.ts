@@ -47,6 +47,30 @@ describe('help.content', () => {
     });
   });
 
+  it('should document the bounded MCP-backed Assistant and external MCP alternative', () => {
+    const assistantSection = HELP_SECTIONS.find(section => section.id === 'ai-insights');
+
+    expect(assistantSection?.title).toBe('Assistant');
+    expect(assistantSection?.content).toContain('Every current answer must use at least one read-only Quantified Self result');
+    expect(assistantSection?.content).toContain('Expand **grounded results**');
+    expect(assistantSection?.content).toContain("browser's IANA timezone");
+    expect(assistantSection?.content).toContain('Direct in-app URLs are withheld');
+    expect(assistantSection?.content).toContain('opaque reference or cursor is rejected');
+    expect(assistantSection?.content).toContain('latest six completed turns');
+    expect(assistantSection?.content).toContain('becomes unavailable about **seven days**');
+    expect(assistantSection?.content).toContain('at most four extra minutes');
+    expect(assistantSection?.content).toContain('deletes the expired record asynchronously');
+    expect(assistantSection?.content).toContain('no access to exact activity locations');
+    expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');
+    expect(assistantSection?.links).toContainEqual({
+      label: 'MCP Connections',
+      icon: 'devices',
+      kind: 'route',
+      target: '/services',
+      queryParams: { serviceName: 'mcp' },
+    });
+  });
+
   it('should document the ChatGPT MCP setup path and production endpoint', () => {
     const dataAndPrivacySection = HELP_SECTIONS.find(section => section.id === 'data-and-privacy');
 

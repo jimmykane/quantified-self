@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONNECTED_SERVICES_POLICY_SECTION,
   POLICY_CONTENT,
+  POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_GARMIN_DATA_FRAGMENT,
   POLICIES_MCP_CLIENTS_FRAGMENT,
   POLICIES_SUUNTO_DATA_FRAGMENT,
@@ -16,6 +17,28 @@ describe('Policy consent fields', () => {
       .map(policy => policy.formControlName);
 
     expect(requiredPolicyControls).toEqual([...REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES]);
+  });
+});
+
+describe('Built-in Assistant policy', () => {
+  it('documents the bounded MCP-backed Gemini context, exclusions, and retention', () => {
+    const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_AI_AND_PROCESSORS_FRAGMENT);
+    const content = topic?.content.join(' ') || '';
+
+    expect(CONNECTED_SERVICES_POLICY_SECTION.summary).toContain('built-in Assistant');
+    expect(content).toContain("browser's IANA timezone");
+    expect(content).toContain('latest six completed conversation turns');
+    expect(content).toContain('bounded validated results from the non-location read-only tools');
+    expect(content).toContain('Direct in-app URLs are withheld from Gemini');
+    expect(content).toContain('opaque reference or cursor is rejected');
+    expect(content).toContain('exact locations');
+    expect(content).toContain('server-owned active conversation becomes unavailable about seven days after');
+    expect(content).toContain('at most four extra minutes');
+    expect(content).toContain('Firestore TTL then deletes it asynchronously');
+    expect(content).toContain('built-in Assistant has no location or saved-route tools');
+    expect(content).not.toContain('AI Insights');
+    expect(content).not.toContain('rollback');
   });
 });
 

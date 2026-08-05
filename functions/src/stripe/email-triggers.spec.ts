@@ -245,7 +245,7 @@ describe('checkAndSendSubscriptionEmails', () => {
                     old_role: 'Pro',
                     activity_description: 'Up to 1,000 activities',
                     route_description: 'Up to 100 saved routes',
-                    ai_insights_description: '50 AI Insights requests per billing period',
+                    ai_insights_description: '50 Assistant requests per billing period',
                     device_sync_will_end: true,
                     membership_url: 'https://quantified-self.io/pricing'
                 })

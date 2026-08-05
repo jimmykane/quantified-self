@@ -63,7 +63,7 @@ export interface EnrichedUser extends BasicUser {
     connectedServices: { provider: string; connectedAt: unknown }[];
     onboardingCompleted: boolean;
     hasSubscribedOnce: boolean;
-    aiCreditsConsumed: number;
+    assistantRequestsUsed: number;
     eventStats: EventCountStats;
     routeStats: RouteCountStats;
 }

@@ -163,7 +163,7 @@ describe('checkSubscriptionNotifications', () => {
                     grace_period_end: '24 January 2026',
                     free_activity_description: 'Up to 100 activities',
                     free_route_description: 'Up to 10 saved routes',
-                    free_ai_insights_description: '20 AI Insights requests per calendar month',
+                    free_ai_insights_description: '20 Assistant requests per calendar month',
                     device_sync_will_end: false,
                     membership_url: 'https://quantified-self.io/pricing'
                 })

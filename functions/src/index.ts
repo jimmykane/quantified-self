@@ -188,7 +188,12 @@ export { reprocessEvent } from './events/reprocess-event';
 export { setEventSharing } from './events/set-event-sharing';
 export { reprocessRoute } from './routes/reprocess-route';
 export { mergeEvents } from './events/merge-events';
-export { aiInsights, getAiInsightsQuotaStatus } from './ai/insights/callable';
+export {
+  assistantChat,
+  getAssistantQuotaStatus,
+  getAssistantConversation,
+  resetAssistantConversation,
+} from './assistant/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
 export { setTrainingVisibleDisciplines } from './derived-metrics/set-training-visible-disciplines';

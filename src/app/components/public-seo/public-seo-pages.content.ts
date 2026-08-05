@@ -1,4 +1,4 @@
-import { AI_INSIGHTS_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import {
   PUBLIC_FEATURE_PATHS,
   PUBLIC_GUIDE_PATHS,
@@ -67,7 +67,7 @@ export interface PublicSeoRouteData {
 const SITE_ORIGIN = 'https://quantified-self.io';
 const STARTER_ACTIVITY_LIMIT = USAGE_LIMITS.free;
 const STARTER_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
-const FREE_AI_REQUEST_LIMIT = AI_INSIGHTS_REQUEST_LIMITS.free;
+const FREE_ASSISTANT_REQUEST_LIMIT = ASSISTANT_REQUEST_LIMITS.free;
 
 function pageUrl(path: string): string {
   return `${SITE_ORIGIN}/${path}`;
@@ -89,15 +89,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore an activity calendar, training analysis, read-only MCP access, AI Insights, workout file comparison, FIT/GPX/TCX tools, and sports watch benchmark reports.',
+    description: 'Explore an activity calendar, training analysis, the grounded Quantified Self Assistant, read-only MCP access, workout file comparison, FIT/GPX/TCX tools, sports watch benchmark reports, and a private dashboard.',
     h1: 'Features for endurance training data',
-    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through AI Insights or an MCP client you explicitly authorize.',
-    chips: ['Activity calendar', 'Training analysis', 'MCP server', 'AI Insights', 'Workout comparison', 'Route files', 'Benchmarks'],
+    intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
+    chips: ['Activity calendar', 'Training analysis', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
       routeAction('Activity Calendar', '/features/activity-calendar'),
       routeAction('MCP Server', '/features/mcp-server'),
-      routeAction('AI Insights', '/features/ai-insights'),
+      routeAction('Assistant', '/features/ai-insights'),
       routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
       routeAction('Compare Files', '/features/workout-file-comparison'),
       routeAction('Analyze Files', '/features/fit-gpx-tcx-file-analyzer'),
@@ -121,9 +121,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Compare current training with your usual workload, then inspect readiness, load, intensity, durability, sleep context, and selected historical builds.',
           },
           {
-            icon: 'query_stats',
-            title: 'AI Insights',
-            copy: `Ask focused questions about stored Garmin, Suunto, COROS, Wahoo, and uploaded activity data. Free accounts include ${FREE_AI_REQUEST_LIMIT} AI requests per calendar month.`,
+            icon: 'auto_awesome',
+            title: 'Grounded Assistant',
+            copy: `Ask follow-up questions about sleep, readiness, Training, measurements, and activities through the same validated read-only tools used by MCP. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
           },
           {
             icon: 'devices',
@@ -182,7 +182,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'What Quantified Self features should I start with?',
-        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, AI Insights for built-in chart-backed answers, or the MCP server for explicitly approved read-only access.',
+        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, the Assistant for built-in grounded answers, or the MCP server when you want to use a compatible external client with explicitly approved read-only data.',
       },
       {
         question: 'Can I compare custom files and provider data?',
@@ -190,7 +190,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which features are available on the free plan?',
-        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_AI_REQUEST_LIMIT} AI Insight requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
+        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
       },
     ],
     closingTitle: 'Choose the feature that matches the data problem',
@@ -494,85 +494,90 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('MCP Client Policy', '/policies', 'stroked', undefined, 'mcp-clients'),
     ],
   },
-  aiInsights: {
-    key: 'aiInsights',
-    path: PUBLIC_FEATURE_PATHS.aiInsights,
-    eyebrow: 'AI Insights',
-    title: 'AI Insights for Endurance Training Data',
-    description: `Ask focused questions about endurance training data and get chart-backed AI insights from Garmin, Suunto, COROS, and uploaded activity history. Free accounts include ${FREE_AI_REQUEST_LIMIT} AI requests per calendar month.`,
-    h1: 'AI insights for endurance training data',
-    intro: `Ask focused questions about your training history and get chart-backed answers grounded in stored Garmin, Suunto, COROS, and uploaded activity data. Free accounts include ${FREE_AI_REQUEST_LIMIT} AI requests per calendar month.`,
-    chips: ['Garmin', 'Suunto', 'COROS', 'Charts', 'Private data'],
+  assistant: {
+    key: 'assistant',
+    path: PUBLIC_FEATURE_PATHS.assistant,
+    eyebrow: 'Quantified Self Assistant',
+    title: 'AI Training Assistant Grounded in Your Fitness Data',
+    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, and activities. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    h1: 'A fitness-data Assistant grounded in your own history',
+    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, or recent activities. The Assistant chooses bounded read-only tools and shows the results that grounded each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities'],
     actions: [
-      routeAction('Try AI Insights', '/ai-insights', 'flat', 'arrow_forward'),
+      routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
       routeAction('View Membership', '/pricing'),
-      routeAction('Read Help', '/help', 'stroked', undefined, 'ai-insights'),
+      routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),
     ],
     sections: [
       {
-        eyebrow: 'Training Questions',
-        title: 'Turn specific prompts into usable answers',
-        copy: 'AI Insights works best when you ask about one metric, activity type, date range, or trend at a time.',
+        eyebrow: 'Conversational analysis',
+        title: 'Ask naturally, then follow up',
+        copy: 'The built-in Assistant uses the same validated MCP server foundation with a conservative non-location tool set, without making you install another client.',
         items: [
           {
-            icon: 'query_stats',
-            title: 'Trend and aggregate answers',
-            copy: 'Ask about distance, duration, power, heart rate, cadence, zones, freshness, or efficiency over a date range.',
+            icon: 'bedtime',
+            title: 'Sleep and recovery context',
+            copy: 'Ask about duration, stages, overnight HRV, sleeping heart rate, SpO2, respiration, trends, readiness, and missing-data coverage.',
           },
           {
-            icon: 'map',
-            title: 'Location-aware prompts',
-            copy: 'Mention a city, region, radius, or coordinate pair when you want answers limited to activities in a place.',
+            icon: 'monitoring',
+            title: 'Training and activity context',
+            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts with the ready Training snapshots already used in the app.',
           },
           {
-            icon: 'fact_check',
-            title: 'Evidence before advice',
-            copy: 'Supported answers can include charts, summary cards, event evidence, confidence labels, and deterministic no-data states.',
+            icon: 'scale',
+            title: 'Measurements and trends',
+            copy: 'Query first-class body measurements such as weight over explicit date ranges instead of hiding them among activity metrics.',
           },
         ],
       },
       {
-        eyebrow: 'Privacy',
-        title: 'Designed around derived training stats',
-        copy: 'The AI workflow is built to avoid sending raw routes, uploaded files, or complete activity payloads to AI providers.',
+        eyebrow: 'Grounding and privacy',
+        title: 'Bounded tools, visible evidence, short retention',
+        copy: 'Each current answer must use at least one validated read-only result. The app shows compact evidence instead of asking you to trust an unsupported narrative.',
         items: [
           {
-            icon: 'shield',
-            title: 'Raw files stay out of prompts',
-            copy: 'AI Insights uses the minimum derived statistics needed for the requested answer instead of raw FIT, TCX, GPX, JSON, or SML files.',
+            icon: 'fact_check',
+            title: 'Grounded every turn',
+            copy: 'Answers must call a current Quantified Self tool. Missing values remain missing, and the response must distinguish recorded facts from interpretation.',
           },
           {
-            icon: 'lock',
-            title: 'Private dashboard context',
-            copy: 'Answers are generated from activity data in your Quantified Self account, not from a public social feed or shared leaderboard.',
+            icon: 'location_off',
+            title: 'Sensitive surfaces excluded',
+            copy: 'The built-in Assistant cannot access saved routes, exact activity locations, original files, write tools, or dashboard settings.',
           },
           {
-            icon: 'restart_alt',
-            title: 'Repeatable result handling',
-            copy: 'Latest completed answers can be restored, refreshed with new data, or replaced when your prompt or date scope changes.',
+            icon: 'timer',
+            title: 'Short-lived conversation',
+            copy: 'Only the latest six completed turns are retained in one server-owned active conversation. It becomes unavailable about seven days after the latest completed turn or reset; a response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL deletes it asynchronously, and New chat clears it immediately.',
           },
         ],
       },
     ],
     faqItems: [
       {
-        question: 'Can AI Insights analyze Garmin, Suunto, COROS, and uploaded workouts?',
-        answer: 'Yes. AI Insights works from the training statistics stored in your account, whether the activity came from Garmin, Suunto, COROS, or supported uploaded files.',
+        question: 'What can the Quantified Self Assistant answer?',
+        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, and swim lengths.',
       },
       {
-        question: 'Does AI Insights send raw activity files to AI providers?',
-        answer: 'No. Quantified Self does not send raw activities, routes, or uploaded files to AI providers for AI Insights. It sends the minimum derived stats needed for the answer.',
+        question: 'Does the Assistant send raw files or routes to Gemini?',
+        answer: 'No. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer. Original FIT, TCX, GPX, JSON, and SML files, saved routes, and exact locations are not available to the built-in Assistant.',
       },
       {
-        question: 'Is AI Insights available on the free plan?',
-        answer: `Yes. Free accounts include up to ${FREE_AI_REQUEST_LIMIT} AI Insight requests per calendar month. Basic and Pro increase the request limits.`,
+        question: 'Is the Assistant available on the free plan?',
+        answer: `Yes. Free accounts include up to ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month. Basic and Pro increase the request limits.`,
+      },
+      {
+        question: 'Can I still use ChatGPT through MCP?',
+        answer: 'Yes. External MCP connections remain the advanced bring-your-own-AI path, with separate permissions including optional route and location access. External client usage does not consume the in-app Assistant allowance.',
       },
     ],
-    closingTitle: 'Ask better questions of the training history you already have',
-    closingCopy: 'Start with a focused date range, metric, and activity type, then use the answer as a chart-backed starting point for deeper analysis.',
+    closingTitle: 'Start with today, then ask why',
+    closingCopy: 'Open with a daily report or a focused sleep, Training, measurement, or activity question, then use follow-ups to compare the evidence over time.',
     closingActions: [
-      routeAction('Open AI Insights', '/ai-insights', 'flat', 'arrow_forward'),
-      routeAction('AI Help', '/help', 'stroked', undefined, 'ai-insights'),
+      routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
+      routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),
+      routeAction('External MCP Overview', '/features/mcp-server', 'stroked', 'extension'),
     ],
   },
   workoutFileComparison: {
@@ -1010,7 +1015,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Centralized Archive',
         title: 'Plan the dashboard before you connect everything',
-        copy: 'The centralization guide explains how provider imports, manual uploads, source files, benchmark reports, exports, and AI Insights fit together.',
+        copy: 'The centralization guide explains how provider imports, manual uploads, source files, benchmark reports, exports, and the built-in Assistant fit together.',
         items: [
           {
             icon: 'hub',
@@ -1025,7 +1030,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'compare_arrows',
             title: 'Analysis after import',
-            copy: 'Once data is centralized, use comparison features, benchmark reports, exports, and chart-backed AI questions from the same archive.',
+            copy: 'Once data is centralized, use comparison features, benchmark reports, exports, and grounded Assistant questions from the same archive.',
           },
         ],
       },
@@ -1622,7 +1627,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.centralizeWorkoutData,
     eyebrow: 'Training Data Hub',
     title: 'Centralize Garmin, Suunto, COROS, and Wahoo Workout Data',
-    description: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data in one private training dashboard with source files, manual uploads, provider sync, benchmark reports, exports, and AI Insights.',
+    description: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data in one private training dashboard with source files, manual uploads, provider sync, benchmark reports, exports, and a grounded Assistant.',
     h1: 'Centralize Garmin, Suunto, COROS, and Wahoo workout data',
     intro: 'Use Quantified Self as the private training hub when your workouts, source files, routes, and analysis are spread across Garmin, Suunto, COROS, Wahoo, and exported activity files.',
     chips: ['Garmin', 'Suunto', 'COROS', 'Wahoo', 'Source files', 'Exports', 'Benchmarks'],
@@ -1650,7 +1655,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'dashboard_customize',
             title: 'One private dashboard',
-            copy: 'Use one dashboard for maps, routes, load, readiness, sleep context, file uploads, benchmark reports, and AI Insights.',
+            copy: 'Use one dashboard for maps, routes, load, readiness, sleep context, file uploads, benchmark reports, and grounded Assistant questions.',
           },
         ],
       },
@@ -1692,7 +1697,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Build the archive first, then choose the workflows you need',
-    closingCopy: 'Start with the providers and files you already use, then add activity sync, uploads, benchmark reports, and AI Insights as your training archive grows.',
+    closingCopy: 'Start with the providers and files you already use, then add activity sync, uploads, benchmark reports, and the Assistant as your training archive grows.',
     closingActions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
       routeAction('All Integrations', '/integrations', 'stroked', 'arrow_forward'),
@@ -1702,7 +1707,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       'Connect the providers you use or upload supported activity files.',
       'Import history or recent activities into Quantified Self.',
       'Turn on cross-service activity sync only when you want future activities sent to Suunto.',
-      'Use dashboard, export, AI Insights, and benchmark workflows from the centralized archive.',
+      'Use dashboard, export, Assistant, and benchmark workflows from the centralized archive.',
     ],
   },
 };
@@ -1787,7 +1792,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),
-  aiInsights: buildRouteData(PUBLIC_SEO_PAGES.aiInsights),
+  assistant: buildRouteData(PUBLIC_SEO_PAGES.assistant),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
   fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),
   routeFiles: buildRouteData(PUBLIC_SEO_PAGES.routeFiles),

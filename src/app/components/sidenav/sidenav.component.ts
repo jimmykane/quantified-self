@@ -13,7 +13,7 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { environment } from '../../../environments/environment';
 import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
-import { getAiInsightsRequestLimitForRole } from '@shared/limits';
+import { getAssistantRequestLimitForRole } from '@shared/limits';
 
 @Component({
   selector: 'app-sidenav',
@@ -54,11 +54,11 @@ export class SideNavComponent {
     return this.userService.hasPaidAccessSignal();
   }
 
-  get aiInsightsRoute(): string {
-    return this.hasAiInsightsAccess ? '/ai-insights' : '/subscriptions';
+  get assistantRoute(): string {
+    return this.hasAssistantAccess ? '/ai-insights' : '/subscriptions';
   }
 
-  get hasAiInsightsAccess(): boolean {
+  get hasAssistantAccess(): boolean {
     const currentUser = this.user;
     if (!currentUser) {
       return false;
@@ -70,7 +70,7 @@ export class SideNavComponent {
 
     const stripeRole = `${(currentUser as any).stripeRole || 'free'}`;
     try {
-      return getAiInsightsRequestLimitForRole(stripeRole) > 0;
+      return getAssistantRequestLimitForRole(stripeRole) > 0;
     } catch {
       return this.hasPaidAccess;
     }

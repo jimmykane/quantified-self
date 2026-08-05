@@ -18,6 +18,21 @@ and re-check this override whenever the MCP SDK changes.
 This is an outbound user-authorized data interface, not a fitness-provider integration. It does not import provider data,
 write activities, mutate Training state, or require a public `/integrations/<provider>` page.
 
+### Internal Assistant adapter
+
+The built-in Assistant reuses this server through an SDK `Client` and linked `InMemoryTransport`. It calls
+`createMcpServer` with a fixed first-party identity, conservative non-location read scopes, and a second explicit tool
+allowlist. It does not call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
+scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
+Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
+references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
+offer a validated safe app link. This prevents the Assistant from becoming a parallel data API.
+
+The internal adapter is implementation-only and does not alter the registered public MCP contract. Adding a public
+tool or response field still requires the digest-bound lifecycle below. Every such change must also review whether the
+Assistant allowlist, routing instructions, deterministic evidence, Help, policies, and tests need an update. See
+`docs/assistant.md` for the exact internal boundary and maintenance checklist.
+
 ## Public endpoints
 
 Hosting routes these paths to `mcpApi`:
@@ -338,11 +353,6 @@ this rollout stage. The source is already compatible: the theme bootstrap is a s
 bindings implement UI event handlers instead of inline event attributes.
 The narrower `wasm-unsafe-eval` source is present because the app uses Mapbox Standard Style WebAssembly; it does not
 permit JavaScript string evaluation.
-
-In browsers, the shared AI Insights response contract configures Zod with `jitless: true` before constructing its first
-object schema. Zod v4 otherwise probes JavaScript string evaluation when object schemas initialize. Keep that browser
-configuration before schema construction, or remove the dependency on the probe, rather than adding general
-`unsafe-eval` permission. Server-side validation retains its existing JIT behavior.
 
 Production and beta builds keep Angular's `optimization.styles.inlineCritical` disabled. The optimizer otherwise emits
 an inline stylesheet `onload` handler into `index.csr.html`, which is incompatible with `script-src-attr 'none'`.
@@ -769,8 +779,7 @@ The preferred nearby-search tools accept either `{ latitudeDegrees, longitudeDeg
 500,000 metres. Direct coordinates are validated and used entirely inside Quantified Self. Place text is normalized,
 limited to 20 words and 200 characters, and sent to the Mapbox Geocoding v6 forward endpoint with autocomplete disabled,
 one result, and temporary (uncached) use. MCP never invokes an AI model to repair or reinterpret a failed place lookup.
-The shared deterministic Mapbox adapter is also used by AI Insights, where the existing explicitly metered AI fallback
-remains an AI-specific behavior.
+The built-in Assistant does not receive location tools and does not use Mapbox.
 
 Mapbox responses have a 5-second timeout and 64 KiB body limit. Only the resolved label, feature type, center, and valid
 bounding box enter the application. Authentication, rate-limit, timeout, malformed-response, and provider failures map

@@ -13,7 +13,7 @@ Try the hosted app at [quantified-self.io](https://www.quantified-self.io/).
 - Explore configurable dashboards, training readiness, load trends, power curves, intensity zones, laps, and durability metrics.
 - View activities and saved routes with Mapbox-powered maps and route tools.
 - Compare recordings from multiple devices, share selected activities, and export your data.
-- Generate optional AI-assisted activity insights.
+- Ask grounded fitness-data questions through the built-in Assistant.
 
 ## Technology and repository layout
 
@@ -125,7 +125,7 @@ Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are use
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, optional `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY` or `STRIPE_API_KEY` |
-| AI Insights | `GEMINI_API_KEY` |
+| Built-in Assistant | `GEMINI_API_KEY` |
 | Backend Mapbox access | `MAPBOX_ACCESS_TOKEN` |
 | Optional task emulator | `CLOUD_TASKS_EMULATOR_HOST` |
 | Release source maps | `SENTRY_AUTH_TOKEN` |
@@ -182,7 +182,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | Collection | Retention | TTL field | Purpose |
 | --- | --- | --- | --- |
 | `mail` | About 90 days | `expireAt` | Transactional email records |
-| `aiInsightsPromptRepairs` | About 90 days | `expireAt` | AI prompt-repair backlog |
+| `aiInsightsPromptRepairs` | Up to 90 days after legacy retirement | `expireAt` | Cleanup-only TTL drain for historical prompt-repair records; there are no active writers |
 | `failed_jobs` | 7 days | `expireAt` | Failed background-job records |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items |
 | `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |
@@ -191,6 +191,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | `mcpOAuthAccessTokens` / `mcpOAuthRefreshTokens` | 1 hour / 30 days | `expireAt` | Hashed MCP bearer and refresh credentials |
 | `mcpOAuthRateLimits` | About 5 minutes | `expireAt` | Distributed MCP request counters |
 | `users/*/mcpConnections` | 5 minutes while pending | `expireAt` | Abandoned MCP approvals; successful exchanges remove the TTL field |
+| `users/*/assistantConversations` | 7 days after the latest completed turn or reset; an active turn is protected for at most 4 extra minutes | `expireAt` | One bounded server-owned active Assistant conversation plus private, unindexed replay fingerprints per user |
 | `users/*/eventMergeOperations` | 7 days after the latest state transition | `expireAt` | Event-merge idempotency and reconciliation ledger |
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
@@ -200,6 +201,7 @@ These policies are infrastructure configuration; starting local emulators does n
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
+- [MCP-backed built-in Assistant](docs/assistant.md)
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
 - [Read-only MCP server](docs/mcp-server.md)
 - [Queue processing architecture](docs/queue-processing.md)

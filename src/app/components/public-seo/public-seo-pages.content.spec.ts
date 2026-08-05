@@ -13,7 +13,7 @@ describe('public-seo-pages.content', () => {
       activityCalendar: 'features/activity-calendar',
       trainingAnalysis: 'features/training-analysis',
       mcpServer: 'features/mcp-server',
-      aiInsights: 'features/ai-insights',
+      assistant: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
       fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
       routeFiles: 'features/fit-gpx-route-files',
@@ -99,9 +99,24 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.aiInsights.h1).toBe('AI insights for endurance training data');
-    expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('chart-backed AI insights');
-    expect(PUBLIC_SEO_PAGES.aiInsights.description).toContain('Free accounts include');
+    expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('A fitness-data Assistant grounded in your own history');
+    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('grounded in read-only Quantified Self tools');
+    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('Free accounts include');
+    expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
+      section.items.some(item => item.title === 'Grounded every turn')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
+      section.items.some(item => item.copy.includes('at most four extra minutes'))
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
+      item.answer.includes('External MCP connections remain the advanced bring-your-own-AI path')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
+      item.answer.includes('your message, browser timezone, and bounded recent conversation context')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
+      item.answer.includes('Direct in-app URLs are withheld')
+    ))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.h1).toBe('Compare FIT, TCX, GPX, JSON, and SML workout files');
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.intro).toContain('Manual uploads and benchmark comparisons are available on the free plan');

@@ -496,7 +496,7 @@ describe('listUsers Cloud Function', () => {
             expect(user.connectedServices).toHaveLength(4);
         });
 
-        it('should include aiCreditsConsumed from the current subscription usage period', async () => {
+        it('should include assistantRequestsUsed from the current subscription usage period', async () => {
             const periodStartMs = Date.parse('2026-01-01T00:00:00.000Z');
             const periodEndMs = Date.parse('2026-02-01T00:00:00.000Z');
             const expectedUsageDocID = `period_${periodStartMs}_${periodEndMs}`;
@@ -591,7 +591,7 @@ describe('listUsers Cloud Function', () => {
             });
 
             const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
-            expect(result.users[0].aiCreditsConsumed).toBe(17);
+            expect(result.users[0].assistantRequestsUsed).toBe(17);
         });
 
         it('should not fall back to latest usage doc for active subscriptions when current period doc is missing', async () => {
@@ -701,7 +701,7 @@ describe('listUsers Cloud Function', () => {
             });
 
             const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
-            expect(result.users[0].aiCreditsConsumed).toBe(0);
+            expect(result.users[0].assistantRequestsUsed).toBe(0);
             expect(latestUsageGet).not.toHaveBeenCalled();
         });
 
@@ -799,7 +799,7 @@ describe('listUsers Cloud Function', () => {
             });
 
             const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
-            expect(result.users[0].aiCreditsConsumed).toBe(29);
+            expect(result.users[0].assistantRequestsUsed).toBe(29);
             expect(latestUsageGet).toHaveBeenCalledTimes(1);
         });
     });
