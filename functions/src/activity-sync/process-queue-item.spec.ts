@@ -1816,6 +1816,62 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
   });
 
+  it('fails closed instead of skipping an accepted upload when the destination now requires reconnect', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      destinationUploadID: 'accepted-upload-reconnect-required',
+      destinationProviderUserID: 'suunto-user-1',
+    };
+    const authError = new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_status',
+      disposition: 'auth_required',
+      retryMode: 'none',
+      code: 'unauthenticated',
+      message: 'Authentication failed. Please re-connect your Suunto account.',
+      providerUserId: 'suunto-user-1',
+      providerOperationId: 'accepted-upload-reconnect-required',
+      dlqContext: 'SUUNTO_AUTH_REQUIRED',
+    });
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
+      serviceName === ServiceNames.SuuntoApp
+        ? { connectionState: 'reconnect_required' }
+        : null
+    ));
+    mockGetSuuntoActivityUploadStatus.mockRejectedValueOnce(authError);
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockGetSuuntoActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'accepted-upload-reconnect-required',
+      'suunto-user-1',
+    );
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'destination_not_connected',
+    }));
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationUploadID: 'accepted-upload-reconnect-required',
+        destinationProviderUserID: 'suunto-user-1',
+      }),
+      authError,
+      undefined,
+      'SUUNTO_AUTH_REQUIRED',
+    );
+    expect(mockMoveToDeadLetterQueueIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({
+      manualReconciliation: {
+        additionalData: expect.objectContaining({
+          destinationUploadID: 'accepted-upload-reconnect-required',
+          destinationProviderUserID: 'suunto-user-1',
+          destinationUploadContinuation: null,
+        }),
+      },
+    }));
+  });
+
   it('defers instead of marking processed when destination service is pending disconnect', async () => {
     mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
       serviceName === ServiceNames.SuuntoApp

@@ -1186,7 +1186,13 @@ export async function processActivitySyncQueueItem(
                 queueItem.destinationServiceName,
             );
         }
-        if (destinationConnectionStatus === 'not_connected') {
+        // A provider-issued upload ID means the irreversible provider request
+        // was already accepted. Let the resumed status request reach the
+        // existing auth/error handling below, which retains a manual-
+        // reconciliation record instead of dropping the accepted upload. This
+        // also lets malformed partial Suunto state fail closed at its dedicated
+        // validation guard below.
+        if (destinationConnectionStatus === 'not_connected' && !queueItem.destinationUploadID) {
             await setActivitySyncSkippedMetadata({
                 ...routeMeta,
                 skippedReason: 'destination_not_connected',
