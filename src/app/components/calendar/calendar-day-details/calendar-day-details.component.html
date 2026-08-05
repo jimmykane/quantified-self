@@ -26,7 +26,7 @@
           <a mat-list-item class="calendar-day-event-item"
             [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
             (click)="dismiss()">
-            <app-activity-type-icon matListItemIcon [activityType]="event.activityType" size="24px"
+            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
             <div matListItemLine class="calendar-day-event-supporting">
@@ -41,7 +41,7 @@
           } @else {
           <div mat-list-item class="calendar-day-event-item"
             [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0">
-            <app-activity-type-icon matListItemIcon [activityType]="event.activityType" size="24px"
+            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
             <div matListItemLine class="calendar-day-event-supporting">

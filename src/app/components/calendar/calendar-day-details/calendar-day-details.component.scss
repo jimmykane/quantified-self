@@ -59,9 +59,9 @@ mat-nav-list {
   min-height: 88px;
 }
 
-.calendar-day-event-item-with-metrics app-activity-type-icon[matListItemIcon] {
-  align-self: center;
-  margin-top: 0;
+.calendar-day-event-item-with-metrics .calendar-day-event-icon {
+  align-self: center !important;
+  margin-top: 0 !important;
 }
 
 .calendar-day-event-supporting {
