@@ -1182,6 +1182,7 @@ function toSuuntoActivityCallableResult(
 export const importActivityToSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.importActivityToSuuntoApp.region,
   cors: ALLOWED_CORS_ORIGINS,
+  memory: '512MiB',
   timeoutSeconds: 300,
   maxInstances: 10,
 }, async (request) => {
