@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { RouterModule } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -20,7 +21,6 @@ import {
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import {
   ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
-  ASSISTANT_PROMPT_EXAMPLES,
 } from '@shared/assistant.prompts';
 import { MaterialModule } from '../../modules/material.module';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
@@ -28,6 +28,7 @@ import {
   AssistantError,
   AssistantService,
 } from '../../services/assistant.service';
+import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 
 @Component({
   selector: 'app-assistant-page',
@@ -45,12 +46,12 @@ import {
 export class AssistantPageComponent implements OnInit {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
+  private readonly bottomSheet = inject(MatBottomSheet);
   private readonly assistantPage = viewChild<ElementRef<HTMLElement>>('assistantPage');
   private readonly conversationEnd = viewChild<ElementRef<HTMLElement>>('conversationEnd');
   private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
-  readonly starterPrompts = ASSISTANT_PROMPT_EXAMPLES;
   readonly composerPlaceholder = `For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`;
   readonly promptControl = new FormControl('', {
     nonNullable: true,
@@ -120,6 +121,16 @@ export class AssistantPageComponent implements OnInit {
   useStarterPrompt(prompt: string): void {
     this.promptControl.setValue(prompt);
     this.promptControl.markAsDirty();
+  }
+
+  openExploreSheet(): void {
+    this.bottomSheet.open(AssistantExploreBottomSheetComponent)
+      .afterDismissed()
+      .subscribe((prompt: string | undefined) => {
+        if (typeof prompt === 'string') {
+          this.useStarterPrompt(prompt);
+        }
+      });
   }
 
   async sendMessage(): Promise<void> {

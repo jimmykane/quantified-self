@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
+import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import {
@@ -13,6 +15,7 @@ import {
   AssistantError,
   AssistantService,
 } from '../../services/assistant.service';
+import { AssistantExploreBottomSheetComponent } from './assistant-explore-bottom-sheet.component';
 import { AssistantPageComponent } from './assistant-page.component';
 
 const chatResponse: AssistantChatResponse = {
@@ -100,41 +103,29 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
   });
 
-  it('renders the zero-setup welcome state, privacy boundaries, and MCP alternative', () => {
+  it('renders a minimal empty chat with an optional explore control', () => {
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('What would you like to understand?');
-    expect(text).toContain('Grounded in read-only MCP');
-    expect(text).toContain('Saved-route summaries available');
-    expect(text).toContain('Coordinates & geometry stay private');
-    expect(text).toContain('Prefer ChatGPT or another compatible client?');
+    expect(text).toContain('Assistant');
+    expect(text).toContain('Examples & data access');
     expect(fixture.nativeElement.querySelector('mat-chip')?.textContent.trim()).toBe('Beta');
-    expect(fixture.nativeElement.querySelector('.assistant-welcome')?.classList)
-      .toContain('qs-glass-card-panel');
-    const renderedPromptButtons = Array.from(
-      fixture.nativeElement.querySelectorAll('.starter-prompts button'),
-    ) as HTMLElement[];
-    expect(renderedPromptButtons).toHaveLength(ASSISTANT_PROMPT_EXAMPLES.length);
-    ASSISTANT_PROMPT_EXAMPLES.forEach((prompt, index) => {
-      expect(renderedPromptButtons[index].textContent).toContain(prompt.shortLabel);
-      expect(renderedPromptButtons[index].getAttribute('aria-label')).toContain(prompt.prompt);
-    });
+    expect(fixture.nativeElement.querySelector('.assistant-welcome')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.assistant-trust-row')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.external-mcp-card')).toBeNull();
     expect(fixture.nativeElement.querySelector('.composer-shell')?.classList)
       .not.toContain('composer-shell-sticky');
     const header = fixture.nativeElement.querySelector('.assistant-header') as HTMLElement;
     const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
-    const trustRow = fixture.nativeElement.querySelector('.assistant-trust-row') as HTMLElement;
+    const explore = fixture.nativeElement.querySelector('.assistant-explore-trigger') as HTMLElement;
     expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(composer.compareDocumentPosition(trustRow) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(composer.compareDocumentPosition(explore) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
     expect(fixture.nativeElement.querySelector('textarea')?.placeholder)
       .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
-    const mcpIcon = fixture.nativeElement.querySelector('.external-mcp-icon') as HTMLElement;
-    expect(mcpIcon.textContent?.trim()).toBe('hub');
     const headerActions = Array.from(
       fixture.nativeElement.querySelectorAll('.assistant-header-actions :is(a, button)'),
     ) as HTMLElement[];
@@ -153,20 +144,38 @@ describe('AssistantPageComponent', () => {
       .toContain('composer-shell-sticky');
   });
 
-  it('inserts the complete question when a compact suggested action is selected', () => {
+  it('keeps the composer immediately below the header while the conversation loads', () => {
+    component.loadingConversation.set(true);
+    fixture.detectChanges();
+    const header = fixture.nativeElement.querySelector('.assistant-header') as HTMLElement;
+    const composer = fixture.nativeElement.querySelector('.composer-shell') as HTMLElement;
+    const loading = fixture.nativeElement.querySelector('.assistant-loading') as HTMLElement;
+
+    expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(composer.compareDocumentPosition(loading) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+  });
+
+  it('opens the explore sheet and inserts a selected example', () => {
     const routeExample = ASSISTANT_PROMPT_EXAMPLES.find(example => (
       example.id === 'saved-cycling-routes'
     ));
     if (!routeExample) {
       throw new Error('Expected the saved-route prompt example.');
     }
-    const routeButton = Array.from(
-      fixture.nativeElement.querySelectorAll('.starter-prompts button'),
-    ).find(button => button.textContent?.includes(routeExample.shortLabel)) as HTMLButtonElement;
+    const componentBottomSheet = (component as unknown as {
+      bottomSheet: MatBottomSheet;
+    }).bottomSheet;
+    const openSpy = vi.spyOn(componentBottomSheet, 'open').mockReturnValue({
+      afterDismissed: () => of(routeExample.prompt),
+    } as never);
 
-    routeButton.click();
+    component.openExploreSheet();
 
+    expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent);
     expect(component.promptControl.value).toBe(routeExample.prompt);
+    openSpy.mockRestore();
   });
 
   it('cancels native form navigation before sending', async () => {

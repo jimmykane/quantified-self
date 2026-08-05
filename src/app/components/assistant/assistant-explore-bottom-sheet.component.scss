@@ -1,0 +1,96 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.assistant-explore-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.assistant-explore-content {
+  display: grid;
+  gap: 20px;
+  padding: 4px 16px 24px;
+}
+
+.assistant-explore-intro,
+.assistant-mcp-link p {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.5;
+}
+
+h3 {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.assistant-explore-prompts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.assistant-explore-prompts button {
+  min-height: 44px;
+  height: auto;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.assistant-explore-prompts mat-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--mat-sys-primary);
+  font-size: 18px;
+}
+
+.assistant-data-access {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-data-access div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.assistant-data-access mat-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--mat-sys-primary);
+  font-size: 20px;
+}
+
+.assistant-mcp-link {
+  padding-top: 2px;
+}
+
+.assistant-mcp-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  .assistant-explore-content {
+    padding: 4px 12px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .assistant-explore-prompts {
+    grid-template-columns: 1fr;
+  }
+}
