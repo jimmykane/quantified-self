@@ -119,6 +119,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
     expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
     expect(feedbackAction?.getAttribute('target')).toBe('_blank');
+    const calendarAction = element.querySelector('.training-calendar-action');
+    expect(calendarAction?.getAttribute('aria-label')).toBe('Open activity calendar');
+    expect(calendarAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
     expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sports shown.');
@@ -181,6 +184,9 @@ describe('TrainingWorkspaceComponent', () => {
     expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
     expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
     expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
+    expect(compactActionsStyles).toContain('.training-calendar-action,');
+    expect(compactActionsStyles).toContain('.training-calendar-action-label,');
+    expect(compactActionsStyles).toContain('.training-page-actions .training-calendar-action mat-icon,');
     expect(compactActionsStyles).toContain('flex-wrap: nowrap;');
     expect(compactActionsStyles).toContain('width: 48px;');
   });

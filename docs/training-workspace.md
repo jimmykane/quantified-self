@@ -159,10 +159,10 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 - Shared discipline registry: `shared/training-disciplines.ts`
 - User help copy: `src/app/shared/help.content.ts`
 
-Training is available to signed-in users from the sidenav. The route header includes a Feedback action that opens the
-configured support email with a Training-specific subject. Dashboard offers one
-**Open Training** route action, but does not add curated Training snapshots as default Dashboard dependencies or
-configurable tiles.
+Training is available to signed-in users from the sidenav. Its route header includes a Feedback action that opens the
+configured support email with a Training-specific subject, plus direct **Calendar** and **Dashboard** route actions.
+Dashboard offers **Open Training** and **Calendar** route actions, but does not add curated Training snapshots as default
+Dashboard dependencies or configurable tiles.
 
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and

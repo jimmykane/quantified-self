@@ -184,7 +184,7 @@ describe('SummariesComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('exposes the Training action beside Dashboard manager', () => {
+  it('exposes Training and Calendar actions beside Dashboard manager', () => {
     component.showActions = true;
 
     fixture.detectChanges();
@@ -193,6 +193,11 @@ describe('SummariesComponent', () => {
     expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
     expect(trainingLink.textContent).toContain('Open Training');
     expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
+    const calendarLink = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link') as HTMLAnchorElement;
+    expect(calendarLink).not.toBeNull();
+    expect(calendarLink.getAttribute('aria-label')).toBe('Open activity calendar');
+    expect(calendarLink.textContent).toContain('Calendar');
+    expect(calendarLink.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
@@ -338,9 +343,11 @@ describe('SummariesComponent', () => {
     expect(template).toContain('aria-label="Retry derived metrics update"');
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
     expect(template).toContain('class="dashboard-training-link-label"');
+    expect(template).toContain('class="dashboard-calendar-link-label"');
     expect(styles).toContain('@media (max-width: 600px)');
     expect(styles).toContain('.dashboard-derived-metrics-retry-label,');
     expect(styles).toContain('.dashboard-training-link-label');
+    expect(styles).toContain('.dashboard-calendar-link-label');
   });
 
   it('does not mutate dashboard tile arrays during live drag sorting', () => {

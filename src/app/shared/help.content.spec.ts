@@ -60,7 +60,7 @@ describe('help.content', () => {
     expect(assistantSection?.content).toContain('becomes unavailable about **seven days**');
     expect(assistantSection?.content).toContain('at most four extra minutes');
     expect(assistantSection?.content).toContain('deletes the expired record asynchronously');
-    expect(assistantSection?.content).toContain('no access to exact activity locations');
+    expect(assistantSection?.content).toContain('no access to coordinate fields');
     expect(assistantSection?.content).toContain('Use [Connections -> MCP](/services?serviceName=mcp)');
     expect(assistantSection?.links).toContainEqual({
       label: 'MCP Connections',
@@ -181,6 +181,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
     expect(gettingStartedSection?.content).toContain('one-time addition to existing dashboards that lack it');
     expect(gettingStartedSection?.content).toContain('Open Training');
+    expect(gettingStartedSection?.content).toContain('**Open Training** and **Calendar** actions');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');
     expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
@@ -210,6 +211,7 @@ describe('help.content', () => {
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
     expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
+    expect(calendarSection?.content).toContain('Dashboard and Training headers each include a **Calendar** action');
     expect(calendarSection?.content).toContain('Existing editable dashboards that do not contain the Activity Calendar receive it once automatically');
     expect(calendarSection?.content).toContain('Dashboard manager **Remove all** to keep it from returning');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');

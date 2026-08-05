@@ -384,6 +384,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
   .training-derived-metrics-retry,
   .training-sport-visibility-action,
   .training-feedback-action,
+  .training-calendar-action,
   .training-dashboard-action {
     align-items: center;
     display: inline-flex;
@@ -396,6 +397,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
   .training-derived-metrics-retry-label,
   .training-sport-visibility-action-label,
   .training-feedback-action-label,
+  .training-calendar-action-label,
   .training-dashboard-action-label {
     display: none;
   }
@@ -403,6 +405,7 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
   .training-page-actions .training-derived-metrics-retry mat-icon,
   .training-page-actions .training-sport-visibility-action mat-icon,
   .training-page-actions .training-feedback-action mat-icon,
+  .training-page-actions .training-calendar-action mat-icon,
   .training-page-actions .training-dashboard-action mat-icon {
     margin-inline: 0;
   }
