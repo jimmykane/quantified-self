@@ -186,6 +186,25 @@ describe('retired AI Insights data purge', () => {
     expect(fake.close).toHaveBeenCalledTimes(2);
   });
 
+  it('refuses an unexpected collection-group path before scheduling any delete', async () => {
+    const fake = createFakeFirestore({
+      aiInsightsRequests: [
+        'users/user-1/events/event-1/aiInsightsRequests/not-the-legacy-snapshot',
+      ],
+    });
+
+    await expect(purgeRetiredAiInsightsData({
+      db: fake.db as never,
+      execute: true,
+      logger: { info: vi.fn(), warn: vi.fn() },
+    })).rejects.toThrow(
+      'Refusing to purge an unexpected aiInsightsRequests document path.',
+    );
+
+    expect(fake.bulkWriter).not.toHaveBeenCalled();
+    expect(fake.recursiveDelete).not.toHaveBeenCalled();
+  });
+
   it('requires an explicit project and validates destructive CLI options', () => {
     expect(parseRetiredAiInsightsPurgeArgs([
       '--project=quantified-self-io',

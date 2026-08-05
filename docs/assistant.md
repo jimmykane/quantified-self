@@ -180,13 +180,15 @@ npm --prefix functions run purge-retired-ai-insights-data -- --project=quantifie
 npm --prefix functions run purge-retired-ai-insights-data -- --project=quantified-self-io --execute
 ```
 
-The execution is idempotent, processes at most 100 roots per group and batch by default, recursively deletes any
-unexpected descendants, and fails unless all three final collection-group counts are zero. Keep the client deny rule
-in place throughout; the Admin SDK migration does not require restoring browser access. The retired single-field
-overrides and prompt-repair TTL stay in `firestore.indexes.json` until this command confirms zero documents, so a
-standard deploy never re-enables automatic indexes for data that is about to be deleted. Remove those retired overrides
-only in a subsequent configuration-only deployment after the successful purge. Account deletion remains the
-defense-in-depth path for any user root removed while rollout is in progress.
+The count-only dry run reports collection-group totals. Execution is idempotent, processes at most 100 documents per
+group and batch by default, and recursively deletes any unexpected descendants. Before scheduling a deletion, it
+verifies the document is at one of the exact legacy paths; a collection-group name collision therefore fails closed
+rather than expanding the purge's scope. It fails unless all three final collection-group counts are zero. Keep the
+client deny rule in place throughout; the Admin SDK migration does not require restoring browser access. The retired
+single-field overrides and prompt-repair TTL stay in `firestore.indexes.json` until this command confirms zero
+documents, so a standard deploy never re-enables automatic indexes for data that is about to be deleted. Remove those
+retired overrides only in a subsequent configuration-only deployment after the successful purge. Account deletion
+remains the defense-in-depth path for any user root removed while rollout is in progress.
 
 Do not log prompts, conversation text, tool arguments, tool output, coordinates, or user IDs from the Assistant path.
 Operational logs should contain only safe error classes and lifecycle outcomes. Monitor callable errors, quota failures,

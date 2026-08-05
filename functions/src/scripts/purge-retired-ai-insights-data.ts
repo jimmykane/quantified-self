@@ -22,6 +22,12 @@ type RetiredAiInsightsPurgeCounts = Record<
   number
 >;
 
+interface RetiredAiInsightsPurgeDocument {
+  ref: {
+    path: string;
+  };
+}
+
 interface RetiredAiInsightsPurgeLogger {
   info: (message: string) => void;
   warn: (message: string, details?: Record<string, unknown>) => void;
@@ -99,6 +105,48 @@ async function countRetiredAiInsightsData(
   return counts;
 }
 
+function isExpectedRetiredDocumentPath(
+  collectionGroup: RetiredAiInsightsCollectionGroup,
+  path: string,
+): boolean {
+  const segments = path.split('/');
+
+  switch (collectionGroup) {
+    case 'aiInsightsRequests':
+      return segments.length === 4
+        && segments[0] === 'users'
+        && Boolean(segments[1])
+        && segments[2] === collectionGroup
+        && segments[3] === 'latest';
+    case 'aiInsightsUsage':
+      return segments.length === 4
+        && segments[0] === 'users'
+        && Boolean(segments[1])
+        && segments[2] === collectionGroup
+        && Boolean(segments[3]);
+    case 'aiInsightsPromptRepairs':
+      return segments.length === 2
+        && segments[0] === collectionGroup
+        && Boolean(segments[1]);
+  }
+}
+
+function assertExpectedRetiredDocumentPaths(
+  collectionGroup: RetiredAiInsightsCollectionGroup,
+  documents: readonly RetiredAiInsightsPurgeDocument[],
+): void {
+  if (documents.some(document => !isExpectedRetiredDocumentPath(
+    collectionGroup,
+    document.ref.path,
+  ))) {
+    // Do not include paths in the error or logs: old records can contain
+    // sensitive prompt data and this operation must never broaden its scope.
+    throw new RetiredAiInsightsPurgeError(
+      `Refusing to purge an unexpected ${collectionGroup} document path.`,
+    );
+  }
+}
+
 async function purgeCollectionGroup(
   db: RetiredAiInsightsPurgeFirestore,
   collectionGroup: RetiredAiInsightsCollectionGroup,
@@ -114,6 +162,8 @@ async function purgeCollectionGroup(
       return deleted;
     }
 
+    assertExpectedRetiredDocumentPaths(collectionGroup, snapshot.docs);
+
     const bulkWriter = db.bulkWriter();
     bulkWriter.onWriteError((error) => {
       logger.warn('[RetiredAiInsightsPurge] Retrying a failed recursive delete.', {
@@ -125,8 +175,8 @@ async function purgeCollectionGroup(
     });
 
     try {
-      // Every retired root is deleted recursively so unexpected descendants
-      // cannot retain historical prompts, responses, or usage state.
+      // Every matched legacy document is deleted recursively so unexpected
+      // descendants cannot retain historical prompts, responses, or usage.
       for (const document of snapshot.docs) {
         await db.recursiveDelete(document.ref, bulkWriter);
       }
@@ -136,7 +186,7 @@ async function purgeCollectionGroup(
 
     deleted += snapshot.size;
     logger.info(
-      `[RetiredAiInsightsPurge] Deleted ${deleted} ${collectionGroup} document root(s).`,
+      `[RetiredAiInsightsPurge] Deleted ${deleted} matched ${collectionGroup} document(s).`,
     );
   }
 }
@@ -153,9 +203,9 @@ export async function purgeRetiredAiInsightsData(
 
   if (!execute) {
     logger.info(
-      `[RetiredAiInsightsPurge] Dry run found ${JSON.stringify(found)} document root(s).`,
+      `[RetiredAiInsightsPurge] Dry run found ${JSON.stringify(found)} collection-group document(s).`,
     );
-    return { found, deleted: createCounts(0), remaining: found };
+    return { found, deleted: createCounts(0), remaining: { ...found } };
   }
 
   const deleted = createCounts(0);
