@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   AssistantConversationStoreError,
+  createAssistantRequestFingerprint,
   type AssistantConversationStore,
 } from './conversation-store';
 import type { AssistantCallableDependencies } from './callable';
@@ -53,6 +54,7 @@ function createDependencies() {
   };
   const store: AssistantConversationStore = {
     getActiveConversation: vi.fn().mockResolvedValue(null),
+    findCompletedTurn: vi.fn().mockResolvedValue(null),
     beginTurn: vi.fn().mockResolvedValue({
       kind: 'started',
       conversationId: 'conversation-1',
@@ -358,7 +360,14 @@ describe('Assistant callable', () => {
       blockedReason: 'limit_reached' as const,
     };
     vi.mocked(dependencies.getQuotaStatus).mockResolvedValue(exhaustedQuota);
-    vi.mocked(store.getActiveConversation).mockResolvedValue(completedConversation);
+    vi.mocked(store.findCompletedTurn).mockResolvedValue({
+      kind: 'replayed',
+      conversation: completedConversation,
+      requestFingerprint: createAssistantRequestFingerprint(
+        REQUEST_ID,
+        'How am I today?',
+      ),
+    });
 
     await expect(runAssistantChat({
       requestId: REQUEST_ID,
@@ -394,9 +403,16 @@ describe('Assistant callable', () => {
       remainingCount: 0,
       blockedReason: 'limit_reached' as const,
     };
-    vi.mocked(store.getActiveConversation)
+    vi.mocked(store.findCompletedTurn)
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(completedConversation);
+      .mockResolvedValueOnce({
+        kind: 'replayed',
+        conversation: completedConversation,
+        requestFingerprint: createAssistantRequestFingerprint(
+          REQUEST_ID,
+          'How am I today?',
+        ),
+      });
     vi.mocked(dependencies.reserveQuota).mockRejectedValue(new HttpsError(
       'resource-exhausted',
       'Assistant limit reached for this billing period.',
@@ -412,7 +428,7 @@ describe('Assistant callable', () => {
       quota: exhaustedQuota,
     });
 
-    expect(store.getActiveConversation).toHaveBeenCalledTimes(2);
+    expect(store.findCompletedTurn).toHaveBeenCalledTimes(2);
     expect(store.beginTurn).not.toHaveBeenCalled();
     expect(dependencies.releaseQuota).not.toHaveBeenCalled();
     expect(dependencies.answer).not.toHaveBeenCalled();
@@ -423,7 +439,10 @@ describe('Assistant callable', () => {
     vi.mocked(store.beginTurn).mockResolvedValue({
       kind: 'replayed',
       conversation,
-      requestText: 'How am I today?',
+      requestFingerprint: createAssistantRequestFingerprint(
+        REQUEST_ID,
+        'How am I today?',
+      ),
     });
 
     await expect(runAssistantChat({
@@ -441,12 +460,13 @@ describe('Assistant callable', () => {
 
   it('maps a completed-request quota refresh failure to a safe error', async () => {
     const { dependencies, store, conversation } = createDependencies();
-    vi.mocked(store.getActiveConversation).mockResolvedValue({
-      ...conversation,
-      messages: [
-        { ...conversation.messages[0], id: REQUEST_ID },
-        conversation.messages[1],
-      ],
+    vi.mocked(store.findCompletedTurn).mockResolvedValue({
+      kind: 'replayed',
+      conversation,
+      requestFingerprint: createAssistantRequestFingerprint(
+        REQUEST_ID,
+        'How am I today?',
+      ),
     });
     vi.mocked(dependencies.getQuotaStatus).mockRejectedValue(
       new Error('firestore quota detail'),
@@ -467,16 +487,13 @@ describe('Assistant callable', () => {
 
   it('rejects reuse of a completed request identifier for different text', async () => {
     const { dependencies, store, conversation } = createDependencies();
-    vi.mocked(store.getActiveConversation).mockResolvedValue({
-      ...conversation,
-      messages: [
-        {
-          ...conversation.messages[0],
-          id: REQUEST_ID,
-          text: 'Original question',
-        },
-        conversation.messages[1],
-      ],
+    vi.mocked(store.findCompletedTurn).mockResolvedValue({
+      kind: 'replayed',
+      conversation,
+      requestFingerprint: createAssistantRequestFingerprint(
+        REQUEST_ID,
+        'Original question',
+      ),
     });
 
     await expect(runAssistantChat({
@@ -494,14 +511,13 @@ describe('Assistant callable', () => {
   });
 
   it('rejects a request identifier collision before model work', async () => {
-    const { dependencies, store, conversation } = createDependencies();
-    vi.mocked(store.getActiveConversation).mockResolvedValue({
-      ...conversation,
-      messages: [
-        conversation.messages[0],
-        { ...conversation.messages[1], id: REQUEST_ID },
-      ],
-    });
+    const { dependencies, store } = createDependencies();
+    vi.mocked(store.findCompletedTurn).mockRejectedValue(
+      new AssistantConversationStoreError(
+        'request_id_conflict',
+        'The Assistant request identifier conflicts with a saved message.',
+      ),
+    );
 
     await expect(runAssistantChat({
       requestId: REQUEST_ID,

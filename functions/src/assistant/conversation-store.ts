@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
   ASSISTANT_CONVERSATION_VERSION,
@@ -17,10 +17,18 @@ const ASSISTANT_CONVERSATION_RETENTION_MS = TTL_CONFIG.ASSISTANT_CONVERSATIONS_I
   * 24 * 60 * 60 * 1_000;
 const ASSISTANT_PENDING_TURN_TTL_MS = 4 * 60 * 1_000;
 const ASSISTANT_PENDING_TURN_CLOCK_SKEW_MS = 30 * 1_000;
+export const ASSISTANT_MAX_REPLAY_RECEIPTS = 512;
+const ASSISTANT_REQUEST_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
 
 interface AssistantPendingTurn {
   id: string;
   expiresAtMs: number;
+}
+
+interface AssistantReplayReceipt {
+  requestId: string;
+  requestFingerprint: string;
+  completedAtMs: number;
 }
 
 interface StoredAssistantConversation {
@@ -31,6 +39,7 @@ interface StoredAssistantConversation {
   updatedAt: Timestamp;
   expireAt: Timestamp;
   pendingTurn: AssistantPendingTurn | null;
+  replayReceipts: AssistantReplayReceipt[];
 }
 
 export interface BegunAssistantTurn {
@@ -43,7 +52,7 @@ export interface BegunAssistantTurn {
 export interface ReplayedAssistantTurn {
   kind: 'replayed';
   conversation: AssistantConversation;
-  requestText: string;
+  requestFingerprint: string;
 }
 
 export type AssistantTurnStart = BegunAssistantTurn | ReplayedAssistantTurn;
@@ -67,6 +76,11 @@ export class AssistantConversationStoreError extends Error {
 
 export interface AssistantConversationStore {
   getActiveConversation: (uid: string) => Promise<AssistantConversation | null>;
+  findCompletedTurn: (
+    uid: string,
+    expectedConversationId: string | undefined,
+    requestId: string,
+  ) => Promise<ReplayedAssistantTurn | null>;
   beginTurn: (
     uid: string,
     expectedConversationId?: string,
@@ -96,6 +110,17 @@ const defaultDependencies: AssistantConversationStoreDependencies = {
   getDeletionGuard: getUserDeletionGuardStateInTransaction,
 };
 
+export function createAssistantRequestFingerprint(
+  requestId: string,
+  requestText: string,
+): string {
+  return createHash('sha256')
+    .update(requestId)
+    .update('\0')
+    .update(requestText)
+    .digest('hex');
+}
+
 function toMillis(value: unknown): number | null {
   if (value && typeof value === 'object'
     && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
@@ -103,6 +128,55 @@ function toMillis(value: unknown): number | null {
     return Number.isFinite(milliseconds) ? milliseconds : null;
   }
   return null;
+}
+
+function normalizeReplayReceipts(
+  value: unknown,
+  messages: AssistantMessage[],
+): AssistantReplayReceipt[] {
+  const receiptsByRequestId = new Map<string, AssistantReplayReceipt>();
+  if (Array.isArray(value)) {
+    for (const candidate of value.slice(-ASSISTANT_MAX_REPLAY_RECEIPTS)) {
+      if (!candidate
+        || typeof candidate !== 'object'
+        || typeof candidate.requestId !== 'string'
+        || candidate.requestId.length < 1
+        || candidate.requestId.length > 120
+        || typeof candidate.requestFingerprint !== 'string'
+        || !ASSISTANT_REQUEST_FINGERPRINT_PATTERN.test(candidate.requestFingerprint)
+        || typeof candidate.completedAtMs !== 'number'
+        || !Number.isSafeInteger(candidate.completedAtMs)
+        || candidate.completedAtMs <= 0) {
+        continue;
+      }
+      receiptsByRequestId.set(candidate.requestId, {
+        requestId: candidate.requestId,
+        requestFingerprint: candidate.requestFingerprint,
+        completedAtMs: candidate.completedAtMs,
+      });
+    }
+  }
+
+  // Documents written before replay receipts were introduced are upgraded in
+  // memory from their retained user messages, then persisted on the next write.
+  for (const message of messages) {
+    if (message.role !== 'user') {
+      continue;
+    }
+    const completedAtMs = Date.parse(message.createdAt);
+    if (!Number.isSafeInteger(completedAtMs)
+      || completedAtMs <= 0) {
+      continue;
+    }
+    receiptsByRequestId.set(message.id, {
+      requestId: message.id,
+      requestFingerprint: createAssistantRequestFingerprint(message.id, message.text),
+      completedAtMs,
+    });
+  }
+
+  return [...receiptsByRequestId.values()]
+    .slice(-ASSISTANT_MAX_REPLAY_RECEIPTS);
 }
 
 function parseStoredConversation(
@@ -128,6 +202,7 @@ function parseStoredConversation(
   if (!validateAssistantConversation(publicConversation).ok) {
     return null;
   }
+  const messages = data.messages as AssistantMessage[];
   const pendingTurn = data.pendingTurn === null
     ? null
     : data.pendingTurn
@@ -156,6 +231,7 @@ function parseStoredConversation(
     updatedAt: data.updatedAt as Timestamp,
     expireAt: data.expireAt as Timestamp,
     pendingTurn,
+    replayReceipts: normalizeReplayReceipts(data.replayReceipts, messages),
   };
 }
 
@@ -183,6 +259,27 @@ function createEmptyConversation(
     updatedAt: timestamp,
     expireAt: Timestamp.fromMillis(now.getTime() + ASSISTANT_CONVERSATION_RETENTION_MS),
     pendingTurn: null,
+    replayReceipts: [],
+  };
+}
+
+function findReplayReceipt(
+  conversation: StoredAssistantConversation,
+  requestId: string,
+): AssistantReplayReceipt | null {
+  return conversation.replayReceipts.find(
+    receipt => receipt.requestId === requestId,
+  ) ?? null;
+}
+
+function toReplayedTurn(
+  conversation: StoredAssistantConversation,
+  receipt: AssistantReplayReceipt,
+): ReplayedAssistantTurn {
+  return {
+    kind: 'replayed',
+    conversation: toPublicConversation(conversation),
+    requestFingerprint: receipt.requestFingerprint,
   };
 }
 
@@ -252,6 +349,46 @@ export function createAssistantConversationStore(
       });
     },
 
+    findCompletedTurn: async (uid, expectedConversationId, requestId) => {
+      const db = dependencies.db();
+      const conversationRef = getConversationRef(db, uid);
+      return db.runTransaction(async (transaction) => {
+        const nowMs = dependencies.now().getTime();
+        const deletionGuard = await dependencies.getDeletionGuard(
+          db,
+          transaction,
+          uid,
+          nowMs,
+        );
+        if (deletionGuard.shouldSkip) {
+          return null;
+        }
+        const snapshot = await transaction.get(conversationRef);
+        const conversation = snapshot.exists
+          ? parseStoredConversation(snapshot.data(), nowMs)
+          : null;
+        if (!conversation
+          || conversation.expireAt.toMillis() <= nowMs
+          || (expectedConversationId
+            && expectedConversationId !== conversation.conversationId)) {
+          return null;
+        }
+        const receipt = findReplayReceipt(conversation, requestId);
+        if (receipt) {
+          return toReplayedTurn(conversation, receipt);
+        }
+        if (conversation.messages.some(
+          message => message.id === requestId && message.role === 'assistant',
+        )) {
+          throw new AssistantConversationStoreError(
+            'request_id_conflict',
+            'The Assistant request identifier conflicts with a saved message.',
+          );
+        }
+        return null;
+      });
+    },
+
     beginTurn: async (uid, expectedConversationId, requestId) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -276,17 +413,11 @@ export function createAssistantConversationStore(
           );
         }
         if (requestId) {
-          const matchingMessage = conversation.messages.find(
-            message => message.id === requestId,
-          );
-          if (matchingMessage?.role === 'user') {
-            return {
-              kind: 'replayed',
-              conversation: toPublicConversation(conversation),
-              requestText: matchingMessage.text,
-            };
+          const receipt = findReplayReceipt(conversation, requestId);
+          if (receipt) {
+            return toReplayedTurn(conversation, receipt);
           }
-          if (matchingMessage) {
+          if (conversation.messages.some(message => message.id === requestId)) {
             throw new AssistantConversationStoreError(
               'request_id_conflict',
               'The Assistant request identifier conflicts with a saved message.',
@@ -352,9 +483,23 @@ export function createAssistantConversationStore(
           userMessage,
           assistantMessage,
         ].slice(-ASSISTANT_MAX_STORED_MESSAGES);
+        const replayReceipts = [
+          ...conversation.replayReceipts.filter(
+            receipt => receipt.requestId !== userMessage.id,
+          ),
+          {
+            requestId: userMessage.id,
+            requestFingerprint: createAssistantRequestFingerprint(
+              userMessage.id,
+              userMessage.text,
+            ),
+            completedAtMs: nowMs,
+          },
+        ].slice(-ASSISTANT_MAX_REPLAY_RECEIPTS);
         const updatedConversation: StoredAssistantConversation = {
           ...conversation,
           messages,
+          replayReceipts,
           updatedAt: Timestamp.fromDate(now),
           expireAt: Timestamp.fromMillis(nowMs + ASSISTANT_CONVERSATION_RETENTION_MS),
           pendingTurn: null,

@@ -121,22 +121,30 @@ This evidence is a compact audit aid, not a full transcript of internal tool cal
 There is one active document at `users/{uid}/assistantConversations/active`:
 
 - at most 12 messages, representing six completed turns;
+- at most 512 private replay receipts containing only a request ID, request fingerprint, and completion time;
 - `createdAt`, `updatedAt`, and `expireAt` timestamps;
 - an opaque conversation generation ID;
 - one four-minute pending-turn lease to serialize requests.
 
-Each browser send also carries a client-generated opaque request ID. That ID becomes the stored user-message ID, so a
-retry after a lost callable response can return the already committed conversation without invoking Gemini or consuming
-another request. Reusing an ID with different text is rejected. The page retains the ID only while the outcome is
-ambiguous, clears it after a confirmed completion or authoritative conversation-generation change, and requires an
-exact ID match when reconciling a response that may have been lost. This prevents another tab's same-text turn from
-being mistaken for the current request.
+Each browser send also carries a client-generated opaque request ID. That ID becomes the stored user-message ID. On
+completion, the server also records a SHA-256 request fingerprint in the private receipt array; it does not duplicate
+the prompt or response. Receipts are independent of the 12-message transcript and capped at the 512 most recently
+completed request IDs. They remain with the active conversation generation until **New chat** replaces it or Firestore
+TTL removes the inactive document. An exact retry can therefore return the current committed conversation without
+invoking Gemini or consuming another request even after the original messages leave the transcript. Reusing an ID with
+different text is rejected. Documents from before this field existed derive receipts from their retained user messages
+in memory and persist them on the next write.
+
+The page retains the request ID only while the outcome is ambiguous, clears it after a confirmed completion or
+authoritative conversation-generation change, and requires an exact ID match when reconciling a response that may
+have been lost. This prevents another tab's same-text turn from being mistaken for the current request.
 
 Each completed turn refreshes `expireAt` to seven days. Starting a turn never renews that seven-day retention, but it
 raises an imminent expiry only to the four-minute pending-turn deadline so TTL cannot delete a conversation while a
 valid response is still being generated. A failed attempt can therefore retain an otherwise expiring conversation for
 at most four extra minutes. The conversation becomes unavailable when `expireAt` passes; Firestore TTL deletes the
-expired record asynchronously. **New chat** immediately replaces the document with a new generation and no messages.
+expired record asynchronously. **New chat** immediately replaces the document with a new generation, no messages, and
+no replay receipts, so an old response cannot be replayed into a replacement conversation.
 Account deletion recursively removes the user document and all Assistant subcollection data. Every transactional
 write, including failure cleanup, checks the shared user-deletion guard so an in-flight request cannot recreate data
 after deletion starts.

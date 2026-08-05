@@ -231,6 +231,7 @@ describe('firestore indexes', () => {
             'conversationId',
             'messages',
             'pendingTurn',
+            'replayReceipts',
             'createdAt',
             'updatedAt',
         ]) {

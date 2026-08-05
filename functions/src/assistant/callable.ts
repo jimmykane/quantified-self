@@ -6,7 +6,6 @@ import {
   ASSISTANT_MAX_MESSAGE_CHARS,
   type AssistantChatRequest,
   type AssistantChatResponse,
-  type AssistantConversation,
   type AssistantMessage,
   type AssistantQuotaStatusResponse,
   type GetAssistantConversationResponse,
@@ -26,6 +25,7 @@ import {
 import {
   AssistantConversationStoreError,
   assistantConversationStore,
+  createAssistantRequestFingerprint,
   type AssistantConversationStore,
   type BegunAssistantTurn,
   type ReplayedAssistantTurn,
@@ -267,39 +267,14 @@ function mapAssistantError(error: unknown): HttpsError {
   );
 }
 
-function findCompletedRequest(
-  conversation: AssistantConversation | null,
-  input: AssistantChatRequest,
-): ReplayedAssistantTurn | null {
-  if (!conversation
-    || (input.conversationId
-      && input.conversationId !== conversation.conversationId)) {
-    return null;
-  }
-  const matchingMessage = conversation.messages.find(
-    message => message.id === input.requestId,
-  );
-  if (!matchingMessage) {
-    return null;
-  }
-  if (matchingMessage.role !== 'user') {
-    throw new AssistantConversationStoreError(
-      'request_id_conflict',
-      'The Assistant request identifier conflicts with a saved message.',
-    );
-  }
-  return {
-    kind: 'replayed',
-    conversation,
-    requestText: matchingMessage.text,
-  };
-}
-
 function assertReplayMatchesInput(
   replayedTurn: ReplayedAssistantTurn,
   input: AssistantChatRequest,
 ): void {
-  if (replayedTurn.requestText !== input.message) {
+  if (replayedTurn.requestFingerprint !== createAssistantRequestFingerprint(
+    input.requestId,
+    input.message,
+  )) {
     throw new HttpsError(
       'invalid-argument',
       'requestId was already used for a different Assistant message.',
@@ -337,9 +312,10 @@ export async function runAssistantChat(
   try {
     await dependencies.assertLegalAccess(uid);
     const quotaRoleContext = resolveCallableQuotaRoleContext(context);
-    const completedRequest = findCompletedRequest(
-      await dependencies.conversationStore.getActiveConversation(uid),
-      input,
+    const completedRequest = await dependencies.conversationStore.findCompletedTurn(
+      uid,
+      input.conversationId,
+      input.requestId,
     );
     if (completedRequest) {
       const replayResponse = await buildReplayResponse(
@@ -357,9 +333,10 @@ export async function runAssistantChat(
         : await dependencies.reserveQuota(uid);
     } catch (error) {
       if (error instanceof HttpsError && error.code === 'resource-exhausted') {
-        const requestCompletedWhileReserving = findCompletedRequest(
-          await dependencies.conversationStore.getActiveConversation(uid),
-          input,
+        const requestCompletedWhileReserving = await dependencies.conversationStore.findCompletedTurn(
+          uid,
+          input.conversationId,
+          input.requestId,
         );
         if (requestCompletedWhileReserving) {
           const replayResponse = await buildReplayResponse(

@@ -1553,6 +1553,12 @@
     },
     {
       "collectionGroup": "assistantConversations",
+      "fieldPath": "replayReceipts",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "assistantConversations",
       "fieldPath": "createdAt",
       "ttl": false,
       "indexes": []
