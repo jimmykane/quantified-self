@@ -262,7 +262,7 @@ export function buildActivityCalendarViewModel(
       view,
       periodLabel: `${year}`,
       months,
-      summary: buildActivityCalendarPeriodSummary(months, options.summariesSettings),
+      summary: buildActivityCalendarPeriodSummaryForMonths(months, options.summariesSettings),
     };
   }
 
@@ -285,7 +285,7 @@ export function buildActivityCalendarViewModel(
       view,
       periodLabel: formatWeekRange(weekStart, addLocalDays(weekStart, 6), locale),
       months,
-      summary: buildActivityCalendarPeriodSummary(months, options.summariesSettings),
+      summary: buildActivityCalendarPeriodSummaryForMonths(months, options.summariesSettings),
     };
   }
 
@@ -302,7 +302,7 @@ export function buildActivityCalendarViewModel(
     view,
     periodLabel: formatMonthLabel(monthStart, locale),
     months,
-    summary: buildActivityCalendarPeriodSummary(months, options.summariesSettings),
+    summary: buildActivityCalendarPeriodSummaryForMonths(months, options.summariesSettings),
   };
 }
 
@@ -464,48 +464,51 @@ function buildDayViewModel(
   };
 }
 
-function buildActivityCalendarPeriodSummary(
+function buildActivityCalendarPeriodSummaryForMonths(
   months: ActivityCalendarMonthViewModel[],
+  summariesSettings?: SummaryStatsSettingsLike | null,
+): ActivityCalendarPeriodSummary {
+  return buildActivityCalendarPeriodSummary(
+    months.flatMap(month => month.days.flatMap(day => day.inPrimaryPeriod ? day.events : [])),
+    summariesSettings,
+  );
+}
+
+export function buildActivityCalendarPeriodSummary(
+  events: readonly EventInterface[],
   summariesSettings?: SummaryStatsSettingsLike | null,
 ): ActivityCalendarPeriodSummary {
   const periodMetrics = createActivityCalendarMetricAggregates();
   const familyAccumulators = new Map<string, ActivityCalendarPeriodFamilyAccumulator>();
   const elevationExclusions = resolveActivityCalendarElevationExclusions(summariesSettings);
 
-  months.forEach((month) => {
-    month.days.forEach((day) => {
-      if (!day.inPrimaryPeriod) {
-        return;
-      }
-      day.events.forEach((event) => {
-        const family = resolveEventFamilyIdentity(event);
-        const accumulator = familyAccumulators.get(family.id) || {
-          ...family,
-          eventCount: 0,
-          metrics: createActivityCalendarMetricAggregates(),
-        };
-        const metricValues: Record<ActivityCalendarVolumeMetric, number | null> = {
-          duration: resolveActivityCalendarEventDurationSeconds(event),
-          distance: resolveActivityCalendarEventStatValue(event, DataDistance.type),
-          ascent: resolveActivityCalendarEventStatValue(event, DataAscent.type),
-          descent: resolveActivityCalendarEventStatValue(event, DataDescent.type),
-        };
-        const elevationEligibility = resolveActivityCalendarElevationEligibility(event, elevationExclusions);
-        const metricEligibility: Record<ActivityCalendarVolumeMetric, boolean> = {
-          duration: true,
-          distance: true,
-          ascent: elevationEligibility.ascent,
-          descent: elevationEligibility.descent,
-        };
+  events.forEach((event) => {
+    const family = resolveEventFamilyIdentity(event);
+    const accumulator = familyAccumulators.get(family.id) || {
+      ...family,
+      eventCount: 0,
+      metrics: createActivityCalendarMetricAggregates(),
+    };
+    const metricValues: Record<ActivityCalendarVolumeMetric, number | null> = {
+      duration: resolveActivityCalendarEventDurationSeconds(event),
+      distance: resolveActivityCalendarEventStatValue(event, DataDistance.type),
+      ascent: resolveActivityCalendarEventStatValue(event, DataAscent.type),
+      descent: resolveActivityCalendarEventStatValue(event, DataDescent.type),
+    };
+    const elevationEligibility = resolveActivityCalendarElevationEligibility(event, elevationExclusions);
+    const metricEligibility: Record<ActivityCalendarVolumeMetric, boolean> = {
+      duration: true,
+      distance: true,
+      ascent: elevationEligibility.ascent,
+      descent: elevationEligibility.descent,
+    };
 
-        accumulator.eventCount += 1;
-        (Object.keys(metricValues) as ActivityCalendarVolumeMetric[]).forEach((metric) => {
-          addActivityCalendarMetricValue(accumulator.metrics[metric], metricValues[metric], metricEligibility[metric]);
-          addActivityCalendarMetricValue(periodMetrics[metric], metricValues[metric], metricEligibility[metric]);
-        });
-        familyAccumulators.set(family.id, accumulator);
-      });
+    accumulator.eventCount += 1;
+    (Object.keys(metricValues) as ActivityCalendarVolumeMetric[]).forEach((metric) => {
+      addActivityCalendarMetricValue(accumulator.metrics[metric], metricValues[metric], metricEligibility[metric]);
+      addActivityCalendarMetricValue(periodMetrics[metric], metricValues[metric], metricEligibility[metric]);
     });
+    familyAccumulators.set(family.id, accumulator);
   });
 
   const families = [...familyAccumulators.values()].sort((left, right) => (

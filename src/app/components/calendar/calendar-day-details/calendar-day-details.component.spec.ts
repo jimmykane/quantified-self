@@ -3,7 +3,15 @@ import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
-import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
+import {
+  ActivityTypes,
+  DataAscent,
+  DataDescent,
+  DataDistance,
+  DataDuration,
+  DaysOfTheWeek,
+  type EventInterface,
+} from '@sports-alliance/sports-lib';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
@@ -15,8 +23,10 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Running');
     expect(fixture.nativeElement.textContent).toContain('Morning run');
     expect(fixture.nativeElement.querySelector('a')?.getAttribute('href')).toBe('/user/user-1/event/event-1');
-    expect(fixture.nativeElement.querySelectorAll('.calendar-day-family-list mat-list-item')).toHaveLength(1);
-    expect(fixture.nativeElement.querySelector('.calendar-day-family-duration')?.textContent).toContain('1h');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim()).toBe('Running');
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
+    expect([...fixture.nativeElement.querySelectorAll('h3')].map((heading: HTMLElement) => heading.textContent?.trim()))
+      .toEqual(['Activities', 'Activity details']);
   });
 
   it('replaces generic timestamp names without repeating the activity type', async () => {
@@ -35,6 +45,29 @@ describe('CalendarDayDetailsComponent', () => {
 
     const eventIcon = fixture.nativeElement.querySelector('mat-nav-list app-activity-type-icon mat-icon');
     expect(eventIcon?.textContent?.trim()).toBe('terrain');
+  });
+
+  it('shows day-specific distance and descent while excluding downhill ascent', async () => {
+    const fixture = await renderDayDetails(createEvent(
+      'Downhill ride',
+      undefined,
+      'Downhill Cycling',
+      {
+        [DataDistance.type]: 20_000,
+        [DataAscent.type]: 900,
+        [DataDescent.type]: 1200,
+      },
+    ));
+
+    const stats = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+      .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
+    expect(stats).toEqual([
+      'Duration 1h',
+      'Distance 20.00 Km',
+      'Descent 1,200 m',
+    ]);
+    expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('role'))
+      .toBe('progressbar');
   });
 
   it('uses the shared bottom-sheet surface without an inset background', () => {
@@ -83,7 +116,12 @@ function createEvent(
   name = 'Morning run',
   description?: string,
   activityType = 'Running',
+  metricOverrides: Partial<Record<string, number | null>> = {},
 ): EventInterface {
+  const metrics: Record<string, number | null> = {
+    [DataDuration.type]: 3600,
+    ...metricOverrides,
+  };
   return {
     name,
     description,
@@ -91,6 +129,9 @@ function createEvent(
     getID: () => 'event-1',
     getActivityTypesAsArray: () => [activityType === 'Downhill Cycling' ? ActivityTypes.DownhillCycling : ActivityTypes.Running],
     getActivityTypesAsString: () => activityType,
-    getStat: (type: string) => type === DataDuration.type ? { getValue: () => 3600 } : null,
+    getStat: (type: string) => {
+      const value = metrics[type];
+      return value === null || value === undefined ? null : { getValue: () => value };
+    },
   } as unknown as EventInterface;
 }

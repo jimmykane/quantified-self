@@ -1,19 +1,24 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
-import type { EventInterface } from '@sports-alliance/sports-lib';
-import { AppActivityTypeGroupIcons } from '../../../services/color/app.activity-type-group.icons';
+import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   type ActivityCalendarDayViewModel,
+  buildActivityCalendarPeriodSummary,
   formatActivityCalendarDuration,
   resolveActivityCalendarEventDurationSeconds,
   resolveActivityCalendarEventLabel,
 } from '../../../helpers/activity-calendar.helper';
+import { buildActivityCalendarFamilyVolumeRows } from '../../../helpers/activity-calendar-volume.helper';
+import type { SummaryStatsSettingsLike } from '../../../helpers/summary-stats.helper';
 import { SharedModule } from '../../../modules/shared.module';
+import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
 
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
   userId: string;
   locale?: string;
+  unitSettings?: UserUnitSettingsInterface | null;
+  summariesSettings?: SummaryStatsSettingsLike | null;
 }
 
 interface CalendarDayEventRow {
@@ -27,7 +32,7 @@ interface CalendarDayEventRow {
 @Component({
   selector: 'app-calendar-day-details',
   standalone: true,
-  imports: [SharedModule],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent],
   templateUrl: './calendar-day-details.component.html',
   styleUrls: ['./calendar-day-details.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,13 +40,17 @@ interface CalendarDayEventRow {
 export class CalendarDayDetailsComponent {
   private readonly bottomSheetRef = inject(MatBottomSheetRef<CalendarDayDetailsComponent>);
   readonly data = inject<CalendarDayDetailsData>(MAT_BOTTOM_SHEET_DATA);
-  readonly familyIcons = AppActivityTypeGroupIcons;
   readonly title = new Intl.DateTimeFormat(this.data.locale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   }).format(this.data.day.date);
+  readonly familyVolumeRows = buildActivityCalendarFamilyVolumeRows(
+    buildActivityCalendarPeriodSummary(this.data.day.events, this.data.summariesSettings),
+    this.data.unitSettings,
+    this.data.locale,
+  );
   readonly eventRows = this.data.day.events.map(event => this.buildEventRow(event));
 
   dismiss(): void {

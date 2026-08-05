@@ -10,6 +10,7 @@ import {
   type EventInterface,
 } from '@sports-alliance/sports-lib';
 import {
+  buildActivityCalendarPeriodSummary,
   buildActivityCalendarViewModel,
   formatActivityCalendarDateParam,
   formatActivityCalendarDuration,
@@ -177,6 +178,36 @@ describe('activity-calendar helper', () => {
     }))).toEqual([
       { id: ActivityTypeGroups.RunningGroup, duration: 3600, distance: 10_000 },
       { id: ActivityTypeGroups.CyclingGroup, duration: 1800, distance: 5000 },
+    ]);
+  });
+
+  it('builds day summaries from the same metric and elevation rules as period summaries', () => {
+    const summary = buildActivityCalendarPeriodSummary([
+      createEvent('downhill', new Date(2026, 7, 3, 8), [ActivityTypes.DownhillCycling], 3600, {
+        distanceMeters: 20_000,
+        ascentMeters: 900,
+        descentMeters: 1200,
+      }),
+      createEvent('run', new Date(2026, 7, 3, 12), [ActivityTypes.Running], 1800, {
+        distanceMeters: 5000,
+        ascentMeters: 100,
+        descentMeters: 80,
+      }),
+    ]);
+
+    expect(summary).toMatchObject({
+      totalDurationSeconds: 5400,
+      totalDistanceMeters: 25_000,
+      totalAscentMeters: 100,
+      totalDescentMeters: 1280,
+    });
+    expect(summary.families.map(family => ({
+      label: family.label,
+      ascent: family.metrics.ascent.value,
+      descent: family.metrics.descent.value,
+    }))).toEqual([
+      { label: 'Mountain Biking', ascent: 0, descent: 1200 },
+      { label: 'Running', ascent: 100, descent: 80 },
     ]);
   });
 

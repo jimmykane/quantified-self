@@ -210,7 +210,11 @@ describe('CalendarPageComponent', () => {
     fixture.componentInstance.openDay(activityDay);
 
     expect(componentOpen).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
-      data: expect.objectContaining({ userId: 'user-1' }),
+      data: expect.objectContaining({
+        userId: 'user-1',
+        unitSettings: user.settings.unitSettings,
+        summariesSettings: user.settings.summariesSettings,
+      }),
     }));
   });
 

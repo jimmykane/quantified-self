@@ -95,46 +95,7 @@
         </div>
       </header>
 
-      <div class="calendar-family-volume-list">
-        @for (family of familyVolumeRows(); track family.id) {
-        <div class="calendar-family-volume-row" role="group" [attr.aria-label]="family.ariaLabel">
-          <div class="calendar-family-volume-identity">
-            <mat-icon aria-hidden="true" [style.color]="family.color">{{ family.icon }}</mat-icon>
-            <span class="calendar-family-volume-copy">
-              <strong>{{ family.label }}</strong>
-              <span>{{ family.eventCountLabel }}</span>
-            </span>
-          </div>
-          <strong class="calendar-family-volume-value">{{ family.valueLabel }}</strong>
-          <div class="calendar-family-volume-track"
-            [attr.role]="family.hasData ? 'progressbar' : null"
-            [attr.aria-label]="family.hasData ? family.progressLabel : null"
-            [attr.aria-valuemin]="family.hasData ? 0 : null"
-            [attr.aria-valuemax]="family.hasData ? family.maximumValue : null"
-            [attr.aria-valuenow]="family.hasData ? family.value : null"
-            [attr.aria-valuetext]="family.hasData ? family.valueLabel : null">
-            <span class="calendar-family-volume-fill"
-              [style.width.%]="family.barPercent"
-              [style.background-color]="family.color"></span>
-          </div>
-          @if (family.stats.length) {
-          <div class="calendar-family-volume-stats" role="list" aria-label="Recorded totals">
-            @for (stat of family.stats; track stat.metric) {
-            <span class="calendar-family-volume-stat" role="listitem"
-              [class.calendar-family-volume-stat--bar-metric]="stat.isBarMetric"
-              [attr.aria-label]="stat.ariaLabel">
-              <mat-icon aria-hidden="true">{{ stat.icon }}</mat-icon>
-              <span class="calendar-family-volume-stat-value">{{ stat.valueLabel }}</span>
-            </span>
-            }
-          </div>
-          }
-        </div>
-        @if (!$last) {
-        <mat-divider></mat-divider>
-        }
-        }
-      </div>
+      <app-activity-calendar-volume-list [rows]="familyVolumeRows()"></app-activity-calendar-volume-list>
     </section>
     }
   }

@@ -12,25 +12,14 @@
     </div>
 
     <section aria-labelledby="calendar-day-family-title">
-      <h3 id="calendar-day-family-title">Sport families</h3>
-      <mat-list class="calendar-day-family-list">
-        @for (family of data.day.families; track family.id) {
-        <mat-list-item>
-          <mat-icon matListItemIcon class="calendar-day-family-icon"
-            [style.--calendar-family-color]="family.color" aria-hidden="true">
-            {{ familyIcons[family.activityTypeGroup] }}
-          </mat-icon>
-          <span matListItemTitle>{{ family.label }}</span>
-          <strong matListItemMeta class="calendar-day-family-duration">{{ family.durationLabel }}</strong>
-        </mat-list-item>
-        }
-      </mat-list>
+      <h3 id="calendar-day-family-title">Activities</h3>
+      <app-activity-calendar-volume-list [rows]="familyVolumeRows"></app-activity-calendar-volume-list>
     </section>
 
     <mat-divider></mat-divider>
 
     <section aria-labelledby="calendar-day-activities-title">
-      <h3 id="calendar-day-activities-title">Activities</h3>
+      <h3 id="calendar-day-activities-title">Activity details</h3>
       <mat-nav-list>
         @for (event of eventRows; track event.id) {
           @if (event.route) {

@@ -190,6 +190,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('Dashboard manager **Remove all** to keep it from returning');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
+    expect(calendarSection?.content).toContain('same duration bars and available distance/ascent/descent totals by activity group');
     expect(calendarSection?.content).toContain('intentionally have no hover or touch tooltip');
     expect(calendarSection?.content).toContain('recorded **Distance**, **Duration**, and **Ascent**');
     expect(calendarSection?.content).toContain('Month totals exclude adjacent dates');

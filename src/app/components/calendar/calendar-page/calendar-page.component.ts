@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, 
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
-import { DataAscent, DataDescent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../../models/app-user.interface';
@@ -13,7 +13,6 @@ import {
   type ActivityCalendarDayViewModel,
   type ActivityCalendarRouteState,
   type ActivityCalendarView,
-  type ActivityCalendarVolumeMetric,
   buildActivityCalendarViewModel,
   formatActivityCalendarDateParam,
   formatActivityCalendarDuration,
@@ -22,8 +21,12 @@ import {
   parseActivityCalendarDate,
   resolveActivityCalendarQueryWindow,
 } from '../../../helpers/activity-calendar.helper';
-import { AppActivityTypeGroupIcons } from '../../../services/color/app.activity-type-group.icons';
+import {
+  ACTIVITY_CALENDAR_VOLUME_TOOLTIP,
+  buildActivityCalendarFamilyVolumeRows,
+} from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activity-calendar-grid.component';
+import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
 import {
   CalendarDayDetailsComponent,
   type CalendarDayDetailsData,
@@ -46,41 +49,10 @@ interface CalendarSummaryMetric {
   value: string;
 }
 
-interface CalendarVolumeMetricOption {
-  value: ActivityCalendarVolumeMetric;
-  label: string;
-  icon: string;
-  dataType: string | null;
-}
-
-interface CalendarFamilyVolumeStat {
-  metric: ActivityCalendarVolumeMetric;
-  icon: string;
-  valueLabel: string;
-  isBarMetric: boolean;
-  ariaLabel: string;
-}
-
-interface CalendarFamilyVolumeRow {
-  id: string;
-  label: string;
-  icon: string;
-  color: string;
-  eventCountLabel: string;
-  value: number;
-  maximumValue: number;
-  valueLabel: string;
-  barPercent: number;
-  hasData: boolean;
-  progressLabel: string;
-  ariaLabel: string;
-  stats: CalendarFamilyVolumeStat[];
-}
-
 @Component({
   selector: 'app-calendar-page',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarGridComponent],
+  imports: [SharedModule, ActivityCalendarGridComponent, ActivityCalendarVolumeListComponent],
   templateUrl: './calendar-page.component.html',
   styleUrls: ['./calendar-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -109,13 +81,7 @@ export class CalendarPageComponent {
     { value: 'month', label: 'Month', icon: 'calendar_view_month' },
     { value: 'year', label: 'Year', icon: 'calendar_month' },
   ];
-  readonly familyVolumeTooltip = 'Bar length compares recorded duration within this period. The longest activity group fills the track.';
-  private readonly familyVolumeMetricOptions: ReadonlyArray<CalendarVolumeMetricOption> = [
-    { value: 'duration', label: 'Duration', icon: 'schedule', dataType: null },
-    { value: 'distance', label: 'Distance', icon: 'route', dataType: DataDistance.type },
-    { value: 'ascent', label: 'Ascent', icon: 'trending_up', dataType: DataAscent.type },
-    { value: 'descent', label: 'Descent', icon: 'trending_down', dataType: DataDescent.type },
-  ];
+  readonly familyVolumeTooltip = ACTIVITY_CALENDAR_VOLUME_TOOLTIP;
   readonly routeState = toSignal(this.routeState$, { initialValue: this.initialRouteState });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly eventState = toSignal(combineLatest([
@@ -181,73 +147,16 @@ export class CalendarPageComponent {
       },
     ];
   });
-  readonly familyVolumeRows = computed<CalendarFamilyVolumeRow[]>(() => {
+  readonly familyVolumeRows = computed(() => {
     if (this.eventState().status !== 'ready') {
       return [];
     }
 
-    const barMetric = this.familyVolumeMetricOptions[0];
-    const metric = barMetric.value;
-    const families = this.calendarModel().summary.families;
-    const maximumValue = families.reduce((maximum, family) => {
-      const aggregate = family.metrics[metric];
-      return aggregate.recordedEventCount > 0 ? Math.max(maximum, aggregate.value) : maximum;
-    }, 0);
-    const unitSettings = this.currentUser()?.settings?.unitSettings ?? null;
-    const formatMetricValue = (option: CalendarVolumeMetricOption, value: number): string => (
-      option.value === 'duration'
-        ? formatActivityCalendarDuration(value)
-        : formatUnitAwareDataValue(option.dataType || undefined, value, unitSettings, {
-          stripRepeatedUnit: true,
-          locale: this.locale,
-        }) || `${value}`
+    return buildActivityCalendarFamilyVolumeRows(
+      this.calendarModel().summary,
+      this.currentUser()?.settings?.unitSettings ?? null,
+      this.locale,
     );
-
-    return families.map((family) => {
-      const aggregate = family.metrics[metric];
-      const hasData = aggregate.recordedEventCount > 0;
-      const valueLabel = hasData ? formatMetricValue(barMetric, aggregate.value) : '--';
-      const metricStatus = hasData
-        ? `${barMetric.label} ${valueLabel}`
-        : `${barMetric.label} unavailable`;
-      const stats = this.familyVolumeMetricOptions.flatMap((option): CalendarFamilyVolumeStat[] => {
-        const metricAggregate = family.metrics[option.value];
-        if (metricAggregate.recordedEventCount <= 0 || metricAggregate.value <= 0) {
-          return [];
-        }
-
-        const metricValueLabel = formatMetricValue(option, metricAggregate.value);
-        return [{
-          metric: option.value,
-          icon: option.icon,
-          valueLabel: metricValueLabel,
-          isBarMetric: option.value === metric,
-          ariaLabel: `${option.label} ${metricValueLabel}`,
-        }];
-      });
-
-      return {
-        id: family.id,
-        label: family.label,
-        icon: AppActivityTypeGroupIcons[family.activityTypeGroup],
-        color: family.color,
-        eventCountLabel: `${family.eventCount} ${family.eventCount === 1 ? 'activity' : 'activities'}`,
-        value: aggregate.value,
-        maximumValue: Math.max(1, maximumValue),
-        valueLabel,
-        barPercent: hasData && aggregate.value > 0 && maximumValue > 0
-          ? aggregate.value / maximumValue * 100
-          : 0,
-        hasData,
-        progressLabel: `${family.label} ${barMetric.label}`,
-        ariaLabel: `${family.label}, ${family.eventCount} ${family.eventCount === 1 ? 'activity' : 'activities'}, ${metricStatus}`,
-        stats,
-      };
-    }).sort((left, right) => (
-      Number(right.hasData) - Number(left.hasData)
-      || right.value - left.value
-      || left.label.localeCompare(right.label)
-    ));
   });
   readonly isLoading = computed(() => this.eventState().status === 'loading');
   readonly hasError = computed(() => this.eventState().status === 'error');
@@ -291,7 +200,13 @@ export class CalendarPageComponent {
       return;
     }
     this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData>(CalendarDayDetailsComponent, {
-      data: { day, userId, locale: this.locale },
+      data: {
+        day,
+        userId,
+        locale: this.locale,
+        unitSettings: this.currentUser()?.settings?.unitSettings ?? null,
+        summariesSettings: this.currentUser()?.settings?.summariesSettings ?? null,
+      },
     });
   }
 

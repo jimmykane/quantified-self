@@ -42,29 +42,6 @@ h3 {
   letter-spacing: 0;
 }
 
-.calendar-day-family-list {
-  padding: 0;
-}
-
-.calendar-day-family-icon {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--calendar-family-color);
-  color: var(--mat-sys-on-primary-container);
-  font-size: 18px;
-  line-height: 18px;
-}
-
-.calendar-day-family-duration {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.05rem;
-  letter-spacing: 0;
-}
-
 mat-nav-list {
   padding-top: 0;
 }
