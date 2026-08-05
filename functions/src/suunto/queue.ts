@@ -5,6 +5,7 @@ import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue
 
 import { config } from '../config';
 import { verifySuuntoWebhookSignature } from './webhook-signature';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -76,6 +77,7 @@ async function enqueueSuuntoWorkout(userName: string, workoutID: string, res: fu
 export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '256MB',
+  secrets: FUNCTION_SECRET_BINDINGS.insertSuuntoAppActivityToQueue,
 }).https.onRequest(async (req, res) => {
   if (isSuuntoJsonNotificationRequest(req)) {
     const signature = getRequestHeader(req, 'X-HMAC-SHA256-Signature');

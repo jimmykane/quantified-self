@@ -7,6 +7,7 @@ import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants'
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { processActivitySyncQueueItem } from '../activity-sync/process-queue-item';
 import { isQueueItemDeletedForUserCleanup } from '../queue/cleanup-tombstone';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface ActivitySyncTaskPayload {
     queueItemId: string;
@@ -34,6 +35,7 @@ function getSafeRetryReason(queueItem: ActivitySyncQueueItemInterface): string |
 
 export const processActivitySyncTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
+    secrets: FUNCTION_SECRET_BINDINGS.processActivitySyncTask,
     memory: '1GiB',
     timeoutSeconds: 540,
     region: 'europe-west2',

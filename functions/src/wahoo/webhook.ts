@@ -13,6 +13,7 @@ import {
 import { upsertWahooWorkoutQueueItem } from './queue-store';
 import { parseWahooWorkout } from './workout-payload';
 import { getWahooErrorLogDetails } from './error-details';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 export function secureTokenMatches(actual: unknown, expected: string): boolean {
   if (typeof actual !== 'string') return false;
@@ -55,6 +56,7 @@ export async function resolveActiveWahooOwner(wahooUserID: string): Promise<stri
 export const wahooAPIWebhook = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '256MB',
+  secrets: FUNCTION_SECRET_BINDINGS.wahooAPIWebhook,
 }).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send();

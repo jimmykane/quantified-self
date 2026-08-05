@@ -17,6 +17,7 @@ import {
   createSuuntoRouteUploadContext,
   listSuuntoRoutes,
 } from './routes';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 type ExternalRecord = Record<string, unknown>;
 
@@ -118,6 +119,7 @@ async function updateSuuntoRouteImportMeta(
 export const insertSuuntoAppRouteToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '256MB',
+  secrets: FUNCTION_SECRET_BINDINGS.insertSuuntoAppRouteToQueue,
 }).https.onRequest(async (req, res) => {
   const signature = getRequestHeader(req, 'X-HMAC-SHA256-Signature');
   if (!verifySuuntoWebhookSignature(req.rawBody, signature)) {
@@ -166,6 +168,7 @@ export const insertSuuntoAppRouteToQueue = functions.region('europe-west2').runW
 
 export const addSuuntoAppRoutesToQueue = onCall({
   region: FUNCTIONS_MANIFEST.addSuuntoAppRoutesToQueue.region,
+  secrets: FUNCTION_SECRET_BINDINGS.addSuuntoAppRoutesToQueue,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '512MiB',
   maxInstances: 10,

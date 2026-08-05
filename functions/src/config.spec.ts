@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Hoisted admin mock & dotenv noop
+// Hoisted admin mock
 const adminMock = vi.hoisted(() => ({
     instanceId: vi.fn(() => ({
         app: { options: { projectId: 'mock-project' } }
     }))
 }));
-
-vi.mock('dotenv', () => ({ config: vi.fn() }));
 
 vi.mock('firebase-admin', () => ({
     default: {
@@ -73,6 +71,23 @@ describe('config.ts', () => {
         const { config } = await import('./config');
 
         expect(() => config.wahooapi.client_id).toThrow(/Missing required environment variable: WAHOOAPI_CLIENT_ID/);
+    });
+
+    it('reads only the requested provider credential', async () => {
+        delete process.env.SUUNTOAPP_SUBSCRIPTION_KEY;
+        delete process.env.WAHOOAPI_WEBHOOK_TOKEN;
+        const { config } = await import('./config');
+
+        expect(config.suuntoapp.client_id).toBe('suunto-id');
+        expect(config.suuntoapp.client_secret).toBe('suunto-secret');
+        expect(config.wahooapi.client_id).toBe('wahoo-id');
+        expect(config.wahooapi.client_secret).toBe('wahoo-secret');
+        expect(() => config.suuntoapp.subscription_key).toThrow(
+            /Missing required environment variable: SUUNTOAPP_SUBSCRIPTION_KEY/,
+        );
+        expect(() => config.wahooapi.webhook_token).toThrow(
+            /Missing required environment variable: WAHOOAPI_WEBHOOK_TOKEN/,
+        );
     });
 
     it('exposes no Wahoo feature gate configuration', async () => {

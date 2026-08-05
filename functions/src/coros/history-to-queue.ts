@@ -7,6 +7,7 @@ import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
 import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 interface HistoryToQueueRequest {
   startDate: string;
@@ -22,7 +23,10 @@ interface HistoryToQueueResponse {
  * Add to the workout queue the workouts of a user for a selected date range
  */
 export const addCOROSAPIHistoryToQueue = functions
-  .runWith({ memory: '256MB' })
+  .runWith({
+    memory: '256MB',
+    secrets: FUNCTION_SECRET_BINDINGS.addCOROSAPIHistoryToQueue,
+  })
   .region(FUNCTIONS_MANIFEST.addCOROSAPIHistoryToQueue.region)
   .https.onCall(async (data: HistoryToQueueRequest, context): Promise<HistoryToQueueResponse> => {
     // App Check verification

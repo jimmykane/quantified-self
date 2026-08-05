@@ -39,6 +39,7 @@ import {
 } from '../shared/provider-operation-error';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import { ProviderPendingDisconnectError } from '../shared/provider-pending-disconnect-error';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const SUUNTO_ALWAYS_TRANSIENT_STATUS_CODES = new Set([408, 502, 503, 504]);
 const SUUNTO_MAX_TRANSIENT_RETRIES = 2;
@@ -1181,6 +1182,7 @@ function toSuuntoActivityCallableResult(
  */
 export const importActivityToSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.importActivityToSuuntoApp.region,
+  secrets: FUNCTION_SECRET_BINDINGS.importActivityToSuuntoApp,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '512MiB',
   timeoutSeconds: 300,

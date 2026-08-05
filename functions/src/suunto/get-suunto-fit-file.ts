@@ -8,11 +8,15 @@ import { getTokenData } from '../tokens';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 /**
  * Downloads the original file
  */
-export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const getSuuntoFITFile = functions
+  .region('europe-west2')
+  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.getSuuntoFITFile })
+  .https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     logger.error('Not allowed');

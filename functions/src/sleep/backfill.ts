@@ -32,6 +32,7 @@ import {
 } from '../shared/user-deletion-guard';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
@@ -552,6 +553,7 @@ function isGarminSleepBackfillAlreadyRequestedError(error: unknown): boolean {
 
 export const backfillSuuntoAppSleep = onCall({
     region: FUNCTIONS_MANIFEST.backfillSuuntoAppSleep.region,
+    secrets: FUNCTION_SECRET_BINDINGS.backfillSuuntoAppSleep,
     cors: ALLOWED_CORS_ORIGINS,
     memory: '512MiB',
     timeoutSeconds: 540,
@@ -640,6 +642,7 @@ export const backfillSuuntoAppSleep = onCall({
 
 export const backfillCorosAPISleep = onCall({
     region: FUNCTIONS_MANIFEST.backfillCorosAPISleep.region,
+    secrets: FUNCTION_SECRET_BINDINGS.backfillCorosAPISleep,
     cors: ALLOWED_CORS_ORIGINS,
     memory: '512MiB',
     timeoutSeconds: 540,
@@ -731,6 +734,7 @@ export const backfillCorosAPISleep = onCall({
 
 export const backfillGarminAPISleep = onCall({
     region: FUNCTIONS_MANIFEST.backfillGarminAPISleep.region,
+    secrets: FUNCTION_SECRET_BINDINGS.backfillGarminAPISleep,
     cors: ALLOWED_CORS_ORIGINS,
     memory: '512MiB',
     timeoutSeconds: 540,

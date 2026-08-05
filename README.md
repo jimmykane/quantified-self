@@ -82,7 +82,7 @@ Do not copy a maintainer token or commit this file. A valid token is required fo
 > [!WARNING]
 > The current development configuration is **hybrid, not fully isolated**. Callable Functions are routed to the Functions emulator, but browser Auth, Firestore, Storage, Analytics, App Check, and Remote Config still use the configured hosted Firebase project. Starting additional emulators does not connect those browser SDKs automatically.
 
-Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Credentials placed in `functions/.env` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
+Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Development credentials placed in `functions/.secret.local` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
 
 ### 4. Build Functions and start the emulators
 
@@ -116,15 +116,15 @@ Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are use
 
 ## Optional backend and provider configuration
 
-`functions/.env` is ignored and is not required to install dependencies, build the code, or run unit tests. Add only the credentials needed for the integration you are developing.
+Copy `functions/.secret.local.example` to the ignored `functions/.secret.local` only when an emulator or operational script needs provider credentials. Add development-only values for the integration you are testing; builds and unit tests do not require the file. See [Firebase Function secret management](docs/function-secret-management.md) for binding, deployment, and rotation rules.
 
 | Feature | Configuration names |
 | --- | --- |
-| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET`, `GARMINHEALTHAPI_CONSUMER_KEY`, `GARMINHEALTHAPI_CONSUMER_SECRET` |
+| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
-| Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, optional `WAHOOAPI_ALLOWED_FILE_HOSTS` |
-| Stripe | `STRIPE_SECRET_KEY` or `STRIPE_API_KEY` |
+| Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
+| Stripe | `STRIPE_SECRET_KEY` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend Mapbox access | `MAPBOX_ACCESS_TOKEN` |
 | Optional task emulator | `CLOUD_TASKS_EMULATOR_HOST` |
@@ -205,6 +205,7 @@ These policies are infrastructure configuration; starting local emulators does n
 - [MCP-backed built-in Assistant](docs/assistant.md)
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
 - [Read-only MCP server](docs/mcp-server.md)
+- [Firebase Function secret management](docs/function-secret-management.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)
 - [Email lifecycle](docs/email-lifecycle.md)

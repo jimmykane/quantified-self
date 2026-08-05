@@ -16,6 +16,7 @@ import { upsertWahooWorkoutQueueItem } from './queue-store';
 import { parseWahooWorkout } from './workout-payload';
 import { ParsedWahooWorkout } from './workout-payload';
 import { getWahooErrorLogDetails } from './error-details';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 const PAGE_SIZE = 100;
 const HISTORY_LEASE_MS = 15 * 60 * 1000;
@@ -227,6 +228,7 @@ export async function importWahooHistory(
 
 export const addWahooAPIHistoryToQueue = onCall({
   region: FUNCTIONS_MANIFEST.addWahooAPIHistoryToQueue.region,
+  secrets: FUNCTION_SECRET_BINDINGS.addWahooAPIHistoryToQueue,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '512MiB',
   timeoutSeconds: 540,

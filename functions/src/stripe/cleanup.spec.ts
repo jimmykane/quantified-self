@@ -69,9 +69,6 @@ const mockRequest = {
     app: { appId: 'test-app-id' } // Mock App Check
 } as CallableRequest;
 
-// Assuming process.env is handled by environment or set here
-process.env.STRIPE_API_KEY = 'sk_test_fake';
-
 import { cleanupStripeCustomer } from './cleanup';
 
 describe('cleanupStripeCustomer', () => {

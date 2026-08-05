@@ -13,6 +13,7 @@ import {
 import { SERVICE_NAME, WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../constants';
 import { getWahooErrorLogDetails } from '../error-details';
 import { setServiceConnectionProviderUserId } from '../../service-connection-meta';
+import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 
 async function requireWahooConnectAccess(request: { auth?: { uid: string } | null }): Promise<string> {
   enforceAppCheck(request as any);
@@ -25,6 +26,7 @@ async function requireWahooConnectAccess(request: { auth?: { uid: string } | nul
 
 export const getWahooAPIAuthRequestTokenRedirectURI = onCall({
   region: FUNCTIONS_MANIFEST.getWahooAPIAuthRequestTokenRedirectURI.region,
+  secrets: FUNCTION_SECRET_BINDINGS.getWahooAPIAuthRequestTokenRedirectURI,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10,
@@ -39,6 +41,7 @@ export const getWahooAPIAuthRequestTokenRedirectURI = onCall({
 
 export const requestAndSetWahooAPIAccessToken = onCall({
   region: FUNCTIONS_MANIFEST.requestAndSetWahooAPIAccessToken.region,
+  secrets: FUNCTION_SECRET_BINDINGS.requestAndSetWahooAPIAccessToken,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10,
@@ -67,6 +70,7 @@ export const requestAndSetWahooAPIAccessToken = onCall({
 
 export const deauthorizeWahooAPI = onCall({
   region: FUNCTIONS_MANIFEST.deauthorizeWahooAPI.region,
+  secrets: FUNCTION_SECRET_BINDINGS.deauthorizeWahooAPI,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10,

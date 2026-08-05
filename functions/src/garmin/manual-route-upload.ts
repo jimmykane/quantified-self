@@ -22,6 +22,7 @@ import {
 } from './routes';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { isProviderOperationError } from '../shared/provider-operation-error';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 async function assertGarminManualRouteUploadAllowed(userID: string): Promise<void> {
   let deletionGuard;
@@ -41,6 +42,7 @@ async function assertGarminManualRouteUploadAllowed(userID: string): Promise<voi
 /** Sends a selected GPX or FIT route to Garmin Connect as a Course Import. */
 export const importRouteToGarminAPI = onCall({
   region: FUNCTIONS_MANIFEST.importRouteToGarminAPI.region,
+  secrets: FUNCTION_SECRET_BINDINGS.importRouteToGarminAPI,
   ...ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS,
   cors: ALLOWED_CORS_ORIGINS,
 }, async (request) => {

@@ -5,6 +5,7 @@ import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import type { UpcomingRenewalAmountResult } from '../../../shared/stripe-renewal';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
 type SubscriptionDocument = {
     id?: unknown;
@@ -193,6 +194,7 @@ async function resolveNextPaymentAmountForZeroDueInvoice(
 
 export const getUpcomingRenewalAmount = onCall({
     region: FUNCTIONS_MANIFEST.getUpcomingRenewalAmount.region,
+    secrets: FUNCTION_SECRET_BINDINGS.getUpcomingRenewalAmount,
     cors: ALLOWED_CORS_ORIGINS
 }, async (request): Promise<UpcomingRenewalAmountResult> => {
     if (!request.auth) {
