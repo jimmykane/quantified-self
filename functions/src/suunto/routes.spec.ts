@@ -543,7 +543,9 @@ describe('importRouteToSuuntoApp', () => {
             onProviderAccepted,
         )).rejects.toMatchObject({
             code: 'failed-precondition',
-            dlqContext: 'SUUNTO_ROUTE_UPLOAD_REJECTED',
+            disposition: 'permanent',
+            retryMode: 'none',
+            dlqContext: 'SUUNTO_ROUTE_PARTIAL_ACCEPTANCE',
         });
 
         expect(onProviderAccepted).toHaveBeenNthCalledWith(1, {
@@ -563,6 +565,41 @@ describe('importRouteToSuuntoApp', () => {
             }],
         });
         expect(onProviderAccepted).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails closed after a partial direct multi-account upload without retrying accepted accounts', async () => {
+        const createTokenRef = (id: string) => ({
+            id,
+            providerUserId: `suunto-${id}`,
+            ref: {
+                get: vi.fn().mockResolvedValue({
+                    id,
+                    exists: true,
+                    ref: { update: vi.fn() },
+                    data: () => ({ accessToken: `access-${id}` }),
+                }),
+            },
+        });
+        const context = {
+            tokenRefs: [createTokenRef('token-1'), createTokenRef('token-2')],
+            userNames: ['suunto-token-1', 'suunto-token-2'],
+        };
+        requestMocks.post
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-1' }))
+            .mockResolvedValueOnce(JSON.stringify({ error: 'route import failed' }));
+
+        await expect(uploadGPXRouteToSuuntoApp(
+            'test-user-id',
+            '<gpx>route</gpx>',
+            context as any,
+        )).rejects.toMatchObject({
+            disposition: 'permanent',
+            retryMode: 'none',
+            code: 'failed-precondition',
+            dlqContext: 'SUUNTO_ROUTE_PARTIAL_ACCEPTANCE',
+        });
+
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
     });
 
     it('surfaces a deleted Suunto token as reconnect-required auth failure', async () => {

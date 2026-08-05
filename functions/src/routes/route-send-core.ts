@@ -75,7 +75,19 @@ export interface RouteSendDestinationAdapter<Context = unknown> {
     preparedRoute: PreparedSavedRoute,
     context: Context,
     onProviderAccepted?: RouteProviderAcceptanceHandler,
+    options?: RouteSendExecutionOptions,
   ): Promise<RouteProviderSendResult>;
+}
+
+/** Internal controls for a specific route-send invocation. */
+export interface RouteSendExecutionOptions {
+  /**
+   * User-triggered resends can use durable per-account delivery receipts to
+   * avoid posting a route again after a partial multi-account delivery.
+   * Automated delivery jobs intentionally leave this off: their source
+   * revision state decides whether a changed route must be delivered again.
+   */
+  skipPreviouslyAcceptedDestinationAccounts?: boolean;
 }
 
 export class RouteSendItemError extends Error {
@@ -112,8 +124,19 @@ class SuuntoRouteSendAdapter implements RouteSendDestinationAdapter<SuuntoRouteU
     preparedRoute: PreparedSavedRoute,
     context: SuuntoRouteUploadContext,
     onProviderAccepted?: RouteProviderAcceptanceHandler,
+    options?: RouteSendExecutionOptions,
   ): Promise<RouteProviderSendResult> {
-    const uploadContext = getSuuntoRouteSendContext(preparedRoute.routeDocument, context);
+    const uploadContext = getSuuntoRouteSendContext(
+      preparedRoute.routeDocument,
+      context,
+      options?.skipPreviouslyAcceptedDestinationAccounts === true,
+    );
+    if (!uploadContext) {
+      return {
+        complete: true,
+        alreadyAccepted: true,
+      };
+    }
     const result = onProviderAccepted
       ? await uploadGPXRouteToSuuntoApp(
         userID,
@@ -142,6 +165,7 @@ class GarminRouteSendAdapter implements RouteSendDestinationAdapter<GarminRouteS
     preparedRoute: PreparedSavedRoute,
     context: GarminRouteSendContext,
     onProviderAccepted?: RouteProviderAcceptanceHandler,
+    _options?: RouteSendExecutionOptions,
   ): Promise<RouteProviderSendResult> {
     return sendRouteToGarminConnect(
       userID,
@@ -182,6 +206,7 @@ class WahooRouteSendAdapter implements RouteSendDestinationAdapter<void> {
     preparedRoute: PreparedSavedRoute,
     _context: void,
     onProviderAccepted?: RouteProviderAcceptanceHandler,
+    _options?: RouteSendExecutionOptions,
   ): Promise<{ providerRouteId?: string }> {
     const result = await sendSavedRouteToWahoo(
       userID,
@@ -228,20 +253,21 @@ function getRouteSourceProviderUserId(routeDocument: FirestoreRouteJSON): string
 function getSuuntoRouteSendContext(
   routeDocument: FirestoreRouteJSON,
   context: SuuntoRouteUploadContext,
-): SuuntoRouteUploadContext {
-  if (getRouteSourceServiceName(routeDocument) !== ServiceNames.SuuntoApp) {
-    return context;
+  skipPreviouslyAcceptedDestinationAccounts: boolean,
+): SuuntoRouteUploadContext | null {
+  let eligibleTokenRefs = context.tokenRefs;
+  if (getRouteSourceServiceName(routeDocument) === ServiceNames.SuuntoApp) {
+    const sourceProviderUserId = getRouteSourceProviderUserId(routeDocument);
+    if (!sourceProviderUserId) {
+      throw new RouteSendItemError(
+        'SOURCE_SERVICE_BLOCKED',
+        'Routes imported from Suunto can only be sent to a different connected Suunto account once the source account is known.',
+      );
+    }
+
+    eligibleTokenRefs = eligibleTokenRefs.filter(tokenRef => tokenRef.providerUserId !== sourceProviderUserId);
   }
 
-  const sourceProviderUserId = getRouteSourceProviderUserId(routeDocument);
-  if (!sourceProviderUserId) {
-    throw new RouteSendItemError(
-      'SOURCE_SERVICE_BLOCKED',
-      'Routes imported from Suunto can only be sent to a different connected Suunto account once the source account is known.',
-    );
-  }
-
-  const eligibleTokenRefs = context.tokenRefs.filter(tokenRef => tokenRef.providerUserId !== sourceProviderUserId);
   if (eligibleTokenRefs.length === 0) {
     throw new RouteSendItemError(
       'SOURCE_SERVICE_BLOCKED',
@@ -249,10 +275,33 @@ function getSuuntoRouteSendContext(
     );
   }
 
+  if (skipPreviouslyAcceptedDestinationAccounts) {
+    const acceptedProviderUserIds = getPreviouslyAcceptedDestinationProviderUserIds(routeDocument, ServiceNames.SuuntoApp);
+    eligibleTokenRefs = eligibleTokenRefs.filter(tokenRef => !acceptedProviderUserIds.has(tokenRef.providerUserId));
+    if (eligibleTokenRefs.length === 0) {
+      return null;
+    }
+  }
+
   return {
     tokenRefs: eligibleTokenRefs,
     userNames: Array.from(new Set(eligibleTokenRefs.map(tokenRef => tokenRef.providerUserId))),
   };
+}
+
+function getPreviouslyAcceptedDestinationProviderUserIds(
+  routeDocument: FirestoreRouteJSON,
+  destinationServiceName: ServiceNames,
+): Set<string> {
+  const summaries = Array.isArray(routeDocument.deliverySummaries)
+    ? routeDocument.deliverySummaries
+    : [];
+  const matchingSummary = summaries.find(summary => summary?.serviceName === destinationServiceName);
+  return new Set(
+    (matchingSummary?.providerUserIds || [])
+      .map(providerUserId => normalizeNonEmptyString(providerUserId))
+      .filter((providerUserId): providerUserId is string => providerUserId !== null),
+  );
 }
 
 export function getRouteSendAdapter(destinationServiceName: ServiceNames): RouteSendDestinationAdapter | null {
@@ -537,8 +586,9 @@ export async function sendPreparedRouteToDestination(
   adapter: RouteSendDestinationAdapter,
   context: unknown,
   onProviderAccepted?: RouteProviderAcceptanceHandler,
+  options?: RouteSendExecutionOptions,
 ): Promise<RouteProviderSendResult> {
-  return adapter.sendRoute(userID, preparedRoute, context, onProviderAccepted);
+  return adapter.sendRoute(userID, preparedRoute, context, onProviderAccepted, options);
 }
 
 export function buildRouteSendFailureResult(

@@ -93,8 +93,9 @@ export const sendRoutesToService = onCall({
           adapter,
           context,
           persistAcceptedDelivery,
+          { skipPreviouslyAcceptedDestinationAccounts: true },
         );
-        if (!acceptancePersistedDuringSend) {
+        if (!providerResult.alreadyAccepted && !acceptancePersistedDuringSend) {
           await persistAcceptedDelivery(providerResult);
         }
         results.push({

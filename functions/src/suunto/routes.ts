@@ -342,6 +342,23 @@ function selectSuuntoRouteUploadFailure(failures: unknown[]): unknown {
     });
 }
 
+function createSuuntoRoutePartialAcceptanceError(failures: unknown[]): ProviderOperationError {
+  const selectedFailure = selectSuuntoRouteUploadFailure(failures);
+  const selectedProviderFailure = isProviderOperationError(selectedFailure) ? selectedFailure : null;
+  return new ProviderOperationError({
+    serviceName: ServiceNames.SuuntoApp,
+    operation: 'route_create',
+    disposition: 'permanent',
+    retryMode: 'none',
+    code: 'failed-precondition',
+    message: 'Suunto accepted the route for at least one connected account but did not finish every account. The upload was not retried to avoid creating duplicate routes.',
+    statusCode: selectedProviderFailure?.statusCode,
+    providerCode: selectedProviderFailure?.providerCode,
+    providerUserId: selectedProviderFailure?.providerUserId,
+    dlqContext: 'SUUNTO_ROUTE_PARTIAL_ACCEPTANCE',
+  });
+}
+
 function toSuuntoRouteHttpsError(error: ProviderOperationError): HttpsError {
   if (error.disposition === 'auth_required') {
     return new HttpsError('unauthenticated', error.message);
@@ -785,6 +802,9 @@ export async function uploadGPXRouteToSuuntoApp(
     if (complete) {
       return { status: 'success', successCount, providerRouteIds, deliveries };
     }
+    // A caller without a durable receipt (the direct route-upload callable)
+    // must never retry a batch after any account has accepted the route.
+    throw createSuuntoRoutePartialAcceptanceError(failures);
   }
 
   throw selectSuuntoRouteUploadFailure(failures);
