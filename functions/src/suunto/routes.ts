@@ -769,9 +769,12 @@ export async function uploadGPXRouteToSuuntoApp(
   }
 
   if (successCount > 0) {
+    const complete = failures.length === 0;
     await onProviderAccepted?.({
       providerRouteId: providerRouteIds[0],
-      complete: true,
+      // A successful account must remain durable, but another failed account
+      // means the provider batch cannot be finalized as a complete delivery.
+      complete,
       deliveries: [...deliveries],
     });
     try {
@@ -779,7 +782,9 @@ export async function uploadGPXRouteToSuuntoApp(
     } catch (e: unknown) {
       logger.error('Could not update uploadedRoutes count', e);
     }
-    return { status: 'success', successCount, providerRouteIds, deliveries };
+    if (complete) {
+      return { status: 'success', successCount, providerRouteIds, deliveries };
+    }
   }
 
   throw selectSuuntoRouteUploadFailure(failures);

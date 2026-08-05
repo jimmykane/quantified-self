@@ -514,6 +514,57 @@ describe('importRouteToSuuntoApp', () => {
         expect(onProviderAccepted).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps a multi-account acceptance incomplete when a later account upload fails', async () => {
+        const createTokenRef = (id: string) => ({
+            id,
+            providerUserId: `suunto-${id}`,
+            ref: {
+                get: vi.fn().mockResolvedValue({
+                    id,
+                    exists: true,
+                    ref: { update: vi.fn() },
+                    data: () => ({ accessToken: `access-${id}` }),
+                }),
+            },
+        });
+        const context = {
+            tokenRefs: [createTokenRef('token-1'), createTokenRef('token-2')],
+            userNames: ['suunto-token-1', 'suunto-token-2'],
+        };
+        requestMocks.post
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-1' }))
+            .mockResolvedValueOnce(JSON.stringify({ error: 'route import failed' }));
+        const onProviderAccepted = vi.fn().mockResolvedValue(undefined);
+
+        await expect(uploadGPXRouteToSuuntoApp(
+            'test-user-id',
+            '<gpx>route</gpx>',
+            context as any,
+            onProviderAccepted,
+        )).rejects.toMatchObject({
+            code: 'failed-precondition',
+            dlqContext: 'SUUNTO_ROUTE_UPLOAD_REJECTED',
+        });
+
+        expect(onProviderAccepted).toHaveBeenNthCalledWith(1, {
+            providerRouteId: 'route-1',
+            complete: false,
+            deliveries: [{
+                providerUserId: 'suunto-token-1',
+                providerRouteId: 'route-1',
+            }],
+        });
+        expect(onProviderAccepted).toHaveBeenNthCalledWith(2, {
+            providerRouteId: 'route-1',
+            complete: false,
+            deliveries: [{
+                providerUserId: 'suunto-token-1',
+                providerRouteId: 'route-1',
+            }],
+        });
+        expect(onProviderAccepted).toHaveBeenCalledTimes(2);
+    });
+
     it('surfaces a deleted Suunto token as reconnect-required auth failure', async () => {
         const context = {
             tokenRefs: [{
