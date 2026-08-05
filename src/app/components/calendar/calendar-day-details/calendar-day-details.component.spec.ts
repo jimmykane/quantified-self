@@ -86,6 +86,19 @@ describe('CalendarDayDetailsComponent', () => {
 
     expect(styles).not.toMatch(/\.calendar-day-details\s*\{[^}]*\bbackground\s*:/s);
   });
+
+  it('keeps the header outside the day-detail scroll region', () => {
+    const componentStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
+      'utf8',
+    );
+    const globalStyles = readFileSync(resolve(process.cwd(), 'src/styles.scss'), 'utf8');
+
+    expect(componentStyles).toMatch(/:host\s*\{[^}]*display:\s*flex[^}]*min-height:\s*0/s);
+    expect(componentStyles).toMatch(/\.calendar-day-details\s*\{[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden/s);
+    expect(componentStyles).toMatch(/\.calendar-day-details-content\s*\{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s);
+    expect(globalStyles).toMatch(/\.mat-bottom-sheet-container\s*\{[^}]*display:\s*flex !important/s);
+  });
 });
 
 async function renderDayDetails(event: EventInterface) {

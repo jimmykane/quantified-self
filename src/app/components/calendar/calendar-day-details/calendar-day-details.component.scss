@@ -1,15 +1,23 @@
 :host {
-  display: block;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .calendar-day-details {
-  max-height: min(82vh, 720px);
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   overflow: hidden;
   color: var(--mat-sys-on-surface);
 }
 
 .calendar-day-details-content {
   display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
   gap: 18px;
   padding: 16px;
   overflow-y: auto;
