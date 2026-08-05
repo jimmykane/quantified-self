@@ -4,7 +4,7 @@ This document is the implementation and maintenance guide for the Activity Calen
 
 ## Product surfaces
 
-- The dashboard Activity Calendar tile shows the current month in a compact 2 x 2 tile and opens the full calendar.
+- The dashboard Activity Calendar tile shows the current month in a compact 1 x 1 tile and opens the full calendar. This is the creation default; persisted user-selected dimensions are not rewritten.
 - New dashboards include the tile by default. An existing editable dashboard that does not contain it receives a one-time automatic addition with an Undo action.
 - The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and day details.
 - Selecting an active day opens an Angular Material bottom sheet with day totals, activity-group totals, and links to individual events.

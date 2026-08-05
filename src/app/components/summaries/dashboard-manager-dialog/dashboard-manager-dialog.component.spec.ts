@@ -552,7 +552,7 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogData.user.settings.dashboardSettings.tiles[1]).toMatchObject({
       type: TileTypes.Chart,
       chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
     });
     expect(dialogData.user.settings.dashboardSettings.autoTiles.activityCalendar).toMatchObject({
       state: 'added',

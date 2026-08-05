@@ -1008,6 +1008,20 @@ describe('TileChartComponent', () => {
     expect(fixture.nativeElement.querySelector('.tile-event-filter-controls')).toBeNull();
   });
 
+  it('should size the Calendar route action like other compact tile-header buttons', () => {
+    const stylePath = resolve(process.cwd(), 'src/app/components/tile/tile.abstract.css');
+    const styles = readFileSync(stylePath, 'utf8');
+    const buttonRule = styles.match(/\.calendar-route-action,\s*\.drag-handle-indicator\s*\{([^}]*)\}/)?.[1];
+    const iconRule = styles.match(/\.calendar-route-action mat-icon,\s*\.drag-handle-indicator mat-icon\s*\{([^}]*)\}/)?.[1];
+
+    expect(buttonRule).toContain('width: 24px;');
+    expect(buttonRule).toContain('height: 24px;');
+    expect(buttonRule).toContain('--mat-icon-button-state-layer-size: 24px;');
+    expect(iconRule).toContain('width: 18px;');
+    expect(iconRule).toContain('height: 18px;');
+    expect(iconRule).toContain('font-size: 18px;');
+  });
+
   it('should render a visible drag handle button for desktop drag mode', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/tile/chart/tile.chart.component.html');
     const template = readFileSync(templatePath, 'utf8');

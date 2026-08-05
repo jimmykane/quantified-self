@@ -9,7 +9,6 @@ import {
 import {
   cloneDashboardTileDefaultSize,
   DASHBOARD_DEFAULT_TILE_SIZE,
-  DASHBOARD_LARGE_TILE_SIZE,
   DASHBOARD_WIDE_TILE_SIZE,
   getDefaultDashboardChartTileSizeForChartType,
   getDefaultDashboardMapTileSizeForSource,
@@ -27,9 +26,9 @@ describe('dashboard-tile-default-size.helper', () => {
     expect(getDefaultDashboardChartTileSizeForChartType(null)).toEqual(DASHBOARD_DEFAULT_TILE_SIZE);
   });
 
-  it('defaults the activity calendar to a large two-row tile', () => {
+  it('defaults the activity calendar to a compact one-cell tile', () => {
     expect(getDefaultDashboardChartTileSizeForChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE))
-      .toEqual(DASHBOARD_LARGE_TILE_SIZE);
+      .toEqual(DASHBOARD_DEFAULT_TILE_SIZE);
   });
 
   it('defaults route maps to wide one-row tiles and event maps to compact tiles', () => {

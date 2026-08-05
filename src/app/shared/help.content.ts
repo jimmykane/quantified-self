@@ -101,7 +101,7 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
 const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
-- New dashboards start with a 2 x 2 **Activity Calendar** tile showing the current month. Select its open action to move to the full [Calendar](/calendar).
+- New dashboards start with a 1 x 1 **Activity Calendar** tile showing the current month. Select its open action to move to the full [Calendar](/calendar).
 - Existing editable dashboards that do not contain the Activity Calendar receive it once automatically. Use **Undo** on the notice, remove the tile, or use Dashboard manager **Remove all** to keep it from returning; adding it again manually restores it to the dashboard.
 - The full Calendar has **Week**, **Month**, and **Year** views. The previous and next controls move by the selected view's period, and **Today** returns to the current period without taking a separate row on smaller screens.
 - The selected view and date are kept in the URL, so refreshing or sharing the authenticated route preserves the same calendar position.
@@ -195,7 +195,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
 - **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
-- **Activity Calendar** is the default 2 x 2 dashboard tile. It shows the current month and opens the full [Calendar](/calendar). Existing editable dashboards that do not contain it receive it once automatically; **Undo** or removing it keeps it dismissed. The [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
+- **Activity Calendar** is the default 1 x 1 dashboard tile. It shows the current month and opens the full [Calendar](/calendar). Existing editable dashboards that do not contain it receive it once automatically; **Undo** or removing it keeps it dismissed. The [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
 - New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header begins with the same TSS-only **Training state** shown in Training, then shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, Overnight HR, and an **Open Training** action. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
@@ -205,7 +205,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - The main dashboard groups chart and map tiles by intent, such as **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
 - Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
-- New dashboard tiles use chart-aware default sizes: Activity Calendar starts at 2 x 2, Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
+- New dashboard tiles use chart-aware default sizes: Activity Calendar, simple custom totals, KPIs, and the clustered heatmap start at 1 x 1, while Form/TSS, Power Curve, and the Routes map start wider.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
 - KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
 - **Aerobic Capacity** shows the latest imported running or cycling VO2 max and compares only observations from the same source. It does not substitute FTP or rolling CP/W′/Pmax capacity for VO2 max.
@@ -232,7 +232,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
 - Map style and cluster-marker settings are edited inside Dashboard manager.
-- Default manager sizes are chart-aware: Activity Calendar starts at 2 x 2, Form/TSS, Power Curve, and Routes map start wider, while simple custom totals, KPIs, and the clustered heatmap stay compact.
+- Default manager sizes are chart-aware: Activity Calendar, simple custom totals, KPIs, and the clustered heatmap start at 1 x 1, while Form/TSS, Power Curve, and the Routes map start wider.
 - Dashboard manager bulk actions include **Reset to default**, which replaces the current dashboard tiles with a useful recommended set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, and the prepared 1-year Power Curve snapshots), plus route, capacity, and durability evidence; **Add everything**, which inserts every available preset including overlapping metrics; and **Remove all**, which hides the Today summary, clears every dashboard chart/map tile, and keeps automatic suggestions dismissed. Reset to default and Add everything restore the Today summary.
 
 ### Reorder dashboard tiles

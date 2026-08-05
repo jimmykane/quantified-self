@@ -93,8 +93,8 @@ section > :not(.tile-header-controls) {
   align-items: center;
 }
 
+.calendar-route-action,
 .drag-handle-indicator {
-  cursor: grab;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -113,6 +113,7 @@ section > :not(.tile-header-controls) {
   --mat-icon-button-touch-target-display: none;
 }
 
+.calendar-route-action mat-icon,
 .drag-handle-indicator mat-icon {
   display: block;
   width: 18px;
@@ -121,8 +122,13 @@ section > :not(.tile-header-controls) {
   font-size: 18px;
 }
 
+.calendar-route-action .mat-mdc-button-touch-target,
 .drag-handle-indicator .mat-mdc-button-touch-target {
   display: none;
+}
+
+.drag-handle-indicator {
+  cursor: grab;
 }
 
 .drag-handle-indicator:active {

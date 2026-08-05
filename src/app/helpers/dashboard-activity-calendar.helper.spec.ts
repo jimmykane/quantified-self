@@ -10,7 +10,7 @@ describe('dashboard-activity-calendar helper', () => {
       name: 'Activity calendar',
       type: TileTypes.Chart,
       order: 3,
-      size: { columns: 2, rows: 2 },
+      size: { columns: 1, rows: 1 },
       chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
       dataType: DataDuration.type,
       dataValueType: ChartDataValueTypes.Total,

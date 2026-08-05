@@ -81,7 +81,7 @@ describe('DashboardAutoTileService', () => {
         order: 4,
         type: TileTypes.Chart,
         chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-        size: { columns: 2, rows: 2 },
+        size: { columns: 1, rows: 1 },
       },
     ]);
     expect(user.settings?.dashboardSettings?.autoTiles?.activityCalendar).toMatchObject({

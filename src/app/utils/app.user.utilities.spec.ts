@@ -191,7 +191,7 @@ describe('AppUserUtilities', () => {
             expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([
                 expect.objectContaining({
                     chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-                    size: { columns: 2, rows: 2 },
+                    size: { columns: 1, rows: 1 },
                 }),
             ]);
         });
