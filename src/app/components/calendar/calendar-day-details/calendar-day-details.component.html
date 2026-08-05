@@ -23,29 +23,34 @@
       <mat-nav-list>
         @for (event of eventRows; track event.id) {
           @if (event.route) {
-          <a mat-list-item [routerLink]="event.route" (click)="dismiss()">
+          <a mat-list-item class="calendar-day-event-item"
+            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
+            (click)="dismiss()">
             <app-activity-type-icon matListItemIcon [activityType]="event.activityType" size="24px"
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
-            <span matListItemLine>{{ event.detailLabel }}</span>
-            @if (event.metricStats.length) {
-            <div matListItemLine class="calendar-day-event-metrics">
-              <app-activity-calendar-volume-stats [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+            <div matListItemLine class="calendar-day-event-supporting">
+              <span class="calendar-day-event-detail">{{ event.detailLabel }}</span>
+              @if (event.metricStats.length) {
+              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+              }
             </div>
-            }
             <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
           </a>
           } @else {
-          <div mat-list-item>
+          <div mat-list-item class="calendar-day-event-item"
+            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0">
             <app-activity-type-icon matListItemIcon [activityType]="event.activityType" size="24px"
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
-            <span matListItemLine>{{ event.detailLabel }}</span>
-            @if (event.metricStats.length) {
-            <div matListItemLine class="calendar-day-event-metrics">
-              <app-activity-calendar-volume-stats [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+            <div matListItemLine class="calendar-day-event-supporting">
+              <span class="calendar-day-event-detail">{{ event.detailLabel }}</span>
+              @if (event.metricStats.length) {
+              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+              }
             </div>
-            }
           </div>
           }
         }

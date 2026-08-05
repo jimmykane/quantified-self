@@ -54,12 +54,30 @@ mat-nav-list {
   padding-top: 0;
 }
 
-.calendar-day-event-metrics {
-  margin-top: 4px;
+.calendar-day-event-item-with-metrics {
+  height: auto;
+  min-height: 88px;
 }
 
-.calendar-day-event-metrics app-activity-calendar-volume-stats {
+.calendar-day-event-supporting {
+  display: grid;
+  gap: 4px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.calendar-day-event-supporting::before {
+  content: none;
+}
+
+.calendar-day-event-metrics {
   display: block;
+}
+
+.calendar-day-event-detail {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  letter-spacing: 0;
 }
 
 @media (max-width: 480px) {

@@ -74,6 +74,10 @@ describe('CalendarDayDetailsComponent', () => {
       'Distance 20.00 Km',
       'Descent 1,200 m',
     ]);
+    const eventItem = fixture.nativeElement.querySelector('.calendar-day-event-item-with-metrics');
+    expect(eventItem?.querySelector('.calendar-day-event-supporting .calendar-day-event-detail')?.textContent?.trim())
+      .toBe('Downhill Cycling - 8:30 AM - 1h');
+    expect(eventItem?.querySelector('.calendar-day-event-metrics')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-track')?.getAttribute('role'))
       .toBe('progressbar');
   });
@@ -98,6 +102,16 @@ describe('CalendarDayDetailsComponent', () => {
     expect(componentStyles).toMatch(/\.calendar-day-details\s*\{[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden/s);
     expect(componentStyles).toMatch(/\.calendar-day-details-content\s*\{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s);
     expect(globalStyles).toMatch(/\.mat-bottom-sheet-container\s*\{[^}]*display:\s*flex !important/s);
+  });
+
+  it('uses a content-sized activity row for event metrics', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
+      'utf8',
+    );
+
+    expect(styles).toMatch(/\.calendar-day-event-item-with-metrics\s*\{[^}]*height:\s*auto[^}]*min-height:\s*88px/s);
+    expect(styles).toMatch(/\.calendar-day-event-supporting\s*\{[^}]*display:\s*grid[^}]*overflow:\s*visible/s);
   });
 });
 
