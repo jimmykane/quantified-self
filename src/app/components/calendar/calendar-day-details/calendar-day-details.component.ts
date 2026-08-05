@@ -19,6 +19,7 @@ export interface CalendarDayDetailsData {
 interface CalendarDayEventRow {
   id: string;
   label: string;
+  activityType: string;
   detailLabel: string;
   route: string[] | null;
 }
@@ -62,6 +63,7 @@ export class CalendarDayDetailsComponent {
     return {
       id: eventId || `${startDate?.getTime() || 'activity'}`,
       label,
+      activityType: activityTypeLabel,
       detailLabel: [
         activityTypeLabel.toLocaleLowerCase() === label.toLocaleLowerCase() ? null : activityTypeLabel,
         timeLabel,
