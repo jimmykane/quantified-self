@@ -236,6 +236,11 @@ export class AssistantPageComponent implements OnInit {
     void this.sendMessage();
   }
 
+  handleComposerSubmit(event: SubmitEvent): void {
+    event.preventDefault();
+    void this.sendMessage();
+  }
+
   private scrollToConversationEnd(): void {
     setTimeout(() => {
       const element = this.conversationEnd()?.nativeElement;

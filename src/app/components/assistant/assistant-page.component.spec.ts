@@ -152,6 +152,23 @@ describe('AssistantPageComponent', () => {
     expect(component.promptControl.value).toBe(routeExample.prompt);
   });
 
+  it('cancels native form navigation before sending', async () => {
+    component.promptControl.setValue('How am I today?');
+    fixture.detectChanges();
+    const submitEvent = new SubmitEvent('submit', {
+      bubbles: true,
+      cancelable: true,
+    });
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+
+    const dispatchResult = form.dispatchEvent(submitEvent);
+    await fixture.whenStable();
+
+    expect(dispatchResult).toBe(false);
+    expect(submitEvent.defaultPrevented).toBe(true);
+    expect(assistantService.sendMessage).toHaveBeenCalledOnce();
+  });
+
   it('sends a starter prompt and renders the grounded response evidence', async () => {
     component.useStarterPrompt("Give me today's sleep, readiness, and Training report.");
     await component.sendMessage();

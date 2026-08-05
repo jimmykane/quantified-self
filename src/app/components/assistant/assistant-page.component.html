@@ -147,7 +147,7 @@
   }
 
   <section class="composer-shell qs-glass-card-panel" [class.composer-shell-sticky]="!isEmpty()">
-    <form class="composer" (ngSubmit)="sendMessage()">
+    <form class="composer" (submit)="handleComposerSubmit($event)">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Ask about your data</mat-label>
         <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
