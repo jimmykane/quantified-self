@@ -2,12 +2,19 @@ name: Reusable Testing Workflow
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: Commit, branch, or tag to test. Defaults to the caller's SHA.
+        required: false
+        type: string
 
 jobs:
   run_tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
