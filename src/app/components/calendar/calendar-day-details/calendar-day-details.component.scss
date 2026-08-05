@@ -46,6 +46,14 @@ mat-nav-list {
   padding-top: 0;
 }
 
+.calendar-day-event-metrics {
+  margin-top: 4px;
+}
+
+.calendar-day-event-metrics app-activity-calendar-volume-stats {
+  display: block;
+}
+
 @media (max-width: 480px) {
   .calendar-day-details-content {
     padding: 12px;

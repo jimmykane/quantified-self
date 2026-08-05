@@ -8,10 +8,15 @@ import {
   resolveActivityCalendarEventDurationSeconds,
   resolveActivityCalendarEventLabel,
 } from '../../../helpers/activity-calendar.helper';
-import { buildActivityCalendarFamilyVolumeRows } from '../../../helpers/activity-calendar-volume.helper';
+import {
+  type ActivityCalendarFamilyVolumeStat,
+  buildActivityCalendarFamilyVolumeRows,
+  buildActivityCalendarVolumeStats,
+} from '../../../helpers/activity-calendar-volume.helper';
 import type { SummaryStatsSettingsLike } from '../../../helpers/summary-stats.helper';
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
+import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
 
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
@@ -26,13 +31,14 @@ interface CalendarDayEventRow {
   label: string;
   activityType: string;
   detailLabel: string;
+  metricStats: ActivityCalendarFamilyVolumeStat[];
   route: string[] | null;
 }
 
 @Component({
   selector: 'app-calendar-day-details',
   standalone: true,
-  imports: [SharedModule, ActivityCalendarVolumeListComponent],
+  imports: [SharedModule, ActivityCalendarVolumeListComponent, ActivityCalendarVolumeStatsComponent],
   templateUrl: './calendar-day-details.component.html',
   styleUrls: ['./calendar-day-details.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -69,6 +75,15 @@ export class CalendarDayDetailsComponent {
     const durationLabel = durationSeconds === null
       ? 'Duration unavailable'
       : formatActivityCalendarDuration(durationSeconds);
+    const eventSummary = buildActivityCalendarPeriodSummary([event], this.data.summariesSettings);
+    const metricStats = eventSummary.families[0]
+      ? buildActivityCalendarVolumeStats(
+        eventSummary.families[0].metrics,
+        this.data.unitSettings,
+        this.data.locale,
+        { includeDuration: false },
+      )
+      : [];
     return {
       id: eventId || `${startDate?.getTime() || 'activity'}`,
       label,
@@ -78,6 +93,7 @@ export class CalendarDayDetailsComponent {
         timeLabel,
         durationLabel,
       ].filter((value): value is string => !!value).join(' - '),
+      metricStats,
       route: eventId && this.data.userId
         ? ['/user', this.data.userId, 'event', eventId]
         : null,

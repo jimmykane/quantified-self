@@ -47,7 +47,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(eventIcon?.textContent?.trim()).toBe('terrain');
   });
 
-  it('shows day-specific distance and descent while excluding downhill ascent', async () => {
+  it('shows day and activity distance and descent while excluding downhill ascent', async () => {
     const fixture = await renderDayDetails(createEvent(
       'Downhill ride',
       undefined,
@@ -59,10 +59,18 @@ describe('CalendarDayDetailsComponent', () => {
       },
     ));
 
-    const stats = [...fixture.nativeElement.querySelectorAll('.calendar-family-volume-stat')]
+    const groupStats = [...fixture.nativeElement.querySelectorAll(
+      '[aria-labelledby="calendar-day-family-title"] .calendar-family-volume-stat',
+    )]
       .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
-    expect(stats).toEqual([
+    expect(groupStats).toEqual([
       'Duration 1h',
+      'Distance 20.00 Km',
+      'Descent 1,200 m',
+    ]);
+    const eventStats = [...fixture.nativeElement.querySelectorAll('.calendar-day-event-metrics .calendar-family-volume-stat')]
+      .map((stat: HTMLElement) => stat.getAttribute('aria-label'));
+    expect(eventStats).toEqual([
       'Distance 20.00 Km',
       'Descent 1,200 m',
     ]);

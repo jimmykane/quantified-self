@@ -110,7 +110,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
 - Week and Month views separate activity-group circles when space allows. Narrow layouts, the dashboard tile, and Year view place multiple circles concentrically around the same center so a day stays readable in a compact cell.
-- Select a day with activity to open its details sheet. It shows the day's total duration, the same duration bars and available distance/ascent/descent totals by activity group, and individual activities.
+- Select a day with activity to open its details sheet. It shows the day's total duration, the same duration bars and available distance/ascent/descent totals by activity group, and individual activities with their available distance and elevation metrics.
 - Calendar dates intentionally have no hover or touch tooltip. This keeps native vertical scrolling responsive on phones; day details remain available by selecting a date.
 
 ## Understand period totals and activity bars

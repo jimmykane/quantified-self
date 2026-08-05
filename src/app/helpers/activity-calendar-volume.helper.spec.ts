@@ -8,7 +8,7 @@ import {
   type EventInterface,
 } from '@sports-alliance/sports-lib';
 import { buildActivityCalendarPeriodSummary } from './activity-calendar.helper';
-import { buildActivityCalendarFamilyVolumeRows } from './activity-calendar-volume.helper';
+import { buildActivityCalendarFamilyVolumeRows, buildActivityCalendarVolumeStats } from './activity-calendar-volume.helper';
 
 describe('activity-calendar-volume helper', () => {
   it('builds duration bars with available distance and elevation statistics', () => {
@@ -53,6 +53,27 @@ describe('activity-calendar-volume helper', () => {
     expect(rows[0].stats.map(stat => stat.ariaLabel)).toEqual([
       'Duration 1h',
       'Descent 1,200 m',
+    ]);
+  });
+
+  it('can omit duplicated duration from an individual activity metric strip', () => {
+    const summary = buildActivityCalendarPeriodSummary([
+      createEvent('run', ActivityTypes.Running, {
+        [DataDuration.type]: 3600,
+        [DataDistance.type]: 10_000,
+        [DataAscent.type]: 450,
+        [DataDescent.type]: 420,
+      }),
+    ]);
+
+    const stats = buildActivityCalendarVolumeStats(summary.families[0].metrics, null, 'en-US', {
+      includeDuration: false,
+    });
+
+    expect(stats.map(stat => stat.ariaLabel)).toEqual([
+      'Distance 10.00 Km',
+      'Ascent 450 m',
+      'Descent 420 m',
     ]);
   });
 });

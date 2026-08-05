@@ -7,6 +7,7 @@ import {
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { AppActivityTypeGroupIcons } from '../services/color/app.activity-type-group.icons';
 import {
+  type ActivityCalendarMetricAggregate,
   type ActivityCalendarPeriodSummary,
   type ActivityCalendarVolumeMetric,
   formatActivityCalendarDuration,
@@ -43,6 +44,10 @@ export interface ActivityCalendarFamilyVolumeRow {
   stats: ActivityCalendarFamilyVolumeStat[];
 }
 
+export interface BuildActivityCalendarVolumeStatsOptions {
+  includeDuration?: boolean;
+}
+
 export const ACTIVITY_CALENDAR_VOLUME_TOOLTIP =
   'Bar length compares recorded duration within this period. The longest activity group fills the track.';
 
@@ -64,37 +69,15 @@ export function buildActivityCalendarFamilyVolumeRows(
     const aggregate = family.metrics[metric];
     return aggregate.recordedEventCount > 0 ? Math.max(maximum, aggregate.value) : maximum;
   }, 0);
-  const formatMetricValue = (option: ActivityCalendarVolumeMetricOption, value: number): string => (
-    option.value === 'duration'
-      ? formatActivityCalendarDuration(value)
-      : formatUnitAwareDataValue(option.dataType || undefined, value, unitSettings, {
-        stripRepeatedUnit: true,
-        locale,
-      }) || `${value}`
-  );
 
   return summary.families.map((family) => {
     const aggregate = family.metrics[metric];
     const hasData = aggregate.recordedEventCount > 0;
-    const valueLabel = hasData ? formatMetricValue(barMetric, aggregate.value) : '--';
+    const valueLabel = hasData ? formatActivityCalendarVolumeMetricValue(barMetric, aggregate.value, unitSettings, locale) : '--';
     const metricStatus = hasData
       ? `${barMetric.label} ${valueLabel}`
       : `${barMetric.label} unavailable`;
-    const stats = ACTIVITY_CALENDAR_VOLUME_METRIC_OPTIONS.flatMap((option): ActivityCalendarFamilyVolumeStat[] => {
-      const metricAggregate = family.metrics[option.value];
-      if (metricAggregate.recordedEventCount <= 0 || metricAggregate.value <= 0) {
-        return [];
-      }
-
-      const metricValueLabel = formatMetricValue(option, metricAggregate.value);
-      return [{
-        metric: option.value,
-        icon: option.icon,
-        valueLabel: metricValueLabel,
-        isBarMetric: option.value === metric,
-        ariaLabel: `${option.label} ${metricValueLabel}`,
-      }];
-    });
+    const stats = buildActivityCalendarVolumeStats(family.metrics, unitSettings, locale);
 
     return {
       id: family.id,
@@ -118,4 +101,46 @@ export function buildActivityCalendarFamilyVolumeRows(
     || right.value - left.value
     || left.label.localeCompare(right.label)
   ));
+}
+
+export function buildActivityCalendarVolumeStats(
+  metrics: Record<ActivityCalendarVolumeMetric, ActivityCalendarMetricAggregate>,
+  unitSettings?: UserUnitSettingsInterface | null,
+  locale?: string,
+  options: BuildActivityCalendarVolumeStatsOptions = {},
+): ActivityCalendarFamilyVolumeStat[] {
+  const includeDuration = options.includeDuration ?? true;
+  return ACTIVITY_CALENDAR_VOLUME_METRIC_OPTIONS.flatMap((option): ActivityCalendarFamilyVolumeStat[] => {
+    if (option.value === 'duration' && !includeDuration) {
+      return [];
+    }
+
+    const aggregate = metrics[option.value];
+    if (aggregate.recordedEventCount <= 0 || aggregate.value <= 0) {
+      return [];
+    }
+
+    const valueLabel = formatActivityCalendarVolumeMetricValue(option, aggregate.value, unitSettings, locale);
+    return [{
+      metric: option.value,
+      icon: option.icon,
+      valueLabel,
+      isBarMetric: option.value === 'duration',
+      ariaLabel: `${option.label} ${valueLabel}`,
+    }];
+  });
+}
+
+function formatActivityCalendarVolumeMetricValue(
+  option: ActivityCalendarVolumeMetricOption,
+  value: number,
+  unitSettings?: UserUnitSettingsInterface | null,
+  locale?: string,
+): string {
+  return option.value === 'duration'
+    ? formatActivityCalendarDuration(value)
+    : formatUnitAwareDataValue(option.dataType || undefined, value, unitSettings, {
+      stripRepeatedUnit: true,
+      locale,
+    }) || `${value}`;
 }

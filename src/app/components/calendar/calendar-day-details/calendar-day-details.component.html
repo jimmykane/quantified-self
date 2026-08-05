@@ -28,6 +28,11 @@
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
             <span matListItemLine>{{ event.detailLabel }}</span>
+            @if (event.metricStats.length) {
+            <div matListItemLine class="calendar-day-event-metrics">
+              <app-activity-calendar-volume-stats [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+            </div>
+            }
             <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
           </a>
           } @else {
@@ -36,6 +41,11 @@
               aria-hidden="true"></app-activity-type-icon>
             <span matListItemTitle>{{ event.label }}</span>
             <span matListItemLine>{{ event.detailLabel }}</span>
+            @if (event.metricStats.length) {
+            <div matListItemLine class="calendar-day-event-metrics">
+              <app-activity-calendar-volume-stats [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+            </div>
+            }
           </div>
           }
         }

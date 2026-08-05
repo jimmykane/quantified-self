@@ -1,0 +1,44 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.calendar-family-volume-stats {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px var(--calendar-volume-stats-column-gap, 16px);
+}
+
+.calendar-family-volume-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+.calendar-family-volume-stat mat-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  font-size: 15px;
+  line-height: 15px;
+}
+
+.calendar-family-volume-stat-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.calendar-family-volume-stat--bar-metric {
+  color: var(--mat-sys-on-surface);
+}
+
+.calendar-family-volume-stat--bar-metric .calendar-family-volume-stat-value {
+  font-weight: 600;
+}
