@@ -135,6 +135,14 @@ describe('AssistantPageComponent', () => {
       .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
     const mcpIcon = fixture.nativeElement.querySelector('.external-mcp-icon') as HTMLElement;
     expect(mcpIcon.textContent?.trim()).toBe('hub');
+    const headerActions = Array.from(
+      fixture.nativeElement.querySelectorAll('.assistant-header-actions :is(a, button)'),
+    ) as HTMLElement[];
+    expect(headerActions).toHaveLength(2);
+    expect(headerActions.map(action => action.textContent?.trim())).toEqual([
+      'help_outline',
+      'add_comment',
+    ]);
   });
 
   it('makes the compact composer sticky only after a conversation starts', () => {

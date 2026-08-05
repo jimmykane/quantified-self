@@ -15,18 +15,16 @@
       </div>
     </div>
     <div class="assistant-header-actions">
-      <a mat-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help">
+      <a mat-icon-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help" matTooltip="Assistant help">
         <mat-icon>help_outline</mat-icon>
-        <span>Help</span>
       </a>
-      <button mat-button type="button" aria-label="Start a new chat"
+      <button mat-icon-button type="button" aria-label="Start a new chat" matTooltip="Start a new chat"
         [disabled]="loadingConversation() || sending() || resetting()" (click)="resetConversation()">
         @if (resetting()) {
-          <mat-spinner diameter="18"></mat-spinner>
+          <mat-spinner diameter="20"></mat-spinner>
         } @else {
           <mat-icon>add_comment</mat-icon>
         }
-        <span>New chat</span>
       </button>
     </div>
   </header>

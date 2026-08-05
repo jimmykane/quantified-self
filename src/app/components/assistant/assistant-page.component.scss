@@ -82,7 +82,6 @@ h1 {
   flex: 0 0 auto;
 }
 
-.assistant-header-actions :is(a, button),
 .external-mcp-card a,
 .evidence-links a {
   display: inline-flex;
@@ -410,16 +409,9 @@ h1 {
 }
 
 @media (max-width: 480px) {
+  .assistant-beta-chip,
   .assistant-heading p,
   .welcome-copy p {
-    display: none;
-  }
-
-  .assistant-header-actions :is(a, button) {
-    min-width: 40px;
-  }
-
-  .assistant-header-actions :is(a, button) span {
     display: none;
   }
 
