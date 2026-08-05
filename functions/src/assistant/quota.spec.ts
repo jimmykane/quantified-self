@@ -229,7 +229,7 @@ describe('Assistant quota', () => {
       .rejects.toMatchObject<HttpsError>({ code: 'unavailable' });
 
     const storedDoc = fakeDb.getDocument(
-      `users/user-1/aiInsightsUsage/${reservation.periodDocId}`,
+      `users/user-1/assistantUsage/${reservation.periodDocId}`,
     );
     expect(storedDoc?.successfulRequestCount).toBe(1);
     expect(storedDoc?.reservationMap).toEqual({});
@@ -237,7 +237,7 @@ describe('Assistant quota', () => {
 
   it('does not consume quota after a reservation expires', async () => {
     const reservation = await reserveAssistantQuotaForRequest('user-1');
-    const usagePath = `users/user-1/aiInsightsUsage/${reservation.periodDocId}`;
+    const usagePath = `users/user-1/assistantUsage/${reservation.periodDocId}`;
     fakeDb.seedDocument(usagePath, {
       ...fakeDb.getDocument(usagePath),
       reservationMap: {
@@ -282,7 +282,7 @@ describe('Assistant quota', () => {
 
     try {
       const reservation = await reserveAssistantQuotaForRequest('user-1');
-      const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${reservation.periodDocId}`);
+      const storedDoc = fakeDb.getDocument(`users/user-1/assistantUsage/${reservation.periodDocId}`);
 
       expect(storedDoc?.updatedAt).toBe(FIXED_NOW_ISO);
     } finally {
@@ -321,14 +321,14 @@ describe('Assistant quota', () => {
 
     await expect(reserveAssistantQuotaForRequest('user-1'))
       .rejects.toMatchObject<HttpsError>({ code: 'permission-denied' });
-    expect(fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`))
+    expect(fakeDb.getDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`))
       .toBeUndefined();
     expect(fakeDb.getWriteCount()).toBe(0);
   });
 
   it('does not finalize or release an existing reservation after deletion starts', async () => {
     const reservation = await reserveAssistantQuotaForRequest('user-1');
-    const usagePath = `users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`;
+    const usagePath = `users/user-1/assistantUsage/${PERIOD_DOC_ID}`;
     const storedBeforeDeletion = fakeDb.getDocument(usagePath);
     const writesBeforeDeletion = fakeDb.getWriteCount();
     fakeDb.seedDocument('userDeletionTombstones/user-1', {
@@ -357,7 +357,7 @@ describe('Assistant quota', () => {
     });
 
     const finalizedStatus = await finalizeAssistantQuotaReservation(reservation);
-    const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`);
+    const storedDoc = fakeDb.getDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`);
 
     expect(finalizedStatus.successfulRequestCount).toBe(1);
     expect(finalizedStatus.activeRequestCount).toBe(0);
@@ -415,7 +415,7 @@ describe('Assistant quota', () => {
   });
 
   it('prunes expired reservations before computing availability', async () => {
-    fakeDb.seedDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
+    fakeDb.seedDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
       successfulRequestCount: 5,
       reservationMap: {
         expired: Date.parse('2026-03-19T11:00:00.000Z'),
@@ -423,7 +423,7 @@ describe('Assistant quota', () => {
     }));
 
     const quotaStatus = await getAssistantQuotaStatus('user-1');
-    const storedDoc = fakeDb.getDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`);
+    const storedDoc = fakeDb.getDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`);
 
     expect(quotaStatus.successfulRequestCount).toBe(5);
     expect(quotaStatus.activeRequestCount).toBe(0);
@@ -435,7 +435,7 @@ describe('Assistant quota', () => {
   });
 
   it('does not write usage documents when quota status is fetched', async () => {
-    fakeDb.seedDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
+    fakeDb.seedDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
       successfulRequestCount: 12,
       reservationMap: {
         active: Date.parse('2026-03-19T12:05:00.000Z'),
@@ -451,7 +451,7 @@ describe('Assistant quota', () => {
   });
 
   it('caps concurrent reservations at the configured limit', async () => {
-    fakeDb.seedDocument(`users/user-1/aiInsightsUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
+    fakeDb.seedDocument(`users/user-1/assistantUsage/${PERIOD_DOC_ID}`, buildUsageDoc({
       successfulRequestCount: 99,
     }));
 

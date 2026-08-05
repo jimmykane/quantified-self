@@ -546,7 +546,7 @@ describe('listUsers Cloud Function', () => {
                     return {
                         doc: vi.fn().mockReturnValue({
                             collection: vi.fn().mockImplementation((collectionName: string) => {
-                                if (collectionName === 'aiInsightsUsage') {
+                                if (collectionName === 'assistantUsage') {
                                     return {
                                         doc: vi.fn().mockImplementation((docID: string) => ({
                                             get: vi.fn().mockResolvedValue({
@@ -651,7 +651,7 @@ describe('listUsers Cloud Function', () => {
                     return {
                         doc: vi.fn().mockReturnValue({
                             collection: vi.fn().mockImplementation((collectionName: string) => {
-                                if (collectionName === 'aiInsightsUsage') {
+                                if (collectionName === 'assistantUsage') {
                                     return {
                                         doc: vi.fn().mockReturnValue({
                                             get: vi.fn().mockResolvedValue({
@@ -749,7 +749,7 @@ describe('listUsers Cloud Function', () => {
                     return {
                         doc: vi.fn().mockReturnValue({
                             collection: vi.fn().mockImplementation((collectionName: string) => {
-                                if (collectionName === 'aiInsightsUsage') {
+                                if (collectionName === 'assistantUsage') {
                                     return {
                                         doc: vi.fn().mockReturnValue({
                                             get: vi.fn().mockResolvedValue({

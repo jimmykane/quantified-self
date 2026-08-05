@@ -164,25 +164,29 @@ subscription period is available.
 Deploy the Firestore rules and single-field index exemptions before exposing the feature, then roll out the four
 Assistant backend callables before the frontend route. The legacy AI Insights callable, deterministic prompt parser,
 snapshot UI, chart pipeline, and prompt-repair writer have been removed; `/ai-insights` is now permanently owned by the
-Assistant. The existing `aiInsightsUsage` Firestore collection name is retained only as a storage-compatibility key so
-current billing-period request counts are not reset.
+Assistant. The new `users/{uid}/assistantUsage/{periodId}` ledger deliberately starts empty and never reads the
+retired `aiInsightsUsage` collection, so this release resets every account's Assistant allowance. The Admin user list
+reads the same new ledger, so its request count resets with the callable.
 
-The retired `aiInsightsPromptRepairs` collection has no remaining writer. Its `expireAt` TTL policy is intentionally
-kept as cleanup-only infrastructure until every historical record has drained, after which its field override and
-README retention row can be removed. Legacy `users/*/aiInsightsRequests/latest` documents contain prompts and complete
-responses but predate TTL fields, so draining them is a mandatory rollout step rather than optional retention. Run the
-dedicated migration first in its default count-only mode, then execute its bounded recursive purge with explicit
-project targeting:
+The retired `aiInsightsRequests`, `aiInsightsUsage`, and `aiInsightsPromptRepairs` collection groups have no remaining
+writer. They can contain historical prompts, responses, and usage state, so draining all three is a mandatory rollout
+step rather than optional retention. First deploy the new Functions, rules, and index configuration (which adds the
+`assistantUsage` exemptions while retaining the retired ones). Wait at least ten minutes after the Functions rollout
+finishes so no old revision can finalize a legacy reservation, then run the dedicated migration first in its default
+count-only mode and finally execute its bounded recursive purge with explicit project targeting:
 
 ```bash
-npm --prefix functions run purge-legacy-ai-insights-snapshots -- --project=quantified-self-io
-npm --prefix functions run purge-legacy-ai-insights-snapshots -- --project=quantified-self-io --execute
+npm --prefix functions run purge-retired-ai-insights-data -- --project=quantified-self-io
+npm --prefix functions run purge-retired-ai-insights-data -- --project=quantified-self-io --execute
 ```
 
-The execution is idempotent, processes at most 100 roots per batch by default, recursively deletes any unexpected
-descendants, and fails unless the final collection-group count is zero. Keep the client deny rule in place throughout;
-the Admin SDK migration does not require restoring browser access. Account deletion remains the defense-in-depth path
-for any user root removed while rollout is in progress.
+The execution is idempotent, processes at most 100 roots per group and batch by default, recursively deletes any
+unexpected descendants, and fails unless all three final collection-group counts are zero. Keep the client deny rule
+in place throughout; the Admin SDK migration does not require restoring browser access. The retired single-field
+overrides and prompt-repair TTL stay in `firestore.indexes.json` until this command confirms zero documents, so a
+standard deploy never re-enables automatic indexes for data that is about to be deleted. Remove those retired overrides
+only in a subsequent configuration-only deployment after the successful purge. Account deletion remains the
+defense-in-depth path for any user root removed while rollout is in progress.
 
 Do not log prompts, conversation text, tool arguments, tool output, coordinates, or user IDs from the Assistant path.
 Operational logs should contain only safe error classes and lifecycle outcomes. Monitor callable errors, quota failures,

@@ -432,12 +432,12 @@ describe('Firestore Security Rules', () => {
             });
         });
 
-        describe('Assistant Usage (users/{uid}/aiInsightsUsage/{periodDocId})', () => {
+        describe('Assistant Usage (users/{uid}/assistantUsage/{periodDocId})', () => {
             const usageDocId = 'period_1740787200000_1743465600000';
 
             it('should deny owner from reading Assistant usage period docs', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                    await context.firestore().doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
                         version: 1,
                         role: 'pro',
                         limit: 100,
@@ -451,12 +451,12 @@ describe('Firestore Security Rules', () => {
                 });
 
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).get());
             });
 
             it('should deny owner from writing Assistant usage period docs', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
                     version: 1,
                     role: 'pro',
                     limit: 100,
@@ -471,7 +471,7 @@ describe('Firestore Security Rules', () => {
 
             it('should deny other users from reading Assistant usage period docs', async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {
-                    await context.firestore().doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                    await context.firestore().doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
                         version: 1,
                         role: 'pro',
                         limit: 100,
@@ -485,12 +485,12 @@ describe('Firestore Security Rules', () => {
                 });
 
                 const db = testEnv.authenticatedContext(otherId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).get());
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).get());
             });
 
             it('should deny other users from writing Assistant usage period docs', async () => {
                 const db = testEnv.authenticatedContext(otherId).firestore();
-                await assertFails(db.doc(`users/${userId}/aiInsightsUsage/${usageDocId}`).set({
+                await assertFails(db.doc(`users/${userId}/assistantUsage/${usageDocId}`).set({
                     version: 1,
                     role: 'pro',
                     limit: 100,
@@ -1508,6 +1508,21 @@ describe('Firestore Security Rules', () => {
     });
 
     describe('Retired AI Insights storage paths', () => {
+        it('keeps the retired usage ledger inaccessible even to its owner', async () => {
+            const retiredUserId = 'retired-insights-usage-user';
+            const usagePath = `users/${retiredUserId}/aiInsightsUsage/period_1_2`;
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(usagePath).set({
+                    successfulRequestCount: 12,
+                });
+            });
+
+            const db = testEnv.authenticatedContext(retiredUserId).firestore();
+            await assertFails(db.doc(usagePath).get());
+            await assertFails(db.doc(usagePath).set({ successfulRequestCount: 0 }));
+            await assertFails(db.doc(usagePath).delete());
+        });
+
         it('keeps legacy latest snapshots inaccessible even to their owner', async () => {
             const retiredUserId = 'retired-insights-user';
             const snapshotPath = `users/${retiredUserId}/aiInsightsRequests/latest`;

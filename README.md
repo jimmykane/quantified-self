@@ -182,7 +182,7 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 | Collection | Retention | TTL field | Purpose |
 | --- | --- | --- | --- |
 | `mail` | About 90 days | `expireAt` | Transactional email records |
-| `aiInsightsPromptRepairs` | Up to 90 days after legacy retirement | `expireAt` | Cleanup-only TTL drain for historical prompt-repair records; there are no active writers |
+| `aiInsightsPromptRepairs` | Until the retired AI Insights purge completes | `expireAt` | Temporary TTL protection for historical prompt-repair data; no active writer remains |
 | `failed_jobs` | 7 days | `expireAt` | Failed background-job records |
 | `*Queue` | 7 days | `expireAt` | Temporary queue items |
 | `adminStats` | About 1 hour | `expireAt` | Admin aggregate cache |

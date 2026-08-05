@@ -11,9 +11,9 @@ import { getAssistantRequestLimitForRole } from '../../../shared/limits';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { getUserRoleAndGracePeriod, isGracePeriodActive } from '../utils';
 
-// Preserve the deployed storage key so replacing AI Insights with the Assistant
-// does not reset an account's current-period request count.
-const ASSISTANT_USAGE_COLLECTION = 'aiInsightsUsage';
+// Starting a separate Assistant ledger deliberately resets the allowance during
+// the AI Insights replacement; legacy usage is purged after the cutover.
+const ASSISTANT_USAGE_COLLECTION = 'assistantUsage';
 const ASSISTANT_USAGE_DOC_VERSION = 2;
 const ASSISTANT_RESERVATION_TTL_MS = 10 * 60 * 1000;
 

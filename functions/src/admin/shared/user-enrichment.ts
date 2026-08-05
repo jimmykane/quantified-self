@@ -141,7 +141,7 @@ export async function enrichUsers(
                     if (usageDocID) {
                         const usageSnapshot = await db.collection('users')
                             .doc(user.uid)
-                            .collection('aiInsightsUsage')
+                            .collection('assistantUsage')
                             .doc(usageDocID)
                             .get();
 
@@ -156,7 +156,7 @@ export async function enrichUsers(
                     try {
                         const latestUsageSnapshot = await db.collection('users')
                             .doc(user.uid)
-                            .collection('aiInsightsUsage')
+                            .collection('assistantUsage')
                             .orderBy('periodEnd', 'desc')
                             .limit(1)
                             .get();

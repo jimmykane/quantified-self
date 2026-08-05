@@ -112,8 +112,14 @@ service cloud.firestore {
            && !resource.data.keys().hasAny(['trainingSettings']);
       }
 
-      // Assistant Usage (Private / Server-Owned only). The collection path is
-      // retained to preserve current-period usage across the feature replacement.
+      // Assistant usage is private and server-owned only.
+      match /assistantUsage/{periodDocId} {
+         allow read: if false;
+         allow write: if false;
+      }
+
+      // Retired data stays client-inaccessible until the bounded Admin purge
+      // deletes it after the Assistant usage-ledger reset.
       match /aiInsightsUsage/{periodDocId} {
          allow read: if false;
          allow write: if false;
