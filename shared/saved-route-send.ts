@@ -55,6 +55,8 @@ export type SendRouteToServiceFailureReason =
 export interface SendRoutesToServiceRequest {
     routeIds: string[];
     destinationServiceName: ServiceNames;
+    /** User confirmed that an already delivered Suunto route should be copied again. */
+    forceCopy?: boolean;
 }
 
 export interface SendRouteToServiceItemResult {

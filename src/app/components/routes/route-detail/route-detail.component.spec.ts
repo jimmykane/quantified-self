@@ -558,7 +558,11 @@ describe('RouteDetailComponent', () => {
 
     await component.sendRouteToSuunto();
 
-    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.SuuntoApp);
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(
+      ['route-1'],
+      ServiceNames.SuuntoApp,
+      { forceCopy: true },
+    );
     expect(snackBarMock.open).toHaveBeenCalledWith('Route copy sent to Suunto.', undefined, { duration: 2500 });
     expect(component.sendingToService()).toBe(false);
   });

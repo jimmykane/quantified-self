@@ -498,11 +498,15 @@ export class RouteDetailComponent {
     ) {
       return;
     }
+    const forceSuuntoCopy = destinationServiceName === ServiceNames.SuuntoApp
+      && hasRouteDeliveryForService(routeDocument, ServiceNames.SuuntoApp);
 
     this.sendingToService.set(true);
     this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
     try {
-      const result = await this.routeSendService.sendRoutesToService([routeID], destinationServiceName);
+      const result = forceSuuntoCopy
+        ? await this.routeSendService.sendRoutesToService([routeID], destinationServiceName, { forceCopy: true })
+        : await this.routeSendService.sendRoutesToService([routeID], destinationServiceName);
       const status = result.successCount > 0 ? 'success' : 'failure';
       this.analyticsService.logSavedRouteAction('send_service_route', {
         status,

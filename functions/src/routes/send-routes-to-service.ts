@@ -93,7 +93,7 @@ export const sendRoutesToService = onCall({
           adapter,
           context,
           persistAcceptedDelivery,
-          { skipPreviouslyAcceptedDestinationAccounts: true },
+          { skipPreviouslyAcceptedDestinationAccounts: payload.forceCopy !== true },
         );
         if (!providerResult.alreadyAccepted && !acceptancePersistedDuringSend) {
           await persistAcceptedDelivery(providerResult);
@@ -188,8 +188,13 @@ function normalizeSendRoutesRequest(payload: Partial<SendRoutesToServiceRequest>
     throw new HttpsError('invalid-argument', `Send at most ${SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS} routes at a time.`);
   }
 
+  if (payload?.forceCopy !== undefined && typeof payload.forceCopy !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'forceCopy must be a boolean when provided.');
+  }
+
   return {
     destinationServiceName,
     routeIds,
+    forceCopy: payload?.forceCopy === true,
   };
 }

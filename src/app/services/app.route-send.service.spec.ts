@@ -57,6 +57,28 @@ describe('AppRouteSendService', () => {
     expect(result.successCount).toBe(1);
   });
 
+  it('includes forceCopy only for an explicitly confirmed resend', async () => {
+    functionsServiceMock.call.mockResolvedValueOnce({
+      data: {
+        destinationServiceName: ServiceNames.SuuntoApp,
+        status: 'success',
+        routeCount: 1,
+        successCount: 1,
+        failureCount: 0,
+        skippedCount: 0,
+        results: [{ routeId: 'route-1', destinationServiceName: ServiceNames.SuuntoApp, status: 'success' }],
+      },
+    });
+
+    await service.sendRoutesToService(['route-1'], ServiceNames.SuuntoApp, { forceCopy: true });
+
+    expect(functionsServiceMock.call).toHaveBeenCalledWith('sendRoutesToService', {
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+      forceCopy: true,
+    });
+  });
+
   it('chunks route ids and aggregates partial successes', async () => {
     const routeIds = Array.from({ length: SEND_ROUTES_TO_SERVICE_MAX_ROUTE_IDS + 1 }, (_value, index) => `route-${index + 1}`);
     functionsServiceMock.call

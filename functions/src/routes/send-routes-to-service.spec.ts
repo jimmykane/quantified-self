@@ -1143,6 +1143,55 @@ describe('sendRoutesToService', () => {
     });
   });
 
+  it('reposts an already delivered Suunto route only after an explicit force-copy request', async () => {
+    suuntoRouteMocks.createSuuntoRouteUploadContext.mockResolvedValueOnce({
+      tokenRefs: [{ id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' }],
+      userNames: ['suunto-user-1'],
+    });
+    routeDocuments.set('users/user-1/routes/route-1', {
+      id: 'route-1',
+      userID: 'user-1',
+      name: 'Delivered Suunto route',
+      srcFileType: 'gpx',
+      originalFiles: [{ path: 'users/user-1/routes/route-1/original.gpx', extension: 'gpx' }],
+      routes: [{ id: 'segment-1' }],
+      deliverySummaries: [{
+        serviceName: ServiceNames.SuuntoApp,
+        providerUserIds: ['suunto-user-1'],
+      }],
+    });
+    storagePayloads.set('users/user-1/routes/route-1/original.gpx', Buffer.from('<gpx></gpx>'));
+
+    await sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+      forceCopy: true,
+    }) as any);
+
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).toHaveBeenCalledWith(
+      'user-1',
+      '<gpx><metadata><name>Delivered Suunto route</name></metadata><routes>Delivered Suunto route</routes></gpx>',
+      {
+        tokenRefs: [{ id: 'token-1', ref: {}, providerUserId: 'suunto-user-1' }],
+        userNames: ['suunto-user-1'],
+      },
+      expect.any(Function),
+    );
+  });
+
+  it('rejects a malformed force-copy request before sending routes', async () => {
+    await expect(sendRoutesToService(createRequest({
+      routeIds: ['route-1'],
+      destinationServiceName: ServiceNames.SuuntoApp,
+      forceCopy: 'yes',
+    }) as any)).rejects.toMatchObject({
+      code: 'invalid-argument',
+      message: 'forceCopy must be a boolean when provided.',
+    });
+
+    expect(suuntoRouteMocks.uploadGPXRouteToSuuntoApp).not.toHaveBeenCalled();
+  });
+
   it('stops the direct batch when an accepted Suunto delivery cannot be persisted', async () => {
     for (const routeId of ['route-1', 'route-2']) {
       routeDocuments.set(`users/user-1/routes/${routeId}`, {

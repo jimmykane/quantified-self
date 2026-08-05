@@ -18,6 +18,12 @@ export interface RouteSendProgress {
   routeCount: number;
 }
 
+export interface RouteSendOptions {
+  onProgress?: (progress: RouteSendProgress) => void;
+  /** Explicit user confirmation to create another Suunto copy. */
+  forceCopy?: boolean;
+}
+
 const ROUTE_SEND_REASON_PRIORITY: SendRouteToServiceFailureReason[] = [
   'DESTINATION_AUTH_REQUIRED',
   'DESTINATION_PERMISSION_REQUIRED',
@@ -131,7 +137,7 @@ export class AppRouteSendService {
   async sendRoutesToService(
     routeIds: string[],
     destinationServiceName: ServiceNames,
-    options: { onProgress?: (progress: RouteSendProgress) => void } = {},
+    options: RouteSendOptions = {},
   ): Promise<SendRoutesToServiceResponse> {
     const uniqueRouteIds = Array.from(new Set(routeIds.map(routeId => `${routeId || ''}`.trim()).filter(Boolean)));
     if (uniqueRouteIds.length === 0) {
@@ -150,6 +156,7 @@ export class AppRouteSendService {
           {
             routeIds: chunk,
             destinationServiceName,
+            ...(options.forceCopy === true ? { forceCopy: true } : {}),
           },
         );
         responses.push(response.data);
