@@ -324,10 +324,41 @@ function getRouteDeliveryManualReconciliationState(
             ...(queueItem.destinationProviderRouteId !== undefined
                 ? { destinationProviderRouteId: queueItem.destinationProviderRouteId }
                 : {}),
+            ...(queueItem.destinationProviderUserId !== undefined
+                ? { destinationProviderUserId: queueItem.destinationProviderUserId }
+                : {}),
+            ...(queueItem.destinationProviderOperation !== undefined
+                ? { destinationProviderOperation: queueItem.destinationProviderOperation }
+                : {}),
             ...(queueItem.destinationDeliveries !== undefined
                 ? { destinationDeliveries: queueItem.destinationDeliveries }
                 : {}),
         },
+    };
+}
+
+function withDestinationProviderOperationDiagnostics(
+    queueItem: RouteDeliverySyncQueueItemInterface,
+    error: unknown,
+    context: string | undefined,
+): RouteDeliverySyncQueueItemInterface {
+    if (
+        !isProviderOperationError(error)
+        || !ROUTE_DELIVERY_MANUAL_RECONCILIATION_CONTEXTS.has(`${context || ''}`)
+    ) {
+        return queueItem;
+    }
+
+    const providerUserId = normalizeNonEmptyString(error.providerUserId);
+    const providerOperation = normalizeNonEmptyString(error.operation);
+    if (!providerUserId && !providerOperation) {
+        return queueItem;
+    }
+
+    return {
+        ...queueItem,
+        ...(providerUserId ? { destinationProviderUserId: providerUserId } : {}),
+        ...(providerOperation ? { destinationProviderOperation: providerOperation } : {}),
     };
 }
 
@@ -1180,12 +1211,18 @@ export async function processRouteDeliverySyncQueueItem(
             logRouteProviderFailureDecision(queueItem, error, 'dlq');
         }
 
-        await safelyWriteDeliveryMetadata(() => setFailedDeliveryMetadata(queueItem, normalizedError));
-        return moveRouteDeliverySyncQueueItemToDlqIfCurrent(
+        const dlqContext = (normalizedError as Error & { dlqContext?: string }).dlqContext || getDeadLetterContext(error);
+        const failedQueueItem = withDestinationProviderOperationDiagnostics(
             queueItem,
+            error,
+            dlqContext,
+        );
+        await safelyWriteDeliveryMetadata(() => setFailedDeliveryMetadata(failedQueueItem, normalizedError));
+        return moveRouteDeliverySyncQueueItemToDlqIfCurrent(
+            failedQueueItem,
             normalizedError,
             bulkWriter,
-            (normalizedError as Error & { dlqContext?: string }).dlqContext || getDeadLetterContext(error),
+            dlqContext,
         );
     }
 }

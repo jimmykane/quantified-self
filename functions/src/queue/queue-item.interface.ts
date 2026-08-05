@@ -126,6 +126,10 @@ export interface RouteDeliverySyncQueueItemInterface extends QueueItemInterface 
   destinationDeliveryAcceptedAt?: number;
   destinationDeliveryComplete?: boolean;
   destinationProviderRouteId?: string | null;
+  /** Provider identity retained only for manual reconciliation of an ambiguous create. */
+  destinationProviderUserId?: string | null;
+  /** Typed provider operation that produced the manual-reconciliation record. */
+  destinationProviderOperation?: string | null;
   destinationDeliveries?: Array<{
     providerUserId: string | null;
     providerRouteId: string | null;

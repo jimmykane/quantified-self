@@ -1872,6 +1872,70 @@ describe('activity-sync/process-queue-item', () => {
     }));
   });
 
+  it.each([
+    ['allowlist misconfiguration', () => mockGetActivitySyncRouteAllowlistConfigError.mockReturnValue('allowlist misconfigured')],
+    ['missing allowlist membership', () => mockIsActivitySyncRouteUserAllowlisted.mockReturnValue(false)],
+    ['missing Pro access', () => mockHasProAccess.mockResolvedValue(false)],
+    ['a disabled route', () => mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false)],
+    ['a pending disconnect', () => mockGetServiceConnectionMeta.mockResolvedValue({ connectionState: 'disconnect_pending' })],
+  ])('resumes an accepted Suunto upload before %s can skip it', async (_scenario, configureEligibilitySkip) => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      destinationUploadID: 'accepted-upload-before-eligibility-check',
+      destinationProviderUserID: 'suunto-user-1',
+    };
+    configureEligibilitySkip();
+    mockGetSuuntoActivityUploadStatus.mockResolvedValueOnce({
+      status: 'success',
+      message: 'Activity uploaded to Suunto.',
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockGetSuuntoActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      queueItem.destinationUploadID,
+      queueItem.destinationProviderUserID,
+    );
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationUploadID: queueItem.destinationUploadID,
+    }));
+  });
+
+  it('resumes an accepted Wahoo upload before a disabled route can skip it', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      ref: {} as any,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      destinationUploadID: 'accepted-wahoo-upload-before-eligibility-check',
+    };
+    mockIsActivitySyncRouteEnabledForUser.mockResolvedValue(false);
+    mockGetWahooActivityUploadStatus.mockResolvedValueOnce({
+      status: 'success',
+      message: 'Activity uploaded to Wahoo.',
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      queueItem.destinationUploadID,
+    );
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationUploadID: queueItem.destinationUploadID,
+    }));
+  });
+
   it('defers instead of marking processed when destination service is pending disconnect', async () => {
     mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
       serviceName === ServiceNames.SuuntoApp

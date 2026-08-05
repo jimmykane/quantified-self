@@ -1102,6 +1102,10 @@ export async function processActivitySyncQueueItem(
                 Number(queueItem.providerOperationStartedAt),
             );
         }
+        // A provider upload ID is an accepted external side effect. Its status
+        // must be resolved before ordinary sync eligibility can skip the item,
+        // otherwise the provider may finish while QS records a false skip.
+        const shouldResumePersistedDestinationUpload = hasPersistedDestinationUpload(queueItem);
 
         const route = ACTIVITY_SYNC_ROUTES[queueItem.routeId];
         if (!route) {
@@ -1110,36 +1114,38 @@ export async function processActivitySyncQueueItem(
             throw error;
         }
 
-        const allowlistConfigError = getActivitySyncRouteAllowlistConfigError(queueItem.routeId);
-        if (allowlistConfigError) {
-            await setActivitySyncSkippedMetadata({
-                ...routeMeta,
-                skippedReason: 'allowlist_misconfigured',
-                detail: allowlistConfigError,
-            });
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'allowlist_misconfigured',
-                destinationUploadContinuation: null,
-                resultStatus: 'skipped',
-            });
-        }
+        if (!shouldResumePersistedDestinationUpload) {
+            const allowlistConfigError = getActivitySyncRouteAllowlistConfigError(queueItem.routeId);
+            if (allowlistConfigError) {
+                await setActivitySyncSkippedMetadata({
+                    ...routeMeta,
+                    skippedReason: 'allowlist_misconfigured',
+                    detail: allowlistConfigError,
+                });
+                return updateToProcessed(queueItem, bulkWriter, {
+                    skippedReason: 'allowlist_misconfigured',
+                    destinationUploadContinuation: null,
+                    resultStatus: 'skipped',
+                });
+            }
 
-        if (!isActivitySyncRouteUserAllowlisted(queueItem.routeId, queueItem.userID)) {
-            await setActivitySyncSkippedMetadata({
-                ...routeMeta,
-                skippedReason: 'user_not_allowlisted',
-                detail: 'User is not allowlisted for this activity sync route.',
-            });
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'user_not_allowlisted',
-                destinationUploadContinuation: null,
-                resultStatus: 'skipped',
-            });
+            if (!isActivitySyncRouteUserAllowlisted(queueItem.routeId, queueItem.userID)) {
+                await setActivitySyncSkippedMetadata({
+                    ...routeMeta,
+                    skippedReason: 'user_not_allowlisted',
+                    detail: 'User is not allowlisted for this activity sync route.',
+                });
+                return updateToProcessed(queueItem, bulkWriter, {
+                    skippedReason: 'user_not_allowlisted',
+                    destinationUploadContinuation: null,
+                    resultStatus: 'skipped',
+                });
+            }
         }
 
         await setActivitySyncProcessingMetadata(routeMeta);
 
-        if (!(await hasProAccess(queueItem.userID))) {
+        if (!shouldResumePersistedDestinationUpload && !(await hasProAccess(queueItem.userID))) {
             await setActivitySyncSkippedMetadata({
                 ...routeMeta,
                 skippedReason: 'no_pro_access',
@@ -1152,71 +1158,67 @@ export async function processActivitySyncQueueItem(
             });
         }
 
-        const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
-        const isManualRun = queueItem.manual === true;
-        const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
-        if (pendingDisconnectService) {
-            return deferActivitySyncQueueItemForPendingDisconnect(
-                queueItem,
-                bulkWriter,
-                routeMeta,
-                pendingDisconnectService,
-            );
-        }
+        if (!shouldResumePersistedDestinationUpload) {
+            const enabled = await isActivitySyncRouteEnabledForUser(queueItem.userID, queueItem.routeId);
+            const isManualRun = queueItem.manual === true;
+            const pendingDisconnectService = await getPendingDisconnectServiceForRoute(queueItem.userID, route);
+            if (pendingDisconnectService) {
+                return deferActivitySyncQueueItemForPendingDisconnect(
+                    queueItem,
+                    bulkWriter,
+                    routeMeta,
+                    pendingDisconnectService,
+                );
+            }
 
-        if (!enabled && !isManualRun) {
-            await setActivitySyncSkippedMetadata({
-                ...routeMeta,
-                skippedReason: 'route_disabled',
-                detail: 'Route is disabled in user settings.',
-            });
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'route_disabled',
-                destinationUploadContinuation: null,
-                resultStatus: 'skipped',
-            });
-        }
+            if (!enabled && !isManualRun) {
+                await setActivitySyncSkippedMetadata({
+                    ...routeMeta,
+                    skippedReason: 'route_disabled',
+                    detail: 'Route is disabled in user settings.',
+                });
+                return updateToProcessed(queueItem, bulkWriter, {
+                    skippedReason: 'route_disabled',
+                    destinationUploadContinuation: null,
+                    resultStatus: 'skipped',
+                });
+            }
 
-        const destinationConnectionStatus = await getDestinationConnectionStatus(queueItem.userID, queueItem.destinationServiceName);
-        if (destinationConnectionStatus === 'disconnect_pending') {
-            return deferActivitySyncQueueItemForPendingDisconnect(
-                queueItem,
-                bulkWriter,
-                routeMeta,
-                queueItem.destinationServiceName,
-            );
-        }
-        // A provider-issued upload ID means the irreversible provider request
-        // was already accepted. Let the resumed status request reach the
-        // existing auth/error handling below, which retains a manual-
-        // reconciliation record instead of dropping the accepted upload. This
-        // also lets malformed partial Suunto state fail closed at its dedicated
-        // validation guard below.
-        if (destinationConnectionStatus === 'not_connected' && !queueItem.destinationUploadID) {
-            await setActivitySyncSkippedMetadata({
-                ...routeMeta,
-                skippedReason: 'destination_not_connected',
-                detail: 'Destination account is not connected.',
-            });
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'destination_not_connected',
-                destinationUploadContinuation: null,
-                resultStatus: 'skipped',
-            });
-        }
+            const destinationConnectionStatus = await getDestinationConnectionStatus(queueItem.userID, queueItem.destinationServiceName);
+            if (destinationConnectionStatus === 'disconnect_pending') {
+                return deferActivitySyncQueueItemForPendingDisconnect(
+                    queueItem,
+                    bulkWriter,
+                    routeMeta,
+                    queueItem.destinationServiceName,
+                );
+            }
+            if (destinationConnectionStatus === 'not_connected') {
+                await setActivitySyncSkippedMetadata({
+                    ...routeMeta,
+                    skippedReason: 'destination_not_connected',
+                    detail: 'Destination account is not connected.',
+                });
+                return updateToProcessed(queueItem, bulkWriter, {
+                    skippedReason: 'destination_not_connected',
+                    destinationUploadContinuation: null,
+                    resultStatus: 'skipped',
+                });
+            }
 
-        const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
-        if (!route.supportedFileExtensions.includes(extension)) {
-            await setActivitySyncSkippedMetadata({
-                ...routeMeta,
-                skippedReason: 'unsupported_original_file',
-                detail: `Unsupported original file extension: ${extension || 'unknown'}.`,
-            });
-            return updateToProcessed(queueItem, bulkWriter, {
-                skippedReason: 'unsupported_original_file',
-                destinationUploadContinuation: null,
-                resultStatus: 'skipped',
-            });
+            const extension = toExtension(queueItem.originalFile?.path, queueItem.originalFile?.extension);
+            if (!route.supportedFileExtensions.includes(extension)) {
+                await setActivitySyncSkippedMetadata({
+                    ...routeMeta,
+                    skippedReason: 'unsupported_original_file',
+                    detail: `Unsupported original file extension: ${extension || 'unknown'}.`,
+                });
+                return updateToProcessed(queueItem, bulkWriter, {
+                    skippedReason: 'unsupported_original_file',
+                    destinationUploadContinuation: null,
+                    resultStatus: 'skipped',
+                });
+            }
         }
 
         if (await shouldSkipQueueWorkForDeletedUser(

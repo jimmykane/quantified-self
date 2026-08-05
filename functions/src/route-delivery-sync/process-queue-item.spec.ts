@@ -1044,6 +1044,40 @@ describe('route-delivery-sync/process-queue-item', () => {
     expect(mockIncreaseRetryCount).not.toHaveBeenCalled();
   });
 
+  it('retains the Garmin account identity for an ambiguous route create reconciliation', async () => {
+    const providerError = new ProviderOperationError({
+      serviceName: ServiceNames.GarminAPI,
+      operation: 'route_create',
+      disposition: 'permanent',
+      code: 'failed-precondition',
+      message: 'Garmin did not confirm whether the course was created.',
+      providerUserId: 'garmin-destination-account',
+      dlqContext: 'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    });
+    mockSendPreparedRoute.mockRejectedValue(providerError);
+
+    const result = await processRouteDeliverySyncQueueItem({ ...baseQueueItem });
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockMoveToDLQ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationProviderUserId: 'garmin-destination-account',
+        destinationProviderOperation: 'route_create',
+      }),
+      providerError,
+      undefined,
+      'GARMIN_ROUTE_CREATE_AMBIGUOUS',
+    );
+    expect(mockMoveToDLQIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({
+      manualReconciliation: {
+        additionalData: expect.objectContaining({
+          destinationProviderUserId: 'garmin-destination-account',
+          destinationProviderOperation: 'route_create',
+        }),
+      },
+    }));
+  });
+
   it('does not apply provider retry policy after a successful send', async () => {
     const metadataError = new ProviderOperationError({
       serviceName: ServiceNames.GarminAPI,
