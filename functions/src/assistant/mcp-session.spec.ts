@@ -57,12 +57,15 @@ describe('Assistant MCP session', () => {
         ).toEqual([]);
       }
       expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
+      expect(session.tools.map(tool => tool.name)).toContain('list_routes');
       expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_chart_data');
       expect(session.tools.map(tool => tool.name)).not.toContain(
         'search_activities_near_location',
       );
       expect(session.tools.find(tool => tool.name === 'list_activity_jumps')?.description)
         .toContain('coordinates redacted');
+      expect(session.tools.find(tool => tool.name === 'list_routes')?.description)
+        .toContain('Bounds are redacted');
       const dailyReportSchema = session.tools
         .find(tool => tool.name === 'get_daily_report')?.inputSchema;
       expect(dailyReportSchema?.required).toContain('timeZone');
@@ -71,7 +74,7 @@ describe('Assistant MCP session', () => {
     }
   });
 
-  it('uses the MCP server in-process and exposes only the curated non-location tools', async () => {
+  it('uses the MCP server in-process and exposes curated non-location tools plus route summaries', async () => {
     let capturedAuth: AuthenticatedMcpRequest | null = null;
     let capturedPublicBaseUrl = '';
     const session = await createAssistantMcpSession('user-1', 'https://beta.quantified-self.io', {
@@ -93,10 +96,10 @@ describe('Assistant MCP session', () => {
           MCP_OAUTH_SCOPES.MeasurementsRead,
           MCP_OAUTH_SCOPES.SleepRead,
           MCP_OAUTH_SCOPES.ActivityDetailsRead,
+          MCP_OAUTH_SCOPES.RoutesRead,
         ],
       });
       expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.ActivityLocationRead);
-      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.RoutesRead);
       expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
       expect(capturedPublicBaseUrl).toBe('https://beta.quantified-self.io');
       await expect(session.callTool('get_daily_report', {})).resolves.toEqual({

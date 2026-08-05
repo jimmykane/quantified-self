@@ -73,6 +73,38 @@ describe('Assistant evidence', () => {
     expect(evidence.links).toEqual([]);
   });
 
+  it('shows route-summary evidence without leaking references or geography', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'list_routes',
+      title: 'List saved routes',
+    }, {
+      routes: [{
+        routeRef: 'opaque-route-ref',
+        appUrl: 'https://quantified-self.io/user/u/route/r',
+        name: 'Lunch loop',
+        activityTypes: ['Cycling'],
+        locationRedacted: true,
+        bounds: {
+          minLatitudeDegrees: 39.65,
+          minLongitudeDegrees: 20.84,
+        },
+        provider: 'must-not-leak',
+      }],
+    });
+
+    expect(evidence.summary).toBe('1 routes returned by List saved routes.');
+    expect(evidence.facts).toEqual(expect.arrayContaining([
+      { label: 'Name', value: 'Lunch loop' },
+    ]));
+    expect(evidence.links).toEqual([{
+      label: 'Open in Quantified Self',
+      url: 'https://quantified-self.io/user/u/route/r',
+    }]);
+    expect(JSON.stringify(evidence)).not.toContain('opaque-route-ref');
+    expect(JSON.stringify(evidence)).not.toContain('must-not-leak');
+    expect(JSON.stringify(evidence)).not.toMatch(/Latitude|Longitude|39\.65|20\.84/);
+  });
+
   it('does not use denied provenance counts in its fallback summary', () => {
     const evidence = buildAssistantEvidence({
       name: 'get_training_metric',

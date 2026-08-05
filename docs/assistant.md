@@ -6,7 +6,7 @@ Quantified Self offers two complementary conversational paths:
 
 | Path | Best for | Who pays for inference | Data authority |
 | --- | --- | --- | --- |
-| Built-in Assistant at `/ai-insights` | Zero-setup questions inside the app | Quantified Self, subject to the existing per-plan request allowance | A conservative first-party non-location MCP tool allowlist |
+| Built-in Assistant at `/ai-insights` | Zero-setup questions inside the app | Quantified Self, subject to the existing per-plan request allowance | A conservative first-party coordinate-free MCP tool allowlist |
 | External MCP client | ChatGPT or another compatible bring-your-own-AI experience | The external client or user | The scopes explicitly approved in MCP authorization |
 
 The built-in Assistant is not a second fitness-data API. It connects an in-process MCP client to the same canonical
@@ -52,19 +52,21 @@ Firestore rules deny browser access to `users/{uid}/assistantConversations/activ
 
 ## Tool and data boundary
 
-The internal session grants `metrics:read`, `measurements:read`, `sleep:read`, and `activity-details:read`, then narrows
+The internal session grants `metrics:read`, `measurements:read`, `sleep:read`, `activity-details:read`, and `routes:read`, then narrows
 the exposed model tools to the explicit `ASSISTANT_MCP_TOOL_NAMES` allowlist. It covers:
 
 - daily report and live Readiness;
 - normalized sleep sessions, trends, and safe aggregate vitals;
 - Training and activity metric discovery and bounded queries;
 - first-class body-measurement discovery and bounded history;
-- bounded activity lists, overview, selected metrics, rankings, laps, coordinate-redacted MTB jumps, and swim lengths.
+- bounded activity lists, overview, selected metrics, rankings, laps, coordinate-redacted MTB jumps, and swim lengths;
+- coordinate-free saved-route summaries filtered by canonical activity type, name, or recency.
 
-The built-in Assistant does not receive route scopes, activity-location scope, saved routes, route geometry, exact
-coordinates, activity chart streams, original source files, write tools, or dashboard settings. These exclusions are
-product and privacy boundaries, not merely prompt instructions. External MCP clients can request separately approved
-route and location permissions; that is the intended path for those questions.
+The built-in Assistant does not receive activity-location or route-location scopes, route geometry, waypoints, exact
+coordinates, nearby-location search, activity chart streams, original source files, write tools, or dashboard settings.
+These exclusions are product and privacy boundaries, not merely prompt instructions. External MCP clients can request
+separately approved location permissions; that is the intended path for exact-location and route-geometry questions.
+Saved-route names are included in summaries and can themselves contain user- or provider-assigned place information.
 
 Every current answer must execute at least one allowlisted tool. Genkit tools are built from the MCP server's live JSON
 input schemas. MCP validates every structured result against its strict output schema before the model receives it; the
@@ -207,7 +209,7 @@ changes:
 2. Decide explicitly whether the built-in Assistant should receive it. Do not widen scopes or add tools implicitly.
 3. Update the Assistant allowlist, system routing guidance, evidence projection, Help, policies, and this document when
    the boundary changes.
-4. Add positive routing tests plus negative leakage tests for identifiers, provenance, files, routes, and coordinates.
+4. Add positive routing tests plus negative leakage tests for identifiers, provenance, files, route geography, and coordinates.
 5. Run the Assistant tests, MCP output contract suite, and `npm --prefix functions run mcp:contract:check`.
 6. If the public registered MCP contract changed, follow its digest-bound publication and ChatGPT rescan lifecycle.
    An implementation-only Assistant change that leaves the public contract unchanged requires neither a registered
@@ -231,6 +233,6 @@ Also run the public Help/SEO content tests whenever capabilities, privacy, reten
 ## Deliberately deferred capabilities
 
 The initial version does not include streaming responses, multiple named conversations, proactive notifications,
-voice, route/location access, chart-stream analysis, write actions, dashboard arrangement, or medical recommendations.
+voice, location access, route geometry or waypoints, chart-stream analysis, write actions, dashboard arrangement, or medical recommendations.
 Any expansion needs an explicit product decision, privacy review, bounded data contract, quota/cost model, and rollback
-plan. Route or location support should normally remain in the external MCP path where the user approves those scopes.
+plan. Exact-location or route-geometry support should normally remain in the external MCP path where the user approves those scopes.

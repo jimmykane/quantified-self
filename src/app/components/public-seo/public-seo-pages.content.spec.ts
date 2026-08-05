@@ -102,11 +102,21 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('A fitness-data Assistant grounded in your own history');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('grounded in read-only Quantified Self tools');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('Free accounts include');
+    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('saved-route summaries');
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.title === 'Grounded every turn')
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.copy.includes('at most four extra minutes'))
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
+      section.items.some(item => item.title === 'Saved-route summaries')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
+      section.items.some(item => item.copy.includes('coordinate fields, saved bounds, geometry, and waypoints stay unavailable'))
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
+      item.answer.includes('Route names can contain place information')
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
       item.answer.includes('External MCP connections remain the advanced bring-your-own-AI path')

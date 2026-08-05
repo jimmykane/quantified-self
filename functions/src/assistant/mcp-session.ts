@@ -28,6 +28,7 @@ export const ASSISTANT_MCP_TOOL_NAMES = [
   'get_activity_overview',
   'get_activity_metrics',
   'rank_activities_by_metric',
+  'list_routes',
 ] as const;
 
 export type AssistantMcpToolName = typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -87,6 +88,7 @@ export async function createAssistantMcpSession(
       MCP_OAUTH_SCOPES.MeasurementsRead,
       MCP_OAUTH_SCOPES.SleepRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.RoutesRead,
     ],
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

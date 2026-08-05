@@ -499,10 +499,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.assistant,
     eyebrow: 'Quantified Self Assistant',
     title: 'AI Training Assistant Grounded in Your Fitness Data',
-    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, and activities. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, activities, and saved-route summaries. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
     h1: 'A fitness-data Assistant grounded in your own history',
-    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, or recent activities. The Assistant chooses bounded read-only tools and shows the results that grounded each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
-    chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities'],
+    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, recent activities, or saved routes. The Assistant chooses bounded read-only tools and shows the results that grounded each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities', 'Saved routes'],
     actions: [
       routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
       routeAction('View Membership', '/pricing'),
@@ -512,7 +512,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Conversational analysis',
         title: 'Ask naturally, then follow up',
-        copy: 'The built-in Assistant uses the same validated MCP server foundation with a conservative non-location tool set, without making you install another client.',
+        copy: 'The built-in Assistant uses the same validated MCP server foundation with a conservative coordinate-free tool set, without making you install another client.',
         items: [
           {
             icon: 'bedtime',
@@ -529,6 +529,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             title: 'Measurements and trends',
             copy: 'Query first-class body measurements such as weight over explicit date ranges instead of hiding them among activity metrics.',
           },
+          {
+            icon: 'route',
+            title: 'Saved-route summaries',
+            copy: 'Find recent saved routes by sport, name, or recency while coordinate fields, saved bounds, geometry, and waypoints stay unavailable. Route names may contain place information.',
+          },
         ],
       },
       {
@@ -544,7 +549,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'location_off',
             title: 'Sensitive surfaces excluded',
-            copy: 'The built-in Assistant cannot access saved routes, exact activity locations, original files, write tools, or dashboard settings.',
+            copy: 'The built-in Assistant cannot access coordinate fields, saved route bounds, route geometry, waypoints, original files, write tools, or dashboard settings.',
           },
           {
             icon: 'timer',
@@ -557,11 +562,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What can the Quantified Self Assistant answer?',
-        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, and swim lengths.',
+        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, swim lengths, and coordinate-free saved-route summaries.',
       },
       {
-        question: 'Does the Assistant send raw files or routes to Gemini?',
-        answer: 'No. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer. Original FIT, TCX, GPX, JSON, and SML files, saved routes, and exact locations are not available to the built-in Assistant.',
+        question: 'Does the Assistant send raw files or route locations to Gemini?',
+        answer: 'No. Along with your message, browser timezone, and bounded recent conversation context, Gemini receives the validated read-only tool results selected for the current question, which may include a coordinate-free saved-route summary and its route name. Route names can contain place information. Direct in-app URLs are withheld, and opaque references cannot be returned in an answer. Original FIT, TCX, GPX, JSON, and SML files, coordinate fields, saved bounds, route geometry, and waypoints are not available to the built-in Assistant.',
       },
       {
         question: 'Is the Assistant available on the free plan?',
@@ -573,7 +578,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Start with today, then ask why',
-    closingCopy: 'Open with a daily report or a focused sleep, Training, measurement, or activity question, then use follow-ups to compare the evidence over time.',
+    closingCopy: 'Open with a daily report or a focused sleep, Training, measurement, activity, or saved-route question, then use follow-ups to compare the evidence over time.',
     closingActions: [
       routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
       routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),

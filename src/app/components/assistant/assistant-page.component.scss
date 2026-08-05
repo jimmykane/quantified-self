@@ -82,7 +82,6 @@ h1 {
 }
 
 .assistant-header-actions :is(a, button),
-.composer button,
 .external-mcp-card a,
 .evidence-links a {
   display: inline-flex;
@@ -131,8 +130,8 @@ h1 {
 
 .assistant-welcome mat-card-content {
   display: grid;
-  gap: 24px;
-  padding: 24px;
+  gap: 20px;
+  padding: 22px;
 }
 
 .welcome-copy {
@@ -156,23 +155,38 @@ h1 {
   line-height: 1.5;
 }
 
-.starter-prompts {
+.starter-prompts-shell {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 9px;
+}
+
+.starter-prompts-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.starter-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .starter-prompts button {
-  min-height: 58px;
+  min-height: 40px;
   height: auto;
   justify-content: flex-start;
-  padding: 10px 14px;
+  padding: 6px 12px;
   text-align: left;
   white-space: normal;
 }
 
 .starter-prompts mat-icon {
-  transform: rotate(90deg);
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
 }
 
 .message {
@@ -292,10 +306,13 @@ h1 {
 }
 
 .composer-shell {
+  padding: 14px;
+}
+
+.composer-shell-sticky {
   position: sticky;
   z-index: 4;
   bottom: 12px;
-  padding: 14px;
 }
 
 .composer {
@@ -307,12 +324,6 @@ h1 {
 
 .composer mat-form-field {
   width: 100%;
-}
-
-.composer button {
-  min-width: 96px;
-  min-height: 48px;
-  justify-content: center;
 }
 
 .composer-footer {
@@ -369,12 +380,7 @@ h1 {
   }
 
   .assistant-header-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .starter-prompts {
-    grid-template-columns: 1fr;
+    justify-content: flex-end;
   }
 
   .message {
@@ -382,8 +388,11 @@ h1 {
     padding: 14px;
   }
 
-  .composer-shell {
+  .composer-shell-sticky {
     bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .composer-shell {
     padding: 10px;
   }
 
@@ -392,29 +401,28 @@ h1 {
     gap: 7px;
   }
 
-  .composer button {
-    min-width: 48px;
-    width: 48px;
-    padding-inline: 0;
-  }
-
-  .composer button span {
-    display: none;
-  }
-
   .composer-footer {
     display: grid;
     gap: 3px;
   }
 
   .external-mcp-card mat-card-content {
-    align-items: stretch;
+    align-items: flex-start;
     flex-direction: column;
   }
 
   .external-mcp-card a {
-    align-self: stretch;
-    justify-content: center;
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .assistant-header-actions :is(a, button) span {
+    display: none;
+  }
+
+  .assistant-welcome mat-card-content {
+    padding: 18px;
   }
 }
 

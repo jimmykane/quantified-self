@@ -441,11 +441,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Training:** ready Training metric catalog, current values, Form, ramp, load, volume, intensity, current-versus-usual context, and missing or rebuilding states.
 - **Measurements:** first-class measurement discovery and bounded history, including body weight when recorded.
 - **Activities:** activity types, recent or bounded activity lists, activity metrics, rankings, laps, MTB jumps with coordinates redacted, and swim lengths.
+- **Saved routes:** coordinate-free route names, activity types, bounded summary metrics and counts, and import or update times, filterable by sport, name, or recency. Route names can contain user- or provider-assigned place information.
 - **Activity metrics:** one or several bounded aggregate metric queries through the canonical MCP metric catalog.
 
 ## Privacy boundaries
 
-- The built-in Assistant has no access to exact activity locations, route summaries, route geometry, waypoints, raw chart streams, original files, write tools, or dashboard settings.
+- The built-in Assistant can read coordinate-free saved-route summaries, but it has no access to coordinate fields, saved bounds, route geometry, waypoints, nearby-location search, raw chart streams, original files, write tools, or dashboard settings.
 - Gemini receives your message, the browser's IANA timezone for local-day context, bounded recent conversation context, and the validated read-only tool results selected for the current question. Direct in-app URLs are withheld, and an answer that repeats an opaque reference or cursor is rejected. Raw FIT, TCX, GPX, JSON, and SML files are not sent.
 - Evidence rendering removes opaque references, cursors, provider, device, source, owner, token, and identifier fields again before display.
 - The Assistant is fitness information, not medical advice. Verify important health and Training decisions.
@@ -459,8 +460,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Built-in Assistant or external MCP?
 
-- Use the **Assistant** for a zero-setup, app-funded conversation with the conservative non-location tool set above.
-- Use [Connections -> MCP](/services?serviceName=mcp) when you prefer ChatGPT or another compatible client, want separately approved route or location scopes, or want usage billed by that external client.
+- Use the **Assistant** for a zero-setup, app-funded conversation with the conservative coordinate-free tool set above.
+- Use [Connections -> MCP](/services?serviceName=mcp) when you prefer ChatGPT or another compatible client, want separately approved location or route-geometry access, or want usage billed by that external client.
 - External MCP calls do not consume the in-app Assistant allowance. External clients have their own privacy and retention practices.
 
 ## Troubleshooting quick checks
@@ -470,7 +471,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Another response is in progress**: wait for the current turn to finish. A stale turn lock expires automatically.
 - **Quota reached**: wait for reset, upgrade, or use your own compatible AI client through MCP.
 - **No data found**: ask which measurement, sleep vital, Training metric, activity type, or activity metric is available before assuming it is unsupported.
-- For location or saved-route questions, use an external MCP client and explicitly approve the related permission.`,
+- For exact-location, nearby-search, route-geometry, or waypoint questions, use an external MCP client and explicitly approve the related permission.`,
     links: [
       { label: 'Assistant', icon: 'auto_awesome', kind: 'route', target: '/ai-insights' },
       { label: 'Assistant Overview', icon: 'travel_explore', kind: 'route', target: '/features/ai-insights' },
@@ -830,7 +831,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
 - Use **Stop sharing** from the event details menu or saved comparison row to make the event, activities, and event source-file folder private again.
 - Anonymous viewers are read-only. They can open an existing saved benchmark report from a comparison link, but they cannot generate or save new reports.
 - The built-in Assistant sends Gemini your message, bounded recent conversation context, and only the validated read-only Quantified Self results selected for that question.
-- The Assistant cannot access or send raw activity files, saved routes, exact locations, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable about seven days after the latest completed turn or reset (with at most four extra minutes for a response already in progress), and is then deleted asynchronously by Firestore TTL.
+- The Assistant can send Gemini coordinate-free saved-route summaries selected for a question, including route names that may contain place information. It cannot access or send raw activity or route files, coordinate fields, saved bounds, route geometry, waypoints, write tools, or dashboard settings. Its server-owned conversation keeps at most six completed turns, becomes unavailable about seven days after the latest completed turn or reset (with at most four extra minutes for a response already in progress), and is then deleted asynchronously by Firestore TTL.
 - The Policies page includes provider-specific sections for [Garmin Data](/policies#garmin-data), [Suunto Data](/policies#suunto-data), [COROS Data](/policies#coros-data), [Wahoo Data](/policies#wahoo-data), and [AI & Third-Party Processing](/policies#ai-and-third-party-processing).
 - The dedicated [Privacy Policy](/privacy) and [Terms of Service](/terms) pages are public and readable without signing in.
 

@@ -259,7 +259,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-08-05');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
@@ -274,9 +274,9 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-07-18');
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-05');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });
 
   it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {

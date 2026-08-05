@@ -11,29 +11,31 @@
             <mat-chip class="assistant-beta-chip" disableRipple highlighted color="accent">Beta</mat-chip>
           </mat-chip-set>
         </div>
-        <p>Ask about your sleep, readiness, Training, measurements, or activities.</p>
+        <p>Explore your sleep, readiness, Training, measurements, activities, and saved routes.</p>
       </div>
     </div>
     <div class="assistant-header-actions">
-      <a mat-button routerLink="/help" fragment="ai-insights">
+      <a mat-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help">
         <mat-icon>help_outline</mat-icon>
-        Help
+        <span>Help</span>
       </a>
-      <button mat-stroked-button type="button" [disabled]="loadingConversation() || sending() || resetting()" (click)="resetConversation()">
+      <button mat-button type="button" aria-label="Start a new chat"
+        [disabled]="loadingConversation() || sending() || resetting()" (click)="resetConversation()">
         @if (resetting()) {
           <mat-spinner diameter="18"></mat-spinner>
         } @else {
           <mat-icon>add_comment</mat-icon>
         }
-        New chat
+        <span>New chat</span>
       </button>
     </div>
   </header>
 
   <section class="assistant-trust-row" aria-label="Assistant privacy and data source">
-    <span><mat-icon>verified_user</mat-icon> Every Assistant call requires Auth and App Check</span>
-    <span><mat-icon>hub</mat-icon> Grounded in the same read-only MCP tools</span>
-    <span><mat-icon>location_off</mat-icon> Location and routes are not available to this Assistant</span>
+    <span><mat-icon>verified_user</mat-icon> Verified requests</span>
+    <span><mat-icon>hub</mat-icon> Grounded in read-only MCP</span>
+    <span><mat-icon>route</mat-icon> Saved-route summaries available</span>
+    <span><mat-icon>location_off</mat-icon> Coordinates &amp; geometry stay private</span>
   </section>
 
   @if (loadingConversation()) {
@@ -53,13 +55,18 @@
                 <p>The Assistant chooses the relevant read-only tools, checks your current data, and shows which results grounded the answer.</p>
               </div>
             </div>
-            <div class="starter-prompts" aria-label="Suggested questions">
-              @for (prompt of starterPrompts; track prompt) {
-                <button mat-stroked-button type="button" (click)="useStarterPrompt(prompt)">
-                  <mat-icon>north_west</mat-icon>
-                  <span>{{ prompt }}</span>
-                </button>
-              }
+            <div class="starter-prompts-shell">
+              <span class="starter-prompts-label">Quick questions</span>
+              <div class="starter-prompts" aria-label="Suggested questions">
+                @for (prompt of starterPrompts; track prompt.id) {
+                  <button mat-stroked-button type="button"
+                    [attr.aria-label]="'Use suggested question: ' + prompt.prompt"
+                    (click)="useStarterPrompt(prompt.prompt)">
+                    <mat-icon>{{ prompt.icon }}</mat-icon>
+                    <span>{{ prompt.shortLabel }}</span>
+                  </button>
+                }
+              </div>
             </div>
           </mat-card-content>
         </mat-card>
@@ -139,22 +146,21 @@
     </section>
   }
 
-  <section class="composer-shell qs-glass-card-panel">
+  <section class="composer-shell qs-glass-card-panel" [class.composer-shell-sticky]="!isEmpty()">
     <form class="composer" (ngSubmit)="sendMessage()">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Ask about your data</mat-label>
-        <textarea matInput rows="2" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+        <textarea matInput rows="1" [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
           (keydown)="handleComposerKeydown($event)"
           [placeholder]="composerPlaceholder"></textarea>
         <mat-hint align="end">{{ promptControl.value.length }}/{{ maxMessageChars }}</mat-hint>
       </mat-form-field>
-      <button mat-flat-button type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
+      <button mat-mini-fab type="submit" [disabled]="loadingConversation() || sending() || quotaPreventsSend() || promptControl.invalid" aria-label="Send message">
         @if (sending()) {
           <mat-spinner diameter="20"></mat-spinner>
         } @else {
           <mat-icon>arrow_upward</mat-icon>
         }
-        <span>Send</span>
       </button>
     </form>
     <footer class="composer-footer">
@@ -172,7 +178,7 @@
           Connect through MCP for a bring-your-own-AI experience that does not use your in-app Assistant allowance.
         </span>
       </div>
-      <a mat-stroked-button routerLink="/services" [queryParams]="{ serviceName: 'mcp' }">
+      <a mat-button routerLink="/services" [queryParams]="{ serviceName: 'mcp' }">
         MCP connections
         <mat-icon>arrow_forward</mat-icon>
       </a>

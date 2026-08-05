@@ -20,6 +20,7 @@ const SAFE_APP_ORIGINS = new Set([
 const DENIED_FIELD_PATTERN = /(?:^|_)(?:uid|user|owner|email|token|secret|source|provider|device|cursor|ref|id|lat|latitude|lng|lon|longitude|gps|location|coordinates?|position|geometry|polyline|waypoints?|bounds|bbox|center)(?:$|_)/i;
 const SUMMARY_ARRAY_KEYS = [
   'activities',
+  'routes',
   'sessions',
   'measurements',
   'buckets',

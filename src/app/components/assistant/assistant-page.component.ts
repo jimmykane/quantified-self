@@ -20,7 +20,7 @@ import {
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import {
   ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
-  ASSISTANT_STARTER_PROMPTS,
+  ASSISTANT_PROMPT_EXAMPLES,
 } from '@shared/assistant.prompts';
 import { MaterialModule } from '../../modules/material.module';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
@@ -49,7 +49,7 @@ export class AssistantPageComponent implements OnInit {
   private readonly retryRequest = signal<{ message: string; requestId: string } | null>(null);
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
-  readonly starterPrompts = ASSISTANT_STARTER_PROMPTS;
+  readonly starterPrompts = ASSISTANT_PROMPT_EXAMPLES;
   readonly composerPlaceholder = `For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`;
   readonly promptControl = new FormControl('', {
     nonNullable: true,

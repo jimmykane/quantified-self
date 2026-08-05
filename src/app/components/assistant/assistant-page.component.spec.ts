@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
 import {
   ASSISTANT_COMPOSER_EXAMPLE_PROMPT,
-  ASSISTANT_STARTER_PROMPTS,
+  ASSISTANT_PROMPT_EXAMPLES,
 } from '@shared/assistant.prompts';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import {
@@ -104,8 +104,9 @@ describe('AssistantPageComponent', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('What would you like to understand?');
-    expect(text).toContain('Grounded in the same read-only MCP tools');
-    expect(text).toContain('Location and routes are not available');
+    expect(text).toContain('Grounded in read-only MCP');
+    expect(text).toContain('Saved-route summaries available');
+    expect(text).toContain('Coordinates & geometry stay private');
     expect(text).toContain('Prefer ChatGPT or another compatible client?');
     expect(fixture.nativeElement.querySelector('mat-chip')?.textContent.trim()).toBe('Beta');
     expect(fixture.nativeElement.querySelector('.assistant-welcome')?.classList)
@@ -113,12 +114,42 @@ describe('AssistantPageComponent', () => {
     const renderedPromptButtons = Array.from(
       fixture.nativeElement.querySelectorAll('.starter-prompts button'),
     ) as HTMLElement[];
-    expect(renderedPromptButtons).toHaveLength(ASSISTANT_STARTER_PROMPTS.length);
-    ASSISTANT_STARTER_PROMPTS.forEach((prompt, index) => {
-      expect(renderedPromptButtons[index].textContent).toContain(prompt);
+    expect(renderedPromptButtons).toHaveLength(ASSISTANT_PROMPT_EXAMPLES.length);
+    ASSISTANT_PROMPT_EXAMPLES.forEach((prompt, index) => {
+      expect(renderedPromptButtons[index].textContent).toContain(prompt.shortLabel);
+      expect(renderedPromptButtons[index].getAttribute('aria-label')).toContain(prompt.prompt);
     });
+    expect(fixture.nativeElement.querySelector('.composer-shell')?.classList)
+      .not.toContain('composer-shell-sticky');
+    const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(sendButton.textContent).not.toContain('Send');
+    expect(sendButton.getAttribute('aria-label')).toBe('Send message');
     expect(fixture.nativeElement.querySelector('textarea')?.placeholder)
       .toBe(`For example: ${ASSISTANT_COMPOSER_EXAMPLE_PROMPT}`);
+  });
+
+  it('makes the compact composer sticky only after a conversation starts', () => {
+    component.conversation.set(chatResponse.conversation);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.composer-shell')?.classList)
+      .toContain('composer-shell-sticky');
+  });
+
+  it('inserts the complete question when a compact suggested action is selected', () => {
+    const routeExample = ASSISTANT_PROMPT_EXAMPLES.find(example => (
+      example.id === 'saved-cycling-routes'
+    ));
+    if (!routeExample) {
+      throw new Error('Expected the saved-route prompt example.');
+    }
+    const routeButton = Array.from(
+      fixture.nativeElement.querySelectorAll('.starter-prompts button'),
+    ).find(button => button.textContent?.includes(routeExample.shortLabel)) as HTMLButtonElement;
+
+    routeButton.click();
+
+    expect(component.promptControl.value).toBe(routeExample.prompt);
   });
 
   it('sends a starter prompt and renders the grounded response evidence', async () => {

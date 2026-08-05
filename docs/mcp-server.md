@@ -21,7 +21,8 @@ write activities, mutate Training state, or require a public `/integrations/<pro
 ### Internal Assistant adapter
 
 The built-in Assistant reuses this server through an SDK `Client` and linked `InMemoryTransport`. It calls
-`createMcpServer` with a fixed first-party identity, conservative non-location read scopes, and a second explicit tool
+`createMcpServer` with a fixed first-party identity, conservative coordinate-free read scopes including saved-route
+summaries, and a second explicit tool
 allowlist. It does not call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
 scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
